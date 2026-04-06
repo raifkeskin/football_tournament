@@ -15,16 +15,16 @@ class AdminAddLeagueScreen extends StatefulWidget {
 
 class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
   final _leagueNameController = TextEditingController();
-  final _leagueCountryController = TextEditingController();
   final _picker = ImagePicker();
   final _storageService = StorageService();
 
   XFile? _leagueLogo;
+  DateTime? _startDate;
+  DateTime? _endDate;
 
   @override
   void dispose() {
     _leagueNameController.dispose();
-    _leagueCountryController.dispose();
     super.dispose();
   }
 
@@ -37,20 +37,72 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
     setState(() => _leagueLogo = picked);
   }
 
+  Future<void> _tarihSec({required bool isStart}) async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: isStart
+          ? (_startDate ?? now)
+          : (_endDate ?? _startDate ?? now),
+      firstDate: DateTime(now.year - 5),
+      lastDate: DateTime(now.year + 10),
+    );
+    if (picked == null) return;
+    setState(() {
+      if (isStart) {
+        _startDate = picked;
+        if (_endDate != null && _endDate!.isBefore(picked)) {
+          _endDate = picked;
+        }
+      } else {
+        _endDate = picked;
+      }
+    });
+  }
+
+  String _tarihYaz(DateTime? date) {
+    if (date == null) return 'Tarih seç';
+    return '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year}';
+  }
+
   Future<void> _turnuvaEkle() async {
-    if (_leagueLogo != null && _leagueNameController.text.trim().isNotEmpty) {
-      await _storageService.uploadLeagueLogo(
-        leagueId: _leagueNameController.text.trim().toLowerCase().replaceAll(
-          ' ',
-          '_',
+    if (_leagueNameController.text.trim().isEmpty ||
+        _startDate == null ||
+        _endDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Lütfen turnuva adı, başlangıç ve bitiş tarihini girin.',
+          ),
         ),
-        file: File(_leagueLogo!.path),
+      );
+      return;
+    }
+
+    try {
+      if (_leagueLogo != null) {
+        await _storageService.uploadLeagueLogo(
+          leagueId: _leagueNameController.text.trim().toLowerCase().replaceAll(
+            ' ',
+            '_',
+          ),
+          file: File(_leagueLogo!.path),
+        );
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Turnuva taslağı oluşturuldu (iskelet).')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Logo yükleme sırasında hata oluştu. Firebase bağlantısı kontrol edilmeli.',
+          ),
+        ),
       );
     }
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Turnuva taslağı oluşturuldu (iskelet).')),
-    );
   }
 
   @override
@@ -67,9 +119,28 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
             decoration: const InputDecoration(labelText: 'Turnuva Adı'),
           ),
           const SizedBox(height: 10),
-          TextField(
-            controller: _leagueCountryController,
-            decoration: const InputDecoration(labelText: 'Ülke'),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _tarihSec(isStart: true),
+                  icon: const Icon(Icons.event_outlined),
+                  label: Text('Başlangıç: ${_tarihYaz(_startDate)}'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _tarihSec(isStart: false),
+                  icon: const Icon(Icons.event_available_outlined),
+                  label: Text('Bitiş: ${_tarihYaz(_endDate)}'),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 10),
           OutlinedButton.icon(

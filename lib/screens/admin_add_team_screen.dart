@@ -15,7 +15,6 @@ class AdminAddTeamScreen extends StatefulWidget {
 
 class _AdminAddTeamScreenState extends State<AdminAddTeamScreen> {
   final _teamNameController = TextEditingController();
-  final _teamLeagueIdController = TextEditingController();
   final _picker = ImagePicker();
   final _storageService = StorageService();
 
@@ -24,7 +23,6 @@ class _AdminAddTeamScreenState extends State<AdminAddTeamScreen> {
   @override
   void dispose() {
     _teamNameController.dispose();
-    _teamLeagueIdController.dispose();
     super.dispose();
   }
 
@@ -38,19 +36,36 @@ class _AdminAddTeamScreenState extends State<AdminAddTeamScreen> {
   }
 
   Future<void> _takimEkle() async {
-    if (_teamLogo != null && _teamNameController.text.trim().isNotEmpty) {
-      await _storageService.uploadTeamLogo(
-        teamId: _teamNameController.text.trim().toLowerCase().replaceAll(
-          ' ',
-          '_',
+    if (_teamNameController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Lütfen takım adını girin.')),
+      );
+      return;
+    }
+    try {
+      if (_teamLogo != null) {
+        await _storageService.uploadTeamLogo(
+          teamId: _teamNameController.text.trim().toLowerCase().replaceAll(
+            ' ',
+            '_',
+          ),
+          file: File(_teamLogo!.path),
+        );
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Takım taslağı oluşturuldu (iskelet).')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Logo yükleme sırasında hata oluştu. Firebase bağlantısı kontrol edilmeli.',
+          ),
         ),
-        file: File(_teamLogo!.path),
       );
     }
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Takım taslağı oluşturuldu (iskelet).')),
-    );
   }
 
   @override
@@ -65,11 +80,6 @@ class _AdminAddTeamScreenState extends State<AdminAddTeamScreen> {
           TextField(
             controller: _teamNameController,
             decoration: const InputDecoration(labelText: 'Takım Adı'),
-          ),
-          const SizedBox(height: 10),
-          TextField(
-            controller: _teamLeagueIdController,
-            decoration: const InputDecoration(labelText: 'Turnuva ID'),
           ),
           const SizedBox(height: 10),
           OutlinedButton.icon(
