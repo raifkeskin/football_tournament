@@ -1,39 +1,30 @@
-/// Çoklu lig desteği için temel League modeli.
-class League {
-  const League({
+/// Takım modeli.
+class Team {
+  const Team({
     required this.id,
     required this.name,
+    required this.leagueId,
     required this.logoUrl,
-    required this.country,
-    this.startDate,
-    this.endDate,
-    this.season,
-    this.isActive = true,
+    this.groupName,
     this.createdAt,
     this.updatedAt,
   });
 
   final String id;
   final String name;
+  final String leagueId;
   final String logoUrl;
-  final String country;
-  final DateTime? startDate;
-  final DateTime? endDate;
-  final String? season;
-  final bool isActive;
+  final String? groupName;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
-  factory League.fromMap(Map<String, dynamic> map) {
-    return League(
+  factory Team.fromMap(Map<String, dynamic> map) {
+    return Team(
       id: map['id'] as String? ?? '',
       name: map['name'] as String? ?? '',
+      leagueId: map['leagueId'] as String? ?? '',
       logoUrl: (map['logoUrl'] ?? map['logo']) as String? ?? '',
-      country: map['country'] as String? ?? '',
-      startDate: _readDate(map['startDate']),
-      endDate: _readDate(map['endDate']),
-      season: map['season'] as String?,
-      isActive: map['isActive'] as bool? ?? true,
+      groupName: map['groupName'] as String?,
       createdAt: _readDate(map['createdAt']),
       updatedAt: _readDate(map['updatedAt']),
     );
@@ -43,12 +34,9 @@ class League {
     return {
       'id': id,
       'name': name,
+      'leagueId': leagueId,
       'logoUrl': logoUrl,
-      'country': country,
-      'startDate': startDate?.toIso8601String(),
-      'endDate': endDate?.toIso8601String(),
-      'season': season,
-      'isActive': isActive,
+      'groupName': groupName,
       'createdAt': createdAt?.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),
     };

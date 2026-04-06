@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 
+import 'admin_panel_screen.dart';
+
 /// Uygulama içindeki kullanıcı rolleri.
-enum UserRole {
-  admin,
-  teamManager,
-  standard,
-}
+enum UserRole { admin, teamManager, standard }
 
 /// Profil ekranı — rol tabanlı yönetim aksiyonları içerir.
 class ProfileScreen extends StatelessWidget {
@@ -26,9 +24,7 @@ class ProfileScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: cs.surfaceContainerLowest,
-      appBar: AppBar(
-        title: const Text('Profil'),
-      ),
+      appBar: AppBar(title: const Text('Profil')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
         children: [
@@ -46,11 +42,7 @@ class ProfileScreen extends StatelessWidget {
                   CircleAvatar(
                     radius: 36,
                     backgroundColor: cs.primary.withValues(alpha: 0.14),
-                    child: Icon(
-                      Icons.person,
-                      size: 40,
-                      color: cs.primary,
-                    ),
+                    child: Icon(Icons.person, size: 40, color: cs.primary),
                   ),
                   const SizedBox(height: 12),
                   Text(
@@ -81,46 +73,54 @@ class ProfileScreen extends StatelessWidget {
   List<Widget> _rolButonlari(BuildContext context, UserRole rol) {
     return switch (rol) {
       UserRole.admin => [
-          _AksiyonButonu(
-            baslik: 'Sistem Yönetim Paneli',
-            ikon: Icons.admin_panel_settings_outlined,
-            arkaPlan: const Color(0xFFFFEBEE),
-            yaziRenk: const Color(0xFFC62828),
-          ),
-          const SizedBox(height: 12),
-          _AksiyonButonu(
-            baslik: 'Lig/Haber Ayarları',
-            ikon: Icons.settings_suggest_outlined,
-            arkaPlan: const Color(0xFFFFF1F1),
-            yaziRenk: const Color(0xFFC62828),
-          ),
-        ],
+        _AksiyonButonu(
+          baslik: 'Sistem Yönetim Paneli',
+          ikon: Icons.admin_panel_settings_outlined,
+          arkaPlan: const Color(0xFFFFEBEE),
+          yaziRenk: const Color(0xFFC62828),
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const AdminPanelScreen()),
+            );
+          },
+        ),
+        const SizedBox(height: 12),
+        _AksiyonButonu(
+          baslik: 'Lig/Haber Ayarları',
+          ikon: Icons.settings_suggest_outlined,
+          arkaPlan: const Color(0xFFFFF1F1),
+          yaziRenk: const Color(0xFFC62828),
+          onPressed: () {},
+        ),
+      ],
       UserRole.teamManager => [
-          _AksiyonButonu(
-            baslik: 'Takım Yönetimi',
-            ikon: Icons.groups_2_outlined,
-            arkaPlan: const Color(0xFFEAF2FF),
-            yaziRenk: const Color(0xFF1565C0),
-          ),
-          const SizedBox(height: 12),
-          _AksiyonButonu(
-            baslik: 'Kadro Güncelle (Excel)',
-            ikon: Icons.upload_file_outlined,
-            arkaPlan: const Color(0xFFF0F6FF),
-            yaziRenk: const Color(0xFF1565C0),
-          ),
-        ],
+        _AksiyonButonu(
+          baslik: 'Takım Yönetimi',
+          ikon: Icons.groups_2_outlined,
+          arkaPlan: const Color(0xFFEAF2FF),
+          yaziRenk: const Color(0xFF1565C0),
+          onPressed: () {},
+        ),
+        const SizedBox(height: 12),
+        _AksiyonButonu(
+          baslik: 'Kadro Güncelle (Excel)',
+          ikon: Icons.upload_file_outlined,
+          arkaPlan: const Color(0xFFF0F6FF),
+          yaziRenk: const Color(0xFF1565C0),
+          onPressed: () {},
+        ),
+      ],
       UserRole.standard => [
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(
-              'Standart kullanıcılar için ek yönetim işlemi bulunmuyor.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text(
+            'Standart kullanıcılar için ek yönetim işlemi bulunmuyor.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
-        ],
+        ),
+      ],
     };
   }
 }
@@ -132,31 +132,28 @@ class _AksiyonButonu extends StatelessWidget {
     required this.ikon,
     required this.arkaPlan,
     required this.yaziRenk,
+    required this.onPressed,
   });
 
   final String baslik;
   final IconData ikon;
   final Color arkaPlan;
   final Color yaziRenk;
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
     return FilledButton.tonalIcon(
-      onPressed: () {},
+      onPressed: onPressed,
       style: FilledButton.styleFrom(
         elevation: 0,
         minimumSize: const Size(double.infinity, 52),
         backgroundColor: arkaPlan,
         foregroundColor: yaziRenk,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
       icon: Icon(ikon),
-      label: Text(
-        baslik,
-        style: const TextStyle(fontWeight: FontWeight.w600),
-      ),
+      label: Text(baslik, style: const TextStyle(fontWeight: FontWeight.w600)),
     );
   }
 }
