@@ -1,20 +1,31 @@
 import 'dart:io';
 
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 
 /// Firebase Storage yükleme işlemleri için servis iskeleti.
 class StorageService {
-  StorageService({FirebaseStorage? storage})
-    : _storage = storage ?? FirebaseStorage.instance;
+  StorageService({FirebaseStorage? storage}) : _storage = storage;
 
-  final FirebaseStorage _storage;
+  final FirebaseStorage? _storage;
+
+  FirebaseStorage _resolveStorage() {
+    if (_storage != null) return _storage;
+    if (Firebase.apps.isEmpty) {
+      throw StateError(
+        'Firebase initialize edilmedi. Logo yüklemek için önce Firebase.initializeApp() çağrılmalı.',
+      );
+    }
+    return FirebaseStorage.instance;
+  }
 
   /// Turnuva logosunu `league_logos/` altında saklar.
   Future<String> uploadLeagueLogo({
     required String leagueId,
     required File file,
   }) async {
-    final ref = _storage.ref().child(
+    final storage = _resolveStorage();
+    final ref = storage.ref().child(
       'league_logos/$leagueId-${DateTime.now().millisecondsSinceEpoch}.jpg',
     );
     final task = await ref.putFile(file);
@@ -26,7 +37,8 @@ class StorageService {
     required String teamId,
     required File file,
   }) async {
-    final ref = _storage.ref().child(
+    final storage = _resolveStorage();
+    final ref = storage.ref().child(
       'team_logos/$teamId-${DateTime.now().millisecondsSinceEpoch}.jpg',
     );
     final task = await ref.putFile(file);
