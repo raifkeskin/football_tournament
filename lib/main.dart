@@ -11,6 +11,9 @@ void main() {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
+  /// Firebase rol bağlantısı tamamlanana kadar admin simülasyonu.
+  static const bool isCurrentUserAdmin = true;
+
   /// Koyu yeşil tonları (varsayılan mavi yerine).
   static const Color _anaYesil = Color(0xFF1B5E20);
   static const Color _ikincilYesil = Color(0xFF2E7D32);
@@ -44,7 +47,7 @@ class MyApp extends StatelessWidget {
           foregroundColor: colorScheme.onPrimary,
         ),
       ),
-      home: const MainNavigator(),
+      home: const MainNavigator(isCurrentUserAdmin: isCurrentUserAdmin),
     );
   }
 }

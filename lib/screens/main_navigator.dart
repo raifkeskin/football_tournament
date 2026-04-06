@@ -7,7 +7,9 @@ import 'stats_screen.dart';
 
 /// Alt menü çubuğu ve dört ana ekran arasında geçiş.
 class MainNavigator extends StatefulWidget {
-  const MainNavigator({super.key});
+  const MainNavigator({super.key, required this.isCurrentUserAdmin});
+
+  final bool isCurrentUserAdmin;
 
   @override
   State<MainNavigator> createState() => _MainNavigatorState();
@@ -16,25 +18,21 @@ class MainNavigator extends StatefulWidget {
 class _MainNavigatorState extends State<MainNavigator> {
   int _aktifSekme = 0;
 
-  /// Sekme sırasıyla eşleşen ekranlar; [IndexedStack] ile durum korunur.
-  static const List<Widget> _ekranlar = [
-    HomeScreen(),
-    GroupsScreen(),
-    StatsScreen(),
-    ProfileScreen(),
-  ];
-
   void _sekmeDegistir(int index) {
     setState(() => _aktifSekme = index);
   }
 
   @override
   Widget build(BuildContext context) {
+    final ekranlar = <Widget>[
+      const HomeScreen(),
+      const GroupsScreen(),
+      const StatsScreen(),
+      ProfileScreen(isCurrentUserAdmin: widget.isCurrentUserAdmin),
+    ];
+
     return Scaffold(
-      body: IndexedStack(
-        index: _aktifSekme,
-        children: _ekranlar,
-      ),
+      body: IndexedStack(index: _aktifSekme, children: ekranlar),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _aktifSekme,
         onTap: _sekmeDegistir,

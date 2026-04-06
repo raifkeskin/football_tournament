@@ -7,16 +7,16 @@ enum UserRole { admin, teamManager, standard }
 
 /// Profil ekranı — rol tabanlı yönetim aksiyonları içerir.
 class ProfileScreen extends StatelessWidget {
-  const ProfileScreen({super.key});
+  const ProfileScreen({super.key, required this.isCurrentUserAdmin});
 
-  /// Demo amaçlı aktif kullanıcı rolü.
-  /// Gerçek projede bu değer auth katmanından gelmelidir.
-  final UserRole _aktifRol = UserRole.admin;
+  /// Firebase bağlantısı tamamlanana kadar `main.dart` üzerinden simüle edilir.
+  final bool isCurrentUserAdmin;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final rolMetni = switch (_aktifRol) {
+    final aktifRol = isCurrentUserAdmin ? UserRole.admin : UserRole.standard;
+    final rolMetni = switch (aktifRol) {
       UserRole.admin => 'Admin',
       UserRole.teamManager => 'Takım Yöneticisi',
       UserRole.standard => 'Standart Kullanıcı',
@@ -63,7 +63,7 @@ class ProfileScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          ..._rolButonlari(context, _aktifRol),
+          ..._rolButonlari(context, aktifRol),
         ],
       ),
     );
