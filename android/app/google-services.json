@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "974894815246",
+    "project_id": "football-tournament-c0c05",
+    "storage_bucket": "football-tournament-c0c05.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:974894815246:android:c62c1e058aa380211bc45f",
+        "android_client_info": {
+          "package_name": "com.example.football_tournament"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC_mGPEkY0kwR4Z2QoF6epzLQEzUr3Ok2w"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

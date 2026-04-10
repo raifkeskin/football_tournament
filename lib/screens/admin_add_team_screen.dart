@@ -1,9 +1,11 @@
 import 'dart:io';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
-import '../services/storage_service.dart';
+import '../services/database_service.dart';
+import '../services/image_upload_service.dart';
 
 /// Admin için takım ekleme formu.
 class AdminAddTeamScreen extends StatefulWidget {
@@ -16,9 +18,12 @@ class AdminAddTeamScreen extends StatefulWidget {
 class _AdminAddTeamScreenState extends State<AdminAddTeamScreen> {
   final _teamNameController = TextEditingController();
   final _picker = ImagePicker();
-  final _storageService = StorageService();
+  final _imageUploadService = ImgBBUploadService();
+  final _databaseService = DatabaseService();
 
   XFile? _teamLogo;
+  String? _selectedLeagueId;
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -36,35 +41,60 @@ class _AdminAddTeamScreenState extends State<AdminAddTeamScreen> {
   }
 
   Future<void> _takimEkle() async {
-    if (_teamNameController.text.trim().isEmpty) {
+    final teamName = _teamNameController.text.trim();
+
+    if (teamName.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Lütfen takım adını girin.')),
       );
       return;
     }
+
+    if (_selectedLeagueId == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Lütfen bir lig seçin.')));
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
     try {
+      String logoUrl = '';
       if (_teamLogo != null) {
-        await _storageService.uploadTeamLogo(
-          teamId: _teamNameController.text.trim().toLowerCase().replaceAll(
-            ' ',
-            '_',
-          ),
-          file: File(_teamLogo!.path),
+        final uploadedUrl = await _imageUploadService.uploadImage(
+          File(_teamLogo!.path),
         );
+        if (uploadedUrl != null) {
+          logoUrl = uploadedUrl;
+        } else {
+          throw Exception('Logo yüklenemedi, lütfen tekrar deneyin.');
+        }
       }
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Takım taslağı oluşturuldu (iskelet).')),
-      );
-    } catch (_) {
+
+      await _databaseService.addTeam(_selectedLeagueId!, teamName, logoUrl);
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Logo yükleme sırasında hata oluştu. Firebase bağlantısı kontrol edilmeli.',
-          ),
+          content: Text('Takım başarıyla kaydedildi.'),
+          backgroundColor: Colors.green,
         ),
       );
+
+      // Formu temizle
+      setState(() {
+        _teamNameController.clear();
+        _teamLogo = null;
+        _selectedLeagueId = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Hata oluştu: $e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -72,39 +102,98 @@ class _AdminAddTeamScreenState extends State<AdminAddTeamScreen> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: cs.surfaceContainerLowest,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(title: const Text('Takım Ekle')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          TextField(
-            controller: _teamNameController,
-            decoration: const InputDecoration(labelText: 'Takım Adı'),
-          ),
-          const SizedBox(height: 10),
-          OutlinedButton.icon(
-            onPressed: _logoSec,
-            style: OutlinedButton.styleFrom(
-              elevation: 0,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-              side: BorderSide(color: cs.outlineVariant),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                StreamBuilder<QuerySnapshot>(
+                  stream: _databaseService.getLeagues(),
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return Text('Hata: ${snapshot.error}');
+                    }
+                    if (!snapshot.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    final leagues = snapshot.data!.docs;
+                    if (leagues.isEmpty) {
+                      return const Card(
+                        child: Padding(
+                          padding: EdgeInsets.all(16.0),
+                          child: Text(
+                            'Henüz bir turnuva eklenmemiş. Önce bir turnuva eklemelisiniz.',
+                            style: TextStyle(color: Colors.orange),
+                          ),
+                        ),
+                      );
+                    }
+                    return DropdownButtonFormField<String>(
+                      initialValue: _selectedLeagueId,
+                      decoration: const InputDecoration(labelText: 'Turnuva Seçin'),
+                      items: leagues.map((doc) {
+                        final data = doc.data() as Map<String, dynamic>;
+                        return DropdownMenuItem<String>(
+                          value: doc.id,
+                          child: Text(data['name'] ?? 'Adsız Turnuva'),
+                        );
+                      }).toList(),
+                      onChanged: (val) =>
+                          setState(() => _selectedLeagueId = val),
+                    );
+                  },
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _teamNameController,
+                  decoration: const InputDecoration(labelText: 'Takım Adı'),
+                ),
+                const SizedBox(height: 16),
+                if (_teamLogo != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16.0),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.file(
+                        File(_teamLogo!.path),
+                        height: 150,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  ),
+                OutlinedButton.icon(
+                  onPressed: _logoSec,
+                  style: OutlinedButton.styleFrom(
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 14,
+                    ),
+                    side: BorderSide(color: cs.outlineVariant),
+                  ),
+                  icon: const Icon(Icons.photo_library_outlined),
+                  label: Text(
+                    _teamLogo == null
+                        ? 'Takım Logosu Seç (Galeri)'
+                        : 'Seçildi: ${_teamLogo!.name}',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                FilledButton.tonal(
+                  onPressed: _takimEkle,
+                  style: FilledButton.styleFrom(
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  child: const Text('Takımı Kaydet'),
+                ),
+              ],
             ),
-            icon: const Icon(Icons.photo_library_outlined),
-            label: Text(
-              _teamLogo == null
-                  ? 'Takım Logosu Seç (Galeri)'
-                  : 'Seçildi: ${_teamLogo!.name}',
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const SizedBox(height: 12),
-          FilledButton.tonal(
-            onPressed: _takimEkle,
-            style: FilledButton.styleFrom(elevation: 0),
-            child: const Text('Takım Ekle'),
-          ),
-        ],
-      ),
     );
   }
 }

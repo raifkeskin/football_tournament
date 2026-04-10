@@ -1,9 +1,9 @@
+import 'dart:math';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 /// Bekleyen yönetim işlemlerinin durumları.
-enum PendingActionStatus {
-  pending,
-  approved,
-  rejected,
-}
+enum PendingActionStatus { pending, approved, rejected }
 
 /// Firestore `pending_actions` koleksiyonu için veri modeli.
 ///
@@ -46,6 +46,32 @@ class PendingAction {
   final DateTime? reviewedAt;
   final String? reviewNote;
 
+  factory PendingAction.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final map = doc.data() ?? const <String, dynamic>{};
+    final statusStr =
+        (map['status'] as String?) ?? PendingActionStatus.pending.name;
+    final submittedAt = map['submittedAt'];
+    final reviewedAt = map['reviewedAt'];
+    return PendingAction(
+      actionId: (map['actionId'] as String?) ?? doc.id,
+      actionType: (map['actionType'] as String?) ?? '',
+      leagueId: (map['leagueId'] as String?) ?? '',
+      teamId: map['teamId'] as String?,
+      submittedBy: (map['submittedBy'] as String?) ?? '',
+      payload:
+          (map['payload'] as Map<String, dynamic>?) ??
+          const <String, dynamic>{},
+      status: PendingActionStatus.values.firstWhere(
+        (e) => e.name == statusStr,
+        orElse: () => PendingActionStatus.pending,
+      ),
+      submittedAt: submittedAt is Timestamp ? submittedAt.toDate() : null,
+      reviewedBy: map['reviewedBy'] as String?,
+      reviewedAt: reviewedAt is Timestamp ? reviewedAt.toDate() : null,
+      reviewNote: map['reviewNote'] as String?,
+    );
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'actionId': actionId,
@@ -55,9 +81,11 @@ class PendingAction {
       'submittedBy': submittedBy,
       'payload': payload,
       'status': status.name,
-      'submittedAt': submittedAt?.toIso8601String(),
+      'submittedAt': submittedAt == null
+          ? FieldValue.serverTimestamp()
+          : Timestamp.fromDate(submittedAt!),
       'reviewedBy': reviewedBy,
-      'reviewedAt': reviewedAt?.toIso8601String(),
+      'reviewedAt': reviewedAt == null ? null : Timestamp.fromDate(reviewedAt!),
       'reviewNote': reviewNote,
     };
   }
@@ -68,27 +96,41 @@ class PendingAction {
 /// Not: Bu sınıf Firestore bağlantı kodunu bilinçli olarak içermez.
 /// Projede `cloud_firestore` eklendiğinde metot içleri bağlanmalıdır.
 class ApprovalService {
-  const ApprovalService();
+  ApprovalService({FirebaseFirestore? firestore})
+    : _db = firestore ?? FirebaseFirestore.instance;
+
+  final FirebaseFirestore _db;
 
   /// Koleksiyon adı sabit tutulur.
   static const String pendingActionsCollection = 'pending_actions';
 
   /// TeamManager tarafından gelen bir işlemi bekleyen onaya yollar.
   Future<void> submitPendingAction(PendingAction action) async {
-    // TODO(approval): Firestore'a `pending_actions/{actionId}` olarak yaz.
-    // await FirebaseFirestore.instance
-    //   .collection(pendingActionsCollection)
-    //   .doc(action.actionId)
-    //   .set(action.toMap());
+    await _db
+        .collection(pendingActionsCollection)
+        .doc(action.actionId)
+        .set(action.toMap());
   }
 
   /// Admin panelinde listelenecek bekleyen işlemleri çeker.
-  Future<List<PendingAction>> fetchPendingActions({
-    String? leagueId,
-  }) async {
-    // TODO(approval): status=pending filtreli sorgu kur.
-    // Not: Gerekirse leagueId ile ek filtre uygula.
-    return const [];
+  Future<List<PendingAction>> fetchPendingActions({String? leagueId}) async {
+    Query<Map<String, dynamic>> q = _db
+        .collection(pendingActionsCollection)
+        .where('status', isEqualTo: PendingActionStatus.pending.name);
+    if (leagueId != null) {
+      q = q.where('leagueId', isEqualTo: leagueId);
+    }
+    final snap = await q.get();
+    final list = snap.docs.map((d) => PendingAction.fromDoc(d)).toList();
+    list.sort((a, b) {
+      final aa = a.submittedAt?.millisecondsSinceEpoch;
+      final bb = b.submittedAt?.millisecondsSinceEpoch;
+      if (aa == null && bb == null) return 0;
+      if (aa == null) return 1;
+      if (bb == null) return -1;
+      return bb.compareTo(aa);
+    });
+    return list;
   }
 
   /// Admin onayı.
@@ -97,7 +139,24 @@ class ApprovalService {
     required String adminUserId,
     String? reviewNote,
   }) async {
-    // TODO(approval): status=approved, reviewedBy, reviewedAt alanlarını güncelle.
+    final ref = _db.collection(pendingActionsCollection).doc(actionId);
+    final snap = await ref.get();
+    if (!snap.exists) return;
+    final action = PendingAction.fromDoc(snap);
+
+    if (action.actionType == 'squad_upload') {
+      final payloadPlayers = action.payload['players'];
+      if (payloadPlayers is List) {
+        await _applySquadUpload(teamId: action.teamId, players: payloadPlayers);
+      }
+    }
+
+    await ref.update({
+      'status': PendingActionStatus.approved.name,
+      'reviewedBy': adminUserId,
+      'reviewedAt': FieldValue.serverTimestamp(),
+      'reviewNote': reviewNote,
+    });
   }
 
   /// Admin reddi.
@@ -106,6 +165,48 @@ class ApprovalService {
     required String adminUserId,
     String? reviewNote,
   }) async {
-    // TODO(approval): status=rejected, reviewedBy, reviewedAt, reviewNote güncelle.
+    await _db.collection(pendingActionsCollection).doc(actionId).update({
+      'status': PendingActionStatus.rejected.name,
+      'reviewedBy': adminUserId,
+      'reviewedAt': FieldValue.serverTimestamp(),
+      'reviewNote': reviewNote,
+    });
+  }
+
+  Future<void> _applySquadUpload({
+    required String? teamId,
+    required List players,
+  }) async {
+    if (teamId == null || teamId.isEmpty) return;
+
+    var start = 0;
+    while (start < players.length) {
+      final end = min(start + 400, players.length);
+      final chunk = players.sublist(start, end);
+      final batch = _db.batch();
+      for (final row in chunk) {
+        if (row is! Map) continue;
+        final name = (row['name'] ?? '').toString().trim();
+        if (name.isEmpty) continue;
+        final docRef = _db.collection('players').doc();
+        batch.set(docRef, {
+          'teamId': teamId,
+          'name': name,
+          'position': row['position'],
+          'preferredFoot': row['preferredFoot'],
+          'number': row['number'],
+          'birthYear': row['birthYear'],
+          'photoUrl': row['photoUrl'],
+          'goals': 0,
+          'assists': 0,
+          'yellowCards': 0,
+          'redCards': 0,
+          'matchesPlayed': 0,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+      await batch.commit();
+      start = end;
+    }
   }
 }

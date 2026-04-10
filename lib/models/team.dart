@@ -1,11 +1,15 @@
 /// Takım modeli.
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class Team {
   const Team({
     required this.id,
     required this.name,
     required this.leagueId,
     required this.logoUrl,
+    this.groupId,
     this.groupName,
+    this.stats,
     this.createdAt,
     this.updatedAt,
   });
@@ -14,7 +18,9 @@ class Team {
   final String name;
   final String leagueId;
   final String logoUrl;
+  final String? groupId;
   final String? groupName;
+  final Map<String, dynamic>? stats; // P, G, B, M, AG, YG, AV, Puan
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -24,7 +30,9 @@ class Team {
       name: map['name'] as String? ?? '',
       leagueId: map['leagueId'] as String? ?? '',
       logoUrl: (map['logoUrl'] ?? map['logo']) as String? ?? '',
+      groupId: map['groupId'] as String?,
       groupName: map['groupName'] as String?,
+      stats: map['stats'] as Map<String, dynamic>?,
       createdAt: _readDate(map['createdAt']),
       updatedAt: _readDate(map['updatedAt']),
     );
@@ -36,16 +44,17 @@ class Team {
       'name': name,
       'leagueId': leagueId,
       'logoUrl': logoUrl,
+      'groupId': groupId,
       'groupName': groupName,
-      'createdAt': createdAt?.toIso8601String(),
-      'updatedAt': updatedAt?.toIso8601String(),
+      'stats': stats,
     };
   }
 
   static DateTime? _readDate(dynamic value) {
-    if (value is String) {
-      return DateTime.tryParse(value);
-    }
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
+    if (value is String) return DateTime.tryParse(value);
     return null;
   }
 }

@@ -1,159 +1,221 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'admin_panel_screen.dart';
+import '../services/app_session.dart';
 
-/// Uygulama içindeki kullanıcı rolleri.
-enum UserRole { admin, teamManager, standard }
+class ProfileScreen extends StatefulWidget {
+  const ProfileScreen({super.key, required this.onRequestHomeTab});
 
-/// Profil ekranı — rol tabanlı yönetim aksiyonları içerir.
-class ProfileScreen extends StatelessWidget {
-  const ProfileScreen({super.key, required this.isCurrentUserAdmin});
+  final VoidCallback onRequestHomeTab;
 
-  /// Firebase bağlantısı tamamlanana kadar `main.dart` üzerinden simüle edilir.
-  final bool isCurrentUserAdmin;
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  final _usernameController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _isLoading = false;
+
+  @override
+  void dispose() {
+    _usernameController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _login(AppSessionController session) async {
+    final username = _usernameController.text.trim();
+    final password = _passwordController.text;
+    if (username.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Lütfen kullanıcı adı ve şifre girin.')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    try {
+      await session.signInWithUsername(username: username, password: password);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Giriş başarısız: $e')));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final aktifRol = isCurrentUserAdmin ? UserRole.admin : UserRole.standard;
-    final rolMetni = switch (aktifRol) {
-      UserRole.admin => 'Admin',
-      UserRole.teamManager => 'Takım Yöneticisi',
-      UserRole.standard => 'Standart Kullanıcı',
-    };
+    final session = AppSession.of(context);
 
-    return Scaffold(
-      backgroundColor: cs.surfaceContainerLowest,
-      appBar: AppBar(title: const Text('Profil')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
-        children: [
-          Card(
-            elevation: 0,
-            color: cs.surfaceContainerLow,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(18),
-              side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.4)),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  CircleAvatar(
-                    radius: 36,
-                    backgroundColor: cs.primary.withValues(alpha: 0.14),
-                    child: Icon(Icons.person, size: 40, color: cs.primary),
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, authSnapshot) {
+        final user = authSnapshot.data;
+
+        return ValueListenableBuilder<AppSessionState>(
+          valueListenable: session,
+          builder: (context, state, _) {
+            final isAdminPanelVisible =
+                user != null && !state.isLoading && state.isAdmin;
+
+            if (user != null && !state.isLoading && !state.isAdmin) {
+              WidgetsBinding.instance.addPostFrameCallback((_) async {
+                await session.signOut();
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Bu hesap admin yetkisine sahip değil.'),
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Raif Keskin',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    rolMetni,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: cs.onSurfaceVariant,
-                    ),
-                  ),
-                ],
+                );
+              });
+            }
+
+            return PopScope(
+              canPop: !isAdminPanelVisible,
+              onPopInvokedWithResult: (didPop, result) {
+                if (didPop) return;
+                if (isAdminPanelVisible) {
+                  widget.onRequestHomeTab();
+                }
+              },
+              child: Scaffold(
+                backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+                appBar: AppBar(title: const Text('Profil')),
+                body: isAdminPanelVisible
+                    ? AdminPanelWidget(
+                        onLogout: () => FirebaseAuth.instance.signOut(),
+                      )
+                    : Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 460),
+                          child: ListView(
+                            padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+                            children: [
+                              Card(
+                                margin: EdgeInsets.zero,
+                                child: Padding(
+                                  padding: const EdgeInsets.all(18),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Container(
+                                            width: 44,
+                                            height: 44,
+                                            decoration: BoxDecoration(
+                                              color: cs.primary.withValues(
+                                                alpha: 0.10,
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                              border: Border.all(
+                                                color: cs.outlineVariant
+                                                    .withValues(alpha: 0.4),
+                                              ),
+                                            ),
+                                            child: Icon(
+                                              Icons
+                                                  .admin_panel_settings_outlined,
+                                              color: cs.primary,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Text(
+                                              'Yönetici Girişi',
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .titleLarge
+                                                  ?.copyWith(
+                                                    fontWeight:
+                                                        FontWeight.w900,
+                                                  ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 16),
+                                      TextField(
+                                        controller: _usernameController,
+                                        textInputAction: TextInputAction.next,
+                                        decoration: const InputDecoration(
+                                          labelText: 'Kullanıcı Adı',
+                                          prefixIcon:
+                                              Icon(Icons.person_outline),
+                                        ),
+                                        enabled: !_isLoading,
+                                      ),
+                                      const SizedBox(height: 12),
+                                      TextField(
+                                        controller: _passwordController,
+                                        obscureText: true,
+                                        onSubmitted: _isLoading
+                                            ? null
+                                            : (_) => _login(session),
+                                        decoration: const InputDecoration(
+                                          labelText: 'Şifre',
+                                          prefixIcon: Icon(Icons.lock_outline),
+                                        ),
+                                        enabled: !_isLoading,
+                                      ),
+                                      const SizedBox(height: 16),
+                                      SizedBox(
+                                        height: 50,
+                                        child: _isLoading
+                                            ? const Center(
+                                                child: SizedBox(
+                                                  width: 20,
+                                                  height: 20,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                    strokeWidth: 2,
+                                                  ),
+                                                ),
+                                              )
+                                            : FilledButton(
+                                                onPressed: () =>
+                                                    _login(session),
+                                                child: const Text(
+                                                  'Giriş Yap',
+                                                  style: TextStyle(
+                                                    fontWeight:
+                                                        FontWeight.w800,
+                                                  ),
+                                                ),
+                                              ),
+                                      ),
+                                      if (state.isLoading && user != null) ...[
+                                        const SizedBox(height: 12),
+                                        Text(
+                                          'Yetki kontrol ediliyor...',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            color: cs.onSurfaceVariant,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
               ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          ..._rolButonlari(context, aktifRol),
-        ],
-      ),
-    );
-  }
-
-  /// Role göre görünecek aksiyonlar.
-  List<Widget> _rolButonlari(BuildContext context, UserRole rol) {
-    return switch (rol) {
-      UserRole.admin => [
-        _AksiyonButonu(
-          baslik: 'Sistem Yönetim Paneli',
-          ikon: Icons.admin_panel_settings_outlined,
-          arkaPlan: const Color(0xFFFFEBEE),
-          yaziRenk: const Color(0xFFC62828),
-          onPressed: () {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const AdminPanelScreen()),
             );
           },
-        ),
-        const SizedBox(height: 12),
-        _AksiyonButonu(
-          baslik: 'Lig/Haber Ayarları',
-          ikon: Icons.settings_suggest_outlined,
-          arkaPlan: const Color(0xFFFFF1F1),
-          yaziRenk: const Color(0xFFC62828),
-          onPressed: () {},
-        ),
-      ],
-      UserRole.teamManager => [
-        _AksiyonButonu(
-          baslik: 'Takım Yönetimi',
-          ikon: Icons.groups_2_outlined,
-          arkaPlan: const Color(0xFFEAF2FF),
-          yaziRenk: const Color(0xFF1565C0),
-          onPressed: () {},
-        ),
-        const SizedBox(height: 12),
-        _AksiyonButonu(
-          baslik: 'Kadro Güncelle (Excel)',
-          ikon: Icons.upload_file_outlined,
-          arkaPlan: const Color(0xFFF0F6FF),
-          yaziRenk: const Color(0xFF1565C0),
-          onPressed: () {},
-        ),
-      ],
-      UserRole.standard => [
-        Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Text(
-            'Standart kullanıcılar için ek yönetim işlemi bulunmuyor.',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ),
-      ],
-    };
-  }
-}
-
-/// Gölgesiz, pastel renkli aksiyon butonu.
-class _AksiyonButonu extends StatelessWidget {
-  const _AksiyonButonu({
-    required this.baslik,
-    required this.ikon,
-    required this.arkaPlan,
-    required this.yaziRenk,
-    required this.onPressed,
-  });
-
-  final String baslik;
-  final IconData ikon;
-  final Color arkaPlan;
-  final Color yaziRenk;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return FilledButton.tonalIcon(
-      onPressed: onPressed,
-      style: FilledButton.styleFrom(
-        elevation: 0,
-        minimumSize: const Size(double.infinity, 52),
-        backgroundColor: arkaPlan,
-        foregroundColor: yaziRenk,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      ),
-      icon: Icon(ikon),
-      label: Text(baslik, style: const TextStyle(fontWeight: FontWeight.w600)),
+        );
+      },
     );
   }
 }

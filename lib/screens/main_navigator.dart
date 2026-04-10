@@ -7,9 +7,7 @@ import 'stats_screen.dart';
 
 /// Alt menü çubuğu ve dört ana ekran arasında geçiş.
 class MainNavigator extends StatefulWidget {
-  const MainNavigator({super.key, required this.isCurrentUserAdmin});
-
-  final bool isCurrentUserAdmin;
+  const MainNavigator({super.key});
 
   @override
   State<MainNavigator> createState() => _MainNavigatorState();
@@ -28,7 +26,7 @@ class _MainNavigatorState extends State<MainNavigator> {
       const HomeScreen(),
       const GroupsScreen(),
       const StatsScreen(),
-      ProfileScreen(isCurrentUserAdmin: widget.isCurrentUserAdmin),
+      ProfileScreen(onRequestHomeTab: () => _sekmeDegistir(0)),
     ];
 
     return Scaffold(
