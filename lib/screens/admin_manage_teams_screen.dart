@@ -389,9 +389,11 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                                           MaterialPageRoute(
                                             builder: (_) => TeamSquadScreen(
                                               teamId: doc.id,
-                                              tournamentId: _selectedLeagueId ?? '',
+                                              tournamentId:
+                                                  _selectedLeagueId ?? '',
                                               teamName: data['name'] ?? '',
-                                              teamLogoUrl: data['logoUrl'] ?? '',
+                                              teamLogoUrl:
+                                                  data['logoUrl'] ?? '',
                                             ),
                                           ),
                                         );
@@ -537,8 +539,9 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
             }
             final s = value.toString().replaceAll('\u0000', '').trim();
             if (s.isEmpty) return null;
-            final m = RegExp(r'^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$')
-                .firstMatch(s);
+            final m = RegExp(
+              r'^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$',
+            ).firstMatch(s);
             if (m != null) {
               final dd = m.group(1)!.padLeft(2, '0');
               final mm = m.group(2)!.padLeft(2, '0');
@@ -1342,8 +1345,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                     'teamName': teamName,
                     'fileName': pickedFileName,
                     'players': parsed,
-                    'skippedRows':
-                        skippedEmpty + skippedShort + skippedNoName,
+                    'skippedRows': skippedEmpty + skippedShort + skippedNoName,
                   },
                 ),
               );
@@ -1563,9 +1565,12 @@ class _EditTeamScreenState extends State<EditTeamScreen> {
                               if (_newLogo != null)
                                 CircleAvatar(
                                   radius: 64,
-                                  backgroundColor:
-                                      cs.primary.withValues(alpha: 0.10),
-                                  backgroundImage: FileImage(File(_newLogo!.path)),
+                                  backgroundColor: cs.primary.withValues(
+                                    alpha: 0.10,
+                                  ),
+                                  backgroundImage: FileImage(
+                                    File(_newLogo!.path),
+                                  ),
                                 )
                               else if (currentLogoUrl.isNotEmpty)
                                 SizedBox(
@@ -1582,8 +1587,9 @@ class _EditTeamScreenState extends State<EditTeamScreen> {
                               else
                                 CircleAvatar(
                                   radius: 64,
-                                  backgroundColor:
-                                      cs.primary.withValues(alpha: 0.10),
+                                  backgroundColor: cs.primary.withValues(
+                                    alpha: 0.10,
+                                  ),
                                   child: Icon(
                                     Icons.shield,
                                     size: 46,
@@ -1610,20 +1616,24 @@ class _EditTeamScreenState extends State<EditTeamScreen> {
                         const SizedBox(height: 14),
                         TextField(
                           controller: _nameController,
-                          decoration: const InputDecoration(labelText: 'Takım Adı'),
+                          decoration: const InputDecoration(
+                            labelText: 'Takım Adı',
+                          ),
                         ),
                         const SizedBox(height: 10),
                         TextField(
                           controller: _foundedController,
                           keyboardType: TextInputType.number,
-                          decoration:
-                              const InputDecoration(labelText: 'Kuruluş Tarihi'),
+                          decoration: const InputDecoration(
+                            labelText: 'Kuruluş Tarihi',
+                          ),
                         ),
                         const SizedBox(height: 10),
                         TextField(
                           controller: _managerController,
-                          decoration:
-                              const InputDecoration(labelText: 'Takım Sorumlusu'),
+                          decoration: const InputDecoration(
+                            labelText: 'Takım Sorumlusu',
+                          ),
                         ),
                       ],
                     ),
@@ -1635,7 +1645,7 @@ class _EditTeamScreenState extends State<EditTeamScreen> {
                   style: FilledButton.styleFrom(
                     minimumSize: const Size(double.infinity, 50),
                   ),
-                  child: const Text('Bilgileri Güncelle'),
+                  child: const Text('GÜNCELLE'),
                 ),
               ],
             ),

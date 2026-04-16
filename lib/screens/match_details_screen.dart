@@ -65,9 +65,9 @@ Future<void> _openExternalUrl(BuildContext context, String rawUrl) async {
   final uri = Uri.tryParse(normalized);
   if (uri == null) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Link geçersiz.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Link geçersiz.')));
     return;
   }
   try {
@@ -77,15 +77,15 @@ Future<void> _openExternalUrl(BuildContext context, String rawUrl) async {
       webOnlyWindowName: kIsWeb ? '_blank' : null,
     );
     if (!ok && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Link açılamadı.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Link açılamadı.')));
     }
   } catch (e) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Link açılamadı: $e')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Link açılamadı: $e')));
   }
 }
 
@@ -102,7 +102,8 @@ String? _extractYoutubeVideoId(String rawUrl) {
     return id.isEmpty ? null : id;
   }
 
-  if (uri.host.contains('youtube.com') || uri.host.contains('youtube-nocookie.com')) {
+  if (uri.host.contains('youtube.com') ||
+      uri.host.contains('youtube-nocookie.com')) {
     final v = (uri.queryParameters['v'] ?? '').trim();
     if (v.isNotEmpty) return v;
 
@@ -462,10 +463,7 @@ Future<void> _saveNetworkImageToGallery(
   } catch (e) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Hata: $e'),
-        backgroundColor: Colors.red,
-      ),
+      SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red),
     );
   }
 }
@@ -641,9 +639,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
             content: TextField(
               controller: controller,
               keyboardType: TextInputType.url,
-              decoration: const InputDecoration(
-                hintText: 'https://…',
-              ),
+              decoration: const InputDecoration(hintText: 'https://…'),
             ),
             actions: [
               TextButton(
@@ -678,10 +674,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Hata: $e'),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red),
       );
     } finally {
       controller.dispose();
@@ -717,10 +710,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Hata: $e'),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red),
       );
     }
   }
@@ -782,8 +772,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
 
   Future<void> _openPitchEditor(MatchModel match) async {
     final cs = Theme.of(context).colorScheme;
-    final matchRef =
-        FirebaseFirestore.instance.collection('matches').doc(match.id);
+    final matchRef = FirebaseFirestore.instance
+        .collection('matches')
+        .doc(match.id);
     try {
       final saved = await showModalBottomSheet<Map<String, String?>?>(
         context: context,
@@ -817,8 +808,10 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
                       const SizedBox(height: 8),
                       const Text(
                         'Saha Seç',
-                        style:
-                            TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 16,
+                        ),
                       ),
                       const SizedBox(height: 10),
                       StreamBuilder<QuerySnapshot>(
@@ -831,8 +824,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
                           return DropdownButtonFormField<String?>(
                             key: ValueKey(selectedId),
                             initialValue: selectedId,
-                            decoration:
-                                const InputDecoration(labelText: 'Saha'),
+                            decoration: const InputDecoration(
+                              labelText: 'Saha',
+                            ),
                             items: [
                               const DropdownMenuItem<String?>(
                                 value: null,
@@ -842,25 +836,32 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
                                 DropdownMenuItem<String?>(
                                   value: d.id,
                                   child: Text(
-                                    ((d.data() as Map<String, dynamic>)['name'] ??
+                                    ((d.data()
+                                                as Map<
+                                                  String,
+                                                  dynamic
+                                                >)['name'] ??
                                             '')
                                         .toString(),
                                   ),
                                 ),
                             ],
                             onChanged: (v) {
-                              final selected =
-                                  docs.where((e) => e.id == v).toList();
+                              final selected = docs
+                                  .where((e) => e.id == v)
+                                  .toList();
                               final data = selected.isEmpty
                                   ? null
                                   : (selected.first.data()
-                                      as Map<String, dynamic>);
-                              final name =
-                                  (data?['name'] ?? '').toString().trim();
+                                        as Map<String, dynamic>);
+                              final name = (data?['name'] ?? '')
+                                  .toString()
+                                  .trim();
                               setSheetState(() {
                                 selectedId = v;
-                                selectedName =
-                                    v == null || name.isEmpty ? null : name;
+                                selectedName = v == null || name.isEmpty
+                                    ? null
+                                    : name;
                               });
                             },
                           );
@@ -874,7 +875,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
                           ),
-                          textStyle: const TextStyle(fontWeight: FontWeight.w900),
+                          textStyle: const TextStyle(
+                            fontWeight: FontWeight.w900,
+                          ),
                         ),
                         onPressed: () => Navigator.pop(context, {
                           'pitchId': selectedId,
@@ -914,8 +917,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
 
   Future<void> _openDateTimeEditor(MatchModel match) async {
     final cs = Theme.of(context).colorScheme;
-    final matchRef =
-        FirebaseFirestore.instance.collection('matches').doc(match.id);
+    final matchRef = FirebaseFirestore.instance
+        .collection('matches')
+        .doc(match.id);
 
     DateTime? selectedDate;
     final dateStr = (match.matchDate ?? '').trim();
@@ -986,13 +990,19 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
               }
               final h = int.tryParse(hh);
               final m = int.tryParse(mm);
-              if (h == null || m == null || h < 0 || h > 23 || m < 0 || m > 59) {
+              if (h == null ||
+                  m == null ||
+                  h < 0 ||
+                  h > 23 ||
+                  m < 0 ||
+                  m > 59) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Saat formatı geçersiz.')),
                 );
                 return;
               }
-              final time = '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
+              final time =
+                  '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
               await matchRef.update({
                 'matchDate': yyyyMmDd(d),
                 'matchTime': time,
@@ -1018,7 +1028,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          selectedDate == null ? 'Maç Tarihi' : ddMmYyyy(selectedDate!),
+                          selectedDate == null
+                              ? 'Maç Tarihi'
+                              : ddMmYyyy(selectedDate!),
                           style: const TextStyle(fontWeight: FontWeight.w900),
                         ),
                       ),
@@ -1060,7 +1072,10 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
                       const SizedBox(width: 10),
                       const Text(
                         ':',
-                        style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 18,
+                        ),
                       ),
                       const SizedBox(width: 10),
                       SizedBox(
@@ -1135,8 +1150,6 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
     }
   }
 
-
-
   @override
   Widget build(BuildContext context) {
     final dbService = DatabaseService();
@@ -1177,9 +1190,11 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
 
             final m = matchSnapshot.data!;
             final showScores = m.status != MatchStatus.notStarted;
-            final htHome = m.score?.halfTime.home ??
+            final htHome =
+                m.score?.halfTime.home ??
                 (showScores ? htHomeFromEvents(m.homeTeamId) : null);
-            final htAway = m.score?.halfTime.away ??
+            final htAway =
+                m.score?.halfTime.away ??
                 (showScores ? htHomeFromEvents(m.awayTeamId) : null);
 
             return StreamBuilder<QuerySnapshot>(
@@ -1195,8 +1210,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
                 if (teamSnapshot.hasData) {
                   for (final doc in teamSnapshot.data!.docs) {
                     final data = doc.data() as Map<String, dynamic>;
-                    final raw =
-                        (data['logoUrl'] ?? data['logo'] ?? '').toString().trim();
+                    final raw = (data['logoUrl'] ?? data['logo'] ?? '')
+                        .toString()
+                        .trim();
                     teamLogoById[doc.id] = raw;
                   }
                 }
@@ -1208,19 +1224,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
                     ? m.awayTeamLogoUrl
                     : (teamLogoById[m.awayTeamId] ?? '');
 
-                  final homeStarting =
-                      m.homeLineupDetail?.starting ?? const <LineupPlayer>[];
-                  final awayStarting =
-                      m.awayLineupDetail?.starting ?? const <LineupPlayer>[];
-                final homeSubs =
-                    m.homeLineupDetail?.subs ?? const <LineupPlayer>[];
-                final awaySubs =
-                    m.awayLineupDetail?.subs ?? const <LineupPlayer>[];
-                final isLineupsEmpty = homeStarting.isEmpty &&
-                    awayStarting.isEmpty &&
-                    homeSubs.isEmpty &&
-                    awaySubs.isEmpty;
-                final showLineupsTab = widget.isAdmin || !isLineupsEmpty;
+                final showLineupsTab = widget.isAdmin;
 
                 return DefaultTabController(
                   length: showLineupsTab ? 3 : 2,
@@ -1237,8 +1241,8 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
                                 animation: tabController,
                                 builder: (context, _) {
                                   final idx = tabController.index;
-                                  final isHighlightsTab = (showLineupsTab &&
-                                          idx == 2) ||
+                                  final isHighlightsTab =
+                                      (showLineupsTab && idx == 2) ||
                                       (!showLineupsTab && idx == 1);
 
                                   if (idx == 0) {
@@ -1272,8 +1276,8 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
                                               MaterialPageRoute(
                                                 builder: (_) =>
                                                     AdminMatchEventScreen(
-                                                  match: m,
-                                                ),
+                                                      match: m,
+                                                    ),
                                               ),
                                             );
                                           },
@@ -1361,7 +1365,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
                                                         .trim();
                                                 final hasDateTime =
                                                     dateStr.isNotEmpty &&
-                                                        timeText.isNotEmpty;
+                                                    timeText.isNotEmpty;
                                                 final text = hasDateTime
                                                     ? '${dateStr.split('-').reversed.join('.')}  $timeText'
                                                     : 'Tarih ve Saat Belirlenmedi';
@@ -1396,14 +1400,14 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
                                                         _openDateTimeEditor(m),
                                                     borderRadius:
                                                         BorderRadius.circular(
-                                                      10,
-                                                    ),
+                                                          10,
+                                                        ),
                                                     child: Padding(
-                                                      padding: const EdgeInsets
-                                                          .symmetric(
-                                                        horizontal: 6,
-                                                        vertical: 4,
-                                                      ),
+                                                      padding:
+                                                          const EdgeInsets.symmetric(
+                                                            horizontal: 6,
+                                                            vertical: 4,
+                                                          ),
                                                       child: row,
                                                     ),
                                                   );
@@ -1423,7 +1427,8 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
                                                       MainAxisSize.min,
                                                   children: [
                                                     const Icon(
-                                                      Icons.location_on_outlined,
+                                                      Icons
+                                                          .location_on_outlined,
                                                       size: 16,
                                                       color: Colors.white,
                                                     ),
@@ -1526,8 +1531,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
         );
       },
     );
-}
-
+  }
 }
 
 class _ScorePill extends StatelessWidget {
@@ -1683,17 +1687,18 @@ class _LineupsTab extends StatelessWidget {
           children: [
             Text(
               text,
-              style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w900),
+              style: TextStyle(
+                color: cs.onSurface,
+                fontWeight: FontWeight.w900,
+              ),
             ),
             if (isAdmin && hasAnyData)
               Positioned(
                 right: 0,
                 child: IconButton(
                   tooltip: 'Düzenle',
-                  onPressed: () => _openLineupSheet(
-                    context,
-                    isStarting: isStarting,
-                  ),
+                  onPressed: () =>
+                      _openLineupSheet(context, isStarting: isStarting),
                   icon: const Icon(Icons.edit_outlined),
                 ),
               ),
@@ -1711,7 +1716,8 @@ class _LineupsTab extends StatelessWidget {
     final awayStarting = away?.starting ?? const <LineupPlayer>[];
     final homeSubs = home?.subs ?? const <LineupPlayer>[];
     final awaySubs = away?.subs ?? const <LineupPlayer>[];
-    final isEmpty = homeStarting.isEmpty &&
+    final isEmpty =
+        homeStarting.isEmpty &&
         awayStarting.isEmpty &&
         homeSubs.isEmpty &&
         awaySubs.isEmpty;
@@ -1766,14 +1772,9 @@ class _LineupsTab extends StatelessWidget {
                           ),
                           child: IconButton(
                             tooltip: 'İlk 11 ekle',
-                            onPressed: () => _openLineupSheet(
-                              context,
-                              isStarting: true,
-                            ),
-                            icon: Icon(
-                              Icons.add,
-                              color: Colors.green.shade800,
-                            ),
+                            onPressed: () =>
+                                _openLineupSheet(context, isStarting: true),
+                            icon: Icon(Icons.add, color: Colors.green.shade800),
                           ),
                         ),
                       ),
@@ -1811,14 +1812,9 @@ class _LineupsTab extends StatelessWidget {
                           ),
                           child: IconButton(
                             tooltip: 'Yedek ekle',
-                            onPressed: () => _openLineupSheet(
-                              context,
-                              isStarting: false,
-                            ),
-                            icon: Icon(
-                              Icons.add,
-                              color: Colors.green.shade800,
-                            ),
+                            onPressed: () =>
+                                _openLineupSheet(context, isStarting: false),
+                            icon: Icon(Icons.add, color: Colors.green.shade800),
                           ),
                         ),
                       ),
@@ -1878,7 +1874,10 @@ class _HighlightsTab extends StatelessWidget {
       items.add(
         ListTile(
           leading: const Icon(Icons.play_circle_fill, color: Colors.red),
-          title: Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+          title: Text(
+            title,
+            style: const TextStyle(fontWeight: FontWeight.w900),
+          ),
           subtitle: Text(
             videoUrls[i],
             maxLines: 1,
@@ -1928,9 +1927,7 @@ class _HighlightsTab extends StatelessWidget {
     }
 
     if (items.isEmpty) {
-      return const Center(
-        child: Text('Henüz önemli an eklenmedi.'),
-      );
+      return const Center(child: Text('Henüz önemli an eklenmedi.'));
     }
 
     return ListView.separated(
@@ -1968,7 +1965,9 @@ class _EventsTab extends StatelessWidget {
     for (final e in events) {
       if (e.type == 'goal') {
         final scoringTeamId = e.isOwnGoal
-            ? (e.teamId == match.homeTeamId ? match.awayTeamId : match.homeTeamId)
+            ? (e.teamId == match.homeTeamId
+                  ? match.awayTeamId
+                  : match.homeTeamId)
             : e.teamId;
         if (scoringTeamId == match.homeTeamId) home += 1;
         if (scoringTeamId == match.awayTeamId) away += 1;
@@ -1990,13 +1989,14 @@ class _EventsTab extends StatelessWidget {
         final isHome = event.teamId == match.homeTeamId;
         final isSecondYellow = event.type == 'yellow_card'
             ? events
-                    .take(index)
-                    .where(
-                      (e) =>
-                          e.type == 'yellow_card' &&
-                          e.teamId == event.teamId &&
-                          e.playerName == event.playerName,
-                    ).isNotEmpty
+                  .take(index)
+                  .where(
+                    (e) =>
+                        e.type == 'yellow_card' &&
+                        e.teamId == event.teamId &&
+                        e.playerName == event.playerName,
+                  )
+                  .isNotEmpty
             : false;
         final row = _TimelineRow(
           isHome: isHome,
@@ -2160,8 +2160,9 @@ class _TimelineRow extends StatelessWidget {
     Widget content;
     if (isSub) {
       content = Column(
-        crossAxisAlignment:
-            isHome ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        crossAxisAlignment: isHome
+            ? CrossAxisAlignment.end
+            : CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisSize: MainAxisSize.min,
@@ -2281,12 +2282,10 @@ class _TimelineRow extends StatelessWidget {
           : null;
 
       content = Column(
-        crossAxisAlignment:
-            isHome ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-        children: [
-          playerLine,
-          ?assistLine,
-        ],
+        crossAxisAlignment: isHome
+            ? CrossAxisAlignment.end
+            : CrossAxisAlignment.start,
+        children: [playerLine, ?assistLine],
       );
     }
 
@@ -2299,8 +2298,9 @@ class _TimelineRow extends StatelessWidget {
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment:
-            isHome ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        crossAxisAlignment: isHome
+            ? CrossAxisAlignment.end
+            : CrossAxisAlignment.start,
         children: [
           if (runningScore != null)
             SizedBox(
@@ -2322,16 +2322,8 @@ class _TimelineRow extends StatelessWidget {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: isHome
-                ? [
-                    Flexible(child: content),
-                    const SizedBox(width: 8),
-                    icon,
-                  ]
-                : [
-                    icon,
-                    const SizedBox(width: 8),
-                    Flexible(child: content),
-                  ],
+                ? [Flexible(child: content), const SizedBox(width: 8), icon]
+                : [icon, const SizedBox(width: 8), Flexible(child: content)],
           ),
         ],
       ),
@@ -2353,7 +2345,9 @@ class _TimelineRow extends StatelessWidget {
           decoration: BoxDecoration(
             color: cs.surfaceContainerLow,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.35)),
+            border: Border.all(
+              color: cs.outlineVariant.withValues(alpha: 0.35),
+            ),
           ),
           child: Text(
             "$minute'",

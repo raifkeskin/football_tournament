@@ -31,7 +31,10 @@ class _AdminDataToolsScreenState extends State<AdminDataToolsScreen> {
     if (v == null) return null;
     if (v is Timestamp) return v.toDate().toIso8601String();
     if (v is DateTime) return v.toIso8601String();
-    if (v is GeoPoint) return {'_geo': [v.latitude, v.longitude]};
+    if (v is GeoPoint)
+      return {
+        '_geo': [v.latitude, v.longitude],
+      };
     if (v is DocumentReference) return {'_ref': v.path};
     if (v is List) return v.map(_jsonify).toList();
     if (v is Map) {
@@ -72,10 +75,7 @@ class _AdminDataToolsScreenState extends State<AdminDataToolsScreen> {
         final docs = <Map<String, dynamic>>[];
         for (final d in snap.docs) {
           final data = d.data();
-          docs.add({
-            'id': d.id,
-            ..._jsonify(data) as Map<String, dynamic>,
-          });
+          docs.add({'id': d.id, ..._jsonify(data) as Map<String, dynamic>});
         }
         (backup['collections'] as Map<String, dynamic>)[name] = docs;
       }
@@ -85,10 +85,9 @@ class _AdminDataToolsScreenState extends State<AdminDataToolsScreen> {
       final file = File('${dir.path}/firestore_backup_$ts.json');
       final encoder = const JsonEncoder.withIndent('  ');
       await file.writeAsString(encoder.convert(backup), flush: true);
-      await Share.shareXFiles(
-        [XFile(file.path)],
-        text: 'Firestore JSON Yedeği',
-      );
+      await Share.shareXFiles([
+        XFile(file.path),
+      ], text: 'Firestore JSON Yedeği');
 
       if (!mounted) return;
       setState(() {
@@ -177,7 +176,10 @@ class _AdminDataToolsScreenState extends State<AdminDataToolsScreen> {
   }
 
   Future<void> _clearFixtures() async {
-    await _runDelete(category: 'Fikstür', action: _db.deleteAllMatchesAndEvents);
+    await _runDelete(
+      category: 'Fikstür',
+      action: _db.deleteAllMatchesAndEvents,
+    );
   }
 
   Future<void> _clearPlayers() async {
@@ -213,9 +215,9 @@ class _AdminDataToolsScreenState extends State<AdminDataToolsScreen> {
     try {
       final result = await _db.migrateMatchesTimeTimestampToMatchFields();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Migrasyon tamamlandı')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Migrasyon tamamlandı')));
       setState(() {
         _lastResult =
             "Taranan kayıt: ${result['scanned']} • Güncellenen kayıt: ${result['updated']}";
@@ -252,7 +254,8 @@ class _AdminDataToolsScreenState extends State<AdminDataToolsScreen> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (_) => const AdminTeamFixtureBuildScreen(),
+                                builder: (_) =>
+                                    const AdminTeamFixtureBuildScreen(),
                               ),
                             );
                           },
@@ -274,7 +277,10 @@ class _AdminDataToolsScreenState extends State<AdminDataToolsScreen> {
                   const SizedBox(height: 12),
                   FilledButton.tonalIcon(
                     onPressed: _busy ? null : _clearTeams,
-                    icon: Icon(Icons.delete_forever_rounded, color: dangerColor),
+                    icon: Icon(
+                      Icons.delete_forever_rounded,
+                      color: dangerColor,
+                    ),
                     label: const Text('Takım Verilerini Temizle'),
                     style: FilledButton.styleFrom(
                       minimumSize: const Size(double.infinity, 52),
@@ -283,7 +289,10 @@ class _AdminDataToolsScreenState extends State<AdminDataToolsScreen> {
                   const SizedBox(height: 12),
                   FilledButton.tonalIcon(
                     onPressed: _busy ? null : _clearFixtures,
-                    icon: Icon(Icons.delete_forever_rounded, color: dangerColor),
+                    icon: Icon(
+                      Icons.delete_forever_rounded,
+                      color: dangerColor,
+                    ),
                     label: const Text('Fikstür Verilerini Temizle'),
                     style: FilledButton.styleFrom(
                       minimumSize: const Size(double.infinity, 52),
@@ -292,7 +301,10 @@ class _AdminDataToolsScreenState extends State<AdminDataToolsScreen> {
                   const SizedBox(height: 12),
                   FilledButton.tonalIcon(
                     onPressed: _busy ? null : _clearPlayers,
-                    icon: Icon(Icons.delete_forever_rounded, color: dangerColor),
+                    icon: Icon(
+                      Icons.delete_forever_rounded,
+                      color: dangerColor,
+                    ),
                     label: const Text('Futbolcu Verilerini Temizle'),
                     style: FilledButton.styleFrom(
                       minimumSize: const Size(double.infinity, 52),
@@ -314,8 +326,9 @@ class _AdminDataToolsScreenState extends State<AdminDataToolsScreen> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color:
-                            Theme.of(context).colorScheme.surfaceContainerLow,
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.surfaceContainerLow,
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
@@ -353,7 +366,8 @@ class AdminTeamFixtureBuildScreen extends StatefulWidget {
       _AdminTeamFixtureBuildScreenState();
 }
 
-class _AdminTeamFixtureBuildScreenState extends State<AdminTeamFixtureBuildScreen> {
+class _AdminTeamFixtureBuildScreenState
+    extends State<AdminTeamFixtureBuildScreen> {
   final _db = DatabaseService();
   bool _busy = false;
   String? _selectedLeagueId;
@@ -484,12 +498,11 @@ class _AdminTeamFixtureBuildScreenState extends State<AdminTeamFixtureBuildScree
         await file.writeAsBytes(bytes);
 
         if (!mounted) return;
-        await Share.shareXFiles(
-          [XFile(path)],
-          text: 'Fikstür Şablonu',
-        );
+        await Share.shareXFiles([XFile(path)], text: 'Fikstür Şablonu');
       } else {
-        final blob = html.Blob([bytes], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        final blob = html.Blob([
+          bytes,
+        ], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         final url = html.Url.createObjectUrlFromBlob(blob);
         html.AnchorElement(href: url)
           ..setAttribute("download", "Fikstur_Sablonu.xlsx")
@@ -521,14 +534,21 @@ class _AdminTeamFixtureBuildScreenState extends State<AdminTeamFixtureBuildScree
       final bytes = await File(path).readAsBytes();
       final book = Excel.decodeBytes(bytes);
 
-      final teamsSheetName =
-          _findSheetName(book, const ['Takımlar', 'Takimlar', 'Teams']);
+      final teamsSheetName = _findSheetName(book, const [
+        'Takımlar',
+        'Takimlar',
+        'Teams',
+      ]);
       if (teamsSheetName == null) {
         throw Exception("Excel içinde 'Takımlar' sayfası bulunamadı.");
       }
 
-      final fixtureSheetName =
-          _findSheetName(book, const ['Fikstur', 'Fikstür', 'Fixtures', 'Matches']);
+      final fixtureSheetName = _findSheetName(book, const [
+        'Fikstur',
+        'Fikstür',
+        'Fixtures',
+        'Matches',
+      ]);
       if (fixtureSheetName == null) {
         throw Exception("Excel içinde 'Fikstur' sayfası bulunamadı.");
       }
@@ -560,7 +580,8 @@ class _AdminTeamFixtureBuildScreenState extends State<AdminTeamFixtureBuildScree
         teamByNameKey[teamKey] = _TeamInfo(
           id: '', // Will populate later
           name: trimmedName,
-          groupId: groupKey, // Using group name key here temporarily to hold the string, we actually just need the raw string
+          groupId:
+              groupKey, // Using group name key here temporarily to hold the string, we actually just need the raw string
           groupName: gName,
         );
       }
@@ -569,7 +590,9 @@ class _AdminTeamFixtureBuildScreenState extends State<AdminTeamFixtureBuildScree
         throw Exception('Takımlar sayfasında kayıt bulunamadı.');
       }
 
-      final headerRow = fixtureSheet.rows.isNotEmpty ? fixtureSheet.rows.first : const <Data?>[];
+      final headerRow = fixtureSheet.rows.isNotEmpty
+          ? fixtureSheet.rows.first
+          : const <Data?>[];
       final headers = headerRow.map(_cellString).toList();
 
       var weekIdx = _findColumnIndex(headers, const ['Hafta', 'Week']);
@@ -641,7 +664,8 @@ class _AdminTeamFixtureBuildScreenState extends State<AdminTeamFixtureBuildScree
         matchRows.add({
           'leagueId': leagueId, // For backwards compatibility
           'tournamentId': leagueId,
-          'groupId': homeInfo.groupName, // V2.1 architecture uses string for group
+          'groupId':
+              homeInfo.groupName, // V2.1 architecture uses string for group
           'homeTeamId': homeKey, // Temporary, will resolve real IDs below
           'homeTeamName': homeInfo.name,
           'awayTeamId': awayKey, // Temporary, will resolve real IDs below
@@ -699,7 +723,7 @@ class _AdminTeamFixtureBuildScreenState extends State<AdminTeamFixtureBuildScree
           final teamRef = firestore.collection('teams').doc();
           teamId = teamRef.id;
           existingTeamIdsByNameKey[key] = teamId;
-          
+
           // Create new team document (ONLY permanent team identity)
           batch.set(teamRef, {
             'name': t.name,
@@ -721,7 +745,7 @@ class _AdminTeamFixtureBuildScreenState extends State<AdminTeamFixtureBuildScree
       // Step B: Process Sheet 2 (Fikstur)
       for (final m in matchRows) {
         final ref = firestore.collection('matches').doc();
-        
+
         // Resolve actual team IDs
         final hKey = m['homeTeamId'] as String;
         final aKey = m['awayTeamId'] as String;
@@ -765,13 +789,15 @@ class _AdminTeamFixtureBuildScreenState extends State<AdminTeamFixtureBuildScree
                   if (!snapshot.hasData) {
                     return const Center(child: CircularProgressIndicator());
                   }
-                  final leagues = snapshot.data!.docs.map(
-                    (doc) => League.fromMap({
-                      ...doc.data() as Map<String, dynamic>,
-                      'id': doc.id,
-                    }),
-                  ).toList();
-                  
+                  final leagues = snapshot.data!.docs
+                      .map(
+                        (doc) => League.fromMap({
+                          ...doc.data() as Map<String, dynamic>,
+                          'id': doc.id,
+                        }),
+                      )
+                      .toList();
+
                   if (leagues.isEmpty) {
                     return const Text('Turnuva bulunamadı.');
                   }
@@ -786,7 +812,9 @@ class _AdminTeamFixtureBuildScreenState extends State<AdminTeamFixtureBuildScree
                       for (final l in leagues)
                         DropdownMenuItem(value: l.id, child: Text(l.name)),
                     ],
-                    onChanged: _busy ? null : (v) => setState(() => _selectedLeagueId = v),
+                    onChanged: _busy
+                        ? null
+                        : (v) => setState(() => _selectedLeagueId = v),
                   );
                 },
               ),

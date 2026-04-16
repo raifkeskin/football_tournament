@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-enum MatchStatus { notStarted, live, finished }
+enum MatchStatus { notStarted, live, finished, postponed, cancelled, halftime }
 
 class LineupPlayer {
   const LineupPlayer({required this.playerId, required this.name, this.number});
@@ -88,18 +88,17 @@ class MatchScore {
   factory MatchScore.fromMap(Map<String, dynamic> map) {
     final htRaw = map['halfTime'];
     final ftRaw = map['fullTime'];
-    final ht =
-        (htRaw is Map) ? MatchScorePart.fromMap(Map<String, dynamic>.from(htRaw)) : const MatchScorePart(home: 0, away: 0);
-    final ft =
-        (ftRaw is Map) ? MatchScorePart.fromMap(Map<String, dynamic>.from(ftRaw)) : const MatchScorePart(home: 0, away: 0);
+    final ht = (htRaw is Map)
+        ? MatchScorePart.fromMap(Map<String, dynamic>.from(htRaw))
+        : const MatchScorePart(home: 0, away: 0);
+    final ft = (ftRaw is Map)
+        ? MatchScorePart.fromMap(Map<String, dynamic>.from(ftRaw))
+        : const MatchScorePart(home: 0, away: 0);
     return MatchScore(halfTime: ht, fullTime: ft);
   }
 
   Map<String, dynamic> toMap() {
-    return {
-      'halfTime': halfTime.toMap(),
-      'fullTime': fullTime.toMap(),
-    };
+    return {'halfTime': halfTime.toMap(), 'fullTime': fullTime.toMap()};
   }
 }
 
@@ -190,7 +189,9 @@ class MatchModel {
       if (v == null) return fallback;
       if (v is num) return v.toInt();
       final s = v.toString().replaceAll('\u0000', '').trim();
-      return int.tryParse(s) ?? double.tryParse(s.replaceAll(',', '.'))?.toInt() ?? fallback;
+      return int.tryParse(s) ??
+          double.tryParse(s.replaceAll(',', '.'))?.toInt() ??
+          fallback;
     }
 
     MatchLineup? readLineup(dynamic v) {
@@ -202,7 +203,10 @@ class MatchModel {
 
     List<String> readLineupPhones(dynamic v) {
       if (v is List) {
-        return v.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
+        return v
+            .map((e) => e.toString().trim())
+            .where((e) => e.isNotEmpty)
+            .toList();
       }
       if (v is Map) {
         final lineup = MatchLineup.fromMap(Map<String, dynamic>.from(v));
@@ -255,13 +259,16 @@ class MatchModel {
     final homePhotoRaw = (map['homeHighlightPhotoUrl'] ?? '').toString().trim();
     final awayPhotoRaw = (map['awayHighlightPhotoUrl'] ?? '').toString().trim();
 
-    final rawTournamentId = (map['tournamentId'] ?? map['leagueId'] ?? '').toString();
+    final rawTournamentId = (map['tournamentId'] ?? map['leagueId'] ?? '')
+        .toString();
     final rawHomeLineup = map['homeLineup'];
     final rawAwayLineup = map['awayLineup'];
     final rawHomeDetail = map['homeLineupDetail'];
     final rawAwayDetail = map['awayLineupDetail'];
-    final homeLineupDetail = readLineup(rawHomeDetail) ?? readLineup(rawHomeLineup);
-    final awayLineupDetail = readLineup(rawAwayDetail) ?? readLineup(rawAwayLineup);
+    final homeLineupDetail =
+        readLineup(rawHomeDetail) ?? readLineup(rawHomeLineup);
+    final awayLineupDetail =
+        readLineup(rawAwayDetail) ?? readLineup(rawAwayLineup);
 
     return MatchModel(
       id: id,
@@ -323,15 +330,13 @@ class MatchModel {
       'awayTeamLogoUrl': awayTeamLogoUrl,
       'homeScore': homeScore,
       'awayScore': awayScore,
-      'score': (score ??
-              MatchScore(
-                halfTime: MatchScorePart(
-                  home: 0,
-                  away: 0,
-                ),
-                fullTime: MatchScorePart(home: homeScore, away: awayScore),
-              ))
-          .toMap(),
+      'score':
+          (score ??
+                  MatchScore(
+                    halfTime: MatchScorePart(home: 0, away: 0),
+                    fullTime: MatchScorePart(home: homeScore, away: awayScore),
+                  ))
+              .toMap(),
       'matchDate': dateStr.isEmpty ? null : dateStr,
       'matchTime': timeStr.isEmpty ? null : timeStr,
       'week': week,
@@ -403,22 +408,28 @@ class MatchEvent {
     return MatchEvent(
       id: id,
       matchId: map['matchId'] ?? '',
-      tournamentId:
-          (map['tournamentId'] ?? map['leagueId'] ?? '').toString().trim(),
+      tournamentId: (map['tournamentId'] ?? map['leagueId'] ?? '')
+          .toString()
+          .trim(),
       playerName: map['playerName'] ?? '',
-      playerPhone: (map['playerPhone'] ?? map['playerId'])?.toString().trim().isEmpty ??
+      playerPhone:
+          (map['playerPhone'] ?? map['playerId'])?.toString().trim().isEmpty ??
               true
           ? null
           : (map['playerPhone'] ?? map['playerId']).toString().trim(),
-      assistPlayerPhone: (map['assistPlayerPhone'] ?? map['assistPlayerId'])
+      assistPlayerPhone:
+          (map['assistPlayerPhone'] ?? map['assistPlayerId'])
                   ?.toString()
                   .trim()
                   .isEmpty ??
               true
           ? null
-          : (map['assistPlayerPhone'] ?? map['assistPlayerId']).toString().trim(),
+          : (map['assistPlayerPhone'] ?? map['assistPlayerId'])
+                .toString()
+                .trim(),
       assistPlayerName: map['assistPlayerName'] as String?,
-      subInPlayerPhone: (map['subInPlayerPhone'] ?? map['subInPlayerId'])
+      subInPlayerPhone:
+          (map['subInPlayerPhone'] ?? map['subInPlayerId'])
                   ?.toString()
                   .trim()
                   .isEmpty ??
@@ -533,8 +544,16 @@ class PlayerModel {
       return null;
     }
 
-    final isRoster = (map['tournamentId'] ?? map['leagueId'] ?? map['playerPhone'] ?? map['teamId']) != null;
-    final phoneRaw = (map['playerPhone'] ?? map['phone'] ?? map['playerId'] ?? id).toString().trim();
+    final isRoster =
+        (map['tournamentId'] ??
+            map['leagueId'] ??
+            map['playerPhone'] ??
+            map['teamId']) !=
+        null;
+    final phoneRaw =
+        (map['playerPhone'] ?? map['phone'] ?? map['playerId'] ?? id)
+            .toString()
+            .trim();
     final phone = phoneRaw.isEmpty ? null : phoneRaw;
     final name = (map['playerName'] ?? map['name'] ?? '').toString().trim();
     final roleRaw = (map['role'] ?? '').toString().trim();
@@ -554,10 +573,13 @@ class PlayerModel {
           double.tryParse(s.replaceAll(',', '.'))?.toInt() ??
           0;
     }
+
     final suspendedMatches = readInt(map['suspendedMatches']);
 
     if (isRoster) {
-      final tournamentId = (map['tournamentId'] ?? map['leagueId'] ?? '').toString().trim();
+      final tournamentId = (map['tournamentId'] ?? map['leagueId'] ?? '')
+          .toString()
+          .trim();
       final teamId = (map['teamId'] ?? '').toString().trim();
       return PlayerModel(
         id: id,
@@ -586,11 +608,7 @@ class PlayerModel {
   }
 
   Map<String, dynamic> toPlayerIdentityMap() {
-    return {
-      'name': name,
-      'birthDate': birthDate,
-      'mainPosition': mainPosition,
-    };
+    return {'name': name, 'birthDate': birthDate, 'mainPosition': mainPosition};
   }
 
   Map<String, dynamic> toRosterMap() {

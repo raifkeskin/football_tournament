@@ -42,7 +42,10 @@ class _AdminGroupManagementScreenState
   Widget build(BuildContext context) {
     final isAdmin = AppSession.of(context).value.isAdmin;
     return Scaffold(
-      appBar: AppBar(centerTitle: true, title: const Text('Grup ve Takım Atama')),
+      appBar: AppBar(
+        centerTitle: true,
+        title: const Text('Grup ve Takım Atama'),
+      ),
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       floatingActionButton: !isAdmin || _selectedLeagueId == null
           ? null
@@ -71,7 +74,8 @@ class _AdminGroupManagementScreenState
                           a.name.toLowerCase().compareTo(b.name.toLowerCase()),
                     );
               if (leagues.isNotEmpty) {
-                final hasSelected = _selectedLeagueId != null &&
+                final hasSelected =
+                    _selectedLeagueId != null &&
                     leagues.any((l) => l.id == _selectedLeagueId);
                 if (!hasSelected) {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -125,12 +129,12 @@ class _AdminGroupManagementScreenState
                       onChanged: widget.lockLeagueSelection
                           ? null
                           : (val) {
-                        setState(() {
-                          _selectedLeagueId = val;
-                          _selectedGroupId = null;
-                          _selectedTeamIds.clear();
-                        });
-                      },
+                              setState(() {
+                                _selectedLeagueId = val;
+                                _selectedGroupId = null;
+                                _selectedTeamIds.clear();
+                              });
+                            },
                     ),
                   ),
                 ),
@@ -150,7 +154,8 @@ class _AdminGroupManagementScreenState
                         a.name.toLowerCase().compareTo(b.name.toLowerCase()),
                   );
                 if (groups.isNotEmpty) {
-                  final hasSelected = _selectedGroupId != null &&
+                  final hasSelected =
+                      _selectedGroupId != null &&
                       groups.any((g) => g.id == _selectedGroupId);
                   if (!hasSelected) {
                     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -244,8 +249,9 @@ class _AdminGroupManagementScreenState
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
                                             ListTile(
-                                              leading:
-                                                  const Icon(Icons.delete_outline),
+                                              leading: const Icon(
+                                                Icons.delete_outline,
+                                              ),
                                               title: const Text('Grubu Sil'),
                                               onTap: () {
                                                 Navigator.pop(context);
@@ -296,9 +302,8 @@ class _AdminGroupManagementScreenState
                   // 3. Takım zaten BAŞKA bir gruptaysa (ve o grup bizim seçtiğimiz grup DEĞİLSE) listede gösterme.
                   final availableTeams = [...allTeams]
                     ..sort(
-                      (a, b) => a.name.toLowerCase().compareTo(
-                        b.name.toLowerCase(),
-                      ),
+                      (a, b) =>
+                          a.name.toLowerCase().compareTo(b.name.toLowerCase()),
                     );
 
                   return Column(
