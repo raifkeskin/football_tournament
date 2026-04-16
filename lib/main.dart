@@ -1,7 +1,6 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'firebase_options.dart';
@@ -11,8 +10,7 @@ import 'widgets/web_responsive_frame.dart';
 
 /// Uygulama giriş noktası.
 void main() async {
-  final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
-  FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+  WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   // TEST: Firebase'e anlık bir mesaj gönderelim
@@ -35,10 +33,6 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      FlutterNativeSplash.remove();
-    });
   }
 
   void _continueToApp() {
@@ -58,7 +52,7 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.white,
       body: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: _continueToApp,
@@ -68,7 +62,7 @@ class _SplashScreenState extends State<SplashScreen> {
             children: [
               Center(
                 child: Image.asset(
-                  'assets/acilis2.png',
+                  'assets/app_logo.png',
                   fit: BoxFit.contain,
                   alignment: Alignment.center,
                 ),
@@ -82,14 +76,14 @@ class _SplashScreenState extends State<SplashScreen> {
                     children: const [
                       Icon(
                         Icons.touch_app,
-                        color: Colors.white,
+                        color: Colors.black,
                         size: 20,
                       ),
                       SizedBox(width: 8),
                       Text(
                         'Sürdürmek için Dokunun',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: Colors.black,
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
                         ),

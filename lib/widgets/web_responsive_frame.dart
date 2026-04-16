@@ -7,7 +7,7 @@ class WebResponsiveFrame extends StatelessWidget {
     required this.child,
     this.maxContentWidth = 600,
     this.backgroundColor = const Color(0xFFF2F2F2),
-    this.backgroundImageAsset = 'assets/acilis2.png',
+    this.backgroundImageAsset = 'assets/app_logo.png',
     this.contentBackgroundColor,
   });
 
