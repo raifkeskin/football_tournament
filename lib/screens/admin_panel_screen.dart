@@ -1,13 +1,9 @@
 import 'package:flutter/material.dart';
 import 'admin_manage_leagues_screen.dart';
 import 'admin_manage_news_screen.dart';
-import 'admin_manage_teams_screen.dart';
-import 'admin_group_management_screen.dart';
-import 'admin_fixture_entry_screen.dart';
 import 'admin_data_tools_screen.dart';
 import 'admin_pending_actions_screen.dart';
-import 'admin_penalty_management_screen.dart';
-import 'admin_awards_screen.dart';
+import 'admin_pitch_management_screen.dart';
 
 class AdminPanelWidget extends StatelessWidget {
   const AdminPanelWidget({super.key, required this.onLogout});
@@ -17,11 +13,11 @@ class AdminPanelWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
       children: [
         _PanelButonu(
-          baslik: 'Turnuva Yönetimi',
-          ikon: Icons.emoji_events_outlined,
+          baslik: 'Turnuva Ayarları / Yönetimi',
+          ikon: Icons.settings_outlined,
           onPressed: () {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
@@ -30,123 +26,68 @@ class AdminPanelWidget extends StatelessWidget {
             );
           },
         ),
-          const SizedBox(height: 12),
-          _PanelButonu(
-            baslik: 'Ödül / Kupa Yönetimi',
-            ikon: Icons.military_tech_outlined,
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const AdminAwardsScreen(),
-                ),
-              );
-            },
-          ),
-          const SizedBox(height: 12),
-          _PanelButonu(
-            baslik: 'Takım Yönetimi',
-            ikon: Icons.groups_2_outlined,
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const AdminManageTeamsScreen(),
-                ),
-              );
-            },
-          ),
-          const SizedBox(height: 12),
+        const SizedBox(height: 12),
         _PanelButonu(
-          baslik: 'Ceza Yönetimi',
-          ikon: Icons.gavel_outlined,
+          baslik: 'Haber Yönetimi',
+          ikon: Icons.newspaper_outlined,
           onPressed: () {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) => const AdminPenaltyManagementScreen(),
+                builder: (_) => const AdminManageNewsScreen(),
               ),
             );
           },
         ),
         const SizedBox(height: 12),
-          _PanelButonu(
-            baslik: 'Haber Yönetimi',
-            ikon: Icons.newspaper_outlined,
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const AdminManageNewsScreen(),
-                ),
-              );
-            },
+        _PanelButonu(
+          baslik: 'Saha Yönetimi',
+          ikon: Icons.location_on_outlined,
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const AdminPitchManagementScreen(),
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 12),
+        _PanelButonu(
+          baslik: 'Veri Araçları',
+          ikon: Icons.construction_outlined,
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const AdminDataToolsScreen(),
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 12),
+        _PanelButonu(
+          baslik: 'Bekleyen Onaylar',
+          ikon: Icons.rule_folder_outlined,
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const AdminPendingActionsScreen(),
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 16),
+        FilledButton.tonalIcon(
+          onPressed: onLogout,
+          style: FilledButton.styleFrom(
+            minimumSize: const Size(double.infinity, 52),
+            backgroundColor: const Color(0xFFFFEBEE),
+            foregroundColor: const Color(0xFFC62828),
           ),
-          const SizedBox(height: 24),
-          const Divider(),
-          const SizedBox(height: 12),
-          const Text(
-            'Yönetim İşlemleri',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          icon: const Icon(Icons.logout_rounded),
+          label: const Text(
+            'Çıkış Yap',
+            style: TextStyle(fontWeight: FontWeight.w900),
           ),
-          const SizedBox(height: 12),
-          _PanelButonu(
-            baslik: 'Grup ve Takım Atama',
-            ikon: Icons.grid_view_outlined,
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const AdminGroupManagementScreen(),
-                ),
-              );
-            },
-          ),
-          const SizedBox(height: 12),
-          _PanelButonu(
-            baslik: 'Fikstür / Maç Planlama',
-            ikon: Icons.calendar_month_outlined,
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const AdminFixtureEntryScreen(),
-                ),
-              );
-            },
-          ),
-          const SizedBox(height: 12),
-          _PanelButonu(
-            baslik: 'Veri Araçları (Dummy)',
-            ikon: Icons.construction_outlined,
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const AdminDataToolsScreen(),
-                ),
-              );
-            },
-          ),
-          const SizedBox(height: 12),
-          _PanelButonu(
-            baslik: 'Bekleyen Onaylar',
-            ikon: Icons.rule_folder_outlined,
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const AdminPendingActionsScreen(),
-                ),
-              );
-            },
-          ),
-          const SizedBox(height: 24),
-          FilledButton.tonalIcon(
-            onPressed: onLogout,
-            style: FilledButton.styleFrom(
-              minimumSize: const Size(double.infinity, 52),
-              backgroundColor: const Color(0xFFFFEBEE),
-              foregroundColor: const Color(0xFFC62828),
-            ),
-            icon: const Icon(Icons.logout_rounded),
-            label: const Text(
-              'Çıkış Yap',
-              style: TextStyle(fontWeight: FontWeight.w900),
-            ),
-          ),
+        ),
       ],
     );
   }

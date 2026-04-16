@@ -6,6 +6,12 @@ import '../models/league.dart';
 import '../services/app_session.dart';
 import '../services/database_service.dart';
 import '../services/image_upload_service.dart';
+import '../widgets/web_safe_image.dart';
+import 'admin_awards_screen.dart';
+import 'admin_fixture_entry_screen.dart';
+import 'admin_group_management_screen.dart';
+import 'admin_manage_teams_screen.dart';
+import 'admin_penalty_management_screen.dart';
 
 class AdminManageLeaguesScreen extends StatefulWidget {
   const AdminManageLeaguesScreen({super.key});
@@ -19,6 +25,7 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
   final _dbService = DatabaseService();
   final _imageUploadService = ImgBBUploadService();
   final _picker = ImagePicker();
+  bool _dialOpen = false;
 
   Future<void> _turnuvaSil(String leagueId) async {
     final ok = await showDialog<bool>(
@@ -58,20 +65,30 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
 
   Future<void> _openAddLeagueSheet() async {
     final leagueNameController = TextEditingController();
+    final subtitleController = TextEditingController();
+    final managerNameController = TextEditingController();
+    final managerSurnameController = TextEditingController();
+    final managerPhoneController = TextEditingController();
     final groupCountController = TextEditingController(text: '1');
     final teamsPerGroupController = TextEditingController(text: '4');
     final youtubeController = TextEditingController();
     final twitterController = TextEditingController();
     final instagramController = TextEditingController();
+    final startDateController = TextEditingController();
+    final endDateController = TextEditingController();
 
     DateTime? startDate;
     DateTime? endDate;
     XFile? leagueLogo;
     var saving = false;
 
-    String tarihYaz(DateTime? date) {
-      if (date == null) return 'Tarih seç';
-      return '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year}';
+    String tarihYaz(DateTime date) {
+      return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+    }
+
+    void syncDateText() {
+      startDateController.text = startDate == null ? '' : tarihYaz(startDate!);
+      endDateController.text = endDate == null ? '' : tarihYaz(endDate!);
     }
 
     Future<void> tarihSec({
@@ -97,7 +114,11 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
           }
         } else {
           endDate = picked;
+          if (startDate != null && endDate!.isBefore(startDate!)) {
+            startDate = endDate;
+          }
         }
+        syncDateText();
       });
     }
 
@@ -110,7 +131,7 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
       setSheetState(() => leagueLogo = picked);
     }
 
-    await showModalBottomSheet<void>(
+    final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
@@ -119,7 +140,12 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
         return StatefulBuilder(
           builder: (context, setSheetState) {
             Future<void> save() async {
+              FocusManager.instance.primaryFocus?.unfocus();
               final name = leagueNameController.text.trim();
+              final subtitle = subtitleController.text.trim();
+              final managerName = managerNameController.text.trim();
+              final managerSurname = managerSurnameController.text.trim();
+              final managerPhone = managerPhoneController.text.trim();
               if (name.isEmpty || startDate == null || endDate == null) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
@@ -131,7 +157,18 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                 return;
               }
               setSheetState(() => saving = true);
+              var didClose = false;
               try {
+                String normalizePhoneToRaw10(String input) {
+                  final digits = input.replaceAll(RegExp(r'\D'), '');
+                  if (digits.isEmpty) return '';
+                  var d = digits;
+                  if (d.startsWith('90') && d.length >= 12) d = d.substring(2);
+                  if (d.startsWith('0')) d = d.substring(1);
+                  if (d.length > 10) d = d.substring(d.length - 10);
+                  return d;
+                }
+
                 var logoUrl = '';
                 if (leagueLogo != null) {
                   final uploadedUrl = await _imageUploadService.uploadImage(
@@ -146,13 +183,24 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                 final league = League(
                   id: '',
                   name: name,
+                  subtitle: subtitle.isEmpty ? null : subtitle,
                   logoUrl: logoUrl,
                   country: 'Türkiye',
+                  managerName: managerName.isEmpty ? null : managerName,
+                  managerSurname: managerSurname.isEmpty ? null : managerSurname,
+                  managerPhoneRaw10: managerPhone.isEmpty
+                      ? null
+                      : normalizePhoneToRaw10(managerPhone),
                   startDate: startDate,
                   endDate: endDate,
                   youtubeUrl: youtubeController.text.trim(),
                   twitterUrl: twitterController.text.trim(),
                   instagramUrl: instagramController.text.trim(),
+                  numberOfGroups: int.tryParse(groupCountController.text) ?? 1,
+                  groups: List.generate(
+                    int.tryParse(groupCountController.text) ?? 1,
+                    (i) => String.fromCharCode(65 + i), // A, B, C...
+                  ),
                   groupCount: int.tryParse(groupCountController.text) ?? 1,
                   teamsPerGroup:
                       int.tryParse(teamsPerGroupController.text) ?? 4,
@@ -160,17 +208,17 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
 
                 await _dbService.addLeague(league);
                 if (!context.mounted) return;
-                Navigator.pop(context);
-                ScaffoldMessenger.of(this.context).showSnackBar(
-                  const SnackBar(content: Text('Turnuva eklendi.')),
-                );
+                didClose = true;
+                Navigator.pop(context, true);
               } catch (e) {
                 if (!context.mounted) return;
                 ScaffoldMessenger.of(
                   context,
                 ).showSnackBar(SnackBar(content: Text('Hata: $e')));
               } finally {
-                if (context.mounted) setSheetState(() => saving = false);
+                if (!didClose && context.mounted) {
+                  setSheetState(() => saving = false);
+                }
               }
             }
 
@@ -196,31 +244,69 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                     decoration: const InputDecoration(labelText: 'Turnuva Adı'),
                   ),
                   const SizedBox(height: 12),
+                  TextField(
+                    controller: subtitleController,
+                    decoration: const InputDecoration(
+                      labelText: 'Alt Bilgi (Örn: Yaz Ligi 2024)',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: managerNameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Turnuva Sorumlusu Ad',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: managerSurnameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Turnuva Sorumlusu Soyad',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: managerPhoneController,
+                    keyboardType: TextInputType.phone,
+                    decoration: const InputDecoration(
+                      labelText: 'Turnuva Sorumlusu Telefon',
+                      hintText: '0 (5XX) XXX XX XX',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   Row(
                     children: [
                       Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: saving
+                        child: TextField(
+                          controller: startDateController,
+                          readOnly: true,
+                          onTap: saving
                               ? null
                               : () => tarihSec(
-                                  isStart: true,
-                                  setSheetState: setSheetState,
-                                ),
-                          icon: const Icon(Icons.event_outlined),
-                          label: Text('Başlangıç: ${tarihYaz(startDate)}'),
+                                    isStart: true,
+                                    setSheetState: setSheetState,
+                                  ),
+                          decoration: const InputDecoration(
+                            hintText: 'Başlangıç Tarihi',
+                            prefixIcon: Icon(Icons.calendar_month_outlined),
+                          ),
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: saving
+                        child: TextField(
+                          controller: endDateController,
+                          readOnly: true,
+                          onTap: saving
                               ? null
                               : () => tarihSec(
-                                  isStart: false,
-                                  setSheetState: setSheetState,
-                                ),
-                          icon: const Icon(Icons.event_available_outlined),
-                          label: Text('Bitiş: ${tarihYaz(endDate)}'),
+                                    isStart: false,
+                                    setSheetState: setSheetState,
+                                  ),
+                          decoration: const InputDecoration(
+                            hintText: 'Bitiş Tarihi',
+                            prefixIcon: Icon(Icons.calendar_month_outlined),
+                          ),
                         ),
                       ),
                     ],
@@ -291,8 +377,8 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                         ? const Center(child: CircularProgressIndicator())
                         : FilledButton.icon(
                             onPressed: save,
-                            icon: const Icon(Icons.add),
-                            label: const Text('Ekle'),
+                            icon: const Icon(Icons.save_outlined),
+                            label: const Text('Kaydet'),
                           ),
                   ),
                 ],
@@ -304,28 +390,132 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
     );
 
     leagueNameController.dispose();
+    subtitleController.dispose();
     groupCountController.dispose();
     teamsPerGroupController.dispose();
     youtubeController.dispose();
     twitterController.dispose();
     instagramController.dispose();
+    startDateController.dispose();
+    endDateController.dispose();
+
+    if (!mounted) return;
+    if (saved == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Turnuva eklendi.')),
+      );
+      setState(() {});
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final isAdmin = AppSession.of(context).value.isAdmin;
     final cs = Theme.of(context).colorScheme;
+    if (!isAdmin) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Turnuva Ayarları / Yönetimi')),
+        body: const Center(
+          child: Text(
+            'Bu sayfaya erişim yetkiniz yok.',
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
     return Scaffold(
-      appBar: AppBar(title: const Text('Turnuva Yönetimi')),
+      appBar: AppBar(title: const Text('Turnuva Ayarları / Yönetimi')),
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       floatingActionButton: isAdmin
-          ? FloatingActionButton(
-              onPressed: _openAddLeagueSheet,
-              child: const Icon(Icons.add),
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if (_dialOpen) ...[
+                  _DialItem(
+                    label: 'Turnuva Ekle',
+                    icon: Icons.add_rounded,
+                    onPressed: () {
+                      setState(() => _dialOpen = false);
+                      _openAddLeagueSheet();
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  _DialItem(
+                    label: 'Takım Yönetimi',
+                    icon: Icons.groups_2_outlined,
+                    onPressed: () {
+                      setState(() => _dialOpen = false);
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const AdminManageTeamsScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  _DialItem(
+                    label: 'Grup Atama',
+                    icon: Icons.grid_view_outlined,
+                    onPressed: () {
+                      setState(() => _dialOpen = false);
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const AdminGroupManagementScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  _DialItem(
+                    label: 'Fikstür Planlama',
+                    icon: Icons.calendar_month_outlined,
+                    onPressed: () {
+                      setState(() => _dialOpen = false);
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const AdminFixtureEntryScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  _DialItem(
+                    label: 'Ceza Yönetimi',
+                    icon: Icons.gavel_outlined,
+                    onPressed: () {
+                      setState(() => _dialOpen = false);
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const AdminPenaltyManagementScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  _DialItem(
+                    label: 'Ödül/Kupa',
+                    icon: Icons.military_tech_outlined,
+                    onPressed: () {
+                      setState(() => _dialOpen = false);
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const AdminAwardsScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                FloatingActionButton(
+                  onPressed: () => setState(() => _dialOpen = !_dialOpen),
+                  child: Icon(_dialOpen ? Icons.close_rounded : Icons.add),
+                ),
+              ],
             )
           : null,
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
         children: [
           const SizedBox(height: 4),
           Text(
@@ -338,8 +528,9 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
           StreamBuilder<QuerySnapshot>(
             stream: _dbService.getLeagues(),
             builder: (context, snapshot) {
-              if (!snapshot.hasData)
+              if (!snapshot.hasData) {
                 return const Center(child: CircularProgressIndicator());
+              }
               final leagues = snapshot.data!.docs
                   .map(
                     (doc) => League.fromMap({
@@ -365,89 +556,118 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                       Divider(color: Colors.grey.shade300, height: 1),
                   itemBuilder: (context, index) {
                     final league = leagues[index];
+                    final subtitle = (league.subtitle ?? '').trim();
+                    Future<void> toggleDefault() async {
+                      try {
+                        await _dbService.setLeagueDefaultFlag(
+                          leagueId: league.id,
+                          isDefault: !league.isDefault,
+                        );
+                      } catch (e) {
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Hata: $e')),
+                        );
+                      }
+                    }
+                    Future<void> openEdit() async {
+                      final updated = await Navigator.push<bool>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => EditLeagueScreen(league: league),
+                        ),
+                      );
+                      if (!context.mounted) return;
+                      if (updated == true) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Güncellendi')),
+                        );
+                        setState(() {});
+                      }
+                    }
                     return ListTile(
                       leading: league.logoUrl.isNotEmpty
-                          ? ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: Image.network(
-                                league.logoUrl,
+                          ? SizedBox(
+                              width: 40,
+                              height: 40,
+                              child: WebSafeImage(
+                                url: league.logoUrl,
                                 width: 40,
                                 height: 40,
-                                fit: BoxFit.cover,
+                                borderRadius: BorderRadius.circular(8),
+                                fallbackIconSize: 18,
                               ),
                             )
                           : const Icon(Icons.emoji_events),
                       title: Text(league.name, maxLines: 3, softWrap: true),
-                      subtitle: Text(league.country),
-                      trailing: SizedBox(
-                        width: 88,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            Switch.adaptive(
-                              value: league.isDefault,
-                              onChanged: !isAdmin || league.isDefault
-                                  ? null
-                                  : (_) async {
-                                      try {
-                                        await _dbService.setDefaultLeague(
-                                          leagueId: league.id,
-                                        );
-                                      } catch (e) {
-                                        if (!context.mounted) return;
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(content: Text('Hata: $e')),
-                                        );
-                                      }
-                                    },
-                            ),
-                            const SizedBox(width: 4),
-                            Icon(
+                      subtitle: subtitle.isEmpty ? null : Text(subtitle),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            onPressed: !isAdmin ? null : toggleDefault,
+                            icon: Icon(
                               league.isDefault
                                   ? Icons.star_rounded
-                                  : Icons.chevron_right,
-                              color: league.isDefault ? cs.primary : null,
-                            ),
-                          ],
-                        ),
-                      ),
-                      onTap: () async {
-                        if (!isAdmin) return;
-                        await showModalBottomSheet<void>(
-                          context: context,
-                          showDragHandle: true,
-                          builder: (context) => SafeArea(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                ListTile(
-                                  leading: const Icon(Icons.edit_outlined),
-                                  title: const Text('Düzenle'),
-                                  onTap: () {
-                                    Navigator.pop(context);
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) =>
-                                            EditLeagueScreen(league: league),
-                                      ),
-                                    );
-                                  },
-                                ),
-                                ListTile(
-                                  leading: const Icon(Icons.delete_outline),
-                                  title: const Text('Sil'),
-                                  onTap: () {
-                                    Navigator.pop(context);
-                                    _turnuvaSil(league.id);
-                                  },
-                                ),
-                                const SizedBox(height: 10),
-                              ],
+                                  : Icons.star_border_rounded,
+                              color: league.isDefault
+                                  ? const Color(0xFF10B981)
+                                  : cs.onSurfaceVariant,
                             ),
                           ),
-                        );
-                      },
+                        ],
+                      ),
+                      onTap: !isAdmin ? null : openEdit,
+                      onLongPress: !isAdmin
+                          ? null
+                          : () async {
+                              await showModalBottomSheet<void>(
+                                context: context,
+                                showDragHandle: true,
+                                builder: (context) => SafeArea(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      ListTile(
+                                        leading: const Icon(Icons.edit_outlined),
+                                        title: const Text('Düzenle'),
+                                        onTap: () async {
+                                          Navigator.pop(context);
+                                          final updated =
+                                              await Navigator.push<bool>(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) => EditLeagueScreen(
+                                                league: league,
+                                              ),
+                                            ),
+                                          );
+                                          if (!context.mounted) return;
+                                          if (updated == true) {
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(
+                                              const SnackBar(
+                                                content: Text('Güncellendi'),
+                                              ),
+                                            );
+                                            setState(() {});
+                                          }
+                                        },
+                                      ),
+                                      ListTile(
+                                        leading: const Icon(Icons.delete_outline),
+                                        title: const Text('Sil'),
+                                        onTap: () {
+                                          Navigator.pop(context);
+                                          _turnuvaSil(league.id);
+                                        },
+                                      ),
+                                      const SizedBox(height: 10),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
                     );
                   },
                 ),
@@ -456,6 +676,50 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _DialItem extends StatelessWidget {
+  const _DialItem({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E293B),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w900,
+              fontSize: 12,
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        FloatingActionButton.small(
+          heroTag: label,
+          onPressed: onPressed,
+          backgroundColor: const Color(0xFF1E293B),
+          foregroundColor: Colors.white,
+          child: Icon(icon),
+        ),
+      ],
     );
   }
 }
@@ -471,9 +735,15 @@ class EditLeagueScreen extends StatefulWidget {
 class _EditLeagueScreenState extends State<EditLeagueScreen> {
   late TextEditingController _nameController;
   late TextEditingController _subtitleController;
+  late TextEditingController _groupCountController;
+  late TextEditingController _teamsPerGroupController;
   late TextEditingController _ytController;
   late TextEditingController _xController;
   late TextEditingController _igController;
+  late TextEditingController _startDateController;
+  late TextEditingController _endDateController;
+  DateTime? _startDate;
+  DateTime? _endDate;
   XFile? _newLogo;
   bool _isLoading = false;
 
@@ -483,12 +753,91 @@ class _EditLeagueScreenState extends State<EditLeagueScreen> {
     _nameController = TextEditingController(text: widget.league.name);
     _subtitleController =
         TextEditingController(text: widget.league.subtitle ?? '');
+    _groupCountController =
+        TextEditingController(text: widget.league.groupCount.toString());
+    _teamsPerGroupController =
+        TextEditingController(text: widget.league.teamsPerGroup.toString());
     _ytController = TextEditingController(text: widget.league.youtubeUrl);
     _xController = TextEditingController(text: widget.league.twitterUrl);
     _igController = TextEditingController(text: widget.league.instagramUrl);
+    _startDate = widget.league.startDate;
+    _endDate = widget.league.endDate;
+    _startDateController = TextEditingController(
+      text: _startDate == null ? '' : _formatDate(_startDate!),
+    );
+    _endDateController = TextEditingController(
+      text: _endDate == null ? '' : _formatDate(_endDate!),
+    );
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _subtitleController.dispose();
+    _groupCountController.dispose();
+    _teamsPerGroupController.dispose();
+    _ytController.dispose();
+    _xController.dispose();
+    _igController.dispose();
+    _startDateController.dispose();
+    _endDateController.dispose();
+    super.dispose();
+  }
+
+  static String _formatDate(DateTime date) {
+    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+  }
+
+  Future<void> _pickDate({required bool isStart}) async {
+    final now = DateTime.now();
+    final initial = isStart
+        ? (_startDate ?? now)
+        : (_endDate ?? _startDate ?? now);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(now.year - 5),
+      lastDate: DateTime(now.year + 10),
+    );
+    if (picked == null) return;
+    setState(() {
+      if (isStart) {
+        _startDate = picked;
+        if (_endDate != null && _endDate!.isBefore(picked)) {
+          _endDate = picked;
+        }
+      } else {
+        _endDate = picked;
+        if (_startDate != null && _endDate!.isBefore(_startDate!)) {
+          _startDate = picked;
+        }
+      }
+      _startDateController.text = _startDate == null ? '' : _formatDate(_startDate!);
+      _endDateController.text = _endDate == null ? '' : _formatDate(_endDate!);
+    });
   }
 
   Future<void> _update() async {
+    final name = _nameController.text.trim();
+    final groupCount = int.tryParse(_groupCountController.text.trim()) ?? 0;
+    final teamsPerGroup =
+        int.tryParse(_teamsPerGroupController.text.trim()) ?? 0;
+    if (name.isEmpty || _startDate == null || _endDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Lütfen turnuva adı, başlangıç ve bitiş tarihini girin.'),
+        ),
+      );
+      return;
+    }
+    if (groupCount <= 0 || teamsPerGroup <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Grup sayısı ve grup başı takım 0 olamaz.')),
+      );
+      return;
+    }
+
+    FocusManager.instance.primaryFocus?.unfocus();
     setState(() => _isLoading = true);
     try {
       String logoUrl = widget.league.logoUrl;
@@ -505,26 +854,32 @@ class _EditLeagueScreenState extends State<EditLeagueScreen> {
 
       final updatedLeague = League(
         id: widget.league.id,
-        name: _nameController.text.trim(),
+        name: name,
         subtitle: _subtitleController.text.trim().isEmpty
             ? null
             : _subtitleController.text.trim(),
         logoUrl: logoUrl,
         country: widget.league.country,
-        startDate: widget.league.startDate,
-        endDate: widget.league.endDate,
+        startDate: _startDate,
+        endDate: _endDate,
+        season: widget.league.season,
+        isActive: widget.league.isActive,
         isDefault: widget.league.isDefault,
         youtubeUrl: _ytController.text.trim(),
         twitterUrl: _xController.text.trim(),
         instagramUrl: _igController.text.trim(),
+        numberOfGroups: groupCount,
+        groups: List.generate(
+          groupCount,
+          (i) => String.fromCharCode(65 + i), // A, B, C...
+        ),
+        groupCount: groupCount,
+        teamsPerGroup: teamsPerGroup,
       );
 
       await DatabaseService().updateLeague(updatedLeague);
       if (!mounted) return;
-      Navigator.pop(context);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Güncellendi')));
+      Navigator.pop(context, true);
     } catch (e) {
       ScaffoldMessenger.of(
         context,
@@ -548,27 +903,37 @@ class _EditLeagueScreenState extends State<EditLeagueScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Turnuvayı Düzenle')),
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
+      body: Stack(
+        children: [
+          ListView(
               padding: const EdgeInsets.all(16),
               children: [
                 // Logo Düzenleme
                 Center(
                   child: Stack(
                     children: [
-                      CircleAvatar(
-                        radius: 60,
-                        backgroundImage: _newLogo != null
-                            ? FileImage(File(_newLogo!.path)) as ImageProvider
-                            : (widget.league.logoUrl.isNotEmpty
-                                  ? NetworkImage(widget.league.logoUrl)
-                                  : null),
-                        child:
-                            (_newLogo == null && widget.league.logoUrl.isEmpty)
-                            ? const Icon(Icons.emoji_events, size: 40)
-                            : null,
-                      ),
+                      if (_newLogo != null)
+                        CircleAvatar(
+                          radius: 60,
+                          backgroundImage: FileImage(File(_newLogo!.path)),
+                        )
+                      else if (widget.league.logoUrl.isNotEmpty)
+                        SizedBox(
+                          width: 120,
+                          height: 120,
+                          child: WebSafeImage(
+                            url: widget.league.logoUrl,
+                            width: 120,
+                            height: 120,
+                            isCircle: true,
+                            fallbackIconSize: 40,
+                          ),
+                        )
+                      else
+                        const CircleAvatar(
+                          radius: 60,
+                          child: Icon(Icons.emoji_events, size: 40),
+                        ),
                       Positioned(
                         bottom: 0,
                         right: 0,
@@ -603,10 +968,66 @@ class _EditLeagueScreenState extends State<EditLeagueScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _startDateController,
+                        readOnly: true,
+                        onTap: _isLoading ? null : () => _pickDate(isStart: true),
+                        decoration: const InputDecoration(
+                          hintText: 'Başlangıç Tarihi',
+                          prefixIcon: Icon(Icons.calendar_month_outlined),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextField(
+                        controller: _endDateController,
+                        readOnly: true,
+                        onTap: _isLoading ? null : () => _pickDate(isStart: false),
+                        decoration: const InputDecoration(
+                          hintText: 'Bitiş Tarihi',
+                          prefixIcon: Icon(Icons.calendar_month_outlined),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _groupCountController,
+                        decoration: const InputDecoration(
+                          labelText: 'Grup Sayısı',
+                          border: OutlineInputBorder(),
+                        ),
+                        keyboardType: TextInputType.number,
+                        enabled: !_isLoading,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextField(
+                        controller: _teamsPerGroupController,
+                        decoration: const InputDecoration(
+                          labelText: 'Grup Başı Takım',
+                          border: OutlineInputBorder(),
+                        ),
+                        keyboardType: TextInputType.number,
+                        enabled: !_isLoading,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
                 TextField(
                   controller: _ytController,
                   decoration: const InputDecoration(
-                    labelText: 'YouTube',
+                    labelText: 'YouTube Linki',
                     prefixIcon: Icon(Icons.play_circle_outline),
                     border: OutlineInputBorder(),
                   ),
@@ -615,7 +1036,7 @@ class _EditLeagueScreenState extends State<EditLeagueScreen> {
                 TextField(
                   controller: _xController,
                   decoration: const InputDecoration(
-                    labelText: 'Twitter (X)',
+                    labelText: 'Twitter (X) Linki',
                     prefixIcon: Icon(Icons.alternate_email),
                     border: OutlineInputBorder(),
                   ),
@@ -624,21 +1045,32 @@ class _EditLeagueScreenState extends State<EditLeagueScreen> {
                 TextField(
                   controller: _igController,
                   decoration: const InputDecoration(
-                    labelText: 'Instagram',
+                    labelText: 'Instagram Linki',
                     prefixIcon: Icon(Icons.camera_alt_outlined),
                     border: OutlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 32),
                 FilledButton(
-                  onPressed: _update,
+                  onPressed: _isLoading ? null : _update,
                   style: FilledButton.styleFrom(
                     minimumSize: const Size(double.infinity, 50),
                   ),
-                  child: const Text('Bilgileri Güncelle'),
+                  child: const Text('Güncelle'),
                 ),
               ],
             ),
+          if (_isLoading)
+            Positioned.fill(
+              child: AbsorbPointer(
+                child: ColoredBox(
+                  color: cs.surface.withValues(alpha: 0.55),
+                  child: const Center(child: CircularProgressIndicator()),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

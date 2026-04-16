@@ -5,9 +5,17 @@ import '../models/match.dart';
 import '../models/team.dart';
 import '../services/app_session.dart';
 import '../services/database_service.dart';
+import '../widgets/web_safe_image.dart';
 
 class AdminGroupManagementScreen extends StatefulWidget {
-  const AdminGroupManagementScreen({super.key});
+  const AdminGroupManagementScreen({
+    super.key,
+    this.initialLeagueId,
+    this.lockLeagueSelection = false,
+  });
+
+  final String? initialLeagueId;
+  final bool lockLeagueSelection;
 
   @override
   State<AdminGroupManagementScreen> createState() =>
@@ -22,10 +30,19 @@ class _AdminGroupManagementScreenState
   final List<String> _selectedTeamIds = [];
 
   @override
+  void initState() {
+    super.initState();
+    final initial = (widget.initialLeagueId ?? '').trim();
+    if (initial.isNotEmpty) {
+      _selectedLeagueId = initial;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final isAdmin = AppSession.of(context).value.isAdmin;
     return Scaffold(
-      appBar: AppBar(title: const Text('Grup ve Takım Atama')),
+      appBar: AppBar(centerTitle: true, title: const Text('Grup ve Takım Atama')),
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       floatingActionButton: !isAdmin || _selectedLeagueId == null
           ? null
@@ -53,6 +70,20 @@ class _AdminGroupManagementScreenState
                       (a, b) =>
                           a.name.toLowerCase().compareTo(b.name.toLowerCase()),
                     );
+              if (leagues.isNotEmpty) {
+                final hasSelected = _selectedLeagueId != null &&
+                    leagues.any((l) => l.id == _selectedLeagueId);
+                if (!hasSelected) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!mounted) return;
+                    setState(() {
+                      _selectedLeagueId = leagues.first.id;
+                      _selectedGroupId = null;
+                      _selectedTeamIds.clear();
+                    });
+                  });
+                }
+              }
               return Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
                 child: Card(
@@ -61,8 +92,17 @@ class _AdminGroupManagementScreenState
                     padding: const EdgeInsets.all(12),
                     child: DropdownButtonFormField<String>(
                       initialValue: _selectedLeagueId,
+                      dropdownColor: const Color(0xFF1E293B),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
                       decoration: const InputDecoration(
                         labelText: 'Turnuva Seçin',
+                        labelStyle: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
                         border: OutlineInputBorder(),
                       ),
                       items: leagues
@@ -73,12 +113,18 @@ class _AdminGroupManagementScreenState
                                 child: Text(
                                   l.name,
                                   textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                               ),
                             ),
                           )
                           .toList(),
-                      onChanged: (val) {
+                      onChanged: widget.lockLeagueSelection
+                          ? null
+                          : (val) {
                         setState(() {
                           _selectedLeagueId = val;
                           _selectedGroupId = null;
@@ -103,6 +149,22 @@ class _AdminGroupManagementScreenState
                     (a, b) =>
                         a.name.toLowerCase().compareTo(b.name.toLowerCase()),
                   );
+                if (groups.isNotEmpty) {
+                  final hasSelected = _selectedGroupId != null &&
+                      groups.any((g) => g.id == _selectedGroupId);
+                  if (!hasSelected) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (!mounted) return;
+                      final first = groups.first;
+                      setState(() {
+                        _selectedGroupId = first.id;
+                        _selectedTeamIds
+                          ..clear()
+                          ..addAll(first.teamIds);
+                      });
+                    });
+                  }
+                }
                 GroupModel? selectedGroup;
                 final selectedGroupId = _selectedGroupId;
                 if (selectedGroupId != null) {
@@ -127,8 +189,17 @@ class _AdminGroupManagementScreenState
                               Expanded(
                                 child: DropdownButtonFormField<String>(
                                   initialValue: _selectedGroupId,
+                                  dropdownColor: const Color(0xFF1E293B),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                   decoration: const InputDecoration(
                                     labelText: 'Grup Seçin',
+                                    labelStyle: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                     border: OutlineInputBorder(),
                                   ),
                                   items: groups
@@ -139,6 +210,10 @@ class _AdminGroupManagementScreenState
                                             child: Text(
                                               g.name,
                                               textAlign: TextAlign.center,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                              ),
                                             ),
                                           ),
                                         ),
@@ -157,48 +232,40 @@ class _AdminGroupManagementScreenState
                                   menuMaxHeight: 360,
                                 ),
                               ),
+                              if (isAdmin && selectedGroup != null) ...[
+                                const SizedBox(width: 8),
+                                IconButton(
+                                  onPressed: () async {
+                                    await showModalBottomSheet<void>(
+                                      context: context,
+                                      showDragHandle: true,
+                                      builder: (context) => SafeArea(
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            ListTile(
+                                              leading:
+                                                  const Icon(Icons.delete_outline),
+                                              title: const Text('Grubu Sil'),
+                                              onTap: () {
+                                                Navigator.pop(context);
+                                                _deleteSelectedGroup();
+                                              },
+                                            ),
+                                            const SizedBox(height: 10),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  icon: const Icon(Icons.more_vert_rounded),
+                                ),
+                              ],
                             ],
                           ),
                         ),
                       ),
                     ),
-                    if (isAdmin && selectedGroup != null)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                        child: Card(
-                          margin: EdgeInsets.zero,
-                          child: ListTile(
-                            title: Text(
-                              'Seçili Grup: ${selectedGroup.name}',
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            trailing: const Icon(Icons.chevron_right),
-                            onTap: () async {
-                              await showModalBottomSheet<void>(
-                                context: context,
-                                showDragHandle: true,
-                                builder: (context) => SafeArea(
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      ListTile(
-                                        leading: const Icon(Icons.delete_outline),
-                                        title: const Text('Grubu Sil'),
-                                        onTap: () {
-                                          Navigator.pop(context);
-                                          _deleteSelectedGroup();
-                                        },
-                                      ),
-                                      const SizedBox(height: 10),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ),
                   ],
                 );
               },
@@ -210,9 +277,11 @@ class _AdminGroupManagementScreenState
               child: StreamBuilder<QuerySnapshot>(
                 stream: _dbService.getTeams(),
                 builder: (context, snapshot) {
-                  if (!snapshot.hasData)
+                  if (!snapshot.hasData) {
                     return const Center(child: CircularProgressIndicator());
+                  }
                   final allTeams = snapshot.data!.docs
+                      .where((d) => d.id != 'free_agent_pool')
                       .map(
                         (doc) => Team.fromMap({
                           ...doc.data() as Map<String, dynamic>,
@@ -225,35 +294,15 @@ class _AdminGroupManagementScreenState
                   // 1. Sadece bu turnuvaya (League) ait olan takımları göster.
                   // 2. Takımın bir grubu yoksa (null) göster.
                   // 3. Takım zaten BAŞKA bir gruptaysa (ve o grup bizim seçtiğimiz grup DEĞİLSE) listede gösterme.
-                  final availableTeams =
-                      allTeams.where((t) {
-                        if (t.leagueId != _selectedLeagueId) return false;
-                        if (t.groupId != null && t.groupId != _selectedGroupId)
-                          return false;
-                        return true;
-                      }).toList()..sort(
-                        (a, b) => a.name.toLowerCase().compareTo(
-                          b.name.toLowerCase(),
-                        ),
-                      );
+                  final availableTeams = [...allTeams]
+                    ..sort(
+                      (a, b) => a.name.toLowerCase().compareTo(
+                        b.name.toLowerCase(),
+                      ),
+                    );
 
                   return Column(
                     children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                        child: Card(
-                          margin: EdgeInsets.zero,
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
-                            child: Text(
-                              'Takımları Seçin',
-                              textAlign: TextAlign.center,
-                              style: Theme.of(context).textTheme.titleSmall
-                                  ?.copyWith(fontWeight: FontWeight.w900),
-                            ),
-                          ),
-                        ),
-                      ),
                       Expanded(
                         child: ListView.builder(
                           itemCount: availableTeams.length,
@@ -266,9 +315,17 @@ class _AdminGroupManagementScreenState
                               ),
                               child: CheckboxListTile(
                                 title: Text(team.name),
-                                secondary: team.logoUrl.isNotEmpty
-                                    ? Image.network(team.logoUrl, width: 30)
-                                    : null,
+                                secondary: SizedBox(
+                                  width: 30,
+                                  height: 30,
+                                  child: WebSafeImage(
+                                    url: team.logoUrl,
+                                    width: 30,
+                                    height: 30,
+                                    borderRadius: BorderRadius.circular(6),
+                                    fallbackIconSize: 16,
+                                  ),
+                                ),
                                 value: _selectedTeamIds.contains(team.id),
                                 onChanged: (val) {
                                   setState(() {
@@ -288,7 +345,7 @@ class _AdminGroupManagementScreenState
                         padding: const EdgeInsets.all(16.0),
                         child: FilledButton(
                           onPressed: _saveGroupTeams,
-                          child: const Text('Grubu Güncelle / Kaydet'),
+                          child: const Text('KAYDET'),
                         ),
                       ),
                     ],
@@ -340,8 +397,9 @@ class _AdminGroupManagementScreenState
                 child: FilledButton.icon(
                   onPressed: () async {
                     if (controller.text.trim().isEmpty ||
-                        _selectedLeagueId == null)
+                        _selectedLeagueId == null) {
                       return;
+                    }
                     await _dbService.addGroup(
                       GroupModel(
                         id: '',

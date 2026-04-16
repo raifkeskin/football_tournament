@@ -1,4 +1,5 @@
 /// Çoklu lig desteği için temel League modeli.
+library;
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class League {
@@ -8,6 +9,9 @@ class League {
     this.subtitle,
     required this.logoUrl,
     required this.country,
+    this.managerName,
+    this.managerSurname,
+    this.managerPhoneRaw10,
     this.startDate,
     this.endDate,
     this.season,
@@ -16,6 +20,8 @@ class League {
     this.youtubeUrl,
     this.twitterUrl,
     this.instagramUrl,
+    this.numberOfGroups = 1,
+    this.groups = const [],
     this.groupCount = 1,
     this.teamsPerGroup = 4,
     this.createdAt,
@@ -27,6 +33,9 @@ class League {
   final String? subtitle;
   final String logoUrl;
   final String country;
+  final String? managerName;
+  final String? managerSurname;
+  final String? managerPhoneRaw10;
   final DateTime? startDate;
   final DateTime? endDate;
   final String? season;
@@ -35,6 +44,8 @@ class League {
   final String? youtubeUrl;
   final String? twitterUrl;
   final String? instagramUrl;
+  final int numberOfGroups;
+  final List<String> groups;
   final int groupCount;
   final int teamsPerGroup;
   final DateTime? createdAt;
@@ -68,6 +79,14 @@ class League {
           : (map['subtitle'] as String?)?.trim(),
       logoUrl: (map['logoUrl'] ?? map['logo']) as String? ?? '',
       country: map['country'] as String? ?? '',
+      managerName: (map['managerName'] as String?)?.trim().isEmpty ?? true
+          ? null
+          : (map['managerName'] as String?)?.trim(),
+      managerSurname: (map['managerSurname'] as String?)?.trim().isEmpty ?? true
+          ? null
+          : (map['managerSurname'] as String?)?.trim(),
+      managerPhoneRaw10:
+          (map['managerPhoneRaw10'] ?? map['managerPhone']) as String?,
       startDate: _readDate(map['startDate']),
       endDate: _readDate(map['endDate']),
       season: map['season'] as String?,
@@ -76,6 +95,8 @@ class League {
       youtubeUrl: map['youtubeUrl'] as String?,
       twitterUrl: map['twitterUrl'] as String?,
       instagramUrl: map['instagramUrl'] as String?,
+      numberOfGroups: intFrom(map['numberOfGroups'], fallback: intFrom(map['groupCount'], fallback: 1)),
+      groups: (map['groups'] as List?)?.map((e) => e.toString()).toList() ?? const [],
       groupCount: intFrom(map['groupCount'], fallback: 1),
       teamsPerGroup: intFrom(map['teamsPerGroup'], fallback: 4),
       createdAt: _readDate(map['createdAt']),
@@ -90,6 +111,9 @@ class League {
       'subtitle': subtitle,
       'logoUrl': logoUrl,
       'country': country,
+      'managerName': managerName,
+      'managerSurname': managerSurname,
+      'managerPhoneRaw10': managerPhoneRaw10,
       'startDate': startDate?.toIso8601String(),
       'endDate': endDate?.toIso8601String(),
       'season': season,
@@ -98,6 +122,8 @@ class League {
       'youtubeUrl': youtubeUrl,
       'twitterUrl': twitterUrl,
       'instagramUrl': instagramUrl,
+      'numberOfGroups': numberOfGroups,
+      'groups': groups,
       'groupCount': groupCount,
       'teamsPerGroup': teamsPerGroup,
     };

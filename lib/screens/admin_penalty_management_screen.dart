@@ -1,7 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/match.dart';
+import '../services/app_session.dart';
 import '../models/team.dart';
 import '../services/database_service.dart';
 
@@ -23,10 +25,18 @@ class _AdminPenaltyManagementScreenState
   }) async {
     String? teamId = editing?.teamId;
     String? playerId = editing?.id;
+    final reasonController = TextEditingController();
     final suspendedController = TextEditingController(
       text: editing != null ? editing.suspendedMatches.toString() : '',
     );
     var saving = false;
+    if (editing != null && (editing.id).trim().isNotEmpty) {
+      try {
+        final data = await _dbService.getPenaltyForPlayer(editing.id);
+        final reason = (data?['penaltyReason'] ?? '').toString().trim();
+        if (reason.isNotEmpty) reasonController.text = reason;
+      } catch (_) {}
+    }
 
     await showModalBottomSheet<void>(
       context: context,
@@ -36,7 +46,17 @@ class _AdminPenaltyManagementScreenState
         final insets = MediaQuery.of(context).viewInsets;
         return StatefulBuilder(
           builder: (context, setSheetState) {
+            final cs = Theme.of(context).colorScheme;
+
             Future<void> saveSelectedPlayer(PlayerModel player) async {
+              final resolvedTeamId = (teamId ?? '').trim();
+              if (resolvedTeamId.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Lütfen takım seçin.')),
+                );
+                return;
+              }
+              final reason = reasonController.text.trim();
               final raw = suspendedController.text.trim();
               final n = int.tryParse(raw);
               if (n == null || n < 0) {
@@ -49,23 +69,34 @@ class _AdminPenaltyManagementScreenState
               }
 
               setSheetState(() => saving = true);
+              var shouldClose = false;
+              final parentMessenger = ScaffoldMessenger.of(this.context);
+              final sm = ScaffoldMessenger.of(context);
+              final nav = Navigator.of(context);
               try {
-                await _dbService.setPlayerSuspendedMatches(
+                await _dbService.upsertPenaltyForPlayer(
                   playerId: player.id,
-                  suspendedMatches: n,
+                  teamId: resolvedTeamId,
+                  penaltyReason: reason,
+                  matchCount: n,
                 );
-                if (!context.mounted) return;
-                Navigator.pop(context);
-                ScaffoldMessenger.of(this.context).showSnackBar(
-                  const SnackBar(content: Text('Ceza kaydedildi.')),
+                if (!mounted) return;
+                shouldClose = true;
+                nav.pop();
+                parentMessenger.showSnackBar(
+                  const SnackBar(content: Text('Ceza başarıyla kaydedildi.')),
                 );
               } catch (e) {
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(SnackBar(content: Text('Hata: $e')));
+                if (!mounted) return;
+                sm.showSnackBar(
+                  SnackBar(content: Text('Hata: $e')),
+                );
               } finally {
-                if (context.mounted) setSheetState(() => saving = false);
+                if (!shouldClose && mounted) {
+                  try {
+                    setSheetState(() => saving = false);
+                  } catch (_) {}
+                }
               }
             }
 
@@ -88,19 +119,24 @@ class _AdminPenaltyManagementScreenState
               child: ListView(
                 shrinkWrap: true,
                 children: [
-                  Text(
-                    editing == null ? 'Ceza Ekle' : 'Cezayı Güncelle',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w900,
-                        ),
+                  Row(
+                    children: [
+                      const Spacer(),
+                      IconButton(
+                        onPressed: saving ? null : () => Navigator.pop(context),
+                        icon: const Icon(Icons.close),
+                        color: cs.primary,
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: teamId,
-                    decoration: const InputDecoration(
-                      labelText: 'Takım',
-                      border: OutlineInputBorder(),
+                    initialValue: teamId,
+                    dropdownColor: const Color(0xFF1E293B),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
                     ),
+                    decoration: const InputDecoration(border: OutlineInputBorder()),
                     items: sortedTeams
                         .map(
                           (t) => DropdownMenuItem<String>(
@@ -109,6 +145,10 @@ class _AdminPenaltyManagementScreenState
                               t.name,
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
                         )
@@ -163,10 +203,19 @@ class _AdminPenaltyManagementScreenState
                         return Column(
                           children: [
                             DropdownButtonFormField<String>(
-                              value: playerId,
+                              initialValue: playerId,
+                              dropdownColor: const Color(0xFF1E293B),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
                               decoration: const InputDecoration(
                                 labelText: 'Oyuncu',
                                 border: OutlineInputBorder(),
+                                labelStyle: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                               items: sortedPlayers
                                   .map(
@@ -178,6 +227,10 @@ class _AdminPenaltyManagementScreenState
                                             : '${p.number} • ${p.name}',
                                         maxLines: 2,
                                         overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
                                     ),
                                   )
@@ -190,17 +243,46 @@ class _AdminPenaltyManagementScreenState
                             ),
                             const SizedBox(height: 12),
                             TextField(
+                              controller: reasonController,
+                              enabled: !saving && selected != null,
+                              decoration: const InputDecoration(
+                                labelText: 'Ceza Sebebi',
+                                border: OutlineInputBorder(),
+                                labelStyle: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
                               controller: suspendedController,
                               enabled: !saving && selected != null,
                               keyboardType: TextInputType.number,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                              ],
                               decoration: const InputDecoration(
-                                labelText: 'Ceza (Maç Sayısı)',
+                                labelText: 'Maç Sayısı',
                                 border: OutlineInputBorder(),
+                                labelStyle: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
                             const SizedBox(height: 14),
                             SizedBox(
                               height: 50,
+                              width: double.infinity,
                               child: saving
                                   ? const Center(
                                       child: SizedBox(
@@ -211,15 +293,45 @@ class _AdminPenaltyManagementScreenState
                                         ),
                                       ),
                                     )
-                                  : FilledButton.icon(
-                                      onPressed: selected == null
-                                          ? null
-                                          : () => saveSelectedPlayer(selected),
-                                      icon: const Icon(Icons.save_outlined),
-                                      label: const Text(
-                                        'Kaydet',
+                                  : FilledButton(
+                                      onPressed: () {
+                                        final resolvedTeamId =
+                                            (teamId ?? '').trim();
+                                        if (resolvedTeamId.isEmpty) {
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                'Lütfen takım seçin.',
+                                              ),
+                                            ),
+                                          );
+                                          return;
+                                        }
+                                        if (selected == null) {
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                'Lütfen oyuncu seçin.',
+                                              ),
+                                            ),
+                                          );
+                                          return;
+                                        }
+                                        saveSelectedPlayer(selected);
+                                      },
+                                      style: FilledButton.styleFrom(
+                                        minimumSize:
+                                            const Size(double.infinity, 50),
+                                        backgroundColor: cs.primary,
+                                        foregroundColor: Colors.white,
+                                      ),
+                                      child: const Text(
+                                        'KAYDET',
                                         style: TextStyle(
                                           fontWeight: FontWeight.w900,
+                                          fontSize: 16,
                                         ),
                                       ),
                                     ),
@@ -236,6 +348,7 @@ class _AdminPenaltyManagementScreenState
       },
     );
 
+    reasonController.dispose();
     suspendedController.dispose();
   }
 
@@ -265,10 +378,7 @@ class _AdminPenaltyManagementScreenState
               onTap: () async {
                 Navigator.pop(context);
                 try {
-                  await _dbService.setPlayerSuspendedMatches(
-                    playerId: player.id,
-                    suspendedMatches: 0,
-                  );
+                  await _dbService.clearPenaltyForPlayer(playerId: player.id);
                   if (!mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Ceza kaldırıldı.')),
@@ -291,6 +401,18 @@ class _AdminPenaltyManagementScreenState
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final isAdmin = AppSession.of(context).value.isAdmin;
+    if (!isAdmin) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Ceza Yönetimi')),
+        body: const Center(
+          child: Text(
+            'Bu sayfaya erişim yetkiniz yok.',
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
     return Scaffold(
       appBar: AppBar(title: const Text('Ceza Yönetimi')),
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -299,6 +421,7 @@ class _AdminPenaltyManagementScreenState
         builder: (context, snapshot) {
           if (!snapshot.hasData) return const SizedBox.shrink();
           final teams = snapshot.data!.docs
+              .where((d) => d.id != 'free_agent_pool')
               .map(
                 (d) => Team.fromMap({
                   ...d.data() as Map<String, dynamic>,
@@ -319,6 +442,7 @@ class _AdminPenaltyManagementScreenState
           final teams = <Team>[];
           if (teamSnapshot.hasData) {
             for (final doc in teamSnapshot.data!.docs) {
+              if (doc.id == 'free_agent_pool') continue;
               final t = Team.fromMap({
                 ...doc.data() as Map<String, dynamic>,
                 'id': doc.id,

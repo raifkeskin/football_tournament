@@ -6,7 +6,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'firebase_options.dart';
 import 'screens/main_navigator.dart';
 import 'services/app_session.dart';
+import 'services/database_service.dart';
 import 'widgets/web_responsive_frame.dart';
+
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 
 /// Uygulama giriş noktası.
 void main() async {
@@ -60,13 +63,7 @@ class _SplashScreenState extends State<SplashScreen> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              Center(
-                child: Image.asset(
-                  'assets/app_logo.png',
-                  fit: BoxFit.contain,
-                  alignment: Alignment.center,
-                ),
-              ),
+              Image.asset('assets/acilis_2.png', fit: BoxFit.cover),
               Align(
                 alignment: Alignment.bottomCenter,
                 child: Padding(
@@ -76,14 +73,14 @@ class _SplashScreenState extends State<SplashScreen> {
                     children: const [
                       Icon(
                         Icons.touch_app,
-                        color: Colors.black,
+                        color: Colors.white,
                         size: 20,
                       ),
                       SizedBox(width: 8),
                       Text(
                         'Sürdürmek için Dokunun',
                         style: TextStyle(
-                          color: Colors.black,
+                          color: Colors.white,
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
                         ),
@@ -111,21 +108,40 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   late final AppSessionController _sessionController = AppSessionController();
 
-  /// Koyu yeşil tonları (varsayılan mavi yerine).
-  static const Color _anaYesil = Color(0xFF1B5E20);
-  static const Color _ikincilYesil = Color(0xFF2E7D32);
+  static const Color _headerForest = Color(0xFF064E3B);
+  static const Color _bgDark = Color(0xFF0F172A);
+  static const Color _cardDark = Color(0xFF1E293B);
+  static const Color _accent = Color(0xFF10B981);
+  static const Color _text = Color(0xFFF8FAFC);
+  static const Color _muted = Color(0xFF94A3B8);
+
+  @override
+  void initState() {
+    super.initState();
+    DatabaseService().migratePlayersDefaultRoleAndBirthDate();
+    DatabaseService().migratePlayersPhoneRaw10();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = ColorScheme.fromSeed(
-      seedColor: _anaYesil,
-      primary: _anaYesil,
-      secondary: _ikincilYesil,
+    const colorScheme = ColorScheme.dark(
+      primary: _headerForest,
+      onPrimary: _text,
+      secondary: _accent,
+      onSecondary: Colors.white,
+      surface: _cardDark,
+      onSurface: _text,
+      surfaceContainerHighest: _cardDark,
+      onSurfaceVariant: _muted,
+      outlineVariant: Color(0xFF334155),
+      error: Color(0xFFEF4444),
+      onError: Colors.white,
     );
 
     return AppSession(
       controller: _sessionController,
       child: MaterialApp(
+        navigatorKey: appNavigatorKey,
         title: 'Futbol Turnuvası',
         debugShowCheckedModeBanner: false,
         localizationsDelegates: const [
@@ -138,33 +154,48 @@ class _MyAppState extends State<MyApp> {
         theme: ThemeData(
           colorScheme: colorScheme,
           useMaterial3: true,
-          scaffoldBackgroundColor: const Color(0xFFE3E6E3),
-          textTheme: GoogleFonts.interTextTheme(),
+          brightness: Brightness.dark,
+          scaffoldBackgroundColor: _bgDark,
+          textTheme: GoogleFonts.interTextTheme().apply(
+            bodyColor: _text,
+            displayColor: _text,
+          ),
           appBarTheme: AppBarTheme(
-            backgroundColor: colorScheme.primary,
-            foregroundColor: colorScheme.onPrimary,
+            backgroundColor: _headerForest,
+            foregroundColor: _text,
             titleTextStyle: GoogleFonts.inter(
-              color: colorScheme.onPrimary,
+              color: _text,
               fontWeight: FontWeight.w800,
               fontSize: 18,
             ),
           ),
           cardTheme: CardThemeData(
-            color: Colors.white,
-            elevation: 2,
-            shadowColor: Colors.black.withValues(alpha: 0.08),
+            color: _cardDark,
+            elevation: 0,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(16),
             ),
           ),
           dividerTheme: DividerThemeData(
-            color: Colors.grey.shade300,
+            color: _muted.withValues(alpha: 0.18),
             thickness: 1,
             space: 1,
           ),
           inputDecorationTheme: InputDecorationTheme(
             filled: true,
-            fillColor: const Color(0xFFF4F5F7),
+            fillColor: Colors.white.withValues(alpha: 0.06),
+            labelStyle: TextStyle(
+              color: _text.withValues(alpha: 0.90),
+              fontWeight: FontWeight.w700,
+            ),
+            floatingLabelStyle: TextStyle(
+              color: _text.withValues(alpha: 0.95),
+              fontWeight: FontWeight.w800,
+            ),
+            hintStyle: TextStyle(
+              color: _text.withValues(alpha: 0.65),
+              fontWeight: FontWeight.w600,
+            ),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 14,
               vertical: 14,
@@ -175,25 +206,16 @@ class _MyAppState extends State<MyApp> {
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(16),
-              borderSide: BorderSide.none,
+              borderSide: const BorderSide(color: Colors.white24),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(16),
-              borderSide: BorderSide(
-                color: Color(0xFF2E7D32),
-                width: 1,
-              ),
+              borderSide: const BorderSide(color: Colors.white54, width: 1),
             ),
           ),
-          bottomNavigationBarTheme: BottomNavigationBarThemeData(
-            backgroundColor: colorScheme.surface,
-            selectedItemColor: colorScheme.primary,
-            unselectedItemColor: colorScheme.onSurfaceVariant,
-            type: BottomNavigationBarType.fixed,
-          ),
           floatingActionButtonTheme: FloatingActionButtonThemeData(
-            backgroundColor: colorScheme.primary,
-            foregroundColor: colorScheme.onPrimary,
+            backgroundColor: _accent,
+            foregroundColor: Colors.white,
           ),
         ),
         builder: (context, child) {

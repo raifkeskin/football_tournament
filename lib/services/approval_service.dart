@@ -188,6 +188,40 @@ class ApprovalService {
         if (row is! Map) continue;
         final name = (row['name'] ?? '').toString().trim();
         if (name.isEmpty) continue;
+        String? normalizeBirthDate(dynamic v) {
+          if (v == null) return null;
+          if (v is DateTime) {
+            final dd = v.day.toString().padLeft(2, '0');
+            final mm = v.month.toString().padLeft(2, '0');
+            final yyyy = v.year.toString().padLeft(4, '0');
+            return '$dd/$mm/$yyyy';
+          }
+          final s = v.toString().replaceAll('\u0000', '').trim();
+          if (s.isEmpty) return null;
+          final m = RegExp(r'^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$')
+              .firstMatch(s);
+          if (m != null) {
+            final dd = m.group(1)!.padLeft(2, '0');
+            final mm = m.group(2)!.padLeft(2, '0');
+            final yyyy = m.group(3)!.padLeft(4, '0');
+            return '$dd/$mm/$yyyy';
+          }
+          final year = int.tryParse(s);
+          if (year != null && year >= 1900 && year <= 2100) {
+            return '01/01/${year.toString().padLeft(4, '0')}';
+          }
+          return null;
+        }
+
+        int? yearFromBirthDate(String? birthDate) {
+          if (birthDate == null) return null;
+          final m = RegExp(r'(\d{4})$').firstMatch(birthDate);
+          return m == null ? null : int.tryParse(m.group(1)!);
+        }
+
+        final birthDate =
+            normalizeBirthDate(row['birthDate']) ?? normalizeBirthDate(row['birthYear']);
+        final birthYear = yearFromBirthDate(birthDate);
         final docRef = _db.collection('players').doc();
         batch.set(docRef, {
           'teamId': teamId,
@@ -195,8 +229,13 @@ class ApprovalService {
           'position': row['position'],
           'preferredFoot': row['preferredFoot'],
           'number': row['number'],
-          'birthYear': row['birthYear'],
+          'birthDate': birthDate,
+          'birthYear': birthYear,
           'photoUrl': row['photoUrl'],
+          'role': (row['role'] ?? '').toString().trim().isEmpty
+              ? 'Futbolcu'
+              : row['role'],
+          'phone': row['phone'],
           'goals': 0,
           'assists': 0,
           'yellowCards': 0,

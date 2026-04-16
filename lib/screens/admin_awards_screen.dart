@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/league.dart';
 import '../models/award.dart';
+import '../services/app_session.dart';
 import '../services/database_service.dart';
 
 class AdminAwardsScreen extends StatefulWidget {
@@ -104,6 +105,18 @@ class _AdminAwardsScreenState extends State<AdminAwardsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isAdmin = AppSession.of(context).value.isAdmin;
+    if (!isAdmin) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Ödül / Kupa Yönetimi')),
+        body: const Center(
+          child: Text(
+            'Bu sayfaya erişim yetkiniz yok.',
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
     final cs = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(title: const Text('Ödül / Kupa Yönetimi')),

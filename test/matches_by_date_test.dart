@@ -6,28 +6,26 @@ import 'package:football_tournament/services/database_service.dart';
 
 void main() {
   test(
-    'getMatchesByDate gün/ay/yıl bazında maçları döndürür ve dateString alanını sağlamlaştırır',
+    'getMatchesByDate gün/ay/yıl bazında maçları döndürür ve legacy alanları matchDate/matchTime alanlarına taşır',
     () async {
       final firestore = FakeFirebaseFirestore();
       final service = DatabaseService(firestore: firestore);
 
-      final matchDate = DateTime(2026, 4, 7, 20, 0);
-      final m1 = MatchModel(
-        id: '',
-        leagueId: 'L1',
-        groupId: 'G1',
-        homeTeamId: 'H1',
-        homeTeamName: 'Ev',
-        homeTeamLogoUrl: '',
-        awayTeamId: 'A1',
-        awayTeamName: 'Dep',
-        awayTeamLogoUrl: '',
-        homeScore: 0,
-        awayScore: 0,
-        matchDate: matchDate,
-        dateString: '2026-04-07',
-        status: MatchStatus.notStarted,
-      );
+      await firestore.collection('matches').add({
+        'leagueId': 'L1',
+        'groupId': 'G1',
+        'homeTeamId': 'H1',
+        'homeTeamName': 'Ev',
+        'homeTeamLogoUrl': '',
+        'awayTeamId': 'A1',
+        'awayTeamName': 'Dep',
+        'awayTeamLogoUrl': '',
+        'homeScore': 0,
+        'awayScore': 0,
+        'dateString': '2026-04-07',
+        'time': '20:00',
+        'status': MatchStatus.notStarted.name,
+      });
 
       final m2 = MatchModel(
         id: '',
@@ -41,13 +39,11 @@ void main() {
         awayTeamLogoUrl: '',
         homeScore: 1,
         awayScore: 2,
-        matchDate: matchDate,
-        dateString: '2026-04-07',
+        matchDate: '2026-04-07',
+        matchTime: '20:00',
         status: MatchStatus.finished,
       );
 
-      final oldDocData = {...m1.toMap()}..remove('dateString');
-      await firestore.collection('matches').add(oldDocData);
       await firestore.collection('matches').add(m2.toMap());
 
       final selectedDay = DateTime(2026, 4, 7);
@@ -57,17 +53,19 @@ void main() {
           .firstWhere((list) => list.length == 1);
 
       expect(onlyL1.single.leagueId, 'L1');
-      expect(onlyL1.single.dateString, '2026-04-07');
-      expect(onlyL1.single.matchDate.year, 2026);
-      expect(onlyL1.single.matchDate.month, 4);
-      expect(onlyL1.single.matchDate.day, 7);
+      expect(onlyL1.single.matchDate, '2026-04-07');
+      expect(onlyL1.single.matchTime, '20:00');
 
       final updatedSnap = await firestore
           .collection('matches')
           .where('leagueId', isEqualTo: 'L1')
           .get();
       expect(updatedSnap.docs.length, 1);
-      expect(updatedSnap.docs.single.data()['dateString'], '2026-04-07');
+      final updated = updatedSnap.docs.single.data();
+      expect(updated['matchDate'], '2026-04-07');
+      expect(updated['matchTime'], '20:00');
+      expect(updated.containsKey('dateString'), false);
+      expect(updated.containsKey('time'), false);
 
       final all = await service
           .getMatchesByDate(date: selectedDay)

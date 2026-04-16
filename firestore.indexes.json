@@ -1,0 +1,75 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "awards",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "leagueId", "order": "ASCENDING" },
+        { "fieldPath": "name", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "players",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "teamId", "order": "ASCENDING" },
+        { "fieldPath": "name", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "matches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "matchDate", "order": "ASCENDING" },
+        { "fieldPath": "leagueId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "matches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "groupId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "matches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "leagueId", "order": "ASCENDING" },
+        { "fieldPath": "week", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "matches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "leagueId", "order": "ASCENDING" },
+        { "fieldPath": "groupId", "order": "ASCENDING" },
+        { "fieldPath": "week", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "matches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "leagueId", "order": "ASCENDING" },
+        { "fieldPath": "week", "order": "ASCENDING" },
+        { "fieldPath": "matchDate", "order": "ASCENDING" },
+        { "fieldPath": "matchTime", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "matches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "leagueId", "order": "ASCENDING" },
+        { "fieldPath": "groupId", "order": "ASCENDING" },
+        { "fieldPath": "week", "order": "ASCENDING" },
+        { "fieldPath": "matchDate", "order": "ASCENDING" },
+        { "fieldPath": "matchTime", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

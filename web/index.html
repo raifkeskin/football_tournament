@@ -1,4 +1,6 @@
-<!DOCTYPE html><html><head>
+<!DOCTYPE html>
+<html>
+  <head>
   <!--
     If you are serving your web app in a path other than the root, change the
     href value below to reflect the base path you are serving from.
@@ -108,23 +110,26 @@
       document.body.style.background = "transparent";
     }
   </script>
-</head>
-<body>
-  
-  
-  
-  
-  
-  
-  <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
+  </head>
+  <body>
+    <div id="recaptcha-container"></div>
 
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
-  -->
-  <script src="flutter_bootstrap.js" async=""></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+    <script>
+      const firebaseConfig = {
+        apiKey: "AIzaSyCB0Gn3T3lvP2Q-Rn_bUTmEsWPzPY1R_ec",
+        authDomain: "football-tournament-c0c05.firebaseapp.com",
+        projectId: "football-tournament-c0c05",
+        storageBucket: "football-tournament-c0c05.firebasestorage.app",
+        messagingSenderId: "974894815246",
+        appId: "1:974894815246:web:8e985b2498673bcc1bc45f",
+        measurementId: "G-PNTWRMRLN2"
+      };
 
+      firebase.initializeApp(firebaseConfig);
+    </script>
 
-</body></html>
+    <script src="flutter_bootstrap.js" defer></script>
+  </body>
+</html>

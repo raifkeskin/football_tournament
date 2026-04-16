@@ -7,6 +7,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:excel/excel.dart' hide Border;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -15,15 +17,18 @@ import '../models/match.dart';
 import '../services/approval_service.dart';
 import '../services/database_service.dart';
 import '../services/image_upload_service.dart';
+import '../widgets/web_safe_image.dart';
 
 class TeamSquadScreen extends StatefulWidget {
   final String teamId;
+  final String tournamentId;
   final String teamName;
   final String teamLogoUrl;
 
   const TeamSquadScreen({
     super.key,
     required this.teamId,
+    required this.tournamentId,
     required this.teamName,
     required this.teamLogoUrl,
   });
@@ -37,14 +42,11 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
   final _approvalService = ApprovalService();
   final _imageUploadService = ImgBBUploadService();
   final _picker = ImagePicker();
-  bool _fabOpen = false;
+
+  final _rosterSearchController = TextEditingController();
+  String _rosterQuery = '';
 
   static const _positions = <String>['GK', 'DEF', 'ORT', 'FOR'];
-
-  @override
-  void dispose() {
-    super.dispose();
-  }
 
   String _normalizeUrl(String raw) {
     final url = raw.trim();
@@ -53,277 +55,61 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     return 'https://$url';
   }
 
+  String _displayPosition(PlayerModel p) {
+    final main = (p.mainPosition ?? '').trim();
+    final sub = (p.position ?? '').trim();
+    if (sub.isNotEmpty) {
+      switch (sub) {
+        case 'GK':
+          return 'Kaleci';
+        case 'DEF':
+          return 'Defans';
+        case 'ORT':
+          return 'Orta Saha';
+        case 'FOR':
+          return 'Forvet';
+      }
+      return sub;
+    }
+    if (main.isNotEmpty) return main;
+    return '-';
+  }
+
+  @override
+  void dispose() {
+    _rosterSearchController.dispose();
+    super.dispose();
+  }
+
   Future<void> _openPlayerForm({PlayerModel? editing}) async {
-    final nameController = TextEditingController(text: editing?.name ?? '');
-    final numberController = TextEditingController(
-      text: (editing?.number ?? '').toString(),
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => PlayerFormScreen(
+          teamId: widget.teamId,
+          tournamentId: widget.tournamentId,
+          normalizeUrl: _normalizeUrl,
+          editing: editing,
+        ),
+      ),
     );
-    final birthController = TextEditingController(
-      text: editing?.birthYear?.toString() ?? '',
-    );
-    String position = (editing?.position ?? '').trim();
-    if (!_positions.contains(position)) position = _positions.first;
-    XFile? pickedPhoto;
-    var saving = false;
-
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (context) {
-        final insets = MediaQuery.of(context).viewInsets;
-        final cs = Theme.of(context).colorScheme;
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            Future<void> pickPhoto() async {
-              final picked = await _picker.pickImage(
-                source: ImageSource.gallery,
-                imageQuality: 85,
-              );
-              if (picked == null) return;
-              setSheetState(() => pickedPhoto = picked);
-            }
-
-            Future<void> save() async {
-              final name = nameController.text.trim();
-              if (name.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Lütfen ad soyad girin.')),
-                );
-                return;
-              }
-
-              final nRaw = numberController.text.trim();
-              final number = nRaw.isEmpty ? null : nRaw;
-              final bRaw = birthController.text.trim();
-              final birthYear = bRaw.isEmpty ? null : int.tryParse(bRaw);
-              if (bRaw.isNotEmpty && birthYear == null) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Doğum yılı geçerli olmalı.')),
-                );
-                return;
-              }
-
-              setSheetState(() => saving = true);
-              var shouldClose = false;
-              try {
-                String? photoUrl = editing?.photoUrl;
-                if (pickedPhoto != null) {
-                  final uploaded = await _imageUploadService.uploadImage(
-                    File(pickedPhoto!.path),
-                  );
-                  if (uploaded == null) {
-                    throw Exception('Fotoğraf yüklenemedi.');
-                  }
-                  photoUrl = uploaded;
-                }
-
-                if (editing == null) {
-                  await _dbService.addPlayer(
-                    PlayerModel(
-                      id: '',
-                      teamId: widget.teamId,
-                      name: name,
-                      number: number,
-                      birthYear: birthYear,
-                      position: position,
-                      photoUrl: photoUrl,
-                    ),
-                  );
-                } else {
-                  await _dbService.updatePlayer(
-                    playerId: editing.id,
-                    data: {
-                      'name': name,
-                      'number': number,
-                      'birthYear': birthYear,
-                      'position': position,
-                      'photoUrl': photoUrl ?? '',
-                    },
-                  );
-                }
-
-                shouldClose = true;
-                if (!context.mounted) return;
-                Navigator.pop(context);
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(this.context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        editing == null
-                            ? 'Futbolcu eklendi.'
-                            : 'Futbolcu güncellendi.',
-                      ),
-                    ),
-                  );
-                });
-              } catch (e) {
-                if (!context.mounted) return;
-                final msg = e.toString();
-                final uniq = 'Bu futbolcu zaten sistemde kayıtlı!';
-                final text = msg.contains(uniq) ? uniq : 'Hata: $msg';
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(text), backgroundColor: Colors.red),
-                );
-              } finally {
-                if (!shouldClose && context.mounted) {
-                  setSheetState(() => saving = false);
-                }
-              }
-            }
-
-            final photoPreview = pickedPhoto != null
-                ? FileImage(File(pickedPhoto!.path)) as ImageProvider
-                : (editing?.photoUrl != null && editing!.photoUrl!.trim().isNotEmpty
-                    ? NetworkImage(_normalizeUrl(editing.photoUrl!.trim()))
-                    : null);
-
-            return Padding(
-              padding: EdgeInsets.only(
-                left: 16,
-                right: 16,
-                top: 6,
-                bottom: insets.bottom + 16,
-              ),
-              child: ListView(
-                shrinkWrap: true,
-                children: [
-                  Text(
-                    editing == null ? 'Futbolcu Ekle' : 'Oyuncu Güncelle',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w900,
-                        ),
-                  ),
-                  const SizedBox(height: 12),
-                  Center(
-                    child: Stack(
-                      children: [
-                        CircleAvatar(
-                          radius: 44,
-                          backgroundColor: cs.primary.withValues(alpha: 0.10),
-                          backgroundImage: photoPreview,
-                          child: photoPreview == null
-                              ? Icon(Icons.person, size: 36, color: cs.primary)
-                              : null,
-                        ),
-                        Positioned(
-                          right: 0,
-                          bottom: 0,
-                          child: CircleAvatar(
-                            radius: 18,
-                            backgroundColor: cs.primary,
-                            child: IconButton(
-                              padding: EdgeInsets.zero,
-                              onPressed: saving ? null : pickPhoto,
-                              icon: const Icon(
-                                Icons.photo_camera_outlined,
-                                color: Colors.white,
-                                size: 18,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: nameController,
-                    enabled: !saving,
-                    decoration: const InputDecoration(
-                      labelText: 'Ad Soyad',
-                      prefixIcon: Icon(Icons.badge_outlined),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: numberController,
-                          enabled: !saving,
-                          decoration: const InputDecoration(
-                            labelText: 'Forma No',
-                            prefixIcon: Icon(Icons.confirmation_number_outlined),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: TextField(
-                          controller: birthController,
-                          enabled: !saving,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'Doğum Yılı',
-                            prefixIcon: Icon(Icons.cake_outlined),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  DropdownButtonFormField<String>(
-                    value: position,
-                    decoration: const InputDecoration(
-                      labelText: 'Mevki',
-                      prefixIcon: Icon(Icons.sports_soccer_outlined),
-                    ),
-                    items: _positions
-                        .map(
-                          (p) => DropdownMenuItem<String>(
-                            value: p,
-                            child: Text(p),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: saving ? null : (v) => setSheetState(() => position = v!),
-                  ),
-                  const SizedBox(height: 14),
-                  SizedBox(
-                    height: 50,
-                    child: saving
-                        ? const Center(
-                            child: SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                          )
-                        : FilledButton.icon(
-                            onPressed: save,
-                            icon: const Icon(Icons.save_outlined),
-                            label: Text(
-                              editing == null ? 'Ekle' : 'Güncelle',
-                              style: const TextStyle(fontWeight: FontWeight.w900),
-                            ),
-                          ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-
-    nameController.dispose();
-    numberController.dispose();
-    birthController.dispose();
+    if (!mounted) return;
+    if (saved == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            editing == null ? 'Futbolcu eklendi.' : 'Futbolcu güncellendi.',
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _openBulkUpload() async {
-    final teamSnap = await FirebaseFirestore.instance
-        .collection('teams')
-        .doc(widget.teamId)
-        .get();
-    final teamData = teamSnap.data() ?? <String, dynamic>{};
-    final leagueId = (teamData['leagueId'] as String?)?.trim() ?? '';
+    final leagueId = widget.tournamentId.trim();
     if (leagueId.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Takımın leagueId alanı bulunamadı.')),
+        const SnackBar(content: Text('Turnuva bilgisi bulunamadı.')),
       );
       return;
     }
@@ -331,6 +117,9 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     bool busy = false;
     String? pickedFileName;
     List<Map<String, dynamic>> parsed = const [];
+    int skippedEmpty = 0;
+    int skippedShort = 0;
+    int skippedNoName = 0;
 
     await showDialog<void>(
       context: context,
@@ -345,7 +134,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                 TextCellValue('Forma No'),
                 TextCellValue('Futbolcu Adı'),
                 TextCellValue('Mevki'),
-                TextCellValue('Doğum Yılı'),
+                TextCellValue('Doğum Tarihi'),
                 TextCellValue('Kullandığı Ayak'),
               ]);
               final bytes = excel.encode();
@@ -382,32 +171,50 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
             return null;
           }
 
-          int? birthYearFrom(dynamic value) {
+          String? birthDateFrom(dynamic value) {
             if (value == null) return null;
             if (value is DateTime) {
-              final y = value.year;
-              return (y >= 1900 && y <= 2100) ? y : null;
+              final dd = value.day.toString().padLeft(2, '0');
+              final mm = value.month.toString().padLeft(2, '0');
+              final yyyy = value.year.toString().padLeft(4, '0');
+              return '$dd/$mm/$yyyy';
             }
             if (value is num) {
-              final y = value.toInt();
-              if (y >= 1900 && y <= 2100) return y;
+              final year = value.toInt();
+              if (year >= 1900 && year <= 2100) {
+                return '01/01/${year.toString().padLeft(4, '0')}';
+              }
             }
             final s = value.toString().replaceAll('\u0000', '').trim();
-            final direct = int.tryParse(s);
-            if (direct != null) {
-              if (direct >= 1900 && direct <= 2100) return direct;
-            }
-            final d = double.tryParse(s.replaceAll(',', '.'));
-            if (d != null) {
-              final y = d.toInt();
-              if (y >= 1900 && y <= 2100) return y;
-            }
-            final m = RegExp(r'(19\\d{2}|20\\d{2}|2100)').firstMatch(s);
+            if (s.isEmpty) return null;
+            final m = RegExp(r'^(\\d{1,2})[./-](\\d{1,2})[./-](\\d{4})$')
+                .firstMatch(s);
             if (m != null) {
-              final y = int.tryParse(m.group(0)!);
-              if (y != null && y >= 1900 && y <= 2100) return y;
+              final dd = m.group(1)!.padLeft(2, '0');
+              final mm = m.group(2)!.padLeft(2, '0');
+              final yyyy = m.group(3)!.padLeft(4, '0');
+              return '$dd/$mm/$yyyy';
+            }
+            final year = int.tryParse(s);
+            if (year != null && year >= 1900 && year <= 2100) {
+              return '01/01/${year.toString().padLeft(4, '0')}';
+            }
+            final yr = int.tryParse(
+              RegExp(r'(19\\d{2}|20\\d{2}|2100)').firstMatch(s)?.group(0) ?? '',
+            );
+            if (yr != null && yr >= 1900 && yr <= 2100) {
+              return '01/01/${yr.toString().padLeft(4, '0')}';
             }
             return null;
+          }
+
+          int? yearFromBirthDate(String? birthDate) {
+            if (birthDate == null) return null;
+            final m = RegExp(r'(\\d{4})$').firstMatch(birthDate);
+            final y = m == null ? null : int.tryParse(m.group(1)!);
+            if (y == null) return null;
+            if (y < 1900 || y > 2100) return null;
+            return y;
           }
 
           String cellStr(Data? cell) {
@@ -422,6 +229,9 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
           Future<void> pickAndParse() async {
             setDialogState(() => busy = true);
             try {
+              skippedEmpty = 0;
+              skippedShort = 0;
+              skippedNoName = 0;
               final result = await FilePicker.platform.pickFiles(
                 type: FileType.custom,
                 allowedExtensions: ['xlsx', 'xls', 'csv', 'numbers'],
@@ -488,18 +298,30 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                 rows = [];
                 for (var i = 1; i < lines.length; i++) {
                   final cols = lines[i].split(',');
-                  if (idxName >= cols.length) continue;
+                  if (cols.isEmpty) {
+                    skippedEmpty++;
+                    continue;
+                  }
+                  if (cols.length < 2 || idxName >= cols.length) {
+                    skippedShort++;
+                    continue;
+                  }
                   final name = cols[idxName].trim();
-                  if (name.isEmpty) continue;
+                  if (name.isEmpty) {
+                    skippedNoName++;
+                    continue;
+                  }
                   final number = (idxNo != null && idxNo < cols.length) ? cols[idxNo].trim() : '';
                   final position = idxPos < cols.length ? cols[idxPos].trim() : '';
                   final birthRaw = idxBirth < cols.length ? cols[idxBirth].trim() : '';
                   final foot = idxFoot < cols.length ? cols[idxFoot].trim() : '';
-                  final birthYear = birthYearFrom(birthRaw);
+                  final birthDate = birthDateFrom(birthRaw);
+                  final birthYear = yearFromBirthDate(birthDate);
                   rows.add({
                     'name': name,
                     'number': number.isEmpty ? null : number,
                     'position': position.isEmpty ? null : position,
+                    'birthDate': birthDate,
                     'birthYear': birthYear,
                     'preferredFoot': foot.isEmpty ? null : foot,
                   });
@@ -580,17 +402,32 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                   final parsedRows = <Map<String, dynamic>>[];
                   for (var r = headerRowIndex + 1; r < sheetResolved.rows.length; r++) {
                     final row = sheetResolved.rows[r];
-                    final name = row.length > idxName ? cellStr(row[idxName]) : '';
-                    if (name.isEmpty) continue;
+                    if (row.isEmpty) {
+                      skippedEmpty++;
+                      continue;
+                    }
+                    if (row.length < 2) {
+                      skippedShort++;
+                      continue;
+                    }
+                    final nameCell = row.length > idxName ? row[idxName] : null;
+                    final nameValue = nameCell?.value;
+                    if (nameValue == null || nameValue.toString().trim().isEmpty) {
+                      skippedNoName++;
+                      continue;
+                    }
+                    final name = cellStr(nameCell);
                     final number = (idxNo != null && row.length > idxNo) ? cellStr(row[idxNo]) : '';
                     final position = row.length > idxPos ? cellStr(row[idxPos]) : '';
                     final birthRaw = row.length > idxBirth ? row[idxBirth]?.value : null;
                     final foot = row.length > idxFoot ? cellStr(row[idxFoot]) : '';
-                    final birthYear = birthYearFrom(birthRaw);
+                    final birthDate = birthDateFrom(birthRaw);
+                    final birthYear = yearFromBirthDate(birthDate);
                     parsedRows.add({
                       'name': name,
                       'number': number.isEmpty ? null : number,
                       'position': position.isEmpty ? null : position,
+                      'birthDate': birthDate,
                       'birthYear': birthYear,
                       'preferredFoot': foot.isEmpty ? null : foot,
                     });
@@ -674,17 +511,31 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                 rows = [];
                 for (var r = headerRowIndex + 1; r < rowsRaw.length; r++) {
                   final row = rowsRaw[r];
-                  final name = row.length > idxName ? dynStr(row[idxName]) : '';
-                  if (name.isEmpty) continue;
+                  if (row.isEmpty) {
+                    skippedEmpty++;
+                    continue;
+                  }
+                  if (row.length < 2) {
+                    skippedShort++;
+                    continue;
+                  }
+                  final rawName = row.length > idxName ? row[idxName] : null;
+                  final name = dynStr(rawName);
+                  if (rawName == null || name.isEmpty) {
+                    skippedNoName++;
+                    continue;
+                  }
                   final number = (idxNo != null && row.length > idxNo) ? dynStr(row[idxNo]) : '';
                   final position = row.length > idxPos ? dynStr(row[idxPos]) : '';
                   final birthRaw = row.length > idxBirth ? row[idxBirth] : null;
                   final foot = row.length > idxFoot ? dynStr(row[idxFoot]) : '';
-                  final birthYear = birthYearFrom(birthRaw);
+                  final birthDate = birthDateFrom(birthRaw);
+                  final birthYear = yearFromBirthDate(birthDate);
                   rows.add({
                     'name': name,
                     'number': number.isEmpty ? null : number,
                     'position': position.isEmpty ? null : position,
+                    'birthDate': birthDate,
                     'birthYear': birthYear,
                     'preferredFoot': foot.isEmpty ? null : foot,
                   });
@@ -752,18 +603,30 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                   rows = [];
                   for (var i = 1; i < lines.length; i++) {
                     final cols = lines[i].split(',');
-                    if (idxName >= cols.length) continue;
+                    if (cols.isEmpty) {
+                      skippedEmpty++;
+                      continue;
+                    }
+                    if (cols.length < 2 || idxName >= cols.length) {
+                      skippedShort++;
+                      continue;
+                    }
                     final name = cols[idxName].trim();
-                    if (name.isEmpty) continue;
+                    if (name.isEmpty) {
+                      skippedNoName++;
+                      continue;
+                    }
                     final number = (idxNo != null && idxNo < cols.length) ? cols[idxNo].trim() : '';
                     final position = idxPos < cols.length ? cols[idxPos].trim() : '';
                     final birthRaw = idxBirth < cols.length ? cols[idxBirth].trim() : '';
                     final foot = idxFoot < cols.length ? cols[idxFoot].trim() : '';
-                    final birthYear = birthYearFrom(birthRaw);
+                    final birthDate = birthDateFrom(birthRaw);
+                    final birthYear = yearFromBirthDate(birthDate);
                     rows.add({
                       'name': name,
                       'number': number.isEmpty ? null : number,
                       'position': position.isEmpty ? null : position,
+                      'birthDate': birthDate,
                       'birthYear': birthYear,
                       'preferredFoot': foot.isEmpty ? null : foot,
                     });
@@ -815,8 +678,13 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
               Navigator.pop(context);
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (!mounted) return;
+                final skipped = skippedEmpty + skippedShort + skippedNoName;
                 ScaffoldMessenger.of(this.context).showSnackBar(
-                  const SnackBar(content: Text('Onaya gönderildi.')),
+                  SnackBar(
+                    content: Text(
+                      'Onaya gönderildi: ${parsed.length} oyuncu • Atlanan satır: $skipped',
+                    ),
+                  ),
                 );
               });
             } catch (e) {
@@ -860,6 +728,11 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                       'Okunan kayıt: ${parsed.length}',
                       style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
+                  if (pickedFileName != null)
+                    Text(
+                      'Atlanan satır: ${skippedEmpty + skippedShort + skippedNoName}',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
                   if (busy) ...[
                     const SizedBox(height: 12),
                     const LinearProgressIndicator(),
@@ -887,71 +760,43 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
   Widget build(BuildContext context) {
     final dbService = _dbService;
     final cs = Theme.of(context).colorScheme;
+    final titleTeam = widget.teamName.trim();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Takım Kadrosu')),
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (_fabOpen) ...[
-            FloatingActionButton.small(
-              heroTag: 'bulk_${widget.teamId}',
-              onPressed: () async {
-                setState(() => _fabOpen = false);
-                await _openBulkUpload();
-              },
-              child: const Icon(Icons.upload_file_rounded),
-            ),
-            const SizedBox(height: 10),
-            FloatingActionButton.small(
-              heroTag: 'add_${widget.teamId}',
-              onPressed: () async {
-                setState(() => _fabOpen = false);
-                await _openPlayerForm();
-              },
-              child: const Icon(Icons.person_add_alt_1_outlined),
-            ),
-            const SizedBox(height: 10),
-          ],
-          FloatingActionButton(
-            heroTag: 'main_${widget.teamId}',
-            onPressed: () => setState(() => _fabOpen = !_fabOpen),
-            child: Icon(_fabOpen ? Icons.close : Icons.add),
-          ),
-        ],
+      appBar: AppBar(
+        title: Text(
+          titleTeam.isEmpty ? 'Takım Kadrosu' : '$titleTeam Kadrosu',
+        ),
+        centerTitle: true,
       ),
+      floatingActionButton: null,
       body: Column(
         children: [
           Container(
-            padding: const EdgeInsets.all(16),
             color: cs.surfaceContainerLow,
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 30,
-                  backgroundImage: widget.teamLogoUrl.isNotEmpty
-                      ? NetworkImage(_normalizeUrl(widget.teamLogoUrl))
-                      : null,
-                  child: widget.teamLogoUrl.isEmpty
-                      ? const Icon(Icons.groups, size: 30)
-                      : null,
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            child: TextField(
+              controller: _rosterSearchController,
+              onChanged: (v) =>
+                  setState(() => _rosterQuery = v.trim().toLowerCase()),
+              decoration: InputDecoration(
+                hintText: 'İsimden Ara',
+                prefixIcon: Icon(Icons.search, color: cs.primary),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide:
+                      BorderSide(color: cs.primary.withValues(alpha: 0.35)),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Text(
-                    widget.teamName,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide(color: cs.primary, width: 2),
                 ),
-              ],
+              ),
             ),
           ),
           Expanded(
             child: StreamBuilder<List<PlayerModel>>(
-              stream: dbService.getPlayers(widget.teamId),
+              stream: dbService.getPlayers(widget.teamId, tournamentId: widget.tournamentId),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
@@ -959,43 +804,110 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                 if (snapshot.hasError) {
                   return Center(child: Text('Hata: ${snapshot.error}'));
                 }
-                final players = snapshot.data ?? const <PlayerModel>[];
-                if (players.isEmpty) {
+                final allPlayers = snapshot.data ?? const <PlayerModel>[];
+                if (allPlayers.isEmpty) {
                   return const Center(child: Text('Henüz kadro girişi yapılmamış.'));
+                }
+                final q = _rosterQuery;
+                final players = q.isEmpty
+                    ? allPlayers
+                    : allPlayers
+                        .where(
+                          (p) => p.name.toLowerCase().contains(q),
+                        )
+                        .toList();
+                if (players.isEmpty) {
+                  return const Center(
+                    child: Text('Aramanıza uygun futbolcu bulunamadı.'),
+                  );
                 }
 
                 return ListView.separated(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                   itemCount: players.length,
-                  separatorBuilder: (context, index) => const SizedBox(height: 10),
+                  separatorBuilder: (context, index) {
+                    bool isManager(PlayerModel p) =>
+                        p.role == 'Takım Sorumlusu' || p.role == 'Her İkisi';
+                    final currentIsManager = isManager(players[index]);
+                    final nextIsManager = (index + 1 < players.length)
+                        ? isManager(players[index + 1])
+                        : false;
+                    if (currentIsManager && !nextIsManager) {
+                      return const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 10),
+                        child: Divider(height: 1),
+                      );
+                    }
+                    return const SizedBox(height: 10);
+                  },
                   itemBuilder: (context, index) {
                     final p = players[index];
                     final photo = (p.photoUrl ?? '').trim();
-                    final photoProvider = photo.isEmpty ? null : NetworkImage(_normalizeUrl(photo));
                     final num = (p.number ?? '').trim();
-                    final pos = (p.position ?? '').trim();
-                    final birth = p.birthYear;
+                    final pos = _displayPosition(p);
+                    final birth = (p.birthDate ?? '').trim();
+                    final isManager =
+                        p.role == 'Takım Sorumlusu' || p.role == 'Her İkisi';
                     return Card(
                       margin: EdgeInsets.zero,
                       child: ListTile(
                         onTap: () => _openPlayerForm(editing: p),
-                        leading: CircleAvatar(
-                          backgroundImage: photoProvider,
-                          child: photoProvider == null
-                              ? Text(
-                                  p.name.trim().isEmpty
-                                      ? '?'
-                                      : p.name.trim()[0].toUpperCase(),
-                                  style: const TextStyle(fontWeight: FontWeight.w900),
-                                )
-                              : null,
+                        leading: ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            width: 56,
+                            height: 56,
+                            color: cs.primary.withValues(alpha: 0.10),
+                            child: photo.isEmpty
+                                ? Center(
+                                    child: Text(
+                                      p.name.trim().isEmpty
+                                          ? '?'
+                                          : p.name.trim()[0].toUpperCase(),
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 18,
+                                      ),
+                                    ),
+                                  )
+                                : WebSafeImage(
+                                    url: _normalizeUrl(photo),
+                                    width: 56,
+                                    height: 56,
+                                    isCircle: false,
+                                    fallbackIconSize: 22,
+                                  ),
+                          ),
                         ),
-                        title: Text(
-                          p.name,
-                          style: const TextStyle(fontWeight: FontWeight.w900),
+                        title: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                p.name,
+                                style: const TextStyle(fontWeight: FontWeight.w900),
+                              ),
+                            ),
+                            if (isManager)
+                              Container(
+                                width: 24,
+                                height: 24,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFEF4444),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Text(
+                                  'C',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w900,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                         subtitle: Text(
-                          '${pos.isEmpty ? '-' : pos} | Doğum: ${birth ?? '-'}',
+                          '${pos.isEmpty ? '-' : pos} | Doğum: ${birth.isEmpty ? '-' : birth}',
                         ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -1042,6 +954,927 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class PlayerFormScreen extends StatefulWidget {
+  const PlayerFormScreen({
+    super.key,
+    required this.teamId,
+    required this.tournamentId,
+    this.editing,
+    String Function(String raw)? normalizeUrl,
+  }) : normalizeUrl = normalizeUrl ?? _defaultNormalizeUrl;
+
+  final String teamId;
+  final String tournamentId;
+  final PlayerModel? editing;
+  final String Function(String raw) normalizeUrl;
+
+  static String _defaultNormalizeUrl(String raw) {
+    final url = raw.trim();
+    if (url.isEmpty) return '';
+    if (url.startsWith('http://') || url.startsWith('https://')) return url;
+    return 'https://$url';
+  }
+
+  @override
+  State<PlayerFormScreen> createState() => _PlayerFormScreenState();
+}
+
+class _PlayerFormScreenState extends State<PlayerFormScreen> {
+  final _dbService = DatabaseService();
+  final _imageUploadService = ImgBBUploadService();
+  final _picker = ImagePicker();
+
+  final _nameController = TextEditingController();
+  final _numberController = TextEditingController();
+  final _birthDateController = TextEditingController();
+  final _phoneController = TextEditingController();
+
+  static const _mainPositions = <String>[
+    'Kaleci',
+    'Defans',
+    'Orta Saha',
+    'Forvet',
+  ];
+  static const Map<String, List<String>> _subPositionsByMain = {
+    'Kaleci': ['Kaleci'],
+    'Defans': ['Stoper', 'Bek'],
+    'Orta Saha': ['Ön Libero', 'Merkez', 'Ofansif', 'Kanat'],
+    'Forvet': ['Santrfor', 'Kanat Forvet'],
+  };
+  static const _roles = <String>['Her İkisi', 'Takım Sorumlusu', 'Futbolcu'];
+
+  String _mainPosition = _mainPositions.first;
+  String _subPosition = _subPositionsByMain[_mainPositions.first]!.first;
+  String _role = 'Futbolcu';
+  String? _activePlayerId;
+  String? _existingPhotoUrl;
+  XFile? _pickedPhoto;
+  bool _saving = false;
+  bool _managerExists = false;
+
+  bool _isManagerRole(String role) =>
+      role == 'Takım Sorumlusu' || role == 'Her İkisi';
+
+  String _deriveMainPosition(String? main, String? subOrLegacy) {
+    final m = (main ?? '').trim();
+    if (_subPositionsByMain.containsKey(m)) return m;
+    final s = (subOrLegacy ?? '').trim();
+    if (s.isEmpty) return _mainPositions.first;
+    switch (s) {
+      case 'GK':
+        return 'Kaleci';
+      case 'DEF':
+        return 'Defans';
+      case 'ORT':
+        return 'Orta Saha';
+      case 'FOR':
+        return 'Forvet';
+    }
+    for (final entry in _subPositionsByMain.entries) {
+      if (entry.value.contains(s)) return entry.key;
+    }
+    return _mainPositions.first;
+  }
+
+  String _deriveSubPosition(String main, String? subOrLegacy) {
+    final options = _subPositionsByMain[main] ?? const <String>[];
+    if (options.isEmpty) return '';
+    final s = (subOrLegacy ?? '').trim();
+    if (options.contains(s)) return s;
+    switch (s) {
+      case 'GK':
+        return 'Kaleci';
+      case 'DEF':
+        return 'Stoper';
+      case 'ORT':
+        return 'Merkez';
+      case 'FOR':
+        return 'Santrfor';
+    }
+    return options.first;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    final e = widget.editing;
+    if (e != null) {
+      _activePlayerId = (e.phone ?? e.id).trim().isEmpty ? e.id : (e.phone ?? e.id);
+      _nameController.text = e.name;
+      _numberController.text = (e.number ?? '').toString();
+      _birthDateController.text = (e.birthDate ?? '').toString();
+      _mainPosition = _deriveMainPosition(e.mainPosition, e.position);
+      _subPosition = _deriveSubPosition(_mainPosition, e.position);
+      final r = e.role.trim();
+      _role = r.isEmpty ? 'Futbolcu' : r;
+      if (!_roles.contains(_role)) _role = 'Futbolcu';
+      final phoneRaw = (e.phone ?? '').toString();
+      _phoneController.text = PhoneMaskFormatter.formatFromRaw(phoneRaw);
+      _existingPhotoUrl = (e.photoUrl ?? '').trim().isEmpty ? null : e.photoUrl;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadManagerState());
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _numberController.dispose();
+    _birthDateController.dispose();
+    _phoneController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadManagerState() async {
+    final snap = await FirebaseFirestore.instance
+        .collection('rosters')
+        .where('tournamentId', isEqualTo: widget.tournamentId)
+        .where('teamId', isEqualTo: widget.teamId)
+        .get();
+    final excludeId = _activePlayerId;
+    var exists = false;
+    for (final d in snap.docs) {
+      if (excludeId != null) {
+        final phone = (d.data()['playerPhone'] ?? '').toString().trim();
+        if (phone == excludeId) continue;
+      }
+      final role = (d.data()['role'] ?? '').toString().trim();
+      final resolvedRole = role.isEmpty ? 'Futbolcu' : role;
+      if (_isManagerRole(resolvedRole)) {
+        exists = true;
+        break;
+      }
+    }
+    if (!mounted) return;
+    setState(() => _managerExists = exists);
+  }
+
+  Future<void> _pickPhoto() async {
+    final picked = await _picker.pickImage(
+      source: ImageSource.gallery,
+    );
+    if (picked == null) return;
+    final originalFile = File(picked.path);
+    final bytes = await originalFile.length();
+    if (bytes > 10 * 1024 * 1024) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Dosya boyutu çok yüksek (Max 10MB). Lütfen daha düşük boyutlu bir görsel seçiniz.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    final tmp = await getTemporaryDirectory();
+
+    const maxUploadedBytes = 800 * 1024;
+    const targetWidth = 1024;
+    const targetHeight = 1024;
+    const qualities = [85, 75, 65, 55];
+
+    XFile? best;
+    for (final q in qualities) {
+      final targetPath =
+          '${tmp.path}/player_${DateTime.now().millisecondsSinceEpoch}_q$q.jpg';
+      final out = await FlutterImageCompress.compressAndGetFile(
+        originalFile.absolute.path,
+        targetPath,
+        quality: q,
+        minWidth: targetWidth,
+        minHeight: targetHeight,
+      );
+      if (out == null) continue;
+      best = out;
+      final size = await File(out.path).length();
+      if (size <= maxUploadedBytes) break;
+    }
+
+    if (best == null) {
+      setState(() => _pickedPhoto = picked);
+      return;
+    }
+    setState(() => _pickedPhoto = best);
+  }
+
+  String _rawPhone() {
+    final digits = _phoneController.text.replaceAll(RegExp(r'\D'), '');
+    if (digits.isEmpty) return '';
+    return digits;
+  }
+
+  int? _birthYearFromDate(String? birthDate) {
+    if (birthDate == null) return null;
+    final m = RegExp(r'(\d{4})$').firstMatch(birthDate.trim());
+    return m == null ? null : int.tryParse(m.group(1)!);
+  }
+
+  bool _isValidBirthDate(String s) {
+    final v = s.trim();
+    if (v.isEmpty) return true;
+    if (!RegExp(r'^\d{2}/\d{2}/\d{4}$').hasMatch(v)) return false;
+    final y = _birthYearFromDate(v);
+    if (y == null) return false;
+    return y >= 1900 && y <= 2100;
+  }
+
+  bool _isValidPhoneRaw(String raw) {
+    if (raw.isEmpty) return true;
+    if (!RegExp(r'^\d{10}$').hasMatch(raw)) return false;
+    return true;
+  }
+
+  Future<PlayerModel?> _selectExistingPlayer() async {
+    return showModalBottomSheet<PlayerModel>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => _PlayerPickerSheet(
+        teamId: widget.teamId,
+        tournamentId: widget.tournamentId,
+        normalizeUrl: widget.normalizeUrl,
+      ),
+    );
+  }
+
+  void _applySelectedPlayer(PlayerModel p) {
+    _activePlayerId = p.id;
+    _nameController.text = p.name;
+    _numberController.text = (p.number ?? '').toString();
+    _birthDateController.text = (p.birthDate ?? '').toString();
+    _mainPosition = _deriveMainPosition(p.mainPosition, p.position);
+    _subPosition = _deriveSubPosition(_mainPosition, p.position);
+    final r = p.role.trim();
+    _role = _roles.contains(r) ? r : 'Futbolcu';
+    final phoneRaw = (p.phone ?? '').toString();
+    _phoneController.text = PhoneMaskFormatter.formatFromRaw(phoneRaw);
+    _existingPhotoUrl = (p.photoUrl ?? '').trim().isEmpty ? null : p.photoUrl;
+    _pickedPhoto = null;
+
+    if (_managerExists && _isManagerRole(_role)) {
+      _role = 'Futbolcu';
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Bu takımda zaten takım sorumlusu var. Rol "Futbolcu" olarak ayarlandı.'),
+          ),
+        );
+      });
+    }
+  }
+
+  Future<void> _save() async {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Lütfen ad soyad girin.')),
+      );
+      return;
+    }
+
+    final birthDate = _birthDateController.text.trim();
+    if (!_isValidBirthDate(birthDate)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Doğum tarihi DD/MM/YYYY formatında olmalı.')),
+      );
+      return;
+    }
+
+    final rawPhone = _rawPhone();
+    if (!_isValidPhoneRaw(rawPhone)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Telefon no 10 haneli olmalı.')),
+      );
+      return;
+    }
+    if (rawPhone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Telefon no zorunludur.')),
+      );
+      return;
+    }
+
+    if (_managerExists &&
+        _isManagerRole(_role) &&
+        !(widget.editing != null && _isManagerRole(widget.editing!.role))) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bu takımda zaten takım sorumlusu var.')),
+      );
+      return;
+    }
+
+    setState(() => _saving = true);
+    try {
+      final number = _numberController.text.trim();
+      final resolvedBirthDate = birthDate.isEmpty ? null : birthDate;
+      await _dbService.upsertPlayerIdentity(
+        phone: rawPhone,
+        name: name,
+        birthDate: resolvedBirthDate,
+        mainPosition: _mainPosition,
+      );
+      await _dbService.upsertRosterEntry(
+        tournamentId: widget.tournamentId,
+        teamId: widget.teamId,
+        playerPhone: rawPhone,
+        playerName: name,
+        jerseyNumber: number.isEmpty ? null : number,
+        role: _role,
+      );
+
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+    } catch (e) {
+      if (!mounted) return;
+      final msg = e.toString();
+      final uniq = 'Bu futbolcu zaten sistemde kayıtlı!';
+      final text = msg.contains(uniq) ? uniq : 'Hata: $msg';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(text), backgroundColor: Colors.red),
+      );
+      setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final editing = widget.editing != null;
+    final allowManagerOptions = !_managerExists || _isManagerRole(_role);
+
+    final hasPicked = _pickedPhoto != null;
+    final editingUrl = (_existingPhotoUrl ?? '').trim();
+    final hasEditingUrl = editingUrl.isNotEmpty;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(editing ? 'Oyuncu Güncelle' : 'Futbolcu Ekle'),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.only(bottom: 110),
+        children: [
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final h = min(MediaQuery.of(context).size.height * 0.38, 340.0);
+              return SizedBox(
+                height: h,
+                width: double.infinity,
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: cs.primary.withValues(alpha: 0.10),
+                          border: Border(
+                            bottom: BorderSide(
+                              color: cs.primary.withValues(alpha: 0.35),
+                              width: 1,
+                            ),
+                          ),
+                        ),
+                        child: hasPicked
+                            ? Image.file(
+                                File(_pickedPhoto!.path),
+                                fit: BoxFit.cover,
+                              )
+                            : hasEditingUrl
+                                ? WebSafeImage(
+                                    url: widget.normalizeUrl(editingUrl),
+                                    width: constraints.maxWidth,
+                                    height: h,
+                                    isCircle: false,
+                                    fallbackIconSize: 64,
+                                    fit: BoxFit.cover,
+                                  )
+                                : Icon(
+                                    Icons.person,
+                                    size: 88,
+                                    color: cs.primary,
+                                  ),
+                      ),
+                    ),
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.black.withValues(alpha: 0.00),
+                                Colors.black.withValues(alpha: 0.25),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      right: 16,
+                      bottom: 16,
+                      child: Material(
+                        color: _saving
+                            ? cs.primary.withValues(alpha: 0.45)
+                            : cs.primary,
+                        shape: const CircleBorder(),
+                        child: IconButton(
+                          onPressed: _saving ? null : _pickPhoto,
+                          icon: const Icon(Icons.photo_camera_outlined),
+                          color: Colors.white,
+                          iconSize: 30,
+                          padding: const EdgeInsets.all(14),
+                          constraints: const BoxConstraints(
+                            minWidth: 56,
+                            minHeight: 56,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _nameController,
+                        enabled: !_saving,
+                        decoration: const InputDecoration(
+                          labelText: 'Ad Soyad',
+                          prefixIcon: Icon(Icons.badge_outlined),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    SizedBox(
+                      height: 52,
+                      child: FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: cs.primary,
+                        ),
+                        onPressed: _saving
+                            ? null
+                            : () async {
+                                final selected = await _selectExistingPlayer();
+                                if (selected == null) return;
+                                setState(() => _applySelectedPlayer(selected));
+                                await _loadManagerState();
+                              },
+                        child: const Text(
+                          'SEÇ',
+                          style: TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _numberController,
+                        enabled: !_saving,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        decoration: const InputDecoration(
+                          labelText: 'Forma No',
+                          prefixIcon:
+                              Icon(Icons.confirmation_number_outlined),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextField(
+                        controller: _birthDateController,
+                        enabled: !_saving,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [BirthDateInputFormatter()],
+                        decoration: const InputDecoration(
+                          labelText: 'Doğum Tarihi',
+                          prefixIcon: Icon(Icons.cake_outlined),
+                          hintText: 'DD/MM/YYYY',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        initialValue: _mainPosition,
+                        decoration: const InputDecoration(
+                          labelText: 'Ana Mevki',
+                          prefixIcon: Icon(Icons.sports_soccer_outlined),
+                        ),
+                        items: _mainPositions
+                            .map(
+                              (p) => DropdownMenuItem<String>(
+                                value: p,
+                                child: Text(p),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: _saving
+                            ? null
+                            : (v) {
+                                if (v == null) return;
+                                setState(() {
+                                  _mainPosition = v;
+                                  _subPosition =
+                                      (_subPositionsByMain[v] ?? const <String>[])
+                                          .first;
+                                });
+                              },
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        initialValue: _subPosition,
+                        decoration: const InputDecoration(
+                          labelText: 'Alt Mevki',
+                          prefixIcon: Icon(Icons.sports_outlined),
+                        ),
+                        items: (_subPositionsByMain[_mainPosition] ??
+                                const <String>[])
+                            .map(
+                              (p) => DropdownMenuItem<String>(
+                                value: p,
+                                child: Text(p),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: _saving
+                            ? null
+                            : (v) {
+                                if (v == null) return;
+                                setState(() => _subPosition = v);
+                              },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: _role,
+                  decoration: const InputDecoration(
+                    labelText: 'Rolü',
+                    prefixIcon: Icon(Icons.manage_accounts_outlined),
+                  ),
+                  items: _roles
+                      .map((r) {
+                        final disabled =
+                            _isManagerRole(r) && !allowManagerOptions;
+                        return DropdownMenuItem<String>(
+                          value: r,
+                          enabled: !disabled,
+                          child: Text(
+                            r,
+                            style: disabled
+                                ? TextStyle(
+                                    color: cs.onSurfaceVariant
+                                        .withValues(alpha: 0.45),
+                                  )
+                                : null,
+                          ),
+                        );
+                      })
+                      .toList(),
+                  onChanged: _saving
+                      ? null
+                      : (v) {
+                          if (v == null) return;
+                          setState(() => _role = v);
+                        },
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _phoneController,
+                  enabled: !_saving,
+                  keyboardType: TextInputType.phone,
+                  inputFormatters: [PhoneMaskFormatter()],
+                  decoration: const InputDecoration(
+                    labelText: 'Telefon No',
+                    prefixIcon: Icon(Icons.phone_outlined),
+                    prefixText: '0 ',
+                    hintText: '(5XX) XXX XX XX',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: _saving
+                ? const Center(
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                : FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: cs.primary,
+                    ),
+                    onPressed: _save,
+                    child: Text(
+                      editing ? 'Güncelle' : 'Kaydet',
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PlayerPickerSheet extends StatefulWidget {
+  const _PlayerPickerSheet({
+    required this.teamId,
+    required this.tournamentId,
+    required this.normalizeUrl,
+  });
+
+  final String teamId;
+  final String tournamentId;
+  final String Function(String raw) normalizeUrl;
+
+  @override
+  State<_PlayerPickerSheet> createState() => _PlayerPickerSheetState();
+}
+
+class _PlayerPickerSheetState extends State<_PlayerPickerSheet> {
+  final _dbService = DatabaseService();
+  final _searchController = TextEditingController();
+  String _q = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 10,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.arrow_back),
+                  color: cs.primary,
+                ),
+                Expanded(
+                  child: Container(
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: cs.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: cs.primary.withValues(alpha: 0.35),
+                      ),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    alignment: Alignment.center,
+                    child: TextField(
+                      controller: _searchController,
+                      onChanged: (v) =>
+                          setState(() => _q = v.trim().toLowerCase()),
+                      decoration: InputDecoration(
+                        hintText: 'Oyuncu Ara',
+                        prefixIcon: Icon(Icons.search, color: cs.primary),
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: () {},
+                  icon: const Icon(Icons.filter_list),
+                  color: cs.primary,
+                ),
+              ],
+            ),
+            const Divider(height: 1),
+            const SizedBox(height: 12),
+            Flexible(
+              child: StreamBuilder<List<PlayerModel>>(
+                stream: _dbService.getPlayers(widget.teamId, tournamentId: widget.tournamentId),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final all = snapshot.data ?? const <PlayerModel>[];
+                  final filtered = _q.isEmpty
+                      ? [...all]
+                      : all
+                          .where((p) => p.name.toLowerCase().contains(_q))
+                          .toList();
+                  filtered.sort(
+                    (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+                  );
+                  if (filtered.isEmpty) {
+                    return const Center(child: Text('Oyuncu bulunamadı.'));
+                  }
+                  return ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: filtered.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 8),
+                    itemBuilder: (context, i) {
+                      final p = filtered[i];
+                      final birth = (p.birthDate ?? '').trim();
+                      final photo = (p.photoUrl ?? '').trim();
+                      return Card(
+                        margin: EdgeInsets.zero,
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                          leading: ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: Container(
+                              width: 40,
+                              height: 40,
+                              color: cs.primary.withValues(alpha: 0.10),
+                              child: photo.isEmpty
+                                  ? Center(
+                                      child: Text(
+                                        p.name.trim().isEmpty
+                                            ? '?'
+                                            : p.name.trim()[0].toUpperCase(),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w900,
+                                        ),
+                                      ),
+                                    )
+                                  : WebSafeImage(
+                                      url: widget.normalizeUrl(photo),
+                                      width: 40,
+                                      height: 40,
+                                      isCircle: false,
+                                      fallbackIconSize: 18,
+                                      fit: BoxFit.cover,
+                                    ),
+                            ),
+                          ),
+                          title: Text(
+                            p.name,
+                            style: const TextStyle(fontWeight: FontWeight.w900),
+                          ),
+                          trailing: Text(
+                            birth.isEmpty ? '-' : birth,
+                            style: TextStyle(
+                              color: cs.onSurface.withValues(alpha: 0.6),
+                              fontSize: 13,
+                            ),
+                          ),
+                          onTap: () => Navigator.of(context).pop(p),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class BirthDateInputFormatter extends TextInputFormatter {
+  static String _digits(String text) => text.replaceAll(RegExp(r'\D'), '');
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final oldDigits = _digits(oldValue.text);
+    final newDigits = _digits(newValue.text);
+
+    final deletingOneChar = oldValue.text.length == newValue.text.length + 1;
+    final deletedOnlySlash = deletingOneChar &&
+        oldValue.text.contains('/') &&
+        oldDigits == newDigits &&
+        !newValue.text.contains('//');
+    if (deletedOnlySlash) {
+      final text = newValue.text.length > 10
+          ? newValue.text.substring(0, 10)
+          : newValue.text;
+      final offset = newValue.selection.baseOffset.clamp(0, text.length);
+      return TextEditingValue(
+        text: text,
+        selection: TextSelection.collapsed(offset: offset),
+      );
+    }
+
+    var digits = newDigits;
+    if (digits.length > 8) digits = digits.substring(0, 8);
+
+    final rawCursor =
+        newValue.selection.baseOffset.clamp(0, newValue.text.length);
+    final digitsBeforeCursor =
+        _digits(newValue.text.substring(0, rawCursor)).length;
+    final clippedDigitsBeforeCursor = min(digitsBeforeCursor, digits.length);
+
+    final b = StringBuffer();
+    for (var i = 0; i < digits.length; i++) {
+      if (i == 2 || i == 4) b.write('/');
+      b.write(digits[i]);
+    }
+    final text = b.toString(); // max 10
+
+    var offset = clippedDigitsBeforeCursor;
+    if (offset > 2) offset += 1;
+    if (offset > 4) offset += 1;
+    offset = offset.clamp(0, text.length);
+
+    return TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: offset),
+    );
+  }
+}
+
+class PhoneMaskFormatter extends TextInputFormatter {
+  static String formatFromRaw(String raw) {
+    String digits = raw.replaceAll(RegExp(r'\D'), '');
+    if (digits.startsWith('0')) digits = digits.substring(1);
+    if (digits.isEmpty) return '';
+
+    final clipped = digits.length > 10 ? digits.substring(0, 10) : digits;
+    final a = clipped.isNotEmpty ? clipped.substring(0, min(3, clipped.length)) : '';
+    final b = clipped.length > 3 ? clipped.substring(3, min(6, clipped.length)) : '';
+    final c = clipped.length > 6 ? clipped.substring(6, min(8, clipped.length)) : '';
+    final e = clipped.length > 8 ? clipped.substring(8, min(10, clipped.length)) : '';
+
+    final sb = StringBuffer();
+    if (a.isNotEmpty) {
+      sb.write('(');
+      sb.write(a);
+      if (a.length == 3) sb.write(') ');
+    }
+    if (b.isNotEmpty) {
+      sb.write(b);
+      if (b.length == 3) sb.write(' ');
+    }
+    if (c.isNotEmpty) {
+      sb.write(c);
+      if (c.length == 2) sb.write(' ');
+    }
+    if (e.isNotEmpty) {
+      sb.write(e);
+    }
+    return sb.toString().trimRight();
+  }
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final formatted = formatFromRaw(newValue.text);
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
     );
   }
 }

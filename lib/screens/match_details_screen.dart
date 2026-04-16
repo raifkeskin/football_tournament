@@ -1,7 +1,20 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
+import 'package:image_gallery_saver2_fixed/image_gallery_saver2_fixed.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:video_player/video_player.dart';
+import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 import '../models/match.dart';
+import '../widgets/web_safe_image.dart';
 import '../services/database_service.dart';
+import '../services/in_app_browser.dart';
+import '../services/image_upload_service.dart';
 import 'admin_match_event_screen.dart';
 import 'admin_match_lineup_screen.dart';
 
@@ -38,6 +51,423 @@ String _shortenName(String raw) {
   final last = parts.last;
   final initial = last.isEmpty ? '' : '${last[0].toUpperCase()}.';
   return '$first $second $initial';
+}
+
+String _normalizeUrl(String raw) {
+  final url = raw.trim();
+  if (url.isEmpty) return '';
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  return 'https://$url';
+}
+
+Future<void> _openExternalUrl(BuildContext context, String rawUrl) async {
+  final normalized = _normalizeUrl(rawUrl);
+  final uri = Uri.tryParse(normalized);
+  if (uri == null) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Link geçersiz.')),
+    );
+    return;
+  }
+  try {
+    final ok = await launchUrl(
+      uri,
+      mode: LaunchMode.externalApplication,
+      webOnlyWindowName: kIsWeb ? '_blank' : null,
+    );
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Link açılamadı.')),
+      );
+    }
+  } catch (e) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Link açılamadı: $e')),
+    );
+  }
+}
+
+String? _extractYoutubeVideoId(String rawUrl) {
+  final trimmed = rawUrl.trim();
+  if (trimmed.isEmpty) return null;
+  final converted = YoutubePlayerController.convertUrlToId(trimmed);
+  if ((converted ?? '').trim().isNotEmpty) return converted!.trim();
+  final uri = Uri.tryParse(_normalizeUrl(trimmed));
+  if (uri == null) return null;
+
+  if (uri.host.contains('youtu.be')) {
+    final id = uri.pathSegments.isEmpty ? '' : uri.pathSegments.first.trim();
+    return id.isEmpty ? null : id;
+  }
+
+  if (uri.host.contains('youtube.com') || uri.host.contains('youtube-nocookie.com')) {
+    final v = (uri.queryParameters['v'] ?? '').trim();
+    if (v.isNotEmpty) return v;
+
+    final segments = uri.pathSegments;
+    final embedIndex = segments.indexOf('embed');
+    if (embedIndex != -1 && segments.length > embedIndex + 1) {
+      final id = segments[embedIndex + 1].trim();
+      return id.isEmpty ? null : id;
+    }
+
+    final shortsIndex = segments.indexOf('shorts');
+    if (shortsIndex != -1 && segments.length > shortsIndex + 1) {
+      final id = segments[shortsIndex + 1].trim();
+      return id.isEmpty ? null : id;
+    }
+  }
+
+  return null;
+}
+
+List<String> _extractVideoUrls(String raw) {
+  final cleaned = raw.replaceAll('\r', '\n').trim();
+  if (cleaned.isEmpty) return const [];
+  final parts = cleaned.split(RegExp(r'[\n,; ]+'));
+  final out = <String>[];
+  for (final p in parts) {
+    final s = p.trim();
+    if (s.isEmpty) continue;
+    final normalized = _normalizeUrl(s);
+    final uri = Uri.tryParse(normalized);
+    if (uri == null) continue;
+    if ((uri.scheme != 'http' && uri.scheme != 'https') || uri.host.isEmpty) {
+      continue;
+    }
+    out.add(normalized);
+  }
+  return out;
+}
+
+Future<void> _openPhotoDialog(BuildContext context, String imageUrl) async {
+  final url = _normalizeUrl(imageUrl);
+  if (url.isEmpty) return;
+  await showDialog<void>(
+    context: context,
+    barrierColor: Colors.black87,
+    builder: (context) {
+      return Dialog(
+        insetPadding: const EdgeInsets.all(16),
+        backgroundColor: Colors.transparent,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            color: Colors.black,
+            child: SafeArea(
+              child: Column(
+                children: [
+                  Container(
+                    height: 50,
+                    color: const Color(0xFF1E293B),
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    child: Row(
+                      children: [
+                        const Spacer(),
+                        IconButton(
+                          onPressed: () => _openExternalUrl(context, url),
+                          icon: const Icon(
+                            Icons.file_download,
+                            color: Colors.white,
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(
+                            Icons.close_rounded,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+                          maxWidth: MediaQuery.sizeOf(context).width,
+                        ),
+                        child: Image.network(
+                          url,
+                          fit: BoxFit.contain,
+                          loadingBuilder: (context, child, progress) {
+                            if (progress == null) return child;
+                            return const Center(
+                              child: CircularProgressIndicator(),
+                            );
+                          },
+                          errorBuilder: (_, _, _) => const Icon(
+                            Icons.broken_image_outlined,
+                            color: Colors.white54,
+                            size: 64,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
+Future<void> _openVideoDialog(BuildContext context, String rawUrl) async {
+  final normalized = _normalizeUrl(rawUrl);
+  if (normalized.isEmpty) return;
+
+  final youtubeId = _extractYoutubeVideoId(normalized);
+  if (youtubeId != null) {
+    try {
+      await showDialog<void>(
+        context: context,
+        barrierColor: Colors.black87,
+        builder: (_) => _YoutubeVideoDialog(videoId: youtubeId),
+      );
+    } catch (_) {
+      await openInAppBrowser(context, normalized);
+    }
+    return;
+  }
+
+  final lower = normalized.toLowerCase();
+  final isMp4 = lower.contains('.mp4');
+  if (isMp4) {
+    try {
+      await showDialog<void>(
+        context: context,
+        barrierColor: Colors.black87,
+        builder: (_) => _Mp4VideoDialog(videoUrl: normalized),
+      );
+    } catch (_) {
+      await openInAppBrowser(context, normalized);
+    }
+    return;
+  }
+
+  await openInAppBrowser(context, normalized);
+}
+
+class _YoutubeVideoDialog extends StatefulWidget {
+  const _YoutubeVideoDialog({required this.videoId});
+  final String videoId;
+
+  @override
+  State<_YoutubeVideoDialog> createState() => _YoutubeVideoDialogState();
+}
+
+class _YoutubeVideoDialogState extends State<_YoutubeVideoDialog> {
+  late final YoutubePlayerController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = YoutubePlayerController.fromVideoId(
+      videoId: widget.videoId,
+      autoPlay: true,
+      params: const YoutubePlayerParams(
+        showControls: true,
+        showFullscreenButton: true,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.close();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      insetPadding: const EdgeInsets.all(16),
+      backgroundColor: Colors.transparent,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          color: Colors.black,
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  height: 50,
+                  color: const Color(0xFF1E293B),
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: Row(
+                    children: [
+                      const Spacer(),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: YoutubePlayer(
+                    controller: _controller,
+                    aspectRatio: 16 / 9,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Mp4VideoDialog extends StatefulWidget {
+  const _Mp4VideoDialog({required this.videoUrl});
+  final String videoUrl;
+
+  @override
+  State<_Mp4VideoDialog> createState() => _Mp4VideoDialogState();
+}
+
+class _Mp4VideoDialogState extends State<_Mp4VideoDialog> {
+  VideoPlayerController? _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    final uri = Uri.tryParse(widget.videoUrl);
+    if (uri == null) return;
+    final c = VideoPlayerController.networkUrl(uri);
+    _controller = c;
+    c.initialize().then((_) {
+      if (!mounted) return;
+      setState(() {});
+      c.setLooping(true);
+      c.play();
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = _controller;
+    final initialized = c?.value.isInitialized == true;
+    final aspect = initialized ? c!.value.aspectRatio : (16 / 9);
+    return Dialog(
+      insetPadding: const EdgeInsets.all(16),
+      backgroundColor: Colors.transparent,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          color: Colors.black,
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  height: 50,
+                  color: const Color(0xFF1E293B),
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: Row(
+                    children: [
+                      const Spacer(),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                AspectRatio(
+                  aspectRatio: aspect,
+                  child: initialized
+                      ? VideoPlayer(c!)
+                      : const Center(child: CircularProgressIndicator()),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+Future<void> _saveNetworkImageToGallery(
+  BuildContext context, {
+  required String imageUrl,
+  String? fileName,
+}) async {
+  try {
+    PermissionStatus status;
+    if (Platform.isIOS) {
+      status = await Permission.photosAddOnly.request();
+      if (!status.isGranted) {
+        status = await Permission.photos.request();
+      }
+    } else {
+      status = await Permission.photos.request();
+      if (!status.isGranted) {
+        status = await Permission.storage.request();
+      }
+    }
+    if (!status.isGranted) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Galeriye kayıt izni verilmedi.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final uri = Uri.tryParse(imageUrl);
+    if (uri == null) throw Exception('Geçersiz görsel linki');
+    final resp = await http.get(uri);
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception('Görsel indirilemedi (${resp.statusCode})');
+    }
+
+    final result = await ImageGallerySaver.saveImage(
+      resp.bodyBytes,
+      quality: 100,
+      name: fileName,
+    );
+    final ok = (result is Map) && (result['isSuccess'] == true);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(ok ? 'Görsel galeriye kaydedildi.' : 'Kayıt başarısız.'),
+        backgroundColor: ok ? Colors.green : Colors.red,
+      ),
+    );
+  } catch (e) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Hata: $e'),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
 }
 
 Widget _eventIcon(
@@ -79,10 +509,9 @@ class MatchDetailsScreen extends StatefulWidget {
   State<MatchDetailsScreen> createState() => _MatchDetailsScreenState();
 }
 
-class _MatchDetailsScreenState extends State<MatchDetailsScreen>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabController;
-  int _tabIndex = 0;
+class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
+  final _picker = ImagePicker();
+  final _imageUploadService = ImgBBUploadService();
 
   Future<void> _openYoutubeLinkEditor(MatchModel match) async {
     final controller = TextEditingController(text: match.youtubeUrl ?? '');
@@ -196,27 +625,521 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     }
   }
 
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-    _tabController.addListener(() {
-      if (!_tabController.indexIsChanging && mounted) {
-        setState(() => _tabIndex = _tabController.index);
-      }
-    });
+  Future<void> _openBroadcastLinkEditor(MatchModel match) async {
+    final controller = TextEditingController(text: match.youtubeUrl ?? '');
+    final db = DatabaseService();
+
+    try {
+      final saved = await showDialog<bool>(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text(
+              'Maç Yayın Linki',
+              style: TextStyle(fontWeight: FontWeight.w900),
+            ),
+            content: TextField(
+              controller: controller,
+              keyboardType: TextInputType.url,
+              decoration: const InputDecoration(
+                hintText: 'https://…',
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('İptal'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2E7D32),
+                  foregroundColor: Colors.white,
+                  textStyle: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Kaydet'),
+              ),
+            ],
+          );
+        },
+      );
+      if (saved != true) return;
+      await db.updateMatchYoutubeUrl(
+        matchId: match.id,
+        youtubeUrl: controller.text,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Maç yayını güncellendi.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Hata: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      controller.dispose();
+    }
   }
 
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
+  Future<void> _pickAndUploadHighlightPhoto({
+    required MatchModel match,
+    required bool isHome,
+  }) async {
+    try {
+      final picked = await _picker.pickImage(source: ImageSource.gallery);
+      if (picked == null) return;
+
+      final url = await _imageUploadService.uploadImage(File(picked.path));
+      final trimmed = (url ?? '').trim();
+      if (trimmed.isEmpty) {
+        throw Exception('Fotoğraf yüklenemedi.');
+      }
+
+      await DatabaseService().updateMatchHighlightPhotoUrl(
+        matchId: match.id,
+        isHome: isHome,
+        photoUrl: trimmed,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Fotoğraf eklendi.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Hata: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
+
+  Future<void> _openHighlightsActionSheet(MatchModel match) async {
+    final cs = Theme.of(context).colorScheme;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: cs.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.link_rounded),
+                title: const Text(
+                  'Maç Yayın Linki Ekle',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _openBroadcastLinkEditor(match);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_camera_back_outlined),
+                title: const Text(
+                  'Ev Sahibi Takım Fotosu Ekle',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickAndUploadHighlightPhoto(match: match, isHome: true);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_camera_front_outlined),
+                title: const Text(
+                  'Deplasman Takım Fotosu Ekle',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickAndUploadHighlightPhoto(match: match, isHome: false);
+                },
+              ),
+              const SizedBox(height: 10),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _openPitchEditor(MatchModel match) async {
+    final cs = Theme.of(context).colorScheme;
+    final matchRef =
+        FirebaseFirestore.instance.collection('matches').doc(match.id);
+    try {
+      final saved = await showModalBottomSheet<Map<String, String?>?>(
+        context: context,
+        showDragHandle: true,
+        isScrollControlled: true,
+        backgroundColor: cs.surface,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        builder: (context) {
+          String? selectedId = (match.pitchId ?? '').trim().isEmpty
+              ? null
+              : match.pitchId!.trim();
+          String? selectedName = (match.pitchName ?? '').trim().isEmpty
+              ? null
+              : match.pitchName!.trim();
+          return StatefulBuilder(
+            builder: (context, setSheetState) {
+              return SafeArea(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    16,
+                    0,
+                    16,
+                    12 + MediaQuery.viewInsetsOf(context).bottom,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Saha Seç',
+                        style:
+                            TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+                      ),
+                      const SizedBox(height: 10),
+                      StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance
+                            .collection('pitches')
+                            .orderBy('nameKey')
+                            .snapshots(),
+                        builder: (context, snap) {
+                          final docs = snap.data?.docs ?? const [];
+                          return DropdownButtonFormField<String?>(
+                            key: ValueKey(selectedId),
+                            initialValue: selectedId,
+                            decoration:
+                                const InputDecoration(labelText: 'Saha'),
+                            items: [
+                              const DropdownMenuItem<String?>(
+                                value: null,
+                                child: Text('Saha Seçilmedi'),
+                              ),
+                              for (final d in docs)
+                                DropdownMenuItem<String?>(
+                                  value: d.id,
+                                  child: Text(
+                                    ((d.data() as Map<String, dynamic>)['name'] ??
+                                            '')
+                                        .toString(),
+                                  ),
+                                ),
+                            ],
+                            onChanged: (v) {
+                              final selected =
+                                  docs.where((e) => e.id == v).toList();
+                              final data = selected.isEmpty
+                                  ? null
+                                  : (selected.first.data()
+                                      as Map<String, dynamic>);
+                              final name =
+                                  (data?['name'] ?? '').toString().trim();
+                              setSheetState(() {
+                                selectedId = v;
+                                selectedName =
+                                    v == null || name.isEmpty ? null : name;
+                              });
+                            },
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2E7D32),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          textStyle: const TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                        onPressed: () => Navigator.pop(context, {
+                          'pitchId': selectedId,
+                          'pitchName': selectedName,
+                        }),
+                        child: const Text('Kaydet'),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      );
+
+      if (saved == null) return;
+      await matchRef.update({
+        'pitchId': saved['pitchId'],
+        'pitchName': saved['pitchName'],
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Saha bilgisi güncellendi.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Future<void> _openDateTimeEditor(MatchModel match) async {
+    final cs = Theme.of(context).colorScheme;
+    final matchRef =
+        FirebaseFirestore.instance.collection('matches').doc(match.id);
+
+    DateTime? selectedDate;
+    final dateStr = (match.matchDate ?? '').trim();
+    final dm = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(dateStr);
+    if (dm != null) {
+      final y = int.tryParse(dm.group(1) ?? '');
+      final mo = int.tryParse(dm.group(2) ?? '');
+      final d = int.tryParse(dm.group(3) ?? '');
+      if (y != null && mo != null && d != null) {
+        selectedDate = DateTime(y, mo, d);
+      }
+    }
+    final hourController = TextEditingController();
+    final minuteController = TextEditingController();
+    final hourFocus = FocusNode();
+    final minuteFocus = FocusNode();
+
+    final timeText = (match.matchTime ?? '').trim();
+    final m = RegExp(r'^(\d{1,2}):(\d{2})$').firstMatch(timeText);
+    if (m != null) {
+      hourController.text = m.group(1)!.padLeft(2, '0');
+      minuteController.text = m.group(2)!.padLeft(2, '0');
+    }
+
+    String ddMmYyyy(DateTime d) {
+      return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+    }
+
+    String yyyyMmDd(DateTime d) {
+      return '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    }
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            Future<void> pickDate() async {
+              final now = DateTime.now();
+              final initial = selectedDate ?? now;
+              final picked = await showDatePicker(
+                context: context,
+                initialDate: initial,
+                firstDate: DateTime(now.year - 5),
+                lastDate: DateTime(now.year + 10),
+              );
+              if (picked == null) return;
+              setDialogState(() {
+                selectedDate = DateTime(picked.year, picked.month, picked.day);
+              });
+            }
+
+            Future<void> save() async {
+              final d = selectedDate;
+              if (d == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Lütfen maç tarihini seçin.')),
+                );
+                return;
+              }
+              final hh = hourController.text.trim();
+              final mm = minuteController.text.trim();
+              if (hh.isEmpty || mm.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Lütfen saat bilgisini girin.')),
+                );
+                return;
+              }
+              final h = int.tryParse(hh);
+              final m = int.tryParse(mm);
+              if (h == null || m == null || h < 0 || h > 23 || m < 0 || m > 59) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Saat formatı geçersiz.')),
+                );
+                return;
+              }
+              final time = '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
+              await matchRef.update({
+                'matchDate': yyyyMmDd(d),
+                'matchTime': time,
+                'dateString': FieldValue.delete(),
+                'time': FieldValue.delete(),
+                'updatedAt': FieldValue.serverTimestamp(),
+              });
+              if (!context.mounted) return;
+              Navigator.pop(context, true);
+            }
+
+            return AlertDialog(
+              titlePadding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              contentPadding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              title: InkWell(
+                onTap: pickDate,
+                borderRadius: BorderRadius.circular(12),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    children: [
+                      Icon(Icons.calendar_month_outlined, color: cs.primary),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          selectedDate == null ? 'Maç Tarihi' : ddMmYyyy(selectedDate!),
+                          style: const TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      SizedBox(
+                        width: 64,
+                        child: TextField(
+                          controller: hourController,
+                          focusNode: hourFocus,
+                          keyboardType: TextInputType.number,
+                          textAlign: TextAlign.center,
+                          onChanged: (v) {
+                            final text = v.trim();
+                            if (text.length == 2) {
+                              FocusScope.of(context).requestFocus(minuteFocus);
+                            }
+                          },
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(2),
+                          ],
+                          decoration: const InputDecoration(
+                            hintText: 'SS',
+                            border: OutlineInputBorder(),
+                            counterText: '',
+                          ),
+                          maxLength: 2,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      const Text(
+                        ':',
+                        style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+                      ),
+                      const SizedBox(width: 10),
+                      SizedBox(
+                        width: 64,
+                        child: TextField(
+                          controller: minuteController,
+                          focusNode: minuteFocus,
+                          keyboardType: TextInputType.number,
+                          textAlign: TextAlign.center,
+                          onChanged: (v) {
+                            final text = v.trim();
+                            if (text.length == 2) {
+                              FocusScope.of(context).unfocus();
+                            }
+                          },
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(2),
+                          ],
+                          decoration: const InputDecoration(
+                            hintText: 'DK',
+                            border: OutlineInputBorder(),
+                            counterText: '',
+                          ),
+                          maxLength: 2,
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        onPressed: pickDate,
+                        icon: const Icon(Icons.edit_calendar_outlined),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    height: 48,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2E7D32),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        textStyle: const TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                      onPressed: save,
+                      child: const Text('KAYDET'),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    hourController.dispose();
+    minuteController.dispose();
+    hourFocus.dispose();
+    minuteFocus.dispose();
+
+    if (!mounted) return;
+    if (ok == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Tarih/Saat güncellendi.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
+
+
 
   @override
   Widget build(BuildContext context) {
     final dbService = DatabaseService();
-    final cs = Theme.of(context).colorScheme;
 
     return StreamBuilder<List<MatchEvent>>(
       stream: dbService.getMatchEvents(widget.match.id),
@@ -233,10 +1156,13 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
             body: Center(child: Text('Hata: ${eventSnapshot.error}')),
           );
         }
+
         final events = eventSnapshot.data ?? const <MatchEvent>[];
 
         int htHomeFromEvents(String teamId) => events
-            .where((e) => e.type == 'goal' && e.minute <= 45 && e.teamId == teamId)
+            .where(
+              (e) => e.type == 'goal' && e.minute <= 45 && e.teamId == teamId,
+            )
             .length;
 
         return StreamBuilder<MatchModel>(
@@ -248,12 +1174,12 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                 body: const Center(child: CircularProgressIndicator()),
               );
             }
-            final m = matchSnapshot.data!;
 
+            final m = matchSnapshot.data!;
             final showScores = m.status != MatchStatus.notStarted;
-            final htHome = m.halfTimeHomeScore ??
+            final htHome = m.score?.halfTime.home ??
                 (showScores ? htHomeFromEvents(m.homeTeamId) : null);
-            final htAway = m.halfTimeAwayScore ??
+            final htAway = m.score?.halfTime.away ??
                 (showScores ? htHomeFromEvents(m.awayTeamId) : null);
 
             return StreamBuilder<QuerySnapshot>(
@@ -282,160 +1208,316 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                     ? m.awayTeamLogoUrl
                     : (teamLogoById[m.awayTeamId] ?? '');
 
-                final isAdmin = widget.isAdmin;
-                return Scaffold(
-                  appBar: AppBar(title: const Text('Maç Detayı')),
-                  floatingActionButton: isAdmin && _tabIndex == 0
-                      ? Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            FloatingActionButton(
-                              heroTag: 'yt_${m.id}',
-                              mini: true,
-                              onPressed: () => _openYoutubeLinkEditor(m),
-                              child: const Icon(Icons.videocam_rounded),
-                            ),
-                            const SizedBox(width: 12),
-                            FloatingActionButton(
-                              heroTag: 'event_${m.id}',
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        AdminMatchEventScreen(match: m),
-                                  ),
-                                );
-                              },
-                              child: const Icon(Icons.add),
-                            ),
-                          ],
-                        )
-                      : null,
-                  body: Column(
-                    children: [
-                      Card(
-                        margin: const EdgeInsets.fromLTRB(16, 16, 16, 10),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 16,
-                            horizontal: 14,
-                          ),
-                          child: Column(
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: _TeamInfo(
-                                      name: m.homeTeamName,
-                                      logoUrl: homeLogo,
-                                      textAlign: TextAlign.right,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        '${m.homeScore} - ${m.awayScore}',
-                                        style: const TextStyle(
-                                          fontSize: 44,
-                                          fontWeight: FontWeight.w900,
+                  final homeStarting =
+                      m.homeLineupDetail?.starting ?? const <LineupPlayer>[];
+                  final awayStarting =
+                      m.awayLineupDetail?.starting ?? const <LineupPlayer>[];
+                final homeSubs =
+                    m.homeLineupDetail?.subs ?? const <LineupPlayer>[];
+                final awaySubs =
+                    m.awayLineupDetail?.subs ?? const <LineupPlayer>[];
+                final isLineupsEmpty = homeStarting.isEmpty &&
+                    awayStarting.isEmpty &&
+                    homeSubs.isEmpty &&
+                    awaySubs.isEmpty;
+                final showLineupsTab = widget.isAdmin || !isLineupsEmpty;
+
+                return DefaultTabController(
+                  length: showLineupsTab ? 3 : 2,
+                  child: Builder(
+                    builder: (context) {
+                      final tabController = DefaultTabController.of(context);
+                      final isAdmin = widget.isAdmin;
+
+                      return Scaffold(
+                        appBar: AppBar(title: const Text('Maç Detayı')),
+                        floatingActionButton: !isAdmin
+                            ? null
+                            : AnimatedBuilder(
+                                animation: tabController,
+                                builder: (context, _) {
+                                  final idx = tabController.index;
+                                  final isHighlightsTab = (showLineupsTab &&
+                                          idx == 2) ||
+                                      (!showLineupsTab && idx == 1);
+
+                                  if (idx == 0) {
+                                    return Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        FloatingActionButton(
+                                          heroTag: 'yt_${m.id}',
+                                          mini: true,
+                                          onPressed: () =>
+                                              _openYoutubeLinkEditor(m),
+                                          child: const Icon(
+                                            Icons.videocam_rounded,
+                                          ),
                                         ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      if (showScores)
-                                        Row(
+                                        const SizedBox(width: 12),
+                                        FloatingActionButton(
+                                          heroTag: 'pitch_${m.id}',
+                                          mini: true,
+                                          onPressed: () => _openPitchEditor(m),
+                                          child: const Icon(
+                                            Icons.location_on_outlined,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        FloatingActionButton(
+                                          heroTag: 'event_${m.id}',
+                                          onPressed: () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) =>
+                                                    AdminMatchEventScreen(
+                                                  match: m,
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                          child: const Icon(Icons.add),
+                                        ),
+                                      ],
+                                    );
+                                  }
+
+                                  if (isHighlightsTab) {
+                                    return FloatingActionButton(
+                                      heroTag: 'highlights_${m.id}',
+                                      onPressed: () =>
+                                          _openHighlightsActionSheet(m),
+                                      child: const Icon(Icons.add),
+                                    );
+                                  }
+
+                                  return const SizedBox.shrink();
+                                },
+                              ),
+                        body: Column(
+                          children: [
+                            Card(
+                              margin: const EdgeInsets.fromLTRB(16, 16, 16, 10),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 16,
+                                  horizontal: 14,
+                                ),
+                                child: Column(
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: _TeamInfo(
+                                            name: m.homeTeamName,
+                                            logoUrl: homeLogo,
+                                            textAlign: TextAlign.right,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Column(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            if (htHome != null && htAway != null)
-                                              _ScorePill(
-                                                label: 'İY',
-                                                value: '$htHome-$htAway',
+                                            Text(
+                                              '${m.homeScore} - ${m.awayScore}',
+                                              style: const TextStyle(
+                                                fontSize: 44,
+                                                fontWeight: FontWeight.w900,
+                                                color: Colors.white,
                                               ),
-                                            if (htHome != null && htAway != null)
-                                              const SizedBox(width: 8),
-                                            _ScorePill(
-                                              label: 'MS',
-                                              value:
-                                                  '${m.homeScore}-${m.awayScore}',
                                             ),
+                                            const SizedBox(height: 8),
+                                            if (showScores)
+                                              Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  if (htHome != null &&
+                                                      htAway != null)
+                                                    _ScorePill(
+                                                      label: 'İY',
+                                                      value: '$htHome-$htAway',
+                                                    ),
+                                                  if (htHome != null &&
+                                                      htAway != null)
+                                                    const SizedBox(width: 8),
+                                                  _ScorePill(
+                                                    label: 'MS',
+                                                    value:
+                                                        '${m.homeScore}-${m.awayScore}',
+                                                  ),
+                                                ],
+                                              ),
+                                            const SizedBox(height: 8),
+                                            Builder(
+                                              builder: (context) {
+                                                final timeText =
+                                                    (m.matchTime ?? '')
+                                                        .toString()
+                                                        .trim();
+                                                final dateStr =
+                                                    (m.matchDate ?? '')
+                                                        .toString()
+                                                        .trim();
+                                                final hasDateTime =
+                                                    dateStr.isNotEmpty &&
+                                                        timeText.isNotEmpty;
+                                                final text = hasDateTime
+                                                    ? '${dateStr.split('-').reversed.join('.')}  $timeText'
+                                                    : 'Tarih ve Saat Belirlenmedi';
+                                                final row = Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    if (!hasDateTime)
+                                                      Icon(
+                                                        Icons
+                                                            .calendar_month_outlined,
+                                                        size: 16,
+                                                        color: Colors.white,
+                                                      ),
+                                                    if (!hasDateTime)
+                                                      const SizedBox(width: 6),
+                                                    Text(
+                                                      text,
+                                                      style: const TextStyle(
+                                                        color: Colors.white,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        fontSize: 12,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                );
+                                                if (!hasDateTime &&
+                                                    widget.isAdmin) {
+                                                  return InkWell(
+                                                    onTap: () =>
+                                                        _openDateTimeEditor(m),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                      10,
+                                                    ),
+                                                    child: Padding(
+                                                      padding: const EdgeInsets
+                                                          .symmetric(
+                                                        horizontal: 6,
+                                                        vertical: 4,
+                                                      ),
+                                                      child: row,
+                                                    ),
+                                                  );
+                                                }
+                                                return row;
+                                              },
+                                            ),
+                                            if ((m.pitchName ?? '')
+                                                .trim()
+                                                .isNotEmpty)
+                                              Padding(
+                                                padding: const EdgeInsets.only(
+                                                  top: 6,
+                                                ),
+                                                child: Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    const Icon(
+                                                      Icons.location_on_outlined,
+                                                      size: 16,
+                                                      color: Colors.white,
+                                                    ),
+                                                    const SizedBox(width: 4),
+                                                    Text(
+                                                      'Saha: ${(m.pitchName ?? '').trim()}',
+                                                      style: const TextStyle(
+                                                        color: Colors.white,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        fontSize: 12,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            if (m.status == MatchStatus.live &&
+                                                m.minute != null) ...[
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                "CANLI • ${m.minute}'",
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.w900,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ],
                                           ],
                                         ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        '${m.matchDate.day.toString().padLeft(2, '0')}.${m.matchDate.month.toString().padLeft(2, '0')}.${m.matchDate.year}  ${m.matchDate.hour.toString().padLeft(2, '0')}:${m.matchDate.minute.toString().padLeft(2, '0')}',
-                                        style: TextStyle(
-                                          color: cs.onSurfaceVariant,
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                      if (m.status == MatchStatus.live &&
-                                          m.minute != null) ...[
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          "CANLI • ${m.minute}'",
-                                          style: TextStyle(
-                                            color: cs.primary,
-                                            fontWeight: FontWeight.w900,
-                                            fontSize: 12,
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: _TeamInfo(
+                                            name: m.awayTeamName,
+                                            logoUrl: awayLogo,
+                                            textAlign: TextAlign.left,
                                           ),
                                         ),
                                       ],
-                                    ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                              child: Card(
+                                margin: EdgeInsets.zero,
+                                child: TabBar(
+                                  labelColor: Colors.white,
+                                  unselectedLabelColor: Colors.white,
+                                  indicatorColor: Colors.white,
+                                  labelStyle: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
                                   ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: _TeamInfo(
-                                      name: m.awayTeamName,
-                                      logoUrl: awayLogo,
-                                      textAlign: TextAlign.left,
+                                  unselectedLabelStyle: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                  tabs: [
+                                    const Tab(text: 'Detay'),
+                                    if (showLineupsTab)
+                                      const Tab(text: 'Kadrolar'),
+                                    const Tab(text: 'Önemli Anlar'),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: TabBarView(
+                                children: [
+                                  _KeepAlive(
+                                    child: _EventsTab(
+                                      match: m,
+                                      events: events,
+                                      isAdmin: isAdmin,
                                     ),
                                   ),
+                                  if (showLineupsTab)
+                                    _KeepAlive(
+                                      child: _LineupsTab(
+                                        match: m,
+                                        isAdmin: isAdmin,
+                                      ),
+                                    ),
+                                  _KeepAlive(child: _HighlightsTab(match: m)),
                                 ],
                               ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                        child: Card(
-                          margin: EdgeInsets.zero,
-                          child: TabBar(
-                            controller: _tabController,
-                            labelColor: cs.primary,
-                            unselectedLabelColor: cs.onSurfaceVariant,
-                            indicatorColor: cs.primary,
-                            labelStyle: const TextStyle(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 14,
-                            ),
-                            tabs: const [
-                              Tab(text: 'Olaylar'),
-                              Tab(text: 'Kadrolar'),
-                            ],
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: TabBarView(
-                          controller: _tabController,
-                          children: [
-                            _EventsTab(
-                              match: m,
-                              events: events,
-                              isAdmin: isAdmin,
-                            ),
-                            _LineupsTab(
-                              match: m,
-                              isAdmin: isAdmin,
                             ),
                           ],
                         ),
-                      ),
-                    ],
+                      );
+                    },
                   ),
                 );
               },
@@ -444,7 +1526,8 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
         );
       },
     );
-  }
+}
+
 }
 
 class _ScorePill extends StatelessWidget {
@@ -464,7 +1547,11 @@ class _ScorePill extends StatelessWidget {
       ),
       child: Text(
         '$label: $value',
-        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
+        style: const TextStyle(
+          fontWeight: FontWeight.w900,
+          fontSize: 12,
+          color: Colors.white,
+        ),
       ),
     );
   }
@@ -618,17 +1705,21 @@ class _LineupsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final home = match.homeLineup;
-    final away = match.awayLineup;
+    final home = match.homeLineupDetail;
+    final away = match.awayLineupDetail;
     final homeStarting = home?.starting ?? const <LineupPlayer>[];
     final awayStarting = away?.starting ?? const <LineupPlayer>[];
     final homeSubs = home?.subs ?? const <LineupPlayer>[];
     final awaySubs = away?.subs ?? const <LineupPlayer>[];
+    final isEmpty = homeStarting.isEmpty &&
+        awayStarting.isEmpty &&
+        homeSubs.isEmpty &&
+        awaySubs.isEmpty;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
       children: [
-        if (home == null && away == null)
+        if (isEmpty)
           Padding(
             padding: const EdgeInsets.only(bottom: 10),
             child: Text(
@@ -640,107 +1731,214 @@ class _LineupsTab extends StatelessWidget {
               ),
             ),
           ),
-        Card(
-          margin: EdgeInsets.zero,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _sectionTitle(
-                  context,
-                  'İlk 11',
-                  isStarting: true,
-                  hasAnyData: homeStarting.isNotEmpty || awayStarting.isNotEmpty,
-                ),
-                if (isAdmin && homeStarting.isEmpty && awayStarting.isEmpty)
-                  Center(
-                    child: Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: Colors.green.shade50,
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .outlineVariant
-                              .withValues(alpha: 0.4),
-                        ),
-                      ),
-                      child: IconButton(
-                        tooltip: 'İlk 11 ekle',
-                        onPressed: () => _openLineupSheet(
-                          context,
-                          isStarting: true,
-                        ),
-                        icon: Icon(
-                          Icons.add,
-                          color: Colors.green.shade800,
-                        ),
-                      ),
-                    ),
-                  ),
-                if (isAdmin && homeStarting.isEmpty && awayStarting.isEmpty)
-                  const SizedBox(height: 10),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        IgnorePointer(
+          ignoring: isEmpty,
+          child: Opacity(
+            opacity: isEmpty ? 0.45 : 1,
+            child: Card(
+              margin: EdgeInsets.zero,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Expanded(child: _box(context, homeStarting)),
-                    const SizedBox(width: 12),
-                    Expanded(child: _box(context, awayStarting)),
+                    _sectionTitle(
+                      context,
+                      'İlk 11',
+                      isStarting: true,
+                      hasAnyData:
+                          homeStarting.isNotEmpty || awayStarting.isNotEmpty,
+                    ),
+                    if (isAdmin && homeStarting.isEmpty && awayStarting.isEmpty)
+                      Center(
+                        child: Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade50,
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .outlineVariant
+                                  .withValues(alpha: 0.4),
+                            ),
+                          ),
+                          child: IconButton(
+                            tooltip: 'İlk 11 ekle',
+                            onPressed: () => _openLineupSheet(
+                              context,
+                              isStarting: true,
+                            ),
+                            icon: Icon(
+                              Icons.add,
+                              color: Colors.green.shade800,
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (isAdmin && homeStarting.isEmpty && awayStarting.isEmpty)
+                      const SizedBox(height: 10),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: _box(context, homeStarting)),
+                        const SizedBox(width: 12),
+                        Expanded(child: _box(context, awayStarting)),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    _sectionTitle(
+                      context,
+                      'Yedekler',
+                      isStarting: false,
+                      hasAnyData: homeSubs.isNotEmpty || awaySubs.isNotEmpty,
+                    ),
+                    if (isAdmin && homeSubs.isEmpty && awaySubs.isEmpty)
+                      Center(
+                        child: Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade50,
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .outlineVariant
+                                  .withValues(alpha: 0.4),
+                            ),
+                          ),
+                          child: IconButton(
+                            tooltip: 'Yedek ekle',
+                            onPressed: () => _openLineupSheet(
+                              context,
+                              isStarting: false,
+                            ),
+                            icon: Icon(
+                              Icons.add,
+                              color: Colors.green.shade800,
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (isAdmin && homeSubs.isEmpty && awaySubs.isEmpty)
+                      const SizedBox(height: 10),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: _box(context, homeSubs)),
+                        const SizedBox(width: 12),
+                        Expanded(child: _box(context, awaySubs)),
+                      ],
+                    ),
                   ],
                 ),
-                const SizedBox(height: 6),
-                _sectionTitle(
-                  context,
-                  'Yedekler',
-                  isStarting: false,
-                  hasAnyData: homeSubs.isNotEmpty || awaySubs.isNotEmpty,
-                ),
-                if (isAdmin && homeSubs.isEmpty && awaySubs.isEmpty)
-                  Center(
-                    child: Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: Colors.green.shade50,
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .outlineVariant
-                              .withValues(alpha: 0.4),
-                        ),
-                      ),
-                      child: IconButton(
-                        tooltip: 'Yedek ekle',
-                        onPressed: () => _openLineupSheet(
-                          context,
-                          isStarting: false,
-                        ),
-                        icon: Icon(
-                          Icons.add,
-                          color: Colors.green.shade800,
-                        ),
-                      ),
-                    ),
-                  ),
-                if (isAdmin && homeSubs.isEmpty && awaySubs.isEmpty)
-                  const SizedBox(height: 10),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(child: _box(context, homeSubs)),
-                    const SizedBox(width: 12),
-                    Expanded(child: _box(context, awaySubs)),
-                  ],
-                ),
-              ],
+              ),
             ),
           ),
         ),
       ],
+    );
+  }
+}
+
+class _KeepAlive extends StatefulWidget {
+  const _KeepAlive({required this.child});
+  final Widget child;
+
+  @override
+  State<_KeepAlive> createState() => _KeepAliveState();
+}
+
+class _KeepAliveState extends State<_KeepAlive>
+    with AutomaticKeepAliveClientMixin<_KeepAlive> {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
+  }
+}
+
+class _HighlightsTab extends StatelessWidget {
+  const _HighlightsTab({required this.match});
+
+  final MatchModel match;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = <Widget>[];
+
+    final videoUrls = _extractVideoUrls(match.youtubeUrl ?? '');
+    for (var i = 0; i < videoUrls.length; i++) {
+      final title = videoUrls.length == 1 ? 'Maç Yayını' : 'Video ${i + 1}';
+      items.add(
+        ListTile(
+          leading: const Icon(Icons.play_circle_fill, color: Colors.red),
+          title: Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+          subtitle: Text(
+            videoUrls[i],
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          onTap: () => _openVideoDialog(context, videoUrls[i]),
+        ),
+      );
+    }
+
+    final homePhoto = (match.homeHighlightPhotoUrl ?? '').trim();
+    if (homePhoto.isNotEmpty) {
+      items.add(
+        ListTile(
+          leading: const Icon(
+            Icons.photo_library,
+            color: Colors.lightBlueAccent,
+          ),
+          title: Text(
+            '${match.homeTeamName} Takım Fotosu',
+            style: const TextStyle(fontWeight: FontWeight.w900),
+          ),
+          onTap: () {
+            _openPhotoDialog(context, homePhoto);
+          },
+        ),
+      );
+    }
+
+    final awayPhoto = (match.awayHighlightPhotoUrl ?? '').trim();
+    if (awayPhoto.isNotEmpty) {
+      items.add(
+        ListTile(
+          leading: const Icon(
+            Icons.photo_library,
+            color: Colors.lightBlueAccent,
+          ),
+          title: Text(
+            '${match.awayTeamName} Takım Fotosu',
+            style: const TextStyle(fontWeight: FontWeight.w900),
+          ),
+          onTap: () {
+            _openPhotoDialog(context, awayPhoto);
+          },
+        ),
+      );
+    }
+
+    if (items.isEmpty) {
+      return const Center(
+        child: Text('Henüz önemli an eklenmedi.'),
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      itemCount: items.length,
+      separatorBuilder: (context, index) =>
+          Divider(color: Colors.grey.shade300, height: 1),
+      itemBuilder: (context, index) => items[index],
     );
   }
 }
@@ -798,9 +1996,7 @@ class _EventsTab extends StatelessWidget {
                           e.type == 'yellow_card' &&
                           e.teamId == event.teamId &&
                           e.playerName == event.playerName,
-                    )
-                    .length >=
-                1
+                    ).isNotEmpty
             : false;
         final row = _TimelineRow(
           isHome: isHome,
@@ -898,17 +2094,12 @@ class _TeamInfo extends StatelessWidget {
             color: cs.primary.withValues(alpha: 0.10),
             border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
           ),
-          child: ClipOval(
-            child: url.isNotEmpty
-                ? Image.network(
-                    url,
-                    width: 56,
-                    height: 56,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) =>
-                        Icon(Icons.sports_soccer, size: 26, color: cs.primary),
-                  )
-                : Icon(Icons.sports_soccer, size: 26, color: cs.primary),
+          child: WebSafeImage(
+            url: url,
+            width: 56,
+            height: 56,
+            isCircle: true,
+            fallbackIconSize: 26,
           ),
         ),
         const SizedBox(height: 8),
@@ -918,7 +2109,10 @@ class _TeamInfo extends StatelessWidget {
           maxLines: 2,
           softWrap: true,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontWeight: FontWeight.w900),
+          style: const TextStyle(
+            fontWeight: FontWeight.w900,
+            color: Colors.white,
+          ),
         ),
       ],
     );
@@ -1091,7 +2285,7 @@ class _TimelineRow extends StatelessWidget {
             isHome ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
           playerLine,
-          if (assistLine != null) assistLine,
+          ?assistLine,
         ],
       );
     }

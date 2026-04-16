@@ -42,12 +42,12 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions web = FirebaseOptions(
     apiKey: 'AIzaSyCB0Gn3T3lvP2Q-Rn_bUTmEsWPzPY1R_ec',
-    appId: '1:974894815246:web:6c2c6c88408ccd611bc45f',
+    appId: '1:974894815246:web:8e985b2498673bcc1bc45f',
     messagingSenderId: '974894815246',
     projectId: 'football-tournament-c0c05',
     authDomain: 'football-tournament-c0c05.firebaseapp.com',
     storageBucket: 'football-tournament-c0c05.firebasestorage.app',
-    measurementId: 'G-4GNECVSNWH',
+    measurementId: 'G-PNTWRMRLN2',
   );
 
   static const FirebaseOptions android = FirebaseOptions(

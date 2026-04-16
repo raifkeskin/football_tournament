@@ -14,6 +14,7 @@ class AdminManageNewsScreen extends StatefulWidget {
 class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
   final _dbService = DatabaseService();
   final Set<String> _busyIds = {};
+  String? _selectedTournamentId;
 
   String _tarihYaz(dynamic createdAt) {
     if (createdAt is Timestamp) {
@@ -137,6 +138,13 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
           Future<void> save() async {
+            final tId = (_selectedTournamentId ?? '').trim();
+            if (tId.isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Lütfen önce turnuva seçin.')),
+              );
+              return;
+            }
             final text = controller.text.trim();
             if (text.isEmpty) {
               ScaffoldMessenger.of(context).showSnackBar(
@@ -146,7 +154,7 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
             }
             setDialogState(() => saving = true);
             try {
-              await _dbService.addNews(text);
+              await _dbService.addNews(tournamentId: tId, content: text);
               if (!context.mounted) return;
               Navigator.pop(context);
               ScaffoldMessenger.of(
@@ -196,6 +204,17 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
   @override
   Widget build(BuildContext context) {
     final isAdmin = AppSession.of(context).value.isAdmin;
+    if (!isAdmin) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Haber Yönetimi')),
+        body: const Center(
+          child: Text(
+            'Bu sayfaya erişim yetkiniz yok.',
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
     return Scaffold(
       appBar: AppBar(title: const Text('Haber Yönetimi')),
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -206,95 +225,150 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
             )
           : null,
       body: StreamBuilder<QuerySnapshot>(
-        stream: _dbService.getNews(includeUnpublished: true),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData)
+        stream: _dbService.getLeagues(),
+        builder: (context, tSnap) {
+          if (!tSnap.hasData) {
             return const Center(child: CircularProgressIndicator());
-          final docs = snapshot.data!.docs;
-          if (docs.isEmpty) {
-            return const Center(child: Text('Kayıtlı haber bulunamadı.'));
           }
+          final tournaments = tSnap.data!.docs;
+          if (tournaments.isEmpty) {
+            return const Center(child: Text('Turnuva bulunamadı.'));
+          }
+          _selectedTournamentId ??= tournaments.first.id;
+          final tId = (_selectedTournamentId ?? '').trim();
 
-          return ListView.separated(
-            padding: const EdgeInsets.all(12),
-            itemCount: docs.length,
-            separatorBuilder: (context, index) =>
-                Divider(color: Colors.grey.shade300, height: 1),
-            itemBuilder: (context, index) {
-              final doc = docs[index];
-              final data = doc.data() as Map<String, dynamic>;
-              final content = (data['content'] as String?) ?? '';
-              final isPublished = (data['isPublished'] is bool)
-                  ? data['isPublished'] as bool
-                  : true;
-              final createdAtText = _tarihYaz(data['createdAt']);
-              final busy = _busyIds.contains(doc.id);
-
-              return Card(
-                child: ListTile(
-                  enabled: isAdmin && !busy,
-                  title: Text(content, maxLines: 3, overflow: TextOverflow.ellipsis),
-                  subtitle: createdAtText.isEmpty
-                      ? Text(isPublished ? 'Yayında' : 'Kapalı')
-                      : Text('$createdAtText • ${isPublished ? 'Yayında' : 'Kapalı'}'),
-                  trailing: busy
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.chevron_right),
-                  onTap: !isAdmin || busy
-                      ? null
-                      : () async {
-                          await showModalBottomSheet<void>(
-                            context: context,
-                            showDragHandle: true,
-                            builder: (context) => SafeArea(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  ListTile(
-                                    leading: Icon(
-                                      isPublished
-                                          ? Icons.visibility_off_outlined
-                                          : Icons.visibility_outlined,
-                                    ),
-                                    title: Text(
-                                      isPublished
-                                          ? 'Yayından Kaldır'
-                                          : 'Yayınla',
-                                    ),
-                                    onTap: () {
-                                      Navigator.pop(context);
-                                      _toggle(doc.id, !isPublished);
-                                    },
-                                  ),
-                                  ListTile(
-                                    leading: const Icon(Icons.edit_outlined),
-                                    title: const Text('Düzenle'),
-                                    onTap: () {
-                                      Navigator.pop(context);
-                                      _editNews(doc.id, content);
-                                    },
-                                  ),
-                                  ListTile(
-                                    leading: const Icon(Icons.delete_outline),
-                                    title: const Text('Sil'),
-                                    onTap: () {
-                                      Navigator.pop(context);
-                                      _deleteNews(doc.id);
-                                    },
-                                  ),
-                                  const SizedBox(height: 10),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                child: DropdownButtonFormField<String>(
+                  initialValue: tId.isEmpty ? tournaments.first.id : tId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Turnuva',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: tournaments
+                      .map(
+                        (d) => DropdownMenuItem<String>(
+                          value: d.id,
+                          child: Text(
+                            (d.data() as Map<String, dynamic>)['name']?.toString() ?? d.id,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (v) => setState(() => _selectedTournamentId = v),
                 ),
-              );
-            },
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: tId.isEmpty
+                      ? const Stream.empty()
+                      : _dbService.getNews(
+                          tournamentId: tId,
+                          includeUnpublished: true,
+                        ),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    final docs = snapshot.data!.docs;
+                    if (docs.isEmpty) {
+                      return const Center(child: Text('Kayıtlı haber bulunamadı.'));
+                    }
+
+                    return ListView.separated(
+                      padding: const EdgeInsets.all(12),
+                      itemCount: docs.length,
+                      separatorBuilder: (context, index) =>
+                          Divider(color: Colors.grey.shade300, height: 1),
+                      itemBuilder: (context, index) {
+                        final doc = docs[index];
+                        final data = doc.data() as Map<String, dynamic>;
+                        final content = (data['content'] as String?) ?? '';
+                        final isPublished =
+                            (data['isPublished'] is bool) ? data['isPublished'] as bool : true;
+                        final createdAtText = _tarihYaz(data['createdAt']);
+                        final busy = _busyIds.contains(doc.id);
+
+                        return Card(
+                          child: ListTile(
+                            enabled: isAdmin && !busy,
+                            title: Text(
+                              content,
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: createdAtText.isEmpty
+                                ? Text(isPublished ? 'Yayında' : 'Kapalı')
+                                : Text(
+                                    '$createdAtText • ${isPublished ? 'Yayında' : 'Kapalı'}',
+                                  ),
+                            trailing: busy
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.chevron_right),
+                            onTap: !isAdmin || busy
+                                ? null
+                                : () async {
+                                    await showModalBottomSheet<void>(
+                                      context: context,
+                                      showDragHandle: true,
+                                      builder: (context) => SafeArea(
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            ListTile(
+                                              leading: Icon(
+                                                isPublished
+                                                    ? Icons.visibility_off_outlined
+                                                    : Icons.visibility_outlined,
+                                              ),
+                                              title: Text(
+                                                isPublished ? 'Yayından Kaldır' : 'Yayınla',
+                                              ),
+                                              onTap: () {
+                                                Navigator.pop(context);
+                                                _toggle(doc.id, !isPublished);
+                                              },
+                                            ),
+                                            ListTile(
+                                              leading: const Icon(Icons.edit_outlined),
+                                              title: const Text('Düzenle'),
+                                              onTap: () {
+                                                Navigator.pop(context);
+                                                _editNews(doc.id, content);
+                                              },
+                                            ),
+                                            ListTile(
+                                              leading: const Icon(Icons.delete_outline),
+                                              title: const Text('Sil'),
+                                              onTap: () {
+                                                Navigator.pop(context);
+                                                _deleteNews(doc.id);
+                                              },
+                                            ),
+                                            const SizedBox(height: 10),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
           );
         },
       ),

@@ -11,15 +11,23 @@ import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import '../models/match.dart'; // PlayerModel burada tanımlı
+import '../repositories/teams_repository.dart';
 import '../services/approval_service.dart';
 import '../services/app_session.dart';
 import '../services/database_service.dart';
 import '../services/image_upload_service.dart';
+import '../widgets/web_safe_image.dart';
 import 'team_squad_screen.dart';
 
 class AdminManageTeamsScreen extends StatefulWidget {
-  const AdminManageTeamsScreen({super.key});
+  const AdminManageTeamsScreen({
+    super.key,
+    this.initialLeagueId,
+    this.lockLeagueSelection = false,
+  });
+
+  final String? initialLeagueId;
+  final bool lockLeagueSelection;
 
   @override
   State<AdminManageTeamsScreen> createState() => _AdminManageTeamsScreenState();
@@ -28,6 +36,7 @@ class AdminManageTeamsScreen extends StatefulWidget {
 class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
   final dbService = DatabaseService();
   final approvalService = ApprovalService();
+  final _teamsRepo = TeamsRepository();
   String _searchQuery = '';
   final _teamNameController = TextEditingController();
   final _picker = ImagePicker();
@@ -35,6 +44,15 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
   XFile? _teamLogo;
   String? _selectedLeagueId;
   bool _addingTeam = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final initial = (widget.initialLeagueId ?? '').trim();
+    if (initial.isNotEmpty) {
+      _selectedLeagueId = initial;
+    }
+  }
 
   /// Türkçe karakter duyarlı küçük harfe çevirme (Arama için)
   String _toTurkishLow(String input) {
@@ -85,7 +103,11 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                   }
                   logoUrl = uploaded;
                 }
-                await dbService.addTeam(leagueId, teamName, logoUrl);
+                await _teamsRepo.addTeamAndUpsertCache(
+                  leagueId: leagueId,
+                  teamName: teamName,
+                  logoUrl: logoUrl,
+                );
                 if (!context.mounted) return;
                 Navigator.pop(context);
                 ScaffoldMessenger.of(
@@ -111,13 +133,6 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
               child: ListView(
                 shrinkWrap: true,
                 children: [
-                  Text(
-                    'Takım Ekle',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
                   StreamBuilder<QuerySnapshot>(
                     stream: dbService.getLeagues(),
                     builder: (context, snapshot) {
@@ -136,14 +151,20 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                                 .toLowerCase();
                         return aName.compareTo(bName);
                       });
-                      if (docs.isNotEmpty &&
+                      if ((widget.initialLeagueId ?? '').trim().isEmpty &&
+                          docs.isNotEmpty &&
                           (_selectedLeagueId == null ||
                               _selectedLeagueId!.isEmpty)) {
                         _selectedLeagueId = docs.first.id;
                       }
                       return DropdownButtonFormField<String>(
-                        value: _selectedLeagueId,
-                        decoration: const InputDecoration(labelText: 'Turnuva'),
+                        initialValue: _selectedLeagueId,
+                        dropdownColor: const Color(0xFF1E293B),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        decoration: const InputDecoration(),
                         items: docs.map((doc) {
                           final data = doc.data() as Map<String, dynamic>;
                           return DropdownMenuItem<String>(
@@ -152,10 +173,14 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                               data['name']?.toString() ?? 'Turnuva',
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           );
                         }).toList(),
-                        onChanged: _addingTeam
+                        onChanged: (_addingTeam || widget.lockLeagueSelection)
                             ? null
                             : (val) =>
                                   setSheetState(() => _selectedLeagueId = val),
@@ -166,6 +191,10 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                   TextField(
                     controller: _teamNameController,
                     decoration: const InputDecoration(labelText: 'Takım Adı'),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 10),
                   OutlinedButton.icon(
@@ -176,6 +205,10 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                           ? 'Logo Seç (Galeri)'
                           : 'Seçildi: ${_teamLogo!.name}',
                       overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 14),
@@ -185,8 +218,8 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                         ? const Center(child: CircularProgressIndicator())
                         : FilledButton.icon(
                             onPressed: save,
-                            icon: const Icon(Icons.add),
-                            label: const Text('Ekle'),
+                            icon: const Icon(Icons.save_outlined),
+                            label: const Text('Kaydet'),
                           ),
                   ),
                 ],
@@ -243,6 +276,17 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
   @override
   Widget build(BuildContext context) {
     final isAdmin = AppSession.of(context).value.isAdmin;
+    if (!isAdmin) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Takım Yönetimi')),
+        body: const Center(
+          child: Text(
+            'Bu sayfaya erişim yetkiniz yok.',
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
     return Scaffold(
       appBar: AppBar(title: const Text('Takım Yönetimi')),
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -271,10 +315,12 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
             child: StreamBuilder<QuerySnapshot>(
               stream: dbService.getTeams(),
               builder: (context, snapshot) {
-                if (!snapshot.hasData)
+                if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
+                }
 
                 final teams = snapshot.data!.docs.where((doc) {
+                  if (doc.id == 'free_agent_pool') return false;
                   final name =
                       (doc.data() as Map<String, dynamic>)['name']
                           ?.toString() ??
@@ -293,16 +339,17 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                         final doc = teams[index];
                         final data = doc.data() as Map<String, dynamic>;
                         return ListTile(
-                          leading:
-                              data['logoUrl'] != null &&
-                                  data['logoUrl'].isNotEmpty
-                              ? Image.network(
-                                  data['logoUrl'],
-                                  width: 40,
-                                  height: 40,
-                                  fit: BoxFit.cover,
-                                )
-                              : const Icon(Icons.groups),
+                          leading: SizedBox(
+                            width: 40,
+                            height: 40,
+                            child: WebSafeImage(
+                              url: (data['logoUrl'] ?? '').toString(),
+                              width: 40,
+                              height: 40,
+                              borderRadius: BorderRadius.circular(8),
+                              fallbackIconSize: 18,
+                            ),
+                          ),
                           title: Text(
                             data['name'] ?? '',
                             maxLines: 3,
@@ -316,6 +363,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                                 MaterialPageRoute(
                                   builder: (_) => TeamSquadScreen(
                                     teamId: doc.id,
+                                    tournamentId: _selectedLeagueId ?? '',
                                     teamName: data['name'] ?? '',
                                     teamLogoUrl: data['logoUrl'] ?? '',
                                   ),
@@ -341,33 +389,11 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                                           MaterialPageRoute(
                                             builder: (_) => TeamSquadScreen(
                                               teamId: doc.id,
+                                              tournamentId: _selectedLeagueId ?? '',
                                               teamName: data['name'] ?? '',
                                               teamLogoUrl: data['logoUrl'] ?? '',
                                             ),
                                           ),
-                                        );
-                                      },
-                                    ),
-                                    ListTile(
-                                      leading: const Icon(
-                                        Icons.person_add_alt_1_outlined,
-                                      ),
-                                      title: const Text('Futbolcu Ekle'),
-                                      onTap: () {
-                                        Navigator.pop(context);
-                                        _showAddPlayerDialog(doc.id);
-                                      },
-                                    ),
-                                    ListTile(
-                                      leading: const Icon(Icons.upload_file_rounded),
-                                      title: const Text('Toplu Kadro Yükle'),
-                                      onTap: () {
-                                        Navigator.pop(context);
-                                        _showBulkUploadDialog(
-                                          teamId: doc.id,
-                                          leagueId:
-                                              (data['leagueId'] as String?) ?? '',
-                                          teamName: (data['name'] as String?) ?? '',
                                         );
                                       },
                                     ),
@@ -416,149 +442,12 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
   }
 
   void _showAddPlayerDialog(String teamId) {
-    final nameController = TextEditingController();
-    final numberController = TextEditingController();
-    final yearController = TextEditingController();
-    String position = 'Forvet';
-    XFile? playerPhoto;
-    bool isSaving = false;
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          return AlertDialog(
-            title: const Text('Futbolcu Ekle'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  GestureDetector(
-                    onTap: () async {
-                      final picked = await ImagePicker().pickImage(
-                        source: ImageSource.gallery,
-                        imageQuality: 85,
-                      );
-                      if (picked != null)
-                        setDialogState(() => playerPhoto = picked);
-                    },
-                    child: CircleAvatar(
-                      radius: 40,
-                      backgroundImage: playerPhoto != null
-                          ? FileImage(File(playerPhoto!.path))
-                          : null,
-                      child: playerPhoto == null
-                          ? const Icon(Icons.add_a_photo, size: 30)
-                          : null,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: nameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Ad Soyad',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: numberController,
-                          decoration: const InputDecoration(
-                            labelText: 'Forma No',
-                            border: OutlineInputBorder(),
-                          ),
-                          keyboardType: TextInputType.number,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: TextField(
-                          controller: yearController,
-                          decoration: const InputDecoration(
-                            labelText: 'Doğum Yılı',
-                            border: OutlineInputBorder(),
-                          ),
-                          keyboardType: TextInputType.number,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  DropdownButtonFormField<String>(
-                    value: position,
-                    decoration: const InputDecoration(
-                      labelText: 'Mevki',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: ['Kaleci', 'Defans', 'Ortasaha', 'Forvet']
-                        .map((m) => DropdownMenuItem(value: m, child: Text(m)))
-                        .toList(),
-                    onChanged: (v) => setDialogState(() => position = v!),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('İptal'),
-              ),
-              ElevatedButton(
-                onPressed: isSaving
-                    ? null
-                    : () async {
-                        if (nameController.text.isEmpty) return;
-                        setDialogState(() => isSaving = true);
-
-                        try {
-                          String photoUrl = '';
-                          if (playerPhoto != null) {
-                            final uploaded = await ImgBBUploadService()
-                                .uploadImage(File(playerPhoto!.path));
-                            if (uploaded != null) photoUrl = uploaded;
-                          }
-
-                          await dbService.addPlayer(
-                            PlayerModel(
-                              id: '',
-                              teamId: teamId,
-                              name: nameController.text.trim(),
-                              number: numberController.text.trim(),
-                              birthYear: int.tryParse(yearController.text),
-                              position: position,
-                              photoUrl: photoUrl,
-                            ),
-                          );
-
-                          if (!mounted) return;
-                          Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Futbolcu başarıyla eklendi.'),
-                            ),
-                          );
-                        } catch (e) {
-                          ScaffoldMessenger.of(
-                            context,
-                          ).showSnackBar(SnackBar(content: Text('Hata: $e')));
-                        } finally {
-                          setDialogState(() => isSaving = false);
-                        }
-                      },
-                child: isSaving
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Kaydet'),
-              ),
-            ],
-          );
-        },
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => PlayerFormScreen(
+          teamId: teamId,
+          tournamentId: _selectedLeagueId ?? '',
+        ),
       ),
     );
   }
@@ -571,6 +460,9 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
     bool busy = false;
     String? pickedFileName;
     List<Map<String, dynamic>> parsed = const [];
+    int skippedEmpty = 0;
+    int skippedShort = 0;
+    int skippedNoName = 0;
 
     await showDialog(
       context: context,
@@ -585,7 +477,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                 TextCellValue('Forma No'),
                 TextCellValue('Futbolcu Adı'),
                 TextCellValue('Mevki'),
-                TextCellValue('Doğum Yılı'),
+                TextCellValue('Doğum Tarihi'),
                 TextCellValue('Kullandığı Ayak'),
               ]);
               final bytes = excel.encode();
@@ -629,32 +521,50 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
             return null;
           }
 
-          int? birthYearFrom(dynamic value) {
+          String? birthDateFrom(dynamic value) {
             if (value == null) return null;
             if (value is DateTime) {
-              final y = value.year;
-              return (y >= 1900 && y <= 2100) ? y : null;
+              final dd = value.day.toString().padLeft(2, '0');
+              final mm = value.month.toString().padLeft(2, '0');
+              final yyyy = value.year.toString().padLeft(4, '0');
+              return '$dd/$mm/$yyyy';
             }
             if (value is num) {
-              final y = value.toInt();
-              if (y >= 1900 && y <= 2100) return y;
+              final year = value.toInt();
+              if (year >= 1900 && year <= 2100) {
+                return '01/01/${year.toString().padLeft(4, '0')}';
+              }
             }
             final s = value.toString().replaceAll('\u0000', '').trim();
-            final direct = int.tryParse(s);
-            if (direct != null) {
-              if (direct >= 1900 && direct <= 2100) return direct;
-            }
-            final d = double.tryParse(s.replaceAll(',', '.'));
-            if (d != null) {
-              final y = d.toInt();
-              if (y >= 1900 && y <= 2100) return y;
-            }
-            final m = RegExp(r'(19\d{2}|20\d{2}|2100)').firstMatch(s);
+            if (s.isEmpty) return null;
+            final m = RegExp(r'^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$')
+                .firstMatch(s);
             if (m != null) {
-              final y = int.tryParse(m.group(0)!);
-              if (y != null && y >= 1900 && y <= 2100) return y;
+              final dd = m.group(1)!.padLeft(2, '0');
+              final mm = m.group(2)!.padLeft(2, '0');
+              final yyyy = m.group(3)!.padLeft(4, '0');
+              return '$dd/$mm/$yyyy';
+            }
+            final year = int.tryParse(s);
+            if (year != null && year >= 1900 && year <= 2100) {
+              return '01/01/${year.toString().padLeft(4, '0')}';
+            }
+            final yr = int.tryParse(
+              RegExp(r'(19\d{2}|20\d{2}|2100)').firstMatch(s)?.group(0) ?? '',
+            );
+            if (yr != null && yr >= 1900 && yr <= 2100) {
+              return '01/01/${yr.toString().padLeft(4, '0')}';
             }
             return null;
+          }
+
+          int? yearFromBirthDate(String? birthDate) {
+            if (birthDate == null) return null;
+            final m = RegExp(r'(\d{4})$').firstMatch(birthDate);
+            final y = m == null ? null : int.tryParse(m.group(1)!);
+            if (y == null) return null;
+            if (y < 1900 || y > 2100) return null;
+            return y;
           }
 
           String cellStr(Data? cell) {
@@ -670,6 +580,9 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
           Future<void> pickAndParse() async {
             setDialogState(() => busy = true);
             try {
+              skippedEmpty = 0;
+              skippedShort = 0;
+              skippedNoName = 0;
               final result = await FilePicker.platform.pickFiles(
                 type: FileType.custom,
                 allowedExtensions: ['xlsx', 'xls', 'csv', 'numbers'],
@@ -684,8 +597,9 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
               final bytes =
                   file.bytes ??
                   (path == null ? null : await File(path).readAsBytes());
-              if (bytes == null && ext != 'csv')
+              if (bytes == null && ext != 'csv') {
                 throw Exception('Dosya okunamadı.');
+              }
 
               List<Map<String, dynamic>> rows;
               if (ext == 'csv') {
@@ -745,9 +659,19 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                 rows = [];
                 for (var i = 1; i < lines.length; i++) {
                   final cols = lines[i].split(',');
-                  if (idxName >= cols.length) continue;
+                  if (cols.isEmpty) {
+                    skippedEmpty++;
+                    continue;
+                  }
+                  if (cols.length < 2 || idxName >= cols.length) {
+                    skippedShort++;
+                    continue;
+                  }
                   final name = cols[idxName].trim();
-                  if (name.isEmpty) continue;
+                  if (name.isEmpty) {
+                    skippedNoName++;
+                    continue;
+                  }
                   final number = (idxNo != null && idxNo < cols.length)
                       ? cols[idxNo].trim()
                       : '';
@@ -760,11 +684,13 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                   final foot = idxFoot < cols.length
                       ? cols[idxFoot].trim()
                       : '';
-                  final birthYear = birthYearFrom(birthRaw);
+                  final birthDate = birthDateFrom(birthRaw);
+                  final birthYear = yearFromBirthDate(birthDate);
                   rows.add({
                     'name': name,
                     'number': number.isEmpty ? null : number,
                     'position': position.isEmpty ? null : position,
+                    'birthDate': birthDate,
                     'birthYear': birthYear,
                     'preferredFoot': foot.isEmpty ? null : foot,
                   });
@@ -773,8 +699,9 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                 List<Map<String, dynamic>> parseWithExcelPackage() {
                   final excel = Excel.decodeBytes(bytes!);
                   final availableSheets = excel.tables.entries.toList();
-                  if (availableSheets.isEmpty)
+                  if (availableSheets.isEmpty) {
                     throw Exception('Excel sayfası bulunamadı.');
+                  }
 
                   Sheet? pickedSheet;
                   String? pickedSheetName;
@@ -891,10 +818,22 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                     r++
                   ) {
                     final row = sheetResolved.rows[r];
-                    final name = row.length > idxName
-                        ? cellStr(row[idxName])
-                        : '';
-                    if (name.isEmpty) continue;
+                    if (row.isEmpty) {
+                      skippedEmpty++;
+                      continue;
+                    }
+                    if (row.length < 2) {
+                      skippedShort++;
+                      continue;
+                    }
+                    final nameCell = row.length > idxName ? row[idxName] : null;
+                    final nameValue = nameCell?.value;
+                    if (nameValue == null ||
+                        nameValue.toString().trim().isEmpty) {
+                      skippedNoName++;
+                      continue;
+                    }
+                    final name = cellStr(nameCell);
                     final number = (idxNo != null && row.length > idxNo)
                         ? cellStr(row[idxNo])
                         : '';
@@ -907,11 +846,13 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                     final foot = row.length > idxFoot
                         ? cellStr(row[idxFoot])
                         : '';
-                    final birthYear = birthYearFrom(birthRaw);
+                    final birthDate = birthDateFrom(birthRaw);
+                    final birthYear = yearFromBirthDate(birthDate);
                     parsedRows.add({
                       'name': name,
                       'number': number.isEmpty ? null : number,
                       'position': position.isEmpty ? null : position,
+                      'birthDate': birthDate,
                       'birthYear': birthYear,
                       'preferredFoot': foot.isEmpty ? null : foot,
                     });
@@ -921,10 +862,11 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                     debugPrint(
                       '[bulk-upload] reader=excel parsed=${parsedRows.length}',
                     );
-                    if (parsedRows.isNotEmpty)
+                    if (parsedRows.isNotEmpty) {
                       debugPrint(
                         '[bulk-upload] reader=excel first=${parsedRows.first}',
                       );
+                    }
                     return true;
                   }());
 
@@ -933,8 +875,9 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
 
                 List<Map<String, dynamic>> parseWithSpreadsheetDecoder() {
                   final decoder = SpreadsheetDecoder.decodeBytes(bytes!);
-                  if (decoder.tables.isEmpty)
+                  if (decoder.tables.isEmpty) {
                     throw Exception('Excel sayfası bulunamadı.');
+                  }
 
                   SpreadsheetTable? table;
                   String? tableName;
@@ -948,7 +891,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                   table ??= decoder.tables.values.first;
                   tableName ??= decoder.tables.keys.first;
 
-                  final rowsRaw = table!.rows;
+                  final rowsRaw = table.rows;
                   if (rowsRaw.isEmpty) throw Exception('Excel boş.');
 
                   int headerRowIndex = -1;
@@ -1046,10 +989,20 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                   final parsedRows = <Map<String, dynamic>>[];
                   for (var r = headerRowIndex + 1; r < rowsRaw.length; r++) {
                     final row = rowsRaw[r];
-                    final name = row.length > idxName
-                        ? dynStr(row[idxName])
-                        : '';
-                    if (name.isEmpty) continue;
+                    if (row.isEmpty) {
+                      skippedEmpty++;
+                      continue;
+                    }
+                    if (row.length < 2) {
+                      skippedShort++;
+                      continue;
+                    }
+                    final rawName = row.length > idxName ? row[idxName] : null;
+                    final name = dynStr(rawName);
+                    if (rawName == null || name.isEmpty) {
+                      skippedNoName++;
+                      continue;
+                    }
                     final number = (idxNo != null && row.length > idxNo)
                         ? dynStr(row[idxNo])
                         : '';
@@ -1062,11 +1015,13 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                     final foot = row.length > idxFoot
                         ? dynStr(row[idxFoot])
                         : '';
-                    final birthYear = birthYearFrom(birthRaw);
+                    final birthDate = birthDateFrom(birthRaw);
+                    final birthYear = yearFromBirthDate(birthDate);
                     parsedRows.add({
                       'name': name,
                       'number': number.isEmpty ? null : number,
                       'position': position.isEmpty ? null : position,
+                      'birthDate': birthDate,
                       'birthYear': birthYear,
                       'preferredFoot': foot.isEmpty ? null : foot,
                     });
@@ -1076,10 +1031,11 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                     debugPrint(
                       '[bulk-upload] reader=spreadsheet_decoder parsed=${parsedRows.length}',
                     );
-                    if (parsedRows.isNotEmpty)
+                    if (parsedRows.isNotEmpty) {
                       debugPrint(
                         '[bulk-upload] reader=spreadsheet_decoder first=${parsedRows.first}',
                       );
+                    }
                     return true;
                   }());
 
@@ -1103,8 +1059,9 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                 }
               } else if (ext == 'xls') {
                 final decoder = SpreadsheetDecoder.decodeBytes(bytes!);
-                if (decoder.tables.isEmpty)
+                if (decoder.tables.isEmpty) {
                   throw Exception('Excel sayfası bulunamadı.');
+                }
 
                 SpreadsheetTable? table;
                 for (final e in decoder.tables.entries) {
@@ -1115,7 +1072,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                 }
                 table ??= decoder.tables.values.first;
 
-                final rowsRaw = table!.rows;
+                final rowsRaw = table.rows;
                 if (rowsRaw.isEmpty) throw Exception('Excel boş.');
 
                 int headerRowIndex = -1;
@@ -1197,8 +1154,20 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                 rows = [];
                 for (var r = headerRowIndex + 1; r < rowsRaw.length; r++) {
                   final row = rowsRaw[r];
-                  final name = row.length > idxName ? dynStr(row[idxName]) : '';
-                  if (name.isEmpty) continue;
+                  if (row.isEmpty) {
+                    skippedEmpty++;
+                    continue;
+                  }
+                  if (row.length < 2) {
+                    skippedShort++;
+                    continue;
+                  }
+                  final rawName = row.length > idxName ? row[idxName] : null;
+                  final name = dynStr(rawName);
+                  if (rawName == null || name.isEmpty) {
+                    skippedNoName++;
+                    continue;
+                  }
                   final number = (idxNo != null && row.length > idxNo)
                       ? dynStr(row[idxNo])
                       : '';
@@ -1207,11 +1176,13 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                       : '';
                   final birthRaw = row.length > idxBirth ? row[idxBirth] : null;
                   final foot = row.length > idxFoot ? dynStr(row[idxFoot]) : '';
-                  final birthYear = birthYearFrom(birthRaw);
+                  final birthDate = birthDateFrom(birthRaw);
+                  final birthYear = yearFromBirthDate(birthDate);
                   rows.add({
                     'name': name,
                     'number': number.isEmpty ? null : number,
                     'position': position.isEmpty ? null : position,
+                    'birthDate': birthDate,
                     'birthYear': birthYear,
                     'preferredFoot': foot.isEmpty ? null : foot,
                   });
@@ -1283,9 +1254,19 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                   rows = [];
                   for (var i = 1; i < lines.length; i++) {
                     final cols = lines[i].split(',');
-                    if (idxName >= cols.length) continue;
+                    if (cols.isEmpty) {
+                      skippedEmpty++;
+                      continue;
+                    }
+                    if (cols.length < 2 || idxName >= cols.length) {
+                      skippedShort++;
+                      continue;
+                    }
                     final name = cols[idxName].trim();
-                    if (name.isEmpty) continue;
+                    if (name.isEmpty) {
+                      skippedNoName++;
+                      continue;
+                    }
                     final number = (idxNo != null && idxNo < cols.length)
                         ? cols[idxNo].trim()
                         : '';
@@ -1298,11 +1279,13 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                     final foot = idxFoot < cols.length
                         ? cols[idxFoot].trim()
                         : '';
-                    final birthYear = birthYearFrom(birthRaw);
+                    final birthDate = birthDateFrom(birthRaw);
+                    final birthYear = yearFromBirthDate(birthDate);
                     rows.add({
                       'name': name,
                       'number': number.isEmpty ? null : number,
                       'position': position.isEmpty ? null : position,
+                      'birthDate': birthDate,
                       'birthYear': birthYear,
                       'preferredFoot': foot.isEmpty ? null : foot,
                     });
@@ -1359,15 +1342,20 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                     'teamName': teamName,
                     'fileName': pickedFileName,
                     'players': parsed,
+                    'skippedRows':
+                        skippedEmpty + skippedShort + skippedNoName,
                   },
                 ),
               );
 
               if (!context.mounted) return;
               Navigator.pop(context);
+              final skipped = skippedEmpty + skippedShort + skippedNoName;
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Onaya gönderildi.'),
+                SnackBar(
+                  content: Text(
+                    'Onaya gönderildi: ${parsed.length} oyuncu • Atlanan satır: $skipped',
+                  ),
                   backgroundColor: Colors.green,
                 ),
               );
@@ -1412,6 +1400,11 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                   if (parsed.isNotEmpty)
                     Text(
                       'Okunan kayıt: ${parsed.length}',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  if (pickedFileName != null)
+                    Text(
+                      'Atlanan satır: ${skippedEmpty + skippedShort + skippedNoName}',
                       style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                   if (busy) ...[
@@ -1459,11 +1452,11 @@ class ArchiveDecoder {
         best = f;
         bestScore = score;
       } else if (score == bestScore && best != null) {
-        if (f.size > 0 && f.size < best!.size) best = f;
+        if (f.size > 0 && f.size < best.size) best = f;
       }
     }
     if (best == null) return null;
-    final content = best!.content;
+    final content = best.content;
     if (content is! List<int>) return null;
     var decoded = utf8.decode(content, allowMalformed: true);
     if (decoded.isNotEmpty && decoded.codeUnitAt(0) == 0xFEFF) {
@@ -1567,25 +1560,36 @@ class _EditTeamScreenState extends State<EditTeamScreen> {
                         Center(
                           child: Stack(
                             children: [
-                              CircleAvatar(
-                                radius: 64,
-                                backgroundColor:
-                                    cs.primary.withValues(alpha: 0.10),
-                                backgroundImage: _newLogo != null
-                                    ? FileImage(File(_newLogo!.path))
-                                          as ImageProvider
-                                    : (currentLogoUrl.isNotEmpty
-                                          ? NetworkImage(currentLogoUrl)
-                                          : null),
-                                child:
-                                    (_newLogo == null && currentLogoUrl.isEmpty)
-                                        ? Icon(
-                                            Icons.groups,
-                                            size: 46,
-                                            color: cs.primary,
-                                          )
-                                        : null,
-                              ),
+                              if (_newLogo != null)
+                                CircleAvatar(
+                                  radius: 64,
+                                  backgroundColor:
+                                      cs.primary.withValues(alpha: 0.10),
+                                  backgroundImage: FileImage(File(_newLogo!.path)),
+                                )
+                              else if (currentLogoUrl.isNotEmpty)
+                                SizedBox(
+                                  width: 128,
+                                  height: 128,
+                                  child: WebSafeImage(
+                                    url: currentLogoUrl,
+                                    width: 128,
+                                    height: 128,
+                                    isCircle: true,
+                                    fallbackIconSize: 46,
+                                  ),
+                                )
+                              else
+                                CircleAvatar(
+                                  radius: 64,
+                                  backgroundColor:
+                                      cs.primary.withValues(alpha: 0.10),
+                                  child: Icon(
+                                    Icons.shield,
+                                    size: 46,
+                                    color: Colors.grey,
+                                  ),
+                                ),
                               Positioned(
                                 bottom: 0,
                                 right: 0,

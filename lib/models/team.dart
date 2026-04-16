@@ -1,26 +1,19 @@
-/// Takım modeli.
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class Team {
   const Team({
     required this.id,
     required this.name,
-    required this.leagueId,
     required this.logoUrl,
-    this.groupId,
-    this.groupName,
-    this.stats,
+    this.colors,
     this.createdAt,
     this.updatedAt,
   });
 
   final String id;
   final String name;
-  final String leagueId;
   final String logoUrl;
-  final String? groupId;
-  final String? groupName;
-  final Map<String, dynamic>? stats; // P, G, B, M, AG, YG, AV, Puan
+  final Map<String, dynamic>? colors;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -28,11 +21,8 @@ class Team {
     return Team(
       id: map['id'] as String? ?? '',
       name: map['name'] as String? ?? '',
-      leagueId: map['leagueId'] as String? ?? '',
       logoUrl: (map['logoUrl'] ?? map['logo']) as String? ?? '',
-      groupId: map['groupId'] as String?,
-      groupName: map['groupName'] as String?,
-      stats: map['stats'] as Map<String, dynamic>?,
+      colors: map['colors'] as Map<String, dynamic>?,
       createdAt: _readDate(map['createdAt']),
       updatedAt: _readDate(map['updatedAt']),
     );
@@ -42,11 +32,8 @@ class Team {
     return {
       'id': id,
       'name': name,
-      'leagueId': leagueId,
       'logoUrl': logoUrl,
-      'groupId': groupId,
-      'groupName': groupName,
-      'stats': stats,
+      'colors': colors,
     };
   }
 

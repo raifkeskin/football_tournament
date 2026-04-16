@@ -4,6 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../repositories/teams_repository.dart';
+import '../services/app_session.dart';
 import '../services/database_service.dart';
 import '../services/image_upload_service.dart';
 
@@ -20,6 +22,7 @@ class _AdminAddTeamScreenState extends State<AdminAddTeamScreen> {
   final _picker = ImagePicker();
   final _imageUploadService = ImgBBUploadService();
   final _databaseService = DatabaseService();
+  final _teamsRepo = TeamsRepository();
 
   XFile? _teamLogo;
   String? _selectedLeagueId;
@@ -72,7 +75,11 @@ class _AdminAddTeamScreenState extends State<AdminAddTeamScreen> {
         }
       }
 
-      await _databaseService.addTeam(_selectedLeagueId!, teamName, logoUrl);
+      await _teamsRepo.addTeamAndUpsertCache(
+        leagueId: _selectedLeagueId!,
+        teamName: teamName,
+        logoUrl: logoUrl,
+      );
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -100,6 +107,18 @@ class _AdminAddTeamScreenState extends State<AdminAddTeamScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isAdmin = AppSession.of(context).value.isAdmin;
+    if (!isAdmin) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Takım Ekle')),
+        body: const Center(
+          child: Text(
+            'Bu sayfaya erişim yetkiniz yok.',
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
     final cs = Theme.of(context).colorScheme;
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,

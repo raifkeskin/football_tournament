@@ -3,10 +3,18 @@ import 'package:flutter/material.dart';
 import '../models/league.dart';
 import '../models/match.dart';
 import '../models/team.dart';
+import '../services/app_session.dart';
 import '../services/database_service.dart';
 
 class AdminFixtureEntryScreen extends StatefulWidget {
-  const AdminFixtureEntryScreen({super.key});
+  const AdminFixtureEntryScreen({
+    super.key,
+    this.initialLeagueId,
+    this.lockLeagueSelection = false,
+  });
+
+  final String? initialLeagueId;
+  final bool lockLeagueSelection;
 
   @override
   State<AdminFixtureEntryScreen> createState() =>
@@ -19,20 +27,63 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
   String? _selectedGroupId;
   String? _homeTeamId;
   String? _awayTeamId;
+  String? _selectedPitchId;
+  String? _selectedPitchName;
+  bool _unknownDateTime = false;
   DateTime _selectedDate = DateTime.now();
   TimeOfDay _selectedTime = TimeOfDay.now();
   bool _isLoading = false;
 
   @override
+  void initState() {
+    super.initState();
+    final initial = (widget.initialLeagueId ?? '').trim();
+    if (initial.isNotEmpty) {
+      _selectedLeagueId = initial;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final isAdmin = AppSession.of(context).value.isAdmin;
+    if (!isAdmin) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Fikstür Planlama')),
+        body: const Center(
+          child: Text(
+            'Bu sayfaya erişim yetkiniz yok.',
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
+    const headerForest = Color(0xFF064E3B);
+    final base = Theme.of(context);
+    final themed = base.copyWith(
+      scaffoldBackgroundColor: const Color(0xFF0F172A),
+      textTheme: base.textTheme.apply(
+        bodyColor: Colors.white,
+        displayColor: Colors.white,
+      ),
+      inputDecorationTheme: base.inputDecorationTheme.copyWith(
+        labelStyle: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
+        ),
+        hintStyle: const TextStyle(color: Colors.white70),
+      ),
+    );
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Fikstür / Maç Planlama')),
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
+      appBar: AppBar(title: const Text('Fikstür Planlama')),
+      backgroundColor: const Color(0xFF0F172A),
+      body: Theme(
+        data: themed,
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
                 // 1. Turnuva
                 StreamBuilder<QuerySnapshot>(
                   stream: _dbService.getLeagues(),
@@ -55,18 +106,31 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                     return DropdownButtonFormField<String>(
                       initialValue: _selectedLeagueId,
                       decoration: const InputDecoration(labelText: 'Turnuva'),
+                      dropdownColor: const Color(0xFF1E293B),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
                       items: leagues
                           .map(
                             (l) => DropdownMenuItem(
                               value: l.id,
-                              child: Text(l.name),
+                              child: Text(
+                                l.name,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ),
                           )
                           .toList(),
-                      onChanged: (val) => setState(() {
-                        _selectedLeagueId = val;
-                        _selectedGroupId = null;
-                      }),
+                      onChanged: widget.lockLeagueSelection
+                          ? null
+                          : (val) => setState(() {
+                                _selectedLeagueId = val;
+                                _selectedGroupId = null;
+                              }),
                     );
                   },
                 ),
@@ -87,11 +151,22 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                       return DropdownButtonFormField<String>(
                         initialValue: _selectedGroupId,
                         decoration: const InputDecoration(labelText: 'Grup'),
+                        dropdownColor: const Color(0xFF1E293B),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
                         items: groups
                             .map(
                               (g) => DropdownMenuItem(
                                 value: g.id,
-                                child: Text(g.name),
+                                child: Text(
+                                  g.name,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                               ),
                             )
                             .toList(),
@@ -118,11 +193,22 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                           DropdownButtonFormField<String>(
                             initialValue: _homeTeamId,
                             decoration: const InputDecoration(labelText: 'Ev Sahibi'),
+                            dropdownColor: const Color(0xFF1E293B),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
                             items: teams
                                 .map(
                                   (t) => DropdownMenuItem(
                                     value: t.id,
-                                    child: Text(t.name),
+                                    child: Text(
+                                      t.name,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
                                   ),
                                 )
                                 .toList(),
@@ -133,11 +219,22 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                           DropdownButtonFormField<String>(
                             initialValue: _awayTeamId,
                             decoration: const InputDecoration(labelText: 'Deplasman'),
+                            dropdownColor: const Color(0xFF1E293B),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
                             items: teams
                                 .map(
                                   (t) => DropdownMenuItem(
                                     value: t.id,
-                                    child: Text(t.name),
+                                    child: Text(
+                                      t.name,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
                                   ),
                                 )
                                 .toList(),
@@ -150,24 +247,109 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                   ),
                 const SizedBox(height: 16),
 
+                StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('pitches')
+                      .orderBy('name')
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    final docs = snapshot.data?.docs ?? const [];
+                    return DropdownButtonFormField<String?>(
+                      key: ValueKey(_selectedPitchId),
+                      initialValue: _selectedPitchId,
+                      decoration: const InputDecoration(labelText: 'Saha Seç'),
+                      dropdownColor: const Color(0xFF1E293B),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      items: [
+                        const DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text(
+                            'Saha Seçilmedi',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        for (final d in docs)
+                          DropdownMenuItem<String?>(
+                            value: d.id,
+                            child: Text(
+                              ((d.data() as Map<String, dynamic>)['name'] ?? '')
+                                  .toString(),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                      ],
+                      onChanged: (v) {
+                        final selected =
+                            docs.where((e) => e.id == v).toList(growable: false);
+                        final data = selected.isEmpty
+                            ? null
+                            : (selected.first.data() as Map<String, dynamic>);
+                        final name = (data?['name'] ?? '').toString().trim();
+                        setState(() {
+                          _selectedPitchId = v;
+                          _selectedPitchName = v == null || name.isEmpty ? null : name;
+                        });
+                      },
+                    );
+                  },
+                ),
+                const SizedBox(height: 10),
+                SwitchListTile.adaptive(
+                  value: _unknownDateTime,
+                  onChanged: (v) => setState(() => _unknownDateTime = v),
+                  title: const Text(
+                    'Tarih ve saat belirlenmedi',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+
                 // 4. Tarih & Saat
                 Row(
                   children: [
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: _pickDate,
+                        onPressed: _unknownDateTime ? null : _pickDate,
                         icon: const Icon(Icons.calendar_today),
                         label: Text(
                           '${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
                         ),
                       ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: _pickTime,
+                        onPressed: _unknownDateTime ? null : _pickTime,
                         icon: const Icon(Icons.access_time),
-                        label: Text(_selectedTime.format(context)),
+                        label: Text(
+                          _selectedTime.format(context),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                        ),
                       ),
                     ),
                   ],
@@ -178,11 +360,15 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                   onPressed: _saveFixture,
                   style: ElevatedButton.styleFrom(
                     minimumSize: const Size(double.infinity, 50),
+                    backgroundColor: headerForest,
+                    foregroundColor: Colors.white,
+                    textStyle: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   child: const Text('Maçı Kaydet / Planla'),
                 ),
               ],
             ),
+      ),
     );
   }
 
@@ -223,13 +409,15 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
 
     setState(() => _isLoading = true);
     try {
-      final matchDateTime = DateTime(
-        _selectedDate.year,
-        _selectedDate.month,
-        _selectedDate.day,
-        _selectedTime.hour,
-        _selectedTime.minute,
-      );
+      final matchDateTime = _unknownDateTime
+          ? null
+          : DateTime(
+              _selectedDate.year,
+              _selectedDate.month,
+              _selectedDate.day,
+              _selectedTime.hour,
+              _selectedTime.minute,
+            );
 
       // Takım isimlerini ve logolarını çek (MatchModel için gerekli)
       final homeSnap = await FirebaseFirestore.instance
@@ -263,9 +451,14 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
         awayTeamLogoUrl: logoFrom(awayData),
         homeScore: 0,
         awayScore: 0,
-        matchDate: matchDateTime,
-        dateString:
-            "${matchDateTime.year}-${matchDateTime.month.toString().padLeft(2, '0')}-${matchDateTime.day.toString().padLeft(2, '0')}",
+        matchDate: matchDateTime == null
+            ? null
+            : "${matchDateTime.year}-${matchDateTime.month.toString().padLeft(2, '0')}-${matchDateTime.day.toString().padLeft(2, '0')}",
+        matchTime: matchDateTime == null
+            ? null
+            : '${matchDateTime.hour.toString().padLeft(2, '0')}:${matchDateTime.minute.toString().padLeft(2, '0')}',
+        pitchId: _selectedPitchId,
+        pitchName: _selectedPitchName,
         status: MatchStatus.notStarted,
       );
 

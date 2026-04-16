@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/match.dart';
+import '../services/app_session.dart';
 import '../services/database_service.dart';
 
 class AdminMatchLineupScreen extends StatefulWidget {
@@ -51,8 +52,8 @@ class _AdminMatchLineupScreenState extends State<AdminMatchLineupScreen>
     );
 
     final existing = widget.isHome
-        ? widget.match.homeLineup
-        : widget.match.awayLineup;
+        ? widget.match.homeLineupDetail
+        : widget.match.awayLineupDetail;
     for (final p in existing?.starting ?? const <LineupPlayer>[]) {
       _starting.add(
         _LineupEntry(playerId: p.playerId, name: p.name, number: p.number),
@@ -113,7 +114,9 @@ class _AdminMatchLineupScreenState extends State<AdminMatchLineupScreen>
   }
 
   void _addToStarting(PlayerModel p) {
-    if (_isSelectedInStarting(p.id) || _isSelectedInSubs(p.id)) return;
+    final pid = (p.phone ?? p.id).trim();
+    if (pid.isEmpty) return;
+    if (_isSelectedInStarting(pid) || _isSelectedInSubs(pid)) return;
     if (_starting.length >= 11) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('İlk 11 en fazla 11 kişi olabilir.')),
@@ -122,20 +125,22 @@ class _AdminMatchLineupScreenState extends State<AdminMatchLineupScreen>
     }
     setState(
       () => _starting.add(
-        _LineupEntry(playerId: p.id, name: p.name, number: p.number),
+        _LineupEntry(playerId: pid, name: p.name, number: p.number),
       ),
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final c = _syncControllerText(p.id, p.number);
-      setState(() => _activeNumberEditPlayerId = p.id);
-      _focusNodeFor(p.id).requestFocus();
+      final c = _syncControllerText(pid, p.number);
+      setState(() => _activeNumberEditPlayerId = pid);
+      _focusNodeFor(pid).requestFocus();
       c.selection = TextSelection(baseOffset: 0, extentOffset: c.text.length);
     });
   }
 
   void _addToSubs(PlayerModel p) {
-    if (_isSelectedInSubs(p.id) || _isSelectedInStarting(p.id)) return;
+    final pid = (p.phone ?? p.id).trim();
+    if (pid.isEmpty) return;
+    if (_isSelectedInSubs(pid) || _isSelectedInStarting(pid)) return;
     if (_subs.length >= 7) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Yedekler en fazla 7 kişi olabilir.')),
@@ -144,14 +149,14 @@ class _AdminMatchLineupScreenState extends State<AdminMatchLineupScreen>
     }
     setState(
       () => _subs.add(
-        _LineupEntry(playerId: p.id, name: p.name, number: p.number),
+        _LineupEntry(playerId: pid, name: p.name, number: p.number),
       ),
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final c = _syncControllerText(p.id, p.number);
-      setState(() => _activeNumberEditPlayerId = p.id);
-      _focusNodeFor(p.id).requestFocus();
+      final c = _syncControllerText(pid, p.number);
+      setState(() => _activeNumberEditPlayerId = pid);
+      _focusNodeFor(pid).requestFocus();
       c.selection = TextSelection(baseOffset: 0, extentOffset: c.text.length);
     });
   }
@@ -398,6 +403,18 @@ class _AdminMatchLineupScreenState extends State<AdminMatchLineupScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isAdmin = AppSession.of(context).value.isAdmin;
+    if (!isAdmin) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Kadro / İlk 11')),
+        body: const Center(
+          child: Text(
+            'Bu sayfaya erişim yetkiniz yok.',
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
     final teamName = widget.isHome
         ? widget.match.homeTeamName
         : widget.match.awayTeamName;
@@ -439,7 +456,7 @@ class _AdminMatchLineupScreenState extends State<AdminMatchLineupScreen>
       ),
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: StreamBuilder<List<PlayerModel>>(
-        stream: _dbService.getPlayers(teamId),
+        stream: _dbService.getPlayers(teamId, tournamentId: widget.match.leagueId),
         builder: (context, snapshot) {
           final players = snapshot.data ?? const <PlayerModel>[];
           return TabBarView(

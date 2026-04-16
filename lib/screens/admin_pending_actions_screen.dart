@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../services/approval_service.dart';
+import '../services/app_session.dart';
 
 class AdminPendingActionsScreen extends StatefulWidget {
   const AdminPendingActionsScreen({super.key});
@@ -101,6 +102,18 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isAdmin = AppSession.of(context).value.isAdmin;
+    if (!isAdmin) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Bekleyen Onaylar')),
+        body: const Center(
+          child: Text(
+            'Bu sayfaya erişim yetkiniz yok.',
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
     return Scaffold(
       appBar: AppBar(
         title: const Text('Bekleyen Onaylar'),

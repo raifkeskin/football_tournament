@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/match.dart';
+import '../services/app_session.dart';
 import '../services/database_service.dart';
 
 class AdminMatchEventScreen extends StatefulWidget {
@@ -16,9 +17,9 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
   final _dbService = DatabaseService();
   String _eventType = 'goal';
   String? _teamId;
-  String? _selectedPlayerName;
-  String? _selectedAssistName;
-  String? _selectedSubInName;
+  LineupPlayer? _selectedPlayer;
+  LineupPlayer? _selectedAssist;
+  LineupPlayer? _selectedSubIn;
   bool _isOwnGoal = false;
   bool _isLoading = false;
 
@@ -37,9 +38,9 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
   List<LineupPlayer> _playersFromLineup(String? teamId) {
     if (teamId == null) return const <LineupPlayer>[];
     final lineup = teamId == widget.match.homeTeamId
-        ? widget.match.homeLineup
+        ? widget.match.homeLineupDetail
         : teamId == widget.match.awayTeamId
-        ? widget.match.awayLineup
+        ? widget.match.awayLineupDetail
         : null;
     if (lineup == null) return const <LineupPlayer>[];
     final list = [...lineup.starting, ...lineup.subs];
@@ -63,9 +64,9 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
   List<LineupPlayer> _startingFromLineup(String? teamId) {
     if (teamId == null) return const <LineupPlayer>[];
     final lineup = teamId == widget.match.homeTeamId
-        ? widget.match.homeLineup
+        ? widget.match.homeLineupDetail
         : teamId == widget.match.awayTeamId
-        ? widget.match.awayLineup
+        ? widget.match.awayLineupDetail
         : null;
     if (lineup == null) return const <LineupPlayer>[];
     final list = [...lineup.starting];
@@ -89,9 +90,9 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
   List<LineupPlayer> _subsFromLineup(String? teamId) {
     if (teamId == null) return const <LineupPlayer>[];
     final lineup = teamId == widget.match.homeTeamId
-        ? widget.match.homeLineup
+        ? widget.match.homeLineupDetail
         : teamId == widget.match.awayTeamId
-        ? widget.match.awayLineup
+        ? widget.match.awayLineupDetail
         : null;
     if (lineup == null) return const <LineupPlayer>[];
     final list = [...lineup.subs];
@@ -269,16 +270,15 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
   }
 
   Future<void> _addEvent() async {
-    final player = (_selectedPlayerName ?? '').trim();
+    final player = _selectedPlayer;
     final minuteStr = _minuteController.text.trim();
-    final subIn = (_selectedSubInName ?? '').trim();
-    if (player.isEmpty || minuteStr.isEmpty) {
+    if (player == null || minuteStr.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Lütfen tüm alanları doldurun.')),
       );
       return;
     }
-    if (_eventType == 'substitution' && subIn.isEmpty) {
+    if (_eventType == 'substitution' && _selectedSubIn == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Lütfen giren oyuncuyu seçin.')),
       );
@@ -293,16 +293,25 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
       final event = MatchEvent(
         id: '',
         matchId: widget.match.id,
-        playerName: player,
-        assistPlayerName: _eventType == 'goal' && !_isOwnGoal
-            ? (_selectedAssistName?.trim().isEmpty ?? true
-                  ? null
-                  : _selectedAssistName!.trim())
-            : null,
-        subInPlayerName: _eventType == 'substitution' ? subIn : null,
-        type: _eventType,
-        minute: minute,
+        tournamentId: widget.match.leagueId,
         teamId: _teamId!,
+        eventType: _eventType,
+        minute: minute,
+        playerName: player.name.trim(),
+        playerPhone: player.playerId.trim().isEmpty ? null : player.playerId.trim(),
+        assistPlayerName: _eventType == 'goal' && !_isOwnGoal ? _selectedAssist?.name.trim() : null,
+        assistPlayerPhone: _eventType == 'goal' && !_isOwnGoal
+            ? (_selectedAssist?.playerId.trim().isEmpty ?? true
+                  ? null
+                  : _selectedAssist!.playerId.trim())
+            : null,
+        subInPlayerName: _eventType == 'substitution' ? _selectedSubIn?.name.trim() : null,
+        subInPlayerPhone: _eventType == 'substitution'
+            ? (_selectedSubIn?.playerId.trim().isEmpty ?? true
+                  ? null
+                  : _selectedSubIn!.playerId.trim())
+            : null,
+        type: _eventType,
         isOwnGoal: _eventType == 'goal' ? _isOwnGoal : false,
       );
 
@@ -327,24 +336,35 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isAdmin = AppSession.of(context).value.isAdmin;
+    if (!isAdmin) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Maç Olayları')),
+        body: const Center(
+          child: Text(
+            'Bu sayfaya erişim yetkiniz yok.',
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
     final players = _playersFromLineup(_teamId);
     final startingPlayers = _startingFromLineup(_teamId);
     final subsPlayers = _subsFromLineup(_teamId);
     final enabled = players.isNotEmpty && !_isLoading;
-    if (enabled && _selectedPlayerName != null) {
-      final exists =
-          players.any((p) => p.name.trim() == _selectedPlayerName!.trim());
+    if (enabled && _selectedPlayer != null) {
+      final exists = players.any((p) => p.playerId == _selectedPlayer!.playerId);
       if (!exists) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
-          setState(() => _selectedPlayerName = null);
+          setState(() => _selectedPlayer = null);
         });
       }
     }
-    if (_eventType != 'goal' && _selectedAssistName != null) {
+    if (_eventType != 'goal' && _selectedAssist != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        setState(() => _selectedAssistName = null);
+        setState(() => _selectedAssist = null);
       });
     }
     if (_eventType != 'goal' && _isOwnGoal) {
@@ -353,10 +373,10 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
         setState(() => _isOwnGoal = false);
       });
     }
-    if (_eventType != 'substitution' && _selectedSubInName != null) {
+    if (_eventType != 'substitution' && _selectedSubIn != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        setState(() => _selectedSubInName = null);
+        setState(() => _selectedSubIn = null);
       });
     }
 
@@ -393,9 +413,9 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                           if (picked == null || !mounted) return;
                           setState(() {
                             _teamId = picked;
-                            _selectedPlayerName = null;
-                            _selectedAssistName = null;
-                            _selectedSubInName = null;
+                            _selectedPlayer = null;
+                            _selectedAssist = null;
+                            _selectedSubIn = null;
                             _isOwnGoal = false;
                           });
                         },
@@ -405,32 +425,23 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                   label: _eventType == 'substitution'
                       ? 'Çıkan Oyuncu'
                       : 'Futbolcu Seçimi',
-                  valueText: (_selectedPlayerName ?? '').trim().isEmpty
+                  valueText: _selectedPlayer == null
                       ? (players.isEmpty ? 'Önce esame/kadro girin' : 'Seçiniz')
-                      : _labelFor(
-                          players.firstWhere(
-                            (p) => p.name.trim() == _selectedPlayerName!.trim(),
-                            orElse: () => LineupPlayer(
-                              playerId: '',
-                              name: _selectedPlayerName!.trim(),
-                              number: null,
-                            ),
-                          ),
-                        ),
+                      : _labelFor(_selectedPlayer!),
                   onTap: enabled
                       ? () async {
-                          final picked = await _pickFromSheet<String>(
+                          final picked = await _pickFromSheet<LineupPlayer>(
                             title: 'Futbolcu Seçimi',
-                            selected: _selectedPlayerName,
+                            selected: _selectedPlayer,
                             options: [
                               for (final p in (_eventType == 'substitution'
                                   ? startingPlayers
                                   : players))
-                                _PickerOption(p.name, _labelFor(p)),
+                                _PickerOption(p, _labelFor(p)),
                             ],
                           );
                           if (picked == null || !mounted) return;
-                          setState(() => _selectedPlayerName = picked);
+                          setState(() => _selectedPlayer = picked);
                         }
                       : null,
                 ),
@@ -439,30 +450,21 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                   visible: _eventType == 'substitution',
                   child: _selectorTile(
                     label: 'Giren Oyuncu',
-                    valueText: (_selectedSubInName ?? '').trim().isEmpty
+                    valueText: _selectedSubIn == null
                         ? (subsPlayers.isEmpty ? 'Yedek yok' : 'Seçiniz')
-                        : _labelFor(
-                            subsPlayers.firstWhere(
-                              (p) => p.name.trim() == _selectedSubInName!.trim(),
-                              orElse: () => LineupPlayer(
-                                playerId: '',
-                                name: _selectedSubInName!.trim(),
-                                number: null,
-                              ),
-                            ),
-                          ),
+                        : _labelFor(_selectedSubIn!),
                     onTap: (subsPlayers.isNotEmpty && !_isLoading)
                         ? () async {
-                            final picked = await _pickFromSheet<String>(
+                            final picked = await _pickFromSheet<LineupPlayer>(
                               title: 'Giren Oyuncu',
-                              selected: _selectedSubInName,
+                              selected: _selectedSubIn,
                               options: [
                                 for (final p in subsPlayers)
-                                  _PickerOption(p.name, _labelFor(p)),
+                                  _PickerOption(p, _labelFor(p)),
                               ],
                             );
                             if (picked == null || !mounted) return;
-                            setState(() => _selectedSubInName = picked);
+                            setState(() => _selectedSubIn = picked);
                           }
                         : null,
                   ),
@@ -482,8 +484,12 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                   label: 'Olay Türü',
                   valueText: _eventType == 'goal'
                       ? 'Gol'
+                      : _eventType == 'assist'
+                      ? 'Asist'
                       : _eventType == 'yellow_card'
                       ? 'Sarı Kart'
+                      : _eventType == 'man_of_the_match'
+                      ? 'Maçın Adamı'
                       : _eventType == 'substitution'
                       ? 'Oyuncu Değişikliği'
                       : 'Kırmızı Kart',
@@ -495,17 +501,19 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                             selected: _eventType,
                             options: const [
                               _PickerOption('goal', 'Gol'),
+                              _PickerOption('assist', 'Asist'),
                               _PickerOption('yellow_card', 'Sarı Kart'),
                               _PickerOption('red_card', 'Kırmızı Kart'),
+                              _PickerOption('man_of_the_match', 'Maçın Adamı'),
                               _PickerOption('substitution', 'Oyuncu Değişikliği'),
                             ],
                           );
                           if (picked == null || !mounted) return;
                           setState(() {
                             _eventType = picked;
-                            if (_eventType != 'goal') _selectedAssistName = null;
+                            if (_eventType != 'goal') _selectedAssist = null;
                             if (_eventType != 'goal') _isOwnGoal = false;
-                            if (_eventType != 'substitution') _selectedSubInName = null;
+                            if (_eventType != 'substitution') _selectedSubIn = null;
                           });
                         },
                 ),
@@ -535,7 +543,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                                 ? null
                                 : (v) => setState(() {
                                     _isOwnGoal = v;
-                                    if (_isOwnGoal) _selectedAssistName = null;
+                                    if (_isOwnGoal) _selectedAssist = null;
                                   }),
                           ),
                         ],
@@ -548,31 +556,21 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                   visible: _eventType == 'goal' && !_isOwnGoal,
                   child: _selectorTile(
                     label: 'Asist Yapan',
-                    valueText: (_selectedAssistName ?? '').trim().isEmpty
+                    valueText: _selectedAssist == null
                         ? 'Seçiniz'
-                        : _labelFor(
-                            players.firstWhere(
-                              (p) =>
-                                  p.name.trim() == _selectedAssistName!.trim(),
-                              orElse: () => LineupPlayer(
-                                playerId: '',
-                                name: _selectedAssistName!.trim(),
-                                number: null,
-                              ),
-                            ),
-                          ),
+                        : _labelFor(_selectedAssist!),
                     onTap: enabled
                         ? () async {
-                            final picked = await _pickFromSheet<String>(
+                            final picked = await _pickFromSheet<LineupPlayer>(
                               title: 'Asist Yapan',
-                              selected: _selectedAssistName,
+                              selected: _selectedAssist,
                               options: [
                                 for (final p in players)
-                                  _PickerOption(p.name, _labelFor(p)),
+                                  _PickerOption(p, _labelFor(p)),
                               ],
                             );
                             if (picked == null || !mounted) return;
-                            setState(() => _selectedAssistName = picked);
+                            setState(() => _selectedAssist = picked);
                           }
                         : null,
                   ),

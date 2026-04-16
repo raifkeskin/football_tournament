@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/league.dart';
-import '../models/match.dart';
+import '../models/player_stats.dart';
 import '../models/team.dart';
 import '../services/database_service.dart';
+import '../widgets/web_safe_image.dart';
 
 class StatsScreen extends StatefulWidget {
   const StatsScreen({super.key});
@@ -33,59 +35,108 @@ class _StatsScreenState extends State<StatsScreen> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Scaffold(
-      appBar: AppBar(title: const Text('İstatistik')),
-      body: StreamBuilder(
-        stream: _db.getLeagues(),
-        builder: (context, leaguesSnap) {
-          if (!leaguesSnap.hasData) {
-            return const Center(child: CircularProgressIndicator());
+    return StreamBuilder(
+      stream: _db.getLeagues(),
+      builder: (context, leaguesSnap) {
+        if (!leaguesSnap.hasData) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final leagues = leaguesSnap.data!.docs
+            .map(
+              (d) => League.fromMap(
+                {...d.data() as Map<String, dynamic>, 'id': d.id},
+              ),
+            )
+            .toList();
+        if (leagues.isEmpty) {
+          return const Scaffold(
+            body: Center(child: Text('Turnuva bulunamadı.')),
+          );
+        }
+
+        if (_selectedLeagueId == null) {
+          final defaults = leagues.where((l) => l.isDefault).toList();
+          if (defaults.isNotEmpty) {
+            defaults.sort(
+              (a, b) =>
+                  (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)),
+            );
+            _selectedLeagueId = defaults.first.id;
+          } else {
+            leagues.sort(
+              (a, b) =>
+                  (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)),
+            );
+            _selectedLeagueId = leagues.first.id;
           }
+        }
 
-          final leagues = leaguesSnap.data!.docs
-              .map(
-                (d) => League.fromMap(
-                  {...d.data() as Map<String, dynamic>, 'id': d.id},
-                ),
-              )
-              .toList();
-          if (leagues.isEmpty) {
-            return const Center(child: Text('Turnuva bulunamadı.'));
-          }
+        final leagueId = _selectedLeagueId!;
 
-          if (_selectedLeagueId == null) {
-            final defaults = leagues.where((l) => l.isDefault).toList();
-            if (defaults.isNotEmpty) {
-              defaults.sort(
-                (a, b) => (b.createdAt ?? DateTime(0)).compareTo(
-                  a.createdAt ?? DateTime(0),
-                ),
-              );
-              _selectedLeagueId = defaults.first.id;
-            } else {
-              leagues.sort(
-                (a, b) => (b.createdAt ?? DateTime(0)).compareTo(
-                  a.createdAt ?? DateTime(0),
-                ),
-              );
-              _selectedLeagueId = leagues.first.id;
-            }
-          }
-
-          final leagueId = _selectedLeagueId!;
-
-          return Column(
+        return Scaffold(
+          appBar: AppBar(
+            centerTitle: true,
+            title: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                Icon(Icons.bar_chart_outlined),
+                SizedBox(width: 8),
+                Text('İstatistik'),
+              ],
+            ),
+          ),
+          body: Column(
             children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
+              Container(
+                color: const Color(0xFF064E3B),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
                 child: DropdownButtonFormField<String>(
                   initialValue: leagueId,
-                  decoration: const InputDecoration(labelText: 'Turnuva Seçimi'),
+                  isExpanded: true,
+                  dropdownColor: const Color(0xFF1E293B),
+                  icon: const Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    color: Colors.white,
+                  ),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: 'Turnuva Seçin',
+                    labelStyle: const TextStyle(
+                      color: Colors.white70,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    floatingLabelBehavior: FloatingLabelBehavior.always,
+                    filled: true,
+                    fillColor: Colors.white.withValues(alpha: 0.10),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: Colors.white24),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: Colors.white54),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                  ),
                   items: leagues
                       .map(
                         (l) => DropdownMenuItem(
                           value: l.id,
-                          child: Text(l.name),
+                          child: Text(
+                            l.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w900),
+                          ),
                         ),
                       )
                       .toList(),
@@ -93,86 +144,66 @@ class _StatsScreenState extends State<StatsScreen> {
                 ),
               ),
               Expanded(
-                child: StreamBuilder(
-                  stream: _db.getTeams(),
-                  builder: (context, teamsSnap) {
-                    if (!teamsSnap.hasData) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-
-                    final teams = teamsSnap.data!.docs
-                        .map(
-                          (d) => Team.fromMap(
-                            {...d.data() as Map<String, dynamic>, 'id': d.id},
-                          ),
-                        )
-                        .where((t) => t.leagueId == leagueId)
-                        .toList();
-                    final teamIds = teams.map((t) => t.id).toSet();
-                    final teamById = {for (final t in teams) t.id: t};
-
-                    return StreamBuilder<List<PlayerModel>>(
-                      stream: _db.watchAllPlayers(),
-                      builder: (context, playersSnap) {
-                        if (!playersSnap.hasData) {
-                          return const Center(child: CircularProgressIndicator());
+                child: Transform.translate(
+                  offset: const Offset(0, -20),
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF0F172A),
+                      borderRadius:
+                          BorderRadius.vertical(top: Radius.circular(24)),
+                    ),
+                    padding: const EdgeInsets.only(top: 34),
+                    child: StreamBuilder(
+                      stream: _db.getTeams(),
+                      builder: (context, teamsSnap) {
+                        if (!teamsSnap.hasData) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
                         }
-                        final players = playersSnap.data!
-                            .where((p) => teamIds.contains(p.teamId))
-                            .toList();
 
-                        return StreamBuilder<List<MatchModel>>(
-                          stream: _db.watchMatchesForLeague(leagueId),
-                          builder: (context, matchesSnap) {
-                            if (!matchesSnap.hasData) {
-                              return const Center(
-                                child: CircularProgressIndicator(),
-                              );
+              final teams = teamsSnap.data!.docs
+                  .where((d) => d.id != 'free_agent_pool')
+                  .map(
+                    (d) => Team.fromMap(
+                      {...d.data() as Map<String, dynamic>, 'id': d.id},
+                    ),
+                  )
+                  .toList();
+              final teamIds = teams.map((t) => t.id).toSet();
+              final teamById = {for (final t in teams) t.id: t};
+
+                        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                          stream: FirebaseFirestore.instance
+                              .collection('player_stats')
+                              .where('tournamentId', isEqualTo: leagueId)
+                              .snapshots(),
+                          builder: (context, statsSnap) {
+                            if (!statsSnap.hasData) {
+                              return const Center(child: CircularProgressIndicator());
                             }
-                            final matches = matchesSnap.data!;
+                            final stats = statsSnap.data!.docs
+                                .map((d) => PlayerStats.fromMap(d.data(), d.id))
+                                .where((s) => s.playerPhone.trim().isNotEmpty)
+                                .toList();
 
-                            final appearances = <String, int>{};
-                            void bump(String playerId) {
-                              final id = playerId.trim();
-                              if (id.isEmpty) return;
-                              appearances[id] = (appearances[id] ?? 0) + 1;
-                            }
-
-                            for (final m in matches) {
-                              final home = m.homeLineup;
-                              final away = m.awayLineup;
-                              if (home != null) {
-                                for (final p in [...home.starting, ...home.subs]) {
-                                  bump(p.playerId);
-                                }
-                              }
-                              if (away != null) {
-                                for (final p in [...away.starting, ...away.subs]) {
-                                  bump(p.playerId);
-                                }
-                              }
-                            }
-
-                            List<PlayerModel> topBy(
-                              int Function(PlayerModel p) getValue,
-                            ) {
-                              final list = [...players];
+                            List<PlayerStats> topBy(int Function(PlayerStats s) getValue) {
+                              final list = [...stats];
                               list.sort((a, b) {
-                                final cmp =
-                                    getValue(b).compareTo(getValue(a));
+                                final cmp = getValue(b).compareTo(getValue(a));
                                 if (cmp != 0) return cmp;
-                                return _trKey(a.name).compareTo(_trKey(b.name));
+                                return a.playerPhone.compareTo(b.playerPhone);
                               });
-                              return list.where((p) => getValue(p) > 0).take(10).toList();
+                              return list.where((s) => getValue(s) > 0).take(10).toList();
                             }
 
-                            final topGoals = topBy((p) => p.goals);
-                            final topAssists = topBy((p) => p.assists);
+                            final topGoals = topBy((s) => s.goals);
+                            final topAssists = topBy((s) => s.assists);
 
                             Widget table({
                               required String valueHeader,
-                              required List<PlayerModel> rows,
-                              required int Function(PlayerModel) getValue,
+                              required List<PlayerStats> rows,
+                              required int Function(PlayerStats) getValue,
                             }) {
                               return ListView(
                                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
@@ -183,7 +214,7 @@ class _StatsScreenState extends State<StatsScreen> {
                                       vertical: 10,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFF1B5E20),
+                                      color: const Color(0xFF064E3B),
                                       borderRadius: BorderRadius.circular(14),
                                     ),
                                     child: Row(
@@ -242,9 +273,7 @@ class _StatsScreenState extends State<StatsScreen> {
                                   const SizedBox(height: 10),
                                   if (rows.isEmpty)
                                     Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 12,
-                                      ),
+                                      padding: const EdgeInsets.symmetric(vertical: 12),
                                       child: Text(
                                         'Veri yok.',
                                         textAlign: TextAlign.center,
@@ -281,56 +310,53 @@ class _StatsScreenState extends State<StatsScreen> {
                                                 flex: 6,
                                                 child: Builder(
                                                   builder: (context) {
-                                                    final p = rows[i];
-                                                    final team =
-                                                        teamById[p.teamId];
-                                                    final teamName =
-                                                        team?.name ?? '';
-                                                    final teamLogo =
-                                                        team?.logoUrl ?? '';
-                                                    final fallback =
-                                                        teamName.isNotEmpty
-                                                            ? teamName[0]
-                                                                .toUpperCase()
-                                                            : '?';
+                                                    final s = rows[i];
+                                                    final team = teamById[s.teamId];
+                                                    final teamName = team?.name ?? '';
+                                                    final teamLogo = team?.logoUrl ?? '';
+                                                    final fallback = teamName.isNotEmpty
+                                                        ? teamName[0].toUpperCase()
+                                                        : '?';
                                                     return Column(
-                                                      crossAxisAlignment:
-                                                          CrossAxisAlignment.start,
+                                                      crossAxisAlignment: CrossAxisAlignment.start,
                                                       children: [
-                                                        Text(
-                                                          p.name,
-                                                          maxLines: 1,
-                                                          overflow:
-                                                              TextOverflow.ellipsis,
-                                                          style: const TextStyle(
-                                                            fontWeight:
-                                                                FontWeight.w900,
-                                                          ),
+                                                        FutureBuilder<
+                                                            DocumentSnapshot<Map<String, dynamic>>>(
+                                                          future: FirebaseFirestore.instance
+                                                              .collection('players')
+                                                              .doc(s.playerPhone)
+                                                              .get(),
+                                                          builder: (context, pSnap) {
+                                                            final name = (pSnap.data?.data()?['name']
+                                                                        as String?)
+                                                                    ?.trim() ??
+                                                                s.playerPhone;
+                                                            return Text(
+                                                              name,
+                                                              maxLines: 1,
+                                                              overflow: TextOverflow.ellipsis,
+                                                              style: const TextStyle(
+                                                                fontWeight: FontWeight.w900,
+                                                              ),
+                                                            );
+                                                          },
                                                         ),
                                                         const SizedBox(height: 3),
                                                         Row(
                                                           children: [
                                                             _MiniTeamLogo(
                                                               logoUrl: teamLogo,
-                                                              fallbackText:
-                                                                  fallback,
+                                                              fallbackText: fallback,
                                                             ),
-                                                            const SizedBox(
-                                                              width: 6,
-                                                            ),
+                                                            const SizedBox(width: 6),
                                                             Expanded(
                                                               child: Text(
                                                                 teamName,
                                                                 maxLines: 1,
-                                                                overflow:
-                                                                    TextOverflow
-                                                                        .ellipsis,
+                                                                overflow: TextOverflow.ellipsis,
                                                                 style: TextStyle(
-                                                                  color: cs
-                                                                      .onSurfaceVariant,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w600,
+                                                                  color: cs.onSurfaceVariant,
+                                                                  fontWeight: FontWeight.w600,
                                                                   fontSize: 11,
                                                                 ),
                                                               ),
@@ -345,7 +371,7 @@ class _StatsScreenState extends State<StatsScreen> {
                                               Expanded(
                                                 flex: 2,
                                                 child: Text(
-                                                  '${appearances[rows[i].id] ?? 0}',
+                                                  '${rows[i].matchesPlayed}',
                                                   textAlign: TextAlign.center,
                                                   style: TextStyle(
                                                     fontWeight: FontWeight.w900,
@@ -374,45 +400,52 @@ class _StatsScreenState extends State<StatsScreen> {
 
                             return DefaultTabController(
                               length: 2,
-                              child: Column(
+                              child: Stack(
+                                clipBehavior: Clip.none,
                                 children: [
-                                  Container(
-                                    margin: const EdgeInsets.fromLTRB(
-                                      16,
-                                      0,
-                                      16,
-                                      10,
-                                    ),
-                                    padding: const EdgeInsets.all(6),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF1B5E20),
-                                      borderRadius: BorderRadius.circular(14),
-                                    ),
-                                    child: const TabBar(
-                                      labelColor: Colors.white,
-                                      unselectedLabelColor: Colors.white70,
-                                      indicatorColor: Colors.white,
-                                      indicatorSize: TabBarIndicatorSize.tab,
-                                      tabs: [
-                                        Tab(text: 'Gol Krallığı'),
-                                        Tab(text: 'Asist Krallığı'),
-                                      ],
+                                  Positioned(
+                                    top: -22,
+                                    left: 16,
+                                    right: 16,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(6),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF1E293B),
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
+                                      child: const TabBar(
+                                        labelColor: Colors.white,
+                                        unselectedLabelColor: Colors.white70,
+                                        indicatorColor: Colors.white,
+                                        indicatorSize: TabBarIndicatorSize.tab,
+                                        labelStyle: TextStyle(
+                                          fontWeight: FontWeight.w900,
+                                        ),
+                                        tabs: [
+                                          Tab(text: 'Gol Krallığı'),
+                                          Tab(text: 'Asist Krallığı'),
+                                        ],
+                                      ),
                                     ),
                                   ),
-                                  Expanded(
-                                    child: TabBarView(
-                                      children: [
-                                        table(
-                                          valueHeader: 'Gol',
-                                          rows: topGoals,
-                                          getValue: (p) => p.goals,
-                                        ),
-                                        table(
-                                          valueHeader: 'Asist',
-                                          rows: topAssists,
-                                          getValue: (p) => p.assists,
-                                        ),
-                                      ],
+                                  Positioned.fill(
+                                    top: 34,
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(bottom: 120),
+                                      child: TabBarView(
+                                        children: [
+                                          table(
+                                            valueHeader: 'Gol',
+                                            rows: topGoals,
+                                            getValue: (s) => s.goals,
+                                          ),
+                                          table(
+                                            valueHeader: 'Asist',
+                                            rows: topAssists,
+                                            getValue: (s) => s.assists,
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -421,14 +454,14 @@ class _StatsScreenState extends State<StatsScreen> {
                           },
                         );
                       },
-                    );
-                  },
+                    ),
+                  ),
                 ),
               ),
             ],
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 }
@@ -457,36 +490,12 @@ class _MiniTeamLogo extends StatelessWidget {
         shape: BoxShape.circle,
         color: cs.primary.withValues(alpha: 0.16),
       ),
-      child: ClipOval(
-        child: url.isNotEmpty
-            ? Image.network(
-                url,
-                width: 16,
-                height: 16,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => Center(
-                  child: Text(
-                    fallbackText,
-                    style: TextStyle(
-                      color: cs.primary,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 10,
-                      height: 1,
-                    ),
-                  ),
-                ),
-              )
-            : Center(
-                child: Text(
-                  fallbackText,
-                  style: TextStyle(
-                    color: cs.primary,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 10,
-                    height: 1,
-                  ),
-                ),
-              ),
+      child: WebSafeImage(
+        url: url,
+        width: 16,
+        height: 16,
+        isCircle: true,
+        fallbackIconSize: 12,
       ),
     );
   }
