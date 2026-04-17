@@ -1,8 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
-import '../lib/services/database_service.dart';
-import '../lib/models/league.dart';
+import 'package:football_tournament/services/database_service.dart';
 
 void main() {
   group('getTeamActiveTournaments Tests', () {

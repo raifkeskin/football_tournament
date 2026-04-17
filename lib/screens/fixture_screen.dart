@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../models/league.dart';
 import '../models/match.dart';
 import '../services/database_service.dart';
+import '../services/app_session.dart'; // EKLENDİ
 import '../widgets/web_safe_image.dart';
 import 'match_details_screen.dart';
 
@@ -41,6 +42,9 @@ class _FixtureScreenState extends State<FixtureScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // ADMIN KONTROLÜ - EKLENDİ
+    final bool isAdmin = AppSession.of(context).value.isAdmin;
+
     const headerForest = Color(0xFF064E3B);
     const bgDark = Color(0xFF0F172A);
     const cardBg = Color(0xFF1E293B);
@@ -106,7 +110,6 @@ class _FixtureScreenState extends State<FixtureScreen> {
                   final groups = snapshot.hasData
                       ? snapshot.data!.docs.map((doc) {
                           final d = doc.data() as Map<String, dynamic>;
-                          // Grup adını 'name' alanından veya döküman ID'sinden alıyoruz
                           return (d['name'] ?? doc.id).toString();
                         }).toList()
                       : <String>[];
@@ -121,7 +124,7 @@ class _FixtureScreenState extends State<FixtureScreen> {
                   }
 
                   final selectedGroupId = groups.isEmpty ? null : _groupId;
-                  final groupNameById = {for (final g in groups) g: '$g Grubu'};
+                  final groupNameById = {for (final g in groups) g: g};
 
                   InputDecoration dec(String label) {
                     return InputDecoration(
@@ -200,21 +203,10 @@ class _FixtureScreenState extends State<FixtureScreen> {
 
                           if ((maxWeekSnap.hasError && !useWeekFallback) ||
                               matchesSnap.hasError) {
-                            final raw = (matchesSnap.error ?? maxWeekSnap.error)
-                                .toString();
-                            final needsIndex =
-                                raw.contains('requires an index') ||
-                                raw.contains('FAILED_PRECONDITION');
-                            return Center(
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Text(
-                                  needsIndex
-                                      ? 'Fikstür sorgusu için Firestore index gerekiyor. firestore.indexes.json deploy edildiyse, indexlerin Firebase Console’da “Building” sürecinin bitmesini bekleyin ve uygulamayı yeniden başlatın.'
-                                      : 'Fikstür verisi alınamadı.',
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(color: Colors.white),
-                                ),
+                            return const Center(
+                              child: Text(
+                                'Fikstür verisi alınamadı.',
+                                style: TextStyle(color: Colors.white),
                               ),
                             );
                           }
@@ -336,7 +328,13 @@ class _FixtureScreenState extends State<FixtureScreen> {
                                                       DropdownMenuItem<String?>(
                                                         value: g,
                                                         child: Text(
-                                                          '$g Grubu',
+                                                          g
+                                                                  .toLowerCase()
+                                                                  .contains(
+                                                                    'grup',
+                                                                  )
+                                                              ? g
+                                                              : '$g Grubu',
                                                           maxLines: 1,
                                                           overflow: TextOverflow
                                                               .ellipsis,
@@ -427,6 +425,8 @@ class _FixtureScreenState extends State<FixtureScreen> {
                                             showGroupInHeader:
                                                 selectedGroupId == null,
                                             teamLogoById: teamLogoById,
+                                            isAdmin:
+                                                isAdmin, // AŞAĞIYA AKTARILDI
                                             onMatchTap: (m) {
                                               Navigator.push(
                                                 context,
@@ -470,6 +470,7 @@ class _FixtureList extends StatelessWidget {
     required this.onMatchTap,
     required this.surfaceContainerLow,
     required this.outlineVariant,
+    required this.isAdmin, // EKLENDİ
   });
 
   final List<MatchModel> matches;
@@ -480,6 +481,7 @@ class _FixtureList extends StatelessWidget {
   final void Function(MatchModel match) onMatchTap;
   final Color surfaceContainerLow;
   final Color outlineVariant;
+  final bool isAdmin; // EKLENDİ
 
   @override
   Widget build(BuildContext context) {
@@ -558,6 +560,7 @@ class _FixtureList extends StatelessWidget {
                     match: bySection[k]![i],
                     teamLogoById: teamLogoById,
                     onTap: () => onMatchTap(bySection[k]![i]),
+                    isAdmin: isAdmin, // AŞAĞIYA AKTARILDI
                   ),
                   if (i != bySection[k]!.length - 1) const SizedBox(height: 10),
                 ],
@@ -574,11 +577,13 @@ class _MatchCard extends StatelessWidget {
     required this.match,
     required this.teamLogoById,
     required this.onTap,
+    required this.isAdmin, // EKLENDİ
   });
 
   final MatchModel match;
   final Map<String, String> teamLogoById;
   final VoidCallback onTap;
+  final bool isAdmin; // EKLENDİ
 
   Widget _logo(String url) {
     return SizedBox(
@@ -646,17 +651,32 @@ class _MatchCard extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              // SAAT VE EDİT İKONU - BURASI DÜZENLENDİ
               SizedBox(
                 width: 46,
-                child: Center(
-                  child: Text(
-                    leftText,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w900,
-                      color: isFinished ? accent : mid,
-                      fontSize: 12,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      leftText,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        color: isFinished ? accent : mid,
+                        fontSize: 12,
+                      ),
                     ),
-                  ),
+                    if (isAdmin) // ADMINSE MAVİ EDİT İKONU EKLENDİ
+                      IconButton(
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        icon: const Icon(
+                          Icons.edit_calendar,
+                          size: 16,
+                          color: Colors.blueAccent,
+                        ),
+                        onPressed: () => _showEditPopup(context),
+                      ),
+                  ],
                 ),
               ),
               const SizedBox(width: 12),
@@ -730,6 +750,109 @@ class _MatchCard extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  // EDİT POPUP (TARİH/SAAT/STAD) - EKLENDİ
+  void _showEditPopup(BuildContext context) async {
+    final dCtrl = TextEditingController(text: match.matchDate ?? '');
+    final tCtrl = TextEditingController(text: match.matchTime ?? '');
+    String? selectedPitch = match.pitchName; // Mevcut stad adı
+
+    // Stadları (pitches koleksiyonu) çek
+    final pitchesSnap = await FirebaseFirestore.instance
+        .collection('pitches')
+        .get();
+    final pitches = pitchesSnap.docs
+        .map((d) => d.data()['name'] as String)
+        .toList();
+
+    showDialog(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF1E293B),
+          title: const Text(
+            'Maç Bilgilerini Düzenle',
+            style: TextStyle(color: Colors.white),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: dCtrl,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: 'Tarih (Örn: 19042026)',
+                  labelStyle: TextStyle(color: Colors.white54),
+                ),
+              ),
+              TextField(
+                controller: tCtrl,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: 'Saat (Örn: 18:00)',
+                  labelStyle: TextStyle(color: Colors.white54),
+                ),
+              ),
+              const SizedBox(height: 15),
+              DropdownButton<String>(
+                value: selectedPitch,
+                hint: const Text(
+                  "Stad Seçin",
+                  style: TextStyle(color: Colors.white54),
+                ),
+                isExpanded: true,
+                dropdownColor: const Color(0xFF0F172A),
+                items: pitches
+                    .map(
+                      (p) => DropdownMenuItem(
+                        value: p,
+                        child: Text(
+                          p,
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (val) => setDialogState(() => selectedPitch = val),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c),
+              child: const Text('İptal'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                String date = dCtrl.text;
+                // Tarih Tercümanı: 19042026 -> 2026-04-19
+                if (date.length == 8 && !date.contains('-')) {
+                  date =
+                      "${date.substring(4, 8)}-${date.substring(2, 4)}-${date.substring(0, 2)}";
+                }
+
+                // Firestore Güncelleme
+                await FirebaseFirestore.instance
+                    .collection('matches')
+                    .doc(match.id)
+                    .update({
+                      'matchDate': date,
+                      'matchTime': tCtrl.text,
+                      'pitchName': selectedPitch,
+                    });
+
+                Navigator.pop(c);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Maç başarıyla güncellendi!')),
+                );
+              },
+              child: const Text('Güncelle'),
+            ),
+          ],
         ),
       ),
     );
