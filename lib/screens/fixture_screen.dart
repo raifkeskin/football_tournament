@@ -5,7 +5,7 @@ import 'package:intl/intl.dart';
 import '../models/league.dart';
 import '../models/match.dart';
 import '../services/database_service.dart';
-import '../services/app_session.dart'; // EKLENDİ
+import '../services/app_session.dart';
 import '../widgets/web_safe_image.dart';
 import 'match_details_screen.dart';
 
@@ -42,13 +42,13 @@ class _FixtureScreenState extends State<FixtureScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // ADMIN KONTROLÜ - EKLENDİ
     final bool isAdmin = AppSession.of(context).value.isAdmin;
 
     const headerForest = Color(0xFF064E3B);
     const bgDark = Color(0xFF0F172A);
     const cardBg = Color(0xFF1E293B);
     const outline = Color(0xFF334155);
+
     return Scaffold(
       backgroundColor: bgDark,
       appBar: AppBar(
@@ -76,9 +76,9 @@ class _FixtureScreenState extends State<FixtureScreen> {
           return StreamBuilder<QuerySnapshot>(
             stream: _db.getLeagues(),
             builder: (context, leaguesSnap) {
-              if (!leaguesSnap.hasData) {
+              if (!leaguesSnap.hasData)
                 return const Center(child: CircularProgressIndicator());
-              }
+
               final leagues =
                   leaguesSnap.data!.docs
                       .map(
@@ -93,148 +93,72 @@ class _FixtureScreenState extends State<FixtureScreen> {
                           a.name.toLowerCase().compareTo(b.name.toLowerCase()),
                     );
 
-              if (leagues.isEmpty) {
+              if (leagues.isEmpty)
                 return const Center(child: Text('Turnuva bulunamadı.'));
-              }
+
               _leagueId ??= leagues.any((l) => l.isDefault)
                   ? (leagues.where((l) => l.isDefault).first.id)
                   : leagues.first.id;
-              final leagueId = _leagueId!;
 
               return StreamBuilder<QuerySnapshot>(
                 stream: FirebaseFirestore.instance
                     .collection('groups')
-                    .where('tournamentId', isEqualTo: leagueId)
+                    .where('tournamentId', isEqualTo: _leagueId)
                     .snapshots(),
                 builder: (context, snapshot) {
                   final groups = snapshot.hasData
-                      ? snapshot.data!.docs.map((doc) {
-                          final d = doc.data() as Map<String, dynamic>;
-                          return (d['name'] ?? doc.id).toString();
-                        }).toList()
+                      ? snapshot.data!.docs
+                            .map(
+                              (doc) =>
+                                  (doc.data() as Map<String, dynamic>)['name']
+                                      ?.toString() ??
+                                  doc.id,
+                            )
+                            .toList()
                       : <String>[];
 
-                  if (groups.isNotEmpty &&
-                      _groupId != null &&
-                      !groups.contains(_groupId)) {
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (!mounted) return;
-                      setState(() => _groupId = null);
-                    });
-                  }
-
-                  final selectedGroupId = groups.isEmpty ? null : _groupId;
+                  final selectedGroupId = (groups.contains(_groupId))
+                      ? _groupId
+                      : null;
                   final groupNameById = {for (final g in groups) g: g};
 
-                  InputDecoration dec(String label) {
-                    return InputDecoration(
-                      labelText: label,
-                      labelStyle: const TextStyle(
-                        color: Colors.white70,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      floatingLabelBehavior: FloatingLabelBehavior.always,
-                      filled: true,
-                      fillColor: Colors.white.withValues(alpha: 0.10),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: const BorderSide(color: Colors.white24),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: const BorderSide(color: Colors.white54),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 8,
-                      ),
-                    );
-                  }
-
                   return FutureBuilder<int?>(
-                    key: ValueKey('$leagueId|$selectedGroupId'),
+                    key: ValueKey('$_leagueId|$selectedGroupId'),
                     future: _db.getFixtureMaxWeek(
-                      leagueId,
+                      _leagueId!,
                       groupId: selectedGroupId,
                     ),
                     builder: (context, maxWeekSnap) {
-                      final maxWeekErr = maxWeekSnap.error?.toString() ?? '';
-                      final maxWeekNeedsIndex =
-                          maxWeekErr.contains('requires an index') ||
-                          maxWeekErr.contains('FAILED_PRECONDITION');
-                      final useWeekFallback =
-                          maxWeekSnap.hasError && maxWeekNeedsIndex;
-
-                      final maxWeek = useWeekFallback
-                          ? 30
-                          : (maxWeekSnap.data ?? 0);
+                      final maxWeek = maxWeekSnap.data ?? 30;
                       final weeks = <int>[for (var i = 1; i <= maxWeek; i++) i];
-                      if (_week != null && _week! > maxWeek) {
-                        weeks.insert(0, _week!);
-                      }
 
                       if (_week == null && maxWeek > 0) {
                         WidgetsBinding.instance.addPostFrameCallback((_) {
-                          if (!mounted) return;
-                          setState(() => _week = useWeekFallback ? 1 : maxWeek);
+                          if (mounted) setState(() => _week = 1);
                         });
                       }
 
-                      final effectiveWeek = _week;
-
                       return StreamBuilder<List<MatchModel>>(
-                        stream: effectiveWeek == null
-                            ? Stream<List<MatchModel>>.empty()
+                        stream: _week == null
+                            ? Stream.empty()
                             : _db.watchFixtureMatches(
-                                leagueId,
-                                effectiveWeek,
+                                _leagueId!,
+                                _week!,
                                 groupId: selectedGroupId,
                               ),
                         builder: (context, matchesSnap) {
-                          if ((!useWeekFallback &&
-                                  maxWeekSnap.connectionState ==
-                                      ConnectionState.waiting) ||
-                              matchesSnap.connectionState ==
-                                  ConnectionState.waiting) {
+                          if (matchesSnap.connectionState ==
+                              ConnectionState.waiting)
                             return const Center(
                               child: CircularProgressIndicator(),
                             );
-                          }
 
-                          if ((maxWeekSnap.hasError && !useWeekFallback) ||
-                              matchesSnap.hasError) {
-                            return const Center(
-                              child: Text(
-                                'Fikstür verisi alınamadı.',
-                                style: TextStyle(color: Colors.white),
+                          final matches = (matchesSnap.data ?? [])
+                            ..sort(
+                              (a, b) => (a.matchDate ?? '').compareTo(
+                                b.matchDate ?? '',
                               ),
                             );
-                          }
-
-                          final matches =
-                              (matchesSnap.data ?? const <MatchModel>[])..sort((
-                                a,
-                                b,
-                              ) {
-                                final ad = (a.matchDate ?? '').trim();
-                                final bd = (b.matchDate ?? '').trim();
-                                final dcmp = ad.compareTo(bd);
-                                if (dcmp != 0) return dcmp;
-                                final at = (a.matchTime ?? '').trim();
-                                final bt = (b.matchTime ?? '').trim();
-                                if (at.isEmpty && bt.isEmpty) {
-                                  return a.homeTeamName.toLowerCase().compareTo(
-                                    b.homeTeamName.toLowerCase(),
-                                  );
-                                }
-                                if (at.isEmpty) return 1;
-                                if (bt.isEmpty) return -1;
-                                final cmp = at.compareTo(bt);
-                                if (cmp != 0) return cmp;
-                                return a.homeTeamName.toLowerCase().compareTo(
-                                  b.homeTeamName.toLowerCase(),
-                                );
-                              });
 
                           return Column(
                             children: [
@@ -247,150 +171,66 @@ class _FixtureScreenState extends State<FixtureScreen> {
                                   32,
                                 ),
                                 child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  mainAxisAlignment: MainAxisAlignment.start,
                                   children: [
-                                    DropdownButtonFormField<String>(
-                                      initialValue: leagueId,
-                                      isExpanded: true,
-                                      dropdownColor: cardBg,
-                                      icon: const Icon(
-                                        Icons.keyboard_arrow_down_rounded,
-                                        color: Colors.white,
-                                      ),
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w900,
-                                      ),
-                                      decoration: dec('Turnuva Seçin'),
-                                      items: [
-                                        for (final l in leagues)
-                                          DropdownMenuItem(
-                                            value: l.id,
-                                            child: Text(
-                                              l.name,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.w900,
-                                              ),
+                                    _buildDropdown(
+                                      'Turnuva Seçin',
+                                      _leagueId,
+                                      leagues
+                                          .map(
+                                            (l) => DropdownMenuItem(
+                                              value: l.id,
+                                              child: Text(l.name),
                                             ),
-                                          ),
-                                      ],
-                                      onChanged: (v) {
-                                        setState(() {
-                                          _leagueId = v;
-                                          _groupId = null;
-                                          _week = null;
-                                        });
-                                      },
+                                          )
+                                          .toList(),
+                                      (v) => setState(() {
+                                        _leagueId = v;
+                                        _groupId = null;
+                                        _week = null;
+                                      }),
                                     ),
                                     const SizedBox(height: 10),
                                     Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
                                       children: [
                                         Expanded(
-                                          child: DropdownButtonFormField<String?>(
-                                            initialValue: selectedGroupId,
-                                            isExpanded: true,
-                                            dropdownColor: cardBg,
-                                            icon: const Icon(
-                                              Icons.keyboard_arrow_down_rounded,
-                                              color: Colors.white,
-                                            ),
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.w900,
-                                            ),
-                                            decoration: dec('Grup Seçin'),
-                                            items: groups.isEmpty
-                                                ? const [
-                                                    DropdownMenuItem<String?>(
-                                                      value: null,
-                                                      child: Text('-'),
-                                                    ),
-                                                  ]
-                                                : [
-                                                    const DropdownMenuItem<
-                                                      String?
-                                                    >(
-                                                      value: null,
-                                                      child: Text(
-                                                        'Tümü',
-                                                        style: TextStyle(
-                                                          fontWeight:
-                                                              FontWeight.w900,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    for (final g in groups)
-                                                      DropdownMenuItem<String?>(
-                                                        value: g,
-                                                        child: Text(
-                                                          g
-                                                                  .toLowerCase()
-                                                                  .contains(
-                                                                    'grup',
-                                                                  )
-                                                              ? g
-                                                              : '$g Grubu',
-                                                          maxLines: 1,
-                                                          overflow: TextOverflow
-                                                              .ellipsis,
-                                                          style:
-                                                              const TextStyle(
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w900,
-                                                              ),
-                                                        ),
-                                                      ),
-                                                  ],
-                                            onChanged: groups.isEmpty
-                                                ? null
-                                                : (v) => setState(
-                                                    () => _groupId = v,
+                                          child: _buildDropdown(
+                                            'Grup Seçin',
+                                            selectedGroupId,
+                                            [
+                                              const DropdownMenuItem(
+                                                value: null,
+                                                child: Text('Tümü'),
+                                              ),
+                                              ...groups.map(
+                                                (g) => DropdownMenuItem(
+                                                  value: g,
+                                                  child: Text(
+                                                    g.toLowerCase().contains(
+                                                          'grup',
+                                                        )
+                                                        ? g
+                                                        : '$g Grubu',
                                                   ),
+                                                ),
+                                              ),
+                                            ],
+                                            (v) => setState(() => _groupId = v),
                                           ),
                                         ),
                                         const SizedBox(width: 12),
                                         Expanded(
-                                          child: DropdownButtonFormField<int?>(
-                                            initialValue: _week,
-                                            isExpanded: true,
-                                            dropdownColor: cardBg,
-                                            icon: const Icon(
-                                              Icons.keyboard_arrow_down_rounded,
-                                              color: Colors.white,
-                                            ),
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.w900,
-                                            ),
-                                            decoration: dec('Hafta Seçin'),
-                                            items: [
-                                              if (weeks.isEmpty)
-                                                const DropdownMenuItem<int?>(
-                                                  value: null,
-                                                  child: Text('-'),
-                                                ),
-                                              for (final w in weeks)
-                                                DropdownMenuItem<int?>(
-                                                  value: w,
-                                                  child: Text(
-                                                    '$w. Hafta',
-                                                    style: const TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.w900,
-                                                    ),
+                                          child: _buildDropdown(
+                                            'Hafta Seçin',
+                                            _week,
+                                            weeks
+                                                .map(
+                                                  (w) => DropdownMenuItem(
+                                                    value: w,
+                                                    child: Text('$w. Hafta'),
                                                   ),
-                                                ),
-                                            ],
-                                            onChanged: weeks.isEmpty
-                                                ? null
-                                                : (v) =>
-                                                      setState(() => _week = v),
+                                                )
+                                                .toList(),
+                                            (v) => setState(() => _week = v),
                                           ),
                                         ),
                                       ],
@@ -425,21 +265,18 @@ class _FixtureScreenState extends State<FixtureScreen> {
                                             showGroupInHeader:
                                                 selectedGroupId == null,
                                             teamLogoById: teamLogoById,
-                                            isAdmin:
-                                                isAdmin, // AŞAĞIYA AKTARILDI
-                                            onMatchTap: (m) {
-                                              Navigator.push(
-                                                context,
-                                                MaterialPageRoute(
-                                                  builder: (_) =>
-                                                      MatchDetailsScreen(
-                                                        match: m,
-                                                      ),
-                                                ),
-                                              );
-                                            },
-                                            surfaceContainerLow: cardBg,
-                                            outlineVariant: outline,
+                                            isAdmin: isAdmin,
+                                            onMatchTap: (m) => Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) =>
+                                                    MatchDetailsScreen(
+                                                      match: m,
+                                                    ),
+                                              ),
+                                            ),
+                                            cardColor: cardBg,
+                                            outlineColor: outline,
                                           ),
                                   ),
                                 ),
@@ -458,6 +295,33 @@ class _FixtureScreenState extends State<FixtureScreen> {
       ),
     );
   }
+
+  Widget _buildDropdown(
+    String label,
+    dynamic value,
+    List<DropdownMenuItem<dynamic>> items,
+    Function(dynamic) onChanged,
+  ) {
+    return DropdownButtonFormField(
+      value: value,
+      isExpanded: true,
+      dropdownColor: const Color(0xFF1E293B),
+      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: Colors.white70),
+        filled: true,
+        fillColor: Colors.white.withOpacity(0.1),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: Colors.white24),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      ),
+      items: items,
+      onChanged: onChanged,
+    );
+  }
 }
 
 class _FixtureList extends StatelessWidget {
@@ -468,9 +332,9 @@ class _FixtureList extends StatelessWidget {
     required this.showGroupInHeader,
     required this.teamLogoById,
     required this.onMatchTap,
-    required this.surfaceContainerLow,
-    required this.outlineVariant,
-    required this.isAdmin, // EKLENDİ
+    required this.cardColor,
+    required this.outlineColor,
+    required this.isAdmin,
   });
 
   final List<MatchModel> matches;
@@ -479,48 +343,29 @@ class _FixtureList extends StatelessWidget {
   final bool showGroupInHeader;
   final Map<String, String> teamLogoById;
   final void Function(MatchModel match) onMatchTap;
-  final Color surfaceContainerLow;
-  final Color outlineVariant;
-  final bool isAdmin; // EKLENDİ
+  final Color cardColor;
+  final Color outlineColor;
+  final bool isAdmin;
 
   @override
   Widget build(BuildContext context) {
     String groupLabel(String groupId) {
-      final raw = (groupNameById[groupId] ?? '').trim();
-      if (raw.isEmpty) return 'Grup';
-      final base = raw.length <= 2 ? raw.toUpperCase() : raw;
-      final hasGrup = RegExp(r'grup', caseSensitive: false).hasMatch(base);
-      return hasGrup ? base : '$base Grubu';
+      final name = groupNameById[groupId] ?? 'Grup';
+      return name.toLowerCase().contains('grup') ? name : '$name Grubu';
     }
 
     final bySection = <String, List<MatchModel>>{};
     for (final m in matches) {
       final dateKey = (m.matchDate ?? '').trim().isEmpty
           ? '__NO_DATE__'
-          : (m.matchDate ?? '').trim();
+          : m.matchDate!.trim();
       final sectionKey = showGroupInHeader
-          ? '$dateKey|${(m.groupId ?? '').trim()}'
+          ? '$dateKey|${m.groupId ?? ''}'
           : dateKey;
       (bySection[sectionKey] ??= []).add(m);
     }
 
-    final sectionKeys = bySection.keys.toList()
-      ..sort((a, b) {
-        String da(String key) => showGroupInHeader ? key.split('|').first : key;
-        String ga(String key) => showGroupInHeader
-            ? (key.split('|').length > 1 ? key.split('|')[1] : '')
-            : '';
-
-        final ad = da(a);
-        final bd = da(b);
-        if (ad == '__NO_DATE__' && bd == '__NO_DATE__') return 0;
-        if (ad == '__NO_DATE__') return 1;
-        if (bd == '__NO_DATE__') return -1;
-        final dcmp = ad.compareTo(bd);
-        if (dcmp != 0) return dcmp;
-        if (!showGroupInHeader) return 0;
-        return groupLabel(ga(a)).compareTo(groupLabel(ga(b)));
-      });
+    final sectionKeys = bySection.keys.toList()..sort();
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 120),
@@ -530,24 +375,22 @@ class _FixtureList extends StatelessWidget {
             margin: const EdgeInsets.only(bottom: 12),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: surfaceContainerLow,
+              color: cardColor,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: outlineVariant.withValues(alpha: 0.5)),
+              border: Border.all(color: outlineColor.withOpacity(0.5)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
                   () {
-                    final parts = showGroupInHeader ? k.split('|') : [k];
-                    final dateKey = parts.first;
-                    final dateText = dateKey == '__NO_DATE__'
+                    final parts = k.split('|');
+                    final dateText = parts[0] == '__NO_DATE__'
                         ? 'Tarih Belirlenmedi'
-                        : dateStripText(dateKey);
-                    if (!showGroupInHeader) return dateText;
-                    final groupId = parts.length > 1 ? parts[1] : '';
-                    final grp = groupLabel(groupId);
-                    return '$dateText - $grp';
+                        : dateStripText(parts[0]);
+                    return showGroupInHeader
+                        ? '$dateText - ${groupLabel(parts.length > 1 ? parts[1] : '')}'
+                        : dateText;
                   }(),
                   style: const TextStyle(
                     fontWeight: FontWeight.w900,
@@ -555,15 +398,13 @@ class _FixtureList extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
-                for (var i = 0; i < bySection[k]!.length; i++) ...[
+                for (final m in bySection[k]!)
                   _MatchCard(
-                    match: bySection[k]![i],
+                    match: m,
                     teamLogoById: teamLogoById,
-                    onTap: () => onMatchTap(bySection[k]![i]),
-                    isAdmin: isAdmin, // AŞAĞIYA AKTARILDI
+                    isAdmin: isAdmin,
+                    onTap: () => onMatchTap(m),
                   ),
-                  if (i != bySection[k]!.length - 1) const SizedBox(height: 10),
-                ],
               ],
             ),
           ),
@@ -577,13 +418,13 @@ class _MatchCard extends StatelessWidget {
     required this.match,
     required this.teamLogoById,
     required this.onTap,
-    required this.isAdmin, // EKLENDİ
+    required this.isAdmin,
   });
 
   final MatchModel match;
   final Map<String, String> teamLogoById;
   final VoidCallback onTap;
-  final bool isAdmin; // EKLENDİ
+  final bool isAdmin;
 
   Widget _logo(String url) {
     return SizedBox(
@@ -606,6 +447,7 @@ class _MatchCard extends StatelessWidget {
     final leftText = isFinished
         ? 'MS'
         : (timeText.isEmpty ? '--:--' : timeText);
+
     const fg = Color(0xFFF8FAFC);
     const mid = Color(0xFF94A3B8);
     const accent = Color(0xFF10B981);
@@ -617,29 +459,9 @@ class _MatchCard extends StatelessWidget {
         ? match.awayTeamLogoUrl
         : (teamLogoById[match.awayTeamId] ?? '');
 
-    final showScore =
-        isFinished || match.homeScore != 0 || match.awayScore != 0;
     final hs = match.homeScore;
     final as = match.awayScore;
-    final homeWin = showScore && hs > as;
-    final awayWin = showScore && as > hs;
-
-    Widget scoreBox({required int score, required bool highlight}) {
-      return SizedBox(
-        width: 25,
-        child: Align(
-          alignment: Alignment.centerRight,
-          child: Text(
-            showScore ? '$score' : '-',
-            style: TextStyle(
-              color: highlight ? fg : mid,
-              fontWeight: FontWeight.w900,
-              fontSize: 14,
-            ),
-          ),
-        ),
-      );
-    }
+    final showScore = isFinished || hs != 0 || as != 0;
 
     return Card(
       margin: EdgeInsets.zero,
@@ -649,101 +471,54 @@ class _MatchCard extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // SAAT VE EDİT İKONU - BURASI DÜZENLENDİ
+              // SAAT VE TAKVİM İKONU ALANI - DİKEY DÜZENLEME YAPILDI
               SizedBox(
-                width: 46,
+                width: 50,
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(
-                      leftText,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w900,
-                        color: isFinished ? accent : mid,
-                        fontSize: 12,
-                      ),
-                    ),
-                    if (isAdmin) // ADMINSE MAVİ EDİT İKONU EKLENDİ
+                    if (isAdmin)
                       IconButton(
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
                         icon: const Icon(
                           Icons.edit_calendar,
-                          size: 16,
-                          color: Colors.blueAccent,
+                          size: 22,
+                          color: Colors.white, // İKON RENGİ BEYAZ YAPILDI
                         ),
                         onPressed: () => _showEditPopup(context),
                       ),
+                    const SizedBox(height: 4), // İkon ve saat arasına boşluk
+                    Text(
+                      leftText,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        color: isFinished ? accent : mid,
+                        fontSize: 11,
+                      ),
+                    ),
                   ],
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        _logo(homeLogo),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            match.homeTeamName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w900,
-                              color: fg,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            scoreBox(
-                              score: hs,
-                              highlight: homeWin || !showScore,
-                            ),
-                          ],
-                        ),
-                      ],
+                    _teamRow(
+                      match.homeTeamName,
+                      homeLogo,
+                      hs,
+                      showScore,
+                      hs >= as,
                     ),
                     const SizedBox(height: 12),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        _logo(awayLogo),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            match.awayTeamName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w900,
-                              color: fg,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            scoreBox(
-                              score: as,
-                              highlight: awayWin || !showScore,
-                            ),
-                          ],
-                        ),
-                      ],
+                    _teamRow(
+                      match.awayTeamName,
+                      awayLogo,
+                      as,
+                      showScore,
+                      as >= hs,
                     ),
                   ],
                 ),
@@ -755,106 +530,204 @@ class _MatchCard extends StatelessWidget {
     );
   }
 
-  // EDİT POPUP (TARİH/SAAT/STAD) - EKLENDİ
-  void _showEditPopup(BuildContext context) async {
-    final dCtrl = TextEditingController(text: match.matchDate ?? '');
-    final tCtrl = TextEditingController(text: match.matchTime ?? '');
-    String? selectedPitch = match.pitchName; // Mevcut stad adı
+  Widget _teamRow(
+    String name,
+    String logo,
+    int score,
+    bool showScore,
+    bool highlight,
+  ) {
+    return Row(
+      children: [
+        _logo(logo),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontWeight: FontWeight.w900,
+              color: highlight ? Colors.white : Colors.white70,
+              fontSize: 13,
+            ),
+          ),
+        ),
+        SizedBox(
+          width: 25,
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              showScore ? '$score' : '-',
+              style: TextStyle(
+                color: highlight ? Colors.white : Colors.white38,
+                fontWeight: FontWeight.w900,
+                fontSize: 14,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+void _showEditPopup(BuildContext context) async {
+    // 1. TARİHİ DD/MM/YYYY FORMATINA ÇEVİREREK AÇ (DB: 2026-04-18 -> Ekran: 18/04/2026)
+    String initialDate = '';
+    if (match.matchDate != null && match.matchDate!.contains('-')) {
+      final p = match.matchDate!.split('-');
+      if (p.length == 3) initialDate = '${p[2]}/${p[1]}/${p[0]}';
+    } else {
+      initialDate = match.matchDate ?? '';
+    }
 
-    // Stadları (pitches koleksiyonu) çek
-    final pitchesSnap = await FirebaseFirestore.instance
-        .collection('pitches')
-        .get();
-    final pitches = pitchesSnap.docs
-        .map((d) => d.data()['name'] as String)
-        .toList();
+    final dCtrl = TextEditingController(text: initialDate);
+    final tCtrl = TextEditingController(text: match.matchTime ?? '');
+    String? selectedPitch = match.pitchName;
+
+    final pitchesSnap = await FirebaseFirestore.instance.collection('pitches').get();
+    final pitches = pitchesSnap.docs.map((d) => (d.data() as Map<String, dynamic>)['name'] as String).toList();
 
     showDialog(
       context: context,
       builder: (c) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           backgroundColor: const Color(0xFF1E293B),
-          title: const Text(
-            'Maç Bilgilerini Düzenle',
-            style: TextStyle(color: Colors.white),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: dCtrl,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: 'Tarih (Örn: 19042026)',
-                  labelStyle: TextStyle(color: Colors.white54),
+          title: const Text('Maçı Düzenle', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          content: SingleChildScrollView( // Klavye açıldığında taşmaması için
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // TARİH INPUT (Maskeleme yapıldı)
+                TextField(
+                  controller: dCtrl,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    _DateInputFormatter(), // Özel tarih maskesi
+                  ],
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    labelText: 'Tarih (GG/AA/YYYY)',
+                    hintText: '18/04/2026',
+                    labelStyle: TextStyle(color: Colors.white54),
+                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                  ),
                 ),
-              ),
-              TextField(
-                controller: tCtrl,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: 'Saat (Örn: 18:00)',
-                  labelStyle: TextStyle(color: Colors.white54),
+                const SizedBox(height: 20), // Üst üste binmeyi engelleyen boşluk
+                // SAAT INPUT (Maskeleme yapıldı)
+                TextField(
+                  controller: tCtrl,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    _TimeInputFormatter(), // Özel saat maskesi (Otomatik :)
+                  ],
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    labelText: 'Saat (SS:DD)',
+                    hintText: '20:00',
+                    labelStyle: TextStyle(color: Colors.white54),
+                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 15),
-              DropdownButton<String>(
-                value: selectedPitch,
-                hint: const Text(
-                  "Stad Seçin",
-                  style: TextStyle(color: Colors.white54),
+                const SizedBox(height: 25),
+                DropdownButtonFormField<String>(
+                  value: pitches.contains(selectedPitch) ? selectedPitch : null,
+                  dropdownColor: const Color(0xFF0F172A),
+                  decoration: const InputDecoration(
+                    labelText: 'Stad Seçin',
+                    labelStyle: TextStyle(color: Colors.white54),
+                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                  ),
+                  items: pitches.map((p) => DropdownMenuItem(value: p, child: Text(p, style: const TextStyle(color: Colors.white)))).toList(),
+                  onChanged: (val) => setDialogState(() => selectedPitch = val),
                 ),
-                isExpanded: true,
-                dropdownColor: const Color(0xFF0F172A),
-                items: pitches
-                    .map(
-                      (p) => DropdownMenuItem(
-                        value: p,
-                        child: Text(
-                          p,
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (val) => setDialogState(() => selectedPitch = val),
-              ),
-            ],
+              ],
+            ),
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(c),
-              child: const Text('İptal'),
-            ),
+            TextButton(onPressed: () => Navigator.pop(c), child: const Text('İptal', style: TextStyle(color: Colors.white70))),
             ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
               onPressed: () async {
-                String date = dCtrl.text;
-                // Tarih Tercümanı: 19042026 -> 2026-04-19
-                if (date.length == 8 && !date.contains('-')) {
-                  date =
-                      "${date.substring(4, 8)}-${date.substring(2, 4)}-${date.substring(0, 2)}";
+                final date = dCtrl.text;
+                final time = tCtrl.text;
+
+                // 2. DOĞRULAMA (VALIDATION)
+                if (date.length != 10) {
+                  _showError(context, 'Tarih formatı hatalı! (GG/AA/YYYY)');
+                  return;
+                }
+                if (time.length != 5) {
+                  _showError(context, 'Saat formatı hatalı! (SS:DD)');
+                  return;
                 }
 
-                // Firestore Güncelleme
-                await FirebaseFirestore.instance
-                    .collection('matches')
-                    .doc(match.id)
-                    .update({
-                      'matchDate': date,
-                      'matchTime': tCtrl.text,
-                      'pitchName': selectedPitch,
-                    });
+                try {
+                  // 3. DB FORMATINA ÇEVİR (18/04/2026 -> 2026-04-18)
+                  final parts = date.split('/');
+                  final dbDate = '${parts[2]}-${parts[1]}-${parts[0]}';
 
-                Navigator.pop(c);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Maç başarıyla güncellendi!')),
-                );
+                  await FirebaseFirestore.instance.collection('matches').doc(match.id).update({
+                    'matchDate': dbDate,
+                    'matchTime': time,
+                    'pitchName': selectedPitch,
+                  });
+                  Navigator.pop(c);
+                  _showSuccess(context, 'Maç güncellendi!');
+                } catch (e) {
+                  _showError(context, 'Güncelleme başarısız oldu.');
+                }
               },
-              child: const Text('Güncelle'),
+              child: const Text('Güncelle', style: TextStyle(color: Colors.white)),
             ),
           ],
         ),
       ),
     );
   }
+
+  // Yardımcı Uyarı Metotları
+  void _showError(BuildContext context, String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.redAccent));
+  }
+  void _showSuccess(BuildContext context, String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.green));
+  }
+}
+
+// --- OTOMATİK FORMATLAYICILAR (DOSYANIN EN ALTINA EKLEYEBİLİRSİN) ---
+
+class _DateInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldV, TextEditingValue newV) {
+    var text = newV.text;
+    if (newV.selection.baseOffset < oldV.selection.baseOffset) return newV;
+    var buffer = StringBuffer();
+    for (int i = 0; i < text.length; i++) {
+      buffer.write(text[i]);
+      var nonZeroIndex = i + 1;
+      if (nonZeroIndex % 2 == 0 && nonZeroIndex != text.length && nonZeroIndex < 5) buffer.write('/');
+    }
+    var string = buffer.toString();
+    return newV.copyWith(text: string, selection: TextSelection.collapsed(offset: string.length));
+  }
+}
+
+class _TimeInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldV, TextEditingValue newV) {
+    var text = newV.text;
+    if (newV.selection.baseOffset < oldV.selection.baseOffset) return newV;
+    var buffer = StringBuffer();
+    for (int i = 0; i < text.length; i++) {
+      buffer.write(text[i]);
+      var nonZeroIndex = i + 1;
+      if (nonZeroIndex == 2 && nonZeroIndex != text.length) buffer.write(':');
+    }
+    var string = buffer.toString();
+    return newV.copyWith(text: string, selection: TextSelection.collapsed(offset: string.length));
+  }
+}
+
 }
