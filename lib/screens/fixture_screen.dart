@@ -155,11 +155,18 @@ class _FixtureScreenState extends State<FixtureScreen> {
                             );
 
                           final matches = (matchesSnap.data ?? [])
-                            ..sort(
-                              (a, b) => (a.matchDate ?? '').compareTo(
+                            ..sort((a, b) {
+                              // Önce tarihe göre sırala (2026-04-18, 2026-04-19 gibi)
+                              int dateComp = (a.matchDate ?? '').compareTo(
                                 b.matchDate ?? '',
-                              ),
-                            );
+                              );
+                              if (dateComp != 0) return dateComp;
+
+                              // Eğer tarihler aynıysa, saate göre sırala (18:00, 19:00 gibi)
+                              return (a.matchTime ?? '').compareTo(
+                                b.matchTime ?? '',
+                              );
+                            });
 
                           return Column(
                             children: [
@@ -355,25 +362,23 @@ class _FixtureList extends StatelessWidget {
       return name.toLowerCase().contains('grup') ? name : '$name Grubu';
     }
 
-    final bySection = <String, List<MatchModel>>{};
+    // 1. AŞAMA: Maçları Tarihe Göre Grupla
+    final byDate = <String, List<MatchModel>>{};
     for (final m in matches) {
       final dateKey = (m.matchDate ?? '').trim().isEmpty
           ? '__NO_DATE__'
           : m.matchDate!.trim();
-      final sectionKey = showGroupInHeader
-          ? '$dateKey|${m.groupId ?? ''}'
-          : dateKey;
-      (bySection[sectionKey] ??= []).add(m);
+      (byDate[dateKey] ??= []).add(m);
     }
 
-    final sectionKeys = bySection.keys.toList()..sort();
+    final sortedDates = byDate.keys.toList()..sort();
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 120),
       children: [
-        for (final k in sectionKeys)
+        for (final dKey in sortedDates)
           Container(
-            margin: const EdgeInsets.only(bottom: 12),
+            margin: const EdgeInsets.only(bottom: 16),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: cardColor,
@@ -383,35 +388,82 @@ class _FixtureList extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  () {
-                    final parts = k.split('|');
-                    // HATA DÜZELTİLDİ: dateKey yerine dateText kullanıldı
-                    final dateText = parts[0] == '__NO_DATE__'
+                // ANA TARİH BAŞLIĞI (Panelin en üstünde tek sefer)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8, top: 4),
+                  child: Text(
+                    dKey == '__NO_DATE__'
                         ? 'Tarih Belirlenmedi'
-                        : dateStripText(parts[0]);
-                    return showGroupInHeader
-                        ? '$dateText - ${groupLabel(parts.length > 1 ? parts[1] : '')}'
-                        : dateText;
-                  }(),
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w900,
-                    color: Colors.white,
+                        : dateStripText(dKey),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                      fontSize: 14,
+                      letterSpacing: 0.5,
+                    ),
                   ),
                 ),
+                const Divider(color: Colors.white10, height: 1),
                 const SizedBox(height: 12),
-                for (final m in bySection[k]!)
-                  _MatchCard(
-                    match: m,
-                    teamLogoById: teamLogoById,
-                    isAdmin: isAdmin,
-                    onTap: () => onMatchTap(m),
-                  ),
+
+                // 2. AŞAMA: O Günkü Maçları Gruplara Bölerek Listele
+                ..._buildGroupedSection(byDate[dKey]!, groupLabel),
               ],
             ),
           ),
       ],
     );
+  }
+
+  List<Widget> _buildGroupedSection(
+    List<MatchModel> matchesInDate,
+    String Function(String) groupLabel,
+  ) {
+    // O tarihteki maçları kendi içinde gruplara ayır
+    final groupedByGroup = <String, List<MatchModel>>{};
+    for (var m in matchesInDate) {
+      final gId = m.groupId ?? '';
+      (groupedByGroup[gId] ??= []).add(m);
+    }
+
+    final sortedGroupIds = groupedByGroup.keys.toList()..sort();
+    final List<Widget> items = [];
+
+    for (var gId in sortedGroupIds) {
+      // Eğer "Tümü" seçiliyse (showGroupInHeader true) grup başlıklarını göster
+      if (showGroupInHeader && gId.isNotEmpty) {
+        items.add(
+          Padding(
+            padding: const EdgeInsets.only(top: 8, bottom: 8),
+            child: Text(
+              groupLabel(gId).toUpperCase(),
+              style: TextStyle(
+                color: Colors.amberAccent.withOpacity(0.8),
+                fontWeight: FontWeight.w900,
+                fontSize: 10,
+                letterSpacing: 1.2,
+              ),
+            ),
+          ),
+        );
+      }
+
+      // Grubun maçlarını ekle
+      for (var m in groupedByGroup[gId]!) {
+        items.add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: _MatchCard(
+              match: m,
+              teamLogoById: teamLogoById,
+              isAdmin: isAdmin,
+              onTap: () => onMatchTap(m),
+            ),
+          ),
+        );
+      }
+    }
+    return items;
   }
 }
 

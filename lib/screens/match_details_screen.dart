@@ -40,10 +40,8 @@ class _TeamInfo extends StatelessWidget {
 
   const _TeamInfo({required this.name, required this.logoUrl});
 
-  // AKILLI KISALTMA (20 KARAKTER KURALI)
   String _smartAbbreviate(String val) {
-    if (val.length <= 20) return val; // 20 karakter ve altıysa asla dokunma
-
+    if (val.length <= 20) return val;
     return val
         .replaceAll(RegExp(r'Masterlar(ı)?', caseSensitive: false), 'M.')
         .replaceAll(RegExp(r'Master', caseSensitive: false), 'M.')
@@ -56,11 +54,9 @@ class _TeamInfo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final displayName = _smartAbbreviate(name);
-
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // LOGO ÜSTTE (Doğru koleksiyondan gelen URL)
         WebSafeImage(
           url: logoUrl,
           width: 54,
@@ -69,11 +65,10 @@ class _TeamInfo extends StatelessWidget {
           fallbackIconSize: 26,
         ),
         const SizedBox(height: 12),
-        // İSİM ALTTA (Merkezlenmiş ve Kelime Koruma)
         Text(
           displayName,
           textAlign: TextAlign.center,
-          softWrap: true, // Kelimeyi bölmez (Arnavutk-öy yapmaz)
+          softWrap: true,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
@@ -118,13 +113,17 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
   @override
   Widget build(BuildContext context) {
     final m = widget.match;
-    final bool isUserAdmin = AppSession.of(context).value.isAdmin;
+    final session = AppSession.of(context).value;
 
-    // TÜM LOGOLARI TEAMS KOLEKSİYONUNDAN DİNLEYEN STREAM
+    // HATA DÜZELTİLDİ: managedTeamId yerine teamId kullanıldı
+    final bool isSuperAdmin = session.isAdmin;
+    final bool isTeamManager =
+        session.teamId == m.homeTeamId || session.teamId == m.awayTeamId;
+    final bool isAdminAccess = isSuperAdmin || isTeamManager;
+
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('teams').snapshots(),
       builder: (context, teamsSnap) {
-        // Logo Haritası Oluştur
         final Map<String, String> logoMap = {};
         if (teamsSnap.hasData) {
           for (var doc in teamsSnap.data!.docs) {
@@ -137,7 +136,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
         final awayLogo = logoMap[m.awayTeamId] ?? '';
 
         return DefaultTabController(
-          length: 2,
+          length: 3,
           child: Scaffold(
             appBar: AppBar(
               title: const Text(
@@ -146,7 +145,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
               ),
               centerTitle: true,
             ),
-            floatingActionButton: !isUserAdmin
+            floatingActionButton: !isSuperAdmin
                 ? null
                 : Row(
                     mainAxisSize: MainAxisSize.min,
@@ -184,7 +183,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
                   width: double.infinity,
                   margin: const EdgeInsets.all(16),
                   padding: const EdgeInsets.symmetric(
-                    vertical: 28,
+                    vertical: 24,
                     horizontal: 16,
                   ),
                   decoration: BoxDecoration(
@@ -194,13 +193,6 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
                       end: Alignment.bottomRight,
                     ),
                     borderRadius: BorderRadius.circular(28),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black26,
-                        blurRadius: 15,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
                   ),
                   child: Column(
                     children: [
@@ -208,15 +200,12 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Ev Sahibi (Logo ve İsim Doğru Kaynaktan)
                           Expanded(
                             child: _TeamInfo(
                               name: m.homeTeamName,
                               logoUrl: homeLogo,
                             ),
                           ),
-
-                          // Skor
                           Padding(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 16,
@@ -233,23 +222,17 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
                                   ),
                                 ),
                                 if (m.status == MatchStatus.live)
-                                  const Padding(
-                                    padding: EdgeInsets.only(top: 4),
-                                    child: Text(
-                                      "CANLI",
-                                      style: TextStyle(
-                                        color: Colors.amber,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 11,
-                                        letterSpacing: 1.2,
-                                      ),
+                                  const Text(
+                                    "CANLI",
+                                    style: TextStyle(
+                                      color: Colors.amber,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 11,
                                     ),
                                   ),
                               ],
                             ),
                           ),
-
-                          // Deplasman (Logo ve İsim Doğru Kaynaktan)
                           Expanded(
                             child: _TeamInfo(
                               name: m.awayTeamName,
@@ -258,16 +241,15 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 28),
-                      // ALT BİLGİ BANDI
+                      const SizedBox(height: 24),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                          vertical: 10,
+                          vertical: 8,
                           horizontal: 16,
                         ),
                         decoration: BoxDecoration(
                           color: Colors.black.withOpacity(0.25),
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(14),
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -284,7 +266,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 11,
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w700,
                               ),
                             ),
                             if ((m.pitchName ?? '').isNotEmpty) ...[
@@ -306,7 +288,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 11,
-                                    fontWeight: FontWeight.w800,
+                                    fontWeight: FontWeight.w700,
                                   ),
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -319,16 +301,26 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
                   ),
                 ),
                 const TabBar(
+                  labelStyle: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 13,
+                  ),
+                  unselectedLabelStyle: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
                   tabs: [
-                    Tab(text: 'Özet'),
-                    Tab(text: 'Olaylar'),
+                    Tab(text: 'Detay'),
+                    Tab(text: 'Kadrolar'),
+                    Tab(text: 'Önemli Anlar'),
                   ],
                 ),
                 Expanded(
                   child: TabBarView(
                     children: [
                       _SummaryTab(match: m),
-                      _LineupEventsTab(match: m, isAdmin: isUserAdmin),
+                      _LineupTab(match: m, isAdmin: isAdminAccess),
+                      _LineupEventsTab(match: m, isAdmin: isSuperAdmin),
                     ],
                   ),
                 ),
@@ -405,6 +397,8 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
   }
 }
 
+// --- TAB İÇERİKLERİ ---
+
 class _SummaryTab extends StatelessWidget {
   final MatchModel match;
   const _SummaryTab({required this.match});
@@ -422,7 +416,7 @@ class _SummaryTab extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         const Text(
-          'Maç özeti yakında burada olacak.',
+          'Bu maçın detaylı özeti ve saha bilgileri burada yer alacaktır.',
           style: TextStyle(color: Colors.white70),
         ),
       ],
@@ -458,10 +452,10 @@ class _YoutubePlayerSectionState extends State<_YoutubePlayerSection> {
   }
 }
 
-class _LineupEventsTab extends StatelessWidget {
+class _LineupTab extends StatelessWidget {
   final MatchModel match;
   final bool isAdmin;
-  const _LineupEventsTab({required this.match, required this.isAdmin});
+  const _LineupTab({required this.match, required this.isAdmin});
 
   void _showLineupChoice(BuildContext context) {
     showModalBottomSheet(
@@ -509,21 +503,118 @@ class _LineupEventsTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'Maç Olayları',
-              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+        if (isAdmin)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: ElevatedButton.icon(
+              onPressed: () => _showLineupChoice(context),
+              icon: const Icon(Icons.people),
+              label: const Text('Kadroları Düzenle'),
             ),
-            if (isAdmin)
-              TextButton.icon(
-                onPressed: () => _showLineupChoice(context),
-                icon: const Icon(Icons.people),
-                label: const Text("Kadroları Düzenle"),
-              ),
-          ],
+          ),
+        _TeamLineupSection(
+          teamName: match.homeTeamName,
+          lineup: match.homeLineup,
         ),
+        const Divider(height: 40, color: Colors.white10),
+        _TeamLineupSection(
+          teamName: match.awayTeamName,
+          lineup: match.awayLineup,
+        ),
+      ],
+    );
+  }
+}
+
+class _TeamLineupSection extends StatelessWidget {
+  final String teamName;
+  final List<dynamic>? lineup;
+  const _TeamLineupSection({required this.teamName, this.lineup});
+
+  @override
+  Widget build(BuildContext context) {
+    final starting =
+        lineup?.where((p) => p['isStarting'] == true).toList() ?? [];
+    final subs = lineup?.where((p) => p['isStarting'] == false).toList() ?? [];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          teamName,
+          style: const TextStyle(
+            fontWeight: FontWeight.w900,
+            fontSize: 16,
+            color: Colors.amber,
+          ),
+        ),
+        const SizedBox(height: 12),
+        const Text(
+          'İLK 11',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 12,
+            color: Colors.white54,
+          ),
+        ),
+        if (starting.isEmpty)
+          const Text(
+            'Kadro girilmedi',
+            style: TextStyle(color: Colors.white24, fontSize: 13),
+          ),
+        ...starting.map(
+          (p) => ListTile(
+            dense: true,
+            leading: Text(
+              '${p['number'] ?? ''}',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            title: Text(p['playerName'] ?? ''),
+          ),
+        ),
+        const SizedBox(height: 12),
+        const Text(
+          'YEDEKLER',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 12,
+            color: Colors.white54,
+          ),
+        ),
+        if (subs.isEmpty)
+          const Text(
+            'Yedek girilmedi',
+            style: TextStyle(color: Colors.white24, fontSize: 13),
+          ),
+        ...subs.map(
+          (p) => ListTile(
+            dense: true,
+            leading: Text(
+              '${p['number'] ?? ''}',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            title: Text(p['playerName'] ?? ''),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _LineupEventsTab extends StatelessWidget {
+  final MatchModel match;
+  final bool isAdmin;
+  const _LineupEventsTab({required this.match, required this.isAdmin});
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const Text(
+          'Maç Olayları',
+          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+        ),
+        const SizedBox(height: 10),
         StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance
               .collection('matches')
@@ -534,6 +625,13 @@ class _LineupEventsTab extends StatelessWidget {
           builder: (context, snap) {
             if (!snap.hasData)
               return const Center(child: CircularProgressIndicator());
+            if (snap.data!.docs.isEmpty)
+              return const Center(
+                child: Text(
+                  'Henüz olay yok.',
+                  style: TextStyle(color: Colors.white38),
+                ),
+              );
             return Column(
               children: snap.data!.docs
                   .map(
