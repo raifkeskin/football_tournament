@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // TextInputFormatter için gerekli
 import 'package:intl/intl.dart';
 
 import '../models/league.dart';
@@ -311,7 +312,7 @@ class _FixtureScreenState extends State<FixtureScreen> {
         labelText: label,
         labelStyle: const TextStyle(color: Colors.white70),
         filled: true,
-        fillColor: Colors.white.withOpacity(0.1),
+        fillColor: Colors.white.withValues(alpha: 0.10),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: const BorderSide(color: Colors.white24),
@@ -385,6 +386,7 @@ class _FixtureList extends StatelessWidget {
                 Text(
                   () {
                     final parts = k.split('|');
+                    // HATA DÜZELTİLDİ: dateKey yerine dateText kullanıldı
                     final dateText = parts[0] == '__NO_DATE__'
                         ? 'Tarih Belirlenmedi'
                         : dateStripText(parts[0]);
@@ -472,7 +474,6 @@ class _MatchCard extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           child: Row(
             children: [
-              // SAAT VE TAKVİM İKONU ALANI - DİKEY DÜZENLEME YAPILDI
               SizedBox(
                 width: 50,
                 child: Column(
@@ -485,11 +486,11 @@ class _MatchCard extends StatelessWidget {
                         icon: const Icon(
                           Icons.edit_calendar,
                           size: 22,
-                          color: Colors.white, // İKON RENGİ BEYAZ YAPILDI
+                          color: Colors.white,
                         ),
                         onPressed: () => _showEditPopup(context),
                       ),
-                    const SizedBox(height: 4), // İkon ve saat arasına boşluk
+                    const SizedBox(height: 4),
                     Text(
                       leftText,
                       style: TextStyle(
@@ -570,8 +571,9 @@ class _MatchCard extends StatelessWidget {
       ],
     );
   }
-void _showEditPopup(BuildContext context) async {
-    // 1. TARİHİ DD/MM/YYYY FORMATINA ÇEVİREREK AÇ (DB: 2026-04-18 -> Ekran: 18/04/2026)
+
+  void _showEditPopup(BuildContext context) async {
+    // DB Formatını (YYYY-MM-DD) -> GG/AA/YYYY'ye Çevir
     String initialDate = '';
     if (match.matchDate != null && match.matchDate!.contains('-')) {
       final p = match.matchDate!.split('-');
@@ -584,150 +586,201 @@ void _showEditPopup(BuildContext context) async {
     final tCtrl = TextEditingController(text: match.matchTime ?? '');
     String? selectedPitch = match.pitchName;
 
-    final pitchesSnap = await FirebaseFirestore.instance.collection('pitches').get();
-    final pitches = pitchesSnap.docs.map((d) => (d.data() as Map<String, dynamic>)['name'] as String).toList();
+    final pitchesSnap = await FirebaseFirestore.instance
+        .collection('pitches')
+        .get();
+    final pitches = pitchesSnap.docs
+        .map((d) => (d.data() as Map<String, dynamic>)['name'] as String)
+        .toList();
+
+    if (!context.mounted) return;
 
     showDialog(
       context: context,
       builder: (c) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           backgroundColor: const Color(0xFF1E293B),
-          title: const Text('Maçı Düzenle', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          content: SingleChildScrollView( // Klavye açıldığında taşmaması için
+          title: const Text(
+            'Maçı Düzenle',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+          content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // TARİH INPUT (Maskeleme yapıldı)
+                // TARİH INPUT
                 TextField(
                   controller: dCtrl,
                   keyboardType: TextInputType.number,
                   inputFormatters: [
                     FilteringTextInputFormatter.digitsOnly,
-                    _DateInputFormatter(), // Özel tarih maskesi
+                    _DateInputFormatter(),
                   ],
                   style: const TextStyle(color: Colors.white),
                   decoration: const InputDecoration(
                     labelText: 'Tarih (GG/AA/YYYY)',
-                    hintText: '18/04/2026',
                     labelStyle: TextStyle(color: Colors.white54),
-                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                    enabledBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(color: Colors.white24),
+                    ),
                   ),
                 ),
-                const SizedBox(height: 20), // Üst üste binmeyi engelleyen boşluk
-                // SAAT INPUT (Maskeleme yapıldı)
+                const SizedBox(
+                  height: 25,
+                ), // Üst üste binmeyi engellemek için boşluk artırıldı
+                // SAAT INPUT
                 TextField(
                   controller: tCtrl,
                   keyboardType: TextInputType.number,
                   inputFormatters: [
                     FilteringTextInputFormatter.digitsOnly,
-                    _TimeInputFormatter(), // Özel saat maskesi (Otomatik :)
+                    _TimeInputFormatter(),
                   ],
                   style: const TextStyle(color: Colors.white),
                   decoration: const InputDecoration(
                     labelText: 'Saat (SS:DD)',
-                    hintText: '20:00',
                     labelStyle: TextStyle(color: Colors.white54),
-                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                    enabledBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(color: Colors.white24),
+                    ),
                   ),
                 ),
-                const SizedBox(height: 25),
+                const SizedBox(height: 30),
                 DropdownButtonFormField<String>(
                   value: pitches.contains(selectedPitch) ? selectedPitch : null,
                   dropdownColor: const Color(0xFF0F172A),
                   decoration: const InputDecoration(
                     labelText: 'Stad Seçin',
                     labelStyle: TextStyle(color: Colors.white54),
-                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                    enabledBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(color: Colors.white24),
+                    ),
                   ),
-                  items: pitches.map((p) => DropdownMenuItem(value: p, child: Text(p, style: const TextStyle(color: Colors.white)))).toList(),
+                  items: pitches
+                      .map(
+                        (p) => DropdownMenuItem(
+                          value: p,
+                          child: Text(
+                            p,
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                        ),
+                      )
+                      .toList(),
                   onChanged: (val) => setDialogState(() => selectedPitch = val),
                 ),
               ],
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(c), child: const Text('İptal', style: TextStyle(color: Colors.white70))),
+            TextButton(
+              onPressed: () => Navigator.pop(c),
+              child: const Text(
+                'İptal',
+                style: TextStyle(color: Colors.white70),
+              ),
+            ),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blueAccent,
+              ),
               onPressed: () async {
-                final date = dCtrl.text;
-                final time = tCtrl.text;
+                final dateText = dCtrl.text;
+                final timeText = tCtrl.text;
 
-                // 2. DOĞRULAMA (VALIDATION)
-                if (date.length != 10) {
-                  _showError(context, 'Tarih formatı hatalı! (GG/AA/YYYY)');
+                // VALIDATION (Doğrulama)
+                if (dateText.length != 10) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Tarih formatı hatalı! (GG/AA/YYYY)'),
+                      backgroundColor: Colors.redAccent,
+                    ),
+                  );
                   return;
                 }
-                if (time.length != 5) {
-                  _showError(context, 'Saat formatı hatalı! (SS:DD)');
+                if (timeText.length != 5) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Saat formatı hatalı! (SS:DD)'),
+                      backgroundColor: Colors.redAccent,
+                    ),
+                  );
                   return;
                 }
 
-                try {
-                  // 3. DB FORMATINA ÇEVİR (18/04/2026 -> 2026-04-18)
-                  final parts = date.split('/');
-                  final dbDate = '${parts[2]}-${parts[1]}-${parts[0]}';
+                // Tekrar DB Formatına Çevir (GG/AA/YYYY -> YYYY-MM-DD)
+                final parts = dateText.split('/');
+                final dbDate = '${parts[2]}-${parts[1]}-${parts[0]}';
 
-                  await FirebaseFirestore.instance.collection('matches').doc(match.id).update({
-                    'matchDate': dbDate,
-                    'matchTime': time,
-                    'pitchName': selectedPitch,
-                  });
-                  Navigator.pop(c);
-                  _showSuccess(context, 'Maç güncellendi!');
-                } catch (e) {
-                  _showError(context, 'Güncelleme başarısız oldu.');
-                }
+                await FirebaseFirestore.instance
+                    .collection('matches')
+                    .doc(match.id)
+                    .update({
+                      'matchDate': dbDate,
+                      'matchTime': timeText,
+                      'pitchName': selectedPitch,
+                    });
+                if (context.mounted) Navigator.pop(c);
               },
-              child: const Text('Güncelle', style: TextStyle(color: Colors.white)),
+              child: const Text(
+                'Güncelle',
+                style: TextStyle(color: Colors.white),
+              ),
             ),
           ],
         ),
       ),
     );
   }
-
-  // Yardımcı Uyarı Metotları
-  void _showError(BuildContext context, String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.redAccent));
-  }
-  void _showSuccess(BuildContext context, String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.green));
-  }
 }
 
-// --- OTOMATİK FORMATLAYICILAR (DOSYANIN EN ALTINA EKLEYEBİLİRSİN) ---
+// --- OTOMATİK FORMATLAYICILAR ---
 
 class _DateInputFormatter extends TextInputFormatter {
   @override
-  TextEditingValue formatEditUpdate(TextEditingValue oldV, TextEditingValue newV) {
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldV,
+    TextEditingValue newV,
+  ) {
     var text = newV.text;
     if (newV.selection.baseOffset < oldV.selection.baseOffset) return newV;
     var buffer = StringBuffer();
     for (int i = 0; i < text.length; i++) {
       buffer.write(text[i]);
       var nonZeroIndex = i + 1;
-      if (nonZeroIndex % 2 == 0 && nonZeroIndex != text.length && nonZeroIndex < 5) buffer.write('/');
+      // 2. ve 4. rakamdan sonra / koy (GG/AA/YYYY)
+      if (nonZeroIndex % 2 == 0 &&
+          nonZeroIndex != text.length &&
+          nonZeroIndex < 5)
+        buffer.write('/');
     }
     var string = buffer.toString();
-    return newV.copyWith(text: string, selection: TextSelection.collapsed(offset: string.length));
+    return newV.copyWith(
+      text: string,
+      selection: TextSelection.collapsed(offset: string.length),
+    );
   }
 }
 
 class _TimeInputFormatter extends TextInputFormatter {
   @override
-  TextEditingValue formatEditUpdate(TextEditingValue oldV, TextEditingValue newV) {
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldV,
+    TextEditingValue newV,
+  ) {
     var text = newV.text;
     if (newV.selection.baseOffset < oldV.selection.baseOffset) return newV;
     var buffer = StringBuffer();
     for (int i = 0; i < text.length; i++) {
       buffer.write(text[i]);
       var nonZeroIndex = i + 1;
+      // 2. rakamdan sonra : koy (SS:DD)
       if (nonZeroIndex == 2 && nonZeroIndex != text.length) buffer.write(':');
     }
     var string = buffer.toString();
-    return newV.copyWith(text: string, selection: TextSelection.collapsed(offset: string.length));
+    return newV.copyWith(
+      text: string,
+      selection: TextSelection.collapsed(offset: string.length),
+    );
   }
-}
-
 }
