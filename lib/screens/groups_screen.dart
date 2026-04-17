@@ -90,8 +90,10 @@ class _GroupsScreenState extends State<GroupsScreen> {
                     borderRadius: BorderRadius.circular(14),
                     borderSide: const BorderSide(color: Colors.white54),
                   ),
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
                 );
               }
 
@@ -141,15 +143,27 @@ class _GroupsScreenState extends State<GroupsScreen> {
                     Expanded(
                       child: _selectedLeagueId == null
                           ? const SizedBox.shrink()
-                          : StreamBuilder<DocumentSnapshot>(
-                              stream: FirebaseFirestore.instance.collection('leagues').doc(_selectedLeagueId).snapshots(),
+                          : StreamBuilder<QuerySnapshot>(
+                              stream: FirebaseFirestore.instance
+                                  .collection('groups')
+                                  .where(
+                                    'tournamentId',
+                                    isEqualTo: _selectedLeagueId,
+                                  )
+                                  .snapshots(),
                               builder: (context, snapshot) {
-                                if (!snapshot.hasData || !snapshot.data!.exists) return const SizedBox.shrink();
-                                final data = snapshot.data!.data() as Map<String, dynamic>;
-                                final groups = (data['groups'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [];
+                                if (!snapshot.hasData) {
+                                  return const SizedBox.shrink();
+                                }
+                                final groupDocs = snapshot.data!.docs;
 
-                                if (_selectedGroupId != null && !groups.contains(_selectedGroupId)) {
-                                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                                if (_selectedGroupId != null &&
+                                    !groupDocs
+                                        .map((d) => d.id)
+                                        .contains(_selectedGroupId)) {
+                                  WidgetsBinding.instance.addPostFrameCallback((
+                                    _,
+                                  ) {
                                     if (!mounted) return;
                                     setState(() => _selectedGroupId = null);
                                   });
@@ -177,11 +191,16 @@ class _GroupsScreenState extends State<GroupsScreen> {
                                         ),
                                       ),
                                     ),
-                                    for (final g in groups)
+                                    for (final doc in groupDocs)
                                       DropdownMenuItem<String?>(
-                                        value: g,
+                                        value: doc.id,
                                         child: Text(
-                                          'Grup $g',
+                                          (doc.data()
+                                                  as Map<
+                                                    String,
+                                                    dynamic
+                                                  >)['name'] ??
+                                              'Grup',
                                           style: const TextStyle(
                                             fontWeight: FontWeight.w900,
                                           ),
@@ -208,15 +227,19 @@ class _GroupsScreenState extends State<GroupsScreen> {
                       style: TextStyle(color: Colors.white),
                     ),
                   )
-                : StreamBuilder<DocumentSnapshot>(
-                    stream: FirebaseFirestore.instance.collection('leagues').doc(_selectedLeagueId).snapshots(),
+                : StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('groups')
+                        .where('tournamentId', isEqualTo: _selectedLeagueId)
+                        .snapshots(),
                     builder: (context, snapshot) {
-                      if (!snapshot.hasData || !snapshot.data!.exists) return const Center(child: CircularProgressIndicator());
-                      
-                      final data = snapshot.data!.data() as Map<String, dynamic>;
-                      final allGroups = (data['groups'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [];
+                      if (!snapshot.hasData) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
 
-                      if (allGroups.isEmpty) {
+                      final allGroupDocs = snapshot.data!.docs;
+
+                      if (allGroupDocs.isEmpty) {
                         return const Center(
                           child: Text(
                             'Bu turnuvada henüz grup oluşturulmamış.',
@@ -225,20 +248,26 @@ class _GroupsScreenState extends State<GroupsScreen> {
                         );
                       }
 
-                      final displayedGroups = _selectedGroupId == null
-                          ? allGroups
-                          : allGroups.where((g) => g == _selectedGroupId).toList();
+                      final displayedGroupDocs = _selectedGroupId == null
+                          ? allGroupDocs
+                          : allGroupDocs
+                                .where((d) => d.id == _selectedGroupId)
+                                .toList();
 
                       return Transform.translate(
                         offset: const Offset(0, -24),
                         child: ListView.builder(
                           padding: const EdgeInsets.fromLTRB(0, 0, 0, 120),
-                          itemCount: displayedGroups.length,
+                          itemCount: displayedGroupDocs.length,
                           itemBuilder: (context, index) {
-                            final group = displayedGroups[index];
+                            final groupDoc = displayedGroupDocs[index];
+                            final groupData =
+                                groupDoc.data() as Map<String, dynamic>;
+                            final groupName = groupData['name'] ?? 'Grup';
                             return _GroupStandingsTable(
                               leagueId: _selectedLeagueId!,
-                              group: group,
+                              groupId: groupDoc.id,
+                              groupName: groupName,
                               databaseService: _databaseService,
                             );
                           },
@@ -255,12 +284,14 @@ class _GroupsScreenState extends State<GroupsScreen> {
 
 class _GroupStandingsTable extends StatelessWidget {
   final String leagueId;
-  final String group;
+  final String groupId;
+  final String groupName;
   final DatabaseService databaseService;
 
   const _GroupStandingsTable({
     required this.leagueId,
-    required this.group,
+    required this.groupId,
+    required this.groupName,
     required this.databaseService,
   });
 
@@ -289,178 +320,210 @@ class _GroupStandingsTable extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       child: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
-            .collection('matches')
-            .where('tournamentId', isEqualTo: leagueId)
-            .where('groupId', isEqualTo: group)
+            .collection('teams')
+            .where('groupId', isEqualTo: groupId)
             .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+        builder: (context, teamsSnapshot) {
+          if (teamsSnapshot.connectionState == ConnectionState.waiting) {
             return const Padding(
               padding: EdgeInsets.all(16),
               child: Center(child: CircularProgressIndicator()),
             );
           }
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+
+          final teamDocs = teamsSnapshot.data?.docs ?? [];
+          final standings = <String, Map<String, dynamic>>{};
+          final teamNames = <String, String>{};
+          final teamLogos = <String, String>{};
+
+          for (final teamDoc in teamDocs) {
+            final teamData = teamDoc.data() as Map<String, dynamic>;
+            final teamId = teamDoc.id;
+            final teamName = (teamData['name'] ?? '').toString();
+            final teamLogo = (teamData['logoUrl'] ?? '').toString();
+
+            teamNames[teamId] = teamName;
+            teamLogos[teamId] = teamLogo;
+            standings[teamId] = {
+              'P': 0,
+              'G': 0,
+              'B': 0,
+              'M': 0,
+              'AG': 0,
+              'YG': 0,
+              'AV': 0,
+              'Puan': 0,
+            };
+          }
+
+          if (standings.isEmpty) {
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Center(
                 child: Text(
-                  'Grup $group için henüz takım/maç verisi yok.',
+                  'Grup $groupName için henüz takım/maç verisi yok.',
                   style: const TextStyle(color: Colors.white),
                 ),
               ),
             );
           }
 
-          final matches = snapshot.data!.docs;
-          
-          final teamStats = <String, Map<String, dynamic>>{};
-          final teamNames = <String, String>{};
-          final teamLogos = <String, String>{};
-
-          void initTeam(String id, String name, String logoUrl) {
-            if (id.isEmpty) return;
-            teamNames[id] = name;
-            teamLogos[id] = logoUrl;
-            teamStats.putIfAbsent(id, () => {
-              'P': 0, 'G': 0, 'B': 0, 'M': 0, 'AG': 0, 'YG': 0, 'AV': 0, 'Puan': 0
-            });
-          }
-
-          for (final doc in matches) {
-            final m = doc.data() as Map<String, dynamic>;
-            final hId = (m['homeTeamId'] ?? '').toString();
-            final aId = (m['awayTeamId'] ?? '').toString();
-            initTeam(hId, (m['homeTeamName'] ?? '').toString(), (m['homeTeamLogoUrl'] ?? '').toString());
-            initTeam(aId, (m['awayTeamName'] ?? '').toString(), (m['awayTeamLogoUrl'] ?? '').toString());
-
-            if (_isCompleted(m)) {
-              final hS = _asInt(m['homeScore']);
-              final aS = _asInt(m['awayScore']);
-              
-              teamStats[hId]!['P'] = teamStats[hId]!['P']! + 1;
-              teamStats[aId]!['P'] = teamStats[aId]!['P']! + 1;
-              teamStats[hId]!['AG'] = teamStats[hId]!['AG']! + hS;
-              teamStats[hId]!['YG'] = teamStats[hId]!['YG']! + aS;
-              teamStats[aId]!['AG'] = teamStats[aId]!['AG']! + aS;
-              teamStats[aId]!['YG'] = teamStats[aId]!['YG']! + hS;
-
-              if (hS > aS) {
-                teamStats[hId]!['G'] = teamStats[hId]!['G']! + 1;
-                teamStats[hId]!['Puan'] = teamStats[hId]!['Puan']! + 3;
-                teamStats[aId]!['M'] = teamStats[aId]!['M']! + 1;
-              } else if (aS > hS) {
-                teamStats[aId]!['G'] = teamStats[aId]!['G']! + 1;
-                teamStats[aId]!['Puan'] = teamStats[aId]!['Puan']! + 3;
-                teamStats[hId]!['M'] = teamStats[hId]!['M']! + 1;
-              } else {
-                teamStats[hId]!['B'] = teamStats[hId]!['B']! + 1;
-                teamStats[aId]!['B'] = teamStats[aId]!['B']! + 1;
-                teamStats[hId]!['Puan'] = teamStats[hId]!['Puan']! + 1;
-                teamStats[aId]!['Puan'] = teamStats[aId]!['Puan']! + 1;
+          return StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('matches')
+                .where('leagueId', isEqualTo: leagueId)
+                .where('groupId', isEqualTo: groupId)
+                .snapshots(),
+            builder: (context, matchesSnapshot) {
+              if (matchesSnapshot.connectionState == ConnectionState.waiting) {
+                return const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Center(child: CircularProgressIndicator()),
+                );
               }
-            }
-          }
 
-          teamStats.forEach((k, v) {
-            v['AV'] = v['AG']! - v['YG']!;
-          });
+              if (matchesSnapshot.hasData) {
+                for (final matchDoc in matchesSnapshot.data!.docs) {
+                  final m = matchDoc.data() as Map<String, dynamic>;
+                  final hId = (m['homeTeamId'] ?? '').toString();
+                  final aId = (m['awayTeamId'] ?? '').toString();
 
-          final sortedTeamIds = teamStats.keys.toList()
-            ..sort((a, b) {
-              final sa = teamStats[a]!;
-              final sb = teamStats[b]!;
-              final pA = _asInt(sa['Puan']);
-              final pB = _asInt(sb['Puan']);
-              if (pB != pA) return pB.compareTo(pA);
-              final avA = _asInt(sa['AV']);
-              final avB = _asInt(sb['AV']);
-              if (avB != avA) return avB.compareTo(avA);
-              final agA = _asInt(sa['AG']);
-              final agB = _asInt(sb['AG']);
-              if (agB != agA) return agB.compareTo(agA);
-              return teamNames[a]!.toLowerCase().compareTo(teamNames[b]!.toLowerCase());
-            });
+                  if (_isCompleted(m) &&
+                      standings.containsKey(hId) &&
+                      standings.containsKey(aId)) {
+                    final hS = _asInt(m['homeScore']);
+                    final aS = _asInt(m['awayScore']);
 
-          Widget headerCell(
-            String text, {
-            required double width,
-            bool highlight = false,
-          }) {
-            return SizedBox(
-              width: width,
-              child: Center(
-                child: Text(
-                  text,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w900,
-                    color: highlight ? accentGreen : midText,
-                  ),
-                ),
-              ),
-            );
-          }
+                    standings[hId]!['P'] = standings[hId]!['P']! + 1;
+                    standings[aId]!['P'] = standings[aId]!['P']! + 1;
+                    standings[hId]!['AG'] = standings[hId]!['AG']! + hS;
+                    standings[hId]!['YG'] = standings[hId]!['YG']! + aS;
+                    standings[aId]!['AG'] = standings[aId]!['AG']! + aS;
+                    standings[aId]!['YG'] = standings[aId]!['YG']! + hS;
 
-          String groupLabel() {
-            final name = group.trim();
-            if (name.isEmpty) return 'GRUP';
-            final upper = name.toUpperCase();
-            return upper.contains('GRUP') ? upper : '$upper GRUBU';
-          }
+                    if (hS > aS) {
+                      standings[hId]!['G'] = standings[hId]!['G']! + 1;
+                      standings[hId]!['Puan'] =
+                          standings[hId]!['Puan']! + 3;
+                      standings[aId]!['M'] = standings[aId]!['M']! + 1;
+                    } else if (aS > hS) {
+                      standings[aId]!['G'] = standings[aId]!['G']! + 1;
+                      standings[aId]!['Puan'] =
+                          standings[aId]!['Puan']! + 3;
+                      standings[hId]!['M'] = standings[hId]!['M']! + 1;
+                    } else {
+                      standings[hId]!['B'] = standings[hId]!['B']! + 1;
+                      standings[aId]!['B'] = standings[aId]!['B']! + 1;
+                      standings[hId]!['Puan'] =
+                          standings[hId]!['Puan']! + 1;
+                      standings[aId]!['Puan'] =
+                          standings[aId]!['Puan']! + 1;
+                    }
+                  }
+                }
+              }
 
-          return Container(
-            decoration: BoxDecoration(
-              color: tableBg,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.emoji_events_rounded,
-                      color: trophy,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 10),
-                    const Text(
-                      'PUAN DURUMU',
+              standings.forEach((k, v) {
+                v['AV'] = v['AG']! - v['YG']!;
+              });
+
+              final sortedTeamIds = standings.keys.toList()
+                ..sort((a, b) {
+                  final sa = standings[a]!;
+                  final sb = standings[b]!;
+                  final pA = _asInt(sa['Puan']);
+                  final pB = _asInt(sb['Puan']);
+                  if (pB != pA) return pB.compareTo(pA);
+                  final avA = _asInt(sa['AV']);
+                  final avB = _asInt(sb['AV']);
+                  if (avB != avA) return avB.compareTo(avA);
+                  final agA = _asInt(sa['AG']);
+                  final agB = _asInt(sb['AG']);
+                  if (agB != agA) return agB.compareTo(agA);
+                  return teamNames[a]!.toLowerCase().compareTo(
+                    teamNames[b]!.toLowerCase(),
+                  );
+                });
+
+              Widget headerCell(
+                String text, {
+                required double width,
+                bool highlight = false,
+              }) {
+                return SizedBox(
+                  width: width,
+                  child: Center(
+                    child: Text(
+                      text,
                       style: TextStyle(
+                        fontSize: 11,
                         fontWeight: FontWeight.w900,
-                        color: Colors.white,
-                        fontSize: 16,
+                        color: highlight ? accentGreen : midText,
                       ),
                     ),
-                    const Spacer(),
-                    Text(
-                      groupLabel(),
-                      style: const TextStyle(
-                        color: midText,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
+                  ),
+                );
+              }
+
+              String groupLabel() {
+                final name = groupName.trim();
+                if (name.isEmpty) return 'GRUP';
+                final upper = name.toUpperCase();
+                return upper.contains('GRUP') ? upper : '$upper GRUBU';
+              }
+
+              return Container(
+                decoration: BoxDecoration(
+                  color: tableBg,
+                  borderRadius: BorderRadius.circular(20),
                 ),
-                const SizedBox(height: 10),
-                Divider(color: midText.withValues(alpha: 0.35), height: 1),
-                const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: bgDark.withValues(alpha: 0.35),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: midText.withValues(alpha: 0.18),
+                padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.emoji_events_rounded,
+                          color: trophy,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 10),
+                        const Text(
+                          'PUAN DURUMU',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            color: Colors.white,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const Spacer(),
+                        Text(
+                          groupLabel(),
+                          style: const TextStyle(
+                            color: midText,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  child: Row(
+                    const SizedBox(height: 10),
+                    Divider(
+                        color: midText.withValues(alpha: 0.35), height: 1),
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: bgDark.withValues(alpha: 0.35),
+                        borderRadius: BorderRadius.circular(14),
+                        border:
+                            Border.all(color: midText.withValues(alpha: 0.18)),
+                      ),
+                      child: Row(
                         children: [
                           const SizedBox(
                             width: 20,
@@ -508,7 +571,7 @@ class _GroupStandingsTable extends StatelessWidget {
                       ),
                       itemBuilder: (context, i) {
                         final tId = sortedTeamIds[i];
-                        final stats = teamStats[tId]!;
+                        final stats = standings[tId]!;
                         final tName = teamNames[tId] ?? 'Takım';
                         final tLogo = teamLogos[tId] ?? '';
                         return _StandingsRow(
@@ -537,6 +600,8 @@ class _GroupStandingsTable extends StatelessWidget {
                   ],
                 ),
               );
+            },
+          );
         },
       ),
     );
@@ -614,8 +679,9 @@ class _StandingsRow extends StatelessWidget {
     final url = _normalizeUrl(teamLogo);
     final isElite = index < 4;
     final isClass = totalCount >= 4 && index >= (totalCount - 4);
-    final stripeColor =
-        isElite ? accentGreen : (isClass ? classOrange : Colors.transparent);
+    final stripeColor = isElite
+        ? accentGreen
+        : (isClass ? classOrange : Colors.transparent);
 
     return InkWell(
       onTap: onTap,
