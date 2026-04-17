@@ -80,7 +80,6 @@ class _HomeScreenState extends State<HomeScreen> {
       initialDate: _selectedDate,
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
-      locale: const Locale('tr', 'TR'),
     );
     if (picked != null) {
       _setSelectedDate(picked);
@@ -110,7 +109,8 @@ class _HomeScreenState extends State<HomeScreen> {
           if (allLeagues.isEmpty)
             return const Center(child: Text('Henüz aktif turnuva yok.'));
 
-          if (!_didAutoSelectDefaultLeague) {
+          if (!_didAutoSelectDefaultLeague ||
+              !allLeagues.any((l) => l.id == _activeLeagueId)) {
             final def = allLeagues.any((l) => l.isDefault)
                 ? allLeagues.firstWhere((l) => l.isDefault).id
                 : allLeagues.first.id;
@@ -123,231 +123,112 @@ class _HomeScreenState extends State<HomeScreen> {
             orElse: () => allLeagues.first,
           );
 
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          return Stack(
             children: [
-              Container(
-                color: cs.primaryContainer,
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              value: _activeLeagueId,
-                              dropdownColor: cs.surfaceContainerHighest,
-                              icon: Icon(
-                                Icons.keyboard_arrow_down_rounded,
-                                color: cs.onPrimaryContainer,
+              // 1. KATMAN: YEŞİL ARKA PLAN (OVAL GEÇİŞİN ARKASI)
+              Container(color: cs.primaryContainer, height: 250),
+
+              // 2. KATMAN: ANA LİSTE (OVAL HATLARI OLAN KISIM)
+              Column(
+                children: [
+                  const SizedBox(
+                    height: 185,
+                  ), // Başlıkların ezilmemesi için ayarlandı
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).scaffoldBackgroundColor,
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(24),
+                        ),
+                      ),
+                      child: _buildMatchList(context, currentLeague),
+                    ),
+                  ),
+                ],
+              ),
+
+              // 3. KATMAN: ETKİLEŞİMLİ PANEL (HEADER BUTONLARI)
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(16, 44, 16, 20),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value: _activeLeagueId,
+                                dropdownColor: cs.surfaceContainerHighest,
+                                icon: Icon(
+                                  Icons.keyboard_arrow_down_rounded,
+                                  color: cs.onPrimaryContainer,
+                                ),
+                                style: TextStyle(
+                                  color: cs.onPrimaryContainer,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 18,
+                                ),
+                                items: allLeagues
+                                    .map(
+                                      (l) => DropdownMenuItem(
+                                        value: l.id,
+                                        child: Text(l.name),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: (val) =>
+                                    setState(() => _activeLeagueId = val),
                               ),
-                              style: TextStyle(
-                                color: cs.onPrimaryContainer,
-                                fontWeight: FontWeight.w900,
-                                fontSize: 18,
-                              ),
-                              items: allLeagues
-                                  .map(
-                                    (l) => DropdownMenuItem(
-                                      value: l.id,
-                                      child: Text(l.name),
-                                    ),
-                                  )
-                                  .toList(),
-                              onChanged: (val) =>
-                                  setState(() => _activeLeagueId = val),
                             ),
                           ),
-                        ),
-                        IconButton(
-                          onPressed: _openDatePicker,
-                          icon: Icon(
-                            Icons.calendar_month_outlined,
-                            color: cs.onPrimaryContainer,
+                          IconButton(
+                            onPressed: _openDatePicker,
+                            icon: Icon(
+                              Icons.calendar_month_outlined,
+                              color: cs.onPrimaryContainer,
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        IconButton(
-                          onPressed: () => _setSelectedDate(
-                            _selectedDate.subtract(const Duration(days: 1)),
-                          ),
-                          icon: Icon(
-                            Icons.chevron_left_rounded,
-                            color: cs.onPrimaryContainer,
-                          ),
-                        ),
-                        Expanded(
-                          child: _TarihSeridi(
-                            tarihler: _tarihler,
-                            seciliIndeks: _seciliIndeks,
-                            bugunMu: _bugunMu,
-                            onSec: _tarihSec,
-                            vurguRenk: cs.primary,
-                            haftaKisa: _haftaKisa,
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: () => _setSelectedDate(
-                            _selectedDate.add(const Duration(days: 1)),
-                          ),
-                          icon: Icon(
-                            Icons.chevron_right_rounded,
-                            color: cs.onPrimaryContainer,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: Transform.translate(
-                  offset: const Offset(0, -20),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).scaffoldBackgroundColor,
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(24),
+                        ],
                       ),
-                    ),
-                    padding: const EdgeInsets.only(top: 18),
-                    child: StreamBuilder<QuerySnapshot>(
-                      // LOGO TAMİRİ: Teams koleksiyonunu dinleyip logo map'i oluşturuyoruz
-                      stream: FirebaseFirestore.instance
-                          .collection('teams')
-                          .snapshots(),
-                      builder: (context, teamSnapshot) {
-                        final Map<String, String> logoMap = {};
-                        if (teamSnapshot.hasData) {
-                          for (var doc in teamSnapshot.data!.docs) {
-                            final data = doc.data() as Map<String, dynamic>;
-                            logoMap[doc.id] = data['logoUrl']?.toString() ?? '';
-                          }
-                        }
-
-                        return StreamBuilder<List<MatchModel>>(
-                          // DÜZELTME: Named parameters (leagueId ve date) kullanıldı
-                          stream: _databaseService.getMatchesByDate(
-                            leagueId: _activeLeagueId!,
-                            date: _selectedDate,
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          IconButton(
+                            onPressed: () => _setSelectedDate(
+                              _selectedDate.subtract(const Duration(days: 1)),
+                            ),
+                            icon: Icon(
+                              Icons.chevron_left_rounded,
+                              color: cs.onPrimaryContainer,
+                            ),
                           ),
-                          builder: (context, matchSnapshot) {
-                            if (matchSnapshot.connectionState ==
-                                ConnectionState.waiting)
-                              return const Center(
-                                child: CircularProgressIndicator(),
-                              );
-
-                            final matches = matchSnapshot.data ?? [];
-                            if (matches.isEmpty) {
-                              return const Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.event_busy_rounded,
-                                      size: 64,
-                                      color: Colors.white24,
-                                    ),
-                                    SizedBox(height: 16),
-                                    Text(
-                                      'Bu tarihte maç bulunamadı.',
-                                      style: TextStyle(
-                                        color: Colors.white24,
-                                        fontSize: 16,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }
-
-                            final Map<String, List<MatchModel>> sectionMap = {};
-                            for (var m in matches) {
-                              final gId = m.groupId ?? 'default';
-                              (sectionMap[gId] ??= []).add(m);
-                            }
-
-                            return ListView(
-                              padding: const EdgeInsets.fromLTRB(
-                                16,
-                                0,
-                                16,
-                                120,
-                              ),
-                              children: sectionMap.keys.map((groupId) {
-                                // GRUP İSMİ DİNAMİK YANSITMA
-                                final String groupLabel = groupId == 'default'
-                                    ? 'GENEL'
-                                    : (groupId.toUpperCase().contains('GRUP')
-                                          ? groupId.toUpperCase()
-                                          : '$groupId GRUBU');
-
-                                return Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    InkWell(
-                                      onTap: () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            // DÜZELTME: leagueId -> initialLeagueId
-                                            builder: (context) => GroupsScreen(
-                                              initialLeagueId: _activeLeagueId!,
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 12,
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            const Icon(
-                                              Icons.shield_outlined,
-                                              color: Color(0xFFFBBF24),
-                                              size: 18,
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Text(
-                                              '${currentLeague.name} - $groupLabel',
-                                              style: const TextStyle(
-                                                color: Color(0xFFFBBF24),
-                                                fontWeight: FontWeight.w900,
-                                                fontSize: 14,
-                                              ),
-                                            ),
-                                            const Spacer(),
-                                            const Icon(
-                                              Icons.chevron_right,
-                                              color: Color(0xFFFBBF24),
-                                              size: 16,
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                    ...sectionMap[groupId]!.map(
-                                      (m) => _MatchCard(
-                                        match: m,
-                                        homeLogo: logoMap[m.homeTeamId] ?? '',
-                                        awayLogo: logoMap[m.awayTeamId] ?? '',
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              }).toList(),
-                            );
-                          },
-                        );
-                      },
-                    ),
+                          Expanded(
+                            child: _TarihSeridi(
+                              tarihler: _tarihler,
+                              seciliIndeks: _seciliIndeks,
+                              bugunMu: _bugunMu,
+                              onSec: _tarihSec,
+                              vurguRenk: cs.primary,
+                              haftaKisa: _haftaKisa,
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => _setSelectedDate(
+                              _selectedDate.add(const Duration(days: 1)),
+                            ),
+                            icon: Icon(
+                              Icons.chevron_right_rounded,
+                              color: cs.onPrimaryContainer,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -355,6 +236,119 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         },
       ),
+    );
+  }
+
+  Widget _buildMatchList(BuildContext context, League currentLeague) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('teams').snapshots(),
+      builder: (context, teamSnapshot) {
+        final Map<String, String> logoMap = {};
+        if (teamSnapshot.hasData) {
+          for (var doc in teamSnapshot.data!.docs) {
+            final data = doc.data() as Map<String, dynamic>;
+            logoMap[doc.id] = data['logoUrl']?.toString() ?? '';
+          }
+        }
+
+        return StreamBuilder<List<MatchModel>>(
+          stream: _databaseService.getMatchesByDate(
+            leagueId: _activeLeagueId!,
+            date: _selectedDate,
+          ),
+          builder: (context, matchSnapshot) {
+            if (matchSnapshot.connectionState == ConnectionState.waiting)
+              return const Center(child: CircularProgressIndicator());
+
+            final matches = matchSnapshot.data ?? [];
+            if (matches.isEmpty) {
+              return const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.event_busy_rounded,
+                      size: 64,
+                      color: Colors.white24,
+                    ),
+                    SizedBox(height: 16),
+                    Text(
+                      'Bu tarihte maç bulunamadı.',
+                      style: TextStyle(color: Colors.white24, fontSize: 16),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            final Map<String, List<MatchModel>> sectionMap = {};
+            for (var m in matches) {
+              final gId = m.groupId ?? 'default';
+              (sectionMap[gId] ??= []).add(m);
+            }
+
+            return ListView(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
+              children: sectionMap.keys.map((groupId) {
+                final String groupLabel = groupId == 'default'
+                    ? 'GENEL'
+                    : (groupId.toUpperCase().contains('GRUP')
+                          ? groupId.toUpperCase()
+                          : '$groupId GRUBU');
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    InkWell(
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              GroupsScreen(initialLeagueId: _activeLeagueId!),
+                        ),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.shield_outlined,
+                              color: Color(0xFFFBBF24),
+                              size: 18,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '${currentLeague.name} - $groupLabel',
+                              style: const TextStyle(
+                                color: Color(0xFFFBBF24),
+                                fontWeight: FontWeight.w900,
+                                fontSize: 14,
+                              ),
+                            ),
+                            const Spacer(),
+                            const Icon(
+                              Icons.chevron_right,
+                              color: Color(0xFFFBBF24),
+                              size: 16,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    ...sectionMap[groupId]!.map(
+                      (m) => _MatchCard(
+                        match: m,
+                        homeLogo: logoMap[m.homeTeamId] ?? '',
+                        awayLogo: logoMap[m.awayTeamId] ?? '',
+                      ),
+                    ),
+                  ],
+                );
+              }).toList(),
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -373,29 +367,32 @@ class _MatchCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isAdmin = AppSession.of(context).value.isAdmin;
-    final isFinished = match.status == MatchStatus.finished;
-    final isLive = match.status == MatchStatus.live;
     final hs = match.homeScore;
     final as = match.awayScore;
-    final showScore = isFinished || isLive || hs != 0 || as != 0;
-    final homeWin = isFinished && hs > as;
-    final awayWin = isFinished && as > hs;
 
-    Widget scoreBox({required int score, bool highlight = false}) {
+    // Skorun gösterilip gösterilmeyeceği kontrolü
+    final showScore =
+        match.status == MatchStatus.finished ||
+        match.status == MatchStatus.live ||
+        hs != 0 ||
+        as != 0;
+
+    // PANEL YEŞİLİ SKOR KUTUCUĞU
+    Widget scoreBox(int score) {
       return Container(
-        width: 32,
-        height: 32,
+        width: 30,
+        height: 30,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: highlight ? cs.primary : cs.surfaceContainerHigh,
+          color: cs.primaryContainer, // Paneldeki Forest Green tonu
           borderRadius: BorderRadius.circular(8),
         ),
         child: Text(
           showScore ? '$score' : '-',
           style: TextStyle(
-            color: highlight ? cs.onPrimary : cs.onSurface,
+            color: cs.onPrimaryContainer, // Yeşil üzerindeki okunaklı renk
             fontWeight: FontWeight.w900,
-            fontSize: 16,
+            fontSize: 14,
           ),
         ),
       );
@@ -403,24 +400,22 @@ class _MatchCard extends StatelessWidget {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: InkWell(
         onTap: () => Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) =>
-                MatchDetailsScreen(match: match, isAdmin: isAdmin),
+            builder: (_) => MatchDetailsScreen(match: match, isAdmin: isAdmin),
           ),
         ),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Row(
             children: [
+              // SAAT VE CANLI DURUMU
               SizedBox(
                 width: 50,
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
                       match.matchTime ?? '--:--',
@@ -430,21 +425,11 @@ class _MatchCard extends StatelessWidget {
                         fontSize: 12,
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    if (isLive)
+                    if (match.status == MatchStatus.live)
                       Text(
                         'CANLI',
                         style: TextStyle(
                           color: cs.primary,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 10,
-                        ),
-                      )
-                    else if (isFinished)
-                      Text(
-                        'MS',
-                        style: TextStyle(
-                          color: cs.onSurfaceVariant,
                           fontWeight: FontWeight.w900,
                           fontSize: 10,
                         ),
@@ -455,46 +440,14 @@ class _MatchCard extends StatelessWidget {
               const SizedBox(width: 8),
               Container(width: 1, height: 40, color: cs.outlineVariant),
               const SizedBox(width: 12),
+
+              // TAKIMLAR VE SKOR KUTUCUKLARI
               Expanded(
                 child: Column(
                   children: [
-                    Row(
-                      children: [
-                        _KucukLogo(logoUrl: homeLogo, size: 20),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            match.homeTeamName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ),
-                        scoreBox(score: hs, highlight: homeWin || !showScore),
-                      ],
-                    ),
+                    _row(match.homeTeamName, homeLogo, scoreBox(hs)),
                     const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        _KucukLogo(logoUrl: awayLogo, size: 20),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            match.awayTeamName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ),
-                        scoreBox(score: as, highlight: awayWin || !showScore),
-                      ],
-                    ),
+                    _row(match.awayTeamName, awayLogo, scoreBox(as)),
                   ],
                 ),
               ),
@@ -502,6 +455,25 @@ class _MatchCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  // Satır yapısını skorWidget'ını kabul edecek şekilde güncelledik
+  Widget _row(String name, String logo, Widget scoreWidget) {
+    return Row(
+      children: [
+        _KucukLogo(logoUrl: logo, size: 20),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
+          ),
+        ),
+        scoreWidget, // Artık burada yeşil kutucuk görünecek
+      ],
     );
   }
 }
