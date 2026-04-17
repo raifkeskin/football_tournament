@@ -43,3 +43,20 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Flutter/Dart çıktıları
+build/
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+
+# Android çıktıları
+.gradle/
+local.properties
+gen/
+
+# iOS çıktıları
+*.mode1v3
+*.mode2v3
+*.moved-aside
