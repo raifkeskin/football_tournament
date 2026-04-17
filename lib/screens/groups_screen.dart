@@ -403,21 +403,17 @@ class _GroupStandingsTable extends StatelessWidget {
 
                     if (hS > aS) {
                       standings[hId]!['G'] = standings[hId]!['G']! + 1;
-                      standings[hId]!['Puan'] =
-                          standings[hId]!['Puan']! + 3;
+                      standings[hId]!['Puan'] = standings[hId]!['Puan']! + 3;
                       standings[aId]!['M'] = standings[aId]!['M']! + 1;
                     } else if (aS > hS) {
                       standings[aId]!['G'] = standings[aId]!['G']! + 1;
-                      standings[aId]!['Puan'] =
-                          standings[aId]!['Puan']! + 3;
+                      standings[aId]!['Puan'] = standings[aId]!['Puan']! + 3;
                       standings[hId]!['M'] = standings[hId]!['M']! + 1;
                     } else {
                       standings[hId]!['B'] = standings[hId]!['B']! + 1;
                       standings[aId]!['B'] = standings[aId]!['B']! + 1;
-                      standings[hId]!['Puan'] =
-                          standings[hId]!['Puan']! + 1;
-                      standings[aId]!['Puan'] =
-                          standings[aId]!['Puan']! + 1;
+                      standings[hId]!['Puan'] = standings[hId]!['Puan']! + 1;
+                      standings[aId]!['Puan'] = standings[aId]!['Puan']! + 1;
                     }
                   }
                 }
@@ -509,8 +505,7 @@ class _GroupStandingsTable extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 10),
-                    Divider(
-                        color: midText.withValues(alpha: 0.35), height: 1),
+                    Divider(color: midText.withValues(alpha: 0.35), height: 1),
                     const SizedBox(height: 10),
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -520,8 +515,9 @@ class _GroupStandingsTable extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: bgDark.withValues(alpha: 0.35),
                         borderRadius: BorderRadius.circular(14),
-                        border:
-                            Border.all(color: midText.withValues(alpha: 0.18)),
+                        border: Border.all(
+                          color: midText.withValues(alpha: 0.18),
+                        ),
                       ),
                       child: Row(
                         children: [
