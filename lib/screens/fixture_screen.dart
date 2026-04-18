@@ -522,7 +522,19 @@ class _MatchCard extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
         onTap: onTap,
-        onLongPress: () => _showQuickScoreDialog(context),
+        onLongPress: () {
+          final role = AppSession.of(context).value.role;
+          if (role != 'super_admin') {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Bu işlem için Super Admin yetkisi gereklidir.'),
+                duration: Duration(seconds: 2),
+              ),
+            );
+            return;
+          }
+          _showQuickScoreDialog(context);
+        },
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           child: Row(
