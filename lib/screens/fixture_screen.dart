@@ -626,8 +626,12 @@ class _MatchCard extends StatelessWidget {
   }
 
   void _showQuickScoreDialog(BuildContext context) {
-    final homeScoreCtrl = TextEditingController(text: match.homeScore.toString());
-    final awayScoreCtrl = TextEditingController(text: match.awayScore.toString());
+    final homeScoreCtrl = TextEditingController(
+      text: match.homeScore.toString(),
+    );
+    final awayScoreCtrl = TextEditingController(
+      text: match.awayScore.toString(),
+    );
 
     showDialog(
       context: context,
@@ -681,7 +685,10 @@ class _MatchCard extends StatelessWidget {
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: Color(0xFF10B981), width: 2),
+                        borderSide: const BorderSide(
+                          color: Color(0xFF10B981),
+                          width: 2,
+                        ),
                       ),
                     ),
                   ),
@@ -689,7 +696,11 @@ class _MatchCard extends StatelessWidget {
                 const SizedBox(width: 12),
                 const Text(
                   '-',
-                  style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -711,7 +722,10 @@ class _MatchCard extends StatelessWidget {
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: Color(0xFF10B981), width: 2),
+                        borderSide: const BorderSide(
+                          color: Color(0xFF10B981),
+                          width: 2,
+                        ),
                       ),
                     ),
                   ),
@@ -729,7 +743,9 @@ class _MatchCard extends StatelessWidget {
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF10B981),
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             onPressed: () async {
               final homeScore = int.tryParse(homeScoreCtrl.text) ?? 0;
@@ -777,7 +793,10 @@ class _MatchCard extends StatelessWidget {
             },
             child: const Text(
               'Kaydet',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],
