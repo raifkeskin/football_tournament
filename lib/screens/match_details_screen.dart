@@ -620,7 +620,7 @@ class _LineupEventsTab extends StatelessWidget {
               .collection('matches')
               .doc(match.id)
               .collection('events')
-              .orderBy('minute', descending: true)
+              .orderBy('minute', descending: false)
               .snapshots(),
           builder: (context, snap) {
             if (!snap.hasData)

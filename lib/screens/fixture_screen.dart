@@ -522,6 +522,7 @@ class _MatchCard extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
         onTap: onTap,
+        onLongPress: () => _showQuickScoreDialog(context),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           child: Row(
@@ -621,6 +622,166 @@ class _MatchCard extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  void _showQuickScoreDialog(BuildContext context) {
+    final homeScoreCtrl = TextEditingController(text: match.homeScore.toString());
+    final awayScoreCtrl = TextEditingController(text: match.awayScore.toString());
+
+    showDialog(
+      context: context,
+      builder: (c) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        titlePadding: EdgeInsets.zero,
+        contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
+        title: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          decoration: const BoxDecoration(
+            color: Color(0xFF064E3B),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+          ),
+          child: const Text(
+            'Hızlı Skor Girişi',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w900,
+              fontSize: 18,
+            ),
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '${match.homeTeamName} - ${match.awayTeamName}',
+              style: const TextStyle(color: Colors.white70, fontSize: 14),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: homeScoreCtrl,
+                    keyboardType: TextInputType.number,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                    ),
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: Colors.white.withValues(alpha: 0.05),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: Colors.white24),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: Color(0xFF10B981), width: 2),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Text(
+                  '-',
+                  style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: awayScoreCtrl,
+                    keyboardType: TextInputType.number,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                    ),
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: Colors.white.withValues(alpha: 0.05),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: Colors.white24),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: Color(0xFF10B981), width: 2),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c),
+            child: const Text('İptal', style: TextStyle(color: Colors.white70)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF10B981),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () async {
+              final homeScore = int.tryParse(homeScoreCtrl.text) ?? 0;
+              final awayScore = int.tryParse(awayScoreCtrl.text) ?? 0;
+
+              // Match'i güncelle
+              await FirebaseFirestore.instance
+                  .collection('matches')
+                  .doc(match.id)
+                  .update({
+                    'homeScore': homeScore,
+                    'awayScore': awayScore,
+                    'status': 'finished',
+                    'isCompleted': true,
+                  });
+
+              // Otomatik event kayıtları ekle (0', 30', 60')
+              final eventsRef = FirebaseFirestore.instance
+                  .collection('matches')
+                  .doc(match.id)
+                  .collection('events');
+
+              await eventsRef.add({
+                'minute': 0,
+                'title': 'Maç Başladı',
+                'type': 'status',
+                'timestamp': FieldValue.serverTimestamp(),
+              });
+
+              await eventsRef.add({
+                'minute': 30,
+                'title': 'İlk Yarı Sonucu',
+                'type': 'status',
+                'timestamp': FieldValue.serverTimestamp(),
+              });
+
+              await eventsRef.add({
+                'minute': 60,
+                'title': 'Maç Sonucu',
+                'type': 'status',
+                'timestamp': FieldValue.serverTimestamp(),
+              });
+
+              if (c.mounted) Navigator.pop(c);
+            },
+            child: const Text(
+              'Kaydet',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
