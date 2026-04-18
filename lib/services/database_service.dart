@@ -284,8 +284,11 @@ class DatabaseService {
 
   Stream<List<GroupModel>> getGroups(String leagueId) {
     return _db
-        .collection('groups')
-        .where('tournamentId', isEqualTo: leagueId)
+        .collection('matches')
+        .where(
+          'tournamentId',
+          isEqualTo: leagueId,
+        ) // tournamentId olarak güncellendi
         .snapshots()
         .map(
           (snap) => snap.docs
@@ -1035,6 +1038,50 @@ class DatabaseService {
     if (match.status == MatchStatus.finished) {
       await commitPlayerStatsForCompletedMatch(matchId: match.id);
     }
+  }
+
+  // Otomatik İlk Yarı Skoru Hesaplama
+  Future<void> recalculateHalfTimeScore(String matchId) async {
+    final matchDoc = await _db.collection('matches').doc(matchId).get();
+    if (!matchDoc.exists) return;
+
+    final matchData = matchDoc.data() as Map<String, dynamic>;
+    final homeTeamId = (matchData['homeTeamId'] ?? '').toString();
+    final awayTeamId = (matchData['awayTeamId'] ?? '').toString();
+
+    if (homeTeamId.isEmpty || awayTeamId.isEmpty) return;
+
+    // Events'den golleri al (minute <= 30)
+    final eventsSnap = await _db
+        .collection('matches')
+        .doc(matchId)
+        .collection('events')
+        .get();
+
+    int homeGoals = 0;
+    int awayGoals = 0;
+
+    for (final eventDoc in eventsSnap.docs) {
+      final eventData = eventDoc.data();
+      final type = (eventData['type'] ?? '').toString().toLowerCase();
+      final minute = (eventData['minute'] as num?)?.toInt() ?? 100;
+      final scoringTeamId = (eventData['teamId'] ?? '').toString();
+
+      // Gol ise ve ilk yarı (minute <= 30) ise say
+      if ((type == 'goal' || type == 'gol') && minute <= 30) {
+        if (scoringTeamId == homeTeamId) {
+          homeGoals++;
+        } else if (scoringTeamId == awayTeamId) {
+          awayGoals++;
+        }
+      }
+    }
+
+    // halfTimeHomeScore ve halfTimeAwayScore güncelle
+    await _db.collection('matches').doc(matchId).update({
+      'halfTimeHomeScore': homeGoals,
+      'halfTimeAwayScore': awayGoals,
+    });
   }
 
   Future<void> updateMatchYoutubeUrl({
