@@ -636,6 +636,9 @@ class _MatchCard extends StatelessWidget {
 
     final dCtrl = TextEditingController(text: initialDate);
     final tCtrl = TextEditingController(text: match.matchTime ?? '');
+    final dateFocus = FocusNode();
+    final timeFocus = FocusNode();
+
     String? selectedPitch = match.pitchName;
 
     final pitchesSnap = await FirebaseFirestore.instance
@@ -644,6 +647,19 @@ class _MatchCard extends StatelessWidget {
     final pitches = pitchesSnap.docs
         .map((d) => (d.data() as Map<String, dynamic>)['name'] as String)
         .toList();
+
+    // Tek bir stad varsa otomatik seç
+    if (pitches.length == 1) {
+      selectedPitch = pitches.first;
+    }
+
+    // Tarih tamam olduğunda otomatik saat field'ine geç
+    dCtrl.addListener(() {
+      if (dCtrl.text.length == 10) {
+        // DD/MM/YYYY = 10 karakter
+        timeFocus.requestFocus();
+      }
+    });
 
     if (!context.mounted) return;
 
@@ -663,11 +679,9 @@ class _MatchCard extends StatelessWidget {
                 // TARİH INPUT
                 TextField(
                   controller: dCtrl,
+                  focusNode: dateFocus,
                   keyboardType: TextInputType.number,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    _DateInputFormatter(),
-                  ],
+                  inputFormatters: [_DateInputFormatter()],
                   style: const TextStyle(color: Colors.white),
                   decoration: const InputDecoration(
                     labelText: 'Tarih (GG/AA/YYYY)',
@@ -683,11 +697,9 @@ class _MatchCard extends StatelessWidget {
                 // SAAT INPUT
                 TextField(
                   controller: tCtrl,
+                  focusNode: timeFocus,
                   keyboardType: TextInputType.number,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    _TimeInputFormatter(),
-                  ],
+                  inputFormatters: [_TimeInputFormatter()],
                   style: const TextStyle(color: Colors.white),
                   decoration: const InputDecoration(
                     labelText: 'Saat (SS:DD)',
@@ -772,7 +784,13 @@ class _MatchCard extends StatelessWidget {
                       'matchTime': timeText,
                       'pitchName': selectedPitch,
                     });
-                if (context.mounted) Navigator.pop(c);
+                if (context.mounted) {
+                  dateFocus.dispose();
+                  timeFocus.dispose();
+                  dCtrl.dispose();
+                  tCtrl.dispose();
+                  Navigator.pop(c);
+                }
               },
               child: const Text(
                 'Güncelle',
@@ -791,25 +809,34 @@ class _MatchCard extends StatelessWidget {
 class _DateInputFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(
-    TextEditingValue oldV,
-    TextEditingValue newV,
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
   ) {
-    var text = newV.text;
-    if (newV.selection.baseOffset < oldV.selection.baseOffset) return newV;
-    var buffer = StringBuffer();
-    for (int i = 0; i < text.length; i++) {
-      buffer.write(text[i]);
-      var nonZeroIndex = i + 1;
-      // 2. ve 4. rakamdan sonra / koy (GG/AA/YYYY)
-      if (nonZeroIndex % 2 == 0 &&
-          nonZeroIndex != text.length &&
-          nonZeroIndex < 5)
-        buffer.write('/');
+    // Silme işlemini izin ver
+    if (newValue.text.isEmpty) return newValue;
+    if (newValue.text.length < oldValue.text.length) return newValue;
+
+    // Sadece rakamları al
+    String digitsOnly = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+
+    // Max 8 rakam (DD/MM/YYYY)
+    if (digitsOnly.length > 8) {
+      digitsOnly = digitsOnly.substring(0, 8);
     }
-    var string = buffer.toString();
-    return newV.copyWith(
-      text: string,
-      selection: TextSelection.collapsed(offset: string.length),
+
+    // Formatla
+    String formatted = '';
+    for (int i = 0; i < digitsOnly.length; i++) {
+      formatted += digitsOnly[i];
+      // 2. ve 4. rakamdan sonra / ekle
+      if (i == 1 || i == 3) {
+        formatted += '/';
+      }
+    }
+
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
     );
   }
 }
@@ -817,22 +844,26 @@ class _DateInputFormatter extends TextInputFormatter {
 class _TimeInputFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(
-    TextEditingValue oldV,
-    TextEditingValue newV,
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
   ) {
-    var text = newV.text;
-    if (newV.selection.baseOffset < oldV.selection.baseOffset) return newV;
-    var buffer = StringBuffer();
-    for (int i = 0; i < text.length; i++) {
-      buffer.write(text[i]);
-      var nonZeroIndex = i + 1;
-      // 2. rakamdan sonra : koy (SS:DD)
-      if (nonZeroIndex == 2 && nonZeroIndex != text.length) buffer.write(':');
+    if (newValue.text.length < oldValue.text.length)
+      return newValue; // Silme işlemi
+
+    String cleanText = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (cleanText.length > 4)
+      cleanText = cleanText.substring(0, 4); // Max 4 rakam
+
+    StringBuffer buffer = StringBuffer();
+    for (int i = 0; i < cleanText.length; i++) {
+      buffer.write(cleanText[i]);
+      if (i == 1) buffer.write(':'); // 2. rakamdan sonra anında : ekle
     }
-    var string = buffer.toString();
-    return newV.copyWith(
-      text: string,
-      selection: TextSelection.collapsed(offset: string.length),
+
+    String finalString = buffer.toString();
+    return TextEditingValue(
+      text: finalString,
+      selection: TextSelection.collapsed(offset: finalString.length),
     );
   }
 }
