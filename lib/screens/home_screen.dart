@@ -91,150 +91,206 @@ class _HomeScreenState extends State<HomeScreen> {
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
-      body: StreamBuilder<QuerySnapshot>(
-        stream: _databaseService.getLeagues(),
-        builder: (context, leagueSnapshot) {
-          if (!leagueSnapshot.hasData)
-            return const Center(child: CircularProgressIndicator());
-
-          final isAdmin = AppSession.of(context).value.isAdmin;
-          final allLeagues = leagueSnapshot.data!.docs
-              .map((doc) {
-                final data = doc.data() as Map<String, dynamic>;
-                return League.fromMap({...data, 'id': doc.id});
-              })
-              .where((l) => isAdmin || l.isActive)
-              .toList();
-
-          if (allLeagues.isEmpty)
-            return const Center(child: Text('Henüz aktif turnuva yok.'));
-
-          if (!_didAutoSelectDefaultLeague ||
-              !allLeagues.any((l) => l.id == _activeLeagueId)) {
-            final def = allLeagues.any((l) => l.isDefault)
-                ? allLeagues.firstWhere((l) => l.isDefault).id
-                : allLeagues.first.id;
-            _activeLeagueId = def;
-            _didAutoSelectDefaultLeague = true;
-          }
-
-          final currentLeague = allLeagues.firstWhere(
-            (l) => l.id == _activeLeagueId,
-            orElse: () => allLeagues.first,
-          );
-
-          return Stack(
-            children: [
-              // 1. KATMAN: YEŞİL ARKA PLAN (OVAL GEÇİŞİN ARKASI)
-              Container(color: cs.primaryContainer, height: 250),
-
-              // 2. KATMAN: ANA LİSTE (OVAL HATLARI OLAN KISIM)
-              Column(
-                children: [
-                  const SizedBox(
-                    height: 185,
-                  ), // Başlıkların ezilmemesi için ayarlandı
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).scaffoldBackgroundColor,
-                        borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(24),
-                        ),
-                      ),
-                      child: _buildMatchList(context, currentLeague),
-                    ),
-                  ),
-                ],
-              ),
-
-              // 3. KATMAN: ETKİLEŞİMLİ PANEL (HEADER BUTONLARI)
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: Container(
-                  padding: const EdgeInsets.fromLTRB(16, 44, 16, 20),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: DropdownButtonHideUnderline(
-                              child: DropdownButton<String>(
-                                value: _activeLeagueId,
-                                dropdownColor: cs.surfaceContainerHighest,
-                                icon: Icon(
-                                  Icons.keyboard_arrow_down_rounded,
-                                  color: cs.onPrimaryContainer,
-                                ),
-                                style: TextStyle(
-                                  color: cs.onPrimaryContainer,
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 18,
-                                ),
-                                items: allLeagues
-                                    .map(
-                                      (l) => DropdownMenuItem(
-                                        value: l.id,
-                                        child: Text(l.name),
-                                      ),
-                                    )
-                                    .toList(),
-                                onChanged: (val) =>
-                                    setState(() => _activeLeagueId = val),
-                              ),
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: _openDatePicker,
-                            icon: Icon(
-                              Icons.calendar_month_outlined,
-                              color: cs.onPrimaryContainer,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          IconButton(
-                            onPressed: () => _setSelectedDate(
-                              _selectedDate.subtract(const Duration(days: 1)),
-                            ),
-                            icon: Icon(
-                              Icons.chevron_left_rounded,
-                              color: cs.onPrimaryContainer,
-                            ),
-                          ),
-                          Expanded(
-                            child: _TarihSeridi(
-                              tarihler: _tarihler,
-                              seciliIndeks: _seciliIndeks,
-                              bugunMu: _bugunMu,
-                              onSec: _tarihSec,
-                              vurguRenk: cs.primary,
-                              haftaKisa: _haftaKisa,
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: () => _setSelectedDate(
-                              _selectedDate.add(const Duration(days: 1)),
-                            ),
-                            icon: Icon(
-                              Icons.chevron_right_rounded,
-                              color: cs.onPrimaryContainer,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: Image.asset(
+              'assets/anasayfa.jpg',
+              fit: BoxFit.cover,
+            ),
+          ),
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    const Color(0xFF0F172A).withOpacity(0.6),
+                    const Color(0xFF0F172A).withOpacity(0.95),
+                  ],
                 ),
               ),
-            ],
-          );
-        },
+            ),
+          ),
+          Positioned.fill(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: _databaseService.getLeagues(),
+              builder: (context, leagueSnapshot) {
+                if (!leagueSnapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                final isAdmin = AppSession.of(context).value.isAdmin;
+                final allLeagues = leagueSnapshot.data!.docs
+                    .map((doc) {
+                      final data = doc.data() as Map<String, dynamic>;
+                      return League.fromMap({...data, 'id': doc.id});
+                    })
+                    .where((l) => isAdmin || l.isActive)
+                    .toList();
+
+                if (allLeagues.isEmpty) {
+                  return const Center(child: Text('Henüz aktif turnuva yok.'));
+                }
+
+                if (!_didAutoSelectDefaultLeague ||
+                    !allLeagues.any((l) => l.id == _activeLeagueId)) {
+                  final def = allLeagues.any((l) => l.isDefault)
+                      ? allLeagues.firstWhere((l) => l.isDefault).id
+                      : allLeagues.first.id;
+                  _activeLeagueId = def;
+                  _didAutoSelectDefaultLeague = true;
+                }
+
+                final currentLeague = allLeagues.firstWhere(
+                  (l) => l.id == _activeLeagueId,
+                  orElse: () => allLeagues.first,
+                );
+
+                return Stack(
+                  children: [
+                    // 1. KATMAN: YEŞİL ARKA PLAN (OVAL GEÇİŞİN ARKASI)
+                    Container(
+                      height: 250,
+                      decoration: BoxDecoration(
+                        color: cs.primaryContainer,
+                        image: const DecorationImage(
+                          image: AssetImage('assets/cim.jpg'),
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      foregroundDecoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                          colors: [
+                            const Color(0xFF064E3B).withOpacity(0.95),
+                            const Color(0xFF064E3B).withOpacity(0.6),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // 2. KATMAN: ANA LİSTE (OVAL HATLARI OLAN KISIM)
+                    Column(
+                      children: [
+                        const SizedBox(
+                          height: 185,
+                        ), // Başlıkların ezilmemesi için ayarlandı
+                        Expanded(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0F172A).withOpacity(0.30),
+                              borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(24),
+                              ),
+                            ),
+                            child: _buildMatchList(context, currentLeague),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    // 3. KATMAN: ETKİLEŞİMLİ PANEL (HEADER BUTONLARI)
+                    Positioned(
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      child: Container(
+                        padding: const EdgeInsets.fromLTRB(16, 44, 16, 20),
+                        child: Column(
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: DropdownButtonHideUnderline(
+                                    child: DropdownButton<String>(
+                                      value: _activeLeagueId,
+                                      dropdownColor: cs.surfaceContainerHighest,
+                                      icon: Icon(
+                                        Icons.keyboard_arrow_down_rounded,
+                                        color: cs.onPrimaryContainer,
+                                      ),
+                                      style: TextStyle(
+                                        color: cs.onPrimaryContainer,
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 18,
+                                        shadows: const [
+                                          Shadow(
+                                            color: Colors.black87,
+                                            blurRadius: 4,
+                                            offset: Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      items: allLeagues
+                                          .map(
+                                            (l) => DropdownMenuItem(
+                                              value: l.id,
+                                              child: Text(l.name),
+                                            ),
+                                          )
+                                          .toList(),
+                                      onChanged: (val) =>
+                                          setState(() => _activeLeagueId = val),
+                                    ),
+                                  ),
+                                ),
+                                IconButton(
+                                  onPressed: _openDatePicker,
+                                  icon: Icon(
+                                    Icons.calendar_month_outlined,
+                                    color: cs.onPrimaryContainer,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                IconButton(
+                                  onPressed: () => _setSelectedDate(
+                                    _selectedDate.subtract(
+                                      const Duration(days: 1),
+                                    ),
+                                  ),
+                                  icon: Icon(
+                                    Icons.chevron_left_rounded,
+                                    color: cs.onPrimaryContainer,
+                                  ),
+                                ),
+                                Expanded(
+                                  child: _TarihSeridi(
+                                    tarihler: _tarihler,
+                                    seciliIndeks: _seciliIndeks,
+                                    bugunMu: _bugunMu,
+                                    onSec: _tarihSec,
+                                    vurguRenk: cs.primary,
+                                    haftaKisa: _haftaKisa,
+                                  ),
+                                ),
+                                IconButton(
+                                  onPressed: () => _setSelectedDate(
+                                    _selectedDate.add(const Duration(days: 1)),
+                                  ),
+                                  icon: Icon(
+                                    Icons.chevron_right_rounded,
+                                    color: cs.onPrimaryContainer,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -287,9 +343,16 @@ class _HomeScreenState extends State<HomeScreen> {
               (sectionMap[gId] ??= []).add(m);
             }
 
+            final sortedGroupIds = sectionMap.keys.toList()
+              ..sort((a, b) {
+                if (a == 'default') return 1;
+                if (b == 'default') return -1;
+                return a.toUpperCase().compareTo(b.toUpperCase());
+              });
+
             return ListView(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
-              children: sectionMap.keys.map((groupId) {
+              children: sortedGroupIds.map((groupId) {
                 final String groupLabel = groupId == 'default'
                     ? 'GENEL'
                     : (groupId.toUpperCase().contains('GRUP')
@@ -369,6 +432,7 @@ class _MatchCard extends StatelessWidget {
     final isAdmin = AppSession.of(context).value.isAdmin;
     final hs = match.homeScore;
     final as = match.awayScore;
+    final timeText = (match.matchTime ?? '').trim();
 
     // Skorun gösterilip gösterilmeyeceği kontrolü
     final showScore =
@@ -398,9 +462,63 @@ class _MatchCard extends StatelessWidget {
       );
     }
 
+    Widget? statusUnderTime() {
+      switch (match.status) {
+        case MatchStatus.notStarted:
+          return null;
+        case MatchStatus.finished:
+          return const Text(
+            'MS',
+            style: TextStyle(
+              color: Color(0xFF10B981),
+              fontWeight: FontWeight.w900,
+              fontSize: 10,
+            ),
+          );
+        case MatchStatus.halftime:
+          return const Text(
+            'İY',
+            style: TextStyle(
+              color: Colors.redAccent,
+              fontWeight: FontWeight.w900,
+              fontSize: 10,
+            ),
+          );
+        case MatchStatus.live:
+          final m = match.minute;
+          return Text(
+            m == null ? "CANLI" : "$m'",
+            style: const TextStyle(
+              color: Colors.redAccent,
+              fontWeight: FontWeight.w900,
+              fontSize: 10,
+            ),
+          );
+        case MatchStatus.cancelled:
+          return const Text(
+            'IPT',
+            style: TextStyle(
+              color: Colors.white70,
+              fontWeight: FontWeight.w900,
+              fontSize: 10,
+            ),
+          );
+        case MatchStatus.postponed:
+          return const Text(
+            'ERT',
+            style: TextStyle(
+              color: Colors.white70,
+              fontWeight: FontWeight.w900,
+              fontSize: 10,
+            ),
+          );
+      }
+    }
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      color: const Color(0xFF1E293B).withOpacity(0.78),
       child: InkWell(
         onTap: () => Navigator.push(
           context,
@@ -418,27 +536,25 @@ class _MatchCard extends StatelessWidget {
                 child: Column(
                   children: [
                     Text(
-                      match.matchTime ?? '--:--',
+                      match.status == MatchStatus.notStarted && timeText.isEmpty
+                          ? ''
+                          : (timeText.isEmpty ? '--:--' : timeText),
                       style: TextStyle(
                         color: cs.onSurfaceVariant,
                         fontWeight: FontWeight.w900,
                         fontSize: 12,
                       ),
                     ),
-                    if (match.status == MatchStatus.live)
-                      Text(
-                        'CANLI',
-                        style: TextStyle(
-                          color: cs.primary,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 10,
-                        ),
-                      ),
+                    if (statusUnderTime() != null) statusUnderTime()!,
                   ],
                 ),
               ),
               const SizedBox(width: 8),
-              Container(width: 1, height: 40, color: cs.outlineVariant),
+              Container(
+                width: 1,
+                height: 40,
+                color: cs.outlineVariant.withOpacity(0.35),
+              ),
               const SizedBox(width: 12),
 
               // TAKIMLAR VE SKOR KUTUCUKLARI
@@ -537,6 +653,13 @@ class _TarihSeridi extends StatelessWidget {
                         fontSize: 10,
                         color: secili ? Colors.white : Colors.white60,
                         fontWeight: FontWeight.bold,
+                        shadows: const [
+                          Shadow(
+                            color: Colors.black87,
+                            blurRadius: 4,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -546,6 +669,13 @@ class _TarihSeridi extends StatelessWidget {
                         fontSize: 14,
                         color: Colors.white,
                         fontWeight: FontWeight.w900,
+                        shadows: [
+                          Shadow(
+                            color: Colors.black87,
+                            blurRadius: 4,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
                       ),
                     ),
                   ],

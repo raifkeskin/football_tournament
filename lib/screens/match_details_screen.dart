@@ -1,12 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'dart:io';
-import 'package:flutter/foundation.dart';
+import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 import '../models/match.dart';
 import '../widgets/web_safe_image.dart';
-import '../services/database_service.dart';
 import '../services/app_session.dart';
 import 'admin_match_event_screen.dart';
 import 'admin_match_lineup_screen.dart';
@@ -75,6 +72,13 @@ class _TeamInfo extends StatelessWidget {
             color: Colors.white,
             fontWeight: FontWeight.w900,
             fontSize: displayName.length > 15 ? 11 : 13,
+            shadows: const [
+              Shadow(
+                color: Colors.black,
+                blurRadius: 10,
+                offset: Offset(0, 2),
+              ),
+            ],
           ),
         ),
       ],
@@ -138,12 +142,16 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
         return DefaultTabController(
           length: 3,
           child: Scaffold(
+            extendBodyBehindAppBar: true,
             appBar: AppBar(
               title: const Text(
                 'Maç Detayı',
                 style: TextStyle(fontWeight: FontWeight.w900),
               ),
               centerTitle: true,
+              backgroundColor: Colors.transparent,
+              surfaceTintColor: Colors.transparent,
+              elevation: 0,
             ),
             floatingActionButton: !isSuperAdmin
                 ? null
@@ -178,127 +186,162 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
                   ),
             body: Column(
               children: [
-                // ÜST PANEL
-                Container(
-                  width: double.infinity,
-                  margin: const EdgeInsets.all(16),
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 24,
-                    horizontal: 16,
-                  ),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF064E3B), Color(0xFF065F46)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
+                Stack(
+                  children: [
+                    Positioned.fill(
+                      child: Image.asset(
+                        'assets/anasayfa.jpg',
+                        fit: BoxFit.cover,
+                      ),
                     ),
-                    borderRadius: BorderRadius.circular(28),
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: _TeamInfo(
-                              name: m.homeTeamName,
-                              logoUrl: homeLogo,
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 8,
-                            ),
-                            child: Column(
+                    Positioned.fill(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.3),
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: EdgeInsets.only(
+                        top: MediaQuery.of(context).padding.top + (kToolbarHeight - 16),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  "${m.homeScore} - ${m.awayScore}",
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 38,
+                                Expanded(
+                                  child: _TeamInfo(
+                                    name: m.homeTeamName,
+                                    logoUrl: homeLogo,
                                   ),
                                 ),
-                                if (m.status == MatchStatus.live)
-                                  const Text(
-                                    "CANLI",
-                                    style: TextStyle(
-                                      color: Colors.amber,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 11,
-                                    ),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 8,
                                   ),
+                                  child: Column(
+                                    children: [
+                                      Text(
+                                        "${m.homeScore} - ${m.awayScore}",
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 38,
+                                          shadows: [
+                                            Shadow(
+                                              color: Colors.black,
+                                              blurRadius: 10,
+                                              offset: Offset(0, 2),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      if (m.status == MatchStatus.live)
+                                        const Text(
+                                          "CANLI",
+                                          style: TextStyle(
+                                            color: Colors.amber,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 11,
+                                            shadows: [
+                                              Shadow(
+                                                color: Colors.black,
+                                                blurRadius: 10,
+                                                offset: Offset(0, 2),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                Expanded(
+                                  child: _TeamInfo(
+                                    name: m.awayTeamName,
+                                    logoUrl: awayLogo,
+                                  ),
+                                ),
                               ],
                             ),
-                          ),
-                          Expanded(
-                            child: _TeamInfo(
-                              name: m.awayTeamName,
-                              logoUrl: awayLogo,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 24),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 8,
-                          horizontal: 16,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.25),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.access_time_filled_rounded,
-                              size: 14,
-                              color: Colors.white70,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              "${_formatDate(m.matchDate ?? '')}  |  ${m.matchTime}",
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            if ((m.pitchName ?? '').isNotEmpty) ...[
-                              const SizedBox(width: 12),
-                              const Text(
-                                "|",
-                                style: TextStyle(color: Colors.white24),
-                              ),
-                              const SizedBox(width: 12),
-                              const Icon(
-                                Icons.location_on_rounded,
-                                size: 14,
-                                color: Colors.white70,
-                              ),
-                              const SizedBox(width: 4),
-                              Flexible(
-                                child: Text(
-                                  m.pitchName!,
+                            const SizedBox(height: 24),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.access_time_filled_rounded,
+                                  size: 14,
+                                  color: Colors.white70,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  "${_formatDate(m.matchDate ?? '')}  |  ${m.matchTime}",
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 11,
                                     fontWeight: FontWeight.w700,
+                                    shadows: [
+                                      Shadow(
+                                        color: Colors.black,
+                                        blurRadius: 10,
+                                        offset: Offset(0, 2),
+                                      ),
+                                    ],
                                   ),
-                                  overflow: TextOverflow.ellipsis,
                                 ),
-                              ),
-                            ],
+                                if ((m.pitchName ?? '').isNotEmpty) ...[
+                                  const SizedBox(width: 12),
+                                  const Text(
+                                    "|",
+                                    style: TextStyle(
+                                      color: Colors.white24,
+                                      shadows: [
+                                        Shadow(
+                                          color: Colors.black,
+                                          blurRadius: 10,
+                                          offset: Offset(0, 2),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  const Icon(
+                                    Icons.location_on_rounded,
+                                    size: 14,
+                                    color: Colors.white70,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Flexible(
+                                    child: Text(
+                                      m.pitchName!,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        shadows: [
+                                          Shadow(
+                                            color: Colors.black,
+                                            blurRadius: 10,
+                                            offset: Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
                           ],
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
                 const TabBar(
                   labelStyle: TextStyle(
@@ -316,12 +359,18 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
                   ],
                 ),
                 Expanded(
-                  child: TabBarView(
-                    children: [
-                      _SummaryTab(match: m),
-                      _LineupTab(match: m, isAdmin: isAdminAccess),
-                      _LineupEventsTab(match: m, isAdmin: isSuperAdmin),
-                    ],
+                  child: Container(
+                    color: Theme.of(context).scaffoldBackgroundColor,
+                    child: TabBarView(
+                      children: [
+                        _SummaryTab(match: m),
+                        _LineupTab(match: m, isAdmin: isAdminAccess),
+                        _LineupEventsTab(
+                          match: m,
+                          isAdmin: isSuperAdmin,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
