@@ -321,7 +321,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
                                       m.pitchName!,
                                       style: const TextStyle(
                                         color: Colors.white,
-                                        fontSize: 11,
+                                        fontSize: 20,
                                         fontWeight: FontWeight.w700,
                                         shadows: [
                                           Shadow(
