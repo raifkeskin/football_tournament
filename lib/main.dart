@@ -156,16 +156,37 @@ class _MyAppState extends State<MyApp> {
           useMaterial3: true,
           brightness: Brightness.dark,
           scaffoldBackgroundColor: _bgDark,
-          textTheme: GoogleFonts.interTextTheme().apply(
-            bodyColor: _text,
-            displayColor: _text,
-          ),
+          textTheme: (() {
+            final base = GoogleFonts.interTextTheme().apply(
+              bodyColor: _text,
+              displayColor: _text,
+            );
+            TextStyle? asBatangas(TextStyle? s) {
+              if (s == null) return null;
+              return s.copyWith(
+                fontFamily: 'Batangas',
+                fontWeight: FontWeight.w900,
+              );
+            }
+
+            return base.copyWith(
+              displayLarge: asBatangas(base.displayLarge),
+              displayMedium: asBatangas(base.displayMedium),
+              displaySmall: asBatangas(base.displaySmall),
+              headlineLarge: asBatangas(base.headlineLarge),
+              headlineMedium: asBatangas(base.headlineMedium),
+              headlineSmall: asBatangas(base.headlineSmall),
+              titleLarge: asBatangas(base.titleLarge),
+              titleMedium: asBatangas(base.titleMedium),
+            );
+          })(),
           appBarTheme: AppBarTheme(
             backgroundColor: _headerForest,
             foregroundColor: _text,
-            titleTextStyle: GoogleFonts.inter(
+            titleTextStyle: const TextStyle(
               color: _text,
-              fontWeight: FontWeight.w800,
+              fontFamily: 'Batangas',
+              fontWeight: FontWeight.w900,
               fontSize: 18,
             ),
           ),

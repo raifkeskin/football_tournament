@@ -103,8 +103,9 @@ class MatchDetailsScreen extends StatefulWidget {
 
 class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
   String _formatDate(String dateStr) {
-    if (dateStr.isEmpty || dateStr == '__NO_DATE__')
+    if (dateStr.isEmpty || dateStr == '__NO_DATE__') {
       return 'Tarih Belirlenmedi';
+    }
     try {
       final p = dateStr.split('-');
       if (p.length != 3) return dateStr;
@@ -321,7 +322,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
                                       m.pitchName!,
                                       style: const TextStyle(
                                         color: Colors.white,
-                                        fontSize: 20,
+                                        fontSize: 11,
                                         fontWeight: FontWeight.w700,
                                         shadows: [
                                           Shadow(
@@ -672,15 +673,17 @@ class _LineupEventsTab extends StatelessWidget {
               .orderBy('minute', descending: false)
               .snapshots(),
           builder: (context, snap) {
-            if (!snap.hasData)
+            if (!snap.hasData) {
               return const Center(child: CircularProgressIndicator());
-            if (snap.data!.docs.isEmpty)
+            }
+            if (snap.data!.docs.isEmpty) {
               return const Center(
                 child: Text(
                   'Henüz olay yok.',
                   style: TextStyle(color: Colors.white38),
                 ),
               );
+            }
             return Column(
               children: snap.data!.docs
                   .map(
