@@ -31,10 +31,11 @@ class _AdminDataToolsScreenState extends State<AdminDataToolsScreen> {
     if (v == null) return null;
     if (v is Timestamp) return v.toDate().toIso8601String();
     if (v is DateTime) return v.toIso8601String();
-    if (v is GeoPoint)
+    if (v is GeoPoint) {
       return {
         '_geo': [v.latitude, v.longitude],
       };
+    }
     if (v is DocumentReference) return {'_ref': v.path};
     if (v is List) return v.map(_jsonify).toList();
     if (v is Map) {

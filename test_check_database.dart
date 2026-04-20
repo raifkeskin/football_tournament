@@ -57,10 +57,10 @@ Future<void> checkDatabaseMatches() async {
       print('  HomeScore: ${data['homeScore'] ?? "UYARI: YOK"}');
       print('  AwayScore: ${data['awayScore'] ?? "UYARI: YOK"}');
       print(
-        '  Score.fullTime.home: ${data?['score']?['fullTime']?['home'] ?? "YOK"}',
+        '  Score.fullTime.home: ${data['score']?['fullTime']?['home'] ?? "YOK"}',
       );
       print(
-        '  Score.fullTime.away: ${data?['score']?['fullTime']?['away'] ?? "YOK"}',
+        '  Score.fullTime.away: ${data['score']?['fullTime']?['away'] ?? "YOK"}',
       );
     }
 

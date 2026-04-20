@@ -77,8 +77,9 @@ class _FixtureScreenState extends State<FixtureScreen> {
           return StreamBuilder<QuerySnapshot>(
             stream: _db.getLeagues(),
             builder: (context, leaguesSnap) {
-              if (!leaguesSnap.hasData)
+              if (!leaguesSnap.hasData) {
                 return const Center(child: CircularProgressIndicator());
+              }
 
               final leagues =
                   leaguesSnap.data!.docs
@@ -94,8 +95,9 @@ class _FixtureScreenState extends State<FixtureScreen> {
                           a.name.toLowerCase().compareTo(b.name.toLowerCase()),
                     );
 
-              if (leagues.isEmpty)
+              if (leagues.isEmpty) {
                 return const Center(child: Text('Turnuva bulunamadı.'));
+              }
 
               _leagueId ??= leagues.any((l) => l.isDefault)
                   ? (leagues.where((l) => l.isDefault).first.id)
@@ -149,10 +151,11 @@ class _FixtureScreenState extends State<FixtureScreen> {
                               ),
                         builder: (context, matchesSnap) {
                           if (matchesSnap.connectionState ==
-                              ConnectionState.waiting)
+                              ConnectionState.waiting) {
                             return const Center(
                               child: CircularProgressIndicator(),
                             );
+                          }
 
                           final matches = (matchesSnap.data ?? [])
                             ..sort((a, b) {
@@ -311,7 +314,7 @@ class _FixtureScreenState extends State<FixtureScreen> {
     Function(dynamic) onChanged,
   ) {
     return DropdownButtonFormField(
-      value: value,
+      initialValue: value,
       isExpanded: true,
       dropdownColor: const Color(0xFF1E293B),
       style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
@@ -837,7 +840,7 @@ class _MatchCard extends StatelessWidget {
         .collection('pitches')
         .get();
     final pitches = pitchesSnap.docs
-        .map((d) => (d.data() as Map<String, dynamic>)['name'] as String)
+        .map((d) => (d.data())['name'] as String)
         .toList();
 
     // Tek bir stad varsa otomatik seç
@@ -903,7 +906,7 @@ class _MatchCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 30),
                 DropdownButtonFormField<String>(
-                  value: pitches.contains(selectedPitch) ? selectedPitch : null,
+                  initialValue: pitches.contains(selectedPitch) ? selectedPitch : null,
                   dropdownColor: const Color(0xFF0F172A),
                   decoration: const InputDecoration(
                     labelText: 'Stad Seçin',
@@ -1039,12 +1042,14 @@ class _TimeInputFormatter extends TextInputFormatter {
     TextEditingValue oldValue,
     TextEditingValue newValue,
   ) {
-    if (newValue.text.length < oldValue.text.length)
+    if (newValue.text.length < oldValue.text.length) {
       return newValue; // Silme işlemi
+    }
 
     String cleanText = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
-    if (cleanText.length > 4)
+    if (cleanText.length > 4) {
       cleanText = cleanText.substring(0, 4); // Max 4 rakam
+    }
 
     StringBuffer buffer = StringBuffer();
     for (int i = 0; i < cleanText.length; i++) {

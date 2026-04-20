@@ -3,14 +3,14 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('Puan Durumu Hesaplama Testleri', () {
     // Mock: _asInt fonksiyonu
-    int _asInt(dynamic v) {
+    int asInt(dynamic v) {
       if (v == null) return 0;
       if (v is num) return v.toInt();
       return int.tryParse(v.toString().trim()) ?? 0;
     }
 
     // Mock: _isCompleted fonksiyonu
-    bool _isCompleted(Map<String, dynamic> data) {
+    bool isCompleted(Map<String, dynamic> data) {
       return data['status'] == 'finished' ||
           (data['homeScore'] != null && data['awayScore'] != null);
     }
@@ -41,11 +41,11 @@ void main() {
         final hId = (m['homeTeamId'] ?? '').toString();
         final aId = (m['awayTeamId'] ?? '').toString();
 
-        if (_isCompleted(m) &&
+        if (isCompleted(m) &&
             standings.containsKey(hId) &&
             standings.containsKey(aId)) {
-          final hS = _asInt(m['homeScore']);
-          final aS = _asInt(m['awayScore']);
+          final hS = asInt(m['homeScore']);
+          final aS = asInt(m['awayScore']);
 
           standings[hId]!['P'] = standings[hId]!['P']! + 1;
           standings[aId]!['P'] = standings[aId]!['P']! + 1;
@@ -172,11 +172,11 @@ void main() {
       int matchHomeScore(Map<String, dynamic> m) {
         final rootHome = m['homeScore'];
         final rootAway = m['awayScore'];
-        if (rootHome != null || rootAway != null) return _asInt(rootHome);
+        if (rootHome != null || rootAway != null) return asInt(rootHome);
         final score = m['score'];
         if (score is Map) {
           final ft = score['fullTime'];
-          if (ft is Map) return _asInt(ft['home']);
+          if (ft is Map) return asInt(ft['home']);
         }
         return 0;
       }
@@ -184,11 +184,11 @@ void main() {
       int matchAwayScore(Map<String, dynamic> m) {
         final rootHome = m['homeScore'];
         final rootAway = m['awayScore'];
-        if (rootHome != null || rootAway != null) return _asInt(rootAway);
+        if (rootHome != null || rootAway != null) return asInt(rootAway);
         final score = m['score'];
         if (score is Map) {
           final ft = score['fullTime'];
-          if (ft is Map) return _asInt(ft['away']);
+          if (ft is Map) return asInt(ft['away']);
         }
         return 0;
       }
@@ -213,7 +213,7 @@ void main() {
         for (final m in matches) {
           final hId = (m['homeTeamId'] ?? '').toString();
           final aId = (m['awayTeamId'] ?? '').toString();
-          if (_isCompleted(m) &&
+          if (isCompleted(m) &&
               standings.containsKey(hId) &&
               standings.containsKey(aId)) {
             final hS = matchHomeScore(m);
@@ -296,11 +296,11 @@ void main() {
 
           final hId = (m['homeTeamId'] ?? '').toString();
           final aId = (m['awayTeamId'] ?? '').toString();
-          if (_isCompleted(m) &&
+          if (isCompleted(m) &&
               standings.containsKey(hId) &&
               standings.containsKey(aId)) {
-            final hS = _asInt(m['homeScore']);
-            final aS = _asInt(m['awayScore']);
+            final hS = asInt(m['homeScore']);
+            final aS = asInt(m['awayScore']);
             standings[hId]!['P'] = standings[hId]!['P']! + 1;
             standings[aId]!['P'] = standings[aId]!['P']! + 1;
             standings[hId]!['AG'] = standings[hId]!['AG']! + hS;
@@ -374,7 +374,7 @@ void main() {
         final h = (m['homeTeamId'] ?? '').toString().trim();
         final w = weekFrom(m);
         if (l.isEmpty || h.isEmpty || w == null) return null;
-        return '${l}_week$w\_$h';
+        return '${l}_week${w}_$h';
       }
 
       Map<String, Map<String, int>> calcWithDedupe(
@@ -402,11 +402,11 @@ void main() {
 
           final hId = (m['homeTeamId'] ?? '').toString();
           final aId = (m['awayTeamId'] ?? '').toString();
-          if (_isCompleted(m) &&
+          if (isCompleted(m) &&
               standings.containsKey(hId) &&
               standings.containsKey(aId)) {
-            final hS = _asInt(m['homeScore']);
-            final aS = _asInt(m['awayScore']);
+            final hS = asInt(m['homeScore']);
+            final aS = asInt(m['awayScore']);
             standings[hId]!['P'] = standings[hId]!['P']! + 1;
             standings[aId]!['P'] = standings[aId]!['P']! + 1;
             standings[hId]!['AG'] = standings[hId]!['AG']! + hS;
@@ -490,13 +490,13 @@ void main() {
           'homeScore': null,
           'awayScore': null,
         };
-        expect(_isCompleted(data1), true); // finished status yeterli
+        expect(isCompleted(data1), true); // finished status yeterli
 
         final data2 = {'status': 'pending', 'homeScore': 2, 'awayScore': 1};
-        expect(_isCompleted(data2), true); // scorelar yeterli
+        expect(isCompleted(data2), true); // scorelar yeterli
 
         final data3 = {'status': 'pending', 'homeScore': null, 'awayScore': 1};
-        expect(_isCompleted(data3), false); // ikisi de gerekli
+        expect(isCompleted(data3), false); // ikisi de gerekli
 
         print('✓ Test 6 GEÇTI: _isCompleted fonksiyonu doğru çalışıyor');
       },

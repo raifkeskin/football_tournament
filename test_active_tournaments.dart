@@ -20,7 +20,7 @@ void main() async {
   try {
     final tournaments = await dbService.getTeamActiveTournaments(testTeamId);
 
-    print('\n' + '=' * 60);
+    print('\n${'=' * 60}');
     print('📊 TEST RESULTS:');
     print('=' * 60);
     print('Total tournaments found: ${tournaments.length}');

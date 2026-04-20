@@ -303,7 +303,7 @@ class _GroupStandingsTable extends StatelessWidget {
     final home = (m['homeTeamId'] ?? '').toString().trim();
     final week = _matchWeek(m);
     if (league.isNotEmpty && home.isNotEmpty && week != null) {
-      return '${league}_week$week\_$home';
+      return '${league}_week${week}_$home';
     }
 
     final matchDate = (m['matchDate'] ?? m['dateString'] ?? '')
@@ -314,7 +314,7 @@ class _GroupStandingsTable extends StatelessWidget {
         matchDate.isNotEmpty &&
         home.isNotEmpty &&
         away.isNotEmpty) {
-      return '${league}_$matchDate\_$home\_$away';
+      return '${league}_${matchDate}_${home}_$away';
     }
 
     return null;

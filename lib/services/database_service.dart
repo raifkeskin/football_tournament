@@ -1464,7 +1464,7 @@ class DatabaseService {
 
       final leagueId = sanitizeIdPart(leagueIdRaw);
       final homeTeamId = sanitizeIdPart(homeTeamIdRaw);
-      final newDocId = '${leagueId}_week$week\_$homeTeamId';
+      final newDocId = '${leagueId}_week${week}_$homeTeamId';
       final targetRef = matchesCol.doc(newDocId);
 
       final targetSnap = await targetRef.get();

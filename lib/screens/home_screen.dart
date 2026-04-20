@@ -313,8 +313,9 @@ class _HomeScreenState extends State<HomeScreen> {
             date: _selectedDate,
           ),
           builder: (context, matchSnapshot) {
-            if (matchSnapshot.connectionState == ConnectionState.waiting)
+            if (matchSnapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
+            }
 
             final matches = matchSnapshot.data ?? [];
             if (matches.isEmpty) {
