@@ -156,6 +156,280 @@ void main() {
       print('✓ Test 4 GEÇTI: Beraberlik 1-1');
     });
 
+    test('Skor sadece score.fullTime içindeyken puanlar hesaplanmalı', () {
+      final teamIds = ['home_team', 'away_team'];
+      final matches = [
+        {
+          'homeTeamId': 'home_team',
+          'awayTeamId': 'away_team',
+          'score': {
+            'fullTime': {'home': 0, 'away': 2},
+          },
+          'status': 'finished',
+        },
+      ];
+
+      int matchHomeScore(Map<String, dynamic> m) {
+        final rootHome = m['homeScore'];
+        final rootAway = m['awayScore'];
+        if (rootHome != null || rootAway != null) return _asInt(rootHome);
+        final score = m['score'];
+        if (score is Map) {
+          final ft = score['fullTime'];
+          if (ft is Map) return _asInt(ft['home']);
+        }
+        return 0;
+      }
+
+      int matchAwayScore(Map<String, dynamic> m) {
+        final rootHome = m['homeScore'];
+        final rootAway = m['awayScore'];
+        if (rootHome != null || rootAway != null) return _asInt(rootAway);
+        final score = m['score'];
+        if (score is Map) {
+          final ft = score['fullTime'];
+          if (ft is Map) return _asInt(ft['away']);
+        }
+        return 0;
+      }
+
+      Map<String, Map<String, int>> calculateStandingsWithScoreFallback(
+        List<String> teamIds,
+        List<Map<String, dynamic>> matches,
+      ) {
+        final standings = <String, Map<String, int>>{};
+        for (final teamId in teamIds) {
+          standings[teamId] = {
+            'P': 0,
+            'G': 0,
+            'B': 0,
+            'M': 0,
+            'AG': 0,
+            'YG': 0,
+            'AV': 0,
+            'Puan': 0,
+          };
+        }
+        for (final m in matches) {
+          final hId = (m['homeTeamId'] ?? '').toString();
+          final aId = (m['awayTeamId'] ?? '').toString();
+          if (_isCompleted(m) &&
+              standings.containsKey(hId) &&
+              standings.containsKey(aId)) {
+            final hS = matchHomeScore(m);
+            final aS = matchAwayScore(m);
+            standings[hId]!['P'] = standings[hId]!['P']! + 1;
+            standings[aId]!['P'] = standings[aId]!['P']! + 1;
+            standings[hId]!['AG'] = standings[hId]!['AG']! + hS;
+            standings[hId]!['YG'] = standings[hId]!['YG']! + aS;
+            standings[aId]!['AG'] = standings[aId]!['AG']! + aS;
+            standings[aId]!['YG'] = standings[aId]!['YG']! + hS;
+            if (hS > aS) {
+              standings[hId]!['G'] = standings[hId]!['G']! + 1;
+              standings[hId]!['Puan'] = standings[hId]!['Puan']! + 3;
+              standings[aId]!['M'] = standings[aId]!['M']! + 1;
+            } else if (aS > hS) {
+              standings[aId]!['G'] = standings[aId]!['G']! + 1;
+              standings[aId]!['Puan'] = standings[aId]!['Puan']! + 3;
+              standings[hId]!['M'] = standings[hId]!['M']! + 1;
+            } else {
+              standings[hId]!['B'] = standings[hId]!['B']! + 1;
+              standings[aId]!['B'] = standings[aId]!['B']! + 1;
+              standings[hId]!['Puan'] = standings[hId]!['Puan']! + 1;
+              standings[aId]!['Puan'] = standings[aId]!['Puan']! + 1;
+            }
+          }
+        }
+        standings.forEach((k, v) => v['AV'] = v['AG']! - v['YG']!);
+        return standings;
+      }
+
+      final standings = calculateStandingsWithScoreFallback(teamIds, matches);
+      expect(standings['away_team']!['Puan'], 3);
+      expect(standings['away_team']!['G'], 1);
+      expect(standings['home_team']!['M'], 1);
+    });
+
+    test('Grup filtresi - diğer grup maçları sayılmamalı', () {
+      final teamIds = ['t1', 't2'];
+      final matches = [
+        {
+          'homeTeamId': 't1',
+          'awayTeamId': 't2',
+          'homeScore': 1,
+          'awayScore': 0,
+          'status': 'finished',
+          'groupId': 'A',
+        },
+        {
+          'homeTeamId': 't1',
+          'awayTeamId': 't2',
+          'homeScore': 2,
+          'awayScore': 2,
+          'status': 'finished',
+          'groupId': 'B',
+        },
+      ];
+
+      Map<String, Map<String, int>> calculateStandingsForGroup(
+        List<String> teamIds,
+        List<Map<String, dynamic>> matches, {
+        required String groupId,
+      }) {
+        final standings = <String, Map<String, int>>{};
+        for (final teamId in teamIds) {
+          standings[teamId] = {
+            'P': 0,
+            'G': 0,
+            'B': 0,
+            'M': 0,
+            'AG': 0,
+            'YG': 0,
+            'AV': 0,
+            'Puan': 0,
+          };
+        }
+
+        for (final m in matches) {
+          final matchGroup = (m['groupId'] ?? m['groupName'] ?? '').toString();
+          if (matchGroup.isNotEmpty && matchGroup != groupId) continue;
+
+          final hId = (m['homeTeamId'] ?? '').toString();
+          final aId = (m['awayTeamId'] ?? '').toString();
+          if (_isCompleted(m) &&
+              standings.containsKey(hId) &&
+              standings.containsKey(aId)) {
+            final hS = _asInt(m['homeScore']);
+            final aS = _asInt(m['awayScore']);
+            standings[hId]!['P'] = standings[hId]!['P']! + 1;
+            standings[aId]!['P'] = standings[aId]!['P']! + 1;
+            standings[hId]!['AG'] = standings[hId]!['AG']! + hS;
+            standings[hId]!['YG'] = standings[hId]!['YG']! + aS;
+            standings[aId]!['AG'] = standings[aId]!['AG']! + aS;
+            standings[aId]!['YG'] = standings[aId]!['YG']! + hS;
+            if (hS > aS) {
+              standings[hId]!['G'] = standings[hId]!['G']! + 1;
+              standings[hId]!['Puan'] = standings[hId]!['Puan']! + 3;
+              standings[aId]!['M'] = standings[aId]!['M']! + 1;
+            } else if (aS > hS) {
+              standings[aId]!['G'] = standings[aId]!['G']! + 1;
+              standings[aId]!['Puan'] = standings[aId]!['Puan']! + 3;
+              standings[hId]!['M'] = standings[hId]!['M']! + 1;
+            } else {
+              standings[hId]!['B'] = standings[hId]!['B']! + 1;
+              standings[aId]!['B'] = standings[aId]!['B']! + 1;
+              standings[hId]!['Puan'] = standings[hId]!['Puan']! + 1;
+              standings[aId]!['Puan'] = standings[aId]!['Puan']! + 1;
+            }
+          }
+        }
+
+        standings.forEach((k, v) {
+          v['AV'] = v['AG']! - v['YG']!;
+        });
+        return standings;
+      }
+
+      final standings =
+          calculateStandingsForGroup(teamIds, matches, groupId: 'A');
+      expect(standings['t1']!['P'], 1);
+      expect(standings['t2']!['P'], 1);
+      expect(standings['t1']!['Puan'], 3);
+      expect(standings['t2']!['Puan'], 0);
+    });
+
+    test('Mükerrer maçlar (aynı league+week+homeTeam) iki kez sayılmamalı', () {
+      final teamIds = ['t1', 't2'];
+      final matches = [
+        {
+          'leagueId': 'L1',
+          'week': 1,
+          'homeTeamId': 't1',
+          'awayTeamId': 't2',
+          'homeScore': 1,
+          'awayScore': 0,
+          'status': 'finished',
+          'groupId': 'A',
+        },
+        {
+          'leagueId': 'L1',
+          'week': '1',
+          'homeTeamId': 't1',
+          'awayTeamId': 't2',
+          'homeScore': 1,
+          'awayScore': 0,
+          'status': 'finished',
+          'groupId': 'A',
+        },
+      ];
+
+      int? weekFrom(Map<String, dynamic> m) {
+        final v = m['week'];
+        if (v is num) return v.toInt();
+        return int.tryParse((v ?? '').toString());
+      }
+
+      String? dedupeKey(Map<String, dynamic> m) {
+        final l = (m['leagueId'] ?? '').toString().trim();
+        final h = (m['homeTeamId'] ?? '').toString().trim();
+        final w = weekFrom(m);
+        if (l.isEmpty || h.isEmpty || w == null) return null;
+        return '${l}_week$w\_$h';
+      }
+
+      Map<String, Map<String, int>> calcWithDedupe(
+        List<String> teamIds,
+        List<Map<String, dynamic>> matches,
+      ) {
+        final standings = <String, Map<String, int>>{};
+        for (final teamId in teamIds) {
+          standings[teamId] = {
+            'P': 0,
+            'G': 0,
+            'B': 0,
+            'M': 0,
+            'AG': 0,
+            'YG': 0,
+            'AV': 0,
+            'Puan': 0,
+          };
+        }
+
+        final seen = <String>{};
+        for (final m in matches) {
+          final k = dedupeKey(m);
+          if (k != null && !seen.add(k)) continue;
+
+          final hId = (m['homeTeamId'] ?? '').toString();
+          final aId = (m['awayTeamId'] ?? '').toString();
+          if (_isCompleted(m) &&
+              standings.containsKey(hId) &&
+              standings.containsKey(aId)) {
+            final hS = _asInt(m['homeScore']);
+            final aS = _asInt(m['awayScore']);
+            standings[hId]!['P'] = standings[hId]!['P']! + 1;
+            standings[aId]!['P'] = standings[aId]!['P']! + 1;
+            standings[hId]!['AG'] = standings[hId]!['AG']! + hS;
+            standings[hId]!['YG'] = standings[hId]!['YG']! + aS;
+            standings[aId]!['AG'] = standings[aId]!['AG']! + aS;
+            standings[aId]!['YG'] = standings[aId]!['YG']! + hS;
+            if (hS > aS) {
+              standings[hId]!['G'] = standings[hId]!['G']! + 1;
+              standings[hId]!['Puan'] = standings[hId]!['Puan']! + 3;
+              standings[aId]!['M'] = standings[aId]!['M']! + 1;
+            }
+          }
+        }
+        standings.forEach((k, v) => v['AV'] = v['AG']! - v['YG']!);
+        return standings;
+      }
+
+      final standings = calcWithDedupe(teamIds, matches);
+      expect(standings['t1']!['P'], 1);
+      expect(standings['t2']!['P'], 1);
+      expect(standings['t1']!['Puan'], 3);
+    });
+
     test('Birden fazla maç - karmaşık senaryo', () {
       final teamIds = ['team_a', 'team_b', 'team_c'];
       final matches = [

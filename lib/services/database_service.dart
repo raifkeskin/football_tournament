@@ -211,14 +211,23 @@ class DatabaseService {
   }
 
   Future<void> deleteLeagueCascade(String leagueId) async {
-    final groupsSnap = await _db
+    final groupsByLeagueId = await _db
+        .collection('groups')
+        .where('leagueId', isEqualTo: leagueId)
+        .get();
+    final groupsByTournamentId = await _db
         .collection('groups')
         .where('tournamentId', isEqualTo: leagueId)
         .get();
-    for (final g in groupsSnap.docs) {
+    final seen = <String>{};
+    for (final g in [...groupsByLeagueId.docs, ...groupsByTournamentId.docs]) {
+      if (!seen.add(g.id)) continue;
       await deleteGroupCascade(g.id);
     }
 
+    await _deleteMatchesAndEventsForQuery(
+      _db.collection('matches').where('leagueId', isEqualTo: leagueId),
+    );
     await _deleteMatchesAndEventsForQuery(
       _db.collection('matches').where('tournamentId', isEqualTo: leagueId),
     );
@@ -227,19 +236,58 @@ class DatabaseService {
 
   // --- GROUP (GRUP) ---
   Future<void> addGroup(GroupModel group) async {
-    await _db.collection('groups').add(group.toMap());
+    await _db.collection('groups').add({...group.toMap(), 'leagueId': group.leagueId});
   }
 
   Stream<List<GroupModel>> getGroups(String leagueId) {
-    return _db
-        .collection('groups')
-        .where('tournamentId', isEqualTo: leagueId)
-        .snapshots()
-        .map(
-          (snap) => snap.docs
-              .map((doc) => GroupModel.fromMap(doc.data(), doc.id))
-              .toList(),
-        );
+    final controller = StreamController<List<GroupModel>>.broadcast();
+    List<GroupModel> latestByLeagueId = const [];
+    List<GroupModel> latestByTournamentId = const [];
+
+    void emit() {
+      final merged = <String, GroupModel>{};
+      for (final g in latestByLeagueId) {
+        merged[g.id] = g;
+      }
+      for (final g in latestByTournamentId) {
+        merged[g.id] = g;
+      }
+      final list = merged.values.toList()
+        ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+      controller.add(list);
+    }
+
+    late final StreamSubscription subLeagueId;
+    late final StreamSubscription subTournamentId;
+
+    controller.onListen = () {
+      subLeagueId = _db
+          .collection('groups')
+          .where('leagueId', isEqualTo: leagueId)
+          .snapshots()
+          .listen((snap) {
+            latestByLeagueId =
+                snap.docs.map((d) => GroupModel.fromMap(d.data(), d.id)).toList();
+            emit();
+          });
+      subTournamentId = _db
+          .collection('groups')
+          .where('tournamentId', isEqualTo: leagueId)
+          .snapshots()
+          .listen((snap) {
+            latestByTournamentId =
+                snap.docs.map((d) => GroupModel.fromMap(d.data(), d.id)).toList();
+            emit();
+          });
+    };
+
+    controller.onCancel = () async {
+      await subLeagueId.cancel();
+      await subTournamentId.cancel();
+      await controller.close();
+    };
+
+    return controller.stream;
   }
 
   Stream<List<GroupModel>> getAllGroups() {
@@ -804,14 +852,104 @@ class DatabaseService {
   }
 
   Stream<List<MatchModel>> watchMatchesForLeague(String leagueId) {
-    return _db
-        .collection('matches')
-        .where('leagueId', isEqualTo: leagueId)
-        .snapshots()
-        .map(
-          (snap) =>
-              snap.docs.map((d) => MatchModel.fromMap(d.data(), d.id)).toList(),
-        );
+    final controller = StreamController<List<MatchModel>>.broadcast();
+    final seen = <String, MatchModel>{};
+    List<MatchModel> latestByLeagueId = const [];
+    List<MatchModel> latestByTournamentId = const [];
+
+    void emit() {
+      seen.clear();
+      for (final m in latestByLeagueId) {
+        seen[m.id] = m;
+      }
+      for (final m in latestByTournamentId) {
+        seen[m.id] = m;
+      }
+      controller.add(seen.values.toList());
+    }
+
+    late final StreamSubscription subLeagueId;
+    late final StreamSubscription subTournamentId;
+
+    controller.onListen = () {
+      subLeagueId = _db
+          .collection('matches')
+          .where('leagueId', isEqualTo: leagueId)
+          .snapshots()
+          .listen((snap) {
+            latestByLeagueId =
+                snap.docs.map((d) => MatchModel.fromMap(d.data(), d.id)).toList();
+            emit();
+          });
+
+      subTournamentId = _db
+          .collection('matches')
+          .where('tournamentId', isEqualTo: leagueId)
+          .snapshots()
+          .listen((snap) {
+            latestByTournamentId =
+                snap.docs.map((d) => MatchModel.fromMap(d.data(), d.id)).toList();
+            emit();
+          });
+    };
+
+    controller.onCancel = () async {
+      await subLeagueId.cancel();
+      await subTournamentId.cancel();
+      await controller.close();
+    };
+
+    return controller.stream;
+  }
+
+  Stream<List<Map<String, dynamic>>> watchMatchesForStandings({
+    required String leagueId,
+  }) {
+    final controller = StreamController<List<Map<String, dynamic>>>.broadcast();
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> latestByLeagueId = const [];
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> latestByTournamentId =
+        const [];
+
+    void emit() {
+      final merged = <String, Map<String, dynamic>>{};
+      for (final d in latestByLeagueId) {
+        merged[d.id] = {...d.data(), 'id': d.id};
+      }
+      for (final d in latestByTournamentId) {
+        merged[d.id] = {...d.data(), 'id': d.id};
+      }
+      controller.add(merged.values.toList());
+    }
+
+    late final StreamSubscription subLeagueId;
+    late final StreamSubscription subTournamentId;
+
+    controller.onListen = () {
+      subLeagueId = _db
+          .collection('matches')
+          .where('leagueId', isEqualTo: leagueId)
+          .snapshots()
+          .listen((snap) {
+            latestByLeagueId = snap.docs;
+            emit();
+          });
+      subTournamentId = _db
+          .collection('matches')
+          .where('tournamentId', isEqualTo: leagueId)
+          .snapshots()
+          .listen((snap) {
+            latestByTournamentId = snap.docs;
+            emit();
+          });
+    };
+
+    controller.onCancel = () async {
+      await subLeagueId.cancel();
+      await subTournamentId.cancel();
+      await controller.close();
+    };
+
+    return controller.stream;
   }
 
   Stream<List<MatchModel>> watchFixtureMatches(
@@ -819,40 +957,99 @@ class DatabaseService {
     int week, {
     String? groupId,
   }) {
-    Query<Map<String, dynamic>> q = _db
+    final gid = (groupId ?? '').trim();
+    final controller = StreamController<List<MatchModel>>.broadcast();
+    List<MatchModel> latestByLeagueId = const [];
+    List<MatchModel> latestByTournamentId = const [];
+
+    void emit() {
+      final merged = <String, MatchModel>{};
+      for (final m in latestByLeagueId) {
+        merged[m.id] = m;
+      }
+      for (final m in latestByTournamentId) {
+        merged[m.id] = m;
+      }
+      final list = merged.values.toList();
+      list.sort((a, b) {
+        final at = (a.matchTime ?? '').trim();
+        final bt = (b.matchTime ?? '').trim();
+        if (at.isEmpty && bt.isEmpty) return 0;
+        if (at.isEmpty) return 1;
+        if (bt.isEmpty) return -1;
+        return at.compareTo(bt);
+      });
+      controller.add(list);
+    }
+
+    late final StreamSubscription subLeagueId;
+    late final StreamSubscription subTournamentId;
+
+    Query<Map<String, dynamic>> baseLeague = _db
         .collection('matches')
         .where('leagueId', isEqualTo: leagueId)
         .where('week', isEqualTo: week);
-    final gid = (groupId ?? '').trim();
+    Query<Map<String, dynamic>> baseTournament = _db
+        .collection('matches')
+        .where('tournamentId', isEqualTo: leagueId)
+        .where('week', isEqualTo: week);
     if (gid.isNotEmpty) {
-      q = q.where('groupId', isEqualTo: gid);
+      baseLeague = baseLeague.where('groupId', isEqualTo: gid);
+      baseTournament = baseTournament.where('groupId', isEqualTo: gid);
     }
-    return q.snapshots().map(
-          (snap) =>
-              snap.docs.map((d) => MatchModel.fromMap(d.data(), d.id)).toList(),
-        );
+
+    controller.onListen = () {
+      subLeagueId = baseLeague.snapshots().listen((snap) {
+        latestByLeagueId =
+            snap.docs.map((d) => MatchModel.fromMap(d.data(), d.id)).toList();
+        emit();
+      });
+      subTournamentId = baseTournament.snapshots().listen((snap) {
+        latestByTournamentId =
+            snap.docs.map((d) => MatchModel.fromMap(d.data(), d.id)).toList();
+        emit();
+      });
+    };
+
+    controller.onCancel = () async {
+      await subLeagueId.cancel();
+      await subTournamentId.cancel();
+      await controller.close();
+    };
+
+    return controller.stream;
   }
 
   Future<int?> getFixtureMaxWeek(
     String leagueId, {
     String? groupId,
   }) async {
-    Query<Map<String, dynamic>> q =
-        _db.collection('matches').where('leagueId', isEqualTo: leagueId);
     final gid = (groupId ?? '').trim();
-    if (gid.isNotEmpty) {
-      q = q.where('groupId', isEqualTo: gid);
+    Future<int?> maxWeekFrom(Query<Map<String, dynamic>> q) async {
+      if (gid.isNotEmpty) {
+        q = q.where('groupId', isEqualTo: gid);
+      }
+      final snap = await q.get();
+      if (snap.docs.isEmpty) return null;
+      int? maxWeek;
+      for (final doc in snap.docs) {
+        final raw = doc.data()['week'];
+        final w = raw is num ? raw.toInt() : int.tryParse(raw?.toString() ?? '');
+        if (w == null) continue;
+        maxWeek = maxWeek == null ? w : (w > maxWeek ? w : maxWeek);
+      }
+      return maxWeek;
     }
-    final snap = await q.get();
-    if (snap.docs.isEmpty) return null;
-    int? maxWeek;
-    for (final doc in snap.docs) {
-      final raw = doc.data()['week'];
-      final w = raw is num ? raw.toInt() : int.tryParse(raw?.toString() ?? '');
-      if (w == null) continue;
-      maxWeek = maxWeek == null ? w : (w > maxWeek ? w : maxWeek);
-    }
-    return maxWeek;
+
+    final a = await maxWeekFrom(
+      _db.collection('matches').where('leagueId', isEqualTo: leagueId),
+    );
+    final b = await maxWeekFrom(
+      _db.collection('matches').where('tournamentId', isEqualTo: leagueId),
+    );
+    if (a == null) return b;
+    if (b == null) return a;
+    return a > b ? a : b;
   }
 
   Stream<MatchModel> watchMatch(String matchId) {
@@ -916,8 +1113,8 @@ class DatabaseService {
         .where('dateString', isEqualTo: dStr);
 
     if (leagueId != null) {
-      qNew = qNew.where('leagueId', isEqualTo: leagueId);
-      qAllForNew = qAllForNew.where('leagueId', isEqualTo: leagueId);
+      qNew = qNew.where('tournamentId', isEqualTo: leagueId);
+      qAllForNew = qAllForNew.where('tournamentId', isEqualTo: leagueId);
       qLegacyString = qLegacyString.where('leagueId', isEqualTo: leagueId);
     }
 
@@ -1143,6 +1340,198 @@ class DatabaseService {
     }
 
     return {'scanned': scanned, 'updated': updated};
+  }
+
+  Future<Map<String, int>> normalizeMatchesDocIdsByLeagueWeekHomeTeam() async {
+    int scanned = 0;
+    int skipped = 0;
+    int rewritten = 0;
+    int deleted = 0;
+    int merged = 0;
+    int eventsMoved = 0;
+    int matchEventsUpdated = 0;
+
+    final matchesCol = _db.collection('matches');
+
+    int? intFrom(dynamic v) {
+      if (v == null) return null;
+      if (v is num) return v.toInt();
+      final s = v.toString().replaceAll('\u0000', '').trim();
+      return int.tryParse(s);
+    }
+
+    String sanitizeIdPart(String s) {
+      return s.replaceAll('/', '_').replaceAll('\u0000', '').trim();
+    }
+
+    Timestamp? asTimestamp(dynamic v) {
+      if (v is Timestamp) return v;
+      return null;
+    }
+
+    Map<String, dynamic> deepMerge(
+      Map<String, dynamic> base,
+      Map<String, dynamic> incoming,
+    ) {
+      final out = <String, dynamic>{...base};
+      for (final entry in incoming.entries) {
+        final key = entry.key;
+        final inc = entry.value;
+        final cur = out[key];
+
+        if (inc is Map && cur is Map) {
+          out[key] = deepMerge(
+            Map<String, dynamic>.from(cur),
+            Map<String, dynamic>.from(inc),
+          );
+          continue;
+        }
+        if (inc is List && cur is List) {
+          final seen = <String>{};
+          final mergedList = <dynamic>[];
+          for (final e in [...cur, ...inc]) {
+            final k = e?.toString() ?? '';
+            if (seen.add(k)) mergedList.add(e);
+          }
+          out[key] = mergedList;
+          continue;
+        }
+
+        bool isEmptyValue(dynamic v) {
+          if (v == null) return true;
+          if (v is String) return v.trim().isEmpty;
+          return false;
+        }
+
+        if (isEmptyValue(cur) && !isEmptyValue(inc)) {
+          out[key] = inc;
+          continue;
+        }
+
+        final curTs = asTimestamp(cur);
+        final incTs = asTimestamp(inc);
+        if (curTs != null && incTs != null) {
+          out[key] = incTs.compareTo(curTs) >= 0 ? incTs : curTs;
+          continue;
+        }
+
+        if (key == 'status') {
+          final curS = (cur ?? '').toString().trim();
+          final incS = (inc ?? '').toString().trim();
+          if (curS != MatchStatus.finished.name &&
+              incS == MatchStatus.finished.name) {
+            out[key] = inc;
+          }
+          continue;
+        }
+
+        if ((key == 'homeScore' || key == 'awayScore') &&
+            intFrom(cur) == 0 &&
+            (intFrom(inc) ?? 0) > 0) {
+          out[key] = inc;
+          continue;
+        }
+      }
+      return out;
+    }
+
+    final snap = await matchesCol.get();
+
+    WriteBatch batch = _db.batch();
+    var ops = 0;
+
+    Future<void> flush() async {
+      if (ops == 0) return;
+      await batch.commit();
+      batch = _db.batch();
+      ops = 0;
+    }
+
+    for (final doc in snap.docs) {
+      scanned++;
+      final data = doc.data();
+
+      final leagueIdRaw = (data['leagueId'] ?? data['tournamentId'] ?? '')
+          .toString()
+          .trim();
+      final homeTeamIdRaw = (data['homeTeamId'] ?? '').toString().trim();
+      final week = intFrom(data['week']);
+
+      if (leagueIdRaw.isEmpty || homeTeamIdRaw.isEmpty || week == null) {
+        skipped++;
+        continue;
+      }
+
+      final leagueId = sanitizeIdPart(leagueIdRaw);
+      final homeTeamId = sanitizeIdPart(homeTeamIdRaw);
+      final newDocId = '${leagueId}_week$week\_$homeTeamId';
+      final targetRef = matchesCol.doc(newDocId);
+
+      final targetSnap = await targetRef.get();
+      final targetData = targetSnap.data();
+
+      final normalized = <String, dynamic>{
+        ...data,
+        'leagueId': leagueIdRaw,
+        'week': week,
+      };
+
+      final mergedData = targetData == null
+          ? normalized
+          : deepMerge(Map<String, dynamic>.from(targetData), normalized);
+      if (targetData != null) merged++;
+
+      batch.set(targetRef, mergedData, SetOptions(merge: true));
+      ops++;
+      rewritten++;
+
+      final eventsSnap = await doc.reference.collection('events').get();
+      for (final e in eventsSnap.docs) {
+        batch.set(
+          targetRef.collection('events').doc(e.id),
+          e.data(),
+          SetOptions(merge: true),
+        );
+        ops++;
+        eventsMoved++;
+        if (doc.id != newDocId) {
+          batch.delete(e.reference);
+          ops++;
+        }
+        if (ops >= 450) await flush();
+      }
+
+      final matchEventsSnap = await _db
+          .collection('match_events')
+          .where('matchId', isEqualTo: doc.id)
+          .get();
+      for (final ev in matchEventsSnap.docs) {
+        batch.update(ev.reference, {'matchId': newDocId});
+        ops++;
+        matchEventsUpdated++;
+        if (ops >= 450) await flush();
+      }
+
+      if (doc.id != newDocId) {
+        batch.delete(doc.reference);
+        ops++;
+        deleted++;
+      }
+
+      if (ops >= 450) await flush();
+    }
+
+    await flush();
+
+    return {
+      'scanned': scanned,
+      'skipped': skipped,
+      'rewritten': rewritten,
+      'deleted': deleted,
+      'merged': merged,
+      'eventsMoved': eventsMoved,
+      'matchEventsUpdated': matchEventsUpdated,
+    };
   }
 
   // --- MATCH EVENTS (OLAYLAR) ---

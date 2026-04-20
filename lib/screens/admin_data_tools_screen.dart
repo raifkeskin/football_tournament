@@ -233,6 +233,86 @@ class _AdminDataToolsScreenState extends State<AdminDataToolsScreen> {
     }
   }
 
+  Future<void> _normalizeMatchesDocIds() async {
+    bool confirmed = false;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Dikkat'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Emin misiniz? Veri yapısı league_week_homeTeam formatına güncellenecektir.',
+              ),
+              const SizedBox(height: 12),
+              CheckboxListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                value: confirmed,
+                onChanged: (v) => setDialogState(() => confirmed = v == true),
+                title: const Text('Onaylıyorum'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Vazgeç'),
+            ),
+            FilledButton(
+              onPressed: confirmed ? () => Navigator.pop(context, true) : null,
+              child: const Text('Başlat'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok != true) return;
+
+    setState(() {
+      _busy = true;
+      _lastResult = null;
+    });
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 16),
+            Expanded(child: Text('Normalize ediliyor...')),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final result = await _db.normalizeMatchesDocIdsByLeagueWeekHomeTeam();
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Normalize işlemi tamamlandı')));
+      setState(() {
+        _lastResult =
+            'Taranan: ${result['scanned']} • Atlanan: ${result['skipped']} • Yazılan: ${result['rewritten']} • Silinen: ${result['deleted']} • Birleşen: ${result['merged']} • events taşınan: ${result['eventsMoved']} • match_events güncellenen: ${result['matchEventsUpdated']}';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      _showErrorSnackBar(e);
+      setState(() {
+        _lastResult = 'Hata: $e';
+      });
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isAdmin = AppSession.of(context).value.isAdmin;
@@ -315,6 +395,15 @@ class _AdminDataToolsScreenState extends State<AdminDataToolsScreen> {
                     onPressed: _busy ? null : _migrateMatchTimesFromTimestamp,
                     icon: const Icon(Icons.sync_alt_rounded),
                     label: const Text('Maç Zaman Migrasyonu'),
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 52),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton.tonalIcon(
+                    onPressed: _busy ? null : _normalizeMatchesDocIds,
+                    icon: const Icon(Icons.rule_folder_outlined),
+                    label: const Text('Lig Bazlı Maç Verilerini Normalize Et'),
                     style: FilledButton.styleFrom(
                       minimumSize: const Size(double.infinity, 52),
                     ),

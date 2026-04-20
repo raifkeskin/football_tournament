@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../models/league.dart';
+import '../models/match.dart';
 import '../services/database_service.dart';
 import '../widgets/web_safe_image.dart';
 import 'team_squad_screen.dart';
@@ -143,24 +144,18 @@ class _GroupsScreenState extends State<GroupsScreen> {
                     Expanded(
                       child: _selectedLeagueId == null
                           ? const SizedBox.shrink()
-                          : StreamBuilder<QuerySnapshot>(
-                              stream: FirebaseFirestore.instance
-                                  .collection('groups')
-                                  .where(
-                                    'tournamentId',
-                                    isEqualTo: _selectedLeagueId,
-                                  )
-                                  .snapshots(),
+                          : StreamBuilder<List<GroupModel>>(
+                              stream: _databaseService.getGroups(
+                                _selectedLeagueId!,
+                              ),
                               builder: (context, snapshot) {
-                                if (!snapshot.hasData) {
-                                  return const SizedBox.shrink();
-                                }
-                                final groupDocs = snapshot.data!.docs;
+                                final groups =
+                                    snapshot.data ?? const <GroupModel>[];
 
                                 if (_selectedGroupId != null &&
-                                    !groupDocs
-                                        .map((d) => d.id)
-                                        .contains(_selectedGroupId)) {
+                                    groups.every(
+                                      (g) => g.id != _selectedGroupId,
+                                    )) {
                                   WidgetsBinding.instance.addPostFrameCallback((
                                     _,
                                   ) {
@@ -191,16 +186,11 @@ class _GroupsScreenState extends State<GroupsScreen> {
                                         ),
                                       ),
                                     ),
-                                    for (final doc in groupDocs)
+                                    for (final g in groups)
                                       DropdownMenuItem<String?>(
-                                        value: doc.id,
+                                        value: g.id,
                                         child: Text(
-                                          (doc.data()
-                                                  as Map<
-                                                    String,
-                                                    dynamic
-                                                  >)['name'] ??
-                                              'Grup',
+                                          g.name.isEmpty ? 'Grup' : g.name,
                                           style: const TextStyle(
                                             fontWeight: FontWeight.w900,
                                           ),
@@ -227,19 +217,15 @@ class _GroupsScreenState extends State<GroupsScreen> {
                       style: TextStyle(color: Colors.white),
                     ),
                   )
-                : StreamBuilder<QuerySnapshot>(
-                    stream: FirebaseFirestore.instance
-                        .collection('groups')
-                        .where('tournamentId', isEqualTo: _selectedLeagueId)
-                        .snapshots(),
+                : StreamBuilder<List<GroupModel>>(
+                    stream: _databaseService.getGroups(_selectedLeagueId!),
                     builder: (context, snapshot) {
                       if (!snapshot.hasData) {
                         return const Center(child: CircularProgressIndicator());
                       }
 
-                      final allGroupDocs = snapshot.data!.docs;
-
-                      if (allGroupDocs.isEmpty) {
+                      final allGroups = snapshot.data ?? const <GroupModel>[];
+                      if (allGroups.isEmpty) {
                         return const Center(
                           child: Text(
                             'Bu turnuvada henüz grup oluşturulmamış.',
@@ -248,26 +234,23 @@ class _GroupsScreenState extends State<GroupsScreen> {
                         );
                       }
 
-                      final displayedGroupDocs = _selectedGroupId == null
-                          ? allGroupDocs
-                          : allGroupDocs
-                                .where((d) => d.id == _selectedGroupId)
+                      final displayedGroups = _selectedGroupId == null
+                          ? allGroups
+                          : allGroups
+                                .where((g) => g.id == _selectedGroupId)
                                 .toList();
 
                       return Transform.translate(
                         offset: const Offset(0, -24),
                         child: ListView.builder(
                           padding: const EdgeInsets.fromLTRB(0, 0, 0, 120),
-                          itemCount: displayedGroupDocs.length,
+                          itemCount: displayedGroups.length,
                           itemBuilder: (context, index) {
-                            final groupDoc = displayedGroupDocs[index];
-                            final groupData =
-                                groupDoc.data() as Map<String, dynamic>;
-                            final groupName = groupData['name'] ?? 'Grup';
+                            final g = displayedGroups[index];
                             return _GroupStandingsTable(
                               leagueId: _selectedLeagueId!,
-                              groupId: groupDoc.id,
-                              groupName: groupName,
+                              groupId: g.id,
+                              groupName: g.name,
                               databaseService: _databaseService,
                             );
                           },
@@ -306,6 +289,75 @@ class _GroupStandingsTable extends StatelessWidget {
     if (status == 'finished') return true;
     final isCompleted = data['isCompleted'];
     return isCompleted == true;
+  }
+
+  int? _matchWeek(Map<String, dynamic> m) {
+    final raw = m['week'];
+    if (raw == null) return null;
+    if (raw is num) return raw.toInt();
+    return int.tryParse(raw.toString().replaceAll('\u0000', '').trim());
+  }
+
+  String? _matchDedupeKey(Map<String, dynamic> m) {
+    final league = (m['leagueId'] ?? m['tournamentId'] ?? '').toString().trim();
+    final home = (m['homeTeamId'] ?? '').toString().trim();
+    final week = _matchWeek(m);
+    if (league.isNotEmpty && home.isNotEmpty && week != null) {
+      return '${league}_week$week\_$home';
+    }
+
+    final matchDate = (m['matchDate'] ?? m['dateString'] ?? '')
+        .toString()
+        .trim();
+    final away = (m['awayTeamId'] ?? '').toString().trim();
+    if (league.isNotEmpty &&
+        matchDate.isNotEmpty &&
+        home.isNotEmpty &&
+        away.isNotEmpty) {
+      return '${league}_$matchDate\_$home\_$away';
+    }
+
+    return null;
+  }
+
+  int _matchHomeScore(Map<String, dynamic> m) {
+    final rootHome = m['homeScore'];
+    final rootAway = m['awayScore'];
+    if (rootHome != null || rootAway != null) {
+      return _asInt(rootHome);
+    }
+
+    final score = m['score'];
+    if (score is Map) {
+      final fullTime = score['fullTime'];
+      if (fullTime is Map) {
+        final home = fullTime['home'];
+        if (home != null) return _asInt(home);
+      }
+    }
+
+    final legacy = m['fullTimeHomeScore'];
+    return _asInt(legacy);
+  }
+
+  int _matchAwayScore(Map<String, dynamic> m) {
+    final rootHome = m['homeScore'];
+    final rootAway = m['awayScore'];
+    if (rootHome != null || rootAway != null) {
+      return _asInt(rootAway);
+    }
+
+    final score = m['score'];
+    if (score is Map) {
+      final fullTime = score['fullTime'];
+      if (fullTime is Map) {
+        final away = fullTime['away'];
+        if (away != null) return _asInt(away);
+      }
+    }
+
+    final legacy = m['fullTimeAwayScore'];
+    return _asInt(legacy);
   }
 
   @override
@@ -368,58 +420,69 @@ class _GroupStandingsTable extends StatelessWidget {
             );
           }
 
-          return StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('matches')
-                .where('leagueId', isEqualTo: leagueId)
-                .where('groupId', isEqualTo: groupId)
-                .snapshots(),
-            builder: (context, matchesSnapshot) {
-              if (matchesSnapshot.connectionState == ConnectionState.waiting) {
+          return StreamBuilder<List<Map<String, dynamic>>>(
+            stream: databaseService.watchMatchesForStandings(
+              leagueId: leagueId,
+            ),
+            builder: (context, mergedSnapshot) {
+              if (mergedSnapshot.connectionState == ConnectionState.waiting) {
                 return const Padding(
                   padding: EdgeInsets.all(16),
                   child: Center(child: CircularProgressIndicator()),
                 );
               }
 
-              if (matchesSnapshot.hasData) {
-                for (final matchDoc in matchesSnapshot.data!.docs) {
-                  final m = matchDoc.data() as Map<String, dynamic>;
-                  final hId = (m['homeTeamId'] ?? '').toString();
-                  final aId = (m['awayTeamId'] ?? '').toString();
+              final matchList =
+                  mergedSnapshot.data ?? const <Map<String, dynamic>>[];
+              final seenMatchKeys = <String>{};
 
-                  if (_isCompleted(m) &&
-                      standings.containsKey(hId) &&
-                      standings.containsKey(aId)) {
-                    final hS = _asInt(m['homeScore']);
-                    final aS = _asInt(m['awayScore']);
+              for (final m in matchList) {
+                final dedupeKey = _matchDedupeKey(m);
+                if (dedupeKey != null && !seenMatchKeys.add(dedupeKey)) {
+                  continue;
+                }
+                final matchGroup = (m['groupId'] ?? m['groupName'] ?? '')
+                    .toString()
+                    .trim();
+                if (matchGroup.isNotEmpty &&
+                    matchGroup != groupId &&
+                    matchGroup != groupName.trim()) {
+                  continue;
+                }
+                final hId = (m['homeTeamId'] ?? '').toString();
+                final aId = (m['awayTeamId'] ?? '').toString();
 
-                    standings[hId]!['P'] = standings[hId]!['P']! + 1;
-                    standings[aId]!['P'] = standings[aId]!['P']! + 1;
-                    standings[hId]!['AG'] = standings[hId]!['AG']! + hS;
-                    standings[hId]!['YG'] = standings[hId]!['YG']! + aS;
-                    standings[aId]!['AG'] = standings[aId]!['AG']! + aS;
-                    standings[aId]!['YG'] = standings[aId]!['YG']! + hS;
+                if (_isCompleted(m) &&
+                    standings.containsKey(hId) &&
+                    standings.containsKey(aId)) {
+                  final hS = _matchHomeScore(m);
+                  final aS = _matchAwayScore(m);
 
-                    if (hS > aS) {
-                      standings[hId]!['G'] = standings[hId]!['G']! + 1;
-                      standings[hId]!['Puan'] = standings[hId]!['Puan']! + 3;
-                      standings[aId]!['M'] = standings[aId]!['M']! + 1;
-                    } else if (aS > hS) {
-                      standings[aId]!['G'] = standings[aId]!['G']! + 1;
-                      standings[aId]!['Puan'] = standings[aId]!['Puan']! + 3;
-                      standings[hId]!['M'] = standings[hId]!['M']! + 1;
-                    } else {
-                      standings[hId]!['B'] = standings[hId]!['B']! + 1;
-                      standings[aId]!['B'] = standings[aId]!['B']! + 1;
-                      standings[hId]!['Puan'] = standings[hId]!['Puan']! + 1;
-                      standings[aId]!['Puan'] = standings[aId]!['Puan']! + 1;
-                    }
+                  standings[hId]!['P'] = standings[hId]!['P']! + 1;
+                  standings[aId]!['P'] = standings[aId]!['P']! + 1;
+                  standings[hId]!['AG'] = standings[hId]!['AG']! + hS;
+                  standings[hId]!['YG'] = standings[hId]!['YG']! + aS;
+                  standings[aId]!['AG'] = standings[aId]!['AG']! + aS;
+                  standings[aId]!['YG'] = standings[aId]!['YG']! + hS;
+
+                  if (hS > aS) {
+                    standings[hId]!['G'] = standings[hId]!['G']! + 1;
+                    standings[hId]!['Puan'] = standings[hId]!['Puan']! + 3;
+                    standings[aId]!['M'] = standings[aId]!['M']! + 1;
+                  } else if (aS > hS) {
+                    standings[aId]!['G'] = standings[aId]!['G']! + 1;
+                    standings[aId]!['Puan'] = standings[aId]!['Puan']! + 3;
+                    standings[hId]!['M'] = standings[hId]!['M']! + 1;
+                  } else {
+                    standings[hId]!['B'] = standings[hId]!['B']! + 1;
+                    standings[aId]!['B'] = standings[aId]!['B']! + 1;
+                    standings[hId]!['Puan'] = standings[hId]!['Puan']! + 1;
+                    standings[aId]!['Puan'] = standings[aId]!['Puan']! + 1;
                   }
                 }
               }
 
-              standings.forEach((k, v) {
+              standings.forEach((_, v) {
                 v['AV'] = v['AG']! - v['YG']!;
               });
 
@@ -545,13 +608,12 @@ class _GroupStandingsTable extends StatelessWidget {
                               ),
                             ),
                           ),
-                          headerCell('O', width: 20),
-                          headerCell('G', width: 20),
-                          headerCell('B', width: 20),
-                          headerCell('M', width: 20),
-                          headerCell('A', width: 20),
-                          headerCell('Y', width: 20),
-                          headerCell('AV', width: 28),
+                          headerCell('O', width: 18),
+                          headerCell('G', width: 18),
+                          headerCell('B', width: 18),
+                          headerCell('M', width: 18),
+                          headerCell('A:Y', width: 34),
+                          headerCell('AV', width: 24),
                           headerCell('P', width: 26, highlight: true),
                         ],
                       ),
@@ -690,7 +752,7 @@ class _StandingsRow extends StatelessWidget {
               height: 46,
               child: Center(
                 child: Container(
-                  width: 3,
+                  width: 2,
                   height: 25,
                   decoration: BoxDecoration(
                     color: stripeColor,
@@ -701,7 +763,7 @@ class _StandingsRow extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             SizedBox(
-              width: 20,
+              width: 24,
               child: Center(
                 child: Text(
                   '${index + 1}',
@@ -726,7 +788,7 @@ class _StandingsRow extends StatelessWidget {
                     ),
                     child: WebSafeImage(
                       url: url,
-                      width: 20,
+                      width: 15,
                       height: 20,
                       isCircle: true,
                       fallbackIconSize: 14,
@@ -748,13 +810,15 @@ class _StandingsRow extends StatelessWidget {
                 ],
               ),
             ),
-            cell(stats['P']),
-            cell(stats['G']),
-            cell(stats['B']),
-            cell(stats['M']),
-            cell(stats['AG']),
-            cell(stats['YG']),
-            cell(stats['AV'], width: 28),
+            cell(stats['P'], width: 18),
+            cell(stats['G'], width: 18),
+            cell(stats['B'], width: 18),
+            cell(stats['M'], width: 18),
+            cell(
+              '${stats['AG']}:${stats['YG']}',
+              width: 34,
+            ), // A:Y formatında yazdırıyoruz
+            cell(stats['AV'], width: 24),
             cell(
               stats['Puan'],
               width: 26,

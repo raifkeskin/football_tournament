@@ -74,4 +74,72 @@ void main() {
       expect(leagues, {'L1', 'L2'});
     },
   );
+
+  test('normalizeMatchesDocIdsByLeagueWeekHomeTeam maç idlerini normalize eder', () async {
+    final firestore = FakeFirebaseFirestore();
+    final service = DatabaseService(firestore: firestore);
+
+    final auto1 = firestore.collection('matches').doc('auto1');
+    await auto1.set({
+      'leagueId': 'L1',
+      'week': 5,
+      'homeTeamId': 'H1',
+      'awayTeamId': 'A1',
+      'homeScore': 3,
+      'awayScore': 1,
+      'status': 'finished',
+      'isCompleted': true,
+    });
+    await auto1.collection('events').doc('e1').set({'minute': 0, 'title': 'X'});
+
+    final auto2 = firestore.collection('matches').doc('auto2');
+    await auto2.set({
+      'leagueId': 'L1',
+      'week': 5,
+      'homeTeamId': 'H1',
+      'awayTeamId': 'A1',
+      'homeScore': 3,
+      'awayScore': 1,
+      'score': {
+        'fullTime': {'home': 3, 'away': 1},
+      },
+      'status': 'finished',
+      'isCompleted': true,
+    });
+
+    await firestore.collection('match_events').doc('me1').set({
+      'matchId': 'auto1',
+      'minute': 10,
+      'type': 'goal',
+      'teamId': 'H1',
+      'playerPhone': '5550000000',
+    });
+
+    final result = await service.normalizeMatchesDocIdsByLeagueWeekHomeTeam();
+    expect((result['scanned'] ?? 0) >= 2, true);
+    expect((result['deleted'] ?? 0) >= 1, true);
+
+    final normalizedId = 'L1_week5_H1';
+    final normalizedSnap =
+        await firestore.collection('matches').doc(normalizedId).get();
+    expect(normalizedSnap.exists, true);
+
+    final stillAuto1 = await firestore.collection('matches').doc('auto1').get();
+    final stillAuto2 = await firestore.collection('matches').doc('auto2').get();
+    expect(stillAuto1.exists, false);
+    expect(stillAuto2.exists, false);
+
+    final evSnap = await firestore
+        .collection('matches')
+        .doc(normalizedId)
+        .collection('events')
+        .get();
+    expect(evSnap.docs.any((d) => d.id == 'e1'), true);
+
+    final matchEventsSnap = await firestore.collection('match_events').get();
+    expect(
+      matchEventsSnap.docs.any((d) => d.data()['matchId'] == normalizedId),
+      true,
+    );
+  });
 }
