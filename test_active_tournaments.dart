@@ -1,6 +1,5 @@
 import 'package:firebase_core/firebase_core.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'lib/services/database_service.dart';
+import 'package:football_tournament/services/database_service.dart';
 
 void main() async {
   // Initialize Firebase
@@ -15,7 +14,7 @@ void main() async {
   const testTeamId = 'OnbHjgCmq5MrMgqyiN0R';
   const expectedTournamentId = 'qAzYxC579QhxDDgsorgX';
 
-  print('\n� Testing getTeamActiveTournaments with teamId: $testTeamId');
+  print('\n🔍 Testing getTeamActiveTournaments with teamId: $testTeamId');
   print('📌 Expected tournament ID: $expectedTournamentId\n');
 
   try {

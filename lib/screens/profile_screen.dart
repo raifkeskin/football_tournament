@@ -453,7 +453,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   return StreamBuilder<
                                       DocumentSnapshot<Map<String, dynamic>>>(
                                     stream: FirebaseFirestore.instance
-                                        .collection('tournaments')
+                                        .collection('leagues')
                                         .doc(tournamentId)
                                         .snapshots(),
                                     builder: (context, tSnap) {

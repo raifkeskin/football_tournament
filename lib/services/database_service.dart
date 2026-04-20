@@ -24,20 +24,19 @@ class DatabaseService {
     final subtitleKey = StringUtils.normalizeTrKey(subtitle);
 
     final byNameKey = await _db
-        .collection('tournaments')
+        .collection('leagues')
         .where('nameKey', isEqualTo: nameKey)
         .get();
     for (final d in byNameKey.docs) {
       if (excludeLeagueId != null && d.id == excludeLeagueId) continue;
       final data = d.data();
-      final existingSubtitleKey =
-          (data['subtitleKey'] as String?) ??
+      final existingSubtitleKey = (data['subtitleKey'] as String?) ??
           StringUtils.normalizeTrKey((data['subtitle'] ?? '').toString());
       if (existingSubtitleKey == subtitleKey) return false;
     }
 
     final byName = await _db
-        .collection('tournaments')
+        .collection('leagues')
         .where('name', isEqualTo: name.trim())
         .get();
     for (final d in byName.docs) {
@@ -61,6 +60,7 @@ class DatabaseService {
     required int minCount,
   }) async {
     return;
+
   }
 
   List<List<Team?>> _roundRobinRounds(List<Team> teams) {
@@ -145,9 +145,7 @@ class DatabaseService {
     final subtitle = (league.subtitle ?? '').trim();
     final unique = await isLeagueUnique(name: league.name, subtitle: subtitle);
     if (!unique) {
-      throw Exception(
-        'Bu isim ve alt bilgi kombinasyonuna sahip bir turnuva zaten var!',
-      );
+      throw Exception('Bu isim ve alt bilgi kombinasyonuna sahip bir turnuva zaten var!');
     }
 
     DocumentReference ref = await _db.collection('leagues').add({
@@ -167,9 +165,7 @@ class DatabaseService {
       excludeLeagueId: league.id,
     );
     if (!unique) {
-      throw Exception(
-        'Bu isim ve alt bilgi kombinasyonuna sahip bir turnuva zaten var!',
-      );
+      throw Exception('Bu isim ve alt bilgi kombinasyonuna sahip bir turnuva zaten var!');
     }
     await _db.collection('leagues').doc(league.id).update({
       ...league.toMap(),
@@ -181,54 +177,6 @@ class DatabaseService {
 
   Stream<QuerySnapshot> getLeagues() {
     return _db.collection('leagues').orderBy('name').snapshots();
-  }
-
-  Future<List<League>> getTeamActiveTournaments(String teamId) async {
-    // Tüm 'groups' alt koleksiyonlarını tara ve bu takımın olduğu grupları bul
-    final groupSnap = await _db
-        .collectionGroup('groups')
-        .where('teamIds', arrayContains: teamId)
-        .get();
-
-    final ids = <String>{};
-    for (final doc in groupSnap.docs) {
-      // Groups dokümanında tournamentId alanı var - doğrudan al
-      final tournamentId = (doc.data()['tournamentId'] ?? '').toString().trim();
-      if (tournamentId.isNotEmpty) {
-        ids.add(tournamentId);
-      }
-    }
-
-    if (ids.isEmpty) {
-      return const [];
-    }
-
-    // Bulunan ID'lerle aktif turnuvaları çek
-    final tournaments = <League>[];
-    final idList = ids.toList();
-
-    // Firestore whereIn sınırı (10-30 arası) olduğu için batch devam
-    for (var i = 0; i < idList.length; i += 10) {
-      final batchIds = idList.sublist(
-        i,
-        i + 10 > idList.length ? idList.length : i + 10,
-      );
-
-      final snap = await _db
-          .collection('leagues')
-          .where(FieldPath.documentId, whereIn: batchIds)
-          .where('isActive', isEqualTo: true)
-          .get();
-
-      for (final doc in snap.docs) {
-        tournaments.add(League.fromMap({...doc.data(), 'id': doc.id}));
-      }
-    }
-
-    tournaments.sort(
-      (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-    );
-    return tournaments;
   }
 
   Future<void> setDefaultLeague({required String leagueId}) async {
@@ -284,11 +232,8 @@ class DatabaseService {
 
   Stream<List<GroupModel>> getGroups(String leagueId) {
     return _db
-        .collection('matches')
-        .where(
-          'tournamentId',
-          isEqualTo: leagueId,
-        ) // tournamentId olarak güncellendi
+        .collection('groups')
+        .where('tournamentId', isEqualTo: leagueId)
         .snapshots()
         .map(
           (snap) => snap.docs
@@ -306,6 +251,43 @@ class DatabaseService {
               .map((doc) => GroupModel.fromMap(doc.data(), doc.id))
               .toList(),
         );
+  }
+
+  Future<List<League>> getTeamActiveTournaments(String teamId) async {
+    final tId = teamId.trim();
+    if (tId.isEmpty) return [];
+
+    final groupSnap = await _db
+        .collection('groups')
+        .where('teamIds', arrayContains: tId)
+        .get();
+
+    final tournamentIds = <String>{};
+    for (final doc in groupSnap.docs) {
+      final data = doc.data();
+      final tournamentId =
+          (data['tournamentId'] ?? data['leagueId'] ?? '').toString().trim();
+      if (tournamentId.isNotEmpty) tournamentIds.add(tournamentId);
+    }
+
+    if (tournamentIds.isEmpty) return [];
+
+    final leagues = <League>[];
+    final ids = tournamentIds.toList();
+    for (var i = 0; i < ids.length; i += 10) {
+      final chunk = ids.sublist(i, min(i + 10, ids.length));
+      final tournamentSnap = await _db
+          .collection('leagues')
+          .where(FieldPath.documentId, whereIn: chunk)
+          .get();
+      for (final doc in tournamentSnap.docs) {
+        leagues.add(League.fromMap({...doc.data(), 'id': doc.id}));
+      }
+    }
+
+    final active = leagues.where((l) => l.isActive).toList()
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    return active;
   }
 
   Future<void> deleteGroupCascade(String groupId) async {
@@ -355,8 +337,7 @@ class DatabaseService {
         .orderBy('name')
         .snapshots()
         .map(
-          (snap) =>
-              snap.docs.map((d) => Award.fromMap(d.data(), d.id)).toList(),
+          (snap) => snap.docs.map((d) => Award.fromMap(d.data(), d.id)).toList(),
         );
   }
 
@@ -372,9 +353,7 @@ class DatabaseService {
       'tournamentId': leagueId,
       'name': trimmed,
       'awardName': trimmed,
-      'description': (description ?? '').trim().isEmpty
-          ? null
-          : description!.trim(),
+      'description': (description ?? '').trim().isEmpty ? null : description!.trim(),
       'createdAt': FieldValue.serverTimestamp(),
     });
   }
@@ -431,6 +410,60 @@ class DatabaseService {
   }
 
   // --- PLAYER (OYUNCU) ---
+  Future<void> _assertPlayerUnique({
+    required String name,
+    required String? birthDate,
+    String? excludePlayerId,
+  }) async {
+    final normalizedBirthDate = (birthDate ?? '').trim();
+    if (normalizedBirthDate.isEmpty) return;
+    final key = StringUtils.normalizeTrKey(name);
+    final seen = <String>{};
+
+    Future<void> scan(QuerySnapshot<Map<String, dynamic>> snap) async {
+      for (final d in snap.docs) {
+        if (!seen.add(d.id)) continue;
+        if (excludePlayerId != null && d.id == excludePlayerId) continue;
+        final existingName = (d.data()['name'] ?? '').toString();
+        if (StringUtils.normalizeTrKey(existingName) == key) {
+          throw Exception(
+            'Bu futbolcu zaten sistemde kayıtlı!',
+          );
+        }
+      }
+    }
+
+    final byBirthDate = await _db
+        .collection('players')
+        .where('birthDate', isEqualTo: normalizedBirthDate)
+        .get();
+    await scan(byBirthDate);
+
+    final year = int.tryParse(
+      RegExp(r'(19\d{2}|20\d{2}|2100)$').firstMatch(normalizedBirthDate)?.group(0) ??
+          '',
+    );
+    if (year != null) {
+      final byInt = await _db
+          .collection('players')
+          .where('birthYear', isEqualTo: year)
+          .get();
+      await scan(byInt);
+
+      final byStr = await _db
+          .collection('players')
+          .where('birthYear', isEqualTo: year.toString())
+          .get();
+      await scan(byStr);
+
+      final byYearStringAsBirthDate = await _db
+          .collection('players')
+          .where('birthDate', isEqualTo: year.toString())
+          .get();
+      await scan(byYearStringAsBirthDate);
+    }
+  }
+
   Future<void> addPlayer(PlayerModel player) async {
     final phone = (player.phone ?? '').trim();
     await upsertPlayerIdentity(
@@ -503,14 +536,18 @@ class DatabaseService {
     final playerRef = _db.collection('players').doc(pId);
     final penaltyRef = _db.collection('penalties').doc(pId);
 
-    batch.set(penaltyRef, {
-      'playerId': pId,
-      'teamId': tId,
-      'penaltyReason': reason,
-      'matchCount': matchCount,
-      'updatedAt': FieldValue.serverTimestamp(),
-      'createdAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    batch.set(
+      penaltyRef,
+      {
+        'playerId': pId,
+        'teamId': tId,
+        'penaltyReason': reason,
+        'matchCount': matchCount,
+        'updatedAt': FieldValue.serverTimestamp(),
+        'createdAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
     batch.update(playerRef, {
       'suspendedMatches': matchCount,
       'updatedAt': FieldValue.serverTimestamp(),
@@ -519,17 +556,17 @@ class DatabaseService {
   }
 
   Stream<List<PlayerModel>> getPlayers(String teamId, {String? tournamentId}) {
-    Query<Map<String, dynamic>> q = _db
-        .collection('rosters')
-        .where('teamId', isEqualTo: teamId);
+    Query<Map<String, dynamic>> q = _db.collection('rosters').where(
+      'teamId',
+      isEqualTo: teamId,
+    );
     final tId = (tournamentId ?? '').trim();
     if (tId.isNotEmpty) {
       q = q.where('tournamentId', isEqualTo: tId);
     }
     return q.snapshots().map((snap) {
-      final list = snap.docs
-          .map((doc) => PlayerModel.fromMap(doc.data(), doc.id))
-          .toList();
+      final list =
+          snap.docs.map((doc) => PlayerModel.fromMap(doc.data(), doc.id)).toList();
       list.sort((a, b) {
         bool isManager(PlayerModel p) =>
             p.role == 'Takım Sorumlusu' || p.role == 'Her İkisi';
@@ -556,16 +593,18 @@ class DatabaseService {
     if (p.isEmpty) throw Exception('Telefon boş olamaz.');
     final n = name.trim();
     if (n.isEmpty) throw Exception('İsim boş olamaz.');
-    await _db.collection('players').doc(p).set({
-      'phone': p,
-      'name': n,
-      'birthDate': (birthDate ?? '').trim().isEmpty ? null : birthDate!.trim(),
-      'mainPosition': (mainPosition ?? '').trim().isEmpty
-          ? null
-          : mainPosition!.trim(),
-      'updatedAt': FieldValue.serverTimestamp(),
-      'createdAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    await _db.collection('players').doc(p).set(
+      {
+        'phone': p,
+        'name': n,
+        'birthDate': (birthDate ?? '').trim().isEmpty ? null : birthDate!.trim(),
+        'mainPosition':
+            (mainPosition ?? '').trim().isEmpty ? null : mainPosition!.trim(),
+        'updatedAt': FieldValue.serverTimestamp(),
+        'createdAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
   }
 
   Future<void> upsertRosterEntry({
@@ -584,18 +623,19 @@ class DatabaseService {
       throw Exception('Kadro alanları eksik.');
     }
     final docId = '${phone}_${t}_$team';
-    await _db.collection('rosters').doc(docId).set({
-      'tournamentId': t,
-      'teamId': team,
-      'playerPhone': phone,
-      'playerName': name,
-      'jerseyNumber': (jerseyNumber ?? '').trim().isEmpty
-          ? null
-          : jerseyNumber!.trim(),
-      'role': role.trim().isEmpty ? 'Futbolcu' : role.trim(),
-      'updatedAt': FieldValue.serverTimestamp(),
-      'createdAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    await _db.collection('rosters').doc(docId).set(
+      {
+        'tournamentId': t,
+        'teamId': team,
+        'playerPhone': phone,
+        'playerName': name,
+        'jerseyNumber': (jerseyNumber ?? '').trim().isEmpty ? null : jerseyNumber!.trim(),
+        'role': role.trim().isEmpty ? 'Futbolcu' : role.trim(),
+        'updatedAt': FieldValue.serverTimestamp(),
+        'createdAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
   }
 
   Stream<QuerySnapshot<Map<String, dynamic>>> watchRostersByPlayerPhone(
@@ -788,15 +828,17 @@ class DatabaseService {
       q = q.where('groupId', isEqualTo: gid);
     }
     return q.snapshots().map(
-      (snap) =>
-          snap.docs.map((d) => MatchModel.fromMap(d.data(), d.id)).toList(),
-    );
+          (snap) =>
+              snap.docs.map((d) => MatchModel.fromMap(d.data(), d.id)).toList(),
+        );
   }
 
-  Future<int?> getFixtureMaxWeek(String leagueId, {String? groupId}) async {
-    Query<Map<String, dynamic>> q = _db
-        .collection('matches')
-        .where('leagueId', isEqualTo: leagueId);
+  Future<int?> getFixtureMaxWeek(
+    String leagueId, {
+    String? groupId,
+  }) async {
+    Query<Map<String, dynamic>> q =
+        _db.collection('matches').where('leagueId', isEqualTo: leagueId);
     final gid = (groupId ?? '').trim();
     if (gid.isNotEmpty) {
       q = q.where('groupId', isEqualTo: gid);
@@ -896,17 +938,17 @@ class DatabaseService {
           final at = (a.matchTime ?? '').trim();
           final bt = (b.matchTime ?? '').trim();
           if (at.isEmpty && bt.isEmpty) {
-            return a.homeTeamName.toLowerCase().compareTo(
-              b.homeTeamName.toLowerCase(),
-            );
+            return a.homeTeamName
+                .toLowerCase()
+                .compareTo(b.homeTeamName.toLowerCase());
           }
           if (at.isEmpty) return 1;
           if (bt.isEmpty) return -1;
           final cmp = at.compareTo(bt);
           if (cmp != 0) return cmp;
-          return a.homeTeamName.toLowerCase().compareTo(
-            b.homeTeamName.toLowerCase(),
-          );
+          return a.homeTeamName
+              .toLowerCase()
+              .compareTo(b.homeTeamName.toLowerCase());
         });
       controller.add(list);
     }
@@ -920,41 +962,28 @@ class DatabaseService {
         QueryDocumentSnapshot<Map<String, dynamic>> doc,
         Map<String, dynamic> data,
       ) async {
-        final hasNewDate =
-            (data['matchDate'] is String) &&
+        final hasNewDate = (data['matchDate'] is String) &&
             (data['matchDate'] as String).trim().isNotEmpty;
-        final hasNewTime =
-            (data['matchTime'] is String) &&
+        final hasNewTime = (data['matchTime'] is String) &&
             (data['matchTime'] as String).trim().isNotEmpty;
-        final hasLegacyDateString =
-            (data['dateString'] is String) &&
+        final hasLegacyDateString = (data['dateString'] is String) &&
             (data['dateString'] as String).trim().isNotEmpty;
         final hasLegacyTime =
-            (data['time'] is String) &&
-            (data['time'] as String).trim().isNotEmpty;
+            (data['time'] is String) && (data['time'] as String).trim().isNotEmpty;
         final raw = data['matchDate'];
         final hasLegacyTimestamp = raw is Timestamp;
 
-        if (hasNewDate &&
-            (hasNewTime || !hasLegacyTime) &&
-            !hasLegacyDateString &&
-            !hasLegacyTime &&
-            !hasLegacyTimestamp) {
+        if (hasNewDate && (hasNewTime || !hasLegacyTime) && !hasLegacyDateString && !hasLegacyTime && !hasLegacyTimestamp) {
           return;
         }
 
-        String? newDate = hasNewDate
-            ? (data['matchDate'] as String).trim()
-            : null;
-        String? newTime = hasNewTime
-            ? (data['matchTime'] as String).trim()
-            : null;
+        String? newDate = hasNewDate ? (data['matchDate'] as String).trim() : null;
+        String? newTime = hasNewTime ? (data['matchTime'] as String).trim() : null;
 
         if ((newDate ?? '').isEmpty && hasLegacyDateString) {
           newDate = (data['dateString'] as String).trim();
         }
-        if (((newDate ?? '').isEmpty || (newTime ?? '').isEmpty) &&
-            raw is Timestamp) {
+        if (((newDate ?? '').isEmpty || (newTime ?? '').isEmpty) && raw is Timestamp) {
           final dt = raw.toDate();
           newDate =
               "${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}";
@@ -987,10 +1016,7 @@ class DatabaseService {
           if (subNewFallback != null) return;
           subNewFallback = qAllForNew.snapshots().listen((snap) {
             latestNew = snap.docs
-                .where(
-                  (d) =>
-                      (d.data()['matchDate'] ?? '').toString().trim() == dStr,
-                )
+                .where((d) => (d.data()['matchDate'] ?? '').toString().trim() == dStr)
                 .map((doc) => MatchModel.fromMap(doc.data(), doc.id))
                 .toList();
             emit();
@@ -1040,50 +1066,6 @@ class DatabaseService {
     }
   }
 
-  // Otomatik İlk Yarı Skoru Hesaplama
-  Future<void> recalculateHalfTimeScore(String matchId) async {
-    final matchDoc = await _db.collection('matches').doc(matchId).get();
-    if (!matchDoc.exists) return;
-
-    final matchData = matchDoc.data() as Map<String, dynamic>;
-    final homeTeamId = (matchData['homeTeamId'] ?? '').toString();
-    final awayTeamId = (matchData['awayTeamId'] ?? '').toString();
-
-    if (homeTeamId.isEmpty || awayTeamId.isEmpty) return;
-
-    // Events'den golleri al (minute <= 30)
-    final eventsSnap = await _db
-        .collection('matches')
-        .doc(matchId)
-        .collection('events')
-        .get();
-
-    int homeGoals = 0;
-    int awayGoals = 0;
-
-    for (final eventDoc in eventsSnap.docs) {
-      final eventData = eventDoc.data();
-      final type = (eventData['type'] ?? '').toString().toLowerCase();
-      final minute = (eventData['minute'] as num?)?.toInt() ?? 100;
-      final scoringTeamId = (eventData['teamId'] ?? '').toString();
-
-      // Gol ise ve ilk yarı (minute <= 30) ise say
-      if ((type == 'goal' || type == 'gol') && minute <= 30) {
-        if (scoringTeamId == homeTeamId) {
-          homeGoals++;
-        } else if (scoringTeamId == awayTeamId) {
-          awayGoals++;
-        }
-      }
-    }
-
-    // halfTimeHomeScore ve halfTimeAwayScore güncelle
-    await _db.collection('matches').doc(matchId).update({
-      'halfTimeHomeScore': homeGoals,
-      'halfTimeAwayScore': awayGoals,
-    });
-  }
-
   Future<void> updateMatchYoutubeUrl({
     required String matchId,
     required String? youtubeUrl,
@@ -1101,9 +1083,8 @@ class DatabaseService {
   }) async {
     final url = (photoUrl ?? '').trim();
     await _db.collection('matches').doc(matchId).update({
-      isHome ? 'homeHighlightPhotoUrl' : 'awayHighlightPhotoUrl': url.isEmpty
-          ? null
-          : url,
+      isHome ? 'homeHighlightPhotoUrl' : 'awayHighlightPhotoUrl':
+          url.isEmpty ? null : url,
     });
   }
 
@@ -1199,19 +1180,13 @@ class DatabaseService {
         if (!isHome && !isAway) return;
 
         final scoreRaw = data['score'];
-        final scoreMap = (scoreRaw is Map)
-            ? Map<String, dynamic>.from(scoreRaw)
-            : <String, dynamic>{};
+        final scoreMap =
+            (scoreRaw is Map) ? Map<String, dynamic>.from(scoreRaw) : <String, dynamic>{};
         final ftRaw = scoreMap['fullTime'];
-        final ft = (ftRaw is Map)
-            ? Map<String, dynamic>.from(ftRaw)
-            : <String, dynamic>{};
-        final currentHome = (ft['home'] is num)
-            ? (ft['home'] as num).toInt()
-            : int.tryParse((ft['home'] ?? '0').toString()) ?? 0;
-        final currentAway = (ft['away'] is num)
-            ? (ft['away'] as num).toInt()
-            : int.tryParse((ft['away'] ?? '0').toString()) ?? 0;
+        final ft =
+            (ftRaw is Map) ? Map<String, dynamic>.from(ftRaw) : <String, dynamic>{};
+        final currentHome = (ft['home'] is num) ? (ft['home'] as num).toInt() : int.tryParse((ft['home'] ?? '0').toString()) ?? 0;
+        final currentAway = (ft['away'] is num) ? (ft['away'] as num).toInt() : int.tryParse((ft['away'] ?? '0').toString()) ?? 0;
         final nextHome = isHome ? currentHome + 1 : currentHome;
         final nextAway = isAway ? currentAway + 1 : currentAway;
         txn.update(matchRef, {
@@ -1226,34 +1201,26 @@ class DatabaseService {
     }
   }
 
-  Future<void> commitPlayerStatsForCompletedMatch({
-    required String matchId,
-  }) async {
+  Future<void> commitPlayerStatsForCompletedMatch({required String matchId}) async {
     final matchRef = _db.collection('matches').doc(matchId);
     final matchSnap = await matchRef.get();
     final match = matchSnap.data();
     if (match == null) return;
 
     final status = (match['status'] ?? '').toString().trim();
-    if (status != MatchStatus.finished.name &&
-        status.toLowerCase() != 'completed') {
+    if (status != MatchStatus.finished.name && status.toLowerCase() != 'completed') {
       return;
     }
     if (match['statsCommittedAt'] != null || match['statsCommitted'] == true) {
       return;
     }
 
-    final tournamentId = (match['tournamentId'] ?? match['leagueId'] ?? '')
-        .toString()
-        .trim();
+    final tournamentId = (match['tournamentId'] ?? match['leagueId'] ?? '').toString().trim();
     if (tournamentId.isEmpty) return;
 
     List<String> asPhones(dynamic v) {
       if (v is! List) return const <String>[];
-      return v
-          .map((e) => e.toString().trim())
-          .where((e) => e.isNotEmpty)
-          .toList();
+      return v.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
     }
 
     final homeTeamId = (match['homeTeamId'] ?? '').toString().trim();
@@ -1293,20 +1260,10 @@ class DatabaseService {
       final playerPhone = (e['playerPhone'] ?? '').toString().trim();
       final assistPhone = (e['assistPlayerPhone'] ?? '').toString().trim();
 
-      void bump(
-        String phone,
-        String field, {
-        int by = 1,
-        String? teamIdOverride,
-      }) {
+      void bump(String phone, String field, {int by = 1, String? teamIdOverride}) {
         final p = phone.trim();
         if (p.isEmpty) return;
-        ensurePhone(
-          p,
-          teamId: (teamIdOverride ?? teamId).trim().isEmpty
-              ? (teamByPhone[p] ?? '')
-              : (teamIdOverride ?? teamId),
-        );
+        ensurePhone(p, teamId: (teamIdOverride ?? teamId).trim().isEmpty ? (teamByPhone[p] ?? '') : (teamIdOverride ?? teamId));
         deltas[p]![field] = (deltas[p]![field] ?? 0) + by;
       }
 
@@ -1335,10 +1292,7 @@ class DatabaseService {
       final phone = entry.key;
       final fields = entry.value;
       final teamId = (teamByPhone[phone] ?? '').trim();
-      final statsId = PlayerStats.docId(
-        playerPhone: phone,
-        tournamentId: tournamentId,
-      );
+      final statsId = PlayerStats.docId(playerPhone: phone, tournamentId: tournamentId);
       final statsRef = _db.collection('player_stats').doc(statsId);
 
       final payload = <String, dynamic>{
@@ -1346,8 +1300,7 @@ class DatabaseService {
         'tournamentId': tournamentId,
         'teamId': teamId,
         'updatedAt': FieldValue.serverTimestamp(),
-        if (match['statsCommittedAt'] == null)
-          'createdAt': FieldValue.serverTimestamp(),
+        if (match['statsCommittedAt'] == null) 'createdAt': FieldValue.serverTimestamp(),
       };
 
       for (final f in fields.entries) {
@@ -1834,10 +1787,7 @@ class DatabaseService {
   }
 
   // --- NEWS (HABERLER) ---
-  Future<void> addNews({
-    required String tournamentId,
-    required String content,
-  }) async {
+  Future<void> addNews({required String tournamentId, required String content}) async {
     final tId = tournamentId.trim();
     if (tId.isEmpty) throw Exception('Turnuva seçilmeden haber eklenemez.');
     await _db.collection('news').add({

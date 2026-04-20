@@ -1,21 +1,43 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:firebase_core/firebase_core.dart';
+import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:football_tournament/services/database_service.dart';
 
 void main() {
   group('getTeamActiveTournaments Tests', () {
     late DatabaseService dbService;
+    late FakeFirebaseFirestore firestore;
     const testTeamId = 'OnbHjgCmq5MrMgqyiN0R';
     const expectedTournamentId = 'qAzYxC579QhxDDgsorgX';
+    const inactiveTournamentId = 'inactive_tournament_123';
 
-    setUpAll(() async {
-      // Firebase initialize
-      try {
-        await Firebase.initializeApp();
-      } catch (e) {
-        // Already initialized
-      }
-      dbService = DatabaseService();
+    setUp(() async {
+      firestore = FakeFirebaseFirestore();
+
+      await firestore.collection('leagues').doc(expectedTournamentId).set({
+        'name': 'Active Tournament',
+        'logoUrl': '',
+        'country': 'TR',
+        'isActive': true,
+      });
+      await firestore.collection('leagues').doc(inactiveTournamentId).set({
+        'name': 'Inactive Tournament',
+        'logoUrl': '',
+        'country': 'TR',
+        'isActive': false,
+      });
+
+      await firestore.collection('groups').doc('g1').set({
+        'tournamentId': expectedTournamentId,
+        'name': 'A',
+        'teamIds': [testTeamId],
+      });
+      await firestore.collection('groups').doc('g2').set({
+        'tournamentId': inactiveTournamentId,
+        'name': 'B',
+        'teamIds': [testTeamId],
+      });
+
+      dbService = DatabaseService(firestore: firestore);
     });
 
     test(
