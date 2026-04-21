@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import '../models/league.dart';
+import '../models/league_extras.dart';
 import '../models/match.dart';
 import '../models/team.dart';
 import '../services/app_session.dart';
 import '../services/database_service.dart';
-import '../services/league_service.dart';
-import '../services/team_service.dart';
+import '../services/interfaces/i_league_service.dart';
+import '../services/interfaces/i_team_service.dart';
+import '../services/service_locator.dart';
 
 class AdminFixtureEntryScreen extends StatefulWidget {
   const AdminFixtureEntryScreen({
@@ -24,8 +26,8 @@ class AdminFixtureEntryScreen extends StatefulWidget {
 
 class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
   final _dbService = DatabaseService();
-  final _leagueService = LeagueService();
-  final _teamService = TeamService();
+  final ILeagueService _leagueService = ServiceLocator.leagueService;
+  final ITeamService _teamService = ServiceLocator.teamService;
   String? _selectedLeagueId;
   String? _selectedGroupId;
   String? _homeTeamId;

@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'admin_fixture_entry_screen.dart';
 import 'admin_group_management_screen.dart';
 import 'admin_manage_teams_screen.dart';
-import '../services/league_service.dart';
+import '../services/interfaces/i_league_service.dart';
+import '../services/service_locator.dart';
 
 class TournamentAdminDashboardScreen extends StatelessWidget {
   const TournamentAdminDashboardScreen({
@@ -16,7 +17,7 @@ class TournamentAdminDashboardScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final leagueService = LeagueService();
+    final ILeagueService leagueService = ServiceLocator.leagueService;
 
     return Scaffold(
       appBar: AppBar(

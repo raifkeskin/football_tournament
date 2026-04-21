@@ -3,9 +3,10 @@ import '../models/league.dart';
 import '../models/match.dart';
 import '../services/app_session.dart';
 import '../models/team.dart';
-import '../services/league_service.dart';
-import '../services/match_service.dart';
-import '../services/team_service.dart';
+import '../services/interfaces/i_league_service.dart';
+import '../services/interfaces/i_match_service.dart';
+import '../services/interfaces/i_team_service.dart';
+import '../services/service_locator.dart';
 import '../widgets/web_safe_image.dart';
 import 'groups_screen.dart';
 import 'match_details_screen.dart';
@@ -31,9 +32,9 @@ class _HomeScreenState extends State<HomeScreen> {
     'Paz',
   ];
 
-  final _leagueService = LeagueService();
-  final _matchService = MatchService();
-  final _teamService = TeamService();
+  final ILeagueService _leagueService = ServiceLocator.leagueService;
+  final IMatchService _matchService = ServiceLocator.matchService;
+  final ITeamService _teamService = ServiceLocator.teamService;
   late List<DateTime> _tarihler;
   int _seciliIndeks = 2;
   String? _activeLeagueId;
@@ -306,110 +307,144 @@ class _HomeScreenState extends State<HomeScreen> {
           }
         }
 
-        return StreamBuilder<List<MatchModel>>(
+        return StreamBuilder<List<GroupModel>>(
           stream: _activeLeagueId == null
-              ? const Stream<List<MatchModel>>.empty()
-              : _matchService.watchMatchesByDate(
-                  leagueId: _activeLeagueId!,
-                  date: _selectedDate,
-                ),
-          builder: (context, matchSnapshot) {
-            if (matchSnapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
+              ? const Stream<List<GroupModel>>.empty()
+              : _leagueService.watchGroups(_activeLeagueId!),
+          builder: (context, groupsSnap) {
+            final groups = groupsSnap.data ?? const <GroupModel>[];
+            final groupNameById = <String, String>{
+              for (final g in groups) g.id: g.name.trim(),
+            };
+
+            int effectiveGroupCount() {
+              if (groups.isNotEmpty) return groups.length;
+              final n1 = currentLeague.numberOfGroups;
+              if (n1 > 0) return n1;
+              final n2 = currentLeague.groupCount;
+              if (n2 > 0) return n2;
+              final n3 = currentLeague.groups.length;
+              if (n3 > 0) return n3;
+              return 1;
             }
 
-            final matches = matchSnapshot.data ?? [];
-            if (matches.isEmpty) {
-              return const Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.event_busy_rounded,
-                      size: 64,
-                      color: Colors.white24,
+            final groupCount = effectiveGroupCount();
+
+            String bannerTitleForGroupId(String groupId) {
+              final leagueName = currentLeague.name.trim();
+              if (groupCount <= 1) return leagueName;
+              final groupName = (groupNameById[groupId] ?? '').trim();
+              if (groupName.isEmpty) return leagueName;
+              return '$leagueName - $groupName';
+            }
+
+            return StreamBuilder<List<MatchModel>>(
+              stream: _activeLeagueId == null
+                  ? const Stream<List<MatchModel>>.empty()
+                  : _matchService.watchMatchesByDate(
+                      leagueId: _activeLeagueId!,
+                      date: _selectedDate,
                     ),
-                    SizedBox(height: 16),
-                    Text(
-                      'Bu tarihte maç bulunamadı.',
-                      style: TextStyle(color: Colors.white24, fontSize: 16),
-                    ),
-                  ],
-                ),
-              );
-            }
+              builder: (context, matchSnapshot) {
+                if (matchSnapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-            final Map<String, List<MatchModel>> sectionMap = {};
-            for (var m in matches) {
-              final gId = m.groupId ?? 'default';
-              (sectionMap[gId] ??= []).add(m);
-            }
-
-            final sortedGroupIds = sectionMap.keys.toList()
-              ..sort((a, b) {
-                if (a == 'default') return 1;
-                if (b == 'default') return -1;
-                return a.toUpperCase().compareTo(b.toUpperCase());
-              });
-
-            return ListView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
-              children: sortedGroupIds.map((groupId) {
-                final String groupLabel = groupId == 'default'
-                    ? 'GENEL'
-                    : (groupId.toUpperCase().contains('GRUP')
-                          ? groupId.toUpperCase()
-                          : '$groupId GRUBU');
-
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    InkWell(
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              GroupsScreen(initialLeagueId: _activeLeagueId!),
+                final matches = matchSnapshot.data ?? [];
+                if (matches.isEmpty) {
+                  return const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.event_busy_rounded,
+                          size: 64,
+                          color: Colors.white24,
                         ),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.shield_outlined,
-                              color: Color(0xFFFBBF24),
-                              size: 18,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              '${currentLeague.name} - $groupLabel',
-                              style: const TextStyle(
-                                color: Color(0xFFFBBF24),
-                                fontWeight: FontWeight.w900,
-                                fontSize: 14,
+                        SizedBox(height: 16),
+                        Text(
+                          'Bu tarihte maç bulunamadı.',
+                          style: TextStyle(color: Colors.white24, fontSize: 16),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                final Map<String, List<MatchModel>> sectionMap = {};
+                for (var m in matches) {
+                  final gId = m.groupId ?? 'default';
+                  (sectionMap[gId] ??= []).add(m);
+                }
+
+                final sortedGroupIds = sectionMap.keys.toList()
+                  ..sort((a, b) {
+                    if (a == 'default') return 1;
+                    if (b == 'default') return -1;
+                    return a.toUpperCase().compareTo(b.toUpperCase());
+                  });
+
+                return ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
+                  children: sortedGroupIds.map((groupId) {
+                    final titleText = bannerTitleForGroupId(groupId);
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        InkWell(
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => GroupsScreen(
+                                initialLeagueId: _activeLeagueId!,
                               ),
                             ),
-                            const Spacer(),
-                            const Icon(
-                              Icons.chevron_right,
-                              color: Color(0xFFFBBF24),
-                              size: 16,
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.shield_outlined,
+                                  color: Color(0xFFFBBF24),
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    titleText,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Color(0xFFFBBF24),
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                const Icon(
+                                  Icons.chevron_right,
+                                  color: Color(0xFFFBBF24),
+                                  size: 16,
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
-                      ),
-                    ),
-                    ...sectionMap[groupId]!.map(
-                      (m) => _MatchCard(
-                        match: m,
-                        homeLogo: logoMap[m.homeTeamId] ?? '',
-                        awayLogo: logoMap[m.awayTeamId] ?? '',
-                      ),
-                    ),
-                  ],
+                        ...sectionMap[groupId]!.map(
+                          (m) => _MatchCard(
+                            match: m,
+                            homeLogo: logoMap[m.homeTeamId] ?? '',
+                            awayLogo: logoMap[m.awayTeamId] ?? '',
+                          ),
+                        ),
+                      ],
+                    );
+                  }).toList(),
                 );
-              }).toList(),
+              },
             );
           },
         );

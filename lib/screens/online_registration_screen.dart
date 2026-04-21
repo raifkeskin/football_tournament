@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../services/auth_service.dart';
+import '../models/auth_models.dart';
+import '../services/interfaces/i_auth_service.dart';
+import '../services/service_locator.dart';
 import '../services/sms/sms_service_locator.dart';
 import '../utils/otp_utils.dart';
 import 'tournament_admin_dashboard_screen.dart';
@@ -15,7 +17,7 @@ class OnlineRegistrationScreen extends StatefulWidget {
 }
 
 class _OnlineRegistrationScreenState extends State<OnlineRegistrationScreen> {
-  final _authService = AuthService();
+  final IAuthService _authService = ServiceLocator.authService;
   final _phoneController = TextEditingController();
   final _otpController = TextEditingController();
   final _nameController = TextEditingController();
@@ -40,9 +42,11 @@ class _OnlineRegistrationScreenState extends State<OnlineRegistrationScreen> {
 
   String _buildTournamentAdminWelcome(Map<String, dynamic> league) {
     final leagueName = (league['name'] ?? '').toString().trim();
-    final mn = (league['managerName'] ?? '').toString().trim();
-    final ms = (league['managerSurname'] ?? '').toString().trim();
-    final fullName = ('$mn $ms').trim();
+    final direct =
+        (league['managerFullName'] ?? league['manager_full_name'] ?? '').toString().trim();
+    final mn = (league['managerName'] ?? league['manager_name'] ?? '').toString().trim();
+    final ms = (league['managerSurname'] ?? league['manager_surname'] ?? '').toString().trim();
+    final fullName = (direct.isNotEmpty ? direct : ('$mn $ms')).trim();
     final resolvedName = fullName.isEmpty ? 'Turnuva Sorumlusu' : fullName;
     final tn = leagueName.isEmpty ? 'Turnuva' : leagueName;
     return 'Hoş geldin $resolvedName, $tn - Turnuva Yöneticisi olarak kaydın hazır.\nLütfen giriş şifreni belirle.';

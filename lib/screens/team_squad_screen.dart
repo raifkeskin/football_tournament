@@ -17,7 +17,8 @@ import '../models/match.dart';
 import '../services/approval_service.dart';
 import '../services/app_session.dart';
 import '../services/database_service.dart';
-import '../services/team_service.dart';
+import '../services/interfaces/i_team_service.dart';
+import '../services/service_locator.dart';
 import '../widgets/web_safe_image.dart';
 
 class TeamSquadScreen extends StatefulWidget {
@@ -41,7 +42,7 @@ class TeamSquadScreen extends StatefulWidget {
 class _TeamSquadScreenState extends State<TeamSquadScreen> {
   final _dbService = DatabaseService();
   final _approvalService = ApprovalService();
-  final _teamService = TeamService();
+  final ITeamService _teamService = ServiceLocator.teamService;
 
   final _rosterSearchController = TextEditingController();
   String _rosterQuery = '';
@@ -1162,8 +1163,8 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                     ),
                   )
                 : StreamBuilder<List<PlayerModel>>(
-                    stream: dbService.getPlayers(
-                      widget.teamId,
+                    stream: _teamService.watchPlayers(
+                      teamId: widget.teamId,
                       tournamentId: effectiveTournamentId,
                     ),
                     builder: (context, snapshot) {
@@ -1364,7 +1365,7 @@ class PlayerFormScreen extends StatefulWidget {
 
 class _PlayerFormScreenState extends State<PlayerFormScreen> {
   final _dbService = DatabaseService();
-  final _teamService = TeamService();
+  final ITeamService _teamService = ServiceLocator.teamService;
   final _picker = ImagePicker();
 
   final _nameController = TextEditingController();
@@ -1642,13 +1643,13 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
     try {
       final number = _numberController.text.trim();
       final resolvedBirthDate = birthDate.isEmpty ? null : birthDate;
-      await _dbService.upsertPlayerIdentity(
+      await _teamService.upsertPlayerIdentity(
         phone: rawPhone,
         name: name,
         birthDate: resolvedBirthDate,
         mainPosition: _mainPosition,
       );
-      await _dbService.upsertRosterEntry(
+      await _teamService.upsertRosterEntry(
         tournamentId: widget.tournamentId,
         teamId: widget.teamId,
         playerPhone: rawPhone,
@@ -1993,6 +1994,7 @@ class _PlayerPickerSheet extends StatefulWidget {
 
 class _PlayerPickerSheetState extends State<_PlayerPickerSheet> {
   final _dbService = DatabaseService();
+  final ITeamService _teamService = ServiceLocator.teamService;
   final _searchController = TextEditingController();
   String _q = '';
 
@@ -2061,8 +2063,8 @@ class _PlayerPickerSheetState extends State<_PlayerPickerSheet> {
             const SizedBox(height: 12),
             Flexible(
               child: StreamBuilder<List<PlayerModel>>(
-                stream: _dbService.getPlayers(
-                  widget.teamId,
+                stream: _teamService.watchPlayers(
+                  teamId: widget.teamId,
                   tournamentId: widget.tournamentId,
                 ),
                 builder: (context, snapshot) {

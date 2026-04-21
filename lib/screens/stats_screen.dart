@@ -3,9 +3,10 @@ import '../models/league.dart';
 import '../models/match.dart';
 import '../models/player_stats.dart';
 import '../models/team.dart';
-import '../services/league_service.dart';
-import '../services/match_service.dart';
-import '../services/team_service.dart';
+import '../services/interfaces/i_league_service.dart';
+import '../services/interfaces/i_match_service.dart';
+import '../services/interfaces/i_team_service.dart';
+import '../services/service_locator.dart';
 import '../widgets/web_safe_image.dart';
 
 class StatsScreen extends StatefulWidget {
@@ -16,9 +17,9 @@ class StatsScreen extends StatefulWidget {
 }
 
 class _StatsScreenState extends State<StatsScreen> {
-  final _leagueService = LeagueService();
-  final _matchService = MatchService();
-  final _teamService = TeamService();
+  final ILeagueService _leagueService = ServiceLocator.leagueService;
+  final IMatchService _matchService = ServiceLocator.matchService;
+  final ITeamService _teamService = ServiceLocator.teamService;
   String? _selectedLeagueId;
 
   String _trKey(String s) {

@@ -4,18 +4,21 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/league.dart';
+import '../models/league_extras.dart';
 import '../models/match.dart';
 import 'database_service.dart';
+import 'interfaces/i_league_service.dart';
 import '../utils/string_utils.dart';
 
-class LeagueService {
-  LeagueService({DatabaseService? databaseService, FirebaseFirestore? firestore})
+class FirebaseLeagueService implements ILeagueService {
+  FirebaseLeagueService({DatabaseService? databaseService, FirebaseFirestore? firestore})
     : _db = databaseService ?? DatabaseService(firestore: firestore),
       _firestore = firestore ?? FirebaseFirestore.instance;
 
   final DatabaseService _db;
   final FirebaseFirestore _firestore;
 
+  @override
   Stream<List<League>> watchLeagues() {
     return _db.getLeagues().map((snap) {
       final list =
@@ -27,6 +30,7 @@ class LeagueService {
     });
   }
 
+  @override
   Stream<League?> watchLeagueById(String leagueId) {
     final id = leagueId.trim();
     if (id.isEmpty) return const Stream<League?>.empty();
@@ -37,22 +41,32 @@ class LeagueService {
     });
   }
 
+  @override
   Stream<String> watchLeagueName(String leagueId) {
     return watchLeagueById(leagueId).map((l) => (l?.name ?? leagueId).trim());
   }
 
+  @override
   Future<String> addLeague(League league) => _db.addLeague(league);
+  @override
   Future<void> updateLeague(League league) => _db.updateLeague(league);
+  @override
   Future<void> deleteLeagueCascade(String leagueId) => _db.deleteLeagueCascade(leagueId);
+  @override
   Future<void> setDefaultLeague({required String leagueId}) =>
       _db.setDefaultLeague(leagueId: leagueId);
+  @override
   Future<void> setLeagueDefaultFlag({required String leagueId, required bool isDefault}) =>
       _db.setLeagueDefaultFlag(leagueId: leagueId, isDefault: isDefault);
 
+  @override
   Stream<List<GroupModel>> watchGroups(String leagueId) => _db.getGroups(leagueId);
+  @override
   Future<void> addGroup(GroupModel group) => _db.addGroup(group);
+  @override
   Future<void> deleteGroupCascade(String groupId) => _db.deleteGroupCascade(groupId);
 
+  @override
   Future<void> setGroupTeams({
     required String groupId,
     required List<String> teamIds,
@@ -87,6 +101,7 @@ class LeagueService {
     await batch.commit();
   }
 
+  @override
   Future<List<String>> listPitchesOnce() async {
     final snap = await _firestore.collection('pitches').get();
     final names = <String>[];
@@ -99,6 +114,7 @@ class LeagueService {
     return names;
   }
 
+  @override
   Stream<List<Pitch>> watchPitches() {
     return _firestore.collection('pitches').orderBy('nameKey').snapshots().map((snap) {
       return snap.docs
@@ -115,6 +131,7 @@ class LeagueService {
     });
   }
 
+  @override
   Future<void> addPitch({required String name, String? location}) async {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return;
@@ -126,12 +143,14 @@ class LeagueService {
     });
   }
 
+  @override
   Future<void> deletePitch(String pitchId) async {
     final id = pitchId.trim();
     if (id.isEmpty) return;
     await _firestore.collection('pitches').doc(id).delete();
   }
 
+  @override
   Stream<List<NewsItem>> watchNews({
     required String tournamentId,
     bool includeUnpublished = false,
@@ -161,6 +180,7 @@ class LeagueService {
     });
   }
 
+  @override
   Future<String> exportCollectionToJson(String collectionName) async {
     final name = collectionName.trim();
     if (name.isEmpty) return '[]';
@@ -169,6 +189,7 @@ class LeagueService {
     return _encodeJson(list);
   }
 
+  @override
   Future<Map<String, dynamic>> buildFirestoreBackup({
     List<String>? collections,
   }) async {
@@ -226,34 +247,4 @@ class LeagueService {
     }
     return v;
   }
-}
-
-class Pitch {
-  const Pitch({
-    required this.id,
-    required this.name,
-    required this.nameKey,
-    required this.location,
-  });
-
-  final String id;
-  final String name;
-  final String nameKey;
-  final String location;
-}
-
-class NewsItem {
-  const NewsItem({
-    required this.id,
-    required this.tournamentId,
-    required this.content,
-    required this.isPublished,
-    required this.createdAt,
-  });
-
-  final String id;
-  final String tournamentId;
-  final String content;
-  final bool isPublished;
-  final DateTime? createdAt;
 }

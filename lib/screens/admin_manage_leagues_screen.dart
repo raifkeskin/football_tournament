@@ -1,11 +1,14 @@
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import '../models/league.dart';
 import '../services/app_session.dart';
 import '../services/database_service.dart';
-import '../services/league_service.dart';
 import '../services/image_upload_service.dart';
+import '../services/interfaces/i_league_service.dart';
+import '../services/service_locator.dart';
 import '../widgets/web_safe_image.dart';
 import 'admin_awards_screen.dart';
 import 'admin_fixture_entry_screen.dart';
@@ -23,7 +26,7 @@ class AdminManageLeaguesScreen extends StatefulWidget {
 
 class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
   final _dbService = DatabaseService();
-  final _leagueService = LeagueService();
+  final ILeagueService _leagueService = ServiceLocator.leagueService;
   final _imageUploadService = ImgBBUploadService();
   final _picker = ImagePicker();
   bool _dialOpen = false;
@@ -67,20 +70,21 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
   Future<void> _openAddLeagueSheet() async {
     final leagueNameController = TextEditingController();
     final subtitleController = TextEditingController();
-    final managerNameController = TextEditingController();
-    final managerSurnameController = TextEditingController();
+    final managerFullNameController = TextEditingController();
     final managerPhoneController = TextEditingController();
+    final matchPeriodDurationController = TextEditingController(text: '25');
     final groupCountController = TextEditingController(text: '1');
     final teamsPerGroupController = TextEditingController(text: '4');
     final youtubeController = TextEditingController();
-    final twitterController = TextEditingController();
     final instagramController = TextEditingController();
     final startDateController = TextEditingController();
     final endDateController = TextEditingController();
+    final accessCodeController = TextEditingController();
 
     DateTime? startDate;
     DateTime? endDate;
     XFile? leagueLogo;
+    var isPrivate = false;
     var saving = false;
 
     String tarihYaz(DateTime date) {
@@ -132,6 +136,11 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
       setSheetState(() => leagueLogo = picked);
     }
 
+    String generateAccessCode() {
+      final n = 100000 + Random().nextInt(900000);
+      return n.toString();
+    }
+
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -144,9 +153,13 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
               FocusManager.instance.primaryFocus?.unfocus();
               final name = leagueNameController.text.trim();
               final subtitle = subtitleController.text.trim();
-              final managerName = managerNameController.text.trim();
-              final managerSurname = managerSurnameController.text.trim();
+              final managerFullName = managerFullNameController.text.trim();
               final managerPhone = managerPhoneController.text.trim();
+              final matchPeriodDuration =
+                  int.tryParse(matchPeriodDurationController.text.trim()) ?? 25;
+              if (isPrivate && accessCodeController.text.trim().isEmpty) {
+                accessCodeController.text = generateAccessCode();
+              }
               if (name.isEmpty || startDate == null || endDate == null) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
@@ -187,15 +200,20 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                   subtitle: subtitle.isEmpty ? null : subtitle,
                   logoUrl: logoUrl,
                   country: 'Türkiye',
-                  managerName: managerName.isEmpty ? null : managerName,
-                  managerSurname: managerSurname.isEmpty ? null : managerSurname,
+                  managerFullName:
+                      managerFullName.isEmpty ? null : managerFullName,
                   managerPhoneRaw10: managerPhone.isEmpty
                       ? null
                       : normalizePhoneToRaw10(managerPhone),
+                  matchPeriodDuration:
+                      matchPeriodDuration <= 0 ? 25 : matchPeriodDuration,
                   startDate: startDate,
                   endDate: endDate,
+                  isPrivate: isPrivate,
+                  accessCode: isPrivate && accessCodeController.text.trim().isNotEmpty
+                      ? accessCodeController.text.trim()
+                      : null,
                   youtubeUrl: youtubeController.text.trim(),
-                  twitterUrl: twitterController.text.trim(),
                   instagramUrl: instagramController.text.trim(),
                   numberOfGroups: int.tryParse(groupCountController.text) ?? 1,
                   groups: List.generate(
@@ -251,18 +269,42 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                       labelText: 'Alt Bilgi (Örn: Yaz Ligi 2024)',
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: managerNameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Turnuva Sorumlusu Ad',
-                    ),
+                  const SizedBox(height: 8),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Gizlensin'),
+                    value: isPrivate,
+                    onChanged: saving
+                        ? null
+                        : (v) {
+                            setSheetState(() {
+                              isPrivate = v;
+                              if (isPrivate &&
+                                  accessCodeController.text.trim().isEmpty) {
+                                accessCodeController.text =
+                                    generateAccessCode();
+                              }
+                              if (!isPrivate) {
+                                accessCodeController.clear();
+                              }
+                            });
+                          },
                   ),
+                  if (isPrivate) ...[
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: accessCodeController,
+                      readOnly: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Erişim Kodu (6 haneli)',
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   TextField(
-                    controller: managerSurnameController,
+                    controller: managerFullNameController,
                     decoration: const InputDecoration(
-                      labelText: 'Turnuva Sorumlusu Soyad',
+                      labelText: 'Turnuva Sorumlusu (Ad Soyad)',
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -273,6 +315,15 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                       labelText: 'Turnuva Sorumlusu Telefon',
                       hintText: '0 (5XX) XXX XX XX',
                     ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: matchPeriodDurationController,
+                    decoration: const InputDecoration(
+                      labelText: 'Maç Süresi (Dakika)',
+                    ),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   ),
                   const SizedBox(height: 12),
                   Row(
@@ -346,14 +397,6 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                   ),
                   const SizedBox(height: 10),
                   TextField(
-                    controller: twitterController,
-                    decoration: const InputDecoration(
-                      labelText: 'Twitter (X) Linki',
-                      prefixIcon: Icon(Icons.alternate_email),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
                     controller: instagramController,
                     decoration: const InputDecoration(
                       labelText: 'Instagram Linki',
@@ -395,10 +438,13 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
     groupCountController.dispose();
     teamsPerGroupController.dispose();
     youtubeController.dispose();
-    twitterController.dispose();
     instagramController.dispose();
     startDateController.dispose();
     endDateController.dispose();
+    accessCodeController.dispose();
+    managerFullNameController.dispose();
+    managerPhoneController.dispose();
+    matchPeriodDurationController.dispose();
 
     if (!mounted) return;
     if (saved == true) {
@@ -729,17 +775,21 @@ class EditLeagueScreen extends StatefulWidget {
 class _EditLeagueScreenState extends State<EditLeagueScreen> {
   late TextEditingController _nameController;
   late TextEditingController _subtitleController;
+  late TextEditingController _managerFullNameController;
+  late TextEditingController _managerPhoneController;
+  late TextEditingController _matchPeriodDurationController;
   late TextEditingController _groupCountController;
   late TextEditingController _teamsPerGroupController;
   late TextEditingController _ytController;
-  late TextEditingController _xController;
   late TextEditingController _igController;
   late TextEditingController _startDateController;
   late TextEditingController _endDateController;
+  late TextEditingController _accessCodeController;
   DateTime? _startDate;
   DateTime? _endDate;
   XFile? _newLogo;
   bool _isLoading = false;
+  bool _isPrivate = false;
 
   @override
   void initState() {
@@ -747,15 +797,27 @@ class _EditLeagueScreenState extends State<EditLeagueScreen> {
     _nameController = TextEditingController(text: widget.league.name);
     _subtitleController =
         TextEditingController(text: widget.league.subtitle ?? '');
+    _managerFullNameController =
+        TextEditingController(text: widget.league.managerFullName ?? '');
+    _managerPhoneController =
+        TextEditingController(text: widget.league.managerPhoneRaw10 ?? '');
+    _matchPeriodDurationController = TextEditingController(
+      text: widget.league.matchPeriodDuration.toString(),
+    );
     _groupCountController =
         TextEditingController(text: widget.league.groupCount.toString());
     _teamsPerGroupController =
         TextEditingController(text: widget.league.teamsPerGroup.toString());
     _ytController = TextEditingController(text: widget.league.youtubeUrl);
-    _xController = TextEditingController(text: widget.league.twitterUrl);
     _igController = TextEditingController(text: widget.league.instagramUrl);
     _startDate = widget.league.startDate;
     _endDate = widget.league.endDate;
+    _isPrivate = widget.league.isPrivate;
+    _accessCodeController =
+        TextEditingController(text: widget.league.accessCode ?? '');
+    if (_isPrivate && _accessCodeController.text.trim().isEmpty) {
+      _accessCodeController.text = _generateAccessCode();
+    }
     _startDateController = TextEditingController(
       text: _startDate == null ? '' : _formatDate(_startDate!),
     );
@@ -768,18 +830,26 @@ class _EditLeagueScreenState extends State<EditLeagueScreen> {
   void dispose() {
     _nameController.dispose();
     _subtitleController.dispose();
+    _managerFullNameController.dispose();
+    _managerPhoneController.dispose();
+    _matchPeriodDurationController.dispose();
     _groupCountController.dispose();
     _teamsPerGroupController.dispose();
     _ytController.dispose();
-    _xController.dispose();
     _igController.dispose();
     _startDateController.dispose();
     _endDateController.dispose();
+    _accessCodeController.dispose();
     super.dispose();
   }
 
   static String _formatDate(DateTime date) {
     return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+  }
+
+  static String _generateAccessCode() {
+    final n = 100000 + Random().nextInt(900000);
+    return n.toString();
   }
 
   Future<void> _pickDate({required bool isStart}) async {
@@ -816,6 +886,13 @@ class _EditLeagueScreenState extends State<EditLeagueScreen> {
     final groupCount = int.tryParse(_groupCountController.text.trim()) ?? 0;
     final teamsPerGroup =
         int.tryParse(_teamsPerGroupController.text.trim()) ?? 0;
+    final managerFullName = _managerFullNameController.text.trim();
+    final managerPhone = _managerPhoneController.text.trim();
+    final matchPeriodDuration =
+        int.tryParse(_matchPeriodDurationController.text.trim()) ?? 25;
+    if (_isPrivate && _accessCodeController.text.trim().isEmpty) {
+      _accessCodeController.text = _generateAccessCode();
+    }
     if (name.isEmpty || _startDate == null || _endDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -834,6 +911,16 @@ class _EditLeagueScreenState extends State<EditLeagueScreen> {
     FocusManager.instance.primaryFocus?.unfocus();
     setState(() => _isLoading = true);
     try {
+      String normalizePhoneToRaw10(String input) {
+        final digits = input.replaceAll(RegExp(r'\D'), '');
+        if (digits.isEmpty) return '';
+        var d = digits;
+        if (d.startsWith('90') && d.length >= 12) d = d.substring(2);
+        if (d.startsWith('0')) d = d.substring(1);
+        if (d.length > 10) d = d.substring(d.length - 10);
+        return d;
+      }
+
       String logoUrl = widget.league.logoUrl;
       if (_newLogo != null) {
         final uploaded = await ImgBBUploadService().uploadImage(
@@ -854,13 +941,20 @@ class _EditLeagueScreenState extends State<EditLeagueScreen> {
             : _subtitleController.text.trim(),
         logoUrl: logoUrl,
         country: widget.league.country,
+        managerFullName: managerFullName.isEmpty ? null : managerFullName,
+        managerPhoneRaw10:
+            managerPhone.trim().isEmpty ? null : normalizePhoneToRaw10(managerPhone),
+        matchPeriodDuration: matchPeriodDuration <= 0 ? 25 : matchPeriodDuration,
         startDate: _startDate,
         endDate: _endDate,
         season: widget.league.season,
         isActive: widget.league.isActive,
         isDefault: widget.league.isDefault,
+        isPrivate: _isPrivate,
+        accessCode: _isPrivate && _accessCodeController.text.trim().isNotEmpty
+            ? _accessCodeController.text.trim()
+            : null,
         youtubeUrl: _ytController.text.trim(),
-        twitterUrl: _xController.text.trim(),
         instagramUrl: _igController.text.trim(),
         numberOfGroups: groupCount,
         groups: List.generate(
@@ -962,6 +1056,68 @@ class _EditLeagueScreenState extends State<EditLeagueScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Gizlensin'),
+                  value: _isPrivate,
+                  onChanged: _isLoading
+                      ? null
+                      : (v) {
+                          setState(() {
+                            _isPrivate = v;
+                            if (_isPrivate &&
+                                _accessCodeController.text.trim().isEmpty) {
+                              _accessCodeController.text = _generateAccessCode();
+                            }
+                            if (!_isPrivate) {
+                              _accessCodeController.clear();
+                            }
+                          });
+                        },
+                ),
+                if (_isPrivate) ...[
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _accessCodeController,
+                    readOnly: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Erişim Kodu (6 haneli)',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ] else
+                  const SizedBox(height: 16),
+                TextField(
+                  controller: _managerFullNameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Turnuva Sorumlusu (Ad Soyad)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _managerPhoneController,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                    labelText: 'Turnuva Sorumlusu Telefon',
+                    hintText: '0 (5XX) XXX XX XX',
+                    border: OutlineInputBorder(),
+                  ),
+                  enabled: !_isLoading,
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _matchPeriodDurationController,
+                  decoration: const InputDecoration(
+                    labelText: 'Maç Süresi (Dakika)',
+                    border: OutlineInputBorder(),
+                  ),
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  enabled: !_isLoading,
+                ),
+                const SizedBox(height: 16),
                 Row(
                   children: [
                     Expanded(
@@ -1023,15 +1179,6 @@ class _EditLeagueScreenState extends State<EditLeagueScreen> {
                   decoration: const InputDecoration(
                     labelText: 'YouTube Linki',
                     prefixIcon: Icon(Icons.play_circle_outline),
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _xController,
-                  decoration: const InputDecoration(
-                    labelText: 'Twitter (X) Linki',
-                    prefixIcon: Icon(Icons.alternate_email),
                     border: OutlineInputBorder(),
                   ),
                 ),

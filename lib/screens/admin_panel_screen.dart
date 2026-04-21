@@ -4,6 +4,7 @@ import 'admin_manage_news_screen.dart';
 import 'admin_data_tools_screen.dart';
 import 'admin_pending_actions_screen.dart';
 import 'admin_pitch_management_screen.dart';
+import 'admin/admin_otp_monitor_screen.dart';
 
 class AdminPanelWidget extends StatelessWidget {
   const AdminPanelWidget({super.key, required this.onLogout});
@@ -58,6 +59,18 @@ class AdminPanelWidget extends StatelessWidget {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
                 builder: (_) => const AdminDataToolsScreen(),
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 12),
+        _PanelButonu(
+          baslik: 'OTP Takip',
+          ikon: Icons.sms_outlined,
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const AdminOtpMonitorScreen(),
               ),
             );
           },

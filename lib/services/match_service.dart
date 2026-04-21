@@ -1,22 +1,48 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../models/fixture_import.dart';
 import '../models/match.dart';
 import '../models/player_stats.dart';
 import 'database_service.dart';
+import 'interfaces/i_match_service.dart';
 import '../utils/string_utils.dart';
 
-class MatchService {
-  MatchService({DatabaseService? databaseService, FirebaseFirestore? firestore})
+class FirebaseMatchService implements IMatchService {
+  FirebaseMatchService({DatabaseService? databaseService, FirebaseFirestore? firestore})
     : _db = databaseService ?? DatabaseService(firestore: firestore),
       _firestore = firestore ?? FirebaseFirestore.instance;
 
   final DatabaseService _db;
   final FirebaseFirestore _firestore;
 
+  int _readInt(dynamic v, {required int fallback}) {
+    if (v == null) return fallback;
+    if (v is num) return v.toInt();
+    final s = v.toString().replaceAll('\u0000', '').trim();
+    return int.tryParse(s) ?? double.tryParse(s.replaceAll(',', '.'))?.toInt() ?? fallback;
+  }
+
+  Future<int> _readMatchPeriodDurationMinutes(String tournamentId) async {
+    final id = tournamentId.trim();
+    if (id.isEmpty) return 25;
+    try {
+      final snap = await _firestore.collection('leagues').doc(id).get();
+      final data = snap.data();
+      if (data == null) return 25;
+      final raw = data['matchPeriodDuration'] ?? data['match_period_duration'];
+      final minutes = _readInt(raw, fallback: 25);
+      return minutes <= 0 ? 25 : minutes;
+    } catch (_) {
+      return 25;
+    }
+  }
+
+  @override
   Stream<List<MatchModel>> watchMatchesForLeague(String leagueId) {
     return _db.watchMatchesForLeague(leagueId);
   }
 
+  @override
   Stream<List<MatchModel>> watchMatchesByDate({
     required String leagueId,
     required DateTime date,
@@ -24,6 +50,7 @@ class MatchService {
     return _db.getMatchesByDate(leagueId: leagueId, date: date);
   }
 
+  @override
   Stream<List<MatchModel>> watchFixtureMatches(
     String leagueId,
     int week, {
@@ -32,26 +59,37 @@ class MatchService {
     return _db.watchFixtureMatches(leagueId, week, groupId: groupId);
   }
 
+  @override
   Future<int?> getFixtureMaxWeek(String leagueId, {String? groupId}) {
     return _db.getFixtureMaxWeek(leagueId, groupId: groupId);
   }
 
+  @override
   Stream<MatchModel> watchMatch(String matchId) => _db.watchMatch(matchId);
 
+  @override
   Stream<List<Map<String, dynamic>>> watchInlineMatchEvents(String matchId) {
     final id = matchId.trim();
     if (id.isEmpty) return const Stream<List<Map<String, dynamic>>>.empty();
     return _firestore
-        .collection('matches')
-        .doc(id)
-        .collection('events')
-        .orderBy('minute', descending: false)
+        .collection('match_events')
+        .where('matchId', isEqualTo: id)
         .snapshots()
         .map((snap) {
-          return snap.docs.map((d) => Map<String, dynamic>.from(d.data())).toList();
+          int readInt(dynamic v) {
+            if (v == null) return 0;
+            if (v is num) return v.toInt();
+            final s = v.toString().replaceAll('\u0000', '').trim();
+            return int.tryParse(s) ?? double.tryParse(s.replaceAll(',', '.'))?.toInt() ?? 0;
+          }
+
+          final list = snap.docs.map((d) => {...d.data(), 'id': d.id}).toList();
+          list.sort((a, b) => readInt(a['minute']).compareTo(readInt(b['minute'])));
+          return list.map((m) => Map<String, dynamic>.from(m)).toList();
         });
   }
 
+  @override
   Future<void> updateMatchYoutubeUrl({
     required String matchId,
     required String? youtubeUrl,
@@ -61,6 +99,7 @@ class MatchService {
     await _firestore.collection('matches').doc(id).update({'youtubeUrl': youtubeUrl});
   }
 
+  @override
   Future<void> updateMatchPitchName({
     required String matchId,
     required String? pitchName,
@@ -70,6 +109,7 @@ class MatchService {
     await _firestore.collection('matches').doc(id).update({'pitchName': pitchName});
   }
 
+  @override
   Future<void> updateMatchSchedule({
     required String matchId,
     required String matchDateDb,
@@ -85,6 +125,7 @@ class MatchService {
     });
   }
 
+  @override
   Future<void> completeMatchWithScoreAndDefaultEvents({
     required String matchId,
     required int homeScore,
@@ -94,6 +135,12 @@ class MatchService {
     if (id.isEmpty) return;
 
     final matchRef = _firestore.collection('matches').doc(id);
+    final matchSnap = await matchRef.get();
+    final matchData = matchSnap.data() ?? const <String, dynamic>{};
+    final tournamentId =
+        (matchData['tournamentId'] ?? matchData['leagueId'] ?? '').toString().trim();
+    final homeTeamId = (matchData['homeTeamId'] ?? '').toString().trim();
+
     await matchRef.update({
       'homeScore': homeScore,
       'awayScore': awayScore,
@@ -101,28 +148,27 @@ class MatchService {
       'isCompleted': true,
     });
 
-    final eventsRef = matchRef.collection('events');
+    final matchPeriodDuration = await _readMatchPeriodDurationMinutes(tournamentId);
     final now = FieldValue.serverTimestamp();
-    await eventsRef.add({
-      'minute': 0,
-      'title': 'Maç Başladı',
-      'type': 'status',
-      'timestamp': now,
-    });
-    await eventsRef.add({
-      'minute': 30,
-      'title': 'İlk Yarı Sonucu',
-      'type': 'status',
-      'timestamp': now,
-    });
-    await eventsRef.add({
-      'minute': 60,
-      'title': 'Maç Sonucu',
-      'type': 'status',
-      'timestamp': now,
-    });
+    Future<void> addStatus(int minute, String title) async {
+      await _firestore.collection('match_events').add({
+        'matchId': id,
+        'tournamentId': tournamentId,
+        'teamId': homeTeamId,
+        'eventType': 'status',
+        'type': 'status',
+        'minute': minute,
+        'playerName': title,
+        'createdAt': now,
+      });
+    }
+
+    await addStatus(0, 'Maç Başladı');
+    await addStatus(matchPeriodDuration, 'İlk Yarı Bitti');
+    await addStatus(matchPeriodDuration * 2, 'Maç Bitti');
   }
 
+  @override
   Stream<List<PlayerStats>> watchPlayerStats({required String tournamentId}) {
     final tId = tournamentId.trim();
     if (tId.isEmpty) return const Stream<List<PlayerStats>>.empty();
@@ -133,10 +179,12 @@ class MatchService {
         .map((snap) => snap.docs.map((d) => PlayerStats.fromMap(d.data(), d.id)).toList());
   }
 
+  @override
   Future<void> commitPlayerStatsForCompletedMatch({required String matchId}) {
     return _db.commitPlayerStatsForCompletedMatch(matchId: matchId);
   }
 
+  @override
   Future<void> importTeamsAndFixture({
     required String tournamentId,
     required List<FixtureImportTeam> teams,
@@ -224,34 +272,4 @@ class MatchService {
 
     if (ops > 0) await batch.commit();
   }
-}
-
-class FixtureImportTeam {
-  const FixtureImportTeam({
-    required this.name,
-    required this.groupName,
-  });
-
-  final String name;
-  final String groupName;
-}
-
-class FixtureImportMatch {
-  const FixtureImportMatch({
-    required this.week,
-    required this.groupId,
-    required this.homeTeamName,
-    required this.awayTeamName,
-    required this.matchDateYyyyMmDd,
-    required this.matchTime,
-    required this.pitchName,
-  });
-
-  final int week;
-  final String groupId;
-  final String homeTeamName;
-  final String awayTeamName;
-  final String? matchDateYyyyMmDd;
-  final String? matchTime;
-  final String? pitchName;
 }

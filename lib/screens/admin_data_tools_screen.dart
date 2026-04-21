@@ -9,11 +9,13 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import '../models/fixture_import.dart';
 import '../models/league.dart';
 import '../services/app_session.dart';
 import '../services/database_service.dart';
-import '../services/league_service.dart';
-import '../services/match_service.dart';
+import '../services/interfaces/i_league_service.dart';
+import '../services/interfaces/i_match_service.dart';
+import '../services/service_locator.dart';
 import '../utils/string_utils.dart';
 
 class AdminDataToolsScreen extends StatefulWidget {
@@ -25,7 +27,7 @@ class AdminDataToolsScreen extends StatefulWidget {
 
 class _AdminDataToolsScreenState extends State<AdminDataToolsScreen> {
   final _db = DatabaseService();
-  final _leagueService = LeagueService();
+  final ILeagueService _leagueService = ServiceLocator.leagueService;
   bool _busy = false;
   String? _lastResult;
 
@@ -431,8 +433,8 @@ class AdminTeamFixtureBuildScreen extends StatefulWidget {
 
 class _AdminTeamFixtureBuildScreenState
     extends State<AdminTeamFixtureBuildScreen> {
-  final _leagueService = LeagueService();
-  final _matchService = MatchService();
+  final ILeagueService _leagueService = ServiceLocator.leagueService;
+  final IMatchService _matchService = ServiceLocator.matchService;
   bool _busy = false;
   String? _selectedLeagueId;
   PlatformFile? _pickedFile;

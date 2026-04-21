@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../models/league_extras.dart';
 import '../services/app_session.dart';
-import '../services/league_service.dart';
+import '../services/interfaces/i_league_service.dart';
+import '../services/service_locator.dart';
 
 class AdminPitchManagementScreen extends StatefulWidget {
   const AdminPitchManagementScreen({super.key});
@@ -12,7 +14,7 @@ class AdminPitchManagementScreen extends StatefulWidget {
 }
 
 class _AdminPitchManagementScreenState extends State<AdminPitchManagementScreen> {
-  final _leagueService = LeagueService();
+  final ILeagueService _leagueService = ServiceLocator.leagueService;
   final _nameController = TextEditingController();
   final _locationController = TextEditingController();
   bool _busy = false;

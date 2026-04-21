@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../models/league.dart';
+import '../models/league_extras.dart';
 import '../services/app_session.dart';
 import '../services/database_service.dart';
-import '../services/league_service.dart';
+import '../services/interfaces/i_league_service.dart';
+import '../services/service_locator.dart';
 
 class AdminManageNewsScreen extends StatefulWidget {
   const AdminManageNewsScreen({super.key});
@@ -14,7 +16,7 @@ class AdminManageNewsScreen extends StatefulWidget {
 
 class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
   final _dbService = DatabaseService();
-  final _leagueService = LeagueService();
+  final ILeagueService _leagueService = ServiceLocator.leagueService;
   final Set<String> _busyIds = {};
   String? _selectedTournamentId;
 

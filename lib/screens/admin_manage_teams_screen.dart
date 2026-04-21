@@ -15,9 +15,10 @@ import '../models/league.dart';
 import '../services/approval_service.dart';
 import '../services/app_session.dart';
 import '../services/database_service.dart';
-import '../services/league_service.dart';
 import '../services/image_upload_service.dart';
-import '../services/team_service.dart';
+import '../services/interfaces/i_league_service.dart';
+import '../services/interfaces/i_team_service.dart';
+import '../services/service_locator.dart';
 import '../widgets/web_safe_image.dart';
 import 'team_squad_screen.dart';
 
@@ -39,8 +40,8 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
   final dbService = DatabaseService();
   final approvalService = ApprovalService();
   final _teamsRepo = TeamsRepository();
-  final _leagueService = LeagueService();
-  final _teamService = TeamService();
+  final ILeagueService _leagueService = ServiceLocator.leagueService;
+  final ITeamService _teamService = ServiceLocator.teamService;
   String _searchQuery = '';
   final _teamNameController = TextEditingController();
   final _picker = ImagePicker();

@@ -9,9 +9,11 @@ import 'online_registration_screen.dart';
 import '../main.dart';
 import 'main_navigator.dart';
 import '../services/app_session.dart';
-import '../services/auth_service.dart';
-import '../services/league_service.dart';
-import '../services/team_service.dart';
+import '../models/auth_models.dart';
+import '../services/interfaces/i_auth_service.dart';
+import '../services/interfaces/i_league_service.dart';
+import '../services/interfaces/i_team_service.dart';
+import '../services/service_locator.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, required this.onRequestHomeTab});
@@ -23,9 +25,9 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  final _authService = AuthService();
-  final _leagueService = LeagueService();
-  final _teamService = TeamService();
+  final IAuthService _authService = ServiceLocator.authService;
+  final ILeagueService _leagueService = ServiceLocator.leagueService;
+  final ITeamService _teamService = ServiceLocator.teamService;
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;

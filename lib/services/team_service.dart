@@ -4,9 +4,10 @@ import '../models/match.dart';
 import '../models/team.dart';
 import 'database_service.dart';
 import '../repositories/teams_repository.dart';
+import 'interfaces/i_team_service.dart';
 
-class TeamService {
-  TeamService({
+class FirebaseTeamService implements ITeamService {
+  FirebaseTeamService({
     DatabaseService? databaseService,
     TeamsRepository? teamsRepository,
     FirebaseFirestore? firestore,
@@ -18,6 +19,7 @@ class TeamService {
   final TeamsRepository _teamsRepo;
   final FirebaseFirestore _firestore;
 
+  @override
   Stream<List<Team>> watchAllTeams() {
     return _firestore.collection('teams').orderBy('name').snapshots().map((snap) {
       final list =
@@ -29,12 +31,14 @@ class TeamService {
     });
   }
 
+  @override
   Stream<List<Map<String, dynamic>>> watchAllTeamsRaw() {
     return _firestore.collection('teams').orderBy('name').snapshots().map((snap) {
       return snap.docs.map((d) => {...d.data(), 'id': d.id}).toList();
     });
   }
 
+  @override
   Future<String> getTeamName(String teamId) async {
     final id = teamId.trim();
     if (id.isEmpty) return '-';
@@ -43,6 +47,7 @@ class TeamService {
     return (data?['name'] as String?) ?? id;
   }
 
+  @override
   Future<Team?> getTeamOnce(String teamId) async {
     final id = teamId.trim();
     if (id.isEmpty) return null;
@@ -52,6 +57,7 @@ class TeamService {
     return Team.fromMap({...data, 'id': snap.id});
   }
 
+  @override
   Future<PlayerModel?> getPlayerByPhoneOnce(String playerPhone) async {
     final phone = playerPhone.trim();
     if (phone.isEmpty) return null;
@@ -61,6 +67,7 @@ class TeamService {
     return PlayerModel.fromMap(data, snap.id);
   }
 
+  @override
   Stream<String> watchTeamName(String teamId) {
     final id = teamId.trim();
     if (id.isEmpty) return const Stream<String>.empty();
@@ -71,6 +78,7 @@ class TeamService {
     });
   }
 
+  @override
   Stream<List<PlayerModel>> watchPlayers({
     required String teamId,
     String? tournamentId,
@@ -78,6 +86,7 @@ class TeamService {
     return _db.getPlayers(teamId, tournamentId: tournamentId);
   }
 
+  @override
   Future<void> upsertPlayerIdentity({
     required String phone,
     required String name,
@@ -92,6 +101,7 @@ class TeamService {
     );
   }
 
+  @override
   Future<void> upsertRosterEntry({
     required String tournamentId,
     required String teamId,
@@ -110,6 +120,7 @@ class TeamService {
     );
   }
 
+  @override
   Future<bool> isTeamManagerForTournament({
     required String tournamentId,
     required String teamId,
@@ -132,6 +143,7 @@ class TeamService {
     });
   }
 
+  @override
   Future<bool> managerExistsForTeamTournament({
     required String tournamentId,
     required String teamId,
@@ -162,7 +174,9 @@ class TeamService {
     return r == 'Takım Sorumlusu' || r == 'Her İkisi';
   }
 
+  @override
   Future<List<Team>> getTeamsCached(String leagueId) => _teamsRepo.getTeamsCached(leagueId);
+  @override
   Future<Team> addTeamAndUpsertCache({
     required String leagueId,
     required String teamName,
@@ -176,5 +190,6 @@ class TeamService {
     groupId: groupId,
     groupName: groupName,
   );
+  @override
   Future<void> invalidateTeams(String leagueId) => _teamsRepo.invalidateTeams(leagueId);
 }

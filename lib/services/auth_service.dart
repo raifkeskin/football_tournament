@@ -2,14 +2,18 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
-class AuthService {
-  AuthService({FirebaseAuth? auth, FirebaseFirestore? firestore})
+import '../models/auth_models.dart';
+import 'interfaces/i_auth_service.dart';
+
+class FirebaseAuthService implements IAuthService {
+  FirebaseAuthService({FirebaseAuth? auth, FirebaseFirestore? firestore})
     : _auth = auth ?? FirebaseAuth.instance,
       _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
 
+  @override
   Future<ConfirmationResult> startPhoneAuthWeb({
     required String phoneNumber,
   }) async {
@@ -19,6 +23,7 @@ class AuthService {
     return _auth.signInWithPhoneNumber(phoneNumber);
   }
 
+  @override
   Stream<UserDoc?> watchUserDoc(String uid) {
     final id = uid.trim();
     if (id.isEmpty) return const Stream<UserDoc?>.empty();
@@ -33,6 +38,7 @@ class AuthService {
     });
   }
 
+  @override
   Stream<List<RosterAssignment>> watchRosterAssignmentsByPhone(String phone) {
     final p = phone.trim();
     if (p.isEmpty) return const Stream<List<RosterAssignment>>.empty();
@@ -53,6 +59,7 @@ class AuthService {
         });
   }
 
+  @override
   Future<void> createOtpRequest({
     required String phoneRaw10,
     required String code,
@@ -64,17 +71,21 @@ class AuthService {
     await _firestore.collection('otp_requests').doc(raw10).set({
       'phone': raw10,
       'code': c,
+      'status': 'pending',
       'expiresAt': Timestamp.fromDate(expiresAt),
       'createdAt': FieldValue.serverTimestamp(),
     });
   }
 
+  @override
   Future<OtpRequest?> getOtpRequest(String phoneRaw10) async {
     final raw10 = phoneRaw10.trim();
     if (raw10.isEmpty) return null;
     final snap = await _firestore.collection('otp_requests').doc(raw10).get();
     final data = snap.data();
     if (data == null) return null;
+    final status = (data['status'] ?? 'pending').toString().trim();
+    if (status != 'pending') return null;
     final storedCode = (data['code'] ?? '').toString().trim();
     final expiresAt = data['expiresAt'];
     final exp = expiresAt is Timestamp ? expiresAt.toDate() : null;
@@ -82,12 +93,53 @@ class AuthService {
     return OtpRequest(phoneRaw10: raw10, code: storedCode, expiresAt: exp);
   }
 
+  @override
   Future<void> deleteOtpRequest(String phoneRaw10) async {
     final raw10 = phoneRaw10.trim();
     if (raw10.isEmpty) return;
-    await _firestore.collection('otp_requests').doc(raw10).delete();
+    await _firestore.collection('otp_requests').doc(raw10).set(
+      {
+        'status': 'verified',
+        'verifiedAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
   }
 
+  @override
+  Stream<List<OtpCodeEntry>> watchOtpCodes({bool includeVerified = false}) {
+    Query<Map<String, dynamic>> q = _firestore
+        .collection('otp_requests')
+        .orderBy('createdAt', descending: true);
+    if (!includeVerified) {
+      q = q.where('status', isEqualTo: 'pending');
+    }
+    return q
+        .snapshots()
+        .map((snap) {
+          return snap.docs.map((d) {
+            final data = d.data();
+            final phoneRaw10 = (data['phone'] ?? d.id).toString().trim();
+            final code = (data['code'] ?? '').toString().trim();
+            final status = (data['status'] ?? 'pending').toString().trim();
+            final expRaw = data['expiresAt'];
+            final expiresAt =
+                expRaw is Timestamp ? expRaw.toDate() : DateTime.fromMillisecondsSinceEpoch(0);
+            final createdRaw = data['createdAt'];
+            final createdAt = createdRaw is Timestamp ? createdRaw.toDate() : null;
+            return OtpCodeEntry(
+              id: d.id,
+              phoneRaw10: phoneRaw10,
+              code: code,
+              status: status,
+              expiresAt: expiresAt,
+              createdAt: createdAt,
+            );
+          }).toList();
+        });
+  }
+
+  @override
   Future<ProfileLookupResult> lookupProfileByPhoneRaw10(String phoneRaw10) async {
     final raw10 = phoneRaw10.trim();
     if (raw10.length != 10) {
@@ -159,6 +211,7 @@ class AuthService {
     );
   }
 
+  @override
   Future<OnlineRegistrationResult> registerOnlineUser({
     required String phoneRaw10,
     required String password,
@@ -277,121 +330,4 @@ class AuthService {
       tournamentId: isTournamentAdmin ? tid : null,
     );
   }
-}
-
-class UserDoc {
-  const UserDoc({required this.uid, required this.role, required this.phone});
-
-  final String uid;
-  final String? role;
-  final String phone;
-}
-
-class RosterAssignment {
-  const RosterAssignment({
-    required this.id,
-    required this.tournamentId,
-    required this.teamId,
-    required this.role,
-  });
-
-  final String id;
-  final String tournamentId;
-  final String teamId;
-  final String role;
-}
-
-class OtpRequest {
-  const OtpRequest({
-    required this.phoneRaw10,
-    required this.code,
-    required this.expiresAt,
-  });
-
-  final String phoneRaw10;
-  final String code;
-  final DateTime expiresAt;
-}
-
-class ProfileLookupResult {
-  const ProfileLookupResult._({
-    required this.profileFound,
-    required this.resolvedRole,
-    required this.matchedPlayerId,
-    required this.playerName,
-    required this.resolvedTeamId,
-    required this.resolvedTeamName,
-    required this.resolvedTournamentId,
-    required this.matchedLeagueIds,
-    required this.leagues,
-  });
-
-  const ProfileLookupResult.notFound()
-    : this._(
-        profileFound: false,
-        resolvedRole: 'player',
-        matchedPlayerId: null,
-        playerName: null,
-        resolvedTeamId: 'free_agent_pool',
-        resolvedTeamName: null,
-        resolvedTournamentId: null,
-        matchedLeagueIds: const [],
-        leagues: const [],
-      );
-
-  ProfileLookupResult.tournamentAdmin({
-    required List<String> matchedLeagueIds,
-    required List<Map<String, dynamic>> leagues,
-  }) : this._(
-         profileFound: true,
-         resolvedRole: 'tournament_admin',
-         matchedPlayerId: null,
-         playerName: null,
-         resolvedTeamId: null,
-         resolvedTeamName: null,
-         resolvedTournamentId: null,
-         matchedLeagueIds: matchedLeagueIds,
-         leagues: leagues,
-       );
-
-  ProfileLookupResult.playerProfile({
-    required String? matchedPlayerId,
-    required String? playerName,
-    required String resolvedRole,
-    required String? resolvedTeamId,
-    required String? resolvedTournamentId,
-    required String? resolvedTeamName,
-  }) : this._(
-         profileFound: true,
-         resolvedRole: resolvedRole,
-         matchedPlayerId: matchedPlayerId,
-         playerName: playerName,
-         resolvedTeamId: resolvedTeamId,
-         resolvedTeamName: resolvedTeamName,
-         resolvedTournamentId: resolvedTournamentId,
-         matchedLeagueIds: const [],
-         leagues: const [],
-       );
-
-  final bool profileFound;
-  final String resolvedRole;
-  final String? matchedPlayerId;
-  final String? playerName;
-  final String? resolvedTeamId;
-  final String? resolvedTeamName;
-  final String? resolvedTournamentId;
-  final List<String> matchedLeagueIds;
-  final List<Map<String, dynamic>> leagues;
-}
-
-class OnlineRegistrationResult {
-  const OnlineRegistrationResult({
-    required this.uid,
-    required this.isTournamentAdmin,
-    required this.tournamentId,
-  });
-
-  final String uid;
-  final bool isTournamentAdmin;
-  final String? tournamentId;
 }

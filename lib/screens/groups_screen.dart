@@ -3,7 +3,8 @@ import '../models/league.dart';
 import '../models/match.dart';
 import '../models/team.dart';
 import '../services/database_service.dart';
-import '../services/league_service.dart';
+import '../services/interfaces/i_league_service.dart';
+import '../services/service_locator.dart';
 import '../widgets/web_safe_image.dart';
 import 'team_squad_screen.dart';
 
@@ -19,7 +20,7 @@ class GroupsScreen extends StatefulWidget {
 
 class _GroupsScreenState extends State<GroupsScreen> {
   final _databaseService = DatabaseService();
-  final _leagueService = LeagueService();
+  final ILeagueService _leagueService = ServiceLocator.leagueService;
   String? _selectedLeagueId;
   String? _selectedGroupId;
 

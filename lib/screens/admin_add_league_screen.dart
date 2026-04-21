@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../models/league.dart';
@@ -19,13 +20,12 @@ class AdminAddLeagueScreen extends StatefulWidget {
 class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
   final _leagueNameController = TextEditingController();
   final _subtitleController = TextEditingController();
-  final _managerNameController = TextEditingController();
-  final _managerSurnameController = TextEditingController();
+  final _managerFullNameController = TextEditingController();
   final _managerPhoneController = TextEditingController();
+  final _matchPeriodDurationController = TextEditingController(text: '25');
   final _groupCountController = TextEditingController(text: '1');
   final _teamsPerGroupController = TextEditingController(text: '4');
   final _youtubeController = TextEditingController();
-  final _twitterController = TextEditingController();
   final _instagramController = TextEditingController();
   final _picker = ImagePicker();
   final _imageUploadService = ImgBBUploadService();
@@ -40,13 +40,12 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
   void dispose() {
     _leagueNameController.dispose();
     _subtitleController.dispose();
-    _managerNameController.dispose();
-    _managerSurnameController.dispose();
+    _managerFullNameController.dispose();
     _managerPhoneController.dispose();
+    _matchPeriodDurationController.dispose();
     _groupCountController.dispose();
     _teamsPerGroupController.dispose();
     _youtubeController.dispose();
-    _twitterController.dispose();
     _instagramController.dispose();
     super.dispose();
   }
@@ -95,9 +94,10 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
   Future<void> _turnuvaEkle() async {
     final leagueName = _leagueNameController.text.trim();
     final subtitle = _subtitleController.text.trim();
-    final managerName = _managerNameController.text.trim();
-    final managerSurname = _managerSurnameController.text.trim();
+    final managerFullName = _managerFullNameController.text.trim();
     final managerPhone = _managerPhoneController.text.trim();
+    final matchPeriodDuration =
+        int.tryParse(_matchPeriodDurationController.text.trim()) ?? 25;
 
     if (leagueName.isEmpty || _startDate == null || _endDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -158,15 +158,14 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
         subtitle: subtitle.isEmpty ? null : subtitle,
         logoUrl: logoUrl,
         country: 'Türkiye', // Varsayılan veya bir input eklenebilir
-        managerName: managerName.isEmpty ? null : managerName,
-        managerSurname: managerSurname.isEmpty ? null : managerSurname,
+        managerFullName: managerFullName.isEmpty ? null : managerFullName,
         managerPhoneRaw10:
             managerPhone.isEmpty ? null : normalizePhoneToRaw10(managerPhone),
         startDate: _startDate,
         endDate: _endDate,
         youtubeUrl: _youtubeController.text.trim(),
-        twitterUrl: _twitterController.text.trim(),
         instagramUrl: _instagramController.text.trim(),
+        matchPeriodDuration: matchPeriodDuration <= 0 ? 25 : matchPeriodDuration,
         numberOfGroups: int.tryParse(_groupCountController.text) ?? 1,
         groups: List.generate(
           int.tryParse(_groupCountController.text) ?? 1,
@@ -190,9 +189,9 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
       setState(() {
         _leagueNameController.clear();
         _subtitleController.clear();
-        _managerNameController.clear();
-        _managerSurnameController.clear();
+        _managerFullNameController.clear();
         _managerPhoneController.clear();
+        _matchPeriodDurationController.text = '25';
         _leagueLogo = null;
         _startDate = null;
         _endDate = null;
@@ -250,17 +249,9 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
               ),
               const SizedBox(height: 16),
               TextField(
-                controller: _managerNameController,
+                controller: _managerFullNameController,
                 decoration: const InputDecoration(
-                  labelText: 'Turnuva Sorumlusu Ad',
-                ),
-                enabled: !_isLoading,
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _managerSurnameController,
-                decoration: const InputDecoration(
-                  labelText: 'Turnuva Sorumlusu Soyad',
+                  labelText: 'Turnuva Sorumlusu (Ad Soyad)',
                 ),
                 enabled: !_isLoading,
               ),
@@ -272,6 +263,17 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
                   labelText: 'Turnuva Sorumlusu Telefon',
                   hintText: '0 (5XX) XXX XX XX',
                 ),
+                enabled: !_isLoading,
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _matchPeriodDurationController,
+                decoration: const InputDecoration(
+                  labelText: 'Maç Süresi (Dakika)',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 enabled: !_isLoading,
               ),
               const SizedBox(height: 16),
@@ -354,16 +356,6 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
                   labelText: 'YouTube Linki',
                   border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.play_circle_outline),
-                ),
-                enabled: !_isLoading,
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _twitterController,
-                decoration: const InputDecoration(
-                  labelText: 'Twitter (X) Linki',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.alternate_email),
                 ),
                 enabled: !_isLoading,
               ),

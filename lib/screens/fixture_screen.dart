@@ -6,9 +6,10 @@ import '../models/league.dart';
 import '../models/match.dart';
 import '../models/team.dart';
 import '../services/app_session.dart';
-import '../services/league_service.dart';
-import '../services/match_service.dart';
-import '../services/team_service.dart';
+import '../services/interfaces/i_league_service.dart';
+import '../services/interfaces/i_match_service.dart';
+import '../services/interfaces/i_team_service.dart';
+import '../services/service_locator.dart';
 import '../widgets/web_safe_image.dart';
 import 'match_details_screen.dart';
 
@@ -20,9 +21,9 @@ class FixtureScreen extends StatefulWidget {
 }
 
 class _FixtureScreenState extends State<FixtureScreen> {
-  final _leagueService = LeagueService();
-  final _matchService = MatchService();
-  final _teamService = TeamService();
+  final ILeagueService _leagueService = ServiceLocator.leagueService;
+  final IMatchService _matchService = ServiceLocator.matchService;
+  final ITeamService _teamService = ServiceLocator.teamService;
   String? _leagueId;
   String? _groupId;
   int? _week;
@@ -100,15 +101,22 @@ class _FixtureScreenState extends State<FixtureScreen> {
                     : _leagueService.watchGroups(_leagueId!),
                 builder: (context, snapshot) {
                   final groupsRaw = snapshot.data ?? const <GroupModel>[];
-                  final groups =
-                      groupsRaw
-                          .map((g) => (g.name.trim().isEmpty ? g.id : g.name.trim()))
-                          .toList();
+                  final groups = [...groupsRaw]
+                    ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
-                  final selectedGroupId = (groups.contains(_groupId))
-                      ? _groupId
-                      : null;
-                  final groupNameById = {for (final g in groups) g: g};
+                  String groupDisplayName(GroupModel g, int index) {
+                    final name = g.name.trim();
+                    if (name.isNotEmpty) return name;
+                    return 'Grup ${index + 1}';
+                  }
+
+                  final groupNameById = <String, String>{
+                    for (final e in groups.indexed) e.$2.id: groupDisplayName(e.$2, e.$1),
+                  };
+
+                  final selectedGroupId =
+                      (_groupId != null && groupNameById.containsKey(_groupId)) ? _groupId : null;
+                  final showGroupInHeader = selectedGroupId == null && groups.length > 1;
 
                   return FutureBuilder<int?>(
                     key: ValueKey('$_leagueId|$selectedGroupId'),
@@ -197,18 +205,14 @@ class _FixtureScreenState extends State<FixtureScreen> {
                                                 value: null,
                                                 child: Text('Tümü'),
                                               ),
-                                              ...groups.map(
-                                                (g) => DropdownMenuItem(
-                                                  value: g,
-                                                  child: Text(
-                                                    g.toLowerCase().contains(
-                                                          'grup',
-                                                        )
-                                                        ? g
-                                                        : '$g Grubu',
-                                                  ),
-                                                ),
-                                              ),
+                                              ...groups.indexed.map((e) {
+                                                final g = e.$2;
+                                                final label = groupNameById[g.id] ?? '';
+                                                return DropdownMenuItem(
+                                                  value: g.id,
+                                                  child: Text(label),
+                                                );
+                                              }),
                                             ],
                                             (v) => setState(() => _groupId = v),
                                           ),
@@ -258,8 +262,7 @@ class _FixtureScreenState extends State<FixtureScreen> {
                                             matches: matches,
                                             dateStripText: _dateStripText,
                                             groupNameById: groupNameById,
-                                            showGroupInHeader:
-                                                selectedGroupId == null,
+                                            showGroupInHeader: showGroupInHeader,
                                             teamLogoById: teamLogoById,
                                             isAdmin: isAdmin,
                                             onMatchTap: (m) => Navigator.push(
@@ -463,8 +466,8 @@ class _MatchCard extends StatelessWidget {
     required this.isAdmin,
   });
 
-  static final MatchService _matchService = MatchService();
-  static final LeagueService _leagueService = LeagueService();
+  static final IMatchService _matchService = ServiceLocator.matchService;
+  static final ILeagueService _leagueService = ServiceLocator.leagueService;
 
   final MatchModel match;
   final Map<String, String> teamLogoById;

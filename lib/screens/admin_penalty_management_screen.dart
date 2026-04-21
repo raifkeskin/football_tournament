@@ -5,7 +5,8 @@ import '../models/match.dart';
 import '../services/app_session.dart';
 import '../models/team.dart';
 import '../services/database_service.dart';
-import '../services/team_service.dart';
+import '../services/interfaces/i_team_service.dart';
+import '../services/service_locator.dart';
 
 class AdminPenaltyManagementScreen extends StatefulWidget {
   const AdminPenaltyManagementScreen({super.key});
@@ -18,7 +19,7 @@ class AdminPenaltyManagementScreen extends StatefulWidget {
 class _AdminPenaltyManagementScreenState
     extends State<AdminPenaltyManagementScreen> {
   final _dbService = DatabaseService();
-  final _teamService = TeamService();
+  final ITeamService _teamService = ServiceLocator.teamService;
 
   Future<void> _openPenaltyForm({
     required List<Team> teams,

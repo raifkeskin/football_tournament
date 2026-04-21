@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../services/auth_service.dart';
+import '../services/interfaces/i_auth_service.dart';
+import '../services/service_locator.dart';
 import '../services/sms/sms_service_locator.dart';
 import '../utils/otp_utils.dart';
 import 'reset_password_screen.dart';
@@ -14,7 +15,7 @@ class ForgotPasswordScreen extends StatefulWidget {
 }
 
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
-  final _authService = AuthService();
+  final IAuthService _authService = ServiceLocator.authService;
   final _phoneController = TextEditingController();
   final _otpController = TextEditingController();
 

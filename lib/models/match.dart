@@ -129,6 +129,7 @@ class MatchModel {
   final List<String> awayLineup;
   final MatchLineup? homeLineupDetail;
   final MatchLineup? awayLineupDetail;
+  final List<MatchEvent> events;
 
   MatchModel({
     required this.id,
@@ -157,10 +158,13 @@ class MatchModel {
     this.awayLineup = const <String>[],
     this.homeLineupDetail,
     this.awayLineupDetail,
+    this.events = const <MatchEvent>[],
   });
 
   factory MatchModel.fromMap(Map<String, dynamic> map, String id) {
-    final rawMatchDate = map['matchDate'];
+    dynamic v(String camel, String snake) => map[camel] ?? map[snake];
+
+    final rawMatchDate = v('matchDate', 'match_date') ?? v('dateString', 'date_string');
     DateTime? legacyTs;
     String? matchDateStr;
     if (rawMatchDate is Timestamp) {
@@ -241,11 +245,11 @@ class MatchModel {
     }
 
     String? matchTimeStr;
-    final rawMatchTime = (map['matchTime'] ?? '').toString().trim();
+    final rawMatchTime = (v('matchTime', 'match_time') ?? '').toString().trim();
     if (rawMatchTime.isNotEmpty) {
       matchTimeStr = rawMatchTime;
     } else {
-      final legacyTime = (map['time'] ?? '').toString().trim();
+      final legacyTime = (v('time', 'time') ?? '').toString().trim();
       if (legacyTime.isNotEmpty) {
         matchTimeStr = legacyTime;
       } else if (legacyTs != null) {
@@ -254,59 +258,77 @@ class MatchModel {
       }
     }
 
-    final pitchIdRaw = (map['pitchId'] ?? '').toString().trim();
-    final pitchNameRaw = (map['pitchName'] ?? '').toString().trim();
-    final homePhotoRaw = (map['homeHighlightPhotoUrl'] ?? '').toString().trim();
-    final awayPhotoRaw = (map['awayHighlightPhotoUrl'] ?? '').toString().trim();
+    final pitchIdRaw = (v('pitchId', 'pitch_id') ?? '').toString().trim();
+    final pitchNameRaw = (v('pitchName', 'pitch_name') ?? '').toString().trim();
+    final homePhotoRaw =
+        (v('homeHighlightPhotoUrl', 'home_highlight_photo_url') ?? '').toString().trim();
+    final awayPhotoRaw =
+        (v('awayHighlightPhotoUrl', 'away_highlight_photo_url') ?? '').toString().trim();
 
-    final rawTournamentId = (map['tournamentId'] ?? map['leagueId'] ?? '')
-        .toString();
-    final rawHomeLineup = map['homeLineup'];
-    final rawAwayLineup = map['awayLineup'];
-    final rawHomeDetail = map['homeLineupDetail'];
-    final rawAwayDetail = map['awayLineupDetail'];
+    final rawTournamentId =
+        (v('tournamentId', 'tournament_id') ?? v('leagueId', 'league_id') ?? '').toString();
+    final rawHomeLineup = v('homeLineup', 'home_lineup');
+    final rawAwayLineup = v('awayLineup', 'away_lineup');
+    final rawHomeDetail = v('homeLineupDetail', 'home_lineup_detail');
+    final rawAwayDetail = v('awayLineupDetail', 'away_lineup_detail');
     final homeLineupDetail =
         readLineup(rawHomeDetail) ?? readLineup(rawHomeLineup);
     final awayLineupDetail =
         readLineup(rawAwayDetail) ?? readLineup(rawAwayLineup);
 
+    List<MatchEvent> readEvents(dynamic raw) {
+      if (raw is List) {
+        return raw.whereType<Map>().map((e) {
+          final m = Map<String, dynamic>.from(e);
+          final eid =
+              (m['id'] ?? m['eventId'] ?? m['event_id'] ?? m['matchEventId'] ?? '').toString();
+          return MatchEvent.fromMap(m, eid);
+        }).toList();
+      }
+      return const <MatchEvent>[];
+    }
+
+    final eventsRaw = v('events', 'match_events') ?? v('matchEvents', 'match_events');
+
     return MatchModel(
       id: id,
       leagueId: rawTournamentId,
-      homeTeamId: map['homeTeamId'] ?? '',
-      homeTeamName: map['homeTeamName'] ?? '',
+      homeTeamId: (v('homeTeamId', 'home_team_id') ?? '').toString(),
+      homeTeamName: (v('homeTeamName', 'home_team_name') ?? '').toString(),
       homeTeamLogoUrl:
-          (map['homeTeamLogoUrl'] ??
-                  map['homeTeamLogo'] ??
-                  map['homeLogoUrl'] ??
-                  map['homeLogo'] ??
+          (v('homeTeamLogoUrl', 'home_team_logo_url') ??
+                  v('homeTeamLogo', 'home_team_logo') ??
+                  v('homeLogoUrl', 'home_logo_url') ??
+                  v('homeLogo', 'home_logo') ??
                   '')
               .toString(),
-      awayTeamId: map['awayTeamId'] ?? '',
-      awayTeamName: map['awayTeamName'] ?? '',
+      awayTeamId: (v('awayTeamId', 'away_team_id') ?? '').toString(),
+      awayTeamName: (v('awayTeamName', 'away_team_name') ?? '').toString(),
       awayTeamLogoUrl:
-          (map['awayTeamLogoUrl'] ??
-                  map['awayTeamLogo'] ??
-                  map['awayLogoUrl'] ??
-                  map['awayLogo'] ??
+          (v('awayTeamLogoUrl', 'away_team_logo_url') ??
+                  v('awayTeamLogo', 'away_team_logo') ??
+                  v('awayLogoUrl', 'away_logo_url') ??
+                  v('awayLogo', 'away_logo') ??
                   '')
               .toString(),
-      homeScore: readInt(map['homeScore']),
-      awayScore: readInt(map['awayScore']),
+      homeScore: readInt(v('homeScore', 'home_score')),
+      awayScore: readInt(v('awayScore', 'away_score')),
       matchDate: (matchDateStr ?? '').trim().isEmpty ? null : matchDateStr,
       matchTime: (matchTimeStr ?? '').trim().isEmpty ? null : matchTimeStr,
-      week: readScore(map['week']),
+      week: readScore(v('week', 'week')),
       pitchId: pitchIdRaw.isEmpty ? null : pitchIdRaw,
       pitchName: pitchNameRaw.isEmpty ? null : pitchNameRaw,
       status: MatchStatus.values.firstWhere(
-        (e) => e.name == (map['status'] ?? 'notStarted'),
+        (e) => e.name == (v('status', 'status') ?? 'notStarted'),
         orElse: () => MatchStatus.notStarted,
       ),
-      minute: readScore(map['minute']),
-      groupId: map['groupId'],
-      youtubeUrl: (map['youtubeUrl'] ?? '').toString().trim().isEmpty
+      minute: readScore(v('minute', 'minute')),
+      groupId: (v('groupId', 'group_id') ?? '').toString().trim().isEmpty
           ? null
-          : (map['youtubeUrl'] ?? '').toString().trim(),
+          : (v('groupId', 'group_id') ?? '').toString().trim(),
+      youtubeUrl: (v('youtubeUrl', 'youtube_url') ?? '').toString().trim().isEmpty
+          ? null
+          : (v('youtubeUrl', 'youtube_url') ?? '').toString().trim(),
       homeHighlightPhotoUrl: homePhotoRaw.isEmpty ? null : homePhotoRaw,
       awayHighlightPhotoUrl: awayPhotoRaw.isEmpty ? null : awayPhotoRaw,
       score: readScoreObject(),
@@ -314,48 +336,82 @@ class MatchModel {
       awayLineup: readLineupPhones(rawAwayLineup),
       homeLineupDetail: homeLineupDetail,
       awayLineupDetail: awayLineupDetail,
+      events: readEvents(eventsRaw),
     );
   }
 
-  Map<String, dynamic> toMap() {
+  Map<String, dynamic> toMap({bool snakeCase = false}) {
     final dateStr = (matchDate ?? '').trim();
     final timeStr = (matchTime ?? '').trim();
-    final base = <String, dynamic>{
-      'tournamentId': leagueId,
-      'homeTeamId': homeTeamId,
-      'homeTeamName': homeTeamName,
-      'homeTeamLogoUrl': homeTeamLogoUrl,
-      'awayTeamId': awayTeamId,
-      'awayTeamName': awayTeamName,
-      'awayTeamLogoUrl': awayTeamLogoUrl,
-      'homeScore': homeScore,
-      'awayScore': awayScore,
-      'score':
-          (score ??
-                  MatchScore(
-                    halfTime: MatchScorePart(home: 0, away: 0),
-                    fullTime: MatchScorePart(home: homeScore, away: awayScore),
-                  ))
-              .toMap(),
-      'matchDate': dateStr.isEmpty ? null : dateStr,
-      'matchTime': timeStr.isEmpty ? null : timeStr,
-      'week': week,
-      'pitchId': pitchId,
-      'pitchName': pitchName,
-      'status': status.name,
-      'minute': minute,
-      'groupId': groupId,
-      'youtubeUrl': youtubeUrl,
-      'homeHighlightPhotoUrl': homeHighlightPhotoUrl,
-      'awayHighlightPhotoUrl': awayHighlightPhotoUrl,
-      'homeLineup': homeLineup,
-      'awayLineup': awayLineup,
-    };
+    final computedScore =
+        (score ??
+                MatchScore(
+                  halfTime: const MatchScorePart(home: 0, away: 0),
+                  fullTime: MatchScorePart(home: homeScore, away: awayScore),
+                ))
+            .toMap();
+
+    final base = <String, dynamic>{};
+    if (!snakeCase) {
+      base.addAll({
+        'tournamentId': leagueId,
+        'homeTeamId': homeTeamId,
+        'homeTeamName': homeTeamName,
+        'homeTeamLogoUrl': homeTeamLogoUrl,
+        'awayTeamId': awayTeamId,
+        'awayTeamName': awayTeamName,
+        'awayTeamLogoUrl': awayTeamLogoUrl,
+        'homeScore': homeScore,
+        'awayScore': awayScore,
+        'score': computedScore,
+        'matchDate': dateStr.isEmpty ? null : dateStr,
+        'matchTime': timeStr.isEmpty ? null : timeStr,
+        'week': week,
+        'pitchId': pitchId,
+        'pitchName': pitchName,
+        'status': status.name,
+        'minute': minute,
+        'groupId': groupId,
+        'youtubeUrl': youtubeUrl,
+        'homeHighlightPhotoUrl': homeHighlightPhotoUrl,
+        'awayHighlightPhotoUrl': awayHighlightPhotoUrl,
+        'homeLineup': homeLineup,
+        'awayLineup': awayLineup,
+      });
+    } else {
+      base.addAll({
+        'tournament_id': leagueId,
+        'home_team_id': homeTeamId,
+        'home_team_name': homeTeamName,
+        'home_team_logo_url': homeTeamLogoUrl,
+        'away_team_id': awayTeamId,
+        'away_team_name': awayTeamName,
+        'away_team_logo_url': awayTeamLogoUrl,
+        'home_score': homeScore,
+        'away_score': awayScore,
+        'score': computedScore,
+        'match_date': dateStr.isEmpty ? null : dateStr,
+        'match_time': timeStr.isEmpty ? null : timeStr,
+        'week': week,
+        'pitch_id': pitchId,
+        'pitch_name': pitchName,
+        'status': status.name,
+        'minute': minute,
+        'group_id': groupId,
+        'youtube_url': youtubeUrl,
+        'home_highlight_photo_url': homeHighlightPhotoUrl,
+        'away_highlight_photo_url': awayHighlightPhotoUrl,
+        'home_lineup': homeLineup,
+        'away_lineup': awayLineup,
+      });
+    }
     if (homeLineupDetail != null) {
-      base['homeLineupDetail'] = homeLineupDetail!.toMap();
+      base[snakeCase ? 'home_lineup_detail' : 'homeLineupDetail'] =
+          homeLineupDetail!.toMap();
     }
     if (awayLineupDetail != null) {
-      base['awayLineupDetail'] = awayLineupDetail!.toMap();
+      base[snakeCase ? 'away_lineup_detail' : 'awayLineupDetail'] =
+          awayLineupDetail!.toMap();
     }
     return base;
   }
@@ -395,7 +451,9 @@ class MatchEvent {
   }) : type = (type ?? eventType);
 
   factory MatchEvent.fromMap(Map<String, dynamic> map, String id) {
-    final rawMinute = map['minute'];
+    dynamic v(String camel, String snake) => map[camel] ?? map[snake];
+
+    final rawMinute = v('minute', 'minute');
     int minute = 0;
     if (rawMinute is num) {
       minute = rawMinute.toInt();
@@ -407,59 +465,78 @@ class MatchEvent {
     }
     return MatchEvent(
       id: id,
-      matchId: map['matchId'] ?? '',
-      tournamentId: (map['tournamentId'] ?? map['leagueId'] ?? '')
+      matchId: (v('matchId', 'match_id') ?? '').toString(),
+      tournamentId: (v('tournamentId', 'tournament_id') ?? v('leagueId', 'league_id') ?? '')
           .toString()
           .trim(),
-      playerName: map['playerName'] ?? '',
+      playerName: (v('playerName', 'player_name') ?? '').toString(),
       playerPhone:
-          (map['playerPhone'] ?? map['playerId'])?.toString().trim().isEmpty ??
+          (v('playerPhone', 'player_phone') ?? v('playerId', 'player_id'))?.toString().trim().isEmpty ??
               true
           ? null
-          : (map['playerPhone'] ?? map['playerId']).toString().trim(),
+          : (v('playerPhone', 'player_phone') ?? v('playerId', 'player_id')).toString().trim(),
       assistPlayerPhone:
-          (map['assistPlayerPhone'] ?? map['assistPlayerId'])
+          (v('assistPlayerPhone', 'assist_player_phone') ?? v('assistPlayerId', 'assist_player_id'))
                   ?.toString()
                   .trim()
                   .isEmpty ??
               true
           ? null
-          : (map['assistPlayerPhone'] ?? map['assistPlayerId'])
+          : (v('assistPlayerPhone', 'assist_player_phone') ?? v('assistPlayerId', 'assist_player_id'))
                 .toString()
                 .trim(),
-      assistPlayerName: map['assistPlayerName'] as String?,
+      assistPlayerName: (v('assistPlayerName', 'assist_player_name') as String?)?.trim(),
       subInPlayerPhone:
-          (map['subInPlayerPhone'] ?? map['subInPlayerId'])
+          (v('subInPlayerPhone', 'sub_in_player_phone') ?? v('subInPlayerId', 'sub_in_player_id'))
                   ?.toString()
                   .trim()
                   .isEmpty ??
               true
           ? null
-          : (map['subInPlayerPhone'] ?? map['subInPlayerId']).toString().trim(),
-      subInPlayerName: map['subInPlayerName'] as String?,
-      eventType: (map['eventType'] ?? map['type'] ?? 'goal').toString(),
-      type: (map['type'] ?? map['eventType'] ?? 'goal').toString(),
+          : (v('subInPlayerPhone', 'sub_in_player_phone') ?? v('subInPlayerId', 'sub_in_player_id'))
+              .toString()
+              .trim(),
+      subInPlayerName: (v('subInPlayerName', 'sub_in_player_name') as String?)?.trim(),
+      eventType: (v('eventType', 'event_type') ?? v('type', 'type') ?? 'goal').toString(),
+      type: (v('type', 'type') ?? v('eventType', 'event_type') ?? 'goal').toString(),
       minute: minute,
-      teamId: map['teamId'] ?? '',
-      isOwnGoal: (map['isOwnGoal'] as bool?) ?? false,
+      teamId: (v('teamId', 'team_id') ?? '').toString(),
+      isOwnGoal: (v('isOwnGoal', 'is_own_goal') as bool?) ?? false,
     );
   }
 
-  Map<String, dynamic> toMap() {
+  Map<String, dynamic> toMap({bool snakeCase = false}) {
+    if (!snakeCase) {
+      return {
+        'matchId': matchId,
+        'tournamentId': tournamentId,
+        'teamId': teamId,
+        'eventType': eventType,
+        'playerName': playerName,
+        'playerPhone': playerPhone,
+        'assistPlayerPhone': assistPlayerPhone,
+        'assistPlayerName': assistPlayerName,
+        'subInPlayerPhone': subInPlayerPhone,
+        'subInPlayerName': subInPlayerName,
+        'type': type,
+        'minute': minute,
+        'isOwnGoal': isOwnGoal,
+      };
+    }
     return {
-      'matchId': matchId,
-      'tournamentId': tournamentId,
-      'teamId': teamId,
-      'eventType': eventType,
-      'playerName': playerName,
-      'playerPhone': playerPhone,
-      'assistPlayerPhone': assistPlayerPhone,
-      'assistPlayerName': assistPlayerName,
-      'subInPlayerPhone': subInPlayerPhone,
-      'subInPlayerName': subInPlayerName,
+      'match_id': matchId,
+      'tournament_id': tournamentId,
+      'team_id': teamId,
+      'event_type': eventType,
+      'player_name': playerName,
+      'player_phone': playerPhone,
+      'assist_player_phone': assistPlayerPhone,
+      'assist_player_name': assistPlayerName,
+      'sub_in_player_phone': subInPlayerPhone,
+      'sub_in_player_name': subInPlayerName,
       'type': type,
       'minute': minute,
-      'isOwnGoal': isOwnGoal,
+      'is_own_goal': isOwnGoal,
     };
   }
 }
@@ -478,16 +555,21 @@ class GroupModel {
   });
 
   factory GroupModel.fromMap(Map<String, dynamic> map, String id) {
+    dynamic v(String camel, String snake) => map[camel] ?? map[snake];
     return GroupModel(
       id: id,
-      leagueId: (map['tournamentId'] ?? map['leagueId'] ?? '').toString(),
-      name: map['name'] ?? '',
-      teamIds: List<String>.from(map['teamIds'] ?? []),
+      leagueId:
+          (v('tournamentId', 'tournament_id') ?? v('leagueId', 'league_id') ?? '').toString(),
+      name: (v('name', 'name') ?? '').toString(),
+      teamIds: List<String>.from(v('teamIds', 'team_ids') ?? const <String>[]),
     );
   }
 
-  Map<String, dynamic> toMap() {
-    return {'tournamentId': leagueId, 'name': name, 'teamIds': teamIds};
+  Map<String, dynamic> toMap({bool snakeCase = false}) {
+    if (!snakeCase) {
+      return {'tournamentId': leagueId, 'name': name, 'teamIds': teamIds};
+    }
+    return {'tournament_id': leagueId, 'name': name, 'team_ids': teamIds};
   }
 }
 
@@ -523,6 +605,8 @@ class PlayerModel {
   final int suspendedMatches;
 
   factory PlayerModel.fromMap(Map<String, dynamic> map, String id) {
+    dynamic v(String camel, String snake) => map[camel] ?? map[snake];
+
     String? normalizeBirthDate(dynamic value) {
       if (value == null) return null;
       if (value is Timestamp) value = value.toDate();
@@ -545,26 +629,31 @@ class PlayerModel {
     }
 
     final isRoster =
-        (map['tournamentId'] ??
-            map['leagueId'] ??
-            map['playerPhone'] ??
-            map['teamId']) !=
+        (v('tournamentId', 'tournament_id') ??
+            v('leagueId', 'league_id') ??
+            v('playerPhone', 'player_phone') ??
+            v('teamId', 'team_id')) !=
         null;
     final phoneRaw =
-        (map['playerPhone'] ?? map['phone'] ?? map['playerId'] ?? id)
+        (v('playerPhone', 'player_phone') ??
+                v('phone', 'phone') ??
+                v('playerId', 'player_id') ??
+                id)
             .toString()
             .trim();
     final phone = phoneRaw.isEmpty ? null : phoneRaw;
-    final name = (map['playerName'] ?? map['name'] ?? '').toString().trim();
-    final roleRaw = (map['role'] ?? '').toString().trim();
+    final name = (v('playerName', 'player_name') ?? v('name', 'name') ?? '').toString().trim();
+    final roleRaw = (v('role', 'role') ?? '').toString().trim();
     final role = roleRaw.isEmpty ? 'Futbolcu' : roleRaw;
-    final numberRaw = (map['jerseyNumber'] ?? map['number'])?.toString().trim();
+    final numberRaw = (v('jerseyNumber', 'jersey_number') ?? v('number', 'number'))
+        ?.toString()
+        .trim();
     final number = (numberRaw ?? '').isEmpty ? null : numberRaw;
-    final birthDate = normalizeBirthDate(map['birthDate']);
-    final mainPosition = (map['mainPosition'] as String?)?.trim();
-    final position = (map['position'] as String?)?.trim();
-    final preferredFoot = (map['preferredFoot'] as String?)?.trim();
-    final photoUrl = (map['photoUrl'] as String?)?.trim();
+    final birthDate = normalizeBirthDate(v('birthDate', 'birth_date'));
+    final mainPosition = (v('mainPosition', 'main_position') as String?)?.trim();
+    final position = (v('position', 'position') as String?)?.trim();
+    final preferredFoot = (v('preferredFoot', 'preferred_foot') as String?)?.trim();
+    final photoUrl = (v('photoUrl', 'photo_url') as String?)?.trim();
     int readInt(dynamic v) {
       if (v == null) return 0;
       if (v is num) return v.toInt();
@@ -574,13 +663,13 @@ class PlayerModel {
           0;
     }
 
-    final suspendedMatches = readInt(map['suspendedMatches']);
+    final suspendedMatches = readInt(v('suspendedMatches', 'suspended_matches'));
 
     if (isRoster) {
-      final tournamentId = (map['tournamentId'] ?? map['leagueId'] ?? '')
+      final tournamentId = (v('tournamentId', 'tournament_id') ?? v('leagueId', 'league_id') ?? '')
           .toString()
           .trim();
-      final teamId = (map['teamId'] ?? '').toString().trim();
+      final teamId = (v('teamId', 'team_id') ?? '').toString().trim();
       return PlayerModel(
         id: id,
         name: name,
@@ -611,13 +700,28 @@ class PlayerModel {
     return {'name': name, 'birthDate': birthDate, 'mainPosition': mainPosition};
   }
 
-  Map<String, dynamic> toRosterMap() {
+  Map<String, dynamic> toPlayerIdentityMapDb({bool snakeCase = false}) {
+    if (!snakeCase) return toPlayerIdentityMap();
+    return {'name': name, 'birth_date': birthDate, 'main_position': mainPosition};
+  }
+
+  Map<String, dynamic> toRosterMap({bool snakeCase = false}) {
+    if (!snakeCase) {
+      return {
+        'tournamentId': tournamentId,
+        'teamId': teamId,
+        'playerPhone': phone,
+        'playerName': name,
+        'jerseyNumber': number,
+        'role': role,
+      };
+    }
     return {
-      'tournamentId': tournamentId,
-      'teamId': teamId,
-      'playerPhone': phone,
-      'playerName': name,
-      'jerseyNumber': number,
+      'tournament_id': tournamentId,
+      'team_id': teamId,
+      'player_phone': phone,
+      'player_name': name,
+      'jersey_number': number,
       'role': role,
     };
   }

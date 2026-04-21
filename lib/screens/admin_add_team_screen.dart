@@ -6,8 +6,9 @@ import 'package:image_picker/image_picker.dart';
 import '../models/league.dart';
 import '../repositories/teams_repository.dart';
 import '../services/app_session.dart';
-import '../services/league_service.dart';
 import '../services/image_upload_service.dart';
+import '../services/interfaces/i_league_service.dart';
+import '../services/service_locator.dart';
 
 /// Admin için takım ekleme formu.
 class AdminAddTeamScreen extends StatefulWidget {
@@ -21,7 +22,7 @@ class _AdminAddTeamScreenState extends State<AdminAddTeamScreen> {
   final _teamNameController = TextEditingController();
   final _picker = ImagePicker();
   final _imageUploadService = ImgBBUploadService();
-  final _leagueService = LeagueService();
+  final ILeagueService _leagueService = ServiceLocator.leagueService;
   final _teamsRepo = TeamsRepository();
 
   XFile? _teamLogo;

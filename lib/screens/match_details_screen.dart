@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
+import '../models/league_extras.dart';
 import '../models/match.dart';
 import '../models/team.dart';
 import '../widgets/web_safe_image.dart';
 import '../services/app_session.dart';
-import '../services/league_service.dart';
-import '../services/match_service.dart';
-import '../services/team_service.dart';
+import '../services/interfaces/i_league_service.dart';
+import '../services/interfaces/i_match_service.dart';
+import '../services/interfaces/i_team_service.dart';
+import '../services/service_locator.dart';
 import 'admin_match_event_screen.dart';
 import 'admin_match_lineup_screen.dart';
 
@@ -72,8 +75,8 @@ class _TeamInfo extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
             color: Colors.white,
-            fontWeight: FontWeight.w900,
-            fontSize: displayName.length > 15 ? 11 : 13,
+            fontWeight: FontWeight.w700,
+            fontSize: 18,
             shadows: const [
               Shadow(
                 color: Colors.black,
@@ -104,9 +107,72 @@ class MatchDetailsScreen extends StatefulWidget {
 }
 
 class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
-  final _teamService = TeamService();
-  final _matchService = MatchService();
-  final _leagueService = LeagueService();
+  final ITeamService _teamService = ServiceLocator.teamService;
+  final IMatchService _matchService = ServiceLocator.matchService;
+  final ILeagueService _leagueService = ServiceLocator.leagueService;
+
+  String _resolvePitchLocation({
+    required List<Pitch> pitches,
+    required String pitchId,
+    required String pitchName,
+  }) {
+    final id = pitchId.trim();
+    final name = pitchName.trim();
+
+    if (id.isNotEmpty) {
+      for (final p in pitches) {
+        if (p.id.trim() == id) {
+          return p.location;
+        }
+      }
+    }
+
+    if (name.isNotEmpty) {
+      for (final p in pitches) {
+        if (p.name.trim().toLowerCase() == name.toLowerCase()) {
+          return p.location;
+        }
+      }
+    }
+
+    return '';
+  }
+
+  Future<void> _openPitchLocation(BuildContext context, String rawLocation) async {
+    if (rawLocation.isEmpty) return;
+    final uri = Uri.tryParse(rawLocation);
+    if (uri == null || uri.scheme.isEmpty) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Konum linki geçersiz.')));
+      return;
+    }
+
+    try {
+      final can = await canLaunchUrl(uri);
+      if (!can) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Link açılamadı.')));
+        return;
+      }
+      final ok = await launchUrl(uri, mode: LaunchMode.externalNonBrowserApplication);
+      if (!ok) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    } catch (_) {
+      try {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } catch (_) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Link açılamadı.')));
+      }
+    }
+  }
 
   String _formatDate(String dateStr) {
     if (dateStr.isEmpty || dateStr == '__NO_DATE__') {
@@ -305,7 +371,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
                                   const Text(
                                     "|",
                                     style: TextStyle(
-                                      color: Colors.white24,
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
                                       shadows: [
                                         Shadow(
                                           color: Colors.black,
@@ -323,21 +391,40 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
                                   ),
                                   const SizedBox(width: 4),
                                   Flexible(
-                                    child: Text(
-                                      m.pitchName!,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w700,
-                                        shadows: [
-                                          Shadow(
-                                            color: Colors.black,
-                                            blurRadius: 10,
-                                            offset: Offset(0, 2),
+                                    child: StreamBuilder<List<Pitch>>(
+                                      stream: _leagueService.watchPitches(),
+                                      builder: (context, pitchSnap) {
+                                        final pitchName = m.pitchName!.trim();
+                                        final pitchId = (m.pitchId ?? '').trim();
+                                        final pitches = pitchSnap.data ?? const <Pitch>[];
+                                        final location = _resolvePitchLocation(
+                                          pitches: pitches,
+                                          pitchId: pitchId,
+                                          pitchName: pitchName,
+                                        );
+
+                                        return InkWell(
+                                          onTap: location.isEmpty
+                                              ? null
+                                              : () => _openPitchLocation(context, location),
+                                          child: Text(
+                                            pitchName,
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                              shadows: [
+                                                Shadow(
+                                                  color: Colors.black,
+                                                  blurRadius: 10,
+                                                  offset: Offset(0, 2),
+                                                ),
+                                              ],
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
                                           ),
-                                        ],
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
+                                        );
+                                      },
                                     ),
                                   ),
                                 ],
@@ -369,12 +456,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
                     color: Theme.of(context).scaffoldBackgroundColor,
                     child: TabBarView(
                       children: [
-                        _SummaryTab(match: m),
+                        _DetailTab(match: m),
                         _LineupTab(match: m, isAdmin: isAdminAccess),
-                        _LineupEventsTab(
-                          match: m,
-                          isAdmin: isSuperAdmin,
-                        ),
+                        _HighlightsTab(match: m),
                       ],
                     ),
                   ),
@@ -453,26 +537,61 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
 
 // --- TAB İÇERİKLERİ ---
 
-class _SummaryTab extends StatelessWidget {
+class _HighlightsTab extends StatelessWidget {
   final MatchModel match;
-  const _SummaryTab({required this.match});
+  const _HighlightsTab({required this.match});
+
   @override
   Widget build(BuildContext context) {
+    final homePhoto = (match.homeHighlightPhotoUrl ?? '').trim();
+    final awayPhoto = (match.awayHighlightPhotoUrl ?? '').trim();
+    final hasPhoto = homePhoto.isNotEmpty || awayPhoto.isNotEmpty;
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         if (match.youtubeUrl != null && match.youtubeUrl!.isNotEmpty)
           _YoutubePlayerSection(url: match.youtubeUrl!),
-        const SizedBox(height: 20),
+        if (match.youtubeUrl != null && match.youtubeUrl!.isNotEmpty)
+          const SizedBox(height: 16),
         const Text(
-          'Maç Hakkında',
+          'Maç Fotoğrafları',
           style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
         ),
         const SizedBox(height: 10),
-        const Text(
-          'Bu maçın detaylı özeti ve saha bilgileri burada yer alacaktır.',
-          style: TextStyle(color: Colors.white70),
-        ),
+        if (!hasPhoto)
+          const Text(
+            'Henüz fotoğraf eklenmedi.',
+            style: TextStyle(color: Colors.white70),
+          ),
+        if (homePhoto.isNotEmpty) ...[
+          ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: WebSafeImage(
+              url: homePhoto,
+              width: double.infinity,
+              height: 220,
+              fit: BoxFit.cover,
+              isCircle: false,
+              fallbackIconSize: 32,
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (awayPhoto.isNotEmpty) ...[
+          ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: WebSafeImage(
+              url: awayPhoto,
+              width: double.infinity,
+              height: 220,
+              fit: BoxFit.cover,
+              isCircle: false,
+              fallbackIconSize: 32,
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
       ],
     );
   }
@@ -655,123 +774,318 @@ class _TeamLineupSection extends StatelessWidget {
   }
 }
 
-class _LineupEventsTab extends StatelessWidget {
+class _DetailTab extends StatelessWidget {
   final MatchModel match;
-  final bool isAdmin;
-  const _LineupEventsTab({required this.match, required this.isAdmin});
+  const _DetailTab({required this.match});
+
+  int _readMinute(dynamic v) {
+    if (v == null) return 0;
+    if (v is num) return v.toInt();
+    final s = v.toString().replaceAll('\u0000', '').trim();
+    return int.tryParse(s) ?? double.tryParse(s.replaceAll(',', '.'))?.toInt() ?? 0;
+  }
+
+  String _readString(dynamic v) => (v ?? '').toString().trim();
+
+  Map<String, dynamic> _asMap(dynamic v) =>
+      (v is Map) ? Map<String, dynamic>.from(v) : const <String, dynamic>{};
+
+  List<Map<String, dynamic>> _fallbackSystemStory() {
+    switch (match.status) {
+      case MatchStatus.notStarted:
+        return <Map<String, dynamic>>[
+          {'minute': 0, 'type': 'status', 'title': 'Maç Henüz Başlamadı'},
+        ];
+      case MatchStatus.postponed:
+        return <Map<String, dynamic>>[
+          {'minute': 0, 'type': 'status', 'title': 'Maç Ertelendi'},
+        ];
+      case MatchStatus.cancelled:
+        return <Map<String, dynamic>>[
+          {'minute': 0, 'type': 'status', 'title': 'Maç İptal Edildi'},
+        ];
+      case MatchStatus.live:
+        return <Map<String, dynamic>>[
+          {'minute': 0, 'type': 'status', 'title': 'Maç Başladı'},
+        ];
+      case MatchStatus.halftime:
+        return <Map<String, dynamic>>[
+          {'minute': 0, 'type': 'status', 'title': 'Maç Başladı'},
+          {'minute': 45, 'type': 'status', 'title': 'İlk Yarı Bitti'},
+        ];
+      case MatchStatus.finished:
+        return <Map<String, dynamic>>[
+          {'minute': 0, 'type': 'status', 'title': 'Maç Başladı'},
+          {'minute': 45, 'type': 'status', 'title': 'İlk Yarı Bitti'},
+          {'minute': 90, 'type': 'status', 'title': 'Maç Bitti'},
+        ];
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        const Text(
-          'Maç Olayları',
-          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
-        ),
-        const SizedBox(height: 10),
-        StreamBuilder<List<Map<String, dynamic>>>(
-          stream: MatchService().watchInlineMatchEvents(match.id),
-          builder: (context, snap) {
-            if (!snap.hasData) {
-              return const Center(child: CircularProgressIndicator());
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: ServiceLocator.matchService.watchInlineMatchEvents(match.id),
+      builder: (context, snap) {
+        if (!snap.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final raw = snap.data ?? const <Map<String, dynamic>>[];
+
+        final systemStory = _fallbackSystemStory();
+        final List<Map<String, dynamic>> normalized =
+            raw.map((e) => _asMap(e)).toList();
+
+        String pickType(Map<String, dynamic> e) {
+          return _readString(e['type']).isNotEmpty
+              ? _readString(e['type'])
+              : _readString(e['eventType']).isNotEmpty
+                  ? _readString(e['eventType'])
+                  : _readString(e['event_type']);
+        }
+
+        String pickTitle(Map<String, dynamic> e) {
+          final a = _readString(e['playerName']);
+          if (a.isNotEmpty) return a;
+          final b = _readString(e['player_name']);
+          if (b.isNotEmpty) return b;
+          final c = _readString(e['title']);
+          if (c.isNotEmpty) return c;
+          return _readString(e['eventType']).isNotEmpty
+              ? _readString(e['eventType'])
+              : _readString(e['event_type']);
+        }
+
+        String pickTeamId(Map<String, dynamic> e) {
+          final a = _readString(e['teamId']);
+          if (a.isNotEmpty) return a;
+          return _readString(e['team_id']);
+        }
+
+        bool isSystem(Map<String, dynamic> e) {
+          final t = pickType(e);
+          final et = _readString(e['eventType']).isNotEmpty
+              ? _readString(e['eventType'])
+              : _readString(e['event_type']);
+          if (t == 'status' || t == 'system') return true;
+          if (et == 'status' || et == 'system') return true;
+          if (pickTeamId(e).isEmpty && pickTitle(e).isNotEmpty) return true;
+          return false;
+        }
+
+        if (normalized.isEmpty) {
+          normalized.addAll(systemStory);
+        } else {
+          final existingTitleKeys = normalized
+              .map((e) => pickTitle(e).toLowerCase())
+              .where((s) => s.isNotEmpty)
+              .toSet();
+          for (final s in systemStory) {
+            final key = pickTitle(s).toLowerCase();
+            if (key.isNotEmpty && !existingTitleKeys.contains(key)) {
+              normalized.add(s);
             }
-            final events = snap.data ?? const <Map<String, dynamic>>[];
-            if (events.isEmpty) {
-              return const Center(
-                child: Text(
-                  'Henüz olay yok.',
-                  style: TextStyle(color: Colors.white38),
-                ),
+          }
+        }
+
+        normalized.sort((a, b) {
+          final am = _readMinute(a['minute']);
+          final bm = _readMinute(b['minute']);
+          if (am != bm) return am.compareTo(bm);
+          final at = pickType(a);
+          final bt = pickType(b);
+          return at.compareTo(bt);
+        });
+
+        return ListView.separated(
+          padding: const EdgeInsets.all(16),
+          itemCount: normalized.length + 1,
+          separatorBuilder: (_, __) => const SizedBox(height: 6),
+          itemBuilder: (context, i) {
+            if (i == 0) {
+              return const Text(
+                'Maç Akışı',
+                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
               );
             }
-            return Column(
-              children:
-                  events
-                      .map(
-                        (data) => _MatchEventTile(
-                          data: data,
-                          homeTeamId: match.homeTeamId,
-                        ),
-                      )
-                      .toList(),
+            final e = normalized[i - 1];
+            final type = pickType(e);
+            final title = pickTitle(e);
+            final minute = _readMinute(e['minute']);
+            final teamId = pickTeamId(e);
+            final system = isSystem(e);
+
+            final subIn =
+                _readString(e['subInPlayerName']).isNotEmpty ? _readString(e['subInPlayerName']) : _readString(e['sub_in_player_name']);
+            final assist =
+                _readString(e['assistPlayerName']).isNotEmpty ? _readString(e['assistPlayerName']) : _readString(e['assist_player_name']);
+            final isOwnGoal = (e['isOwnGoal'] as bool?) ?? (e['is_own_goal'] as bool?) ?? false;
+
+            String displayTitle() {
+              if (type == 'substitution') {
+                final outName = title;
+                final inName = subIn;
+                if (outName.isNotEmpty && inName.isNotEmpty) {
+                  return '$outName → $inName';
+                }
+                return outName.isEmpty ? 'Değişiklik' : outName;
+              }
+              if (type == 'goal') {
+                final suffix = isOwnGoal ? ' (KK)' : '';
+                final a = assist.isNotEmpty ? ' (Asist: $assist)' : '';
+                return '${title.isEmpty ? 'Gol' : title}$suffix$a';
+              }
+              return title;
+            }
+
+            return _DetailEventTile(
+              minute: minute,
+              type: type,
+              title: displayTitle(),
+              teamId: teamId,
+              homeTeamId: match.homeTeamId,
+              system: system,
             );
           },
-        ),
-      ],
+        );
+      },
     );
   }
 }
 
-class _MatchEventTile extends StatelessWidget {
-  final Map<String, dynamic> data;
+class _DetailEventTile extends StatelessWidget {
+  final int minute;
+  final String type;
+  final String title;
+  final String teamId;
   final String homeTeamId;
-  const _MatchEventTile({required this.data, required this.homeTeamId});
+  final bool system;
+  const _DetailEventTile({
+    required this.minute,
+    required this.type,
+    required this.title,
+    required this.teamId,
+    required this.homeTeamId,
+    required this.system,
+  });
+
+  Widget _systemIcon(String title) {
+    final t = title.toLowerCase();
+    if (t.contains('başla')) return const Icon(Icons.play_arrow_rounded, size: 18);
+    if (t.contains('devre') || t.contains('yarı')) {
+      return const Icon(Icons.timelapse_rounded, size: 18);
+    }
+    if (t.contains('bitti') || t.contains('son')) {
+      return const Icon(Icons.flag_rounded, size: 18);
+    }
+    return const Icon(Icons.info_outline, size: 18);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final bool isHome = data['teamId'] == homeTeamId;
-    final String type = data['type'] ?? '';
-    final String player = data['playerName'] ?? '';
-    final String min = data['minute']?.toString() ?? '0';
+    final bool isHome = teamId == homeTeamId;
+    final String min = "$minute'";
 
     Widget icon;
-    switch (type) {
-      case 'goal':
-        icon = const Icon(Icons.sports_soccer, size: 18, color: Colors.white);
-        break;
-      case 'yellow_card':
-        icon = const Icon(Icons.rectangle, color: Colors.yellow, size: 18);
-        break;
-      case 'red_card':
-        icon = const Icon(Icons.rectangle, color: Colors.red, size: 18);
-        break;
-      case 'second_yellow':
-        icon = const _SecondYellowCardIcon();
-        break;
-      default:
-        icon = const Icon(Icons.info_outline, size: 18);
+    if (system) {
+      icon = _systemIcon(title);
+    } else {
+      switch (type) {
+        case 'goal':
+          icon = const Icon(Icons.sports_soccer, size: 18, color: Colors.white);
+          break;
+        case 'yellow_card':
+          icon = const Icon(Icons.rectangle, color: Colors.yellow, size: 18);
+          break;
+        case 'red_card':
+          icon = const Icon(Icons.rectangle, color: Colors.red, size: 18);
+          break;
+        case 'second_yellow':
+          icon = const _SecondYellowCardIcon();
+          break;
+        case 'substitution':
+          icon = const Icon(Icons.swap_horiz_rounded, size: 18);
+          break;
+        default:
+          icon = const Icon(Icons.info_outline, size: 18);
+      }
     }
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        mainAxisAlignment: isHome
-            ? MainAxisAlignment.start
-            : MainAxisAlignment.end,
-        children: isHome
-            ? [
-                Text(
-                  "$min'",
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.amber,
-                  ),
+      child: system
+          ? Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white10,
+                  borderRadius: BorderRadius.circular(999),
                 ),
-                const SizedBox(width: 8),
-                icon,
-                const SizedBox(width: 8),
-                Text(
-                  player,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      min,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.amber,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    icon,
+                    const SizedBox(width: 10),
+                    Text(
+                      title.isEmpty ? '-' : title,
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ],
                 ),
-              ]
-            : [
-                Text(
-                  player,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(width: 8),
-                icon,
-                const SizedBox(width: 8),
-                Text(
-                  "$min'",
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.amber,
-                  ),
-                ),
-              ],
-      ),
+              ),
+            )
+          : Row(
+              mainAxisAlignment:
+                  isHome ? MainAxisAlignment.start : MainAxisAlignment.end,
+              children: isHome
+                  ? [
+                      Text(
+                        min,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.amber,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      icon,
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          title.isEmpty ? '-' : title,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ]
+                  : [
+                      Flexible(
+                        child: Text(
+                          title.isEmpty ? '-' : title,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.right,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      icon,
+                      const SizedBox(width: 8),
+                      Text(
+                        min,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.amber,
+                        ),
+                      ),
+                    ],
+            ),
     );
   }
 }

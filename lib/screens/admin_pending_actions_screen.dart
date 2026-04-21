@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../services/approval_service.dart';
 import '../services/app_session.dart';
-import '../services/team_service.dart';
+import '../services/interfaces/i_team_service.dart';
+import '../services/service_locator.dart';
 
 class AdminPendingActionsScreen extends StatefulWidget {
   const AdminPendingActionsScreen({super.key});
@@ -13,7 +14,7 @@ class AdminPendingActionsScreen extends StatefulWidget {
 
 class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
   final _approval = ApprovalService();
-  final _teamService = TeamService();
+  final ITeamService _teamService = ServiceLocator.teamService;
   bool _busy = false;
   List<PendingAction> _actions = const [];
 

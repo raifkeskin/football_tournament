@@ -2,7 +2,9 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'config/app_config.dart';
 import 'firebase_options.dart';
 import 'screens/main_navigator.dart';
 import 'services/app_session.dart';
@@ -15,10 +17,10 @@ final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
-  // TEST: Firebase'e anlık bir mesaj gönderelim
-  debugPrint('Firebase Bağlantısı Test Ediliyor...');
-  // Eğer hata almazsan buraya kadar her şey OK!
+  await Supabase.initialize(
+    url: AppConfig.supabaseUrl,
+    anonKey: AppConfig.supabaseAnonKey,
+  );
 
   runApp(const MyApp());
 }
@@ -118,8 +120,10 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    DatabaseService().migratePlayersDefaultRoleAndBirthDate();
-    DatabaseService().migratePlayersPhoneRaw10();
+    if (AppConfig.activeDatabase == DatabaseType.firebase) {
+      DatabaseService().migratePlayersDefaultRoleAndBirthDate();
+      DatabaseService().migratePlayersPhoneRaw10();
+    }
   }
 
   @override

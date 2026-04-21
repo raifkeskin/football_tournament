@@ -34,6 +34,7 @@ class PlayerStats {
   }
 
   factory PlayerStats.fromMap(Map<String, dynamic> map, String id) {
+    dynamic v(String camel, String snake) => map[camel] ?? map[snake];
     int readInt(dynamic v) {
       if (v == null) return 0;
       if (v is num) return v.toInt();
@@ -49,36 +50,51 @@ class PlayerStats {
       return null;
     }
 
-    final tournamentId = (map['tournamentId'] ?? map['leagueId'] ?? '').toString();
+    final tournamentId = (v('tournamentId', 'tournament_id') ??
+            v('leagueId', 'league_id') ??
+            '')
+        .toString();
 
     return PlayerStats(
       id: id,
-      playerPhone: (map['playerPhone'] ?? '').toString(),
+      playerPhone: (v('playerPhone', 'player_phone') ?? '').toString(),
       tournamentId: tournamentId,
-      teamId: (map['teamId'] ?? '').toString(),
-      matchesPlayed: readInt(map['matchesPlayed']),
-      goals: readInt(map['goals']),
-      assists: readInt(map['assists']),
-      yellowCards: readInt(map['yellowCards']),
-      redCards: readInt(map['redCards']),
-      manOfTheMatch: readInt(map['manOfTheMatch']),
-      createdAt: readDate(map['createdAt']),
-      updatedAt: readDate(map['updatedAt']),
+      teamId: (v('teamId', 'team_id') ?? '').toString(),
+      matchesPlayed: readInt(v('matchesPlayed', 'matches_played')),
+      goals: readInt(v('goals', 'goals')),
+      assists: readInt(v('assists', 'assists')),
+      yellowCards: readInt(v('yellowCards', 'yellow_cards')),
+      redCards: readInt(v('redCards', 'red_cards')),
+      manOfTheMatch: readInt(v('manOfTheMatch', 'man_of_the_match')),
+      createdAt: readDate(v('createdAt', 'created_at')),
+      updatedAt: readDate(v('updatedAt', 'updated_at')),
     );
   }
 
-  Map<String, dynamic> toMap() {
+  Map<String, dynamic> toMap({bool snakeCase = false}) {
+    if (!snakeCase) {
+      return {
+        'playerPhone': playerPhone,
+        'tournamentId': tournamentId,
+        'teamId': teamId,
+        'matchesPlayed': matchesPlayed,
+        'goals': goals,
+        'assists': assists,
+        'yellowCards': yellowCards,
+        'redCards': redCards,
+        'manOfTheMatch': manOfTheMatch,
+      };
+    }
     return {
-      'playerPhone': playerPhone,
-      'tournamentId': tournamentId,
-      'teamId': teamId,
-      'matchesPlayed': matchesPlayed,
+      'player_phone': playerPhone,
+      'tournament_id': tournamentId,
+      'team_id': teamId,
+      'matches_played': matchesPlayed,
       'goals': goals,
       'assists': assists,
-      'yellowCards': yellowCards,
-      'redCards': redCards,
-      'manOfTheMatch': manOfTheMatch,
+      'yellow_cards': yellowCards,
+      'red_cards': redCards,
+      'man_of_the_match': manOfTheMatch,
     };
   }
 }
-

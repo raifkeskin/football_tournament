@@ -4,8 +4,9 @@ import '../models/match.dart';
 import '../models/team.dart';
 import '../services/app_session.dart';
 import '../services/database_service.dart';
-import '../services/league_service.dart';
-import '../services/team_service.dart';
+import '../services/interfaces/i_league_service.dart';
+import '../services/interfaces/i_team_service.dart';
+import '../services/service_locator.dart';
 import '../widgets/web_safe_image.dart';
 
 class AdminGroupManagementScreen extends StatefulWidget {
@@ -26,8 +27,8 @@ class AdminGroupManagementScreen extends StatefulWidget {
 class _AdminGroupManagementScreenState
     extends State<AdminGroupManagementScreen> {
   final _dbService = DatabaseService();
-  final _leagueService = LeagueService();
-  final _teamService = TeamService();
+  final ILeagueService _leagueService = ServiceLocator.leagueService;
+  final ITeamService _teamService = ServiceLocator.teamService;
   String? _selectedLeagueId;
   String? _selectedGroupId;
   final List<String> _selectedTeamIds = [];
