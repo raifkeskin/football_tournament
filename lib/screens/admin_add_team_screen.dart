@@ -1,12 +1,12 @@
 import 'dart:io';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../models/league.dart';
 import '../repositories/teams_repository.dart';
 import '../services/app_session.dart';
-import '../services/database_service.dart';
+import '../services/league_service.dart';
 import '../services/image_upload_service.dart';
 
 /// Admin için takım ekleme formu.
@@ -21,7 +21,7 @@ class _AdminAddTeamScreenState extends State<AdminAddTeamScreen> {
   final _teamNameController = TextEditingController();
   final _picker = ImagePicker();
   final _imageUploadService = ImgBBUploadService();
-  final _databaseService = DatabaseService();
+  final _leagueService = LeagueService();
   final _teamsRepo = TeamsRepository();
 
   XFile? _teamLogo;
@@ -128,8 +128,8 @@ class _AdminAddTeamScreenState extends State<AdminAddTeamScreen> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                StreamBuilder<QuerySnapshot>(
-                  stream: _databaseService.getLeagues(),
+                StreamBuilder<List<League>>(
+                  stream: _leagueService.watchLeagues(),
                   builder: (context, snapshot) {
                     if (snapshot.hasError) {
                       return Text('Hata: ${snapshot.error}');
@@ -138,7 +138,7 @@ class _AdminAddTeamScreenState extends State<AdminAddTeamScreen> {
                       return const Center(child: CircularProgressIndicator());
                     }
 
-                    final leagues = snapshot.data!.docs;
+                    final leagues = snapshot.data ?? const <League>[];
                     if (leagues.isEmpty) {
                       return const Card(
                         child: Padding(
@@ -154,10 +154,9 @@ class _AdminAddTeamScreenState extends State<AdminAddTeamScreen> {
                       initialValue: _selectedLeagueId,
                       decoration: const InputDecoration(labelText: 'Turnuva Seçin'),
                       items: leagues.map((doc) {
-                        final data = doc.data() as Map<String, dynamic>;
                         return DropdownMenuItem<String>(
                           value: doc.id,
-                          child: Text(data['name'] ?? 'Adsız Turnuva'),
+                          child: Text(doc.name),
                         );
                       }).toList(),
                       onChanged: (val) =>

@@ -1,10 +1,10 @@
 import 'dart:io';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../models/league.dart';
 import '../services/app_session.dart';
 import '../services/database_service.dart';
+import '../services/league_service.dart';
 import '../services/image_upload_service.dart';
 import '../widgets/web_safe_image.dart';
 import 'admin_awards_screen.dart';
@@ -23,6 +23,7 @@ class AdminManageLeaguesScreen extends StatefulWidget {
 
 class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
   final _dbService = DatabaseService();
+  final _leagueService = LeagueService();
   final _imageUploadService = ImgBBUploadService();
   final _picker = ImagePicker();
   bool _dialOpen = false;
@@ -525,20 +526,13 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
             ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 12),
-          StreamBuilder<QuerySnapshot>(
-            stream: _dbService.getLeagues(),
+          StreamBuilder<List<League>>(
+            stream: _leagueService.watchLeagues(),
             builder: (context, snapshot) {
               if (!snapshot.hasData) {
                 return const Center(child: CircularProgressIndicator());
               }
-              final leagues = snapshot.data!.docs
-                  .map(
-                    (doc) => League.fromMap({
-                      ...doc.data() as Map<String, dynamic>,
-                      'id': doc.id,
-                    }),
-                  )
-                  .toList();
+              final leagues = snapshot.data ?? const <League>[];
 
               if (leagues.isEmpty) {
                 return const Padding(

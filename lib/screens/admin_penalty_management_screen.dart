@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -6,6 +5,7 @@ import '../models/match.dart';
 import '../services/app_session.dart';
 import '../models/team.dart';
 import '../services/database_service.dart';
+import '../services/team_service.dart';
 
 class AdminPenaltyManagementScreen extends StatefulWidget {
   const AdminPenaltyManagementScreen({super.key});
@@ -18,6 +18,7 @@ class AdminPenaltyManagementScreen extends StatefulWidget {
 class _AdminPenaltyManagementScreenState
     extends State<AdminPenaltyManagementScreen> {
   final _dbService = DatabaseService();
+  final _teamService = TeamService();
 
   Future<void> _openPenaltyForm({
     required List<Team> teams,
@@ -416,61 +417,44 @@ class _AdminPenaltyManagementScreenState
     return Scaffold(
       appBar: AppBar(title: const Text('Ceza Yönetimi')),
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      floatingActionButton: StreamBuilder<QuerySnapshot>(
-        stream: _dbService.getTeams(),
+      floatingActionButton: StreamBuilder<List<Team>>(
+        stream: _teamService.watchAllTeams(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) return const SizedBox.shrink();
-          final teams = snapshot.data!.docs
-              .where((d) => d.id != 'free_agent_pool')
-              .map(
-                (d) => Team.fromMap({
-                  ...d.data() as Map<String, dynamic>,
-                  'id': d.id,
-                }),
-              )
-              .toList();
+          final teams =
+              (snapshot.data ?? const <Team>[])
+                  .where((t) => t.id != 'free_agent_pool')
+                  .toList();
           return FloatingActionButton(
             onPressed: () => _openPenaltyForm(teams: teams),
             child: const Icon(Icons.add),
           );
         },
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: _dbService.getTeams(),
+      body: StreamBuilder<List<Team>>(
+        stream: _teamService.watchAllTeams(),
         builder: (context, teamSnapshot) {
           final teamById = <String, Team>{};
           final teams = <Team>[];
           if (teamSnapshot.hasData) {
-            for (final doc in teamSnapshot.data!.docs) {
-              if (doc.id == 'free_agent_pool') continue;
-              final t = Team.fromMap({
-                ...doc.data() as Map<String, dynamic>,
-                'id': doc.id,
-              });
+            for (final t in teamSnapshot.data!) {
+              if (t.id == 'free_agent_pool') continue;
               teams.add(t);
               teamById[t.id] = t;
             }
           }
 
-          return StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('players')
-                .where('suspendedMatches', isGreaterThan: 0)
-                .snapshots(),
+          return StreamBuilder<List<PlayerModel>>(
+            stream: _dbService.watchAllPlayers(),
             builder: (context, snapshot) {
               if (!snapshot.hasData) {
                 return const Center(child: CircularProgressIndicator());
               }
 
-              final suspended = snapshot.data!.docs
-                  .map(
-                    (d) => PlayerModel.fromMap(
-                      d.data() as Map<String, dynamic>,
-                      d.id,
-                    ),
-                  )
-                  .where((p) => p.suspendedMatches > 0)
-                  .toList();
+              final suspended =
+                  (snapshot.data ?? const <PlayerModel>[])
+                      .where((p) => p.suspendedMatches > 0)
+                      .toList();
 
               suspended.sort((a, b) {
                 final at = (teamById[a.teamId]?.name ?? '').toLowerCase();

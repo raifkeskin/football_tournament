@@ -1,8 +1,9 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../models/league.dart';
 import '../models/match.dart';
+import '../models/team.dart';
 import '../services/database_service.dart';
+import '../services/league_service.dart';
 import '../widgets/web_safe_image.dart';
 import 'team_squad_screen.dart';
 
@@ -18,6 +19,7 @@ class GroupsScreen extends StatefulWidget {
 
 class _GroupsScreenState extends State<GroupsScreen> {
   final _databaseService = DatabaseService();
+  final _leagueService = LeagueService();
   String? _selectedLeagueId;
   String? _selectedGroupId;
 
@@ -42,23 +44,11 @@ class _GroupsScreenState extends State<GroupsScreen> {
       ),
       body: Column(
         children: [
-          StreamBuilder<QuerySnapshot>(
-            stream: _databaseService.getLeagues(),
+          StreamBuilder<List<League>>(
+            stream: _leagueService.watchLeagues(),
             builder: (context, snapshot) {
               if (!snapshot.hasData) return const SizedBox();
-              final leagues =
-                  snapshot.data!.docs
-                      .map(
-                        (doc) => League.fromMap({
-                          ...doc.data() as Map<String, dynamic>,
-                          'id': doc.id,
-                        }),
-                      )
-                      .toList()
-                    ..sort(
-                      (a, b) =>
-                          a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-                    );
+              final leagues = snapshot.data ?? const <League>[];
               if (leagues.isEmpty) return const SizedBox();
 
               final leagueIds = leagues.map((l) => l.id).toSet();
@@ -370,11 +360,8 @@ class _GroupStandingsTable extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-      child: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('teams')
-            .where('groupId', isEqualTo: groupId)
-            .snapshots(),
+      child: StreamBuilder<List<Team>>(
+        stream: databaseService.getTeamsByGroup(groupId),
         builder: (context, teamsSnapshot) {
           if (teamsSnapshot.connectionState == ConnectionState.waiting) {
             return const Padding(
@@ -383,16 +370,15 @@ class _GroupStandingsTable extends StatelessWidget {
             );
           }
 
-          final teamDocs = teamsSnapshot.data?.docs ?? [];
+          final teams = teamsSnapshot.data ?? const <Team>[];
           final standings = <String, Map<String, dynamic>>{};
           final teamNames = <String, String>{};
           final teamLogos = <String, String>{};
 
-          for (final teamDoc in teamDocs) {
-            final teamData = teamDoc.data() as Map<String, dynamic>;
-            final teamId = teamDoc.id;
-            final teamName = (teamData['name'] ?? '').toString();
-            final teamLogo = (teamData['logoUrl'] ?? '').toString();
+          for (final t in teams) {
+            final teamId = t.id;
+            final teamName = t.name;
+            final teamLogo = t.logoUrl;
 
             teamNames[teamId] = teamName;
             teamLogos[teamId] = teamLogo;

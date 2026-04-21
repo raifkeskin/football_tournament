@@ -1,8 +1,7 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../services/app_session.dart';
-import '../utils/string_utils.dart';
+import '../services/league_service.dart';
 
 class AdminPitchManagementScreen extends StatefulWidget {
   const AdminPitchManagementScreen({super.key});
@@ -13,6 +12,7 @@ class AdminPitchManagementScreen extends StatefulWidget {
 }
 
 class _AdminPitchManagementScreenState extends State<AdminPitchManagementScreen> {
+  final _leagueService = LeagueService();
   final _nameController = TextEditingController();
   final _locationController = TextEditingController();
   bool _busy = false;
@@ -40,12 +40,10 @@ class _AdminPitchManagementScreenState extends State<AdminPitchManagementScreen>
 
     setState(() => _busy = true);
     try {
-      await FirebaseFirestore.instance.collection('pitches').add({
-        'name': name,
-        'nameKey': StringUtils.normalizeTrKey(name),
-        'location': location.isEmpty ? null : location,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
+      await _leagueService.addPitch(
+        name: name,
+        location: location.isEmpty ? null : location,
+      );
       if (!mounted) return;
       _nameController.clear();
       _locationController.clear();
@@ -85,7 +83,7 @@ class _AdminPitchManagementScreenState extends State<AdminPitchManagementScreen>
 
     setState(() => _busy = true);
     try {
-      await FirebaseFirestore.instance.collection('pitches').doc(pitchId).delete();
+      await _leagueService.deletePitch(pitchId);
       if (!mounted) return;
       _snack(
         'Saha silindi.',
@@ -146,17 +144,14 @@ class _AdminPitchManagementScreenState extends State<AdminPitchManagementScreen>
                       ),
                     ),
                     const SizedBox(height: 16),
-                    StreamBuilder<QuerySnapshot>(
-                      stream: FirebaseFirestore.instance
-                          .collection('pitches')
-                          .orderBy('nameKey')
-                          .snapshots(),
+                    StreamBuilder<List<Pitch>>(
+                      stream: _leagueService.watchPitches(),
                       builder: (context, snapshot) {
                         if (!snapshot.hasData) {
                           return const Center(child: CircularProgressIndicator());
                         }
-                        final docs = snapshot.data!.docs;
-                        if (docs.isEmpty) {
+                        final pitches = snapshot.data ?? const <Pitch>[];
+                        if (pitches.isEmpty) {
                           return const Center(child: Text('Saha bulunamadı.'));
                         }
                         return Card(
@@ -164,24 +159,21 @@ class _AdminPitchManagementScreenState extends State<AdminPitchManagementScreen>
                           child: ListView.separated(
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
-                            itemCount: docs.length,
+                            itemCount: pitches.length,
                             separatorBuilder: (context, index) =>
                                 Divider(height: 1, color: cs.outlineVariant),
                             itemBuilder: (context, index) {
-                              final d = docs[index];
-                              final data = d.data() as Map<String, dynamic>;
-                              final name =
-                                  (data['name'] ?? '').toString().trim();
-                              final location =
-                                  (data['location'] ?? '').toString().trim();
+                              final p = pitches[index];
+                              final name = p.name.trim();
+                              final location = p.location.trim();
                               return ListTile(
                                 leading: const Icon(Icons.location_on_outlined),
-                                title: Text(name.isEmpty ? d.id : name),
+                                title: Text(name.isEmpty ? p.id : name),
                                 subtitle:
                                     location.isEmpty ? null : Text(location),
                                 trailing: IconButton(
                                   onPressed:
-                                      _busy ? null : () => _deletePitch(d.id, name),
+                                      _busy ? null : () => _deletePitch(p.id, name),
                                   icon: Icon(
                                     Icons.delete_outline,
                                     color: cs.error,
@@ -209,4 +201,3 @@ class _AdminPitchManagementScreenState extends State<AdminPitchManagementScreen>
     );
   }
 }
-

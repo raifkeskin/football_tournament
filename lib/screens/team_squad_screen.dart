@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:archive/archive.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:excel/excel.dart' hide Border;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -18,6 +17,7 @@ import '../models/match.dart';
 import '../services/approval_service.dart';
 import '../services/app_session.dart';
 import '../services/database_service.dart';
+import '../services/team_service.dart';
 import '../widgets/web_safe_image.dart';
 
 class TeamSquadScreen extends StatefulWidget {
@@ -41,6 +41,7 @@ class TeamSquadScreen extends StatefulWidget {
 class _TeamSquadScreenState extends State<TeamSquadScreen> {
   final _dbService = DatabaseService();
   final _approvalService = ApprovalService();
+  final _teamService = TeamService();
 
   final _rosterSearchController = TextEditingController();
   String _rosterQuery = '';
@@ -159,17 +160,11 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
       return;
     }
 
-    final snap = await FirebaseFirestore.instance
-        .collection('rosters')
-        .where('tournamentId', isEqualTo: tournamentId)
-        .where('teamId', isEqualTo: widget.teamId)
-        .where('playerPhone', isEqualTo: session.phone)
-        .get();
-
-    final isManager = snap.docs.any((doc) {
-      final role = (doc.data()['role'] ?? '').toString().trim();
-      return role == 'Takım Sorumlusu' || role == 'Her İkisi';
-    });
+    final isManager = await _teamService.isTeamManagerForTournament(
+      tournamentId: tournamentId,
+      teamId: widget.teamId,
+      playerPhone: session.phone,
+    );
 
     if (!mounted) return;
     setState(() => _isTeamManager = isManager);
@@ -1369,6 +1364,7 @@ class PlayerFormScreen extends StatefulWidget {
 
 class _PlayerFormScreenState extends State<PlayerFormScreen> {
   final _dbService = DatabaseService();
+  final _teamService = TeamService();
   final _picker = ImagePicker();
 
   final _nameController = TextEditingController();
@@ -1474,25 +1470,11 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
   }
 
   Future<void> _loadManagerState() async {
-    final snap = await FirebaseFirestore.instance
-        .collection('rosters')
-        .where('tournamentId', isEqualTo: widget.tournamentId)
-        .where('teamId', isEqualTo: widget.teamId)
-        .get();
-    final excludeId = _activePlayerId;
-    var exists = false;
-    for (final d in snap.docs) {
-      if (excludeId != null) {
-        final phone = (d.data()['playerPhone'] ?? '').toString().trim();
-        if (phone == excludeId) continue;
-      }
-      final role = (d.data()['role'] ?? '').toString().trim();
-      final resolvedRole = role.isEmpty ? 'Futbolcu' : role;
-      if (_isManagerRole(resolvedRole)) {
-        exists = true;
-        break;
-      }
-    }
+    final exists = await _teamService.managerExistsForTeamTournament(
+      tournamentId: widget.tournamentId,
+      teamId: widget.teamId,
+      excludePlayerPhone: _activePlayerId,
+    );
     if (!mounted) return;
     setState(() => _managerExists = exists);
   }

@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:archive/archive.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:excel/excel.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -12,10 +11,13 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../repositories/teams_repository.dart';
+import '../models/league.dart';
 import '../services/approval_service.dart';
 import '../services/app_session.dart';
 import '../services/database_service.dart';
+import '../services/league_service.dart';
 import '../services/image_upload_service.dart';
+import '../services/team_service.dart';
 import '../widgets/web_safe_image.dart';
 import 'team_squad_screen.dart';
 
@@ -37,6 +39,8 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
   final dbService = DatabaseService();
   final approvalService = ApprovalService();
   final _teamsRepo = TeamsRepository();
+  final _leagueService = LeagueService();
+  final _teamService = TeamService();
   String _searchQuery = '';
   final _teamNameController = TextEditingController();
   final _picker = ImagePicker();
@@ -133,24 +137,15 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
               child: ListView(
                 shrinkWrap: true,
                 children: [
-                  StreamBuilder<QuerySnapshot>(
-                    stream: dbService.getLeagues(),
+                  StreamBuilder<List<League>>(
+                    stream: _leagueService.watchLeagues(),
                     builder: (context, snapshot) {
                       if (!snapshot.hasData) return const SizedBox(height: 56);
-                      final docs = snapshot.data!.docs.toList();
-                      docs.sort((a, b) {
-                        final aName =
-                            ((a.data() as Map<String, dynamic>)['name']
-                                        ?.toString() ??
-                                    '')
-                                .toLowerCase();
-                        final bName =
-                            ((b.data() as Map<String, dynamic>)['name']
-                                        ?.toString() ??
-                                    '')
-                                .toLowerCase();
-                        return aName.compareTo(bName);
-                      });
+                      final docs = <League>[...(snapshot.data ?? const <League>[])];
+                      docs.sort(
+                        (a, b) =>
+                            a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+                      );
                       if ((widget.initialLeagueId ?? '').trim().isEmpty &&
                           docs.isNotEmpty &&
                           (_selectedLeagueId == null ||
@@ -166,11 +161,10 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                         ),
                         decoration: const InputDecoration(),
                         items: docs.map((doc) {
-                          final data = doc.data() as Map<String, dynamic>;
                           return DropdownMenuItem<String>(
                             value: doc.id,
                             child: Text(
-                              data['name']?.toString() ?? 'Turnuva',
+                              doc.name,
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
@@ -312,19 +306,18 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
           ),
           Divider(color: Colors.grey.shade300, height: 1),
           Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: dbService.getTeams(),
+            child: StreamBuilder<List<Map<String, dynamic>>>(
+              stream: _teamService.watchAllTeamsRaw(),
               builder: (context, snapshot) {
                 if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                final teams = snapshot.data!.docs.where((doc) {
-                  if (doc.id == 'free_agent_pool') return false;
-                  final name =
-                      (doc.data() as Map<String, dynamic>)['name']
-                          ?.toString() ??
-                      '';
+                final teams = (snapshot.data ?? const <Map<String, dynamic>>[])
+                    .where((data) {
+                  final id = (data['id'] ?? '').toString();
+                  if (id == 'free_agent_pool') return false;
+                  final name = (data['name'] ?? '').toString();
                   return _toTurkishLow(name).contains(_searchQuery);
                 }).toList();
 
@@ -336,8 +329,8 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                       separatorBuilder: (context, index) =>
                           Divider(color: Colors.grey.shade300, height: 1),
                       itemBuilder: (context, index) {
-                        final doc = teams[index];
-                        final data = doc.data() as Map<String, dynamic>;
+                        final data = teams[index];
+                        final teamId = (data['id'] ?? '').toString();
                         return ListTile(
                           leading: SizedBox(
                             width: 40,
@@ -351,7 +344,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                             ),
                           ),
                           title: Text(
-                            data['name'] ?? '',
+                            (data['name'] ?? '').toString(),
                             maxLines: 3,
                             softWrap: true,
                           ),
@@ -362,10 +355,10 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                                 context,
                                 MaterialPageRoute(
                                   builder: (_) => TeamSquadScreen(
-                                    teamId: doc.id,
+                                    teamId: teamId,
                                     tournamentId: _selectedLeagueId ?? '',
-                                    teamName: data['name'] ?? '',
-                                    teamLogoUrl: data['logoUrl'] ?? '',
+                                    teamName: (data['name'] ?? '').toString(),
+                                    teamLogoUrl: (data['logoUrl'] ?? '').toString(),
                                   ),
                                 ),
                               );
@@ -388,12 +381,12 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                                           context,
                                           MaterialPageRoute(
                                             builder: (_) => TeamSquadScreen(
-                                              teamId: doc.id,
+                                              teamId: teamId,
                                               tournamentId:
                                                   _selectedLeagueId ?? '',
-                                              teamName: data['name'] ?? '',
+                                              teamName: (data['name'] ?? '').toString(),
                                               teamLogoUrl:
-                                                  data['logoUrl'] ?? '',
+                                                  (data['logoUrl'] ?? '').toString(),
                                             ),
                                           ),
                                         );
@@ -409,7 +402,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                                           context,
                                           MaterialPageRoute(
                                             builder: (_) => EditTeamScreen(
-                                              teamId: doc.id,
+                                              teamId: teamId,
                                               data: data,
                                             ),
                                           ),
@@ -421,7 +414,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                                       title: const Text('Sil'),
                                       onTap: () {
                                         Navigator.pop(context);
-                                        _takimSil(doc.id);
+                                        _takimSil(teamId);
                                       },
                                     ),
                                     const SizedBox(height: 10),

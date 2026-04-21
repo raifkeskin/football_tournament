@@ -1,10 +1,12 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 import '../models/match.dart';
+import '../models/team.dart';
 import '../widgets/web_safe_image.dart';
 import '../services/app_session.dart';
+import '../services/league_service.dart';
+import '../services/match_service.dart';
+import '../services/team_service.dart';
 import 'admin_match_event_screen.dart';
 import 'admin_match_lineup_screen.dart';
 
@@ -102,6 +104,10 @@ class MatchDetailsScreen extends StatefulWidget {
 }
 
 class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
+  final _teamService = TeamService();
+  final _matchService = MatchService();
+  final _leagueService = LeagueService();
+
   String _formatDate(String dateStr) {
     if (dateStr.isEmpty || dateStr == '__NO_DATE__') {
       return 'Tarih Belirlenmedi';
@@ -126,14 +132,13 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
         session.teamId == m.homeTeamId || session.teamId == m.awayTeamId;
     final bool isAdminAccess = isSuperAdmin || isTeamManager;
 
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('teams').snapshots(),
+    return StreamBuilder<List<Team>>(
+      stream: _teamService.watchAllTeams(),
       builder: (context, teamsSnap) {
         final Map<String, String> logoMap = {};
         if (teamsSnap.hasData) {
-          for (var doc in teamsSnap.data!.docs) {
-            final data = doc.data() as Map<String, dynamic>;
-            logoMap[doc.id] = data['logoUrl']?.toString() ?? '';
+          for (final team in teamsSnap.data!) {
+            logoMap[team.id] = team.logoUrl;
           }
         }
 
@@ -396,10 +401,10 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
           ),
           ElevatedButton(
             onPressed: () async {
-              await FirebaseFirestore.instance
-                  .collection('matches')
-                  .doc(m.id)
-                  .update({'youtubeUrl': ctrl.text});
+              await _matchService.updateMatchYoutubeUrl(
+                matchId: m.id,
+                youtubeUrl: ctrl.text,
+              );
               Navigator.pop(c);
             },
             child: const Text('Kaydet'),
@@ -410,8 +415,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
   }
 
   void _openPitchEditor(MatchModel m) async {
-    final snap = await FirebaseFirestore.instance.collection('pitches').get();
-    final list = snap.docs.map((d) => d.data()['name'] as String).toList();
+    final list = await _leagueService.listPitchesOnce();
     String? sel = m.pitchName;
     if (!mounted) return;
     showDialog(
@@ -431,10 +435,10 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
             actions: [
               ElevatedButton(
                 onPressed: () async {
-                  await FirebaseFirestore.instance
-                      .collection('matches')
-                      .doc(m.id)
-                      .update({'pitchName': sel});
+                  await _matchService.updateMatchPitchName(
+                    matchId: m.id,
+                    pitchName: sel,
+                  );
                   Navigator.pop(c);
                 },
                 child: const Text('Kaydet'),
@@ -665,18 +669,14 @@ class _LineupEventsTab extends StatelessWidget {
           style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
         ),
         const SizedBox(height: 10),
-        StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('matches')
-              .doc(match.id)
-              .collection('events')
-              .orderBy('minute', descending: false)
-              .snapshots(),
+        StreamBuilder<List<Map<String, dynamic>>>(
+          stream: MatchService().watchInlineMatchEvents(match.id),
           builder: (context, snap) {
             if (!snap.hasData) {
               return const Center(child: CircularProgressIndicator());
             }
-            if (snap.data!.docs.isEmpty) {
+            final events = snap.data ?? const <Map<String, dynamic>>[];
+            if (events.isEmpty) {
               return const Center(
                 child: Text(
                   'Henüz olay yok.',
@@ -685,14 +685,15 @@ class _LineupEventsTab extends StatelessWidget {
               );
             }
             return Column(
-              children: snap.data!.docs
-                  .map(
-                    (d) => _MatchEventTile(
-                      data: d.data() as Map<String, dynamic>,
-                      homeTeamId: match.homeTeamId,
-                    ),
-                  )
-                  .toList(),
+              children:
+                  events
+                      .map(
+                        (data) => _MatchEventTile(
+                          data: data,
+                          homeTeamId: match.homeTeamId,
+                        ),
+                      )
+                      .toList(),
             );
           },
         ),

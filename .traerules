@@ -1,0 +1,11 @@
+OOP & SOLID: Tüm kodlar nesne yönelimli ve SOLID prensiplerine uygun olmalı.
+
+Separation of Concerns: UI dosyalarında (screens/, widgets/) asla veritabanı veya iş mantığı (business logic) kodu olmamalı.
+
+Service Pattern: Veritabanı işlemleri sadece lib/services/ altındaki ilgili domain servislerinde (match_service, team_service vb.) yapılmalı.
+
+Strict Typing: dynamic tipinden kaçınılmalı, her zaman models/ altındaki sınıflar (Match, Team, League) kullanılmalı.
+
+Clean UI: Tasarımlar şeffaf, modern ve tutarlı olmalı; "Batangas" fontu ve "Glassmorphism" korunmalı.
+
+Interface Driven Development: Servisler önce 'abstract class' (interface) olarak tanımlanmalı, somut implementasyonlar (Firebase/Supabase) bu arayüzü türetmelidir.

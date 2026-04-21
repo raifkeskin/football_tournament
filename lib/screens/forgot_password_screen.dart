@@ -1,7 +1,7 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../services/auth_service.dart';
 import '../services/sms/sms_service_locator.dart';
 import '../utils/otp_utils.dart';
 import 'reset_password_screen.dart';
@@ -14,6 +14,7 @@ class ForgotPasswordScreen extends StatefulWidget {
 }
 
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
+  final _authService = AuthService();
   final _phoneController = TextEditingController();
   final _otpController = TextEditingController();
 
@@ -52,17 +53,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       _raw10 = raw10;
     });
     try {
-      final db = FirebaseFirestore.instance;
       final otp = generateOtp6();
-      final expiresAt = Timestamp.fromDate(
-        DateTime.now().add(const Duration(minutes: 3)),
+      final expiresAt = DateTime.now().add(const Duration(minutes: 3));
+      await _authService.createOtpRequest(
+        phoneRaw10: raw10,
+        code: otp,
+        expiresAt: expiresAt,
       );
-      await db.collection('otp_requests').doc(raw10).set({
-        'phone': raw10,
-        'code': otp,
-        'expiresAt': expiresAt,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
       await SmsServiceLocator.sms.sendOtp(raw10, otp);
       if (!mounted) return;
       setState(() => _step = 1);
@@ -89,20 +86,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
     setState(() => _busy = true);
     try {
-      final db = FirebaseFirestore.instance;
-      final snap = await db.collection('otp_requests').doc(raw10).get();
-      final data = snap.data();
-      if (data == null) {
+      final req = await _authService.getOtpRequest(raw10);
+      if (req == null) {
         throw Exception('Doğrulama kodu bulunamadı.');
       }
-      final storedCode = (data['code'] ?? '').toString().trim();
-      final expiresAt = data['expiresAt'];
-      final exp = expiresAt is Timestamp ? expiresAt.toDate() : null;
-      if (exp == null) throw Exception('Doğrulama kodu geçersiz.');
-      if (DateTime.now().isAfter(exp)) {
+      if (DateTime.now().isAfter(req.expiresAt)) {
         throw Exception('Doğrulama kodunun süresi doldu.');
       }
-      if (storedCode != code) {
+      if (req.code != code) {
         throw Exception('Doğrulama kodu hatalı.');
       }
 
@@ -242,4 +233,3 @@ class _PhoneMaskFormatter extends TextInputFormatter {
     );
   }
 }
-

@@ -1,9 +1,9 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import 'admin_fixture_entry_screen.dart';
 import 'admin_group_management_screen.dart';
 import 'admin_manage_teams_screen.dart';
+import '../services/league_service.dart';
 
 class TournamentAdminDashboardScreen extends StatelessWidget {
   const TournamentAdminDashboardScreen({
@@ -16,20 +16,17 @@ class TournamentAdminDashboardScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final leagueService = LeagueService();
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Turnuva Yönetimi'),
         centerTitle: true,
       ),
-      body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance
-            .collection('leagues')
-            .doc(tournamentId)
-            .snapshots(),
+      body: StreamBuilder<String>(
+        stream: leagueService.watchLeagueName(tournamentId),
         builder: (context, snap) {
-          final name =
-              (snap.data?.data()?['name'] as String?)?.trim() ?? tournamentId;
+          final name = (snap.data ?? tournamentId).trim();
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -116,4 +113,3 @@ class TournamentAdminDashboardScreen extends StatelessWidget {
     );
   }
 }
-

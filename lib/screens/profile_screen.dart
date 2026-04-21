@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'admin_panel_screen.dart';
 import 'forgot_password_screen.dart';
@@ -10,6 +9,9 @@ import 'online_registration_screen.dart';
 import '../main.dart';
 import 'main_navigator.dart';
 import '../services/app_session.dart';
+import '../services/auth_service.dart';
+import '../services/league_service.dart';
+import '../services/team_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, required this.onRequestHomeTab});
@@ -21,6 +23,9 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  final _authService = AuthService();
+  final _leagueService = LeagueService();
+  final _teamService = TeamService();
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
@@ -280,20 +285,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 margin: EdgeInsets.zero,
                 child: Padding(
                   padding: const EdgeInsets.all(18),
-                  child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                  child: StreamBuilder<UserDoc?>(
                     stream: uid == null
-                        ? null
-                        : FirebaseFirestore.instance
-                            .collection('users')
-                            .doc(uid)
-                            .snapshots(),
+                        ? const Stream<UserDoc?>.empty()
+                        : _authService.watchUserDoc(uid),
                     builder: (context, snap) {
-                      final data = snap.data?.data();
-                      final role = (data?['accessRole'] ?? data?['role'] ?? state.role)
-                          .toString()
-                          .trim();
+                      final u = snap.data;
+                      final role = (u?.role ?? state.role).toString().trim();
                       final phone =
-                          (data?['phone'] ?? state.phone).toString().trim();
+                          (u?.phone ?? state.phone).toString().trim();
                       final displayRole = _displayRoleTr(role);
                       final displayPhone = phone.isEmpty ? '-' : phone;
 
@@ -332,13 +332,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 ?.copyWith(fontWeight: FontWeight.w900),
                           ),
                           const SizedBox(height: 10),
-                          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                          StreamBuilder<List<RosterAssignment>>(
                             stream: phone.isEmpty
-                                ? null
-                                : FirebaseFirestore.instance
-                                    .collection('rosters')
-                                    .where('playerPhone', isEqualTo: phone)
-                                    .snapshots(),
+                                ? const Stream<List<RosterAssignment>>.empty()
+                                : _authService.watchRosterAssignmentsByPhone(phone),
                             builder: (context, rosterSnap) {
                               if (phone.isEmpty) {
                                 return Text(
@@ -361,7 +358,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   ),
                                 );
                               }
-                              final rosters = rosterSnap.data!.docs;
+                              final rosters =
+                                  rosterSnap.data ?? const <RosterAssignment>[];
                               if (rosters.isEmpty) {
                                 return Text(
                                   '-',
@@ -373,13 +371,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               }
 
                               return Column(
-                                children: rosters.map((doc) {
-                                  final r = doc.data();
-                                  final tournamentId =
-                                      (r['tournamentId'] ?? '').toString().trim();
-                                  final teamId = (r['teamId'] ?? '').toString().trim();
+                                children: rosters.map((r) {
+                                  final tournamentId = r.tournamentId.trim();
+                                  final teamId = r.teamId.trim();
                                   final roleName = _displayAssignmentRoleTr(
-                                    (r['role'] ?? '').toString(),
+                                    r.role,
                                   );
 
                                   Widget card({
@@ -428,17 +424,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         teamName: '-',
                                       );
                                     }
-                                    return StreamBuilder<
-                                        DocumentSnapshot<Map<String, dynamic>>>(
-                                      stream: FirebaseFirestore.instance
-                                          .collection('teams')
-                                          .doc(teamId)
-                                          .snapshots(),
+                                    return StreamBuilder<String>(
+                                      stream: _teamService.watchTeamName(teamId),
                                       builder: (context, teamSnap) {
                                         final teamName =
-                                            (teamSnap.data?.data()?['name'] as String?)
-                                                    ?.trim() ??
-                                                teamId;
+                                            (teamSnap.data ?? teamId).trim();
                                         return card(
                                           tournamentName: tournamentName,
                                           teamName: teamName,
@@ -450,17 +440,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   if (tournamentId.isEmpty) {
                                     return resolveTeam('-');
                                   }
-                                  return StreamBuilder<
-                                      DocumentSnapshot<Map<String, dynamic>>>(
-                                    stream: FirebaseFirestore.instance
-                                        .collection('leagues')
-                                        .doc(tournamentId)
-                                        .snapshots(),
+                                  return StreamBuilder<String>(
+                                    stream: _leagueService.watchLeagueName(tournamentId),
                                     builder: (context, tSnap) {
                                       final tName =
-                                          (tSnap.data?.data()?['name'] as String?)
-                                                  ?.trim() ??
-                                              tournamentId;
+                                          (tSnap.data ?? tournamentId).trim();
                                       return resolveTeam(tName);
                                     },
                                   );

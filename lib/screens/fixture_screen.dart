@@ -1,12 +1,14 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // TextInputFormatter için gerekli
 import 'package:intl/intl.dart';
 
 import '../models/league.dart';
 import '../models/match.dart';
-import '../services/database_service.dart';
+import '../models/team.dart';
 import '../services/app_session.dart';
+import '../services/league_service.dart';
+import '../services/match_service.dart';
+import '../services/team_service.dart';
 import '../widgets/web_safe_image.dart';
 import 'match_details_screen.dart';
 
@@ -18,7 +20,9 @@ class FixtureScreen extends StatefulWidget {
 }
 
 class _FixtureScreenState extends State<FixtureScreen> {
-  final _db = DatabaseService();
+  final _leagueService = LeagueService();
+  final _matchService = MatchService();
+  final _teamService = TeamService();
   String? _leagueId;
   String? _groupId;
   int? _week;
@@ -63,37 +67,24 @@ class _FixtureScreenState extends State<FixtureScreen> {
           ],
         ),
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('teams').snapshots(),
+      body: StreamBuilder<List<Team>>(
+        stream: _teamService.watchAllTeams(),
         builder: (context, teamsSnap) {
           final teamLogoById = <String, String>{};
           if (teamsSnap.hasData) {
-            for (final doc in teamsSnap.data!.docs) {
-              final data = doc.data() as Map<String, dynamic>;
-              teamLogoById[doc.id] = data['logoUrl']?.toString() ?? '';
+            for (final t in teamsSnap.data!) {
+              teamLogoById[t.id] = t.logoUrl;
             }
           }
 
-          return StreamBuilder<QuerySnapshot>(
-            stream: _db.getLeagues(),
+          return StreamBuilder<List<League>>(
+            stream: _leagueService.watchLeagues(),
             builder: (context, leaguesSnap) {
               if (!leaguesSnap.hasData) {
                 return const Center(child: CircularProgressIndicator());
               }
 
-              final leagues =
-                  leaguesSnap.data!.docs
-                      .map(
-                        (d) => League.fromMap({
-                          ...d.data() as Map<String, dynamic>,
-                          'id': d.id,
-                        }),
-                      )
-                      .toList()
-                    ..sort(
-                      (a, b) =>
-                          a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-                    );
+              final leagues = [...(leaguesSnap.data ?? const <League>[])];
 
               if (leagues.isEmpty) {
                 return const Center(child: Text('Turnuva bulunamadı.'));
@@ -103,22 +94,16 @@ class _FixtureScreenState extends State<FixtureScreen> {
                   ? (leagues.where((l) => l.isDefault).first.id)
                   : leagues.first.id;
 
-              return StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('groups')
-                    .where('tournamentId', isEqualTo: _leagueId)
-                    .snapshots(),
+              return StreamBuilder<List<GroupModel>>(
+                stream: _leagueId == null
+                    ? const Stream<List<GroupModel>>.empty()
+                    : _leagueService.watchGroups(_leagueId!),
                 builder: (context, snapshot) {
-                  final groups = snapshot.hasData
-                      ? snapshot.data!.docs
-                            .map(
-                              (doc) =>
-                                  (doc.data() as Map<String, dynamic>)['name']
-                                      ?.toString() ??
-                                  doc.id,
-                            )
-                            .toList()
-                      : <String>[];
+                  final groupsRaw = snapshot.data ?? const <GroupModel>[];
+                  final groups =
+                      groupsRaw
+                          .map((g) => (g.name.trim().isEmpty ? g.id : g.name.trim()))
+                          .toList();
 
                   final selectedGroupId = (groups.contains(_groupId))
                       ? _groupId
@@ -127,7 +112,7 @@ class _FixtureScreenState extends State<FixtureScreen> {
 
                   return FutureBuilder<int?>(
                     key: ValueKey('$_leagueId|$selectedGroupId'),
-                    future: _db.getFixtureMaxWeek(
+                    future: _matchService.getFixtureMaxWeek(
                       _leagueId!,
                       groupId: selectedGroupId,
                     ),
@@ -144,7 +129,7 @@ class _FixtureScreenState extends State<FixtureScreen> {
                       return StreamBuilder<List<MatchModel>>(
                         stream: _week == null
                             ? Stream.empty()
-                            : _db.watchFixtureMatches(
+                            : _matchService.watchFixtureMatches(
                                 _leagueId!,
                                 _week!,
                                 groupId: selectedGroupId,
@@ -478,6 +463,9 @@ class _MatchCard extends StatelessWidget {
     required this.isAdmin,
   });
 
+  static final MatchService _matchService = MatchService();
+  static final LeagueService _leagueService = LeagueService();
+
   final MatchModel match;
   final Map<String, String> teamLogoById;
   final VoidCallback onTap;
@@ -766,43 +754,11 @@ class _MatchCard extends StatelessWidget {
               final homeScore = int.tryParse(homeScoreCtrl.text) ?? 0;
               final awayScore = int.tryParse(awayScoreCtrl.text) ?? 0;
 
-              // Match'i güncelle
-              await FirebaseFirestore.instance
-                  .collection('matches')
-                  .doc(match.id)
-                  .update({
-                    'homeScore': homeScore,
-                    'awayScore': awayScore,
-                    'status': 'finished',
-                    'isCompleted': true,
-                  });
-
-              // Otomatik event kayıtları ekle (0', 30', 60')
-              final eventsRef = FirebaseFirestore.instance
-                  .collection('matches')
-                  .doc(match.id)
-                  .collection('events');
-
-              await eventsRef.add({
-                'minute': 0,
-                'title': 'Maç Başladı',
-                'type': 'status',
-                'timestamp': FieldValue.serverTimestamp(),
-              });
-
-              await eventsRef.add({
-                'minute': 30,
-                'title': 'İlk Yarı Sonucu',
-                'type': 'status',
-                'timestamp': FieldValue.serverTimestamp(),
-              });
-
-              await eventsRef.add({
-                'minute': 60,
-                'title': 'Maç Sonucu',
-                'type': 'status',
-                'timestamp': FieldValue.serverTimestamp(),
-              });
+              await _matchService.completeMatchWithScoreAndDefaultEvents(
+                matchId: match.id,
+                homeScore: homeScore,
+                awayScore: awayScore,
+              );
 
               if (c.mounted) Navigator.pop(c);
             },
@@ -836,12 +792,7 @@ class _MatchCard extends StatelessWidget {
 
     String? selectedPitch = match.pitchName;
 
-    final pitchesSnap = await FirebaseFirestore.instance
-        .collection('pitches')
-        .get();
-    final pitches = pitchesSnap.docs
-        .map((d) => (d.data())['name'] as String)
-        .toList();
+    final pitches = await _leagueService.listPitchesOnce();
 
     // Tek bir stad varsa otomatik seç
     if (pitches.length == 1) {
@@ -971,14 +922,12 @@ class _MatchCard extends StatelessWidget {
                 final parts = dateText.split('/');
                 final dbDate = '${parts[2]}-${parts[1]}-${parts[0]}';
 
-                await FirebaseFirestore.instance
-                    .collection('matches')
-                    .doc(match.id)
-                    .update({
-                      'matchDate': dbDate,
-                      'matchTime': timeText,
-                      'pitchName': selectedPitch,
-                    });
+                await _matchService.updateMatchSchedule(
+                  matchId: match.id,
+                  matchDateDb: dbDate,
+                  matchTime: timeText,
+                  pitchName: selectedPitch,
+                );
                 if (context.mounted) {
                   dateFocus.dispose();
                   timeFocus.dispose();

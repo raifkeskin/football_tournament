@@ -1,10 +1,11 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../models/league.dart';
 import '../models/match.dart';
 import '../models/team.dart';
 import '../services/app_session.dart';
 import '../services/database_service.dart';
+import '../services/league_service.dart';
+import '../services/team_service.dart';
 import '../widgets/web_safe_image.dart';
 
 class AdminGroupManagementScreen extends StatefulWidget {
@@ -25,6 +26,8 @@ class AdminGroupManagementScreen extends StatefulWidget {
 class _AdminGroupManagementScreenState
     extends State<AdminGroupManagementScreen> {
   final _dbService = DatabaseService();
+  final _leagueService = LeagueService();
+  final _teamService = TeamService();
   String? _selectedLeagueId;
   String? _selectedGroupId;
   final List<String> _selectedTeamIds = [];
@@ -56,23 +59,11 @@ class _AdminGroupManagementScreenState
       body: Column(
         children: [
           // 1. Turnuva Seçimi
-          StreamBuilder<QuerySnapshot>(
-            stream: _dbService.getLeagues(),
+          StreamBuilder<List<League>>(
+            stream: _leagueService.watchLeagues(),
             builder: (context, snapshot) {
               if (!snapshot.hasData) return const SizedBox();
-              final leagues =
-                  snapshot.data!.docs
-                      .map(
-                        (doc) => League.fromMap({
-                          ...doc.data() as Map<String, dynamic>,
-                          'id': doc.id,
-                        }),
-                      )
-                      .toList()
-                    ..sort(
-                      (a, b) =>
-                          a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-                    );
+              final leagues = snapshot.data ?? const <League>[];
               if (leagues.isNotEmpty) {
                 final hasSelected =
                     _selectedLeagueId != null &&
@@ -280,21 +271,16 @@ class _AdminGroupManagementScreenState
           // 3. Takım Listesi (Checkbox)
           if (_selectedGroupId != null)
             Expanded(
-              child: StreamBuilder<QuerySnapshot>(
-                stream: _dbService.getTeams(),
+              child: StreamBuilder<List<Team>>(
+                stream: _teamService.watchAllTeams(),
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) {
                     return const Center(child: CircularProgressIndicator());
                   }
-                  final allTeams = snapshot.data!.docs
-                      .where((d) => d.id != 'free_agent_pool')
-                      .map(
-                        (doc) => Team.fromMap({
-                          ...doc.data() as Map<String, dynamic>,
-                          'id': doc.id,
-                        }),
-                      )
-                      .toList();
+                  final allTeams =
+                      (snapshot.data ?? const <Team>[])
+                          .where((t) => t.id != 'free_agent_pool')
+                          .toList();
 
                   // Filtreleme Mantığı:
                   // 1. Sadece bu turnuvaya (League) ait olan takımları göster.
@@ -429,39 +415,12 @@ class _AdminGroupManagementScreenState
 
   Future<void> _saveGroupTeams() async {
     try {
-      // 1. Grubu güncelle (teamIds listesi)
-      await FirebaseFirestore.instance
-          .collection('groups')
-          .doc(_selectedGroupId)
-          .update({'teamIds': _selectedTeamIds});
-
-      // 2. Takımları güncelle (groupId ve groupName ata)
-      final groupSnap = await FirebaseFirestore.instance
-          .collection('groups')
-          .doc(_selectedGroupId)
-          .get();
-      final groupName = groupSnap.data()?['name'] ?? '';
-
-      final batch = FirebaseFirestore.instance.batch();
-
-      // Önce bu gruptan çıkarılan takımların groupId'sini temizle
-      final oldTeams = await FirebaseFirestore.instance
-          .collection('teams')
-          .where('groupId', isEqualTo: _selectedGroupId)
-          .get();
-      for (var doc in oldTeams.docs) {
-        batch.update(doc.reference, {'groupId': null, 'groupName': null});
-      }
-
-      // Seçilen yeni takımlara ata
-      for (var tId in _selectedTeamIds) {
-        batch.update(FirebaseFirestore.instance.collection('teams').doc(tId), {
-          'groupId': _selectedGroupId,
-          'groupName': groupName,
-        });
-      }
-
-      await batch.commit();
+      final groupId = _selectedGroupId;
+      if (groupId == null) return;
+      await _leagueService.setGroupTeams(
+        groupId: groupId,
+        teamIds: _selectedTeamIds,
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

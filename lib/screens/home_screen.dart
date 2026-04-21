@@ -1,9 +1,11 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../models/league.dart';
 import '../models/match.dart';
-import '../services/database_service.dart';
 import '../services/app_session.dart';
+import '../models/team.dart';
+import '../services/league_service.dart';
+import '../services/match_service.dart';
+import '../services/team_service.dart';
 import '../widgets/web_safe_image.dart';
 import 'groups_screen.dart';
 import 'match_details_screen.dart';
@@ -29,7 +31,9 @@ class _HomeScreenState extends State<HomeScreen> {
     'Paz',
   ];
 
-  final _databaseService = DatabaseService();
+  final _leagueService = LeagueService();
+  final _matchService = MatchService();
+  final _teamService = TeamService();
   late List<DateTime> _tarihler;
   int _seciliIndeks = 2;
   String? _activeLeagueId;
@@ -114,19 +118,15 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           Positioned.fill(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: _databaseService.getLeagues(),
+            child: StreamBuilder<List<League>>(
+              stream: _leagueService.watchLeagues(),
               builder: (context, leagueSnapshot) {
                 if (!leagueSnapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
 
                 final isAdmin = AppSession.of(context).value.isAdmin;
-                final allLeagues = leagueSnapshot.data!.docs
-                    .map((doc) {
-                      final data = doc.data() as Map<String, dynamic>;
-                      return League.fromMap({...data, 'id': doc.id});
-                    })
+                final allLeagues = (leagueSnapshot.data ?? const <League>[])
                     .where((l) => isAdmin || l.isActive)
                     .toList();
 
@@ -296,22 +296,23 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildMatchList(BuildContext context, League currentLeague) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('teams').snapshots(),
+    return StreamBuilder<List<Team>>(
+      stream: _teamService.watchAllTeams(),
       builder: (context, teamSnapshot) {
         final Map<String, String> logoMap = {};
         if (teamSnapshot.hasData) {
-          for (var doc in teamSnapshot.data!.docs) {
-            final data = doc.data() as Map<String, dynamic>;
-            logoMap[doc.id] = data['logoUrl']?.toString() ?? '';
+          for (final t in teamSnapshot.data!) {
+            logoMap[t.id] = t.logoUrl;
           }
         }
 
         return StreamBuilder<List<MatchModel>>(
-          stream: _databaseService.getMatchesByDate(
-            leagueId: _activeLeagueId!,
-            date: _selectedDate,
-          ),
+          stream: _activeLeagueId == null
+              ? const Stream<List<MatchModel>>.empty()
+              : _matchService.watchMatchesByDate(
+                  leagueId: _activeLeagueId!,
+                  date: _selectedDate,
+                ),
           builder: (context, matchSnapshot) {
             if (matchSnapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());

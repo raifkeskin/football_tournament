@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:universal_html/html.dart' as html;
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:excel/excel.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -13,6 +12,8 @@ import 'package:share_plus/share_plus.dart';
 import '../models/league.dart';
 import '../services/app_session.dart';
 import '../services/database_service.dart';
+import '../services/league_service.dart';
+import '../services/match_service.dart';
 import '../utils/string_utils.dart';
 
 class AdminDataToolsScreen extends StatefulWidget {
@@ -24,25 +25,9 @@ class AdminDataToolsScreen extends StatefulWidget {
 
 class _AdminDataToolsScreenState extends State<AdminDataToolsScreen> {
   final _db = DatabaseService();
+  final _leagueService = LeagueService();
   bool _busy = false;
   String? _lastResult;
-
-  dynamic _jsonify(dynamic v) {
-    if (v == null) return null;
-    if (v is Timestamp) return v.toDate().toIso8601String();
-    if (v is DateTime) return v.toIso8601String();
-    if (v is GeoPoint) {
-      return {
-        '_geo': [v.latitude, v.longitude],
-      };
-    }
-    if (v is DocumentReference) return {'_ref': v.path};
-    if (v is List) return v.map(_jsonify).toList();
-    if (v is Map) {
-      return v.map((k, val) => MapEntry(k.toString(), _jsonify(val)));
-    }
-    return v;
-  }
 
   Future<void> _exportFirestoreBackup() async {
     setState(() {
@@ -50,7 +35,6 @@ class _AdminDataToolsScreenState extends State<AdminDataToolsScreen> {
       _lastResult = null;
     });
     try {
-      final db = FirebaseFirestore.instance;
       final collections = <String>[
         'admins',
         'users',
@@ -66,20 +50,9 @@ class _AdminDataToolsScreenState extends State<AdminDataToolsScreen> {
         'otp_requests',
       ];
 
-      final backup = <String, dynamic>{
-        'exportedAt': DateTime.now().toIso8601String(),
-        'collections': <String, dynamic>{},
-      };
-
-      for (final name in collections) {
-        final snap = await db.collection(name).get();
-        final docs = <Map<String, dynamic>>[];
-        for (final d in snap.docs) {
-          final data = d.data();
-          docs.add({'id': d.id, ..._jsonify(data) as Map<String, dynamic>});
-        }
-        (backup['collections'] as Map<String, dynamic>)[name] = docs;
-      }
+      final backup = await _leagueService.buildFirestoreBackup(
+        collections: collections,
+      );
 
       final dir = await getTemporaryDirectory();
       final ts = DateTime.now().millisecondsSinceEpoch;
@@ -458,7 +431,8 @@ class AdminTeamFixtureBuildScreen extends StatefulWidget {
 
 class _AdminTeamFixtureBuildScreenState
     extends State<AdminTeamFixtureBuildScreen> {
-  final _db = DatabaseService();
+  final _leagueService = LeagueService();
+  final _matchService = MatchService();
   bool _busy = false;
   String? _selectedLeagueId;
   PlatformFile? _pickedFile;
@@ -646,10 +620,6 @@ class _AdminTeamFixtureBuildScreenState
       final teamsSheet = book.tables[teamsSheetName]!;
       final fixtureSheet = book.tables[fixtureSheetName]!;
 
-      final firestore = FirebaseFirestore.instance;
-      final groupRefByNameKey =
-          <String, DocumentReference<Map<String, dynamic>>>{};
-      final groupNameByKey = <String, String>{};
       final teamByNameKey = <String, _TeamInfo>{};
 
       for (var r = 1; r < teamsSheet.rows.length; r++) {
@@ -663,10 +633,7 @@ class _AdminTeamFixtureBuildScreenState
 
         final gName = groupName.trim().isEmpty ? 'A' : groupName.trim();
         final groupKey = _norm(gName);
-        groupNameByKey[groupKey] = gName;
-        groupRefByNameKey[groupKey] ??= firestore.collection('groups').doc();
 
-        // Team query will happen later in batch loop
         teamByNameKey[teamKey] = _TeamInfo(
           id: '', // Will populate later
           name: trimmedName,
@@ -699,7 +666,7 @@ class _AdminTeamFixtureBuildScreenState
       if (timeIdx == -1) timeIdx = 4;
       if (pitchIdx == -1) pitchIdx = 5;
 
-      final matchRows = <Map<String, dynamic>>[];
+      final matchRows = <FixtureImportMatch>[];
       final unknownTeams = <String>{};
 
       for (var r = 1; r < fixtureSheet.rows.length; r++) {
@@ -751,30 +718,17 @@ class _AdminTeamFixtureBuildScreenState
             ? '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}'
             : null;
 
-        matchRows.add({
-          'leagueId': leagueId, // For backwards compatibility
-          'tournamentId': leagueId,
-          'groupId':
-              homeInfo.groupName, // V2.1 architecture uses string for group
-          'homeTeamId': homeKey, // Temporary, will resolve real IDs below
-          'homeTeamName': homeInfo.name,
-          'awayTeamId': awayKey, // Temporary, will resolve real IDs below
-          'awayTeamName': awayInfo.name,
-          'score': {
-            'halfTime': {'home': 0, 'away': 0},
-            'fullTime': {'home': 0, 'away': 0},
-          },
-          'homeScore': 0,
-          'awayScore': 0,
-          'dateString': dt == null ? null : _yyyyMmDd(dt),
-          'matchDate': dt == null ? null : _yyyyMmDd(dt),
-          'status': 'notStarted',
-          'week': week,
-          'time': timeFormatted,
-          'matchTime': timeFormatted,
-          'pitchName': pitchText.isEmpty ? null : pitchText,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
+        matchRows.add(
+          FixtureImportMatch(
+            week: week,
+            groupId: homeInfo.groupName,
+            homeTeamName: homeInfo.name,
+            awayTeamName: awayInfo.name,
+            matchDateYyyyMmDd: dt == null ? null : _yyyyMmDd(dt),
+            matchTime: timeFormatted,
+            pitchName: pitchText.isEmpty ? null : pitchText,
+          ),
+        );
       }
 
       if (unknownTeams.isNotEmpty) {
@@ -783,71 +737,15 @@ class _AdminTeamFixtureBuildScreenState
         );
       }
 
-      // V2.1 Architecture Step A: Query teams collection by name
-      final existingTeamsSnap = await firestore.collection('teams').get();
-      final existingTeamIdsByNameKey = <String, String>{};
-      for (final doc in existingTeamsSnap.docs) {
-        final name = (doc.data()['name'] ?? '').toString();
-        if (name.isNotEmpty) {
-          existingTeamIdsByNameKey[_norm(name)] = doc.id;
-        }
-      }
-
-      WriteBatch batch = firestore.batch();
-      var ops = 0;
-      Future<void> commitIfNeeded() async {
-        if (ops >= 450) {
-          await batch.commit();
-          batch = firestore.batch();
-          ops = 0;
-        }
-      }
-
-      // Step A: Process Sheet 1 (Takimlar)
-      for (final t in teamByNameKey.values) {
-        final key = _norm(t.name);
-        String teamId;
-        if (existingTeamIdsByNameKey.containsKey(key)) {
-          teamId = existingTeamIdsByNameKey[key]!;
-        } else {
-          final teamRef = firestore.collection('teams').doc();
-          teamId = teamRef.id;
-          existingTeamIdsByNameKey[key] = teamId;
-
-          // Create new team document (ONLY permanent team identity)
-          batch.set(teamRef, {
-            'name': t.name,
-            'logoUrl': '',
-            'colors': null,
-            'createdAt': FieldValue.serverTimestamp(),
-          });
-          ops++;
-          await commitIfNeeded();
-        }
-        teamByNameKey[key] = _TeamInfo(
-          id: teamId,
-          name: t.name,
-          groupId: t.groupId,
-          groupName: t.groupName,
-        );
-      }
-
-      // Step B: Process Sheet 2 (Fikstur)
-      for (final m in matchRows) {
-        final ref = firestore.collection('matches').doc();
-
-        // Resolve actual team IDs
-        final hKey = m['homeTeamId'] as String;
-        final aKey = m['awayTeamId'] as String;
-        m['homeTeamId'] = existingTeamIdsByNameKey[hKey];
-        m['awayTeamId'] = existingTeamIdsByNameKey[aKey];
-
-        batch.set(ref, m);
-        ops++;
-        await commitIfNeeded();
-      }
-
-      if (ops > 0) await batch.commit();
+      final teams =
+          teamByNameKey.values
+              .map((t) => FixtureImportTeam(name: t.name, groupName: t.groupName))
+              .toList();
+      await _matchService.importTeamsAndFixture(
+        tournamentId: leagueId,
+        teams: teams,
+        matches: matchRows,
+      );
 
       if (!mounted) return;
       _showSnack(
@@ -873,20 +771,13 @@ class _AdminTeamFixtureBuildScreenState
           ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              StreamBuilder<QuerySnapshot>(
-                stream: _db.getLeagues(),
+              StreamBuilder<List<League>>(
+                stream: _leagueService.watchLeagues(),
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) {
                     return const Center(child: CircularProgressIndicator());
                   }
-                  final leagues = snapshot.data!.docs
-                      .map(
-                        (doc) => League.fromMap({
-                          ...doc.data() as Map<String, dynamic>,
-                          'id': doc.id,
-                        }),
-                      )
-                      .toList();
+                  final leagues = snapshot.data ?? const <League>[];
 
                   if (leagues.isEmpty) {
                     return const Text('Turnuva bulunamadı.');

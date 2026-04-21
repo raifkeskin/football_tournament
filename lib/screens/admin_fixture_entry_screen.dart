@@ -1,10 +1,11 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../models/league.dart';
 import '../models/match.dart';
 import '../models/team.dart';
 import '../services/app_session.dart';
 import '../services/database_service.dart';
+import '../services/league_service.dart';
+import '../services/team_service.dart';
 
 class AdminFixtureEntryScreen extends StatefulWidget {
   const AdminFixtureEntryScreen({
@@ -23,6 +24,8 @@ class AdminFixtureEntryScreen extends StatefulWidget {
 
 class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
   final _dbService = DatabaseService();
+  final _leagueService = LeagueService();
+  final _teamService = TeamService();
   String? _selectedLeagueId;
   String? _selectedGroupId;
   String? _homeTeamId;
@@ -85,24 +88,11 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                 padding: const EdgeInsets.all(16),
                 children: [
                 // 1. Turnuva
-                StreamBuilder<QuerySnapshot>(
-                  stream: _dbService.getLeagues(),
+                StreamBuilder<List<League>>(
+                  stream: _leagueService.watchLeagues(),
                   builder: (context, snapshot) {
                     if (!snapshot.hasData) return const SizedBox();
-                    final leagues =
-                        snapshot.data!.docs
-                            .map(
-                              (doc) => League.fromMap({
-                                ...doc.data() as Map<String, dynamic>,
-                                'id': doc.id,
-                              }),
-                            )
-                            .toList()
-                          ..sort(
-                            (a, b) => a.name.toLowerCase().compareTo(
-                              b.name.toLowerCase(),
-                            ),
-                          );
+                    final leagues = snapshot.data ?? const <League>[];
                     return DropdownButtonFormField<String>(
                       initialValue: _selectedLeagueId,
                       decoration: const InputDecoration(labelText: 'Turnuva'),
@@ -247,13 +237,10 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                   ),
                 const SizedBox(height: 16),
 
-                StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('pitches')
-                      .orderBy('name')
-                      .snapshots(),
+                StreamBuilder<List<Pitch>>(
+                  stream: _leagueService.watchPitches(),
                   builder: (context, snapshot) {
-                    final docs = snapshot.data?.docs ?? const [];
+                    final pitches = snapshot.data ?? const <Pitch>[];
                     return DropdownButtonFormField<String?>(
                       key: ValueKey(_selectedPitchId),
                       initialValue: _selectedPitchId,
@@ -274,12 +261,11 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                             ),
                           ),
                         ),
-                        for (final d in docs)
+                        for (final p in pitches)
                           DropdownMenuItem<String?>(
-                            value: d.id,
+                            value: p.id,
                             child: Text(
-                              ((d.data() as Map<String, dynamic>)['name'] ?? '')
-                                  .toString(),
+                              p.name,
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,
@@ -288,12 +274,8 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                           ),
                       ],
                       onChanged: (v) {
-                        final selected =
-                            docs.where((e) => e.id == v).toList(growable: false);
-                        final data = selected.isEmpty
-                            ? null
-                            : (selected.first.data() as Map<String, dynamic>);
-                        final name = (data?['name'] ?? '').toString().trim();
+                        final selected = pitches.where((e) => e.id == v).toList(growable: false);
+                        final name = selected.isEmpty ? '' : selected.first.name.trim();
                         setState(() {
                           _selectedPitchId = v;
                           _selectedPitchName = v == null || name.isEmpty ? null : name;
@@ -420,20 +402,14 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
             );
 
       // Takım isimlerini ve logolarını çek (MatchModel için gerekli)
-      final homeSnap = await FirebaseFirestore.instance
-          .collection('teams')
-          .doc(_homeTeamId)
-          .get();
-      final awaySnap = await FirebaseFirestore.instance
-          .collection('teams')
-          .doc(_awayTeamId)
-          .get();
+      final home = await _teamService.getTeamOnce(_homeTeamId!);
+      final away = await _teamService.getTeamOnce(_awayTeamId!);
+      if (home == null || away == null) {
+        throw Exception('Takım bilgisi alınamadı.');
+      }
 
-      final homeData = homeSnap.data()!;
-      final awayData = awaySnap.data()!;
-
-      String logoFrom(Map<String, dynamic> data) {
-        final raw = (data['logoUrl'] ?? data['logo'] ?? '').toString().trim();
+      String logoFromTeam(Team team) {
+        final raw = team.logoUrl.trim();
         if (raw.isEmpty) return '';
         if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
         return 'https://$raw';
@@ -444,11 +420,11 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
         leagueId: _selectedLeagueId!,
         groupId: _selectedGroupId!,
         homeTeamId: _homeTeamId!,
-        homeTeamName: homeData['name'],
-        homeTeamLogoUrl: logoFrom(homeData),
+        homeTeamName: home.name,
+        homeTeamLogoUrl: logoFromTeam(home),
         awayTeamId: _awayTeamId!,
-        awayTeamName: awayData['name'],
-        awayTeamLogoUrl: logoFrom(awayData),
+        awayTeamName: away.name,
+        awayTeamLogoUrl: logoFromTeam(away),
         homeScore: 0,
         awayScore: 0,
         matchDate: matchDateTime == null

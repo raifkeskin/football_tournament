@@ -1,7 +1,7 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../services/approval_service.dart';
 import '../services/app_session.dart';
+import '../services/team_service.dart';
 
 class AdminPendingActionsScreen extends StatefulWidget {
   const AdminPendingActionsScreen({super.key});
@@ -13,6 +13,7 @@ class AdminPendingActionsScreen extends StatefulWidget {
 
 class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
   final _approval = ApprovalService();
+  final _teamService = TeamService();
   bool _busy = false;
   List<PendingAction> _actions = const [];
 
@@ -40,12 +41,7 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
 
   Future<String> _teamName(String? teamId) async {
     if (teamId == null || teamId.isEmpty) return '-';
-    final snap = await FirebaseFirestore.instance
-        .collection('teams')
-        .doc(teamId)
-        .get();
-    final data = snap.data();
-    return (data?['name'] as String?) ?? teamId;
+    return _teamService.getTeamName(teamId);
   }
 
   Future<void> _approve(PendingAction action) async {

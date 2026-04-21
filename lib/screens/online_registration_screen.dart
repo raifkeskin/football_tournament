@@ -1,8 +1,7 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../services/auth_service.dart';
 import '../services/sms/sms_service_locator.dart';
 import '../utils/otp_utils.dart';
 import 'tournament_admin_dashboard_screen.dart';
@@ -16,6 +15,7 @@ class OnlineRegistrationScreen extends StatefulWidget {
 }
 
 class _OnlineRegistrationScreenState extends State<OnlineRegistrationScreen> {
+  final _authService = AuthService();
   final _phoneController = TextEditingController();
   final _otpController = TextEditingController();
   final _nameController = TextEditingController();
@@ -131,17 +131,13 @@ class _OnlineRegistrationScreenState extends State<OnlineRegistrationScreen> {
     });
 
     try {
-      final db = FirebaseFirestore.instance;
       final otp = generateOtp6();
-      final expiresAt = Timestamp.fromDate(
-        DateTime.now().add(const Duration(minutes: 3)),
+      final expiresAt = DateTime.now().add(const Duration(minutes: 3));
+      await _authService.createOtpRequest(
+        phoneRaw10: raw10,
+        code: otp,
+        expiresAt: expiresAt,
       );
-      await db.collection('otp_requests').doc(raw10).set({
-        'phone': raw10,
-        'code': otp,
-        'expiresAt': expiresAt,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
       await SmsServiceLocator.sms.sendOtp(raw10, otp);
       if (!mounted) return;
       setState(() {
@@ -169,25 +165,17 @@ class _OnlineRegistrationScreenState extends State<OnlineRegistrationScreen> {
     try {
       final raw10 = _raw10;
       if (raw10.length != 10) return;
-      final db = FirebaseFirestore.instance;
-      final snap = await db.collection('otp_requests').doc(raw10).get();
-      final data = snap.data();
-      if (data == null) {
+      final req = await _authService.getOtpRequest(raw10);
+      if (req == null) {
         throw Exception('Doğrulama kodu bulunamadı.');
       }
-      final storedCode = (data['code'] ?? '').toString().trim();
-      final expiresAt = data['expiresAt'];
-      final exp = expiresAt is Timestamp ? expiresAt.toDate() : null;
-      if (exp == null) {
-        throw Exception('Doğrulama kodu geçersiz.');
-      }
-      if (DateTime.now().isAfter(exp)) {
+      if (DateTime.now().isAfter(req.expiresAt)) {
         throw Exception('Doğrulama kodunun süresi doldu.');
       }
-      if (storedCode != code) {
+      if (req.code != code) {
         throw Exception('Doğrulama kodu hatalı.');
       }
-      await db.collection('otp_requests').doc(raw10).delete();
+      await _authService.deleteOtpRequest(raw10);
       _otpVerified = true;
       await _loadProfileAfterOtp();
     } catch (e) {
@@ -203,134 +191,44 @@ class _OnlineRegistrationScreenState extends State<OnlineRegistrationScreen> {
   Future<void> _loadProfileAfterOtp() async {
     final raw10 = _raw10;
     if (raw10.length != 10) return;
-    final db = FirebaseFirestore.instance;
-
     setState(() => _busy = true);
     try {
-      debugPrint(
-        "DEBUG: Querying phone: '$raw10' | Length: ${raw10.length}",
-      );
-      try {
-        final sample = await db.collection('players').limit(2).get();
-        for (final doc in sample.docs) {
-          final data = doc.data();
-          final phone = data['phone'];
-          final phoneRaw10 = data['phoneRaw10'];
-          debugPrint(
-            "DEBUG: DB Sample Player ${doc.id} phone='$phone' (${phone.runtimeType}) phoneRaw10='$phoneRaw10' (${phoneRaw10.runtimeType})",
-          );
-        }
-      } catch (e) {
-        debugPrint('DEBUG: Sample fetch failed: $e');
-      }
-
       _profileFound = false;
       _matchedPlayerId = null;
       _matchedLeagues = const [];
       _selectedLeagueId = null;
       _resolvedTournamentId = null;
-      String? name;
-      String? teamId;
-      String role = 'player';
+      final result = await _authService.lookupProfileByPhoneRaw10(raw10);
 
-      QuerySnapshot<Map<String, dynamic>> leaguesSnap = await db
-          .collection('leagues')
-          .where('managerPhoneRaw10', isEqualTo: raw10)
-          .limit(10)
-          .get();
-      if (leaguesSnap.docs.isEmpty) {
-        leaguesSnap = await db
-            .collection('leagues')
-            .where('managerPhone', isEqualTo: raw10)
-            .limit(10)
-            .get();
-      }
-      if (leaguesSnap.docs.isNotEmpty) {
-        _matchedLeagues = leaguesSnap.docs
-            .map(
-              (d) => {
-                ...d.data(),
-                'id': d.id,
-              },
-            )
-            .toList();
-        _selectedLeagueId = _matchedLeagues.first['id']?.toString();
-        role = 'tournament_admin';
-        _profileFound = true;
-        _welcomeText = _buildTournamentAdminWelcome(_matchedLeagues.first);
-        _resolvedRole = role;
-        _resolvedTeamId = null;
+      _profileFound = result.profileFound;
+      _matchedPlayerId = result.matchedPlayerId;
+      _resolvedTournamentId = result.resolvedTournamentId;
+      _resolvedRole = result.resolvedRole;
+      _resolvedTeamId = result.resolvedTeamId;
+
+      if (result.resolvedRole == 'tournament_admin') {
+        _matchedLeagues = result.leagues;
+        _selectedLeagueId = _matchedLeagues.isEmpty
+            ? null
+            : _matchedLeagues.first['id']?.toString();
+        _welcomeText = _matchedLeagues.isEmpty
+            ? 'Hoş geldin! Turnuva yöneticisi kaydın hazır.\nLütfen giriş şifreni belirle.'
+            : _buildTournamentAdminWelcome(_matchedLeagues.first);
         if (!mounted) return;
-        setState(() {
-          _step = 2;
-        });
+        setState(() => _step = 2);
         return;
       }
 
-      QuerySnapshot<Map<String, dynamic>> playersSnap = await db
-          .collection('players')
-          .where('phoneRaw10', isEqualTo: raw10)
-          .limit(1)
-          .get();
-      if (playersSnap.docs.isEmpty) {
-        playersSnap = await db
-            .collection('players')
-            .where('phone', isEqualTo: raw10)
-            .limit(1)
-            .get();
-      }
-      if (playersSnap.docs.isEmpty) {
-        playersSnap = await db
-            .collection('players')
-            .where('phone', isEqualTo: '0$raw10')
-            .limit(1)
-            .get();
-      }
-      if (playersSnap.docs.isEmpty) {
-        playersSnap = await db
-            .collection('players')
-            .where('phone', isEqualTo: '+90$raw10')
-            .limit(1)
-            .get();
-      }
-      if (playersSnap.docs.isEmpty) {
-        playersSnap = await db
-            .collection('players')
-            .where('phone', isEqualTo: '90$raw10')
-            .limit(1)
-            .get();
-      }
-      if (playersSnap.docs.isNotEmpty) {
-        final doc = playersSnap.docs.first;
-        final d = doc.data();
-        _matchedPlayerId = doc.id;
-        name = (d['name'] ?? '').toString().trim();
-        teamId = (d['teamId'] ?? '').toString().trim();
-        final pr = (d['role'] ?? '').toString().trim();
-        role = (pr == 'Takım Sorumlusu' || pr == 'Her İkisi')
-            ? 'manager'
-            : 'player';
-        _profileFound = true;
-      }
-
-      String? teamName;
-      if (teamId != null && teamId.isNotEmpty && teamId != 'free_agent_pool') {
-        final t = await db.collection('teams').doc(teamId).get();
-        teamName = (t.data()?['name'] as String?)?.trim();
-        _resolvedTournamentId = (t.data()?['leagueId'] as String?)?.trim();
-      }
-
       if (_profileFound) {
-        final resolvedName = (name ?? '').trim().isEmpty ? 'Oyuncu' : name!;
-        final tn = (teamName ?? '').trim().isEmpty ? 'Takım' : teamName!;
-        String roleLabel = role;
-        if (role == 'player') roleLabel = 'Futbolcu';
-        if (role == 'manager') roleLabel = 'Takım Sorumlusu';
-        if (role == 'admin') roleLabel = 'admin';
+        final resolvedName =
+            (result.playerName ?? '').trim().isEmpty ? 'Oyuncu' : result.playerName!.trim();
+        final tn =
+            (result.resolvedTeamName ?? '').trim().isEmpty ? 'Takım' : result.resolvedTeamName!;
+        String roleLabel = _resolvedRole;
+        if (_resolvedRole == 'player') roleLabel = 'Futbolcu';
+        if (_resolvedRole == 'manager') roleLabel = 'Takım Sorumlusu';
         _welcomeText =
             'Hoş geldin $resolvedName, $tn - $roleLabel olarak kaydın hazır.\nLütfen giriş şifreni belirle.';
-        _resolvedRole = role;
-        _resolvedTeamId = (teamId ?? '').trim().isEmpty ? null : teamId;
       } else {
         _welcomeText =
             "Sistemde kaydınız bulunamadı. 'Boşta Futbolcu' olarak profilinizi oluşturabilirsiniz.";
@@ -340,9 +238,7 @@ class _OnlineRegistrationScreenState extends State<OnlineRegistrationScreen> {
       }
 
       if (!mounted) return;
-      setState(() {
-        _step = 2;
-      });
+      setState(() => _step = 2);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -391,115 +287,32 @@ class _OnlineRegistrationScreenState extends State<OnlineRegistrationScreen> {
       return;
     }
 
-    final email = '$raw10@masterclass.com';
-    final auth = FirebaseAuth.instance;
-    final db = FirebaseFirestore.instance;
-
     setState(() => _busy = true);
     final sm = ScaffoldMessenger.of(context);
     final nav = Navigator.of(context);
     try {
-      UserCredential userCred;
-      try {
-        userCred = await auth.createUserWithEmailAndPassword(
-          email: email,
-          password: p1,
-        );
-      } on FirebaseAuthException catch (e) {
-        if (e.code == 'email-already-in-use') {
-          throw Exception('Bu telefon numarası ile zaten kayıt var. Lütfen giriş yapın.');
-        }
-        rethrow;
-      }
+      final matchedTournamentIds = _matchedLeagues
+          .map((e) => (e['id'] ?? '').toString())
+          .where((e) => e.trim().isNotEmpty)
+          .toList();
 
-      final user = userCred.user;
-      if (user == null) throw Exception('Kullanıcı oluşturulamadı.');
-
-      final users = db.collection('users');
-      final batch = db.batch();
-
-      final fullName = (_profileFound)
-          ? null
-          : '${_nameController.text.trim()} ${_surnameController.text.trim()}'
-              .trim();
-
-      Map<String, dynamic>? roleEntry;
-      String? accessRole;
-      if (_resolvedRole == 'tournament_admin') {
-        accessRole = 'tournament_admin';
-        roleEntry = {
-          'tournamentId': (_selectedLeagueId ?? '').trim(),
-          'teamId': null,
-          'role': 'turnuva yöneticisi',
-        };
-      } else {
-        accessRole = null;
-        final roleTr = _resolvedRole == 'manager' ? 'takım sorumlusu' : 'futbolcu';
-        roleEntry = {
-          'tournamentId': (_resolvedTournamentId ?? '').trim().isEmpty
-              ? null
-              : (_resolvedTournamentId ?? '').trim(),
-          'teamId': (_resolvedTeamId ?? '').trim().isEmpty
-              ? null
-              : (_resolvedTeamId ?? '').trim(),
-          'role': roleTr,
-        };
-      }
-
-      batch.set(
-        users.doc(user.uid),
-        {
-          'accessRole': ?accessRole,
-          'phone': raw10,
-          if (fullName != null && fullName.isNotEmpty) 'fullName': fullName,
-          if (_nameController.text.trim().isNotEmpty)
-            'name': _nameController.text.trim(),
-          if (_surnameController.text.trim().isNotEmpty)
-            'surname': _surnameController.text.trim(),
-          'roles': FieldValue.arrayUnion([roleEntry]),
-          if (_resolvedRole == 'tournament_admin')
-            'tournamentIds': _matchedLeagues
-                .map((e) => (e['id'] ?? '').toString())
-                .where((e) => e.trim().isNotEmpty)
-                .toList(),
-          if (_resolvedRole == 'tournament_admin')
-            'activeTournamentId': (_selectedLeagueId ?? '').trim(),
-          'updatedAt': FieldValue.serverTimestamp(),
-          'createdAt': FieldValue.serverTimestamp(),
-        },
-        SetOptions(merge: true),
+      final result = await _authService.registerOnlineUser(
+        phoneRaw10: raw10,
+        password: p1,
+        profileFound: _profileFound,
+        resolvedRole: _resolvedRole,
+        resolvedTeamId: _resolvedTeamId,
+        resolvedTournamentId: _resolvedTournamentId,
+        matchedPlayerId: _matchedPlayerId,
+        matchedTournamentIds: matchedTournamentIds,
+        selectedTournamentId: _selectedLeagueId,
+        name: _nameController.text,
+        surname: _surnameController.text,
       );
 
-      if (_resolvedRole == 'tournament_admin') {
-      } else if (_profileFound) {
-        final pid = (_matchedPlayerId ?? '').trim();
-        if (pid.isNotEmpty) {
-          batch.update(db.collection('players').doc(pid), {
-            'authUid': user.uid,
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-        }
-      } else {
-        batch.set(
-          db.collection('players').doc(),
-          {
-            'teamId': 'free_agent_pool',
-            'name': fullName,
-            'role': 'Futbolcu',
-            'phone': raw10,
-            'authUid': user.uid,
-            'createdAt': FieldValue.serverTimestamp(),
-            'updatedAt': FieldValue.serverTimestamp(),
-          },
-        );
-      }
-
-      await batch.commit();
-
       if (!mounted) return;
-      final isTournamentAdmin = _resolvedRole == 'tournament_admin';
-      final tid = (_selectedLeagueId ?? '').trim();
-      if (isTournamentAdmin && tid.isNotEmpty) {
+      if (result.isTournamentAdmin && (result.tournamentId ?? '').trim().isNotEmpty) {
+        final tid = result.tournamentId!.trim();
         Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
           MaterialPageRoute<void>(
             builder: (_) => TournamentAdminDashboardScreen(tournamentId: tid),

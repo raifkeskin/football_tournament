@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/league.dart';
+import '../models/match.dart';
 import '../models/player_stats.dart';
 import '../models/team.dart';
-import '../services/database_service.dart';
+import '../services/league_service.dart';
+import '../services/match_service.dart';
+import '../services/team_service.dart';
 import '../widgets/web_safe_image.dart';
 
 class StatsScreen extends StatefulWidget {
@@ -14,7 +16,9 @@ class StatsScreen extends StatefulWidget {
 }
 
 class _StatsScreenState extends State<StatsScreen> {
-  final _db = DatabaseService();
+  final _leagueService = LeagueService();
+  final _matchService = MatchService();
+  final _teamService = TeamService();
   String? _selectedLeagueId;
 
   String _trKey(String s) {
@@ -35,8 +39,8 @@ class _StatsScreenState extends State<StatsScreen> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return StreamBuilder(
-      stream: _db.getLeagues(),
+    return StreamBuilder<List<League>>(
+      stream: _leagueService.watchLeagues(),
       builder: (context, leaguesSnap) {
         if (!leaguesSnap.hasData) {
           return const Scaffold(
@@ -44,13 +48,7 @@ class _StatsScreenState extends State<StatsScreen> {
           );
         }
 
-        final leagues = leaguesSnap.data!.docs
-            .map(
-              (d) => League.fromMap(
-                {...d.data() as Map<String, dynamic>, 'id': d.id},
-              ),
-            )
-            .toList();
+        final leagues = leaguesSnap.data ?? const <League>[];
         if (leagues.isEmpty) {
           return const Scaffold(
             body: Center(child: Text('Turnuva bulunamadı.')),
@@ -153,39 +151,29 @@ class _StatsScreenState extends State<StatsScreen> {
                           BorderRadius.vertical(top: Radius.circular(24)),
                     ),
                     padding: const EdgeInsets.only(top: 34),
-                    child: StreamBuilder(
-                      stream: _db.getTeams(),
+                    child: StreamBuilder<List<Team>>(
+                      stream: _teamService.watchAllTeams(),
                       builder: (context, teamsSnap) {
                         if (!teamsSnap.hasData) {
-                          return const Center(
-                            child: CircularProgressIndicator(),
-                          );
+                          return const Center(child: CircularProgressIndicator());
                         }
 
-              final teams = teamsSnap.data!.docs
-                  .where((d) => d.id != 'free_agent_pool')
-                  .map(
-                    (d) => Team.fromMap(
-                      {...d.data() as Map<String, dynamic>, 'id': d.id},
-                    ),
-                  )
-                  .toList();
-              final teamIds = teams.map((t) => t.id).toSet();
-              final teamById = {for (final t in teams) t.id: t};
+                        final teams =
+                            (teamsSnap.data ?? const <Team>[])
+                                .where((t) => t.id != 'free_agent_pool')
+                                .toList();
+                        final teamById = {for (final t in teams) t.id: t};
 
-                        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                          stream: FirebaseFirestore.instance
-                              .collection('player_stats')
-                              .where('tournamentId', isEqualTo: leagueId)
-                              .snapshots(),
+                        return StreamBuilder<List<PlayerStats>>(
+                          stream: _matchService.watchPlayerStats(tournamentId: leagueId),
                           builder: (context, statsSnap) {
                             if (!statsSnap.hasData) {
                               return const Center(child: CircularProgressIndicator());
                             }
-                            final stats = statsSnap.data!.docs
-                                .map((d) => PlayerStats.fromMap(d.data(), d.id))
-                                .where((s) => s.playerPhone.trim().isNotEmpty)
-                                .toList();
+                            final stats =
+                                (statsSnap.data ?? const <PlayerStats>[])
+                                    .where((s) => s.playerPhone.trim().isNotEmpty)
+                                    .toList();
 
                             List<PlayerStats> topBy(int Function(PlayerStats s) getValue) {
                               final list = [...stats];
@@ -320,17 +308,16 @@ class _StatsScreenState extends State<StatsScreen> {
                                                     return Column(
                                                       crossAxisAlignment: CrossAxisAlignment.start,
                                                       children: [
-                                                        FutureBuilder<
-                                                            DocumentSnapshot<Map<String, dynamic>>>(
-                                                          future: FirebaseFirestore.instance
-                                                              .collection('players')
-                                                              .doc(s.playerPhone)
-                                                              .get(),
+                                                        FutureBuilder<PlayerModel?>(
+                                                          future: _teamService.getPlayerByPhoneOnce(
+                                                            s.playerPhone,
+                                                          ),
                                                           builder: (context, pSnap) {
-                                                            final name = (pSnap.data?.data()?['name']
-                                                                        as String?)
-                                                                    ?.trim() ??
-                                                                s.playerPhone;
+                                                            final name = (pSnap.data?.name ?? '')
+                                                                    .trim()
+                                                                    .isNotEmpty
+                                                                ? pSnap.data!.name.trim()
+                                                                : s.playerPhone;
                                                             return Text(
                                                               name,
                                                               maxLines: 1,

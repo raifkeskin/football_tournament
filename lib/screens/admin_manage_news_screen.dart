@@ -1,8 +1,9 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../models/league.dart';
 import '../services/app_session.dart';
 import '../services/database_service.dart';
+import '../services/league_service.dart';
 
 class AdminManageNewsScreen extends StatefulWidget {
   const AdminManageNewsScreen({super.key});
@@ -13,15 +14,14 @@ class AdminManageNewsScreen extends StatefulWidget {
 
 class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
   final _dbService = DatabaseService();
+  final _leagueService = LeagueService();
   final Set<String> _busyIds = {};
   String? _selectedTournamentId;
 
-  String _tarihYaz(dynamic createdAt) {
-    if (createdAt is Timestamp) {
-      final d = createdAt.toDate();
-      return '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${d.year}';
-    }
-    return '';
+  String _tarihYaz(DateTime? createdAt) {
+    final d = createdAt;
+    if (d == null) return '';
+    return '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${d.year}';
   }
 
   Future<void> _toggle(String newsId, bool next) async {
@@ -224,13 +224,13 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
               child: const Icon(Icons.add),
             )
           : null,
-      body: StreamBuilder<QuerySnapshot>(
-        stream: _dbService.getLeagues(),
+      body: StreamBuilder<List<League>>(
+        stream: _leagueService.watchLeagues(),
         builder: (context, tSnap) {
           if (!tSnap.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
-          final tournaments = tSnap.data!.docs;
+          final tournaments = tSnap.data ?? const <League>[];
           if (tournaments.isEmpty) {
             return const Center(child: Text('Turnuva bulunamadı.'));
           }
@@ -250,10 +250,10 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
                   ),
                   items: tournaments
                       .map(
-                        (d) => DropdownMenuItem<String>(
-                          value: d.id,
+                        (l) => DropdownMenuItem<String>(
+                          value: l.id,
                           child: Text(
-                            (d.data() as Map<String, dynamic>)['name']?.toString() ?? d.id,
+                            l.name,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -265,10 +265,10 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
               ),
               const SizedBox(height: 12),
               Expanded(
-                child: StreamBuilder<QuerySnapshot>(
+                child: StreamBuilder<List<NewsItem>>(
                   stream: tId.isEmpty
                       ? const Stream.empty()
-                      : _dbService.getNews(
+                      : _leagueService.watchNews(
                           tournamentId: tId,
                           includeUnpublished: true,
                         ),
@@ -276,7 +276,7 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
                     if (!snapshot.hasData) {
                       return const Center(child: CircularProgressIndicator());
                     }
-                    final docs = snapshot.data!.docs;
+                    final docs = snapshot.data ?? const <NewsItem>[];
                     if (docs.isEmpty) {
                       return const Center(child: Text('Kayıtlı haber bulunamadı.'));
                     }
@@ -288,11 +288,9 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
                           Divider(color: Colors.grey.shade300, height: 1),
                       itemBuilder: (context, index) {
                         final doc = docs[index];
-                        final data = doc.data() as Map<String, dynamic>;
-                        final content = (data['content'] as String?) ?? '';
-                        final isPublished =
-                            (data['isPublished'] is bool) ? data['isPublished'] as bool : true;
-                        final createdAtText = _tarihYaz(data['createdAt']);
+                        final content = doc.content;
+                        final isPublished = doc.isPublished;
+                        final createdAtText = _tarihYaz(doc.createdAt);
                         final busy = _busyIds.contains(doc.id);
 
                         return Card(
