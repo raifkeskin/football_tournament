@@ -96,7 +96,7 @@ class SupabaseLeagueService implements ILeagueService {
       await _client.from('transfers').delete().eq('tournament_id', id);
     } catch (_) {}
     try {
-      await _client.from('groups').delete().eq('tournament_id', id);
+      await _client.from('groups').delete().eq('league_id', id);
     } catch (_) {}
     try {
       await _client.from('teams').delete().eq('league_id', id);
@@ -138,7 +138,9 @@ class SupabaseLeagueService implements ILeagueService {
         .order('name', ascending: true)
         .map((rows) {
           final filtered = rows.where(
-            (r) => (r['tournament_id'] ?? '').toString().trim() == id,
+            (r) =>
+                (r['league_id'] ?? r['tournament_id'] ?? '').toString().trim() ==
+                id,
           );
           return filtered
               .map((r) => GroupModel.fromMap(r, (r['id'] ?? '').toString()))

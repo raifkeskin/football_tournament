@@ -1,17 +1,22 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
+import 'package:image_picker/image_picker.dart';
 import '../models/league_extras.dart';
 import '../models/match.dart';
 import '../models/team.dart';
 import '../widgets/web_safe_image.dart';
 import '../services/app_session.dart';
+import '../services/database_service.dart';
+import '../services/image_upload_service.dart';
 import '../services/interfaces/i_league_service.dart';
 import '../services/interfaces/i_match_service.dart';
 import '../services/interfaces/i_team_service.dart';
 import '../services/service_locator.dart';
 import 'admin_match_event_screen.dart';
 import 'admin_match_lineup_screen.dart';
+import 'formation_tab.dart';
 
 // --- YARDIMCI WIDGETLAR ---
 
@@ -106,10 +111,43 @@ class MatchDetailsScreen extends StatefulWidget {
   State<MatchDetailsScreen> createState() => _MatchDetailsScreenState();
 }
 
-class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
+class _MatchDetailsScreenState extends State<MatchDetailsScreen>
+    with SingleTickerProviderStateMixin {
   final ITeamService _teamService = ServiceLocator.teamService;
   final IMatchService _matchService = ServiceLocator.matchService;
   final ILeagueService _leagueService = ServiceLocator.leagueService;
+
+  late final TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 4, vsync: this);
+    _tabController.addListener(() {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  String _friendlyLoadError(Object? error) {
+    final s = (error ?? '').toString();
+    final lower = s.toLowerCase();
+    if (lower.contains('permission-denied')) {
+      return 'Yetki hatası. Giriş yapıldı mı ve kullanıcı yetkisi doğru mu kontrol edin.\n\n$s';
+    }
+    if (lower.contains('requires an index') || lower.contains('failed-precondition')) {
+      return 'Sorgu için Firestore index gerekli olabilir.\n\n$s';
+    }
+    if (lower.contains('unavailable') || lower.contains('network')) {
+      return 'Bağlantı hatası. İnternet bağlantısını kontrol edin.\n\n$s';
+    }
+    return s;
+  }
 
   String _resolvePitchLocation({
     required List<Pitch> pitches,
@@ -187,77 +225,130 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
     }
   }
 
+  Widget? _buildTabFab({required MatchModel match, required int tabIndex}) {
+    if (tabIndex == 1 || tabIndex == 3) return null;
+
+    if (tabIndex == 0) {
+      return _SpeedDialFab(
+        key: const ValueKey('fab_detail'),
+        actions: [
+          _SpeedDialAction(
+            label: 'Maç Detayı Gir',
+            icon: Icons.edit_note_rounded,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => AdminMatchEventScreen(match: match),
+              ),
+            ),
+          ),
+          _SpeedDialAction(
+            label: 'Stad Seç',
+            icon: Icons.location_on,
+            onTap: () => _openPitchEditor(match),
+          ),
+        ],
+      );
+    }
+
+    if (tabIndex == 2) {
+      return _SpeedDialFab(
+        key: const ValueKey('fab_highlights'),
+        actions: [
+          _SpeedDialAction(
+            label: 'Yayın Linki',
+            icon: Icons.videocam_rounded,
+            onTap: () => _openYoutubeLinkEditor(match),
+          ),
+          _SpeedDialAction(
+            label: 'Medya Ekle',
+            icon: Icons.perm_media_rounded,
+            onTap: () => _openHighlightMediaAdder(match),
+          ),
+        ],
+      );
+    }
+
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final m = widget.match;
     final session = AppSession.of(context).value;
 
-    // HATA DÜZELTİLDİ: managedTeamId yerine teamId kullanıldı
-    final bool isSuperAdmin = session.isAdmin;
-    final bool isTeamManager =
-        session.teamId == m.homeTeamId || session.teamId == m.awayTeamId;
-    final bool isAdminAccess = isSuperAdmin || isTeamManager;
-
-    return StreamBuilder<List<Team>>(
-      stream: _teamService.watchAllTeams(),
-      builder: (context, teamsSnap) {
-        final Map<String, String> logoMap = {};
-        if (teamsSnap.hasData) {
-          for (final team in teamsSnap.data!) {
-            logoMap[team.id] = team.logoUrl;
-          }
-        }
-
-        final homeLogo = logoMap[m.homeTeamId] ?? '';
-        final awayLogo = logoMap[m.awayTeamId] ?? '';
-
-        return DefaultTabController(
-          length: 3,
-          child: Scaffold(
-            extendBodyBehindAppBar: true,
-            appBar: AppBar(
-              title: const Text(
-                'Maç Detayı',
-                style: TextStyle(fontWeight: FontWeight.w900),
+    return StreamBuilder<MatchModel>(
+      stream: _matchService.watchMatch(widget.match.id),
+      initialData: widget.match,
+      builder: (context, matchSnap) {
+        if (matchSnap.hasError) {
+          return Scaffold(
+            appBar: AppBar(title: const Text('Maç Detayı')),
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  'Maç verisi yüklenemedi.\n\n${_friendlyLoadError(matchSnap.error)}',
+                  textAlign: TextAlign.center,
+                ),
               ),
-              centerTitle: true,
-              backgroundColor: Colors.transparent,
-              surfaceTintColor: Colors.transparent,
-              elevation: 0,
             ),
-            floatingActionButton: !isSuperAdmin
-                ? null
-                : Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      FloatingActionButton(
-                        heroTag: 'yt',
-                        mini: true,
-                        onPressed: () => _openYoutubeLinkEditor(m),
-                        child: const Icon(Icons.videocam_rounded),
-                      ),
-                      const SizedBox(width: 10),
-                      FloatingActionButton(
-                        heroTag: 'pitch',
-                        mini: true,
-                        onPressed: () => _openPitchEditor(m),
-                        child: const Icon(Icons.location_on),
-                      ),
-                      const SizedBox(width: 10),
-                      FloatingActionButton(
-                        heroTag: 'event',
-                        onPressed: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => AdminMatchEventScreen(match: m),
-                          ),
-                        ),
-                        child: const Icon(Icons.edit_note_rounded),
-                      ),
-                    ],
+          );
+        }
+        final m = matchSnap.data ?? widget.match;
+
+        // HATA DÜZELTİLDİ: managedTeamId yerine teamId kullanıldı
+        final bool isSuperAdmin = session.isAdmin;
+        final bool isTeamManager =
+            session.teamId == m.homeTeamId || session.teamId == m.awayTeamId;
+        final bool isAdminAccess = isSuperAdmin || isTeamManager;
+
+        return StreamBuilder<List<Team>>(
+          stream: _teamService.watchAllTeams(),
+          builder: (context, teamsSnap) {
+            if (teamsSnap.hasError) {
+              return Scaffold(
+                appBar: AppBar(title: const Text('Maç Detayı')),
+                body: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(
+                      'Takım verileri yüklenemedi.\n\n${_friendlyLoadError(teamsSnap.error)}',
+                      textAlign: TextAlign.center,
+                    ),
                   ),
-            body: Column(
-              children: [
+                ),
+              );
+            }
+            final Map<String, String> logoMap = {};
+            if (teamsSnap.hasData) {
+              for (final team in teamsSnap.data!) {
+                logoMap[team.id] = team.logoUrl;
+              }
+            }
+
+            final homeLogo = (logoMap[m.homeTeamId] ?? '').trim().isNotEmpty
+                ? (logoMap[m.homeTeamId] ?? '')
+                : m.homeTeamLogoUrl;
+            final awayLogo = (logoMap[m.awayTeamId] ?? '').trim().isNotEmpty
+                ? (logoMap[m.awayTeamId] ?? '')
+                : m.awayTeamLogoUrl;
+
+        return Scaffold(
+                extendBodyBehindAppBar: true,
+                appBar: AppBar(
+                  title: const Text(
+                    'Maç Detayı',
+                    style: TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                  centerTitle: true,
+                  backgroundColor: Colors.transparent,
+                  surfaceTintColor: Colors.transparent,
+                  elevation: 0,
+                ),
+                floatingActionButton:
+                    !isSuperAdmin ? null : _buildTabFab(match: m, tabIndex: _tabController.index),
+                body: Column(
+                  children: [
                 Stack(
                   children: [
                     Positioned.fill(
@@ -436,36 +527,46 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
                     ),
                   ],
                 ),
-                const TabBar(
+                TabBar(
+                  controller: _tabController,
                   labelStyle: TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 13,
+                    fontFamily: 'Batangas',
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
                   ),
                   unselectedLabelStyle: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
+                    fontFamily: 'Batangas',
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
                   ),
                   tabs: [
                     Tab(text: 'Detay'),
                     Tab(text: 'Kadrolar'),
                     Tab(text: 'Önemli Anlar'),
+                    Tab(text: 'Diziliş'),
                   ],
                 ),
                 Expanded(
                   child: Container(
                     color: Theme.of(context).scaffoldBackgroundColor,
                     child: TabBarView(
+                      controller: _tabController,
                       children: [
                         _DetailTab(match: m),
                         _LineupTab(match: m, isAdmin: isAdminAccess),
                         _HighlightsTab(match: m),
+                        FormationTab.fromMatch(
+                          match: m,
+                          isTeamManager: isAdminAccess,
+                        ),
                       ],
                     ),
                   ),
                 ),
               ],
             ),
-          ),
+          );
+          },
         );
       },
     );
@@ -531,6 +632,210 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
           );
         },
       ),
+    );
+  }
+
+  Future<void> _openHighlightMediaAdder(MatchModel m) async {
+    final isHome = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (c) {
+        return SafeArea(
+          child: Container(
+            margin: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Theme.of(c).colorScheme.surface,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.home_rounded),
+                  title: const Text('Ev Sahibi Fotoğrafı'),
+                  onTap: () => Navigator.pop(c, true),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.flight_takeoff_rounded),
+                  title: const Text('Deplasman Fotoğrafı'),
+                  onTap: () => Navigator.pop(c, false),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (isHome == null) return;
+    if (!mounted) return;
+
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+    );
+    if (picked == null || !mounted) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (c) => const AlertDialog(
+        content: SizedBox(
+          height: 64,
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      ),
+    );
+
+    try {
+      final url = await ImgBBUploadService().uploadImage(File(picked.path));
+      if (url == null || url.trim().isEmpty) {
+        if (mounted) Navigator.pop(context);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Medya yüklenemedi.')),
+        );
+        return;
+      }
+
+      await DatabaseService().updateMatchHighlightPhotoUrl(
+        matchId: m.id,
+        isHome: isHome,
+        photoUrl: url,
+      );
+
+      if (mounted) Navigator.pop(context);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Fotoğraf kaydedildi.')),
+      );
+    } catch (_) {
+      if (mounted) Navigator.pop(context);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Medya yüklenemedi.')),
+      );
+    }
+  }
+}
+
+class _SpeedDialAction {
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _SpeedDialAction({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+  });
+}
+
+class _SpeedDialFab extends StatefulWidget {
+  final List<_SpeedDialAction> actions;
+
+  const _SpeedDialFab({
+    super.key,
+    required this.actions,
+  });
+
+  @override
+  State<_SpeedDialFab> createState() => _SpeedDialFabState();
+}
+
+class _SpeedDialFabState extends State<_SpeedDialFab> {
+  bool _open = false;
+
+  void _toggle() {
+    setState(() => _open = !_open);
+  }
+
+  void _close() {
+    if (!_open) return;
+    setState(() => _open = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final actions = widget.actions;
+
+    return Stack(
+      alignment: Alignment.bottomRight,
+      children: [
+        if (_open)
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: _close,
+              behavior: HitTestBehavior.opaque,
+              child: const SizedBox.shrink(),
+            ),
+          ),
+        Padding(
+          padding: const EdgeInsets.only(right: 4, bottom: 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              ...List.generate(actions.length, (i) {
+                final a = actions[i];
+                return AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 160),
+                  switchInCurve: Curves.easeOut,
+                  switchOutCurve: Curves.easeIn,
+                  child: !_open
+                      ? const SizedBox.shrink()
+                      : Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: cs.surface.withOpacity(0.95),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: cs.outlineVariant),
+                                ),
+                                child: Text(
+                                  a.label,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              FloatingActionButton(
+                                heroTag: 'speed_${a.label}_$i',
+                                mini: true,
+                                onPressed: () {
+                                  _close();
+                                  a.onTap();
+                                },
+                                child: Icon(a.icon),
+                              ),
+                            ],
+                          ),
+                        ),
+                );
+              }),
+              FloatingActionButton(
+                heroTag: 'speed_main',
+                onPressed: _toggle,
+                child: AnimatedRotation(
+                  turns: _open ? 0.125 : 0,
+                  duration: const Duration(milliseconds: 160),
+                  child: const Icon(Icons.add),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -630,69 +935,120 @@ class _LineupTab extends StatelessWidget {
   final bool isAdmin;
   const _LineupTab({required this.match, required this.isAdmin});
 
-  void _showLineupChoice(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      builder: (c) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.home),
-              title: Text('${match.homeTeamName} Kadrosu'),
-              onTap: () {
-                Navigator.pop(c);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        AdminMatchLineupScreen(match: match, isHome: true),
-                  ),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.outbound),
-              title: Text('${match.awayTeamName} Kadrosu'),
-              onTap: () {
-                Navigator.pop(c);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        AdminMatchLineupScreen(match: match, isHome: false),
-                  ),
-                );
-              },
-            ),
-          ],
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _LineupSide(
+            sideTitle: 'Ev Sahibi',
+            buttonText: 'Kadro Girişi',
+            onPressed: isAdmin
+                ? () {
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (c) => FractionallySizedBox(
+                        heightFactor: 0.9,
+                        child: ClipRRect(
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(20),
+                          ),
+                          child: AdminMatchLineupScreen(
+                            match: match,
+                            isHome: true,
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+                : null,
+            teamName: match.homeTeamName,
+            lineupDetail: match.homeLineupDetail,
+            lineupIds: match.homeLineup,
+          ),
         ),
-      ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _LineupSide(
+            sideTitle: 'Deplasman',
+            buttonText: 'Kadro Girişi',
+            onPressed: isAdmin
+                ? () {
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (c) => FractionallySizedBox(
+                        heightFactor: 0.9,
+                        child: ClipRRect(
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(20),
+                          ),
+                          child: AdminMatchLineupScreen(
+                            match: match,
+                            isHome: false,
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+                : null,
+            teamName: match.awayTeamName,
+            lineupDetail: match.awayLineupDetail,
+            lineupIds: match.awayLineup,
+          ),
+        ),
+      ],
     );
   }
+}
+
+class _LineupSide extends StatelessWidget {
+  final String sideTitle;
+  final String buttonText;
+  final VoidCallback? onPressed;
+  final String teamName;
+  final MatchLineup? lineupDetail;
+  final List<String>? lineupIds;
+
+  const _LineupSide({
+    required this.sideTitle,
+    required this.buttonText,
+    required this.onPressed,
+    required this.teamName,
+    required this.lineupDetail,
+    required this.lineupIds,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        if (isAdmin)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 16),
-            child: ElevatedButton.icon(
-              onPressed: () => _showLineupChoice(context),
-              icon: const Icon(Icons.people),
-              label: const Text('Kadroları Düzenle'),
-            ),
+        Text(
+          sideTitle,
+          style: TextStyle(
+            color: cs.onSurfaceVariant,
+            fontWeight: FontWeight.w900,
+            fontSize: 12,
+            letterSpacing: 0.3,
           ),
-        _TeamLineupSection(
-          teamName: match.homeTeamName,
-          lineup: match.homeLineup,
         ),
-        const Divider(height: 40, color: Colors.white10),
+        const SizedBox(height: 6),
+        if (onPressed != null)
+          ElevatedButton.icon(
+            onPressed: onPressed,
+            icon: const Icon(Icons.people),
+            label: Text(buttonText),
+          ),
+        if (onPressed != null) const SizedBox(height: 12),
         _TeamLineupSection(
-          teamName: match.awayTeamName,
-          lineup: match.awayLineup,
+          teamName: teamName,
+          lineupDetail: lineupDetail,
+          lineupIds: lineupIds,
         ),
       ],
     );
@@ -701,14 +1057,48 @@ class _LineupTab extends StatelessWidget {
 
 class _TeamLineupSection extends StatelessWidget {
   final String teamName;
-  final List<dynamic>? lineup;
-  const _TeamLineupSection({required this.teamName, this.lineup});
+  final MatchLineup? lineupDetail;
+  final List<String>? lineupIds;
+  const _TeamLineupSection({
+    required this.teamName,
+    this.lineupDetail,
+    this.lineupIds,
+  });
+
+  String _readName(dynamic p) {
+    if (p == null) return '';
+    if (p is LineupPlayer) return p.name;
+    if (p is Map) {
+      final v = p['playerName'] ?? p['player_name'] ?? p['name'];
+      return (v ?? '').toString();
+    }
+    return p.toString();
+  }
+
+  String _readNumber(dynamic p) {
+    if (p == null) return '';
+    if (p is LineupPlayer) return (p.number ?? '').toString();
+    if (p is Map) {
+      final v = p['number'] ?? p['jerseyNumber'] ?? p['jersey_number'];
+      return (v ?? '').toString();
+    }
+    return '';
+  }
 
   @override
   Widget build(BuildContext context) {
-    final starting =
-        lineup?.where((p) => p['isStarting'] == true).toList() ?? [];
-    final subs = lineup?.where((p) => p['isStarting'] == false).toList() ?? [];
+    final List<dynamic> startingRaw = lineupDetail != null
+        ? lineupDetail!.starting
+        : (lineupIds ?? const <String>[]);
+    final List<dynamic> subsRaw =
+        lineupDetail != null ? lineupDetail!.subs : const <dynamic>[];
+
+    final starting = startingRaw
+        .where((p) => _readName(p).trim().isNotEmpty)
+        .toList(growable: false);
+    final subs = subsRaw
+        .where((p) => _readName(p).trim().isNotEmpty)
+        .toList(growable: false);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -738,11 +1128,27 @@ class _TeamLineupSection extends StatelessWidget {
         ...starting.map(
           (p) => ListTile(
             dense: true,
+            contentPadding: EdgeInsets.zero,
+            horizontalTitleGap: 8,
+            minLeadingWidth: 26,
+            visualDensity: VisualDensity.compact,
             leading: Text(
-              '${p['number'] ?? ''}',
-              style: const TextStyle(fontWeight: FontWeight.bold),
+              _readNumber(p).trim(),
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: 10,
+              ),
             ),
-            title: Text(p['playerName'] ?? ''),
+            title: Text(
+              _readName(p).trim(),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 11,
+              ),
+            ),
           ),
         ),
         const SizedBox(height: 12),
@@ -762,11 +1168,27 @@ class _TeamLineupSection extends StatelessWidget {
         ...subs.map(
           (p) => ListTile(
             dense: true,
+            contentPadding: EdgeInsets.zero,
+            horizontalTitleGap: 8,
+            minLeadingWidth: 26,
+            visualDensity: VisualDensity.compact,
             leading: Text(
-              '${p['number'] ?? ''}',
-              style: const TextStyle(fontWeight: FontWeight.bold),
+              _readNumber(p).trim(),
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: 10,
+              ),
             ),
-            title: Text(p['playerName'] ?? ''),
+            title: Text(
+              _readName(p).trim(),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 11,
+              ),
+            ),
           ),
         ),
       ],
@@ -777,6 +1199,21 @@ class _TeamLineupSection extends StatelessWidget {
 class _DetailTab extends StatelessWidget {
   final MatchModel match;
   const _DetailTab({required this.match});
+
+  String _friendlyLoadError(Object? error) {
+    final s = (error ?? '').toString();
+    final lower = s.toLowerCase();
+    if (lower.contains('permission-denied')) {
+      return 'Yetki hatası. Giriş yapıldı mı ve kullanıcı yetkisi doğru mu kontrol edin.\n\n$s';
+    }
+    if (lower.contains('requires an index') || lower.contains('failed-precondition')) {
+      return 'Sorgu için Firestore index gerekli olabilir.\n\n$s';
+    }
+    if (lower.contains('unavailable') || lower.contains('network')) {
+      return 'Bağlantı hatası. İnternet bağlantısını kontrol edin.\n\n$s';
+    }
+    return s;
+  }
 
   int _readMinute(dynamic v) {
     if (v == null) return 0;
@@ -827,6 +1264,17 @@ class _DetailTab extends StatelessWidget {
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: ServiceLocator.matchService.watchInlineMatchEvents(match.id),
       builder: (context, snap) {
+        if (snap.hasError) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                'Maç akışı yüklenemedi.\n\n${_friendlyLoadError(snap.error)}',
+                textAlign: TextAlign.center,
+              ),
+            ),
+          );
+        }
         if (!snap.hasData) {
           return const Center(child: CircularProgressIndicator());
         }

@@ -1,10 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:postgres/postgres.dart';
 import 'package:universal_html/html.dart' as html;
 
-import 'package:excel/excel.dart';
+import 'package:excel/excel.dart' hide Border;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
@@ -15,6 +17,7 @@ import '../services/app_session.dart';
 import '../services/database_service.dart';
 import '../services/interfaces/i_league_service.dart';
 import '../services/interfaces/i_match_service.dart';
+import '../services/postgres_migration_service.dart';
 import '../services/service_locator.dart';
 import '../utils/string_utils.dart';
 
@@ -289,6 +292,280 @@ class _AdminDataToolsScreenState extends State<AdminDataToolsScreen> {
     }
   }
 
+  Future<void> _openPostgresMigrationDialog() async {
+    if (_busy) return;
+
+    final hostC = TextEditingController();
+    final portC = TextEditingController(text: '5432');
+    final dbC = TextEditingController();
+    final userC = TextEditingController();
+    final passC = TextEditingController();
+    final pageSizeC = TextEditingController(text: '500');
+
+    bool confirmed = false;
+    bool running = false;
+    bool showPass = false;
+    bool strictMode = true;
+    SslMode sslMode = SslMode.require;
+    final logs = <String>[];
+
+    void addLog(void Function(void Function()) setDialogState, String msg) {
+      final pwd = passC.text;
+      final safe = pwd.trim().isEmpty ? msg : msg.replaceAll(pwd, '******');
+      logs.add(safe);
+      if (logs.length > 220) logs.removeAt(0);
+      setDialogState(() {});
+    }
+
+    Future<void> start(void Function(void Function()) setDialogState) async {
+      final host = hostC.text.trim();
+      final db = dbC.text.trim();
+      final user = userC.text.trim();
+      final pass = passC.text;
+      final port = int.tryParse(portC.text.trim()) ?? 0;
+      final pageSize = int.tryParse(pageSizeC.text.trim()) ?? 500;
+
+      if (host.isEmpty || db.isEmpty || user.isEmpty || pass.trim().isEmpty || port <= 0) {
+        addLog(setDialogState, 'Hata: Host/DB/User/Password/Port zorunludur.');
+        return;
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _busy = true;
+        _lastResult = null;
+      });
+      setDialogState(() => running = true);
+
+      Connection? conn;
+      try {
+        addLog(setDialogState, 'Bağlantı açılıyor... (SSL: ${sslMode.name})');
+        conn = await Connection.open(
+          Endpoint(
+            host: host,
+            port: port,
+            database: db,
+            username: user,
+            password: pass,
+          ),
+          settings: ConnectionSettings(sslMode: sslMode),
+        );
+
+        addLog(setDialogState, 'Bağlantı kuruldu. Migrasyon başlıyor...');
+
+        final svc = PostgresMigrationService(
+          firestore: FirebaseFirestore.instance,
+          pg: conn,
+          pageSize: pageSize,
+          strict: strictMode,
+          log: (m) => addLog(setDialogState, m),
+        );
+
+        await svc.migrateAll();
+
+        if (mounted) {
+          setState(() => _lastResult = 'Firebase -> PostgreSQL migrasyonu tamamlandı.');
+        }
+        addLog(setDialogState, 'Tamamlandı.');
+      } catch (e) {
+        addLog(setDialogState, 'Migrasyon hatası: $e');
+      } finally {
+        try {
+          await conn?.close();
+        } catch (_) {}
+        if (mounted) setState(() => _busy = false);
+        setDialogState(() => running = false);
+      }
+    }
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Firebase -> PostgreSQL Migrasyonu'),
+          content: SizedBox(
+            width: 520,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Bu işlem geri alınamaz. Bağlantı bilgileri sadece bu oturumda RAM’de tutulur.',
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: hostC,
+                  enabled: !running,
+                  decoration: const InputDecoration(labelText: 'Host'),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: dbC,
+                        enabled: !running,
+                        decoration: const InputDecoration(labelText: 'Database'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    SizedBox(
+                      width: 120,
+                      child: TextField(
+                        controller: portC,
+                        enabled: !running,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'Port'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: userC,
+                        enabled: !running,
+                        decoration: const InputDecoration(labelText: 'Username'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    SizedBox(
+                      width: 170,
+                      child: DropdownButtonFormField<SslMode>(
+                        value: sslMode,
+                        decoration: const InputDecoration(labelText: 'SSL'),
+                        items: const [
+                          DropdownMenuItem(
+                            value: SslMode.require,
+                            child: Text('require'),
+                          ),
+                          DropdownMenuItem(
+                            value: SslMode.verifyFull,
+                            child: Text('verifyFull'),
+                          ),
+                          DropdownMenuItem(
+                            value: SslMode.disable,
+                            child: Text('disable'),
+                          ),
+                        ],
+                        onChanged: running
+                            ? null
+                            : (v) {
+                                if (v == null) return;
+                                setDialogState(() => sslMode = v);
+                              },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: passC,
+                  enabled: !running,
+                  obscureText: !showPass,
+                  decoration: InputDecoration(
+                    labelText: 'Password',
+                    suffixIcon: IconButton(
+                      onPressed: running
+                          ? null
+                          : () => setDialogState(() => showPass = !showPass),
+                      icon: Icon(
+                        showPass ? Icons.visibility_off : Icons.visibility,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: pageSizeC,
+                        enabled: !running,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Sayfa Boyutu',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: CheckboxListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        value: strictMode,
+                        onChanged: running
+                            ? null
+                            : (v) => setDialogState(() => strictMode = v == true),
+                        title: const Text('Strict'),
+                      ),
+                    ),
+                  ],
+                ),
+                CheckboxListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  value: confirmed,
+                  onChanged: running
+                      ? null
+                      : (v) => setDialogState(() => confirmed = v == true),
+                  title: const Text('Onaylıyorum'),
+                ),
+                if (running) ...[
+                  const SizedBox(height: 6),
+                  const LinearProgressIndicator(),
+                ],
+                const SizedBox(height: 10),
+                Container(
+                  height: 170,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    color: Theme.of(context).colorScheme.surfaceContainerLow,
+                    border: Border.all(
+                      color: Theme.of(context).colorScheme.outlineVariant,
+                    ),
+                  ),
+                  child: SingleChildScrollView(
+                    child: Text(
+                      logs.isEmpty ? 'Loglar burada görünecek.' : logs.join('\n'),
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: running ? null : () => Navigator.pop(context),
+              child: const Text('Kapat'),
+            ),
+            FilledButton(
+              onPressed: (!confirmed || running)
+                  ? null
+                  : () => start(setDialogState),
+              child: const Text('Başlat'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    hostC.dispose();
+    portC.dispose();
+    dbC.dispose();
+    userC.dispose();
+    passC.dispose();
+    pageSizeC.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final isAdmin = AppSession.of(context).value.isAdmin;
@@ -380,6 +657,15 @@ class _AdminDataToolsScreenState extends State<AdminDataToolsScreen> {
                     onPressed: _busy ? null : _normalizeMatchesDocIds,
                     icon: const Icon(Icons.rule_folder_outlined),
                     label: const Text('Lig Bazlı Maç Verilerini Normalize Et'),
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 52),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton.tonalIcon(
+                    onPressed: _busy ? null : _openPostgresMigrationDialog,
+                    icon: const Icon(Icons.swap_horiz_rounded),
+                    label: const Text('Firebase -> PostgreSQL Migrasyonu'),
                     style: FilledButton.styleFrom(
                       minimumSize: const Size(double.infinity, 52),
                     ),

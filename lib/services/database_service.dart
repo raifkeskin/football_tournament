@@ -215,13 +215,7 @@ class DatabaseService {
         .collection('groups')
         .where('leagueId', isEqualTo: leagueId)
         .get();
-    final groupsByTournamentId = await _db
-        .collection('groups')
-        .where('tournamentId', isEqualTo: leagueId)
-        .get();
-    final seen = <String>{};
-    for (final g in [...groupsByLeagueId.docs, ...groupsByTournamentId.docs]) {
-      if (!seen.add(g.id)) continue;
+    for (final g in groupsByLeagueId.docs) {
       await deleteGroupCascade(g.id);
     }
 
@@ -240,54 +234,17 @@ class DatabaseService {
   }
 
   Stream<List<GroupModel>> getGroups(String leagueId) {
-    final controller = StreamController<List<GroupModel>>.broadcast();
-    List<GroupModel> latestByLeagueId = const [];
-    List<GroupModel> latestByTournamentId = const [];
-
-    void emit() {
-      final merged = <String, GroupModel>{};
-      for (final g in latestByLeagueId) {
-        merged[g.id] = g;
-      }
-      for (final g in latestByTournamentId) {
-        merged[g.id] = g;
-      }
-      final list = merged.values.toList()
-        ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
-      controller.add(list);
-    }
-
-    late final StreamSubscription subLeagueId;
-    late final StreamSubscription subTournamentId;
-
-    controller.onListen = () {
-      subLeagueId = _db
-          .collection('groups')
-          .where('leagueId', isEqualTo: leagueId)
-          .snapshots()
-          .listen((snap) {
-            latestByLeagueId =
-                snap.docs.map((d) => GroupModel.fromMap(d.data(), d.id)).toList();
-            emit();
-          });
-      subTournamentId = _db
-          .collection('groups')
-          .where('tournamentId', isEqualTo: leagueId)
-          .snapshots()
-          .listen((snap) {
-            latestByTournamentId =
-                snap.docs.map((d) => GroupModel.fromMap(d.data(), d.id)).toList();
-            emit();
-          });
-    };
-
-    controller.onCancel = () async {
-      await subLeagueId.cancel();
-      await subTournamentId.cancel();
-      await controller.close();
-    };
-
-    return controller.stream;
+    final id = leagueId.trim();
+    if (id.isEmpty) return const Stream<List<GroupModel>>.empty();
+    return _db
+        .collection('groups')
+        .where('leagueId', isEqualTo: id)
+        .snapshots()
+        .map((snap) {
+      final list = snap.docs.map((d) => GroupModel.fromMap(d.data(), d.id)).toList();
+      list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+      return list;
+    });
   }
 
   Stream<List<GroupModel>> getAllGroups() {
@@ -310,18 +267,17 @@ class DatabaseService {
         .where('teamIds', arrayContains: tId)
         .get();
 
-    final tournamentIds = <String>{};
+    final leagueIds = <String>{};
     for (final doc in groupSnap.docs) {
-      final data = doc.data();
-      final tournamentId =
-          (data['tournamentId'] ?? data['leagueId'] ?? '').toString().trim();
-      if (tournamentId.isNotEmpty) tournamentIds.add(tournamentId);
+      final g = GroupModel.fromMap(doc.data(), doc.id);
+      final lId = g.leagueId.trim();
+      if (lId.isNotEmpty) leagueIds.add(lId);
     }
 
-    if (tournamentIds.isEmpty) return [];
+    if (leagueIds.isEmpty) return [];
 
     final leagues = <League>[];
-    final ids = tournamentIds.toList();
+    final ids = leagueIds.toList();
     for (var i = 0; i < ids.length; i += 10) {
       final chunk = ids.sublist(i, min(i + 10, ids.length));
       final tournamentSnap = await _db
@@ -1283,6 +1239,39 @@ class DatabaseService {
       isHome ? 'homeHighlightPhotoUrl' : 'awayHighlightPhotoUrl':
           url.isEmpty ? null : url,
     });
+  }
+
+  Future<void> updateMatchFormationState({
+    required String matchId,
+    String? homeFormation,
+    String? awayFormation,
+    List<String>? homeOrder,
+    List<String>? awayOrder,
+  }) async {
+    final id = matchId.trim();
+    if (id.isEmpty) return;
+
+    final data = <String, dynamic>{};
+    if (homeFormation != null) {
+      final f = homeFormation.trim();
+      data['homeFormation'] = f.isEmpty ? null : f;
+    }
+    if (awayFormation != null) {
+      final f = awayFormation.trim();
+      data['awayFormation'] = f.isEmpty ? null : f;
+    }
+    if (homeOrder != null) {
+      data['homeFormationOrder'] =
+          homeOrder.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
+    }
+    if (awayOrder != null) {
+      data['awayFormationOrder'] =
+          awayOrder.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
+    }
+    if (data.isEmpty) return;
+    data['updatedAt'] = FieldValue.serverTimestamp();
+
+    await _db.collection('matches').doc(id).update(data);
   }
 
   Future<Map<String, int>> migrateMatchesTimeTimestampToMatchFields() async {

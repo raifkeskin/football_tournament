@@ -489,19 +489,6 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                   ),
                   const SizedBox(height: 10),
                   _DialItem(
-                    label: 'Takım Yönetimi',
-                    icon: Icons.groups_2_outlined,
-                    onPressed: () {
-                      setState(() => _dialOpen = false);
-                      Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const AdminManageTeamsScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  _DialItem(
                     label: 'Grup Atama',
                     icon: Icons.grid_view_outlined,
                     onPressed: () {
@@ -587,65 +574,94 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                 );
               }
 
-              return Card(
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: leagues.length,
-                  separatorBuilder: (context, index) =>
-                      Divider(color: Colors.grey.shade300, height: 1),
-                  itemBuilder: (context, index) {
-                    final league = leagues[index];
-                    final subtitle = (league.subtitle ?? '').trim();
-                    Future<void> toggleDefault() async {
-                      try {
-                        await _dbService.setLeagueDefaultFlag(
-                          leagueId: league.id,
-                          isDefault: !league.isDefault,
-                        );
-                      } catch (e) {
-                        if (!context.mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Hata: $e')),
-                        );
-                      }
-                    }
-                    Future<void> openEdit() async {
-                      final updated = await Navigator.push<bool>(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => EditLeagueScreen(league: league),
-                        ),
+              return ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: leagues.length,
+                itemBuilder: (context, index) {
+                  final league = leagues[index];
+                  final subtitle = (league.subtitle ?? '').trim();
+                  Future<void> toggleDefault() async {
+                    try {
+                      await _dbService.setLeagueDefaultFlag(
+                        leagueId: league.id,
+                        isDefault: !league.isDefault,
                       );
+                    } catch (e) {
                       if (!context.mounted) return;
-                      if (updated == true) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Güncellendi')),
-                        );
-                        setState(() {});
-                      }
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Hata: $e')),
+                      );
                     }
-                    return ListTile(
+                  }
+
+                  Future<void> openEditDialog() async {
+                    final updated = await showDialog<bool>(
+                      context: context,
+                      barrierDismissible: false,
+                      builder: (_) => Dialog.fullscreen(
+                        child: EditLeagueScreen(league: league),
+                      ),
+                    );
+                    if (!context.mounted) return;
+                    if (updated == true) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Güncellendi')),
+                      );
+                      setState(() {});
+                    }
+                  }
+
+                  Future<void> openTeams() async {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => AdminManageTeamsScreen(
+                          initialLeagueId: league.id,
+                          lockLeagueSelection: true,
+                        ),
+                      ),
+                    );
+                  }
+
+                  return Card(
+                    margin: const EdgeInsets.symmetric(vertical: 4),
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 2,
+                      ),
                       leading: league.logoUrl.isNotEmpty
                           ? SizedBox(
-                              width: 40,
-                              height: 40,
+                              width: 36,
+                              height: 36,
                               child: WebSafeImage(
                                 url: league.logoUrl,
-                                width: 40,
-                                height: 40,
+                                width: 36,
+                                height: 36,
                                 borderRadius: BorderRadius.circular(8),
                                 fallbackIconSize: 18,
                               ),
                             )
                           : const Icon(Icons.emoji_events),
-                      title: Text(league.name, maxLines: 3, softWrap: true),
-                      subtitle: subtitle.isEmpty ? null : Text(subtitle),
+                      title: Text(
+                        league.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        softWrap: true,
+                      ),
+                      subtitle: subtitle.isEmpty
+                          ? null
+                          : Text(
+                              subtitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           IconButton(
-                            onPressed: !isAdmin ? null : toggleDefault,
+                            onPressed: toggleDefault,
                             icon: Icon(
                               league.isDefault
                                   ? Icons.star_rounded
@@ -655,62 +671,38 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                                   : cs.onSurfaceVariant,
                             ),
                           ),
+                          IconButton(
+                            onPressed: openEditDialog,
+                            icon: const Icon(Icons.edit_outlined),
+                          ),
                         ],
                       ),
-                      onTap: !isAdmin ? null : openEdit,
-                      onLongPress: !isAdmin
-                          ? null
-                          : () async {
-                              await showModalBottomSheet<void>(
-                                context: context,
-                                showDragHandle: true,
-                                builder: (context) => SafeArea(
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      ListTile(
-                                        leading: const Icon(Icons.edit_outlined),
-                                        title: const Text('Düzenle'),
-                                        onTap: () async {
-                                          Navigator.pop(context);
-                                          final updated =
-                                              await Navigator.push<bool>(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (_) => EditLeagueScreen(
-                                                league: league,
-                                              ),
-                                            ),
-                                          );
-                                          if (!context.mounted) return;
-                                          if (updated == true) {
-                                            ScaffoldMessenger.of(context)
-                                                .showSnackBar(
-                                              const SnackBar(
-                                                content: Text('Güncellendi'),
-                                              ),
-                                            );
-                                            setState(() {});
-                                          }
-                                        },
-                                      ),
-                                      ListTile(
-                                        leading: const Icon(Icons.delete_outline),
-                                        title: const Text('Sil'),
-                                        onTap: () {
-                                          Navigator.pop(context);
-                                          _turnuvaSil(league.id);
-                                        },
-                                      ),
-                                      const SizedBox(height: 10),
-                                    ],
-                                  ),
+                      onTap: openTeams,
+                      onLongPress: () async {
+                        await showModalBottomSheet<void>(
+                          context: context,
+                          showDragHandle: true,
+                          builder: (context) => SafeArea(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                ListTile(
+                                  leading: const Icon(Icons.delete_outline),
+                                  title: const Text('Sil'),
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    _turnuvaSil(league.id);
+                                  },
                                 ),
-                              );
-                            },
-                    );
-                  },
-                ),
+                                const SizedBox(height: 10),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  );
+                },
               );
             },
           ),

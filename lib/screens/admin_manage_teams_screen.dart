@@ -12,6 +12,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../repositories/teams_repository.dart';
 import '../models/league.dart';
+import '../models/match.dart';
 import '../services/approval_service.dart';
 import '../services/app_session.dart';
 import '../services/database_service.dart';
@@ -43,6 +44,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
   final ILeagueService _leagueService = ServiceLocator.leagueService;
   final ITeamService _teamService = ServiceLocator.teamService;
   String _searchQuery = '';
+  String _selectedGroupId = '__ALL__';
   final _teamNameController = TextEditingController();
   final _picker = ImagePicker();
   final _imageUploadService = ImgBBUploadService();
@@ -62,6 +64,29 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
   /// Türkçe karakter duyarlı küçük harfe çevirme (Arama için)
   String _toTurkishLow(String input) {
     return input.replaceAll('İ', 'i').replaceAll('I', 'ı').toLowerCase();
+  }
+
+  bool _matchesTeamSearch(Map<String, dynamic> data) {
+    final q = _searchQuery.trim();
+    if (q.isEmpty) return true;
+    String read(dynamic v) => (v ?? '').toString();
+    final name = read(data['name']);
+    return _toTurkishLow(name).contains(q);
+  }
+
+  String _friendlyLoadError(Object? error) {
+    final s = (error ?? '').toString();
+    final lower = s.toLowerCase();
+    if (lower.contains('permission-denied')) {
+      return 'Yetki hatası. Giriş yapıldı mı ve kullanıcı yetkisi doğru mu kontrol edin.\n\n$s';
+    }
+    if (lower.contains('requires an index') || lower.contains('failed-precondition')) {
+      return 'Sorgu için Firestore index gerekli olabilir.\n\n$s';
+    }
+    if (lower.contains('unavailable') || lower.contains('network')) {
+      return 'Bağlantı hatası. İnternet bağlantısını kontrol edin.\n\n$s';
+    }
+    return s;
   }
 
   Future<void> _openAddTeamSheet() async {
@@ -141,6 +166,15 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                   StreamBuilder<List<League>>(
                     stream: _leagueService.watchLeagues(),
                     builder: (context, snapshot) {
+                      if (snapshot.hasError) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          child: Text(
+                            'Turnuvalar yüklenemedi:\n\n${_friendlyLoadError(snapshot.error)}',
+                            textAlign: TextAlign.center,
+                          ),
+                        );
+                      }
                       if (!snapshot.hasData) return const SizedBox(height: 56);
                       final docs = <League>[...(snapshot.data ?? const <League>[])];
                       docs.sort(
@@ -211,10 +245,9 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                     height: 48,
                     child: _addingTeam
                         ? const Center(child: CircularProgressIndicator())
-                        : FilledButton.icon(
+                        : FilledButton(
                             onPressed: save,
-                            icon: const Icon(Icons.save_outlined),
-                            label: const Text('Kaydet'),
+                            child: const Text('KAYDET'),
                           ),
                   ),
                 ],
@@ -282,145 +315,260 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
         ),
       );
     }
-    return Scaffold(
-      appBar: AppBar(title: const Text('Takım Yönetimi')),
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      floatingActionButton: isAdmin
-          ? FloatingActionButton(
-              onPressed: _openAddTeamSheet,
-              child: const Icon(Icons.add),
-            )
-          : null,
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: TextField(
-              decoration: const InputDecoration(
-                labelText: 'Takım Ara',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
+    return StreamBuilder<List<League>>(
+      stream: _leagueService.watchLeagues(),
+      builder: (context, leaguesSnap) {
+        final leagues = leaguesSnap.data ?? const <League>[];
+        final selectedLeagueId = (_selectedLeagueId ?? '').trim();
+        final effectiveLeagueId = selectedLeagueId.isNotEmpty
+            ? selectedLeagueId
+            : (leagues.isNotEmpty ? leagues.first.id : '');
+        final selectedLeague = effectiveLeagueId.isEmpty
+            ? null
+            : leagues.where((l) => l.id == effectiveLeagueId).toList().isNotEmpty
+                ? leagues.where((l) => l.id == effectiveLeagueId).toList().first
+                : null;
+
+        if (selectedLeagueId.isEmpty &&
+            leagues.isNotEmpty &&
+            _selectedLeagueId == null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            setState(() => _selectedLeagueId = leagues.first.id);
+          });
+        }
+
+        final titleLeagueName = (selectedLeague?.name ?? '').trim();
+        final title = titleLeagueName.isEmpty
+            ? 'Takım Listesi'
+            : '$titleLeagueName > Takım Listesi';
+
+        return Scaffold(
+          appBar: AppBar(
+            title: Text(title),
+            actions: [
+              IconButton(
+                onPressed: _openAddTeamSheet,
+                icon: const Icon(Icons.add_rounded),
+                tooltip: 'Takım Ekle',
               ),
-              onChanged: (val) =>
-                  setState(() => _searchQuery = _toTurkishLow(val)),
-            ),
+            ],
           ),
-          Divider(color: Colors.grey.shade300, height: 1),
-          Expanded(
-            child: StreamBuilder<List<Map<String, dynamic>>>(
-              stream: _teamService.watchAllTeamsRaw(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+          body: StreamBuilder<List<GroupModel>>(
+            stream: effectiveLeagueId.isEmpty
+                ? const Stream<List<GroupModel>>.empty()
+                : _leagueService.watchGroups(effectiveLeagueId),
+            builder: (context, groupsSnap) {
+              final groups = groupsSnap.data ?? const <GroupModel>[];
+              final groupIds = groups.map((g) => g.id).toSet();
+              if (_selectedGroupId != '__ALL__' && !groupIds.contains(_selectedGroupId)) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted) return;
+                  setState(() => _selectedGroupId = '__ALL__');
+                });
+              }
+
+              final allTeamIdsForLeague = <String>{};
+              for (final g in groups) {
+                for (final tId in g.teamIds) {
+                  final id = tId.trim();
+                  if (id.isNotEmpty) allTeamIdsForLeague.add(id);
                 }
+              }
 
-                final teams = (snapshot.data ?? const <Map<String, dynamic>>[])
-                    .where((data) {
-                  final id = (data['id'] ?? '').toString();
-                  if (id == 'free_agent_pool') return false;
-                  final name = (data['name'] ?? '').toString();
-                  return _toTurkishLow(name).contains(_searchQuery);
-                }).toList();
+              final selectedTeamIds = () {
+                if (_selectedGroupId == '__ALL__') return allTeamIdsForLeague;
+                final g = groups.where((e) => e.id == _selectedGroupId).toList();
+                if (g.isEmpty) return <String>{};
+                return g.first.teamIds.map((e) => e.trim()).where((e) => e.isNotEmpty).toSet();
+              }();
 
-                return Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
-                  child: Card(
-                    child: ListView.separated(
-                      itemCount: teams.length,
-                      separatorBuilder: (context, index) =>
-                          Divider(color: Colors.grey.shade300, height: 1),
-                      itemBuilder: (context, index) {
-                        final data = teams[index];
-                        final teamId = (data['id'] ?? '').toString();
-                        return ListTile(
-                          leading: SizedBox(
-                            width: 40,
-                            height: 40,
-                            child: WebSafeImage(
-                              url: (data['logoUrl'] ?? '').toString(),
-                              width: 40,
-                              height: 40,
-                              borderRadius: BorderRadius.circular(8),
-                              fallbackIconSize: 18,
+              String groupDisplayName(GroupModel g, int index) {
+                final n = g.name.trim();
+                if (n.isNotEmpty) return n;
+                return 'Grup ${index + 1}';
+              }
+
+              return Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: DropdownButtonFormField<String>(
+                            value: _selectedGroupId,
+                            decoration: const InputDecoration(
+                              border: OutlineInputBorder(),
                             ),
+                            items: [
+                              const DropdownMenuItem(
+                                value: '__ALL__',
+                                child: Text('Tümü'),
+                              ),
+                              for (var i = 0; i < groups.length; i++)
+                                DropdownMenuItem(
+                                  value: groups[i].id,
+                                  child: Text(groupDisplayName(groups[i], i)),
+                                ),
+                            ],
+                            onChanged: (v) {
+                              if (v == null) return;
+                              setState(() => _selectedGroupId = v);
+                            },
                           ),
-                          title: Text(
-                            (data['name'] ?? '').toString(),
-                            maxLines: 3,
-                            softWrap: true,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          flex: 3,
+                          child: TextField(
+                            decoration: const InputDecoration(
+                              labelText: 'Takım Ara',
+                              prefixIcon: Icon(Icons.search),
+                              border: OutlineInputBorder(),
+                            ),
+                            onChanged: (val) =>
+                                setState(() => _searchQuery = _toTurkishLow(val)),
                           ),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () async {
-                            if (!isAdmin) {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => TeamSquadScreen(
-                                    teamId: teamId,
-                                    tournamentId: _selectedLeagueId ?? '',
-                                    teamName: (data['name'] ?? '').toString(),
-                                    teamLogoUrl: (data['logoUrl'] ?? '').toString(),
-                                  ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: StreamBuilder<List<Map<String, dynamic>>>(
+                      stream: _teamService.watchAllTeamsRaw(),
+                      builder: (context, snapshot) {
+                        if (snapshot.hasError) {
+                          return Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Text(
+                                'Takımlar yüklenemedi.\n\n${_friendlyLoadError(snapshot.error)}',
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          );
+                        }
+                        if (!snapshot.hasData) {
+                          return const Center(child: CircularProgressIndicator());
+                        }
+
+                        final teams = (snapshot.data ?? const <Map<String, dynamic>>[])
+                            .where((data) {
+                              final id = (data['id'] ?? '').toString().trim();
+                              if (id == 'free_agent_pool') return false;
+                              if (groups.isEmpty) {
+                                final leagueId =
+                                    (data['leagueId'] ??
+                                            data['league_id'] ??
+                                            data['tournamentId'] ??
+                                            data['tournament_id'] ??
+                                            '')
+                                        .toString()
+                                        .trim();
+                                if (leagueId.isEmpty || leagueId != effectiveLeagueId) {
+                                  return false;
+                                }
+                              } else {
+                                if (selectedTeamIds.isEmpty) return false;
+                                if (!selectedTeamIds.contains(id)) return false;
+                              }
+                              return _matchesTeamSearch(data);
+                            })
+                            .toList();
+
+                        if (teams.isEmpty) {
+                          return const Center(child: Text('Takım bulunamadı.'));
+                        }
+
+                        return ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
+                          itemCount: teams.length,
+                          itemBuilder: (context, index) {
+                            final data = teams[index];
+                            final teamId = (data['id'] ?? '').toString();
+                            final teamName = (data['name'] ?? '').toString();
+                            final logoUrl = (data['logoUrl'] ?? '').toString();
+
+                            Future<void> openEditDialog() async {
+                              final updated = await showDialog<bool>(
+                                context: context,
+                                barrierDismissible: false,
+                                builder: (_) => Dialog.fullscreen(
+                                  child: EditTeamScreen(teamId: teamId, data: data),
                                 ),
                               );
-                              return;
+                              if (!context.mounted) return;
+                              if (updated == true) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Güncellendi')),
+                                );
+                                setState(() {});
+                              }
                             }
 
-                            await showModalBottomSheet<void>(
-                              context: context,
-                              showDragHandle: true,
-                              builder: (context) => SafeArea(
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    ListTile(
-                                      leading: const Icon(Icons.badge_outlined),
-                                      title: const Text('Kadro'),
-                                      onTap: () {
-                                        Navigator.pop(context);
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (_) => TeamSquadScreen(
-                                              teamId: teamId,
-                                              tournamentId:
-                                                  _selectedLeagueId ?? '',
-                                              teamName: (data['name'] ?? '').toString(),
-                                              teamLogoUrl:
-                                                  (data['logoUrl'] ?? '').toString(),
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                    const Divider(height: 1),
-                                    ListTile(
-                                      leading: const Icon(Icons.edit_outlined),
-                                      title: const Text('Düzenle'),
-                                      onTap: () {
-                                        Navigator.pop(context);
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (_) => EditTeamScreen(
-                                              teamId: teamId,
-                                              data: data,
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                    ListTile(
-                                      leading: const Icon(Icons.delete_outline),
-                                      title: const Text('Sil'),
-                                      onTap: () {
-                                        Navigator.pop(context);
-                                        _takimSil(teamId);
-                                      },
-                                    ),
-                                    const SizedBox(height: 10),
-                                  ],
+                            return Card(
+                              margin: const EdgeInsets.symmetric(vertical: 4),
+                              child: ListTile(
+                                dense: true,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 2,
                                 ),
+                                leading: SizedBox(
+                                  width: 36,
+                                  height: 36,
+                                  child: WebSafeImage(
+                                    url: logoUrl,
+                                    width: 36,
+                                    height: 36,
+                                    borderRadius: BorderRadius.circular(8),
+                                    fallbackIconSize: 18,
+                                  ),
+                                ),
+                                title: Text(
+                                  teamName,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  softWrap: true,
+                                ),
+                                trailing: PopupMenuButton<String>(
+                                  itemBuilder: (context) => const [
+                                    PopupMenuItem(
+                                      value: 'edit',
+                                      child: Text('Düzenle'),
+                                    ),
+                                    PopupMenuItem(
+                                      value: 'delete',
+                                      child: Text('Sil'),
+                                    ),
+                                  ],
+                                  onSelected: (value) {
+                                    switch (value) {
+                                      case 'edit':
+                                        openEditDialog();
+                                        break;
+                                      case 'delete':
+                                        _takimSil(teamId);
+                                        break;
+                                    }
+                                  },
+                                ),
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => TeamSquadScreen(
+                                        teamId: teamId,
+                                        tournamentId: effectiveLeagueId,
+                                        teamName: teamName,
+                                        teamLogoUrl: logoUrl,
+                                      ),
+                                    ),
+                                  );
+                                },
                               ),
                             );
                           },
@@ -428,12 +576,12 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                       },
                     ),
                   ),
-                );
-              },
-            ),
+                ],
+              );
+            },
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 

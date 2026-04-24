@@ -407,7 +407,9 @@ class _StatsScreenState extends State<StatsScreen> {
                                         indicatorColor: Colors.white,
                                         indicatorSize: TabBarIndicatorSize.tab,
                                         labelStyle: TextStyle(
-                                          fontWeight: FontWeight.w900,
+                                          fontFamily: 'Batangas',
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
                                         ),
                                         tabs: [
                                           Tab(text: 'Gol Krallığı'),

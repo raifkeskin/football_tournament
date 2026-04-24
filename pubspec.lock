@@ -89,6 +89,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.2"
+  buffer:
+    dependency: transitive
+    description:
+      name: buffer
+      sha256: "389da2ec2c16283c8787e0adaede82b1842102f8c8aae2f49003a766c5c6b3d1"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.2.3"
   cel:
     dependency: transitive
     description:
@@ -965,6 +973,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.0.0"
+  pool:
+    dependency: transitive
+    description:
+      name: pool
+      sha256: "978783255c543aa3586a1b3c21f6e9d720eb315376a915872c61ef8b5c20177d"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.5.2"
+  postgres:
+    dependency: "direct main"
+    description:
+      name: postgres
+      sha256: fefbbfe749c6130e5096588b9c4459173684c695952cd7636ab19be76f255469
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.5.9"
   postgrest:
     dependency: transitive
     description:

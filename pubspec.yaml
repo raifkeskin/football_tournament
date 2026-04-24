@@ -60,6 +60,7 @@ dependencies:
   flutter_image_compress: ^2.3.0
   universal_html: ^2.3.0
   supabase_flutter: ^2.0.0
+  postgres: ^3.5.9
 
 dev_dependencies:
   flutter_test:

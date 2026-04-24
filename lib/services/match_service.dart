@@ -150,7 +150,22 @@ class FirebaseMatchService implements IMatchService {
 
     final matchPeriodDuration = await _readMatchPeriodDurationMinutes(tournamentId);
     final now = FieldValue.serverTimestamp();
+    final existingStatusSnap = await _firestore
+        .collection('match_events')
+        .where('matchId', isEqualTo: id)
+        .where('type', isEqualTo: 'status')
+        .get();
+    final existingTitles = <String>{};
+    for (final d in existingStatusSnap.docs) {
+      final data = d.data();
+      final title = (data['playerName'] ?? data['title'] ?? '').toString().trim();
+      if (title.isNotEmpty) existingTitles.add(title);
+    }
+
     Future<void> addStatus(int minute, String title) async {
+      final t = title.trim();
+      if (t.isEmpty) return;
+      if (existingTitles.contains(t)) return;
       await _firestore.collection('match_events').add({
         'matchId': id,
         'tournamentId': tournamentId,
@@ -158,9 +173,10 @@ class FirebaseMatchService implements IMatchService {
         'eventType': 'status',
         'type': 'status',
         'minute': minute,
-        'playerName': title,
+        'playerName': t,
         'createdAt': now,
       });
+      existingTitles.add(t);
     }
 
     await addStatus(0, 'Maç Başladı');

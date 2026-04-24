@@ -194,6 +194,18 @@ class _MyAppState extends State<MyApp> {
               fontSize: 18,
             ),
           ),
+          tabBarTheme: const TabBarThemeData(
+            labelStyle: TextStyle(
+              fontFamily: 'Batangas',
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+            unselectedLabelStyle: TextStyle(
+              fontFamily: 'Batangas',
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
           cardTheme: CardThemeData(
             color: _cardDark,
             elevation: 0,

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:archive/archive.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:excel/excel.dart' hide Border;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -12,11 +13,13 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/league.dart';
 import '../models/match.dart';
 import '../services/approval_service.dart';
 import '../services/app_session.dart';
 import '../services/database_service.dart';
+import '../services/image_upload_service.dart';
 import '../services/interfaces/i_team_service.dart';
 import '../services/service_locator.dart';
 import '../widgets/web_safe_image.dart';
@@ -47,10 +50,31 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
   final _rosterSearchController = TextEditingController();
   String _rosterQuery = '';
 
+  final Map<String, String> _playerPhotoUrlByPhone = {};
+  final Set<String> _playerPhotoFetchInFlight = {};
+
   bool _isTeamManager = false;
   bool _isLoadingTournaments = true;
   List<League> _teamTournaments = [];
   String? _selectedTournamentId;
+
+  Future<void> _deleteRosterPlayer({
+    required String tournamentId,
+    required String teamId,
+    required String playerPhone,
+  }) async {
+    final t = tournamentId.trim();
+    final team = teamId.trim();
+    final phone = playerPhone.trim();
+    if (t.isEmpty || team.isEmpty || phone.isEmpty) return;
+    final id = '${phone}_${t}_$team';
+    try {
+      await FirebaseFirestore.instance.collection('rosters').doc(id).delete();
+    } catch (_) {}
+    try {
+      await Supabase.instance.client.from('rosters').delete().eq('id', id);
+    } catch (_) {}
+  }
 
   String _normalizeUrl(String raw) {
     final url = raw.trim();
@@ -77,6 +101,239 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     }
     if (main.isNotEmpty) return main;
     return '-';
+  }
+
+  String _tournamentNameById(String tournamentId) {
+    final id = tournamentId.trim();
+    if (id.isEmpty) return 'Turnuva';
+    for (final t in _teamTournaments) {
+      if (t.id == id) return t.name;
+    }
+    return 'Turnuva';
+  }
+
+  int? _ageFromBirthDate(String? birthDate) {
+    final s = (birthDate ?? '').trim();
+    if (s.isEmpty) return null;
+    final m = RegExp(r'^(\d{2})/(\d{2})/(\d{4})$').firstMatch(s);
+    if (m == null) return null;
+    final dd = int.tryParse(m.group(1)!) ?? 0;
+    final mm = int.tryParse(m.group(2)!) ?? 0;
+    final yyyy = int.tryParse(m.group(3)!) ?? 0;
+    if (dd < 1 || dd > 31 || mm < 1 || mm > 12 || yyyy < 1900 || yyyy > 2100) {
+      return null;
+    }
+    final now = DateTime.now();
+    var age = now.year - yyyy;
+    final hadBirthday = (now.month > mm) || (now.month == mm && now.day >= dd);
+    if (!hadBirthday) age -= 1;
+    return age < 0 ? null : age;
+  }
+
+  Future<void> _openPlayerCard(PlayerModel rosterPlayer) async {
+    final phone = (rosterPlayer.phone ?? '').trim();
+    final cachedPhoto =
+        phone.isEmpty ? '' : (_playerPhotoUrlByPhone[phone] ?? '').trim();
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) {
+        return Dialog(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+          backgroundColor: Colors.transparent,
+          child: FutureBuilder<PlayerModel?>(
+            future: phone.isEmpty ? Future.value(null) : _teamService.getPlayerByPhoneOnce(phone),
+            builder: (context, snap) {
+              final profile = snap.data;
+              final photoUrl = ((profile?.photoUrl ?? '').trim().isNotEmpty)
+                  ? (profile!.photoUrl ?? '').trim()
+                  : cachedPhoto;
+              final name = rosterPlayer.name.trim().isNotEmpty
+                  ? rosterPlayer.name.trim()
+                  : (profile?.name ?? '').trim();
+              final birthDate = (profile?.birthDate ?? rosterPlayer.birthDate ?? '').trim();
+              final age = _ageFromBirthDate(birthDate);
+              final mainPos = (profile?.mainPosition ?? rosterPlayer.mainPosition ?? '').trim();
+              final subPos = (profile?.position ?? rosterPlayer.position ?? '').trim();
+              final preferredFoot =
+                  (profile?.preferredFoot ?? rosterPlayer.preferredFoot ?? '').trim();
+              final number = (rosterPlayer.number ?? profile?.number ?? '').toString().trim();
+
+              final cs = Theme.of(context).colorScheme;
+              final w = MediaQuery.of(context).size.width;
+              final dialogW = min(360.0, w - 36);
+              final topH = dialogW * 0.70;
+
+              return ClipRRect(
+                borderRadius: BorderRadius.circular(18),
+                child: Container(
+                  width: dialogW,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        cs.primary.withValues(alpha: 0.95),
+                        cs.secondary.withValues(alpha: 0.85),
+                        cs.tertiary.withValues(alpha: 0.80),
+                      ],
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        height: topH,
+                        width: double.infinity,
+                        child: Stack(
+                          children: [
+                            Positioned.fill(
+                              child: Container(
+                                color: Colors.black.withValues(alpha: 0.15),
+                                child: photoUrl.isNotEmpty
+                                    ? WebSafeImage(
+                                        url: _normalizeUrl(photoUrl),
+                                        width: dialogW,
+                                        height: topH,
+                                        isCircle: false,
+                                        fallbackIconSize: 74,
+                                        fit: BoxFit.cover,
+                                      )
+                                    : Icon(
+                                        Icons.person,
+                                        size: 96,
+                                        color: Colors.white.withValues(alpha: 0.92),
+                                      ),
+                              ),
+                            ),
+                            Positioned.fill(
+                              child: IgnorePointer(
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                      colors: [
+                                        Colors.black.withValues(alpha: 0.05),
+                                        Colors.black.withValues(alpha: 0.55),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              left: 14,
+                              right: 14,
+                              bottom: 14,
+                              child: Text(
+                                name.isEmpty ? '-' : name,
+                                textAlign: TextAlign.center,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 0.2,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                        color: Colors.black.withValues(alpha: 0.28),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _CardRow(
+                              label: 'Forma Numarası',
+                              value: number.isEmpty ? '-' : number,
+                            ),
+                            _CardRow(
+                              label: 'Doğum Tarihi',
+                              value: birthDate.isEmpty
+                                  ? '-'
+                                  : (age == null ? birthDate : '$birthDate ($age)'),
+                            ),
+                            _CardRow(
+                              label: 'Ana / Alt Mevki',
+                              value: [
+                                if (mainPos.isNotEmpty) mainPos,
+                                if (subPos.isNotEmpty && subPos != mainPos) subPos,
+                              ].isEmpty
+                                  ? '-'
+                                  : [
+                                      if (mainPos.isNotEmpty) mainPos,
+                                      if (subPos.isNotEmpty && subPos != mainPos) subPos,
+                                    ].join(' • '),
+                            ),
+                            _CardRow(
+                              label: 'Kullandığı Ayak',
+                              value: preferredFoot.isEmpty ? '-' : preferredFoot,
+                            ),
+                            const SizedBox(height: 10),
+                            TextButton(
+                              onPressed: () => Navigator.of(context).pop(),
+                              child: const Text(
+                                'Kapat',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  void _prefetchPlayerPhotos(Iterable<PlayerModel> players) {
+    final toFetch = <String>[];
+    for (final p in players) {
+      final phone = (p.phone ?? '').trim();
+      if (phone.isEmpty) continue;
+      if (_playerPhotoUrlByPhone.containsKey(phone)) continue;
+      if (_playerPhotoFetchInFlight.contains(phone)) continue;
+      toFetch.add(phone);
+    }
+    if (toFetch.isEmpty) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (final phone in toFetch) {
+        if (!mounted) return;
+        if (_playerPhotoUrlByPhone.containsKey(phone)) continue;
+        if (!_playerPhotoFetchInFlight.add(phone)) continue;
+
+        _teamService.getPlayerByPhoneOnce(phone).then((player) {
+          final url = (player?.photoUrl ?? '').trim();
+          if (!mounted) return;
+          setState(() {
+            _playerPhotoUrlByPhone[phone] = url;
+            _playerPhotoFetchInFlight.remove(phone);
+          });
+        }).catchError((_) {
+          if (!mounted) return;
+          setState(() {
+            _playerPhotoUrlByPhone[phone] = '';
+            _playerPhotoFetchInFlight.remove(phone);
+          });
+        });
+      }
+    });
   }
 
   @override
@@ -1023,137 +1280,71 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     final titleTeam = widget.teamName.trim();
     final session = AppSession.of(context).value;
     final isAdmin = session.isAdmin;
+    final widgetTournamentId = widget.tournamentId.trim();
     final effectiveTournamentId =
-        (_selectedTournamentId != null &&
-            _selectedTournamentId!.trim().isNotEmpty)
-        ? _selectedTournamentId!.trim()
-        : (_teamTournaments.isEmpty ? widget.tournamentId.trim() : null);
+        (_selectedTournamentId != null && _selectedTournamentId!.trim().isNotEmpty)
+            ? _selectedTournamentId!.trim()
+            : (_teamTournaments.isEmpty && widgetTournamentId.isNotEmpty
+                ? widgetTournamentId
+                : null);
     final canAdd = effectiveTournamentId != null && (isAdmin || _isTeamManager);
+    final headerTournamentName = _tournamentNameById(
+      effectiveTournamentId ?? widgetTournamentId,
+    );
+    final headerTeamName =
+        titleTeam.isEmpty ? widget.teamName.trim() : titleTeam;
 
     return Scaffold(
       appBar: AppBar(
         title: Text(titleTeam.isEmpty ? 'Takım Kadrosu' : '$titleTeam Kadrosu'),
         centerTitle: true,
+        actions: [
+          if (canAdd)
+            IconButton(
+              tooltip: 'Futbolcu Ekle',
+              onPressed: _openPlayerForm,
+              icon: const Icon(Icons.add),
+            ),
+          if (canAdd)
+            IconButton(
+              tooltip: 'Excel Yükle',
+              onPressed: _openBulkUpload,
+              icon: const Icon(Icons.upload_file),
+            ),
+        ],
       ),
-      floatingActionButton: canAdd
-          ? FloatingActionButton(
-              onPressed: () => showModalBottomSheet(
-                context: context,
-                builder: (context) => Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ListTile(
-                      leading: const Icon(Icons.person_add),
-                      title: const Text('Futbolcu Ekle'),
-                      onTap: () {
-                        Navigator.pop(context);
-                        _openPlayerForm();
-                      },
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.upload_file),
-                      title: const Text('Toplu Yükle'),
-                      onTap: () {
-                        Navigator.pop(context);
-                        _openBulkUpload();
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              child: const Icon(Icons.add),
-            )
-          : null,
       body: Column(
         children: [
           if (_isLoadingTournaments)
             const LinearProgressIndicator(minHeight: 2),
-          if (!_isLoadingTournaments && _teamTournaments.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: Row(
-                children: [
-                  Expanded(
-                    flex: 2,
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _selectedTournamentId,
-                      decoration: const InputDecoration(
-                        labelText: 'Turnuva',
-                        border: OutlineInputBorder(),
-                      ),
-                      hint: const Text('Turnuva seçin'),
-                      isExpanded: true,
-                      items: _teamTournaments
-                          .map(
-                            (t) => DropdownMenuItem<String>(
-                              value: t.id,
-                              child: Text(t.name),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (value) {
-                        if (value == null) return;
-                        setState(() => _selectedTournamentId = value);
-                        _checkIfTeamManagerForTournament(value);
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    flex: 3,
-                    child: Container(
-                      color: cs.surfaceContainerLow,
-                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
-                      child: TextField(
-                        controller: _rosterSearchController,
-                        onChanged: (v) => setState(
-                          () => _rosterQuery = v.trim().toLowerCase(),
-                        ),
-                        decoration: InputDecoration(
-                          hintText: 'İsimden Ara',
-                          prefixIcon: Icon(Icons.search, color: cs.primary),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide(
-                              color: cs.primary.withValues(alpha: 0.35),
-                            ),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide(color: cs.primary, width: 2),
-                          ),
-                        ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _rosterSearchController,
+                  onChanged: (v) =>
+                      setState(() => _rosterQuery = v.trim().toLowerCase()),
+                  decoration: InputDecoration(
+                    hintText: 'Futbolcu Ara',
+                    prefixIcon: Icon(Icons.search, color: cs.primary),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(
+                        color: cs.primary.withValues(alpha: 0.35),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            )
-          else ...[
-            Container(
-              color: cs.surfaceContainerLow,
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-              child: TextField(
-                controller: _rosterSearchController,
-                onChanged: (v) =>
-                    setState(() => _rosterQuery = v.trim().toLowerCase()),
-                decoration: InputDecoration(
-                  hintText: 'İsimden Ara',
-                  prefixIcon: Icon(Icons.search, color: cs.primary),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide(
-                      color: cs.primary.withValues(alpha: 0.35),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(color: cs.primary, width: 2),
                     ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide(color: cs.primary, width: 2),
                   ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
           Expanded(
             child: effectiveTournamentId == null
                 ? Center(
@@ -1192,137 +1383,119 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                         );
                       }
 
-                      return ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                      _prefetchPlayerPhotos(players);
+
+                      return ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
                         itemCount: players.length,
-                        separatorBuilder: (context, index) {
-                          bool isManager(PlayerModel p) =>
-                              p.role == 'Takım Sorumlusu' ||
-                              p.role == 'Her İkisi';
-                          final currentIsManager = isManager(players[index]);
-                          final nextIsManager = (index + 1 < players.length)
-                              ? isManager(players[index + 1])
-                              : false;
-                          if (currentIsManager && !nextIsManager) {
-                            return const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 10),
-                              child: Divider(height: 1),
-                            );
-                          }
-                          return const SizedBox(height: 10);
-                        },
                         itemBuilder: (context, index) {
                           final p = players[index];
                           final photo = (p.photoUrl ?? '').trim();
+                          final phone = (p.phone ?? '').trim();
+                          final cached = phone.isEmpty ? '' : (_playerPhotoUrlByPhone[phone] ?? '');
+                          final resolvedPhoto = photo.isNotEmpty ? photo : cached;
                           final num = (p.number ?? '').trim();
-                          final pos = _displayPosition(p);
-                          final birth = (p.birthDate ?? '').trim();
-                          final isManager =
-                              p.role == 'Takım Sorumlusu' ||
-                              p.role == 'Her İkisi';
                           return Card(
-                            margin: EdgeInsets.zero,
+                            margin: const EdgeInsets.symmetric(vertical: 4),
                             child: ListTile(
-                              onTap: () => _openPlayerForm(editing: p),
-                              leading: ClipRRect(
-                                borderRadius: BorderRadius.circular(10),
-                                child: Container(
-                                  width: 56,
-                                  height: 56,
-                                  color: cs.primary.withValues(alpha: 0.10),
-                                  child: photo.isEmpty
-                                      ? Center(
-                                          child: Text(
-                                            p.name.trim().isEmpty
-                                                ? '?'
-                                                : p.name
-                                                      .trim()[0]
-                                                      .toUpperCase(),
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.w900,
-                                              fontSize: 18,
-                                            ),
-                                          ),
-                                        )
-                                      : WebSafeImage(
-                                          url: _normalizeUrl(photo),
-                                          width: 56,
-                                          height: 56,
-                                          isCircle: false,
-                                          fallbackIconSize: 22,
-                                        ),
-                                ),
+                              dense: true,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 2,
                               ),
-                              title: Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      p.name,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w900,
+                              onTap: () => _openPlayerCard(p),
+                              leading: resolvedPhoto.isNotEmpty
+                                  ? WebSafeImage(
+                                      url: _normalizeUrl(resolvedPhoto),
+                                      width: 36,
+                                      height: 36,
+                                      isCircle: true,
+                                      fallbackIconSize: 18,
+                                    )
+                                  : CircleAvatar(
+                                      radius: 18,
+                                      backgroundColor: cs.primary.withValues(alpha: 0.12),
+                                      child: Icon(
+                                        Icons.person,
+                                        size: 18,
+                                        color: cs.primary,
                                       ),
                                     ),
-                                  ),
-                                  if (isManager)
-                                    Container(
-                                      width: 24,
-                                      height: 24,
-                                      alignment: Alignment.center,
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFEF4444),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: const Text(
-                                        'C',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w900,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                              subtitle: Text(
-                                '${pos.isEmpty ? '-' : pos} | Doğum: ${birth.isEmpty ? '-' : birth}',
+                              title: Text(
+                                p.name,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
                               ),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  if (p.suspendedMatches > 0)
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 6,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: Colors.red.withValues(
-                                          alpha: 0.10,
-                                        ),
-                                        borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(
-                                          color: Colors.red.withValues(
-                                            alpha: 0.25,
-                                          ),
-                                        ),
-                                      ),
-                                      child: Text(
-                                        '${p.suspendedMatches}',
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w900,
-                                          color: Colors.red,
-                                        ),
-                                      ),
+                                  Text(
+                                    num.isEmpty ? '-' : num,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      color: cs.onSurfaceVariant,
                                     ),
-                                  if (p.suspendedMatches > 0 && num.isNotEmpty)
-                                    const SizedBox(width: 10),
-                                  if (num.isNotEmpty)
-                                    Text(
-                                      num,
-                                      style: const TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
+                                  ),
+                                  PopupMenuButton<String>(
+                                    icon: const Icon(Icons.more_vert),
+                                    itemBuilder: (context) => const [
+                                      PopupMenuItem(
+                                        value: 'edit',
+                                        child: Text('Düzenle'),
                                       ),
-                                    ),
+                                      PopupMenuItem(
+                                        value: 'delete',
+                                        child: Text('Sil'),
+                                      ),
+                                    ],
+                                    onSelected: (value) async {
+                                      switch (value) {
+                                        case 'edit':
+                                          _openPlayerForm(editing: p);
+                                          break;
+                                        case 'delete':
+                                          final tId = effectiveTournamentId;
+                                          final phone = (p.phone ?? '').trim();
+                                          if (tId == null || tId.trim().isEmpty || phone.isEmpty) {
+                                            if (!context.mounted) return;
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(content: Text('Silme için eksik bilgi.')),
+                                            );
+                                            return;
+                                          }
+                                          final ok = await showDialog<bool>(
+                                            context: context,
+                                            builder: (context) => AlertDialog(
+                                              title: const Text('Futbolcu Sil'),
+                                              content: Text(
+                                                '${p.name} oyuncusunu bu takımdan kaldırmak istiyor musunuz?',
+                                              ),
+                                              actions: [
+                                                TextButton(
+                                                  onPressed: () => Navigator.pop(context, false),
+                                                  child: const Text('İptal'),
+                                                ),
+                                                FilledButton(
+                                                  onPressed: () => Navigator.pop(context, true),
+                                                  child: const Text('Sil'),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                          if (ok != true) return;
+                                          await _deleteRosterPlayer(
+                                            tournamentId: tId,
+                                            teamId: widget.teamId,
+                                            playerPhone: phone,
+                                          );
+                                          if (!context.mounted) return;
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(content: Text('Kadrodan kaldırıldı.')),
+                                          );
+                                          break;
+                                      }
+                                    },
+                                  ),
                                 ],
                               ),
                             ),
@@ -1331,6 +1504,42 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                       );
                     },
                   ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CardRow extends StatelessWidget {
+  const _CardRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.85),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w900,
+            ),
           ),
         ],
       ),
@@ -1367,6 +1576,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
   final _dbService = DatabaseService();
   final ITeamService _teamService = ServiceLocator.teamService;
   final _picker = ImagePicker();
+  final _imageUploadService = ImgBBUploadService();
 
   final _nameController = TextEditingController();
   final _numberController = TextEditingController();
@@ -1392,7 +1602,9 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
   String _role = 'Futbolcu';
   String? _activePlayerId;
   String? _existingPhotoUrl;
+  String? _implicitPhoneKey;
   XFile? _pickedPhoto;
+  bool _removePhoto = false;
   bool _saving = false;
   bool _managerExists = false;
 
@@ -1455,10 +1667,31 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
       _role = r.isEmpty ? 'Futbolcu' : r;
       if (!_roles.contains(_role)) _role = 'Futbolcu';
       final phoneRaw = (e.phone ?? '').toString();
-      _phoneController.text = PhoneMaskFormatter.formatFromRaw(phoneRaw);
+      if (phoneRaw.startsWith('no_phone_')) {
+        _implicitPhoneKey = phoneRaw;
+        _phoneController.text = '';
+      } else {
+        _implicitPhoneKey = null;
+        _phoneController.text = PhoneMaskFormatter.formatFromRaw(phoneRaw);
+      }
       _existingPhotoUrl = (e.photoUrl ?? '').trim().isEmpty ? null : e.photoUrl;
     }
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadManagerState());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _hydrateExistingPhotoFromIdentity());
+  }
+
+  Future<void> _hydrateExistingPhotoFromIdentity() async {
+    if (!mounted) return;
+    if (_pickedPhoto != null) return;
+    if (_removePhoto) return;
+    final phone = _rawPhone();
+    final keyPhone = phone.isNotEmpty ? phone : (_implicitPhoneKey ?? '');
+    if (keyPhone.trim().isEmpty) return;
+    final player = await _teamService.getPlayerByPhoneOnce(keyPhone.trim());
+    final url = (player?.photoUrl ?? '').trim();
+    if (!mounted) return;
+    if (url.isEmpty) return;
+    setState(() => _existingPhotoUrl = url);
   }
 
   @override
@@ -1522,10 +1755,16 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
     }
 
     if (best == null) {
-      setState(() => _pickedPhoto = picked);
+      setState(() {
+        _pickedPhoto = picked;
+        _removePhoto = false;
+      });
       return;
     }
-    setState(() => _pickedPhoto = best);
+    setState(() {
+      _pickedPhoto = best;
+      _removePhoto = false;
+    });
   }
 
   String _rawPhone() {
@@ -1578,9 +1817,16 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
     final r = p.role.trim();
     _role = _roles.contains(r) ? r : 'Futbolcu';
     final phoneRaw = (p.phone ?? '').toString();
-    _phoneController.text = PhoneMaskFormatter.formatFromRaw(phoneRaw);
+    if (phoneRaw.startsWith('no_phone_')) {
+      _implicitPhoneKey = phoneRaw;
+      _phoneController.text = '';
+    } else {
+      _implicitPhoneKey = null;
+      _phoneController.text = PhoneMaskFormatter.formatFromRaw(phoneRaw);
+    }
     _existingPhotoUrl = (p.photoUrl ?? '').trim().isEmpty ? null : p.photoUrl;
     _pickedPhoto = null;
+    _removePhoto = false;
 
     if (_managerExists && _isManagerRole(_role)) {
       _role = 'Futbolcu';
@@ -1595,6 +1841,14 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
         );
       });
     }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => _hydrateExistingPhotoFromIdentity());
+  }
+
+  String _generateNoPhoneKey() {
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    final rnd = Random().nextInt(1 << 31);
+    return 'no_phone_${ts}_$rnd';
   }
 
   Future<void> _save() async {
@@ -1603,6 +1857,14 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Lütfen ad soyad girin.')));
+      return;
+    }
+
+    final number = _numberController.text.trim();
+    if (number.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Forma numarası zorunludur.')));
       return;
     }
 
@@ -1623,12 +1885,9 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
       );
       return;
     }
-    if (rawPhone.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Telefon no zorunludur.')));
-      return;
-    }
+    final keyPhone = rawPhone.isNotEmpty
+        ? rawPhone
+        : (_implicitPhoneKey ??= _generateNoPhoneKey());
 
     if (_managerExists &&
         _isManagerRole(_role) &&
@@ -1641,10 +1900,19 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
 
     setState(() => _saving = true);
     try {
-      final number = _numberController.text.trim();
+      String? uploadedPhotoUrl;
+      if (_pickedPhoto != null) {
+        uploadedPhotoUrl = await _imageUploadService.uploadImage(
+          File(_pickedPhoto!.path),
+        );
+        if ((uploadedPhotoUrl ?? '').trim().isEmpty) {
+          throw Exception('Fotoğraf yüklenemedi, lütfen tekrar deneyin.');
+        }
+      }
+
       final resolvedBirthDate = birthDate.isEmpty ? null : birthDate;
       await _teamService.upsertPlayerIdentity(
-        phone: rawPhone,
+        phone: keyPhone,
         name: name,
         birthDate: resolvedBirthDate,
         mainPosition: _mainPosition,
@@ -1652,11 +1920,30 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
       await _teamService.upsertRosterEntry(
         tournamentId: widget.tournamentId,
         teamId: widget.teamId,
-        playerPhone: rawPhone,
+        playerPhone: keyPhone,
         playerName: name,
-        jerseyNumber: number.isEmpty ? null : number,
+        jerseyNumber: number,
         role: _role,
       );
+
+      if (uploadedPhotoUrl != null) {
+        final url = uploadedPhotoUrl.trim();
+        await _dbService.updatePlayer(playerId: keyPhone, data: {'photoUrl': url});
+        try {
+          await Supabase.instance.client
+              .from('players')
+              .update({'photo_url': url})
+              .eq('phone', keyPhone);
+        } catch (_) {}
+      } else if (_removePhoto) {
+        await _dbService.updatePlayer(playerId: keyPhone, data: {'photoUrl': null});
+        try {
+          await Supabase.instance.client
+              .from('players')
+              .update({'photo_url': null})
+              .eq('phone', keyPhone);
+        } catch (_) {}
+      }
 
       if (!mounted) return;
       Navigator.of(context).pop(true);
@@ -1681,6 +1968,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
     final hasPicked = _pickedPhoto != null;
     final editingUrl = (_existingPhotoUrl ?? '').trim();
     final hasEditingUrl = editingUrl.isNotEmpty;
+    final hasPhoto = hasPicked || hasEditingUrl;
 
     return Scaffold(
       appBar: AppBar(
@@ -1744,22 +2032,54 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                     Positioned(
                       right: 16,
                       bottom: 16,
-                      child: Material(
-                        color: _saving
-                            ? cs.primary.withValues(alpha: 0.45)
-                            : cs.primary,
-                        shape: const CircleBorder(),
-                        child: IconButton(
-                          onPressed: _saving ? null : _pickPhoto,
-                          icon: const Icon(Icons.photo_camera_outlined),
-                          color: Colors.white,
-                          iconSize: 30,
-                          padding: const EdgeInsets.all(14),
-                          constraints: const BoxConstraints(
-                            minWidth: 56,
-                            minHeight: 56,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Material(
+                            color: _saving
+                                ? cs.primary.withValues(alpha: 0.45)
+                                : cs.primary,
+                            shape: const CircleBorder(),
+                            child: IconButton(
+                              onPressed: _saving ? null : _pickPhoto,
+                              icon: const Icon(Icons.photo_camera_outlined),
+                              color: Colors.white,
+                              iconSize: 30,
+                              padding: const EdgeInsets.all(14),
+                              constraints: const BoxConstraints(
+                                minWidth: 56,
+                                minHeight: 56,
+                              ),
+                            ),
                           ),
-                        ),
+                          const SizedBox(width: 10),
+                          Material(
+                            color: (!_saving && hasPhoto)
+                                ? cs.error
+                                : cs.error.withValues(alpha: 0.35),
+                            shape: const CircleBorder(),
+                            child: IconButton(
+                              tooltip: 'Fotoğrafı Kaldır',
+                              onPressed: (_saving || !hasPhoto)
+                                  ? null
+                                  : () {
+                                      setState(() {
+                                        _pickedPhoto = null;
+                                        _existingPhotoUrl = null;
+                                        _removePhoto = true;
+                                      });
+                                    },
+                              icon: const Icon(Icons.delete_outline),
+                              color: Colors.white,
+                              iconSize: 28,
+                              padding: const EdgeInsets.all(14),
+                              constraints: const BoxConstraints(
+                                minWidth: 56,
+                                minHeight: 56,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -1782,11 +2102,11 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                           prefixIcon: Icon(Icons.badge_outlined),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 10),
+                    )
+ /*                    const SizedBox(width: 10),
                     SizedBox(
                       height: 52,
-                      child: FilledButton(
+                     child: FilledButton(
                         style: FilledButton.styleFrom(
                           backgroundColor: cs.primary,
                         ),
@@ -1803,7 +2123,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                           style: TextStyle(fontWeight: FontWeight.w900),
                         ),
                       ),
-                    ),
+                    ),*/
                   ],
                 ),
                 const SizedBox(height: 10),
@@ -1966,7 +2286,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                     style: FilledButton.styleFrom(backgroundColor: cs.primary),
                     onPressed: _save,
                     child: Text(
-                      editing ? 'Güncelle' : 'Kaydet',
+                      editing ? 'GÜNCELLE' : 'KAYDET',
                       style: const TextStyle(fontWeight: FontWeight.w900),
                     ),
                   ),

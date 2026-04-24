@@ -104,6 +104,11 @@ class _AdminMatchLineupScreenState extends State<AdminMatchLineupScreen>
   bool _isSelectedInSubs(String playerId) =>
       _subs.any((e) => e.playerId == playerId);
 
+  String _playerKey(PlayerModel p) {
+    final pid = (p.phone ?? p.id).trim();
+    return pid.isEmpty ? p.id.trim() : pid;
+  }
+
   void _removeFrom(List<_LineupEntry> list, String playerId) {
     setState(() {
       list.removeWhere((e) => e.playerId == playerId);
@@ -114,7 +119,7 @@ class _AdminMatchLineupScreenState extends State<AdminMatchLineupScreen>
   }
 
   void _addToStarting(PlayerModel p) {
-    final pid = (p.phone ?? p.id).trim();
+    final pid = _playerKey(p);
     if (pid.isEmpty) return;
     if (_isSelectedInStarting(pid) || _isSelectedInSubs(pid)) return;
     if (_starting.length >= 11) {
@@ -138,7 +143,7 @@ class _AdminMatchLineupScreenState extends State<AdminMatchLineupScreen>
   }
 
   void _addToSubs(PlayerModel p) {
-    final pid = (p.phone ?? p.id).trim();
+    final pid = _playerKey(p);
     if (pid.isEmpty) return;
     if (_isSelectedInSubs(pid) || _isSelectedInStarting(pid)) return;
     if (_subs.length >= 7) {
@@ -236,7 +241,7 @@ class _AdminMatchLineupScreenState extends State<AdminMatchLineupScreen>
 
     final filtered = isStartingTab
         ? [...players]
-        : players.where((p) => !_isSelectedInStarting(p.id)).toList();
+        : players.where((p) => !_isSelectedInStarting(_playerKey(p))).toList();
 
     final sorted = [...filtered]
       ..sort((a, b) {
@@ -247,7 +252,7 @@ class _AdminMatchLineupScreenState extends State<AdminMatchLineupScreen>
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -276,124 +281,149 @@ class _AdminMatchLineupScreenState extends State<AdminMatchLineupScreen>
               const Text('Bu takımın oyuncu listesi boş.')
             else
               for (final p in sorted)
-                InkWell(
-                  onTap: _saving
-                      ? null
-                      : () {
-                          if (otherSelectedIds.contains(p.id)) return;
-                          if (p.suspendedMatches > 0) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  'Bu oyuncu ${p.suspendedMatches} maç cezalıdır, kadroya eklenemez!',
-                                ),
-                              ),
-                            );
-                            return;
-                          }
-                          if (selectedIds.contains(p.id)) {
-                            _removeFrom(isStartingTab ? _starting : _subs, p.id);
-                            return;
-                          }
-                          if (isStartingTab) {
-                            _addToStarting(p);
-                          } else {
-                            _addToSubs(p);
-                          }
-                        },
-                  borderRadius: BorderRadius.circular(10),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 10,
-                    ),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: selectedIds.contains(p.id)
-                            ? Colors.green.shade100
-                            : null,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 10,
-                      ),
-                      child: Row(
-                        children: [
-                          if (selectedIds.contains(p.id))
-                            SizedBox(
-                              width: 56,
-                              child: TextField(
-                                controller: _controllerForPlayer(
-                                  p.id,
-                                  selectedNumberById[p.id] ?? p.number,
-                                ),
-                                focusNode: _focusNodeFor(p.id),
-                                enabled: !_saving,
-                                decoration: InputDecoration(
-                                  isDense: true,
-                                  counterText: '',
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 10,
+                Builder(
+                  builder: (context) {
+                    final pid = _playerKey(p);
+                    final isSelected = selectedIds.contains(pid);
+                    final isOtherSelected = otherSelectedIds.contains(pid);
+                    final selectedNumber =
+                        (selectedNumberById[pid] ?? p.number ?? '').trim();
+                    final numberController =
+                        isSelected ? _syncControllerText(pid, selectedNumber) : null;
+
+                    return InkWell(
+                      onTap: _saving
+                          ? null
+                          : () {
+                              if (isOtherSelected) return;
+                              if (p.suspendedMatches > 0) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'Bu oyuncu ${p.suspendedMatches} maç cezalıdır, kadroya eklenemez!',
+                                    ),
                                   ),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                ),
-                                keyboardType: TextInputType.number,
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly,
-                                  LengthLimitingTextInputFormatter(2),
-                                ],
-                                textAlign: TextAlign.center,
-                              ),
-                            )
-                          else
-                            SizedBox(
-                              width: 56,
-                              child: Text(
-                                (p.number ?? '').trim(),
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              p.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontWeight: FontWeight.w800,
-                                color: (p.suspendedMatches > 0 ||
-                                        otherSelectedIds.contains(p.id))
-                                    ? Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant
-                                    : null,
-                              ),
-                            ),
+                                );
+                                return;
+                              }
+                              if (isSelected) {
+                                _removeFrom(
+                                  isStartingTab ? _starting : _subs,
+                                  pid,
+                                );
+                                return;
+                              }
+                              if (isStartingTab) {
+                                _addToStarting(p);
+                              } else {
+                                _addToSubs(p);
+                              }
+                            },
+                      borderRadius: BorderRadius.circular(10),
+                      child: Padding(
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: isSelected && isStartingTab
+                                ? Colors.green.shade900.withOpacity(0.35)
+                                : null,
+                            borderRadius: BorderRadius.circular(10),
                           ),
-                          const SizedBox(width: 10),
-                          if (p.suspendedMatches > 0 || otherSelectedIds.contains(p.id))
-                            Icon(
-                              p.suspendedMatches > 0
-                                  ? Icons.lock_outline
-                                  : Icons.block_rounded,
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
-                            )
-                          else if (selectedIds.contains(p.id))
-                            Icon(
-                              Icons.check_circle_rounded,
-                              color: Colors.green.shade800,
-                            ),
-                        ],
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 6,
+                          ),
+                          child: Row(
+                            children: [
+                              if (isSelected)
+                                SizedBox(
+                                  width: 56,
+                                  child: TextField(
+                                    controller: numberController,
+                                    focusNode: _focusNodeFor(pid),
+                                    enabled: !_saving,
+                                    decoration: InputDecoration(
+                                      isDense: true,
+                                      counterText: '',
+                                      filled: true,
+                                      fillColor: Colors.white.withOpacity(0.08),
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 6,
+                                      ),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                    ),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 13,
+                                      color: Colors.white,
+                                    ),
+                                    keyboardType: TextInputType.number,
+                                    inputFormatters: [
+                                      FilteringTextInputFormatter.digitsOnly,
+                                      LengthLimitingTextInputFormatter(2),
+                                    ],
+                                    textAlign: TextAlign.center,
+                                  ),
+                                )
+                              else
+                                SizedBox(
+                                  width: 56,
+                                  child: Text(
+                                    (p.number ?? '').trim(),
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 13,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  p.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 13,
+                                    color: (p.suspendedMatches > 0 ||
+                                            isOtherSelected)
+                                        ? Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant
+                                        : (isSelected && isStartingTab
+                                            ? Colors.white
+                                            : null),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              if (p.suspendedMatches > 0 || isOtherSelected)
+                                Icon(
+                                  p.suspendedMatches > 0
+                                      ? Icons.lock_outline
+                                      : Icons.block_rounded,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                                )
+                              else if (isSelected)
+                                Icon(
+                                  Icons.check_circle_rounded,
+                                  color: Colors.green.shade800,
+                                ),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
+                    );
+                  },
                 ),
           ],
         ),
@@ -424,12 +454,17 @@ class _AdminMatchLineupScreenState extends State<AdminMatchLineupScreen>
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Kadro: $teamName'),
+        title: Text(teamName),
         bottom: TabBar(
           controller: _tabController,
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white70,
           indicatorColor: Colors.white,
+          labelStyle: const TextStyle(
+            fontFamily: 'Batangas',
+            fontWeight: FontWeight.bold,
+            fontSize: 15,
+          ),
           tabs: const [
             Tab(text: 'İlk 11'),
             Tab(text: 'Yedekler'),
@@ -447,7 +482,7 @@ class _AdminMatchLineupScreenState extends State<AdminMatchLineupScreen>
                     ),
                   )
                 : IconButton(
-                    tooltip: 'Kaydet',
+                    tooltip: 'KAYDET',
                     onPressed: _save,
                     icon: const Icon(Icons.save_outlined),
                   ),

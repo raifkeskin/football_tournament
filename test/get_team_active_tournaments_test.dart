@@ -27,12 +27,12 @@ void main() {
       });
 
       await firestore.collection('groups').doc('g1').set({
-        'tournamentId': expectedTournamentId,
+        'leagueId': expectedTournamentId,
         'name': 'A',
         'teamIds': [testTeamId],
       });
       await firestore.collection('groups').doc('g2').set({
-        'tournamentId': inactiveTournamentId,
+        'leagueId': inactiveTournamentId,
         'name': 'B',
         'teamIds': [testTeamId],
       });

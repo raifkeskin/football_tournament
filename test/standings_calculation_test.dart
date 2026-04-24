@@ -203,10 +203,10 @@ void main() {
       expect(standings[team2Id]!['AV'], -2); // Goal average -2
     });
 
-    test('Groups should be queryable with tournamentId filter', () async {
+    test('Groups should be queryable with leagueId filter', () async {
       // Add a group
       await firestore.collection('groups').doc(testGroupId).set({
-        'tournamentId': testTournamentId,
+        'leagueId': testTournamentId,
         'name': 'Grup A',
         'teamIds': [team1Id, team2Id],
       });
@@ -214,7 +214,7 @@ void main() {
       // Query groups
       final groupsSnapshot = await firestore
           .collection('groups')
-          .where('tournamentId', isEqualTo: testTournamentId)
+          .where('leagueId', isEqualTo: testTournamentId)
           .get();
 
       print('\n✅ Groups Query Result:');

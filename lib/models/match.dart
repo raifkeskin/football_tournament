@@ -129,6 +129,10 @@ class MatchModel {
   final List<String> awayLineup;
   final MatchLineup? homeLineupDetail;
   final MatchLineup? awayLineupDetail;
+  final String? homeFormation;
+  final String? awayFormation;
+  final List<String> homeFormationOrder;
+  final List<String> awayFormationOrder;
   final List<MatchEvent> events;
 
   MatchModel({
@@ -158,6 +162,10 @@ class MatchModel {
     this.awayLineup = const <String>[],
     this.homeLineupDetail,
     this.awayLineupDetail,
+    this.homeFormation,
+    this.awayFormation,
+    this.homeFormationOrder = const <String>[],
+    this.awayFormationOrder = const <String>[],
     this.events = const <MatchEvent>[],
   });
 
@@ -290,6 +298,18 @@ class MatchModel {
 
     final eventsRaw = v('events', 'match_events') ?? v('matchEvents', 'match_events');
 
+    List<String> readStringList(dynamic v) {
+      if (v is List) {
+        return v.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
+      }
+      return const <String>[];
+    }
+
+    final homeFormationRaw = (v('homeFormation', 'home_formation') ?? '').toString().trim();
+    final awayFormationRaw = (v('awayFormation', 'away_formation') ?? '').toString().trim();
+    final homeFormationOrderRaw = v('homeFormationOrder', 'home_formation_order');
+    final awayFormationOrderRaw = v('awayFormationOrder', 'away_formation_order');
+
     return MatchModel(
       id: id,
       leagueId: rawTournamentId,
@@ -336,6 +356,10 @@ class MatchModel {
       awayLineup: readLineupPhones(rawAwayLineup),
       homeLineupDetail: homeLineupDetail,
       awayLineupDetail: awayLineupDetail,
+      homeFormation: homeFormationRaw.isEmpty ? null : homeFormationRaw,
+      awayFormation: awayFormationRaw.isEmpty ? null : awayFormationRaw,
+      homeFormationOrder: readStringList(homeFormationOrderRaw),
+      awayFormationOrder: readStringList(awayFormationOrderRaw),
       events: readEvents(eventsRaw),
     );
   }
@@ -377,6 +401,10 @@ class MatchModel {
         'awayHighlightPhotoUrl': awayHighlightPhotoUrl,
         'homeLineup': homeLineup,
         'awayLineup': awayLineup,
+        'homeFormation': (homeFormation ?? '').trim().isEmpty ? null : homeFormation!.trim(),
+        'awayFormation': (awayFormation ?? '').trim().isEmpty ? null : awayFormation!.trim(),
+        'homeFormationOrder': homeFormationOrder,
+        'awayFormationOrder': awayFormationOrder,
       });
     } else {
       base.addAll({
@@ -403,6 +431,10 @@ class MatchModel {
         'away_highlight_photo_url': awayHighlightPhotoUrl,
         'home_lineup': homeLineup,
         'away_lineup': awayLineup,
+        'home_formation': (homeFormation ?? '').trim().isEmpty ? null : homeFormation!.trim(),
+        'away_formation': (awayFormation ?? '').trim().isEmpty ? null : awayFormation!.trim(),
+        'home_formation_order': homeFormationOrder,
+        'away_formation_order': awayFormationOrder,
       });
     }
     if (homeLineupDetail != null) {
@@ -559,7 +591,10 @@ class GroupModel {
     return GroupModel(
       id: id,
       leagueId:
-          (v('tournamentId', 'tournament_id') ?? v('leagueId', 'league_id') ?? '').toString(),
+          (v('leagueId', 'league_id') ??
+                  v('tournamentId', 'tournament_id') ??
+                  '')
+              .toString(),
       name: (v('name', 'name') ?? '').toString(),
       teamIds: List<String>.from(v('teamIds', 'team_ids') ?? const <String>[]),
     );
@@ -567,9 +602,9 @@ class GroupModel {
 
   Map<String, dynamic> toMap({bool snakeCase = false}) {
     if (!snakeCase) {
-      return {'tournamentId': leagueId, 'name': name, 'teamIds': teamIds};
+      return {'leagueId': leagueId, 'name': name, 'teamIds': teamIds};
     }
-    return {'tournament_id': leagueId, 'name': name, 'team_ids': teamIds};
+    return {'league_id': leagueId, 'name': name, 'team_ids': teamIds};
   }
 }
 
@@ -675,6 +710,11 @@ class PlayerModel {
         name: name,
         phone: phone,
         number: number,
+        birthDate: birthDate,
+        mainPosition: mainPosition,
+        position: position,
+        preferredFoot: preferredFoot,
+        photoUrl: photoUrl,
         role: role,
         teamId: teamId.isEmpty ? null : teamId,
         tournamentId: tournamentId.isEmpty ? null : tournamentId,
