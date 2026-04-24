@@ -9,6 +9,7 @@ class League {
     this.subtitle,
     required this.logoUrl,
     required this.country,
+    this.city,
     this.managerFullName,
     this.managerPhoneRaw10,
     this.startDate,
@@ -23,6 +24,8 @@ class League {
     this.youtubeUrl,
     this.instagramUrl,
     this.matchPeriodDuration = 25,
+    this.startingPlayerCount = 11,
+    this.subPlayerCount = 7,
     this.numberOfGroups = 1,
     this.groups = const [],
     this.groupCount = 1,
@@ -36,6 +39,7 @@ class League {
   final String? subtitle;
   final String logoUrl;
   final String country;
+  final String? city;
   final String? managerFullName;
   final String? managerPhoneRaw10;
   final DateTime? startDate;
@@ -50,6 +54,8 @@ class League {
   final String? youtubeUrl;
   final String? instagramUrl;
   final int matchPeriodDuration;
+  final int startingPlayerCount;
+  final int subPlayerCount;
   final int numberOfGroups;
   final List<String> groups;
   final int groupCount;
@@ -87,6 +93,9 @@ class League {
           : (v('subtitle', 'subtitle') as String?)?.trim(),
       logoUrl: (v('logoUrl', 'logo_url') ?? v('logo', 'logo')) as String? ?? '',
       country: (v('country', 'country') as String?) ?? '',
+      city: (v('city', 'city') as String?)?.trim().isEmpty ?? true
+          ? null
+          : (v('city', 'city') as String?)?.trim(),
       managerFullName: () {
         final direct = (v('managerFullName', 'manager_full_name') as String?)?.trim() ?? '';
         if (direct.isNotEmpty) return direct;
@@ -115,6 +124,14 @@ class League {
         v('matchPeriodDuration', 'match_period_duration'),
         fallback: 25,
       ),
+      startingPlayerCount: intFrom(
+        v('startingPlayerCount', 'starting_player_count'),
+        fallback: 11,
+      ),
+      subPlayerCount: intFrom(
+        v('subPlayerCount', 'sub_player_count'),
+        fallback: 7,
+      ),
       numberOfGroups: intFrom(
         v('numberOfGroups', 'number_of_groups'),
         fallback: intFrom(v('groupCount', 'group_count'), fallback: 1),
@@ -134,6 +151,7 @@ class League {
     String? subtitle,
     String? logoUrl,
     String? country,
+    String? city,
     String? managerFullName,
     String? managerPhoneRaw10,
     DateTime? startDate,
@@ -148,6 +166,8 @@ class League {
     String? youtubeUrl,
     String? instagramUrl,
     int? matchPeriodDuration,
+    int? startingPlayerCount,
+    int? subPlayerCount,
     int? numberOfGroups,
     List<String>? groups,
     int? groupCount,
@@ -161,6 +181,7 @@ class League {
       subtitle: subtitle ?? this.subtitle,
       logoUrl: logoUrl ?? this.logoUrl,
       country: country ?? this.country,
+      city: city ?? this.city,
       managerFullName: managerFullName ?? this.managerFullName,
       managerPhoneRaw10: managerPhoneRaw10 ?? this.managerPhoneRaw10,
       startDate: startDate ?? this.startDate,
@@ -175,6 +196,8 @@ class League {
       youtubeUrl: youtubeUrl ?? this.youtubeUrl,
       instagramUrl: instagramUrl ?? this.instagramUrl,
       matchPeriodDuration: matchPeriodDuration ?? this.matchPeriodDuration,
+      startingPlayerCount: startingPlayerCount ?? this.startingPlayerCount,
+      subPlayerCount: subPlayerCount ?? this.subPlayerCount,
       numberOfGroups: numberOfGroups ?? this.numberOfGroups,
       groups: groups ?? this.groups,
       groupCount: groupCount ?? this.groupCount,
@@ -192,6 +215,7 @@ class League {
         'subtitle': subtitle,
         'logoUrl': logoUrl,
         'country': country,
+        'city': city,
         'managerFullName': managerFullName,
         'managerPhoneRaw10': managerPhoneRaw10,
         'startDate': startDate?.toIso8601String(),
@@ -206,6 +230,8 @@ class League {
         'youtubeUrl': youtubeUrl,
         'instagramUrl': instagramUrl,
         'matchPeriodDuration': matchPeriodDuration,
+        'startingPlayerCount': startingPlayerCount,
+        'subPlayerCount': subPlayerCount,
         'numberOfGroups': numberOfGroups,
         'groups': groups,
         'groupCount': groupCount,
@@ -218,6 +244,7 @@ class League {
       'subtitle': subtitle,
       'logo_url': logoUrl,
       'country': country,
+      'city': city,
       'manager_full_name': managerFullName,
       'manager_phone_raw10': managerPhoneRaw10,
       'start_date': startDate?.toIso8601String(),
@@ -232,6 +259,8 @@ class League {
       'youtube_url': youtubeUrl,
       'instagram_url': instagramUrl,
       'match_period_duration': matchPeriodDuration,
+      'starting_player_count': startingPlayerCount,
+      'sub_player_count': subPlayerCount,
       'number_of_groups': numberOfGroups,
       'groups': groups,
       'group_count': groupCount,

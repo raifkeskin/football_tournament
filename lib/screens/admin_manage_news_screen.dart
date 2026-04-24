@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../models/league.dart';
 import '../models/league_extras.dart';
 import '../services/app_session.dart';
-import '../services/database_service.dart';
 import '../services/interfaces/i_league_service.dart';
 import '../services/service_locator.dart';
 
@@ -15,7 +14,6 @@ class AdminManageNewsScreen extends StatefulWidget {
 }
 
 class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
-  final _dbService = DatabaseService();
   final ILeagueService _leagueService = ServiceLocator.leagueService;
   final Set<String> _busyIds = {};
   String? _selectedTournamentId;
@@ -29,7 +27,7 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
   Future<void> _toggle(String newsId, bool next) async {
     setState(() => _busyIds.add(newsId));
     try {
-      await _dbService.setNewsPublished(newsId: newsId, isPublished: next);
+      await _leagueService.setNewsPublished(newsId: newsId, isPublished: next);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -54,7 +52,7 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
             setDialogState(() => saving = true);
             setState(() => _busyIds.add(newsId));
             try {
-              await _dbService.updateNewsContent(newsId: newsId, content: text);
+              await _leagueService.updateNewsContent(newsId: newsId, content: text);
               if (!context.mounted) return;
               Navigator.pop(context);
             } catch (e) {
@@ -89,7 +87,7 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
                         height: 18,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Text('Kaydet'),
+                    : const Text('KAYDET'),
               ),
             ],
           );
@@ -122,7 +120,7 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
 
     setState(() => _busyIds.add(newsId));
     try {
-      await _dbService.deleteNews(newsId: newsId);
+      await _leagueService.deleteNews(newsId: newsId);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Hata: $e')));
@@ -156,7 +154,7 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
             }
             setDialogState(() => saving = true);
             try {
-              await _dbService.addNews(tournamentId: tId, content: text);
+              await _leagueService.addNews(tournamentId: tId, content: text);
               if (!context.mounted) return;
               Navigator.pop(context);
               ScaffoldMessenger.of(
@@ -192,7 +190,7 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
                         height: 18,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Text('Kaydet'),
+                    : const Text('KAYDET'),
               ),
             ],
           );

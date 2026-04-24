@@ -9,3 +9,5 @@ Strict Typing: dynamic tipinden kaçınılmalı, her zaman models/ altındaki s�
 Clean UI: Tasarımlar şeffaf, modern ve tutarlı olmalı; "Batangas" fontu ve "Glassmorphism" korunmalı.
 
 Interface Driven Development: Servisler önce 'abstract class' (interface) olarak tanımlanmalı, somut implementasyonlar (Firebase/Supabase) bu arayüzü türetmelidir.
+
+Raporlama Dili: Asistanın raporları ve açıklamaları her zaman Türkçe olmalı.

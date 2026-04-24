@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:archive/archive.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:excel/excel.dart' hide Border;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -13,12 +12,10 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/league.dart';
 import '../models/match.dart';
 import '../services/approval_service.dart';
 import '../services/app_session.dart';
-import '../services/database_service.dart';
 import '../services/image_upload_service.dart';
 import '../services/interfaces/i_team_service.dart';
 import '../services/service_locator.dart';
@@ -43,7 +40,6 @@ class TeamSquadScreen extends StatefulWidget {
 }
 
 class _TeamSquadScreenState extends State<TeamSquadScreen> {
-  final _dbService = DatabaseService();
   final _approvalService = ApprovalService();
   final ITeamService _teamService = ServiceLocator.teamService;
 
@@ -63,17 +59,11 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     required String teamId,
     required String playerPhone,
   }) async {
-    final t = tournamentId.trim();
-    final team = teamId.trim();
-    final phone = playerPhone.trim();
-    if (t.isEmpty || team.isEmpty || phone.isEmpty) return;
-    final id = '${phone}_${t}_$team';
-    try {
-      await FirebaseFirestore.instance.collection('rosters').doc(id).delete();
-    } catch (_) {}
-    try {
-      await Supabase.instance.client.from('rosters').delete().eq('id', id);
-    } catch (_) {}
+    await _teamService.deleteRosterEntry(
+      tournamentId: tournamentId,
+      teamId: teamId,
+      playerPhone: playerPhone,
+    );
   }
 
   String _normalizeUrl(String raw) {
@@ -352,7 +342,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     if (!mounted) return;
 
     try {
-      final tournaments = await _dbService.getTeamActiveTournaments(
+      final tournaments = await _teamService.getTeamActiveTournaments(
         widget.teamId,
       );
 
@@ -1275,7 +1265,6 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final dbService = _dbService;
     final cs = Theme.of(context).colorScheme;
     final titleTeam = widget.teamName.trim();
     final session = AppSession.of(context).value;
@@ -1573,7 +1562,6 @@ class PlayerFormScreen extends StatefulWidget {
 }
 
 class _PlayerFormScreenState extends State<PlayerFormScreen> {
-  final _dbService = DatabaseService();
   final ITeamService _teamService = ServiceLocator.teamService;
   final _picker = ImagePicker();
   final _imageUploadService = ImgBBUploadService();
@@ -1928,21 +1916,15 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
 
       if (uploadedPhotoUrl != null) {
         final url = uploadedPhotoUrl.trim();
-        await _dbService.updatePlayer(playerId: keyPhone, data: {'photoUrl': url});
-        try {
-          await Supabase.instance.client
-              .from('players')
-              .update({'photo_url': url})
-              .eq('phone', keyPhone);
-        } catch (_) {}
+        await _teamService.updatePlayer(
+          playerId: keyPhone,
+          data: {'photoUrl': url},
+        );
       } else if (_removePhoto) {
-        await _dbService.updatePlayer(playerId: keyPhone, data: {'photoUrl': null});
-        try {
-          await Supabase.instance.client
-              .from('players')
-              .update({'photo_url': null})
-              .eq('phone', keyPhone);
-        } catch (_) {}
+        await _teamService.updatePlayer(
+          playerId: keyPhone,
+          data: {'photoUrl': null},
+        );
       }
 
       if (!mounted) return;
@@ -2313,7 +2295,6 @@ class _PlayerPickerSheet extends StatefulWidget {
 }
 
 class _PlayerPickerSheetState extends State<_PlayerPickerSheet> {
-  final _dbService = DatabaseService();
   final ITeamService _teamService = ServiceLocator.teamService;
   final _searchController = TextEditingController();
   String _q = '';

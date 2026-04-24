@@ -166,7 +166,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Text(
-                      'Kaydet',
+                      'KAYDET',
                       style: TextStyle(fontWeight: FontWeight.w900),
                     ),
             ),

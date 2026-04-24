@@ -21,6 +21,15 @@ void main() async {
     url: AppConfig.supabaseUrl,
     anonKey: AppConfig.supabaseAnonKey,
   );
+  if (AppConfig.activeDatabase == DatabaseType.supabase) {
+    try {
+      final res = await Supabase.instance.client.from('pitches').select('id').limit(1);
+      final n = (res is List) ? res.length : 0;
+      debugPrint('Supabase bağlantı kontrolü OK (pitches örnek kayıt: $n)');
+    } catch (e) {
+      debugPrint('Supabase bağlantı kontrolü HATA: $e');
+    }
+  }
 
   runApp(const MyApp());
 }

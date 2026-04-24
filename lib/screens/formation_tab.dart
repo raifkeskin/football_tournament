@@ -4,7 +4,9 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../models/match.dart';
-import '../services/database_service.dart';
+import '../services/interfaces/i_match_service.dart';
+import '../services/interfaces/i_team_service.dart';
+import '../services/service_locator.dart';
 import '../widgets/web_safe_image.dart';
 
 class FormationPlayer {
@@ -122,7 +124,8 @@ class FormationTab extends StatefulWidget {
 }
 
 class _FormationTabState extends State<FormationTab> {
-  final DatabaseService _dbService = DatabaseService();
+  final IMatchService _matchService = ServiceLocator.matchService;
+  final ITeamService _teamService = ServiceLocator.teamService;
   Timer? _persistTimer;
 
   late String _homeFormation;
@@ -257,7 +260,7 @@ class _FormationTabState extends State<FormationTab> {
       final homeOrder = _homePlayers.map((e) => e.id).toList();
       final awayOrder = _awayPlayers.map((e) => e.id).toList();
       try {
-        await _dbService.updateMatchFormationState(
+        await _matchService.updateMatchFormationState(
           matchId: widget.matchId,
           homeFormation: home ? _homeFormation : null,
           awayFormation: away ? _awayFormation : null,
@@ -293,7 +296,10 @@ class _FormationTabState extends State<FormationTab> {
     final formations = FormationLayout.availableFormations;
 
     return StreamBuilder<List<PlayerModel>>(
-      stream: _dbService.getPlayers(widget.homeTeamId, tournamentId: widget.tournamentId),
+      stream: _teamService.watchPlayers(
+        teamId: widget.homeTeamId,
+        tournamentId: widget.tournamentId,
+      ),
       builder: (context, homeSnap) {
         final homeRoster = homeSnap.data ?? const <PlayerModel>[];
         final homeById = <String, PlayerModel>{
@@ -302,7 +308,10 @@ class _FormationTabState extends State<FormationTab> {
         };
 
         return StreamBuilder<List<PlayerModel>>(
-          stream: _dbService.getPlayers(widget.awayTeamId, tournamentId: widget.tournamentId),
+          stream: _teamService.watchPlayers(
+            teamId: widget.awayTeamId,
+            tournamentId: widget.tournamentId,
+          ),
           builder: (context, awaySnap) {
             final awayRoster = awaySnap.data ?? const <PlayerModel>[];
             final awayById = <String, PlayerModel>{

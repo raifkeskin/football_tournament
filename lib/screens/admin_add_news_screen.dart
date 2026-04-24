@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import '../models/league.dart';
 import '../services/app_session.dart';
-import '../services/database_service.dart';
+import '../services/interfaces/i_league_service.dart';
+import '../services/service_locator.dart';
 
 class AdminAddNewsScreen extends StatefulWidget {
   const AdminAddNewsScreen({super.key});
@@ -11,7 +13,7 @@ class AdminAddNewsScreen extends StatefulWidget {
 
 class _AdminAddNewsScreenState extends State<AdminAddNewsScreen> {
   final _newsController = TextEditingController();
-  final _dbService = DatabaseService();
+  final ILeagueService _leagueService = ServiceLocator.leagueService;
   bool _isLoading = false;
   String? _selectedTournamentId;
 
@@ -39,7 +41,7 @@ class _AdminAddNewsScreenState extends State<AdminAddNewsScreen> {
 
     setState(() => _isLoading = true);
     try {
-      await _dbService.addNews(tournamentId: tId, content: text);
+      await _leagueService.addNews(tournamentId: tId, content: text);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -79,8 +81,8 @@ class _AdminAddNewsScreenState extends State<AdminAddNewsScreen> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            StreamBuilder(
-              stream: _dbService.getLeagues(),
+            StreamBuilder<List<League>>(
+              stream: _leagueService.watchLeagues(),
               builder: (context, snap) {
                 if (!snap.hasData) {
                   return const SizedBox(
@@ -88,11 +90,11 @@ class _AdminAddNewsScreenState extends State<AdminAddNewsScreen> {
                     child: Center(child: CircularProgressIndicator()),
                   );
                 }
-                final docs = snap.data!.docs;
-                if (docs.isEmpty) {
+                final leagues = snap.data ?? const <League>[];
+                if (leagues.isEmpty) {
                   return const SizedBox.shrink();
                 }
-                _selectedTournamentId ??= docs.first.id;
+                _selectedTournamentId ??= leagues.first.id;
                 return DropdownButtonFormField<String>(
                   initialValue: _selectedTournamentId,
                   isExpanded: true,
@@ -100,17 +102,15 @@ class _AdminAddNewsScreenState extends State<AdminAddNewsScreen> {
                     labelText: 'Turnuva',
                     border: OutlineInputBorder(),
                   ),
-                  items: docs
-                      .map(
-                        (d) => DropdownMenuItem<String>(
-                          value: d.id,
-                          child: Text(
-                            (d.data() as Map<String, dynamic>)['name']?.toString() ?? d.id,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      )
+                  items: leagues
+                      .map((l) => DropdownMenuItem<String>(
+                            value: l.id,
+                            child: Text(
+                              l.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ))
                       .toList(),
                   onChanged: (v) => setState(() => _selectedTournamentId = v),
                 );

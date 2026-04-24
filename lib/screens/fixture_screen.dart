@@ -766,7 +766,7 @@ class _MatchCard extends StatelessWidget {
               if (c.mounted) Navigator.pop(c);
             },
             child: const Text(
-              'Kaydet',
+              'KAYDET',
               style: TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w600,
@@ -940,7 +940,7 @@ class _MatchCard extends StatelessWidget {
                 }
               },
               child: const Text(
-                'Güncelle',
+                'GÜNCELLE',
                 style: TextStyle(color: Colors.white),
               ),
             ),

@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import '../models/league.dart';
 import '../models/award.dart';
 import '../services/app_session.dart';
-import '../services/database_service.dart';
+import '../services/interfaces/i_league_service.dart';
+import '../services/service_locator.dart';
 
 class AdminAwardsScreen extends StatefulWidget {
   const AdminAwardsScreen({super.key});
@@ -13,7 +14,7 @@ class AdminAwardsScreen extends StatefulWidget {
 }
 
 class _AdminAwardsScreenState extends State<AdminAwardsScreen> {
-  final _db = DatabaseService();
+  final ILeagueService _leagueService = ServiceLocator.leagueService;
   String? _selectedLeagueId;
 
   Future<void> _openAddSheet(String leagueId) async {
@@ -71,7 +72,7 @@ class _AdminAwardsScreenState extends State<AdminAwardsScreen> {
                       textStyle: const TextStyle(fontWeight: FontWeight.w900),
                     ),
                     onPressed: () => Navigator.pop(context, true),
-                    child: const Text('Kaydet'),
+                    child: const Text('KAYDET'),
                   ),
                 ],
               ),
@@ -80,7 +81,7 @@ class _AdminAwardsScreenState extends State<AdminAwardsScreen> {
         },
       );
       if (saved != true) return;
-      await _db.addAward(
+      await _leagueService.addAward(
         leagueId: leagueId,
         name: controller.text,
         description: descController.text,
@@ -122,18 +123,12 @@ class _AdminAwardsScreenState extends State<AdminAwardsScreen> {
       appBar: AppBar(title: const Text('Ödül / Kupa Yönetimi')),
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: StreamBuilder(
-        stream: _db.getLeagues(),
+        stream: _leagueService.watchLeagues(),
         builder: (context, leaguesSnap) {
           if (!leaguesSnap.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
-          final leagues = leaguesSnap.data!.docs
-              .map(
-                (d) => League.fromMap(
-                  {...d.data() as Map<String, dynamic>, 'id': d.id},
-                ),
-              )
-              .toList();
+          final leagues = leaguesSnap.data ?? const <League>[];
           if (leagues.isEmpty) {
             return const Center(child: Text('Turnuva bulunamadı.'));
           }
@@ -156,7 +151,7 @@ class _AdminAwardsScreenState extends State<AdminAwardsScreen> {
               ),
               Expanded(
                 child: StreamBuilder<List<Award>>(
-                  stream: _db.getAwardsForLeague(leagueId),
+                  stream: _leagueService.watchAwardsForLeague(leagueId),
                   builder: (context, awardsSnap) {
                     if (!awardsSnap.hasData) {
                       return const Center(child: CircularProgressIndicator());
@@ -192,7 +187,7 @@ class _AdminAwardsScreenState extends State<AdminAwardsScreen> {
                                 : null,
                             trailing: IconButton(
                               icon: const Icon(Icons.delete_outline),
-                              onPressed: () => _db.deleteAward(a.id),
+                              onPressed: () => _leagueService.deleteAward(a.id),
                             ),
                           ),
                         );

@@ -14,9 +14,9 @@ import 'package:share_plus/share_plus.dart';
 import '../models/fixture_import.dart';
 import '../models/league.dart';
 import '../services/app_session.dart';
-import '../services/database_service.dart';
 import '../services/interfaces/i_league_service.dart';
 import '../services/interfaces/i_match_service.dart';
+import '../services/interfaces/i_team_service.dart';
 import '../services/postgres_migration_service.dart';
 import '../services/service_locator.dart';
 import '../utils/string_utils.dart';
@@ -29,8 +29,9 @@ class AdminDataToolsScreen extends StatefulWidget {
 }
 
 class _AdminDataToolsScreenState extends State<AdminDataToolsScreen> {
-  final _db = DatabaseService();
   final ILeagueService _leagueService = ServiceLocator.leagueService;
+  final ITeamService _teamService = ServiceLocator.teamService;
+  final IMatchService _matchService = ServiceLocator.matchService;
   bool _busy = false;
   String? _lastResult;
 
@@ -151,18 +152,18 @@ class _AdminDataToolsScreenState extends State<AdminDataToolsScreen> {
   }
 
   Future<void> _clearTeams() async {
-    await _runDelete(category: 'Takım', action: _db.deleteAllTeams);
+    await _runDelete(category: 'Takım', action: _teamService.deleteAllTeams);
   }
 
   Future<void> _clearFixtures() async {
     await _runDelete(
       category: 'Fikstür',
-      action: _db.deleteAllMatchesAndEvents,
+      action: _matchService.deleteAllMatchesAndEvents,
     );
   }
 
   Future<void> _clearPlayers() async {
-    await _runDelete(category: 'Futbolcu', action: _db.deleteAllPlayers);
+    await _runDelete(category: 'Futbolcu', action: _teamService.deleteAllPlayers);
   }
 
   Future<void> _migrateMatchTimesFromTimestamp() async {
@@ -192,7 +193,7 @@ class _AdminDataToolsScreenState extends State<AdminDataToolsScreen> {
       _lastResult = null;
     });
     try {
-      final result = await _db.migrateMatchesTimeTimestampToMatchFields();
+      final result = await _matchService.migrateMatchesTimeTimestampToMatchFields();
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -270,7 +271,7 @@ class _AdminDataToolsScreenState extends State<AdminDataToolsScreen> {
     );
 
     try {
-      final result = await _db.normalizeMatchesDocIdsByLeagueWeekHomeTeam();
+      final result = await _matchService.normalizeMatchesDocIdsByLeagueWeekHomeTeam();
       if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pop();
       ScaffoldMessenger.of(

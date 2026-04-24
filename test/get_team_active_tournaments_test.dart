@@ -1,16 +1,20 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
+import 'package:football_tournament/config/app_config.dart';
 import 'package:football_tournament/services/database_service.dart';
 
 void main() {
   group('getTeamActiveTournaments Tests', () {
     late DatabaseService dbService;
     late FakeFirebaseFirestore firestore;
+    late DatabaseType _prevDb;
     const testTeamId = 'OnbHjgCmq5MrMgqyiN0R';
     const expectedTournamentId = 'qAzYxC579QhxDDgsorgX';
     const inactiveTournamentId = 'inactive_tournament_123';
 
     setUp(() async {
+      _prevDb = AppConfig.activeDatabase;
+      AppConfig.activeDatabase = DatabaseType.firebase;
       firestore = FakeFirebaseFirestore();
 
       await firestore.collection('leagues').doc(expectedTournamentId).set({
@@ -38,6 +42,10 @@ void main() {
       });
 
       dbService = DatabaseService(firestore: firestore);
+    });
+
+    tearDown(() {
+      AppConfig.activeDatabase = _prevDb;
     });
 
     test(

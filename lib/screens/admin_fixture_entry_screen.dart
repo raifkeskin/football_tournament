@@ -4,8 +4,8 @@ import '../models/league_extras.dart';
 import '../models/match.dart';
 import '../models/team.dart';
 import '../services/app_session.dart';
-import '../services/database_service.dart';
 import '../services/interfaces/i_league_service.dart';
+import '../services/interfaces/i_match_service.dart';
 import '../services/interfaces/i_team_service.dart';
 import '../services/service_locator.dart';
 
@@ -25,8 +25,8 @@ class AdminFixtureEntryScreen extends StatefulWidget {
 }
 
 class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
-  final _dbService = DatabaseService();
   final ILeagueService _leagueService = ServiceLocator.leagueService;
+  final IMatchService _matchService = ServiceLocator.matchService;
   final ITeamService _teamService = ServiceLocator.teamService;
   String? _selectedLeagueId;
   String? _selectedGroupId;
@@ -131,7 +131,7 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                 // 2. Grup
                 if (_selectedLeagueId != null)
                   StreamBuilder<List<GroupModel>>(
-                    stream: _dbService.getGroups(_selectedLeagueId!),
+                    stream: _leagueService.watchGroups(_selectedLeagueId!),
                     builder: (context, snapshot) {
                       if (!snapshot.hasData) return const SizedBox();
                       final groups = [...snapshot.data!]
@@ -176,7 +176,7 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                 // 3. Takımlar
                 if (_selectedGroupId != null)
                   StreamBuilder<List<Team>>(
-                    stream: _dbService.getTeamsByGroup(_selectedGroupId!),
+                    stream: _teamService.watchTeamsByGroup(_selectedGroupId!),
                     builder: (context, snapshot) {
                       if (!snapshot.hasData) return const SizedBox();
                       final teams = snapshot.data!;
@@ -440,7 +440,7 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
         status: MatchStatus.notStarted,
       );
 
-      await _dbService.addMatch(match);
+      await _matchService.addMatch(match);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

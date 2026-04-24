@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import '../models/league.dart';
 import '../services/app_session.dart';
-import '../services/database_service.dart';
 import '../services/image_upload_service.dart';
 import '../services/interfaces/i_league_service.dart';
 import '../services/service_locator.dart';
@@ -25,11 +24,157 @@ class AdminManageLeaguesScreen extends StatefulWidget {
 }
 
 class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
-  final _dbService = DatabaseService();
   final ILeagueService _leagueService = ServiceLocator.leagueService;
   final _imageUploadService = ImgBBUploadService();
   final _picker = ImagePicker();
   bool _dialOpen = false;
+
+  static const List<String> _turkiyeIlleri = <String>[
+    'Adana',
+    'Adıyaman',
+    'Afyonkarahisar',
+    'Ağrı',
+    'Amasya',
+    'Ankara',
+    'Antalya',
+    'Artvin',
+    'Aydın',
+    'Balıkesir',
+    'Bilecik',
+    'Bingöl',
+    'Bitlis',
+    'Bolu',
+    'Burdur',
+    'Bursa',
+    'Çanakkale',
+    'Çankırı',
+    'Çorum',
+    'Denizli',
+    'Diyarbakır',
+    'Edirne',
+    'Elazığ',
+    'Erzincan',
+    'Erzurum',
+    'Eskişehir',
+    'Gaziantep',
+    'Giresun',
+    'Gümüşhane',
+    'Hakkâri',
+    'Hatay',
+    'Isparta',
+    'Mersin',
+    'İstanbul',
+    'İzmir',
+    'Kars',
+    'Kastamonu',
+    'Kayseri',
+    'Kırklareli',
+    'Kırşehir',
+    'Kocaeli',
+    'Konya',
+    'Kütahya',
+    'Malatya',
+    'Manisa',
+    'Kahramanmaraş',
+    'Mardin',
+    'Muğla',
+    'Muş',
+    'Nevşehir',
+    'Niğde',
+    'Ordu',
+    'Rize',
+    'Sakarya',
+    'Samsun',
+    'Siirt',
+    'Sinop',
+    'Sivas',
+    'Tekirdağ',
+    'Tokat',
+    'Trabzon',
+    'Tunceli',
+    'Şanlıurfa',
+    'Uşak',
+    'Van',
+    'Yozgat',
+    'Zonguldak',
+    'Aksaray',
+    'Bayburt',
+    'Karaman',
+    'Kırıkkale',
+    'Batman',
+    'Şırnak',
+    'Bartın',
+    'Ardahan',
+    'Iğdır',
+    'Yalova',
+    'Karabük',
+    'Kilis',
+    'Osmaniye',
+    'Düzce',
+  ];
+
+  Future<String?> _sehirSec({
+    required BuildContext context,
+    String? initialValue,
+  }) {
+    return showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) {
+        var query = '';
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final q = query.trim().toLowerCase();
+            final filtered = q.isEmpty
+                ? _turkiyeIlleri
+                : _turkiyeIlleri
+                    .where((c) => c.toLowerCase().contains(q))
+                    .toList();
+            return SafeArea(
+              child: SizedBox(
+                height: MediaQuery.of(context).size.height * 0.75,
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                      child: TextField(
+                        autofocus: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Şehir Ara',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.search),
+                        ),
+                        onChanged: (v) => setModalState(() => query = v),
+                      ),
+                    ),
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: filtered.length,
+                        itemBuilder: (context, index) {
+                          final city = filtered[index];
+                          final selected =
+                              (initialValue ?? '').trim().toLowerCase() ==
+                                  city.toLowerCase();
+                          return ListTile(
+                            title: Text(city),
+                            trailing: selected
+                                ? const Icon(Icons.check_rounded)
+                                : null,
+                            onTap: () => Navigator.pop(context, city),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
 
   Future<void> _turnuvaSil(String leagueId) async {
     final ok = await showDialog<bool>(
@@ -54,11 +199,12 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
     if (ok != true) return;
 
     try {
-      await _dbService.deleteLeagueCascade(leagueId);
+      await _leagueService.deleteLeagueCascade(leagueId);
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Turnuva silindi.')));
+      setState(() {});
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -72,7 +218,10 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
     final subtitleController = TextEditingController();
     final managerFullNameController = TextEditingController();
     final managerPhoneController = TextEditingController();
+    final cityController = TextEditingController();
     final matchPeriodDurationController = TextEditingController(text: '25');
+    final startingPlayerCountController = TextEditingController(text: '11');
+    final subPlayerCountController = TextEditingController(text: '7');
     final groupCountController = TextEditingController(text: '1');
     final teamsPerGroupController = TextEditingController(text: '4');
     final youtubeController = TextEditingController();
@@ -155,8 +304,13 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
               final subtitle = subtitleController.text.trim();
               final managerFullName = managerFullNameController.text.trim();
               final managerPhone = managerPhoneController.text.trim();
+              final city = cityController.text.trim();
               final matchPeriodDuration =
                   int.tryParse(matchPeriodDurationController.text.trim()) ?? 25;
+              final startingPlayerCount =
+                  int.tryParse(startingPlayerCountController.text.trim()) ?? 11;
+              final subPlayerCount =
+                  int.tryParse(subPlayerCountController.text.trim()) ?? 7;
               if (isPrivate && accessCodeController.text.trim().isEmpty) {
                 accessCodeController.text = generateAccessCode();
               }
@@ -200,6 +354,7 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                   subtitle: subtitle.isEmpty ? null : subtitle,
                   logoUrl: logoUrl,
                   country: 'Türkiye',
+                  city: city.isEmpty ? null : city,
                   managerFullName:
                       managerFullName.isEmpty ? null : managerFullName,
                   managerPhoneRaw10: managerPhone.isEmpty
@@ -207,6 +362,9 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                       : normalizePhoneToRaw10(managerPhone),
                   matchPeriodDuration:
                       matchPeriodDuration <= 0 ? 25 : matchPeriodDuration,
+                  startingPlayerCount:
+                      startingPlayerCount <= 0 ? 11 : startingPlayerCount,
+                  subPlayerCount: subPlayerCount < 0 ? 7 : subPlayerCount,
                   startDate: startDate,
                   endDate: endDate,
                   isPrivate: isPrivate,
@@ -225,7 +383,7 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                       int.tryParse(teamsPerGroupController.text) ?? 4,
                 );
 
-                await _dbService.addLeague(league);
+                await _leagueService.addLeague(league);
                 if (!context.mounted) return;
                 didClose = true;
                 Navigator.pop(context, true);
@@ -294,10 +452,14 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                     const SizedBox(height: 8),
                     TextField(
                       controller: accessCodeController,
-                      readOnly: true,
                       decoration: const InputDecoration(
                         labelText: 'Erişim Kodu (6 haneli)',
                       ),
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(6),
+                      ],
                     ),
                   ],
                   const SizedBox(height: 12),
@@ -318,12 +480,56 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                   ),
                   const SizedBox(height: 12),
                   TextField(
+                    controller: cityController,
+                    decoration: const InputDecoration(
+                      labelText: 'Şehir',
+                    ),
+                    readOnly: true,
+                    onTap: saving
+                        ? null
+                        : () async {
+                            final picked = await _sehirSec(
+                              context: context,
+                              initialValue: cityController.text,
+                            );
+                            if (picked == null) return;
+                            setSheetState(() => cityController.text = picked);
+                          },
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
                     controller: matchPeriodDurationController,
                     decoration: const InputDecoration(
-                      labelText: 'Maç Süresi (Dakika)',
+                      labelText: 'Maç Süresi (Tek Devre)',
                     ),
                     keyboardType: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: startingPlayerCountController,
+                          decoration: const InputDecoration(
+                            labelText: 'Sahadaki Oyuncu',
+                          ),
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: subPlayerCountController,
+                          decoration: const InputDecoration(
+                            labelText: 'Yedek Oyuncu',
+                          ),
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 12),
                   Row(
@@ -409,7 +615,7 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                     icon: const Icon(Icons.photo_library_outlined),
                     label: Text(
                       leagueLogo == null
-                          ? 'Logo Seç (Galeri)'
+                          ? 'LOGO EKLE'
                           : 'Seçildi: ${leagueLogo!.name}',
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -421,8 +627,7 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                         ? const Center(child: CircularProgressIndicator())
                         : FilledButton.icon(
                             onPressed: save,
-                            icon: const Icon(Icons.save_outlined),
-                            label: const Text('Kaydet'),
+                            label: const Text('KAYDET'),
                           ),
                   ),
                 ],
@@ -444,7 +649,10 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
     accessCodeController.dispose();
     managerFullNameController.dispose();
     managerPhoneController.dispose();
+    cityController.dispose();
     matchPeriodDurationController.dispose();
+    startingPlayerCountController.dispose();
+    subPlayerCountController.dispose();
 
     if (!mounted) return;
     if (saved == true) {
@@ -583,7 +791,7 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                   final subtitle = (league.subtitle ?? '').trim();
                   Future<void> toggleDefault() async {
                     try {
-                      await _dbService.setLeagueDefaultFlag(
+                      await _leagueService.setLeagueDefaultFlag(
                         leagueId: league.id,
                         isDefault: !league.isDefault,
                       );
@@ -957,7 +1165,7 @@ class _EditLeagueScreenState extends State<EditLeagueScreen> {
         teamsPerGroup: teamsPerGroup,
       );
 
-      await DatabaseService().updateLeague(updatedLeague);
+      await ServiceLocator.leagueService.updateLeague(updatedLeague);
       if (!mounted) return;
       Navigator.pop(context, true);
     } catch (e) {
@@ -1189,7 +1397,7 @@ class _EditLeagueScreenState extends State<EditLeagueScreen> {
                   style: FilledButton.styleFrom(
                     minimumSize: const Size(double.infinity, 50),
                   ),
-                  child: const Text('Güncelle'),
+                  child: const Text('GÜNCELLE'),
                 ),
               ],
             ),

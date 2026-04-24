@@ -15,7 +15,6 @@ import '../models/league.dart';
 import '../models/match.dart';
 import '../services/approval_service.dart';
 import '../services/app_session.dart';
-import '../services/database_service.dart';
 import '../services/image_upload_service.dart';
 import '../services/interfaces/i_league_service.dart';
 import '../services/interfaces/i_team_service.dart';
@@ -38,7 +37,6 @@ class AdminManageTeamsScreen extends StatefulWidget {
 }
 
 class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
-  final dbService = DatabaseService();
   final approvalService = ApprovalService();
   final _teamsRepo = TeamsRepository();
   final ILeagueService _leagueService = ServiceLocator.leagueService;
@@ -282,7 +280,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
     if (ok != true) return;
 
     try {
-      await dbService.deleteTeamCascade(teamId);
+      await _teamService.deleteTeamCascade(teamId);
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -1657,7 +1655,7 @@ class _EditTeamScreenState extends State<EditTeamScreen> {
         }
       }
 
-      await DatabaseService().updateTeam(widget.teamId, {
+      await ServiceLocator.teamService.updateTeam(widget.teamId, {
         'name': _nameController.text.trim(),
         'logoUrl': logoUrl,
         'foundedYear': _foundedController.text.trim(),

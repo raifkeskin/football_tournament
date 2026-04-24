@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import '../models/match.dart';
 import '../services/app_session.dart';
 import '../models/team.dart';
-import '../services/database_service.dart';
 import '../services/interfaces/i_team_service.dart';
 import '../services/service_locator.dart';
 
@@ -18,7 +17,6 @@ class AdminPenaltyManagementScreen extends StatefulWidget {
 
 class _AdminPenaltyManagementScreenState
     extends State<AdminPenaltyManagementScreen> {
-  final _dbService = DatabaseService();
   final ITeamService _teamService = ServiceLocator.teamService;
 
   Future<void> _openPenaltyForm({
@@ -34,8 +32,9 @@ class _AdminPenaltyManagementScreenState
     var saving = false;
     if (editing != null && (editing.id).trim().isNotEmpty) {
       try {
-        final data = await _dbService.getPenaltyForPlayer(editing.id);
-        final reason = (data?['penaltyReason'] ?? '').toString().trim();
+        final data = await _teamService.getPenaltyForPlayer(editing.id);
+        final reason =
+            (data?['penaltyReason'] ?? data?['penalty_reason'] ?? '').toString().trim();
         if (reason.isNotEmpty) reasonController.text = reason;
       } catch (_) {}
     }
@@ -76,7 +75,7 @@ class _AdminPenaltyManagementScreenState
               final sm = ScaffoldMessenger.of(context);
               final nav = Navigator.of(context);
               try {
-                await _dbService.upsertPenaltyForPlayer(
+                await _teamService.upsertPenaltyForPlayer(
                   playerId: player.id,
                   teamId: resolvedTeamId,
                   penaltyReason: reason,
@@ -170,7 +169,7 @@ class _AdminPenaltyManagementScreenState
                     const SizedBox.shrink()
                   else
                     StreamBuilder<List<PlayerModel>>(
-                      stream: _dbService.getPlayers(teamId!),
+                      stream: _teamService.watchPlayers(teamId: teamId!),
                       builder: (context, snapshot) {
                         final players = snapshot.data ?? const <PlayerModel>[];
                         final sortedPlayers = [...players]
@@ -380,7 +379,7 @@ class _AdminPenaltyManagementScreenState
               onTap: () async {
                 Navigator.pop(context);
                 try {
-                  await _dbService.clearPenaltyForPlayer(playerId: player.id);
+                  await _teamService.clearPenaltyForPlayer(playerId: player.id);
                   if (!mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Ceza kaldırıldı.')),
@@ -446,7 +445,7 @@ class _AdminPenaltyManagementScreenState
           }
 
           return StreamBuilder<List<PlayerModel>>(
-            stream: _dbService.watchAllPlayers(),
+            stream: _teamService.watchAllPlayers(),
             builder: (context, snapshot) {
               if (!snapshot.hasData) {
                 return const Center(child: CircularProgressIndicator());

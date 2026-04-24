@@ -539,7 +539,7 @@ class _OnlineRegistrationScreenState extends State<OnlineRegistrationScreen> {
                         ),
                         onPressed: _finishRegistration,
                         child: const Text(
-                          'Kaydet',
+                          'KAYDET',
                           style: TextStyle(fontWeight: FontWeight.w900),
                         ),
                       ),

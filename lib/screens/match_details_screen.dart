@@ -8,7 +8,6 @@ import '../models/match.dart';
 import '../models/team.dart';
 import '../widgets/web_safe_image.dart';
 import '../services/app_session.dart';
-import '../services/database_service.dart';
 import '../services/image_upload_service.dart';
 import '../services/interfaces/i_league_service.dart';
 import '../services/interfaces/i_match_service.dart';
@@ -592,7 +591,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
               );
               Navigator.pop(c);
             },
-            child: const Text('Kaydet'),
+            child: const Text('KAYDET'),
           ),
         ],
       ),
@@ -626,7 +625,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                   );
                   Navigator.pop(c);
                 },
-                child: const Text('Kaydet'),
+                child: const Text('KAYDET'),
               ),
             ],
           );
@@ -698,7 +697,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
         return;
       }
 
-      await DatabaseService().updateMatchHighlightPhotoUrl(
+      await _matchService.updateMatchHighlightPhotoUrl(
         matchId: m.id,
         isHome: isHome,
         photoUrl: url,

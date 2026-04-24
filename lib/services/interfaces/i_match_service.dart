@@ -22,6 +22,10 @@ abstract class IMatchService {
 
   Stream<List<Map<String, dynamic>>> watchInlineMatchEvents(String matchId);
 
+  Future<String> addMatch(MatchModel match);
+
+  Future<void> addMatchEvent(MatchEvent event);
+
   Future<void> updateMatchYoutubeUrl({
     required String matchId,
     required String? youtubeUrl,
@@ -32,11 +36,31 @@ abstract class IMatchService {
     required String? pitchName,
   });
 
+  Future<void> updateMatchHighlightPhotoUrl({
+    required String matchId,
+    required bool isHome,
+    required String? photoUrl,
+  });
+
   Future<void> updateMatchSchedule({
     required String matchId,
     required String matchDateDb,
     required String matchTime,
     required String? pitchName,
+  });
+
+  Future<void> updateMatchLineup({
+    required String matchId,
+    required bool isHome,
+    required MatchLineup lineup,
+  });
+
+  Future<void> updateMatchFormationState({
+    required String matchId,
+    String? homeFormation,
+    String? awayFormation,
+    List<String>? homeOrder,
+    List<String>? awayOrder,
   });
 
   Future<void> completeMatchWithScoreAndDefaultEvents({
@@ -54,4 +78,10 @@ abstract class IMatchService {
     required List<FixtureImportTeam> teams,
     required List<FixtureImportMatch> matches,
   });
+
+  Future<int> deleteAllMatchesAndEvents();
+
+  Future<Map<String, int>> migrateMatchesTimeTimestampToMatchFields();
+
+  Future<Map<String, int>> normalizeMatchesDocIdsByLeagueWeekHomeTeam();
 }

@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/match.dart';
 import '../services/app_session.dart';
-import '../services/database_service.dart';
+import '../services/interfaces/i_match_service.dart';
+import '../services/service_locator.dart';
 
 class AdminMatchEventScreen extends StatefulWidget {
   final MatchModel match;
@@ -14,7 +15,7 @@ class AdminMatchEventScreen extends StatefulWidget {
 
 class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
   final _minuteController = TextEditingController();
-  final _dbService = DatabaseService();
+  final IMatchService _matchService = ServiceLocator.matchService;
   String _eventType = 'goal';
   String? _teamId;
   LineupPlayer? _selectedPlayer;
@@ -315,7 +316,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
         isOwnGoal: _eventType == 'goal' ? _isOwnGoal : false,
       );
 
-      await _dbService.addMatchEvent(event);
+      await _matchService.addMatchEvent(event);
       if (!mounted) return;
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -587,7 +588,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                     ),
                     textStyle: const TextStyle(fontWeight: FontWeight.w900),
                   ),
-                  child: const Text('Kaydet'),
+                  child: const Text('KAYDET'),
                 ),
               ],
             ),

@@ -2,13 +2,15 @@ class Pitch {
   const Pitch({
     required this.id,
     required this.name,
-    required this.nameKey,
+    required this.city,
+    required this.country,
     required this.location,
   });
 
   final String id;
   final String name;
-  final String nameKey;
+  final String city;
+  final String country;
   final String location;
 }
 

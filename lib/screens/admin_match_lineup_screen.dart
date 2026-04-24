@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 
 import '../models/match.dart';
 import '../services/app_session.dart';
-import '../services/database_service.dart';
+import '../services/interfaces/i_match_service.dart';
+import '../services/interfaces/i_team_service.dart';
+import '../services/service_locator.dart';
 
 class AdminMatchLineupScreen extends StatefulWidget {
   const AdminMatchLineupScreen({
@@ -31,7 +33,8 @@ class _LineupEntry {
 
 class _AdminMatchLineupScreenState extends State<AdminMatchLineupScreen>
     with SingleTickerProviderStateMixin {
-  final _dbService = DatabaseService();
+  final IMatchService _matchService = ServiceLocator.matchService;
+  final ITeamService _teamService = ServiceLocator.teamService;
 
   bool _saving = false;
   String? _activeNumberEditPlayerId;
@@ -208,7 +211,7 @@ class _AdminMatchLineupScreenState extends State<AdminMatchLineupScreen>
             .toList(),
       );
 
-      await _dbService.updateMatchLineup(
+      await _matchService.updateMatchLineup(
         matchId: widget.match.id,
         isHome: widget.isHome,
         lineup: lineup,
@@ -491,7 +494,10 @@ class _AdminMatchLineupScreenState extends State<AdminMatchLineupScreen>
       ),
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: StreamBuilder<List<PlayerModel>>(
-        stream: _dbService.getPlayers(teamId, tournamentId: widget.match.leagueId),
+        stream: _teamService.watchPlayers(
+          teamId: teamId,
+          tournamentId: widget.match.leagueId,
+        ),
         builder: (context, snapshot) {
           final players = snapshot.data ?? const <PlayerModel>[];
           return TabBarView(

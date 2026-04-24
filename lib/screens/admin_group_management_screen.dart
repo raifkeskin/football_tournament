@@ -3,7 +3,6 @@ import '../models/league.dart';
 import '../models/match.dart';
 import '../models/team.dart';
 import '../services/app_session.dart';
-import '../services/database_service.dart';
 import '../services/interfaces/i_league_service.dart';
 import '../services/interfaces/i_team_service.dart';
 import '../services/service_locator.dart';
@@ -26,7 +25,6 @@ class AdminGroupManagementScreen extends StatefulWidget {
 
 class _AdminGroupManagementScreenState
     extends State<AdminGroupManagementScreen> {
-  final _dbService = DatabaseService();
   final ILeagueService _leagueService = ServiceLocator.leagueService;
   final ITeamService _teamService = ServiceLocator.teamService;
   String? _selectedLeagueId;
@@ -137,7 +135,7 @@ class _AdminGroupManagementScreenState
           // 2. Grup Seçimi (Turnuva seçildiyse)
           if (_selectedLeagueId != null)
             StreamBuilder<List<GroupModel>>(
-              stream: _dbService.getGroups(_selectedLeagueId!),
+              stream: _leagueService.watchGroups(_selectedLeagueId!),
               builder: (context, snapshot) {
                 if (!snapshot.hasData) return const SizedBox();
                 final groups = [...snapshot.data!]
@@ -392,7 +390,7 @@ class _AdminGroupManagementScreenState
                         _selectedLeagueId == null) {
                       return;
                     }
-                    await _dbService.addGroup(
+                    await _leagueService.addGroup(
                       GroupModel(
                         id: '',
                         leagueId: _selectedLeagueId!,
@@ -404,7 +402,7 @@ class _AdminGroupManagementScreenState
                     Navigator.pop(context);
                   },
                   icon: const Icon(Icons.add),
-                  label: const Text('Ekle'),
+                  label: const Text('KAYDET'),
                 ),
               ),
             ],
@@ -462,7 +460,7 @@ class _AdminGroupManagementScreenState
     if (ok != true) return;
 
     try {
-      await _dbService.deleteGroupCascade(groupId);
+      await _leagueService.deleteGroupCascade(groupId);
       if (!mounted) return;
       setState(() {
         _selectedGroupId = null;

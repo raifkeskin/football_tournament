@@ -6,8 +6,9 @@ import 'package:image_picker/image_picker.dart';
 
 import '../models/league.dart';
 import '../services/app_session.dart';
-import '../services/database_service.dart';
 import '../services/image_upload_service.dart';
+import '../services/interfaces/i_league_service.dart';
+import '../services/service_locator.dart';
 
 /// Admin için turnuva ekleme formu.
 class AdminAddLeagueScreen extends StatefulWidget {
@@ -23,18 +24,167 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
   final _managerFullNameController = TextEditingController();
   final _managerPhoneController = TextEditingController();
   final _matchPeriodDurationController = TextEditingController(text: '25');
+  final _startingPlayerCountController = TextEditingController(text: '11');
+  final _subPlayerCountController = TextEditingController(text: '7');
   final _groupCountController = TextEditingController(text: '1');
   final _teamsPerGroupController = TextEditingController(text: '4');
+  final _cityController = TextEditingController();
+  final _accessCodeController = TextEditingController();
   final _youtubeController = TextEditingController();
   final _instagramController = TextEditingController();
   final _picker = ImagePicker();
   final _imageUploadService = ImgBBUploadService();
-  final _databaseService = DatabaseService();
+  final ILeagueService _leagueService = ServiceLocator.leagueService;
 
   XFile? _leagueLogo;
   DateTime? _startDate;
   DateTime? _endDate;
+  bool _isPrivate = false;
   bool _isLoading = false;
+
+  static const List<String> _turkiyeIlleri = <String>[
+    'Adana',
+    'Adıyaman',
+    'Afyonkarahisar',
+    'Ağrı',
+    'Amasya',
+    'Ankara',
+    'Antalya',
+    'Artvin',
+    'Aydın',
+    'Balıkesir',
+    'Bilecik',
+    'Bingöl',
+    'Bitlis',
+    'Bolu',
+    'Burdur',
+    'Bursa',
+    'Çanakkale',
+    'Çankırı',
+    'Çorum',
+    'Denizli',
+    'Diyarbakır',
+    'Edirne',
+    'Elazığ',
+    'Erzincan',
+    'Erzurum',
+    'Eskişehir',
+    'Gaziantep',
+    'Giresun',
+    'Gümüşhane',
+    'Hakkâri',
+    'Hatay',
+    'Isparta',
+    'Mersin',
+    'İstanbul',
+    'İzmir',
+    'Kars',
+    'Kastamonu',
+    'Kayseri',
+    'Kırklareli',
+    'Kırşehir',
+    'Kocaeli',
+    'Konya',
+    'Kütahya',
+    'Malatya',
+    'Manisa',
+    'Kahramanmaraş',
+    'Mardin',
+    'Muğla',
+    'Muş',
+    'Nevşehir',
+    'Niğde',
+    'Ordu',
+    'Rize',
+    'Sakarya',
+    'Samsun',
+    'Siirt',
+    'Sinop',
+    'Sivas',
+    'Tekirdağ',
+    'Tokat',
+    'Trabzon',
+    'Tunceli',
+    'Şanlıurfa',
+    'Uşak',
+    'Van',
+    'Yozgat',
+    'Zonguldak',
+    'Aksaray',
+    'Bayburt',
+    'Karaman',
+    'Kırıkkale',
+    'Batman',
+    'Şırnak',
+    'Bartın',
+    'Ardahan',
+    'Iğdır',
+    'Yalova',
+    'Karabük',
+    'Kilis',
+    'Osmaniye',
+    'Düzce',
+  ];
+
+  Future<String?> _sehirSec({String? initialValue}) {
+    return showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) {
+        var query = '';
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final q = query.trim().toLowerCase();
+            final filtered = q.isEmpty
+                ? _turkiyeIlleri
+                : _turkiyeIlleri
+                    .where((c) => c.toLowerCase().contains(q))
+                    .toList();
+            return SafeArea(
+              child: SizedBox(
+                height: MediaQuery.of(context).size.height * 0.75,
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                      child: TextField(
+                        autofocus: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Şehir Ara',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.search),
+                        ),
+                        onChanged: (v) => setModalState(() => query = v),
+                      ),
+                    ),
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: filtered.length,
+                        itemBuilder: (context, index) {
+                          final city = filtered[index];
+                          final selected =
+                              (initialValue ?? '').trim().toLowerCase() ==
+                                  city.toLowerCase();
+                          return ListTile(
+                            title: Text(city),
+                            trailing: selected
+                                ? const Icon(Icons.check_rounded)
+                                : null,
+                            onTap: () => Navigator.pop(context, city),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
 
   @override
   void dispose() {
@@ -43,8 +193,12 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
     _managerFullNameController.dispose();
     _managerPhoneController.dispose();
     _matchPeriodDurationController.dispose();
+    _startingPlayerCountController.dispose();
+    _subPlayerCountController.dispose();
     _groupCountController.dispose();
     _teamsPerGroupController.dispose();
+    _cityController.dispose();
+    _accessCodeController.dispose();
     _youtubeController.dispose();
     _instagramController.dispose();
     super.dispose();
@@ -96,8 +250,14 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
     final subtitle = _subtitleController.text.trim();
     final managerFullName = _managerFullNameController.text.trim();
     final managerPhone = _managerPhoneController.text.trim();
+    final city = _cityController.text.trim();
+    final accessCode = _accessCodeController.text.trim();
     final matchPeriodDuration =
         int.tryParse(_matchPeriodDurationController.text.trim()) ?? 25;
+    final startingPlayerCount =
+        int.tryParse(_startingPlayerCountController.text.trim()) ?? 11;
+    final subPlayerCount =
+        int.tryParse(_subPlayerCountController.text.trim()) ?? 7;
 
     if (leagueName.isEmpty || _startDate == null || _endDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -105,6 +265,15 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
           content: Text(
             'Lütfen turnuva adı, başlangıç ve bitiş tarihini girin.',
           ),
+        ),
+      );
+      return;
+    }
+
+    if (_isPrivate && accessCode.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Özel turnuva için erişim kodu zorunludur.'),
         ),
       );
       return;
@@ -124,21 +293,6 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
         return d;
       }
 
-      final unique = await _databaseService.isLeagueUnique(
-        name: leagueName,
-        subtitle: subtitle,
-      );
-      if (!unique) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Bu isim ve alt bilgi kombinasyonuna sahip bir turnuva zaten var!'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
-
       String logoUrl = '';
       if (_leagueLogo != null) {
         final uploadedUrl = await _imageUploadService.uploadImage(
@@ -153,29 +307,37 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
 
       // Veritabanına kaydet
       final league = League(
-        id: '', // Firestore auto-id kullanacak
+        id: '',
         name: leagueName,
         subtitle: subtitle.isEmpty ? null : subtitle,
         logoUrl: logoUrl,
-        country: 'Türkiye', // Varsayılan veya bir input eklenebilir
+        country: 'Türkiye',
+        city: city.isEmpty ? null : city,
         managerFullName: managerFullName.isEmpty ? null : managerFullName,
         managerPhoneRaw10:
             managerPhone.isEmpty ? null : normalizePhoneToRaw10(managerPhone),
         startDate: _startDate,
         endDate: _endDate,
+        isPrivate: _isPrivate,
+        accessCode: _isPrivate ? accessCode : null,
         youtubeUrl: _youtubeController.text.trim(),
         instagramUrl: _instagramController.text.trim(),
         matchPeriodDuration: matchPeriodDuration <= 0 ? 25 : matchPeriodDuration,
+        startingPlayerCount: startingPlayerCount <= 0 ? 11 : startingPlayerCount,
+        subPlayerCount: subPlayerCount < 0 ? 7 : subPlayerCount,
         numberOfGroups: int.tryParse(_groupCountController.text) ?? 1,
         groups: List.generate(
           int.tryParse(_groupCountController.text) ?? 1,
-          (i) => String.fromCharCode(65 + i), // A, B, C...
+          (i) => String.fromCharCode(65 + i),
         ),
         groupCount: int.tryParse(_groupCountController.text) ?? 1,
         teamsPerGroup: int.tryParse(_teamsPerGroupController.text) ?? 4,
       );
 
-      await _databaseService.addLeague(league);
+      final newId = await _leagueService.addLeague(league);
+      if (newId.trim().isEmpty) {
+        throw Exception('Turnuva kaydı başarısız (id dönmedi).');
+      }
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -192,11 +354,21 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
         _managerFullNameController.clear();
         _managerPhoneController.clear();
         _matchPeriodDurationController.text = '25';
+        _startingPlayerCountController.text = '11';
+        _subPlayerCountController.text = '7';
+        _groupCountController.text = '1';
+        _teamsPerGroupController.text = '4';
+        _cityController.clear();
+        _accessCodeController.clear();
+        _isPrivate = false;
+        _youtubeController.clear();
+        _instagramController.clear();
         _leagueLogo = null;
         _startDate = null;
         _endDate = null;
       });
     } catch (e) {
+      print('Turnuva ekleme hatası: $e');
       if (!mounted) return;
       final msg = e.toString();
       final readable = msg.contains('requires an index') ||
@@ -267,6 +439,25 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
               ),
               const SizedBox(height: 16),
               TextField(
+                controller: _cityController,
+                decoration: const InputDecoration(
+                  labelText: 'Şehir',
+                  border: OutlineInputBorder(),
+                ),
+                readOnly: true,
+                onTap: _isLoading
+                    ? null
+                    : () async {
+                        final picked = await _sehirSec(
+                          initialValue: _cityController.text,
+                        );
+                        if (picked == null || !mounted) return;
+                        setState(() => _cityController.text = picked);
+                      },
+                enabled: !_isLoading,
+              ),
+              const SizedBox(height: 16),
+              TextField(
                 controller: _matchPeriodDurationController,
                 decoration: const InputDecoration(
                   labelText: 'Maç Süresi (Dakika)',
@@ -275,6 +466,36 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 enabled: !_isLoading,
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _startingPlayerCountController,
+                      decoration: const InputDecoration(
+                        labelText: 'Sahadaki Oyuncu',
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      enabled: !_isLoading,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: _subPlayerCountController,
+                      decoration: const InputDecoration(
+                        labelText: 'Yedek Oyuncu',
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      enabled: !_isLoading,
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 16),
               InkWell(
@@ -349,6 +570,31 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
                   ),
                 ],
               ),
+              const SizedBox(height: 8),
+              SwitchListTile(
+                value: _isPrivate,
+                onChanged: _isLoading
+                    ? null
+                    : (v) {
+                        setState(() => _isPrivate = v);
+                      },
+                title: const Text('Özel Turnuva'),
+                contentPadding: EdgeInsets.zero,
+              ),
+              if (_isPrivate) ...[
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _accessCodeController,
+                  decoration: const InputDecoration(
+                    labelText: 'Erişim Kodu',
+                    hintText: 'Örn: 437153',
+                    border: OutlineInputBorder(),
+                  ),
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  enabled: !_isLoading,
+                ),
+              ],
               const SizedBox(height: 16),
               TextField(
                 controller: _youtubeController,

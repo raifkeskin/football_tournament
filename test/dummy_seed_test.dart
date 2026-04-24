@@ -1,12 +1,15 @@
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:football_tournament/config/app_config.dart';
 import 'package:football_tournament/services/database_service.dart';
 
 void main() {
   test(
     'seedDummyFixtureOneWeek maç üretir ve puan durumunu günceller',
     () async {
+      final prevDb = AppConfig.activeDatabase;
+      AppConfig.activeDatabase = DatabaseType.firebase;
       final firestore = FakeFirebaseFirestore();
       final service = DatabaseService(firestore: firestore);
 
@@ -132,12 +135,15 @@ void main() {
         expect(stats['AV'], e['AV']);
         expect(stats['Puan'], e['Puan']);
       }
+      AppConfig.activeDatabase = prevDb;
     },
   );
 
   test(
     'gruptaki teamIds üzerinden takım listesi oluşturulabilir (2026 grubu)',
     () async {
+      final prevDb = AppConfig.activeDatabase;
+      AppConfig.activeDatabase = DatabaseType.firebase;
       final firestore = FakeFirebaseFirestore();
       final service = DatabaseService(firestore: firestore);
 
@@ -170,6 +176,7 @@ void main() {
           .toSet();
 
       expect(listedTeamIds, {'t1', 't2'});
+      AppConfig.activeDatabase = prevDb;
     },
   );
 }
