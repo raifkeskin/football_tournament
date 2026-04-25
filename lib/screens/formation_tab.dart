@@ -74,35 +74,6 @@ class FormationTab extends StatefulWidget {
     required MatchModel match,
     required bool isTeamManager,
   }) {
-    List<FormationPlayer> mapLineup(MatchLineup? detail, List<String> phones) {
-      if (detail != null && detail.starting.isNotEmpty) {
-        return detail.starting
-            .map(
-              (p) => FormationPlayer(
-                id: p.playerId,
-                name: p.name,
-                number: (p.number ?? '').toString(),
-              ),
-            )
-            .toList();
-      }
-      if (phones.isNotEmpty) {
-        return phones
-            .map(
-              (phone) => FormationPlayer(
-                id: phone,
-                name: phone,
-                number: '',
-              ),
-            )
-            .toList();
-      }
-      return const <FormationPlayer>[];
-    }
-
-    final home = mapLineup(match.homeLineupDetail, match.homeLineup);
-    final away = mapLineup(match.awayLineupDetail, match.awayLineup);
-
     return FormationTab(
       key: key,
       matchId: match.id,
@@ -110,12 +81,12 @@ class FormationTab extends StatefulWidget {
       homeTeamId: match.homeTeamId,
       awayTeamId: match.awayTeamId,
       isTeamManager: isTeamManager,
-      homePlayers: home,
-      awayPlayers: away,
-      initialHomeFormation: match.homeFormation ?? '4-4-2',
-      initialAwayFormation: match.awayFormation ?? '4-4-2',
-      initialHomeOrder: match.homeFormationOrder,
-      initialAwayOrder: match.awayFormationOrder,
+      homePlayers: const <FormationPlayer>[],
+      awayPlayers: const <FormationPlayer>[],
+      initialHomeFormation: '4-4-2',
+      initialAwayFormation: '4-4-2',
+      initialHomeOrder: const <String>[],
+      initialAwayOrder: const <String>[],
     );
   }
 

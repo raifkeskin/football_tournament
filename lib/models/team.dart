@@ -34,7 +34,7 @@ class Team {
       id: (v('id', 'id') as String?) ?? '',
       name: (v('name', 'name') as String?) ?? '',
       logoUrl: (v('logoUrl', 'logo_url') ?? v('logo', 'logo')) as String? ?? '',
-      leagueId: readNullableString(v('leagueId', 'league_id') ?? v('tournamentId', 'tournament_id')),
+      leagueId: readNullableString(v('leagueId', 'league_id')),
       groupId: readNullableString(v('groupId', 'group_id')),
       groupName: readNullableString(v('groupName', 'group_name')),
       colors: v('colors', 'colors') as Map<String, dynamic>?,

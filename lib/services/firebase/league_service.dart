@@ -77,38 +77,6 @@ class FirebaseLeagueService implements ILeagueService {
   Future<void> deleteGroupCascade(String groupId) => _db.deleteGroupCascade(groupId);
 
   @override
-  Future<void> setGroupTeams({
-    required String groupId,
-    required List<String> teamIds,
-  }) async {
-    final gid = groupId.trim();
-    if (gid.isEmpty) return;
-
-    await _firestore.collection('groups').doc(gid).update({
-      'teamIds': teamIds.map((e) => e.trim()).where((e) => e.isNotEmpty).toList(),
-    });
-
-    final groupSnap = await _firestore.collection('groups').doc(gid).get();
-    final groupName = (groupSnap.data()?['name'] ?? '').toString().trim();
-
-    final batch = _firestore.batch();
-    final oldTeams = await _firestore.collection('teams').where('groupId', isEqualTo: gid).get();
-    for (final doc in oldTeams.docs) {
-      batch.update(doc.reference, {'groupId': null, 'groupName': null});
-    }
-
-    for (final tId in teamIds) {
-      final id = tId.trim();
-      if (id.isEmpty) continue;
-      batch.update(_firestore.collection('teams').doc(id), {
-        'groupId': gid,
-        'groupName': groupName,
-      });
-    }
-    await batch.commit();
-  }
-
-  @override
   Future<List<String>> listPitchesOnce() async {
     if (AppConfig.activeDatabase == DatabaseType.supabase) {
       try {

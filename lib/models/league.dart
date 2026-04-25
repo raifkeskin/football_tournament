@@ -134,11 +134,11 @@ class League {
       ),
       numberOfGroups: intFrom(
         v('numberOfGroups', 'number_of_groups'),
-        fallback: intFrom(v('groupCount', 'group_count'), fallback: 1),
+        fallback:  1,
       ),
       groups:
           (v('groups', 'groups') as List?)?.map((e) => e.toString()).toList() ?? const [],
-      groupCount: intFrom(v('groupCount', 'group_count'), fallback: 1),
+      
       teamsPerGroup: intFrom(v('teamsPerGroup', 'teams_per_group'), fallback: 4),
       createdAt: _readDate(v('createdAt', 'created_at')),
       updatedAt: _readDate(v('updatedAt', 'updated_at')),
@@ -170,7 +170,6 @@ class League {
     int? subPlayerCount,
     int? numberOfGroups,
     List<String>? groups,
-    int? groupCount,
     int? teamsPerGroup,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -200,7 +199,7 @@ class League {
       subPlayerCount: subPlayerCount ?? this.subPlayerCount,
       numberOfGroups: numberOfGroups ?? this.numberOfGroups,
       groups: groups ?? this.groups,
-      groupCount: groupCount ?? this.groupCount,
+
       teamsPerGroup: teamsPerGroup ?? this.teamsPerGroup,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -208,6 +207,14 @@ class League {
   }
 
   Map<String, dynamic> toMap({bool snakeCase = false}) {
+    String? dateOnly(DateTime? d) {
+      if (d == null) return null;
+      final y = d.year.toString().padLeft(4, '0');
+      final m = d.month.toString().padLeft(2, '0');
+      final day = d.day.toString().padLeft(2, '0');
+      return '$y-$m-$day';
+    }
+
     if (!snakeCase) {
       return {
         'id': id,
@@ -218,8 +225,8 @@ class League {
         'city': city,
         'managerFullName': managerFullName,
         'managerPhoneRaw10': managerPhoneRaw10,
-        'startDate': startDate?.toIso8601String(),
-        'endDate': endDate?.toIso8601String(),
+        'startDate': dateOnly(startDate),
+        'endDate': dateOnly(endDate),
         'season': season,
         'isActive': isActive,
         'isDefault': isDefault,
@@ -233,7 +240,6 @@ class League {
         'startingPlayerCount': startingPlayerCount,
         'subPlayerCount': subPlayerCount,
         'numberOfGroups': numberOfGroups,
-        'groups': groups,
         'groupCount': groupCount,
         'teamsPerGroup': teamsPerGroup,
       };
@@ -247,8 +253,8 @@ class League {
       'city': city,
       'manager_full_name': managerFullName,
       'manager_phone_raw10': managerPhoneRaw10,
-      'start_date': startDate?.toIso8601String(),
-      'end_date': endDate?.toIso8601String(),
+      'start_date': dateOnly(startDate),
+      'end_date': dateOnly(endDate),
       'season': season,
       'is_active': isActive,
       'is_default': isDefault,
@@ -262,8 +268,7 @@ class League {
       'starting_player_count': startingPlayerCount,
       'sub_player_count': subPlayerCount,
       'number_of_groups': numberOfGroups,
-      'groups': groups,
-      'group_count': groupCount,
+
       'teams_per_group': teamsPerGroup,
     };
   }

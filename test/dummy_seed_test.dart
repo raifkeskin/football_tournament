@@ -138,45 +138,4 @@ void main() {
       AppConfig.activeDatabase = prevDb;
     },
   );
-
-  test(
-    'gruptaki teamIds üzerinden takım listesi oluşturulabilir (2026 grubu)',
-    () async {
-      final prevDb = AppConfig.activeDatabase;
-      AppConfig.activeDatabase = DatabaseType.firebase;
-      final firestore = FakeFirebaseFirestore();
-      final service = DatabaseService(firestore: firestore);
-
-      await firestore.collection('groups').doc('g2026').set({
-        'leagueId': 'L2026',
-        'name': '2026',
-        'teamIds': ['t1', 't2'],
-      });
-      await firestore.collection('teams').doc('t1').set({
-        'leagueId': 'L2026',
-        'name': 'Takım 1',
-        'logoUrl': '',
-      });
-      await firestore.collection('teams').doc('t2').set({
-        'leagueId': 'L2026',
-        'name': 'Takım 2',
-        'logoUrl': '',
-      });
-
-      final groups = await service.getGroups('L2026').first;
-      expect(groups, hasLength(1));
-      expect(groups.first.name, '2026');
-      expect(groups.first.teamIds.toSet(), {'t1', 't2'});
-
-      final teamIds = groups.first.teamIds.toSet();
-      final teamsSnap = await firestore.collection('teams').orderBy('name').get();
-      final listedTeamIds = teamsSnap.docs
-          .map((d) => d.id)
-          .where(teamIds.contains)
-          .toSet();
-
-      expect(listedTeamIds, {'t1', 't2'});
-      AppConfig.activeDatabase = prevDb;
-    },
-  );
 }

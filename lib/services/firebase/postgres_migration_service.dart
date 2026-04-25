@@ -417,10 +417,7 @@ RETURNING id
       final instagramUrl = _sN(data, const ['instagramUrl', 'instagram_url']);
 
       final matchPeriodDuration = _iN(data, const ['matchPeriodDuration', 'match_period_duration']) ?? 25;
-      final numberOfGroups = _iN(data, const ['numberOfGroups', 'number_of_groups']) ??
-          _iN(data, const ['groupCount', 'group_count']) ??
-          1;
-      final groupCount = _iN(data, const ['groupCount', 'group_count']) ?? 1;
+      final numberOfGroups = _iN(data, const ['numberOfGroups', 'number_of_groups']) ?? 1;
       final teamsPerGroup = _iN(data, const ['teamsPerGroup', 'teams_per_group']) ?? 4;
 
       final createdAt = _dt(data, const ['createdAt', 'created_at']);
@@ -436,7 +433,7 @@ INSERT INTO leagues (
   is_active, is_default, is_private, access_code,
   transfer_start_date, transfer_end_date,
   youtube_url, instagram_url,
-  match_period_duration, number_of_groups, group_count, teams_per_group,
+  match_period_duration, number_of_groups, teams_per_group,
   created_at, updated_at
 )
 VALUES (
@@ -446,7 +443,7 @@ VALUES (
   @is_active, @is_default, @is_private, @access_code,
   @transfer_start_date, @transfer_end_date,
   @youtube_url, @instagram_url,
-  @match_period_duration, @number_of_groups, @group_count, @teams_per_group,
+  @match_period_duration, @number_of_groups, @teams_per_group,
   @created_at, @updated_at
 )
 RETURNING id
@@ -472,7 +469,6 @@ RETURNING id
           'instagram_url': instagramUrl,
           'match_period_duration': matchPeriodDuration,
           'number_of_groups': numberOfGroups,
-          'group_count': groupCount,
           'teams_per_group': teamsPerGroup,
           'created_at': createdAt,
           'updated_at': updatedAt,

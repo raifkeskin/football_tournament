@@ -21,7 +21,7 @@ class FirebaseTeamService implements ITeamService {
   final FirebaseFirestore _firestore;
 
   @override
-  Stream<List<Team>> watchAllTeams() {
+  Stream<List<Team>> watchAllTeams({String? caller}) {
     return _firestore.collection('teams').orderBy('name').snapshots().map((snap) {
       final list =
           snap.docs
@@ -33,14 +33,14 @@ class FirebaseTeamService implements ITeamService {
   }
 
   @override
-  Stream<List<Map<String, dynamic>>> watchAllTeamsRaw() {
+  Stream<List<Map<String, dynamic>>> watchAllTeamsRaw({String? caller}) {
     return _firestore.collection('teams').orderBy('name').snapshots().map((snap) {
       return snap.docs.map((d) => {...d.data(), 'id': d.id}).toList();
     });
   }
 
   @override
-  Future<String> getTeamName(String teamId) async {
+  Future<String> getTeamName(String teamId, {String? caller}) async {
     final id = teamId.trim();
     if (id.isEmpty) return '-';
     final snap = await _firestore.collection('teams').doc(id).get();
@@ -49,7 +49,7 @@ class FirebaseTeamService implements ITeamService {
   }
 
   @override
-  Future<Team?> getTeamOnce(String teamId) async {
+  Future<Team?> getTeamOnce(String teamId, {String? caller}) async {
     final id = teamId.trim();
     if (id.isEmpty) return null;
     final snap = await _firestore.collection('teams').doc(id).get();
@@ -59,7 +59,7 @@ class FirebaseTeamService implements ITeamService {
   }
 
   @override
-  Future<PlayerModel?> getPlayerByPhoneOnce(String playerPhone) async {
+  Future<PlayerModel?> getPlayerByPhoneOnce(String playerPhone, {String? caller}) async {
     final phone = playerPhone.trim();
     if (phone.isEmpty) return null;
     final snap = await _firestore.collection('players').doc(phone).get();
@@ -69,7 +69,7 @@ class FirebaseTeamService implements ITeamService {
   }
 
   @override
-  Stream<String> watchTeamName(String teamId) {
+  Stream<String> watchTeamName(String teamId, {String? caller}) {
     final id = teamId.trim();
     if (id.isEmpty) return const Stream<String>.empty();
     return _firestore.collection('teams').doc(id).snapshots().map((snap) {
@@ -80,7 +80,7 @@ class FirebaseTeamService implements ITeamService {
   }
 
   @override
-  Stream<List<Team>> watchTeamsByGroup(String groupId) {
+  Stream<List<Team>> watchTeamsByGroup(String groupId, {String? caller}) {
     return _db.getTeamsByGroup(groupId);
   }
 
@@ -88,12 +88,13 @@ class FirebaseTeamService implements ITeamService {
   Stream<List<PlayerModel>> watchPlayers({
     required String teamId,
     String? tournamentId,
+    String? caller,
   }) {
     return _db.getPlayers(teamId, tournamentId: tournamentId);
   }
 
   @override
-  Stream<List<PlayerModel>> watchAllPlayers() {
+  Stream<List<PlayerModel>> watchAllPlayers({String? caller}) {
     return _db.watchAllPlayers();
   }
 
@@ -103,6 +104,7 @@ class FirebaseTeamService implements ITeamService {
     required String name,
     String? birthDate,
     String? mainPosition,
+    String? caller,
   }) {
     return _db.upsertPlayerIdentity(
       phone: phone,
@@ -116,12 +118,13 @@ class FirebaseTeamService implements ITeamService {
   Future<void> updatePlayer({
     required String playerId,
     required Map<String, dynamic> data,
+    String? caller,
   }) {
     return _db.updatePlayer(playerId: playerId, data: data);
   }
 
   @override
-  Future<Map<String, dynamic>?> getPenaltyForPlayer(String playerId) {
+  Future<Map<String, dynamic>?> getPenaltyForPlayer(String playerId, {String? caller}) {
     return _db.getPenaltyForPlayer(playerId);
   }
 
@@ -131,6 +134,7 @@ class FirebaseTeamService implements ITeamService {
     required String teamId,
     required String penaltyReason,
     required int matchCount,
+    String? caller,
   }) {
     return _db.upsertPenaltyForPlayer(
       playerId: playerId,
@@ -141,7 +145,7 @@ class FirebaseTeamService implements ITeamService {
   }
 
   @override
-  Future<void> clearPenaltyForPlayer({required String playerId}) {
+  Future<void> clearPenaltyForPlayer({required String playerId, String? caller}) {
     return _db.clearPenaltyForPlayer(playerId: playerId);
   }
 
@@ -153,6 +157,7 @@ class FirebaseTeamService implements ITeamService {
     required String playerName,
     String? jerseyNumber,
     required String role,
+    String? caller,
   }) {
     return _db.upsertRosterEntry(
       tournamentId: tournamentId,
@@ -169,6 +174,7 @@ class FirebaseTeamService implements ITeamService {
     required String tournamentId,
     required String teamId,
     required String playerPhone,
+    String? caller,
   }) async {
     final t = tournamentId.trim();
     final team = teamId.trim();
@@ -185,6 +191,7 @@ class FirebaseTeamService implements ITeamService {
     required String tournamentId,
     required String teamId,
     required String playerPhone,
+    String? caller,
   }) async {
     final t = tournamentId.trim();
     final team = teamId.trim();
@@ -208,6 +215,7 @@ class FirebaseTeamService implements ITeamService {
     required String tournamentId,
     required String teamId,
     String? excludePlayerPhone,
+    String? caller,
   }) async {
     final t = tournamentId.trim();
     final team = teamId.trim();
@@ -235,22 +243,24 @@ class FirebaseTeamService implements ITeamService {
   }
 
   @override
-  Future<List<League>> getTeamActiveTournaments(String teamId) {
+  Future<List<League>> getTeamActiveTournaments(String teamId, {String? caller}) {
     return _db.getTeamActiveTournaments(teamId);
   }
 
   @override
-  Future<void> updateTeam(String teamId, Map<String, dynamic> data) {
+  Future<void> updateTeam(String teamId, Map<String, dynamic> data, {String? caller}) {
     return _db.updateTeam(teamId, data);
   }
 
   @override
-  Future<void> deleteTeamCascade(String teamId) {
+  Future<void> deleteTeamCascade(String teamId, {String? caller}) {
     return _db.deleteTeamCascade(teamId);
   }
 
   @override
-  Future<List<Team>> getTeamsCached(String leagueId) => _teamsRepo.getTeamsCached(leagueId);
+  Future<List<Team>> getTeamsCached(String leagueId, {String? caller}) =>
+      _teamsRepo.getTeamsCached(leagueId);
+
   @override
   Future<Team> addTeamAndUpsertCache({
     required String leagueId,
@@ -258,20 +268,22 @@ class FirebaseTeamService implements ITeamService {
     required String logoUrl,
     String? groupId,
     String? groupName,
+    String? caller,
   }) => _teamsRepo.addTeamAndUpsertCache(
-    leagueId: leagueId,
-    teamName: teamName,
-    logoUrl: logoUrl,
-    groupId: groupId,
-    groupName: groupName,
-  );
+        leagueId: leagueId,
+        teamName: teamName,
+        logoUrl: logoUrl,
+        groupId: groupId,
+        groupName: groupName,
+      );
 
   @override
-  Future<int> deleteAllTeams() => _db.deleteAllTeams();
+  Future<int> deleteAllTeams({String? caller}) => _db.deleteAllTeams();
 
   @override
-  Future<int> deleteAllPlayers() => _db.deleteAllPlayers();
+  Future<int> deleteAllPlayers({String? caller}) => _db.deleteAllPlayers();
 
   @override
-  Future<void> invalidateTeams(String leagueId) => _teamsRepo.invalidateTeams(leagueId);
+  Future<void> invalidateTeams(String leagueId, {String? caller}) =>
+      _teamsRepo.invalidateTeams(leagueId);
 }

@@ -29,6 +29,7 @@ class _AdminGroupManagementScreenState
   final ITeamService _teamService = ServiceLocator.teamService;
   String? _selectedLeagueId;
   String? _selectedGroupId;
+  String? _selectedGroupName;
   final List<String> _selectedTeamIds = [];
 
   @override
@@ -38,6 +39,24 @@ class _AdminGroupManagementScreenState
     if (initial.isNotEmpty) {
       _selectedLeagueId = initial;
     }
+  }
+
+  Future<void> _syncSelectedTeamsForGroup() async {
+    final leagueId = (_selectedLeagueId ?? '').trim();
+    final groupId = (_selectedGroupId ?? '').trim();
+    if (leagueId.isEmpty || groupId.isEmpty) return;
+    final teams = await _teamService.getTeamsCached(leagueId);
+    final ids = teams
+        .where((t) => (t.groupId ?? '').trim() == groupId)
+        .map((t) => t.id)
+        .where((e) => e.trim().isNotEmpty)
+        .toList();
+    if (!mounted) return;
+    setState(() {
+      _selectedTeamIds
+        ..clear()
+        ..addAll(ids);
+    });
   }
 
   @override
@@ -153,10 +172,10 @@ class _AdminGroupManagementScreenState
                       final first = groups.first;
                       setState(() {
                         _selectedGroupId = first.id;
-                        _selectedTeamIds
-                          ..clear()
-                          ..addAll(first.teamIds);
+                        _selectedGroupName = first.name;
+                        _selectedTeamIds.clear();
                       });
+                      _syncSelectedTeamsForGroup();
                     });
                   }
                 }
@@ -215,14 +234,13 @@ class _AdminGroupManagementScreenState
                                       )
                                       .toList(),
                                   onChanged: (val) {
+                                    final selected = groups.where((g) => g.id == val).toList();
                                     setState(() {
                                       _selectedGroupId = val;
-                                      final group = groups.firstWhere(
-                                        (g) => g.id == val,
-                                      );
+                                      _selectedGroupName = selected.isEmpty ? null : selected.first.name;
                                       _selectedTeamIds.clear();
-                                      _selectedTeamIds.addAll(group.teamIds);
                                     });
+                                    _syncSelectedTeamsForGroup();
                                   },
                                   menuMaxHeight: 360,
                                 ),
@@ -281,11 +299,16 @@ class _AdminGroupManagementScreenState
                           .where((t) => t.id != 'free_agent_pool')
                           .toList();
 
-                  // Filtreleme Mantığı:
-                  // 1. Sadece bu turnuvaya (League) ait olan takımları göster.
-                  // 2. Takımın bir grubu yoksa (null) göster.
-                  // 3. Takım zaten BAŞKA bir gruptaysa (ve o grup bizim seçtiğimiz grup DEĞİLSE) listede gösterme.
-                  final availableTeams = [...allTeams]
+                  final leagueId = (_selectedLeagueId ?? '').trim();
+                  final groupId = (_selectedGroupId ?? '').trim();
+                  final availableTeams = allTeams
+                      .where((t) => (t.leagueId ?? '').trim() == leagueId)
+                      .where(
+                        (t) =>
+                            (t.groupId ?? '').trim().isEmpty ||
+                            (t.groupId ?? '').trim() == groupId,
+                      )
+                      .toList()
                     ..sort(
                       (a, b) =>
                           a.name.toLowerCase().compareTo(b.name.toLowerCase()),
@@ -395,7 +418,6 @@ class _AdminGroupManagementScreenState
                         id: '',
                         leagueId: _selectedLeagueId!,
                         name: controller.text.trim(),
-                        teamIds: [],
                       ),
                     );
                     if (!mounted) return;
@@ -416,10 +438,28 @@ class _AdminGroupManagementScreenState
     try {
       final groupId = _selectedGroupId;
       if (groupId == null) return;
-      await _leagueService.setGroupTeams(
-        groupId: groupId,
-        teamIds: _selectedTeamIds,
-      );
+      final leagueId = (_selectedLeagueId ?? '').trim();
+      if (leagueId.isEmpty) return;
+      final groupName = (_selectedGroupName ?? '').trim();
+
+      final teams = await _teamService.getTeamsCached(leagueId);
+      final currentGroupTeams = teams.where((t) => (t.groupId ?? '').trim() == groupId).toList();
+
+      final nextIds = _selectedTeamIds.map((e) => e.trim()).where((e) => e.isNotEmpty).toSet();
+      final currentIds = currentGroupTeams.map((t) => t.id.trim()).where((e) => e.isNotEmpty).toSet();
+
+      final toRemove = currentIds.difference(nextIds);
+      final toAdd = nextIds.difference(currentIds);
+
+      for (final id in toRemove) {
+        await _teamService.updateTeam(id, {'groupId': null, 'groupName': null});
+      }
+      for (final id in toAdd) {
+        await _teamService.updateTeam(
+          id,
+          {'groupId': groupId, 'groupName': groupName.isEmpty ? null : groupName},
+        );
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

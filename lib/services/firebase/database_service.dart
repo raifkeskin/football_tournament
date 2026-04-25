@@ -294,24 +294,24 @@ class DatabaseService {
     if (AppConfig.activeDatabase == DatabaseType.supabase) {
       try {
         AppConfig.sqlLogStart(
-          table: 'groups',
+          table: 'league_registrations',
           operation: 'SELECT',
-          filters: 'team_ids contains [$tId]',
+          filters: 'team_id=$tId | columns=league_id',
         );
-        final groupRes = (await Supabase.instance.client
-                .from('groups')
-                .select('league_id, tournament_id')
-                .contains('team_ids', [tId]))
+        final regRes = (await Supabase.instance.client
+                .from('league_registrations')
+                .select('league_id')
+                .eq('team_id', tId))
             .cast<Map<String, dynamic>>();
-        if (groupRes.isEmpty) {
-          AppConfig.sqlLogResult(table: 'groups', operation: 'SELECT', count: 0);
+        if (regRes.isEmpty) {
+          AppConfig.sqlLogResult(table: 'league_registrations', operation: 'SELECT', count: 0);
           return [];
         }
-        AppConfig.sqlLogResult(table: 'groups', operation: 'SELECT', count: groupRes.length);
+        AppConfig.sqlLogResult(table: 'league_registrations', operation: 'SELECT', count: regRes.length);
 
         final leagueIds = <String>{};
-        for (final row in groupRes) {
-          final id = (row['league_id'] ?? row['tournament_id'] ?? '').toString().trim();
+        for (final row in regRes) {
+          final id = (row['league_id'] ?? '').toString().trim();
           if (id.isNotEmpty) leagueIds.add(id);
         }
         if (leagueIds.isEmpty) return [];
@@ -1261,17 +1261,17 @@ class DatabaseService {
           final at = (a.matchTime ?? '').trim();
           final bt = (b.matchTime ?? '').trim();
           if (at.isEmpty && bt.isEmpty) {
-            return a.homeTeamName
+            return a.homeTeamId
                 .toLowerCase()
-                .compareTo(b.homeTeamName.toLowerCase());
+                .compareTo(b.homeTeamId.toLowerCase());
           }
           if (at.isEmpty) return 1;
           if (bt.isEmpty) return -1;
           final cmp = at.compareTo(bt);
           if (cmp != 0) return cmp;
-          return a.homeTeamName
+          return a.homeTeamId
               .toLowerCase()
-              .compareTo(b.homeTeamName.toLowerCase());
+              .compareTo(b.homeTeamId.toLowerCase());
         });
       controller.add(list);
     }
@@ -2041,11 +2041,7 @@ class DatabaseService {
             leagueId: leagueId,
             groupId: groupDoc.id,
             homeTeamId: home.id,
-            homeTeamName: home.name,
-            homeTeamLogoUrl: home.logoUrl,
             awayTeamId: away.id,
-            awayTeamName: away.name,
-            awayTeamLogoUrl: away.logoUrl,
             homeScore: 0,
             awayScore: 0,
             matchDate: matchDateStr,
@@ -2103,7 +2099,7 @@ class DatabaseService {
               MatchEvent(
                 id: '',
                 matchId: matchId,
-                tournamentId: leagueId,
+                leagueId: leagueId,
                 eventType: 'goal',
                 teamId: home.id,
                 minute: random.nextInt(89) + 1,
@@ -2125,7 +2121,7 @@ class DatabaseService {
               MatchEvent(
                 id: '',
                 matchId: matchId,
-                tournamentId: leagueId,
+                leagueId: leagueId,
                 eventType: 'goal',
                 teamId: away.id,
                 minute: random.nextInt(89) + 1,
@@ -2144,7 +2140,7 @@ class DatabaseService {
               MatchEvent(
                 id: '',
                 matchId: matchId,
-                tournamentId: leagueId,
+                leagueId: leagueId,
                 eventType: 'yellow_card',
                 teamId: teamId,
                 minute: random.nextInt(89) + 1,
@@ -2167,7 +2163,7 @@ class DatabaseService {
               MatchEvent(
                 id: '',
                 matchId: matchId,
-                tournamentId: leagueId,
+                leagueId: leagueId,
                 eventType: 'yellow_card',
                 teamId: teamId,
                 minute: m1,
@@ -2179,7 +2175,7 @@ class DatabaseService {
               MatchEvent(
                 id: '',
                 matchId: matchId,
-                tournamentId: leagueId,
+                leagueId: leagueId,
                 eventType: 'yellow_card',
                 teamId: teamId,
                 minute: m2,
@@ -2197,7 +2193,7 @@ class DatabaseService {
               MatchEvent(
                 id: '',
                 matchId: matchId,
-                tournamentId: leagueId,
+                leagueId: leagueId,
                 eventType: 'red_card',
                 teamId: teamId,
                 minute: 10 + random.nextInt(80),

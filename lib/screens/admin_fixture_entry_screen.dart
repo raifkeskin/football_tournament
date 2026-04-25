@@ -422,11 +422,7 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
         leagueId: _selectedLeagueId!,
         groupId: _selectedGroupId!,
         homeTeamId: _homeTeamId!,
-        homeTeamName: home.name,
-        homeTeamLogoUrl: logoFromTeam(home),
         awayTeamId: _awayTeamId!,
-        awayTeamName: away.name,
-        awayTeamLogoUrl: logoFromTeam(away),
         homeScore: 0,
         awayScore: 0,
         matchDate: matchDateTime == null

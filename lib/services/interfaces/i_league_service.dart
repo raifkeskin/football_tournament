@@ -29,11 +29,6 @@ abstract class ILeagueService {
 
   Future<void> deleteGroupCascade(String groupId);
 
-  Future<void> setGroupTeams({
-    required String groupId,
-    required List<String> teamIds,
-  });
-
   Future<List<String>> listPitchesOnce();
 
   Stream<List<Pitch>> watchPitches();

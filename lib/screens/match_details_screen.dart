@@ -14,7 +14,6 @@ import '../services/interfaces/i_match_service.dart';
 import '../services/interfaces/i_team_service.dart';
 import '../services/service_locator.dart';
 import 'admin_match_event_screen.dart';
-import 'admin_match_lineup_screen.dart';
 import 'formation_tab.dart';
 
 // --- YARDIMCI WIDGETLAR ---
@@ -319,18 +318,22 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
               );
             }
             final Map<String, String> logoMap = {};
+            final Map<String, String> nameMap = {};
             if (teamsSnap.hasData) {
               for (final team in teamsSnap.data!) {
                 logoMap[team.id] = team.logoUrl;
+                nameMap[team.id] = team.name;
               }
             }
 
-            final homeLogo = (logoMap[m.homeTeamId] ?? '').trim().isNotEmpty
-                ? (logoMap[m.homeTeamId] ?? '')
-                : m.homeTeamLogoUrl;
-            final awayLogo = (logoMap[m.awayTeamId] ?? '').trim().isNotEmpty
-                ? (logoMap[m.awayTeamId] ?? '')
-                : m.awayTeamLogoUrl;
+            final homeLogo = (logoMap[m.homeTeamId] ?? '').trim();
+            final awayLogo = (logoMap[m.awayTeamId] ?? '').trim();
+            final homeName = (nameMap[m.homeTeamId] ?? '').trim().isEmpty
+                ? 'Ev Sahibi'
+                : (nameMap[m.homeTeamId] ?? '').trim();
+            final awayName = (nameMap[m.awayTeamId] ?? '').trim().isEmpty
+                ? 'Deplasman'
+                : (nameMap[m.awayTeamId] ?? '').trim();
 
         return Scaffold(
                 extendBodyBehindAppBar: true,
@@ -377,7 +380,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                               children: [
                                 Expanded(
                                   child: _TeamInfo(
-                                    name: m.homeTeamName,
+                                    name: homeName,
                                     logoUrl: homeLogo,
                                   ),
                                 ),
@@ -424,7 +427,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                 ),
                                 Expanded(
                                   child: _TeamInfo(
-                                    name: m.awayTeamName,
+                                    name: awayName,
                                     logoUrl: awayLogo,
                                   ),
                                 ),
@@ -552,7 +555,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                       controller: _tabController,
                       children: [
                         _DetailTab(match: m),
-                        _LineupTab(match: m, isAdmin: isAdminAccess),
+                        _LineupTab(homeName: homeName, awayName: awayName),
                         _HighlightsTab(match: m),
                         FormationTab.fromMatch(
                           match: m,
@@ -930,96 +933,10 @@ class _YoutubePlayerSectionState extends State<_YoutubePlayerSection> {
 }
 
 class _LineupTab extends StatelessWidget {
-  final MatchModel match;
-  final bool isAdmin;
-  const _LineupTab({required this.match, required this.isAdmin});
+  const _LineupTab({required this.homeName, required this.awayName});
 
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: _LineupSide(
-            sideTitle: 'Ev Sahibi',
-            buttonText: 'Kadro Girişi',
-            onPressed: isAdmin
-                ? () {
-                    showModalBottomSheet(
-                      context: context,
-                      isScrollControlled: true,
-                      backgroundColor: Colors.transparent,
-                      builder: (c) => FractionallySizedBox(
-                        heightFactor: 0.9,
-                        child: ClipRRect(
-                          borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(20),
-                          ),
-                          child: AdminMatchLineupScreen(
-                            match: match,
-                            isHome: true,
-                          ),
-                        ),
-                      ),
-                    );
-                  }
-                : null,
-            teamName: match.homeTeamName,
-            lineupDetail: match.homeLineupDetail,
-            lineupIds: match.homeLineup,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _LineupSide(
-            sideTitle: 'Deplasman',
-            buttonText: 'Kadro Girişi',
-            onPressed: isAdmin
-                ? () {
-                    showModalBottomSheet(
-                      context: context,
-                      isScrollControlled: true,
-                      backgroundColor: Colors.transparent,
-                      builder: (c) => FractionallySizedBox(
-                        heightFactor: 0.9,
-                        child: ClipRRect(
-                          borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(20),
-                          ),
-                          child: AdminMatchLineupScreen(
-                            match: match,
-                            isHome: false,
-                          ),
-                        ),
-                      ),
-                    );
-                  }
-                : null,
-            teamName: match.awayTeamName,
-            lineupDetail: match.awayLineupDetail,
-            lineupIds: match.awayLineup,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _LineupSide extends StatelessWidget {
-  final String sideTitle;
-  final String buttonText;
-  final VoidCallback? onPressed;
-  final String teamName;
-  final MatchLineup? lineupDetail;
-  final List<String>? lineupIds;
-
-  const _LineupSide({
-    required this.sideTitle,
-    required this.buttonText,
-    required this.onPressed,
-    required this.teamName,
-    required this.lineupDetail,
-    required this.lineupIds,
-  });
+  final String homeName;
+  final String awayName;
 
   @override
   Widget build(BuildContext context) {
@@ -1028,167 +945,17 @@ class _LineupSide extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       children: [
         Text(
-          sideTitle,
+          '$homeName - $awayName',
           style: TextStyle(
-            color: cs.onSurfaceVariant,
-            fontWeight: FontWeight.w900,
-            fontSize: 12,
-            letterSpacing: 0.3,
-          ),
-        ),
-        const SizedBox(height: 6),
-        if (onPressed != null)
-          ElevatedButton.icon(
-            onPressed: onPressed,
-            icon: const Icon(Icons.people),
-            label: Text(buttonText),
-          ),
-        if (onPressed != null) const SizedBox(height: 12),
-        _TeamLineupSection(
-          teamName: teamName,
-          lineupDetail: lineupDetail,
-          lineupIds: lineupIds,
-        ),
-      ],
-    );
-  }
-}
-
-class _TeamLineupSection extends StatelessWidget {
-  final String teamName;
-  final MatchLineup? lineupDetail;
-  final List<String>? lineupIds;
-  const _TeamLineupSection({
-    required this.teamName,
-    this.lineupDetail,
-    this.lineupIds,
-  });
-
-  String _readName(dynamic p) {
-    if (p == null) return '';
-    if (p is LineupPlayer) return p.name;
-    if (p is Map) {
-      final v = p['playerName'] ?? p['player_name'] ?? p['name'];
-      return (v ?? '').toString();
-    }
-    return p.toString();
-  }
-
-  String _readNumber(dynamic p) {
-    if (p == null) return '';
-    if (p is LineupPlayer) return (p.number ?? '').toString();
-    if (p is Map) {
-      final v = p['number'] ?? p['jerseyNumber'] ?? p['jersey_number'];
-      return (v ?? '').toString();
-    }
-    return '';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final List<dynamic> startingRaw = lineupDetail != null
-        ? lineupDetail!.starting
-        : (lineupIds ?? const <String>[]);
-    final List<dynamic> subsRaw =
-        lineupDetail != null ? lineupDetail!.subs : const <dynamic>[];
-
-    final starting = startingRaw
-        .where((p) => _readName(p).trim().isNotEmpty)
-        .toList(growable: false);
-    final subs = subsRaw
-        .where((p) => _readName(p).trim().isNotEmpty)
-        .toList(growable: false);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          teamName,
-          style: const TextStyle(
+            color: cs.onSurface,
             fontWeight: FontWeight.w900,
             fontSize: 16,
-            color: Colors.amber,
           ),
         ),
         const SizedBox(height: 12),
-        const Text(
-          'İLK 11',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 12,
-            color: Colors.white54,
-          ),
-        ),
-        if (starting.isEmpty)
-          const Text(
-            'Kadro girilmedi',
-            style: TextStyle(color: Colors.white24, fontSize: 13),
-          ),
-        ...starting.map(
-          (p) => ListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            horizontalTitleGap: 8,
-            minLeadingWidth: 26,
-            visualDensity: VisualDensity.compact,
-            leading: Text(
-              _readNumber(p).trim(),
-              textAlign: TextAlign.right,
-              style: const TextStyle(
-                fontWeight: FontWeight.w900,
-                fontSize: 10,
-              ),
-            ),
-            title: Text(
-              _readName(p).trim(),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 11,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        const Text(
-          'YEDEKLER',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 12,
-            color: Colors.white54,
-          ),
-        ),
-        if (subs.isEmpty)
-          const Text(
-            'Yedek girilmedi',
-            style: TextStyle(color: Colors.white24, fontSize: 13),
-          ),
-        ...subs.map(
-          (p) => ListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            horizontalTitleGap: 8,
-            minLeadingWidth: 26,
-            visualDensity: VisualDensity.compact,
-            leading: Text(
-              _readNumber(p).trim(),
-              textAlign: TextAlign.right,
-              style: const TextStyle(
-                fontWeight: FontWeight.w900,
-                fontSize: 10,
-              ),
-            ),
-            title: Text(
-              _readName(p).trim(),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 11,
-              ),
-            ),
-          ),
+        Text(
+          'Kadro verileri match_rosters tablosuna taşındığı için bu ekran yeniden düzenlenecek.',
+          style: TextStyle(color: cs.onSurfaceVariant, fontWeight: FontWeight.w600),
         ),
       ],
     );

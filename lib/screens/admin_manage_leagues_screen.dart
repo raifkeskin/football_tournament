@@ -759,13 +759,6 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
         children: [
-          const SizedBox(height: 4),
-          Text(
-            'Turnuvalar',
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-          ),
           const SizedBox(height: 12),
           StreamBuilder<List<League>>(
             stream: _leagueService.watchLeagues(),

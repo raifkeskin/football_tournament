@@ -29,17 +29,45 @@ class AppConfig {
     print(message);
   }
 
+  static String _safe(String? v, {String fallback = '-'}) {
+    final s = (v ?? '').trim();
+    return s.isEmpty ? fallback : s;
+  }
+
+  static String _formatError(Object error) {
+    final dynamic dyn = error;
+    try {
+      final code = (dyn.code ?? dyn.statusCode ?? dyn.errorCode)?.toString().trim();
+      final message = (dyn.message ?? dyn.details ?? dyn.toString()).toString().trim();
+      final c = (code ?? '').isEmpty ? null : code;
+      if (c != null) return '($c) $message';
+      return message;
+    } catch (_) {
+      return error.toString();
+    }
+  }
+
   static void sqlLogStart({
     required String table,
     required String operation,
     String? filters,
+    String? caller,
+    String? service,
+    String? method,
   }) {
     if (!dbLogEnabled) return;
-    print('[SQL LOG] Tablo: $table | İşlem: $operation');
-    final f = (filters ?? '').trim();
-    if (f.isNotEmpty) {
-      print('[SQL LOG] Filtreler: $f');
-    }
+
+    final callerText = _safe(caller);
+    final serviceText = _safe(service);
+    final methodText = _safe(method);
+    final filtersText = _safe(filters);
+
+    print('---------------- [SUPABASE QUERY START] ----------------');
+    print('📍 CALLER  : $callerText');
+    print('🏗️ SERVICE : $serviceText -> $methodText');
+    print('📊 TABLE   : $table | OP: $operation');
+    print('🔍 FILTERS : $filtersText');
+    print('--------------------------------------------------------');
   }
 
   static void sqlLogResult({
@@ -47,14 +75,28 @@ class AppConfig {
     required String operation,
     int? count,
     Object? error,
+    String? caller,
+    String? service,
+    String? method,
+    String? message,
   }) {
     if (!dbLogEnabled) return;
+
     if (error != null) {
-      print('[SQL LOG] Sonuç: Hata: $error');
+      print('❌ ERROR: ${_formatError(error)}');
       return;
     }
+
     final c = count;
-    final suffix = c == null ? '' : ' | Kayıt: $c';
-    print('[SQL LOG] Sonuç: Başarılı$suffix');
+    final msg = (message ?? '').trim();
+    if (msg.isNotEmpty) {
+      print('✅ RESULT: $msg');
+      return;
+    }
+    if (c != null) {
+      print('✅ RESULT: $c kayıt');
+      return;
+    }
+    print('✅ RESULT: Başarılı');
   }
 }

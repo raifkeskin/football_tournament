@@ -301,9 +301,11 @@ class _HomeScreenState extends State<HomeScreen> {
       stream: _teamService.watchAllTeams(),
       builder: (context, teamSnapshot) {
         final Map<String, String> logoMap = {};
+        final Map<String, String> nameMap = {};
         if (teamSnapshot.hasData) {
           for (final t in teamSnapshot.data!) {
             logoMap[t.id] = t.logoUrl;
+            nameMap[t.id] = t.name;
           }
         }
 
@@ -438,6 +440,12 @@ class _HomeScreenState extends State<HomeScreen> {
                             match: m,
                             homeLogo: logoMap[m.homeTeamId] ?? '',
                             awayLogo: logoMap[m.awayTeamId] ?? '',
+                            homeName: (nameMap[m.homeTeamId] ?? '').trim().isEmpty
+                                ? 'Ev Sahibi'
+                                : (nameMap[m.homeTeamId] ?? '').trim(),
+                            awayName: (nameMap[m.awayTeamId] ?? '').trim().isEmpty
+                                ? 'Deplasman'
+                                : (nameMap[m.awayTeamId] ?? '').trim(),
                           ),
                         ),
                       ],
@@ -457,10 +465,14 @@ class _MatchCard extends StatelessWidget {
   final MatchModel match;
   final String homeLogo;
   final String awayLogo;
+  final String homeName;
+  final String awayName;
   const _MatchCard({
     required this.match,
     required this.homeLogo,
     required this.awayLogo,
+    required this.homeName,
+    required this.awayName,
   });
 
   @override
@@ -598,9 +610,9 @@ class _MatchCard extends StatelessWidget {
               Expanded(
                 child: Column(
                   children: [
-                    _row(match.homeTeamName, homeLogo, scoreBox(hs)),
+                    _row(homeName, homeLogo, scoreBox(hs)),
                     const SizedBox(height: 12),
-                    _row(match.awayTeamName, awayLogo, scoreBox(as)),
+                    _row(awayName, awayLogo, scoreBox(as)),
                   ],
                 ),
               ),

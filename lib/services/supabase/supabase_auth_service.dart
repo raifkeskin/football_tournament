@@ -20,6 +20,42 @@ class SupabaseAuthService implements IAuthService {
     return DateTime.tryParse(s);
   }
 
+  static Map<String, String> _traceInfo(StackTrace trace) {
+    final lines = trace.toString().split('\n');
+    final line = lines.length > 1 ? lines[1] : (lines.isNotEmpty ? lines.first : '');
+
+    final method =
+        RegExp(r'#\d+\s+(.+?)\s+\(').firstMatch(line)?.group(1)?.trim() ?? '-';
+
+    final location =
+        RegExp(r'\((.+?):\d+:\d+\)').firstMatch(line)?.group(1)?.trim() ?? '';
+
+    var file = '-';
+    if (location.isNotEmpty) {
+      final normalized = location.replaceAll('\\', '/');
+      file = normalized.split('/').last;
+    }
+
+    return {'file': file, 'method': method};
+  }
+
+  static void _sbLog({
+    required String table,
+    required String query,
+    required StackTrace trace,
+  }) {
+    final info = _traceInfo(trace);
+    AppConfig.logDb(
+      '[SUPABASE] File: ${info['file']} | Method: ${info['method']} | Table: $table | Query: $query',
+    );
+  }
+
+  static void _sbResult({int? rows, Object? error}) {
+    AppConfig.logDb(
+      '[SUPABASE_RESULT] Rows: ${rows ?? '-'} | Error: ${error == null ? '-' : error.toString()}',
+    );
+  }
+
   @override
   Future<ConfirmationResult> startPhoneAuthWeb({required String phoneNumber}) {
     if (!kIsWeb) {
@@ -33,6 +69,11 @@ class SupabaseAuthService implements IAuthService {
     final id = uid.trim();
     if (id.isEmpty) return const Stream<UserDoc?>.empty();
     try {
+      _sbLog(
+        table: 'users',
+        query: 'STREAM primaryKey=id | clientFilter=id=$id',
+        trace: StackTrace.current,
+      );
       AppConfig.sqlLogStart(
         table: 'users',
         operation: 'STREAM',
@@ -52,6 +93,7 @@ class SupabaseAuthService implements IAuthService {
       });
     } catch (e) {
       AppConfig.sqlLogResult(table: 'users', operation: 'STREAM', error: e);
+      _sbResult(error: e);
       return const Stream<UserDoc?>.empty();
     }
   }
@@ -61,6 +103,11 @@ class SupabaseAuthService implements IAuthService {
     final p = phone.trim();
     if (p.isEmpty) return const Stream<List<RosterAssignment>>.empty();
     try {
+      _sbLog(
+        table: 'rosters',
+        query: 'STREAM primaryKey=id | clientFilter=player_phone=$p',
+        trace: StackTrace.current,
+      );
       AppConfig.sqlLogStart(
         table: 'rosters',
         operation: 'STREAM',
@@ -80,6 +127,7 @@ class SupabaseAuthService implements IAuthService {
       });
     } catch (e) {
       AppConfig.sqlLogResult(table: 'rosters', operation: 'STREAM', error: e);
+      _sbResult(error: e);
       return const Stream<List<RosterAssignment>>.empty();
     }
   }
@@ -94,6 +142,11 @@ class SupabaseAuthService implements IAuthService {
     final c = code.trim();
     if (raw10.isEmpty || c.isEmpty) return;
     try {
+      _sbLog(
+        table: 'otp_codes',
+        query: 'INSERT phone_raw10=$raw10',
+        trace: StackTrace.current,
+      );
       AppConfig.sqlLogStart(
         table: 'otp_codes',
         operation: 'INSERT',
@@ -106,8 +159,10 @@ class SupabaseAuthService implements IAuthService {
         'expires_at': expiresAt.toIso8601String(),
       });
       AppConfig.sqlLogResult(table: 'otp_codes', operation: 'INSERT', count: 1);
+      _sbResult(rows: 1);
     } catch (e) {
       AppConfig.sqlLogResult(table: 'otp_codes', operation: 'INSERT', error: e);
+      _sbResult(rows: 0, error: e);
     }
   }
 
@@ -116,6 +171,11 @@ class SupabaseAuthService implements IAuthService {
     final raw10 = phoneRaw10.trim();
     if (raw10.isEmpty) return null;
     try {
+      _sbLog(
+        table: 'otp_codes',
+        query: 'SELECT phone_raw10=$raw10, status=pending | order=created_at desc | limit=1',
+        trace: StackTrace.current,
+      );
       AppConfig.sqlLogStart(
         table: 'otp_codes',
         operation: 'SELECT',
@@ -131,9 +191,11 @@ class SupabaseAuthService implements IAuthService {
       final rows = (res as List).cast<Map<String, dynamic>>();
       if (rows.isEmpty) {
         AppConfig.sqlLogResult(table: 'otp_codes', operation: 'SELECT', count: 0);
+        _sbResult(rows: 0);
         return null;
       }
       AppConfig.sqlLogResult(table: 'otp_codes', operation: 'SELECT', count: 1);
+      _sbResult(rows: 1);
       final row = rows.first;
       final code = (row['code'] ?? '').toString().trim();
       final expiresAt = _readDate(row['expires_at']);
@@ -141,6 +203,7 @@ class SupabaseAuthService implements IAuthService {
       return OtpRequest(phoneRaw10: raw10, code: code, expiresAt: expiresAt);
     } catch (e) {
       AppConfig.sqlLogResult(table: 'otp_codes', operation: 'SELECT', error: e);
+      _sbResult(rows: 0, error: e);
       return null;
     }
   }
@@ -150,6 +213,11 @@ class SupabaseAuthService implements IAuthService {
     final raw10 = phoneRaw10.trim();
     if (raw10.isEmpty) return;
     try {
+      _sbLog(
+        table: 'otp_codes',
+        query: 'UPDATE phone_raw10=$raw10, status=pending',
+        trace: StackTrace.current,
+      );
       AppConfig.sqlLogStart(
         table: 'otp_codes',
         operation: 'UPDATE',
@@ -161,14 +229,21 @@ class SupabaseAuthService implements IAuthService {
           .eq('phone_raw10', raw10)
           .eq('status', 'pending');
       AppConfig.sqlLogResult(table: 'otp_codes', operation: 'UPDATE');
+      _sbResult(rows: 1);
     } catch (e) {
       AppConfig.sqlLogResult(table: 'otp_codes', operation: 'UPDATE', error: e);
+      _sbResult(rows: 0, error: e);
     }
   }
 
   @override
   Stream<List<OtpCodeEntry>> watchOtpCodes({bool includeVerified = false}) {
     Future<List<OtpCodeEntry>> fetch() async {
+      _sbLog(
+        table: 'otp_codes',
+        query: 'SELECT order=created_at desc | limit=200 | includeVerified=$includeVerified',
+        trace: StackTrace.current,
+      );
       AppConfig.sqlLogStart(
         table: 'otp_codes',
         operation: 'SELECT',
@@ -184,6 +259,7 @@ class SupabaseAuthService implements IAuthService {
           ? rows
           : rows.where((r) => (r['status'] ?? '').toString().trim() == 'pending');
       AppConfig.sqlLogResult(table: 'otp_codes', operation: 'SELECT', count: filtered.length);
+      _sbResult(rows: filtered.length);
       return filtered.map((row) {
         final id = (row['id'] ?? '').toString();
         final phoneRaw10 = (row['phone_raw10'] ?? '').toString().trim();
@@ -231,6 +307,11 @@ class SupabaseAuthService implements IAuthService {
 
     return Future(() async {
       Future<List<Map<String, dynamic>>> leaguesBy(String field, String value) async {
+        _sbLog(
+          table: 'leagues',
+          query: 'SELECT $field=$value | limit=10',
+          trace: StackTrace.current,
+        );
         AppConfig.sqlLogStart(
           table: 'leagues',
           operation: 'SELECT',
@@ -239,6 +320,7 @@ class SupabaseAuthService implements IAuthService {
         final res = await _client.from('leagues').select().eq(field, value).limit(10);
         final rows = (res as List).cast<Map<String, dynamic>>();
         AppConfig.sqlLogResult(table: 'leagues', operation: 'SELECT', count: rows.length);
+        _sbResult(rows: rows.length);
         return rows;
       }
 
@@ -258,6 +340,11 @@ class SupabaseAuthService implements IAuthService {
       }
 
       Future<Map<String, dynamic>?> firstPlayerBy(String field, String value) async {
+        _sbLog(
+          table: 'players',
+          query: 'SELECT $field=$value | limit=1',
+          trace: StackTrace.current,
+        );
         AppConfig.sqlLogStart(
           table: 'players',
           operation: 'SELECT',
@@ -267,9 +354,11 @@ class SupabaseAuthService implements IAuthService {
         final rows = (res as List).cast<Map<String, dynamic>>();
         if (rows.isEmpty) {
           AppConfig.sqlLogResult(table: 'players', operation: 'SELECT', count: 0);
+          _sbResult(rows: 0);
           return null;
         }
         AppConfig.sqlLogResult(table: 'players', operation: 'SELECT', count: 1);
+        _sbResult(rows: 1);
         return rows.first;
       }
 
@@ -293,6 +382,11 @@ class SupabaseAuthService implements IAuthService {
       String? tournamentId;
       if (teamId.isNotEmpty && teamId != 'free_agent_pool') {
         try {
+          _sbLog(
+            table: 'teams',
+            query: 'SELECT id=$teamId | limit=1',
+            trace: StackTrace.current,
+          );
           AppConfig.sqlLogStart(
             table: 'teams',
             operation: 'SELECT',
@@ -302,14 +396,17 @@ class SupabaseAuthService implements IAuthService {
           final rows = (tRes as List).cast<Map<String, dynamic>>();
           if (rows.isNotEmpty) {
             AppConfig.sqlLogResult(table: 'teams', operation: 'SELECT', count: 1);
+            _sbResult(rows: 1);
             final t = rows.first;
             teamName = (t['name'] ?? '').toString().trim();
             tournamentId = (t['league_id'] ?? t['tournament_id'] ?? '').toString().trim();
           } else {
             AppConfig.sqlLogResult(table: 'teams', operation: 'SELECT', count: 0);
+            _sbResult(rows: 0);
           }
         } catch (e) {
           AppConfig.sqlLogResult(table: 'teams', operation: 'SELECT', error: e);
+          _sbResult(rows: 0, error: e);
         }
       }
 
@@ -388,6 +485,11 @@ class SupabaseAuthService implements IAuthService {
 
     final nowIso = DateTime.now().toIso8601String();
     try {
+      _sbLog(
+        table: 'users',
+        query: 'UPSERT onConflict=id | id=${user.uid}',
+        trace: StackTrace.current,
+      );
       AppConfig.sqlLogStart(
         table: 'users',
         operation: 'UPSERT',
@@ -407,8 +509,10 @@ class SupabaseAuthService implements IAuthService {
         'created_at': nowIso,
       }, onConflict: 'id');
       AppConfig.sqlLogResult(table: 'users', operation: 'UPSERT', count: 1);
+      _sbResult(rows: 1);
     } catch (e) {
       AppConfig.sqlLogResult(table: 'users', operation: 'UPSERT', error: e);
+      _sbResult(rows: 0, error: e);
     }
 
     if (resolvedRole == 'tournament_admin') {
@@ -416,6 +520,11 @@ class SupabaseAuthService implements IAuthService {
       final pid = (matchedPlayerId ?? '').trim();
       if (pid.isNotEmpty) {
         try {
+          _sbLog(
+            table: 'players',
+            query: 'UPDATE id=$pid',
+            trace: StackTrace.current,
+          );
           AppConfig.sqlLogStart(
             table: 'players',
             operation: 'UPDATE',
@@ -423,12 +532,19 @@ class SupabaseAuthService implements IAuthService {
           );
           await _client.from('players').update({'auth_uid': user.uid, 'updated_at': nowIso}).eq('id', pid);
           AppConfig.sqlLogResult(table: 'players', operation: 'UPDATE', count: 1);
+          _sbResult(rows: 1);
         } catch (e) {
           AppConfig.sqlLogResult(table: 'players', operation: 'UPDATE', error: e);
+          _sbResult(rows: 0, error: e);
         }
       }
     } else {
       try {
+        _sbLog(
+          table: 'players',
+          query: 'INSERT phone=$raw10',
+          trace: StackTrace.current,
+        );
         AppConfig.sqlLogStart(
           table: 'players',
           operation: 'INSERT',
@@ -447,8 +563,10 @@ class SupabaseAuthService implements IAuthService {
           'updated_at': nowIso,
         });
         AppConfig.sqlLogResult(table: 'players', operation: 'INSERT', count: 1);
+        _sbResult(rows: 1);
       } catch (e) {
         AppConfig.sqlLogResult(table: 'players', operation: 'INSERT', error: e);
+        _sbResult(rows: 0, error: e);
       }
     }
 

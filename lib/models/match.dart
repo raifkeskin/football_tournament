@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 enum MatchStatus { notStarted, live, finished, postponed, cancelled, halftime }
@@ -105,48 +107,34 @@ class MatchScore {
 class MatchModel {
   final String id;
   final String leagueId;
+  final String? firebaseId;
   final String homeTeamId;
-  final String homeTeamName;
-  final String homeTeamLogoUrl;
   final String awayTeamId;
-  final String awayTeamName;
-  final String awayTeamLogoUrl;
   final int homeScore;
   final int awayScore;
   final String? matchDate; // YYYY-MM-DD
   final String? matchTime; // HH:mm
+  final int? week;
+  final String? pitchId;
+  final String? pitchName;
   final MatchStatus status;
   final int? minute;
   final String? groupId;
   final String? youtubeUrl;
   final String? homeHighlightPhotoUrl;
   final String? awayHighlightPhotoUrl;
-  final int? week;
-  final String? pitchId;
-  final String? pitchName;
   final MatchScore? score;
-  final List<String> homeLineup;
-  final List<String> awayLineup;
-  final MatchLineup? homeLineupDetail;
-  final MatchLineup? awayLineupDetail;
-  final String? homeFormation;
-  final String? awayFormation;
-  final List<String> homeFormationOrder;
-  final List<String> awayFormationOrder;
-  final List<MatchEvent> events;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
 
   MatchModel({
     required this.id,
     required this.leagueId,
+    required this.status,
     required this.homeTeamId,
-    required this.homeTeamName,
-    required this.homeTeamLogoUrl,
     required this.awayTeamId,
-    required this.awayTeamName,
-    required this.awayTeamLogoUrl,
     required this.homeScore,
     required this.awayScore,
-    required this.status,
     this.matchDate,
     this.matchTime,
     this.week,
@@ -154,19 +142,13 @@ class MatchModel {
     this.pitchName,
     this.minute,
     this.groupId,
+    this.firebaseId,
     this.youtubeUrl,
     this.homeHighlightPhotoUrl,
     this.awayHighlightPhotoUrl,
     this.score,
-    this.homeLineup = const <String>[],
-    this.awayLineup = const <String>[],
-    this.homeLineupDetail,
-    this.awayLineupDetail,
-    this.homeFormation,
-    this.awayFormation,
-    this.homeFormationOrder = const <String>[],
-    this.awayFormationOrder = const <String>[],
-    this.events = const <MatchEvent>[],
+    this.createdAt,
+    this.updatedAt,
   });
 
   factory MatchModel.fromMap(Map<String, dynamic> map, String id) {
@@ -185,7 +167,18 @@ class MatchModel {
           "${legacyTs.year}-${legacyTs.month.toString().padLeft(2, '0')}-${legacyTs.day.toString().padLeft(2, '0')}";
     } else if (rawMatchDate is String) {
       final s = rawMatchDate.trim();
-      matchDateStr = s.isEmpty ? null : s;
+      if (s.isEmpty) {
+        matchDateStr = null;
+      } else {
+        final dt = DateTime.tryParse(s);
+        if (dt != null) {
+          matchDateStr =
+              "${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}";
+          legacyTs = legacyTs ?? dt;
+        } else {
+          matchDateStr = s;
+        }
+      }
     } else if (rawMatchDate != null) {
       final s = rawMatchDate.toString().trim();
       matchDateStr = s.isEmpty ? null : s;
@@ -206,35 +199,21 @@ class MatchModel {
           fallback;
     }
 
-    MatchLineup? readLineup(dynamic v) {
-      if (v is Map) {
-        return MatchLineup.fromMap(Map<String, dynamic>.from(v));
-      }
-      return null;
-    }
-
-    List<String> readLineupPhones(dynamic v) {
-      if (v is List) {
-        return v
-            .map((e) => e.toString().trim())
-            .where((e) => e.isNotEmpty)
-            .toList();
-      }
-      if (v is Map) {
-        final lineup = MatchLineup.fromMap(Map<String, dynamic>.from(v));
-        final ids = <String>[
-          ...lineup.starting.map((p) => p.playerId.trim()),
-          ...lineup.subs.map((p) => p.playerId.trim()),
-        ];
-        return ids.where((e) => e.isNotEmpty).toList();
-      }
-      return const <String>[];
-    }
-
     MatchScore? readScoreObject() {
-      final sRaw = map['score'];
+      final sRaw = map['score_json'] ?? map['scoreJson'] ?? map['score'];
       if (sRaw is Map) {
         return MatchScore.fromMap(Map<String, dynamic>.from(sRaw));
+      }
+      if (sRaw is String) {
+        final str = sRaw.trim();
+        if (str.isNotEmpty) {
+          try {
+            final decoded = jsonDecode(str);
+            if (decoded is Map) {
+              return MatchScore.fromMap(Map<String, dynamic>.from(decoded));
+            }
+          } catch (_) {}
+        }
       }
       final htHome = readInt(map['halfTimeHomeScore']);
       final htAway = readInt(map['halfTimeAwayScore']);
@@ -273,64 +252,28 @@ class MatchModel {
     final awayPhotoRaw =
         (v('awayHighlightPhotoUrl', 'away_highlight_photo_url') ?? '').toString().trim();
 
-    final rawTournamentId =
-        (v('tournamentId', 'tournament_id') ?? v('leagueId', 'league_id') ?? '').toString();
-    final rawHomeLineup = v('homeLineup', 'home_lineup');
-    final rawAwayLineup = v('awayLineup', 'away_lineup');
-    final rawHomeDetail = v('homeLineupDetail', 'home_lineup_detail');
-    final rawAwayDetail = v('awayLineupDetail', 'away_lineup_detail');
-    final homeLineupDetail =
-        readLineup(rawHomeDetail) ?? readLineup(rawHomeLineup);
-    final awayLineupDetail =
-        readLineup(rawAwayDetail) ?? readLineup(rawAwayLineup);
+    final rawStatus = (v('status', 'status') ?? '').toString().trim();
+    final resolvedStatus = MatchStatus.values.firstWhere(
+      (e) => e.name == (rawStatus.isEmpty ? 'notStarted' : rawStatus),
+      orElse: () => MatchStatus.notStarted,
+    );
 
-    List<MatchEvent> readEvents(dynamic raw) {
-      if (raw is List) {
-        return raw.whereType<Map>().map((e) {
-          final m = Map<String, dynamic>.from(e);
-          final eid =
-              (m['id'] ?? m['eventId'] ?? m['event_id'] ?? m['matchEventId'] ?? '').toString();
-          return MatchEvent.fromMap(m, eid);
-        }).toList();
-      }
-      return const <MatchEvent>[];
+    DateTime? readDate(dynamic value) {
+      if (value is Timestamp) return value.toDate();
+      if (value is DateTime) return value;
+      if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
+      if (value is String) return DateTime.tryParse(value);
+      return null;
     }
-
-    final eventsRaw = v('events', 'match_events') ?? v('matchEvents', 'match_events');
-
-    List<String> readStringList(dynamic v) {
-      if (v is List) {
-        return v.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
-      }
-      return const <String>[];
-    }
-
-    final homeFormationRaw = (v('homeFormation', 'home_formation') ?? '').toString().trim();
-    final awayFormationRaw = (v('awayFormation', 'away_formation') ?? '').toString().trim();
-    final homeFormationOrderRaw = v('homeFormationOrder', 'home_formation_order');
-    final awayFormationOrderRaw = v('awayFormationOrder', 'away_formation_order');
 
     return MatchModel(
       id: id,
-      leagueId: rawTournamentId,
+      leagueId: (map['leagueId'] ?? map['league_id'] ?? '').toString(),
+      firebaseId: (v('firebaseId', 'firebase_id') ?? '').toString().trim().isEmpty
+          ? null
+          : (v('firebaseId', 'firebase_id') ?? '').toString().trim(),
       homeTeamId: (v('homeTeamId', 'home_team_id') ?? '').toString(),
-      homeTeamName: (v('homeTeamName', 'home_team_name') ?? '').toString(),
-      homeTeamLogoUrl:
-          (v('homeTeamLogoUrl', 'home_team_logo_url') ??
-                  v('homeTeamLogo', 'home_team_logo') ??
-                  v('homeLogoUrl', 'home_logo_url') ??
-                  v('homeLogo', 'home_logo') ??
-                  '')
-              .toString(),
       awayTeamId: (v('awayTeamId', 'away_team_id') ?? '').toString(),
-      awayTeamName: (v('awayTeamName', 'away_team_name') ?? '').toString(),
-      awayTeamLogoUrl:
-          (v('awayTeamLogoUrl', 'away_team_logo_url') ??
-                  v('awayTeamLogo', 'away_team_logo') ??
-                  v('awayLogoUrl', 'away_logo_url') ??
-                  v('awayLogo', 'away_logo') ??
-                  '')
-              .toString(),
       homeScore: readInt(v('homeScore', 'home_score')),
       awayScore: readInt(v('awayScore', 'away_score')),
       matchDate: (matchDateStr ?? '').trim().isEmpty ? null : matchDateStr,
@@ -338,10 +281,7 @@ class MatchModel {
       week: readScore(v('week', 'week')),
       pitchId: pitchIdRaw.isEmpty ? null : pitchIdRaw,
       pitchName: pitchNameRaw.isEmpty ? null : pitchNameRaw,
-      status: MatchStatus.values.firstWhere(
-        (e) => e.name == (v('status', 'status') ?? 'notStarted'),
-        orElse: () => MatchStatus.notStarted,
-      ),
+      status: resolvedStatus,
       minute: readScore(v('minute', 'minute')),
       groupId: (v('groupId', 'group_id') ?? '').toString().trim().isEmpty
           ? null
@@ -352,15 +292,8 @@ class MatchModel {
       homeHighlightPhotoUrl: homePhotoRaw.isEmpty ? null : homePhotoRaw,
       awayHighlightPhotoUrl: awayPhotoRaw.isEmpty ? null : awayPhotoRaw,
       score: readScoreObject(),
-      homeLineup: readLineupPhones(rawHomeLineup),
-      awayLineup: readLineupPhones(rawAwayLineup),
-      homeLineupDetail: homeLineupDetail,
-      awayLineupDetail: awayLineupDetail,
-      homeFormation: homeFormationRaw.isEmpty ? null : homeFormationRaw,
-      awayFormation: awayFormationRaw.isEmpty ? null : awayFormationRaw,
-      homeFormationOrder: readStringList(homeFormationOrderRaw),
-      awayFormationOrder: readStringList(awayFormationOrderRaw),
-      events: readEvents(eventsRaw),
+      createdAt: readDate(v('createdAt', 'created_at')),
+      updatedAt: readDate(v('updatedAt', 'updated_at')),
     );
   }
 
@@ -378,16 +311,13 @@ class MatchModel {
     final base = <String, dynamic>{};
     if (!snakeCase) {
       base.addAll({
-        'tournamentId': leagueId,
+        'leagueId': leagueId,
+        'firebaseId': firebaseId,
         'homeTeamId': homeTeamId,
-        'homeTeamName': homeTeamName,
-        'homeTeamLogoUrl': homeTeamLogoUrl,
         'awayTeamId': awayTeamId,
-        'awayTeamName': awayTeamName,
-        'awayTeamLogoUrl': awayTeamLogoUrl,
         'homeScore': homeScore,
         'awayScore': awayScore,
-        'score': computedScore,
+        'scoreJson': computedScore,
         'matchDate': dateStr.isEmpty ? null : dateStr,
         'matchTime': timeStr.isEmpty ? null : timeStr,
         'week': week,
@@ -399,51 +329,35 @@ class MatchModel {
         'youtubeUrl': youtubeUrl,
         'homeHighlightPhotoUrl': homeHighlightPhotoUrl,
         'awayHighlightPhotoUrl': awayHighlightPhotoUrl,
-        'homeLineup': homeLineup,
-        'awayLineup': awayLineup,
-        'homeFormation': (homeFormation ?? '').trim().isEmpty ? null : homeFormation!.trim(),
-        'awayFormation': (awayFormation ?? '').trim().isEmpty ? null : awayFormation!.trim(),
-        'homeFormationOrder': homeFormationOrder,
-        'awayFormationOrder': awayFormationOrder,
+        'createdAt': createdAt?.toIso8601String(),
+        'updatedAt': updatedAt?.toIso8601String(),
       });
     } else {
       base.addAll({
-        'tournament_id': leagueId,
+        if (id.trim().isNotEmpty) 'id': id.trim(),
+        'firebase_id': (firebaseId ?? '').trim().isEmpty ? null : firebaseId!.trim(),
+        'league_id': leagueId.trim().isEmpty ? null : leagueId.trim(),
         'home_team_id': homeTeamId,
-        'home_team_name': homeTeamName,
-        'home_team_logo_url': homeTeamLogoUrl,
         'away_team_id': awayTeamId,
-        'away_team_name': awayTeamName,
-        'away_team_logo_url': awayTeamLogoUrl,
-        'home_score': homeScore,
-        'away_score': awayScore,
-        'score': computedScore,
+        'group_id': (groupId ?? '').trim().isEmpty ? null : groupId!.trim(),
+        'pitch_id': (pitchId ?? '').trim().isEmpty ? null : pitchId!.trim(),
+        'pitch_name': (pitchName ?? '').trim().isEmpty ? null : pitchName!.trim(),
+        'week': week,
         'match_date': dateStr.isEmpty ? null : dateStr,
         'match_time': timeStr.isEmpty ? null : timeStr,
-        'week': week,
-        'pitch_id': pitchId,
-        'pitch_name': pitchName,
         'status': status.name,
         'minute': minute,
-        'group_id': groupId,
-        'youtube_url': youtubeUrl,
-        'home_highlight_photo_url': homeHighlightPhotoUrl,
-        'away_highlight_photo_url': awayHighlightPhotoUrl,
-        'home_lineup': homeLineup,
-        'away_lineup': awayLineup,
-        'home_formation': (homeFormation ?? '').trim().isEmpty ? null : homeFormation!.trim(),
-        'away_formation': (awayFormation ?? '').trim().isEmpty ? null : awayFormation!.trim(),
-        'home_formation_order': homeFormationOrder,
-        'away_formation_order': awayFormationOrder,
+        'home_score': homeScore,
+        'away_score': awayScore,
+        'youtube_url': (youtubeUrl ?? '').trim().isEmpty ? null : youtubeUrl!.trim(),
+        'home_highlight_photo_url':
+            (homeHighlightPhotoUrl ?? '').trim().isEmpty ? null : homeHighlightPhotoUrl!.trim(),
+        'away_highlight_photo_url':
+            (awayHighlightPhotoUrl ?? '').trim().isEmpty ? null : awayHighlightPhotoUrl!.trim(),
+        'score_json': computedScore,
+        'created_at': createdAt?.toIso8601String(),
+        'updated_at': updatedAt?.toIso8601String(),
       });
-    }
-    if (homeLineupDetail != null) {
-      base[snakeCase ? 'home_lineup_detail' : 'homeLineupDetail'] =
-          homeLineupDetail!.toMap();
-    }
-    if (awayLineupDetail != null) {
-      base[snakeCase ? 'away_lineup_detail' : 'awayLineupDetail'] =
-          awayLineupDetail!.toMap();
     }
     return base;
   }
@@ -452,7 +366,7 @@ class MatchModel {
 class MatchEvent {
   final String id;
   final String matchId;
-  final String tournamentId;
+  final String leagueId;
   final String teamId;
   final String eventType;
   final int minute;
@@ -468,7 +382,7 @@ class MatchEvent {
   MatchEvent({
     required this.id,
     required this.matchId,
-    required this.tournamentId,
+    required this.leagueId,
     required this.teamId,
     required this.eventType,
     required this.minute,
@@ -498,7 +412,7 @@ class MatchEvent {
     return MatchEvent(
       id: id,
       matchId: (v('matchId', 'match_id') ?? '').toString(),
-      tournamentId: (v('tournamentId', 'tournament_id') ?? v('leagueId', 'league_id') ?? '')
+      leagueId: (v('leagueId', 'league_id') ?? v('tournamentId', 'tournament_id') ?? '')
           .toString()
           .trim(),
       playerName: (v('playerName', 'player_name') ?? '').toString(),
@@ -541,7 +455,7 @@ class MatchEvent {
     if (!snakeCase) {
       return {
         'matchId': matchId,
-        'tournamentId': tournamentId,
+        'leagueId': leagueId,
         'teamId': teamId,
         'eventType': eventType,
         'playerName': playerName,
@@ -557,16 +471,13 @@ class MatchEvent {
     }
     return {
       'match_id': matchId,
-      'tournament_id': tournamentId,
+      'league_id': leagueId,
       'team_id': teamId,
+      'player_id': playerPhone,
+      'assist_player_id': assistPlayerPhone,
+      'sub_in_player_id': subInPlayerPhone,
       'event_type': eventType,
       'player_name': playerName,
-      'player_phone': playerPhone,
-      'assist_player_phone': assistPlayerPhone,
-      'assist_player_name': assistPlayerName,
-      'sub_in_player_phone': subInPlayerPhone,
-      'sub_in_player_name': subInPlayerName,
-      'type': type,
       'minute': minute,
       'is_own_goal': isOwnGoal,
     };
@@ -577,34 +488,27 @@ class GroupModel {
   final String id;
   final String leagueId;
   final String name;
-  final List<String> teamIds;
 
   GroupModel({
     required this.id,
     required this.leagueId,
     required this.name,
-    required this.teamIds,
   });
 
   factory GroupModel.fromMap(Map<String, dynamic> map, String id) {
     dynamic v(String camel, String snake) => map[camel] ?? map[snake];
     return GroupModel(
       id: id,
-      leagueId:
-          (v('leagueId', 'league_id') ??
-                  v('tournamentId', 'tournament_id') ??
-                  '')
-              .toString(),
+      leagueId: (v('leagueId', 'league_id') ?? '').toString(),
       name: (v('name', 'name') ?? '').toString(),
-      teamIds: List<String>.from(v('teamIds', 'team_ids') ?? const <String>[]),
     );
   }
 
   Map<String, dynamic> toMap({bool snakeCase = false}) {
     if (!snakeCase) {
-      return {'leagueId': leagueId, 'name': name, 'teamIds': teamIds};
+      return {'leagueId': leagueId, 'name': name};
     }
-    return {'league_id': leagueId, 'name': name, 'team_ids': teamIds};
+    return {'league_id': leagueId, 'name': name};
   }
 }
 
@@ -664,8 +568,7 @@ class PlayerModel {
     }
 
     final isRoster =
-        (v('tournamentId', 'tournament_id') ??
-            v('leagueId', 'league_id') ??
+        (v('leagueId', 'league_id') ??
             v('playerPhone', 'player_phone') ??
             v('teamId', 'team_id')) !=
         null;
@@ -701,9 +604,7 @@ class PlayerModel {
     final suspendedMatches = readInt(v('suspendedMatches', 'suspended_matches'));
 
     if (isRoster) {
-      final tournamentId = (v('tournamentId', 'tournament_id') ?? v('leagueId', 'league_id') ?? '')
-          .toString()
-          .trim();
+      final tournamentId = (v('leagueId', 'league_id') ?? '').toString().trim();
       final teamId = (v('teamId', 'team_id') ?? '').toString().trim();
       return PlayerModel(
         id: id,
@@ -757,7 +658,7 @@ class PlayerModel {
       };
     }
     return {
-      'tournament_id': tournamentId,
+      'league_id': tournamentId,
       'team_id': teamId,
       'player_phone': phone,
       'player_name': name,

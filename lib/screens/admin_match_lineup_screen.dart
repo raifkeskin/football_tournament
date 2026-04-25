@@ -53,20 +53,6 @@ class _AdminMatchLineupScreenState extends State<AdminMatchLineupScreen>
       vsync: this,
       initialIndex: widget.initialTabIndex.clamp(0, 1),
     );
-
-    final existing = widget.isHome
-        ? widget.match.homeLineupDetail
-        : widget.match.awayLineupDetail;
-    for (final p in existing?.starting ?? const <LineupPlayer>[]) {
-      _starting.add(
-        _LineupEntry(playerId: p.playerId, name: p.name, number: p.number),
-      );
-    }
-    for (final p in existing?.subs ?? const <LineupPlayer>[]) {
-      _subs.add(
-        _LineupEntry(playerId: p.playerId, name: p.name, number: p.number),
-      );
-    }
   }
 
   @override
@@ -448,9 +434,7 @@ class _AdminMatchLineupScreenState extends State<AdminMatchLineupScreen>
         ),
       );
     }
-    final teamName = widget.isHome
-        ? widget.match.homeTeamName
-        : widget.match.awayTeamName;
+    final teamName = widget.isHome ? 'Ev Sahibi' : 'Deplasman';
     final teamId = widget.isHome
         ? widget.match.homeTeamId
         : widget.match.awayTeamId;

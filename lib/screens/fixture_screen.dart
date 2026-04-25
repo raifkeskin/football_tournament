@@ -72,9 +72,11 @@ class _FixtureScreenState extends State<FixtureScreen> {
         stream: _teamService.watchAllTeams(),
         builder: (context, teamsSnap) {
           final teamLogoById = <String, String>{};
+          final teamNameById = <String, String>{};
           if (teamsSnap.hasData) {
             for (final t in teamsSnap.data!) {
               teamLogoById[t.id] = t.logoUrl;
+              teamNameById[t.id] = t.name;
             }
           }
 
@@ -264,6 +266,7 @@ class _FixtureScreenState extends State<FixtureScreen> {
                                             groupNameById: groupNameById,
                                             showGroupInHeader: showGroupInHeader,
                                             teamLogoById: teamLogoById,
+                                          teamNameById: teamNameById,
                                             isAdmin: isAdmin,
                                             onMatchTap: (m) => Navigator.push(
                                               context,
@@ -330,6 +333,7 @@ class _FixtureList extends StatelessWidget {
     required this.groupNameById,
     required this.showGroupInHeader,
     required this.teamLogoById,
+    required this.teamNameById,
     required this.onMatchTap,
     required this.cardColor,
     required this.outlineColor,
@@ -341,6 +345,7 @@ class _FixtureList extends StatelessWidget {
   final Map<String, String> groupNameById;
   final bool showGroupInHeader;
   final Map<String, String> teamLogoById;
+  final Map<String, String> teamNameById;
   final void Function(MatchModel match) onMatchTap;
   final Color cardColor;
   final Color outlineColor;
@@ -447,6 +452,7 @@ class _FixtureList extends StatelessWidget {
             child: _MatchCard(
               match: m,
               teamLogoById: teamLogoById,
+              teamNameById: teamNameById,
               isAdmin: isAdmin,
               onTap: () => onMatchTap(m),
             ),
@@ -462,6 +468,7 @@ class _MatchCard extends StatelessWidget {
   const _MatchCard({
     required this.match,
     required this.teamLogoById,
+    required this.teamNameById,
     required this.onTap,
     required this.isAdmin,
   });
@@ -471,6 +478,7 @@ class _MatchCard extends StatelessWidget {
 
   final MatchModel match;
   final Map<String, String> teamLogoById;
+  final Map<String, String> teamNameById;
   final VoidCallback onTap;
   final bool isAdmin;
 
@@ -500,12 +508,10 @@ class _MatchCard extends StatelessWidget {
     const mid = Color(0xFF94A3B8);
     const accent = Color(0xFF10B981);
 
-    final homeLogo = match.homeTeamLogoUrl.trim().isNotEmpty
-        ? match.homeTeamLogoUrl
-        : (teamLogoById[match.homeTeamId] ?? '');
-    final awayLogo = match.awayTeamLogoUrl.trim().isNotEmpty
-        ? match.awayTeamLogoUrl
-        : (teamLogoById[match.awayTeamId] ?? '');
+    final homeLogo = (teamLogoById[match.homeTeamId] ?? '').trim();
+    final awayLogo = (teamLogoById[match.awayTeamId] ?? '').trim();
+    final homeName = (teamNameById[match.homeTeamId] ?? '').trim();
+    final awayName = (teamNameById[match.awayTeamId] ?? '').trim();
 
     final hs = match.homeScore;
     final as = match.awayScore;
@@ -566,7 +572,7 @@ class _MatchCard extends StatelessWidget {
                 child: Column(
                   children: [
                     _teamRow(
-                      match.homeTeamName,
+                      homeName.isEmpty ? 'Ev Sahibi' : homeName,
                       homeLogo,
                       hs,
                       showScore,
@@ -574,7 +580,7 @@ class _MatchCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     _teamRow(
-                      match.awayTeamName,
+                      awayName.isEmpty ? 'Deplasman' : awayName,
                       awayLogo,
                       as,
                       showScore,
@@ -632,6 +638,8 @@ class _MatchCard extends StatelessWidget {
   }
 
   void _showQuickScoreDialog(BuildContext context) {
+    final homeName = (teamNameById[match.homeTeamId] ?? '').trim();
+    final awayName = (teamNameById[match.awayTeamId] ?? '').trim();
     final homeScoreCtrl = TextEditingController(
       text: match.homeScore.toString(),
     );
@@ -665,7 +673,7 @@ class _MatchCard extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              '${match.homeTeamName} - ${match.awayTeamName}',
+              '${homeName.isEmpty ? 'Ev Sahibi' : homeName} - ${awayName.isEmpty ? 'Deplasman' : awayName}',
               style: const TextStyle(color: Colors.white70, fontSize: 14),
               textAlign: TextAlign.center,
             ),

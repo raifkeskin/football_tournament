@@ -50,10 +50,7 @@ class PlayerStats {
       return null;
     }
 
-    final tournamentId = (v('tournamentId', 'tournament_id') ??
-            v('leagueId', 'league_id') ??
-            '')
-        .toString();
+    final tournamentId = (v('tournamentId', 'league_id') ?? v('leagueId', 'league_id') ?? '').toString();
 
     return PlayerStats(
       id: id,
@@ -87,7 +84,7 @@ class PlayerStats {
     }
     return {
       'player_phone': playerPhone,
-      'tournament_id': tournamentId,
+      'league_id': tournamentId,
       'team_id': teamId,
       'matches_played': matchesPlayed,
       'goals': goals,

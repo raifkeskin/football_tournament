@@ -280,7 +280,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
     if (ok != true) return;
 
     try {
-      await _teamService.deleteTeamCascade(teamId);
+      await _teamService.deleteTeamCascade(teamId, caller: 'AdminManageTeamsScreen');
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -367,21 +367,6 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                 });
               }
 
-              final allTeamIdsForLeague = <String>{};
-              for (final g in groups) {
-                for (final tId in g.teamIds) {
-                  final id = tId.trim();
-                  if (id.isNotEmpty) allTeamIdsForLeague.add(id);
-                }
-              }
-
-              final selectedTeamIds = () {
-                if (_selectedGroupId == '__ALL__') return allTeamIdsForLeague;
-                final g = groups.where((e) => e.id == _selectedGroupId).toList();
-                if (g.isEmpty) return <String>{};
-                return g.first.teamIds.map((e) => e.trim()).where((e) => e.isNotEmpty).toSet();
-              }();
-
               String groupDisplayName(GroupModel g, int index) {
                 final n = g.name.trim();
                 if (n.isNotEmpty) return n;
@@ -436,7 +421,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                   ),
                   Expanded(
                     child: StreamBuilder<List<Map<String, dynamic>>>(
-                      stream: _teamService.watchAllTeamsRaw(),
+                      stream: _teamService.watchAllTeamsRaw(caller: 'AdminManageTeamsScreen'),
                       builder: (context, snapshot) {
                         if (snapshot.hasError) {
                           return Center(
@@ -470,8 +455,22 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                                   return false;
                                 }
                               } else {
-                                if (selectedTeamIds.isEmpty) return false;
-                                if (!selectedTeamIds.contains(id)) return false;
+                                final gId =
+                                    (data['groupId'] ?? data['group_id'] ?? '').toString().trim();
+                                if (_selectedGroupId != '__ALL__' && gId != _selectedGroupId) {
+                                  return false;
+                                }
+                                final leagueId =
+                                    (data['leagueId'] ??
+                                            data['league_id'] ??
+                                            data['tournamentId'] ??
+                                            data['tournament_id'] ??
+                                            '')
+                                        .toString()
+                                        .trim();
+                                if (leagueId.isEmpty || leagueId != effectiveLeagueId) {
+                                  return false;
+                                }
                               }
                               return _matchesTeamSearch(data);
                             })
@@ -488,7 +487,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                             final data = teams[index];
                             final teamId = (data['id'] ?? '').toString();
                             final teamName = (data['name'] ?? '').toString();
-                            final logoUrl = (data['logoUrl'] ?? '').toString();
+                            final logoUrl = (data['logo_url'] ??'').toString();
 
                             Future<void> openEditDialog() async {
                               final updated = await showDialog<bool>(
@@ -1643,7 +1642,11 @@ class _EditTeamScreenState extends State<EditTeamScreen> {
   Future<void> _update() async {
     setState(() => _isLoading = true);
     try {
-      String logoUrl = widget.data['logoUrl'] ?? '';
+      String logoUrl = (widget.data['logoUrl'] ??
+              widget.data['logo_url'] ??
+              widget.data['logo'] ??
+              '')
+          .toString();
       if (_newLogo != null) {
         final uploaded = await ImgBBUploadService().uploadImage(
           File(_newLogo!.path),
@@ -1655,12 +1658,16 @@ class _EditTeamScreenState extends State<EditTeamScreen> {
         }
       }
 
-      await ServiceLocator.teamService.updateTeam(widget.teamId, {
-        'name': _nameController.text.trim(),
-        'logoUrl': logoUrl,
-        'foundedYear': _foundedController.text.trim(),
-        'managerName': _managerController.text.trim(),
-      });
+      await ServiceLocator.teamService.updateTeam(
+        widget.teamId,
+        {
+          'name': _nameController.text.trim(),
+          'logoUrl': logoUrl,
+          'foundedYear': _foundedController.text.trim(),
+          'managerName': _managerController.text.trim(),
+        },
+        caller: 'EditTeamScreen',
+      );
       if (!mounted) return;
       Navigator.pop(context);
     } catch (e) {
@@ -1683,7 +1690,11 @@ class _EditTeamScreenState extends State<EditTeamScreen> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final currentLogoUrl = widget.data['logoUrl'] ?? '';
+    final currentLogoUrl = (widget.data['logoUrl'] ??
+            widget.data['logo_url'] ??
+            widget.data['logo'] ??
+            '')
+        .toString();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Takımı Düzenle')),
