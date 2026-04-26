@@ -28,8 +28,12 @@ abstract class ITeamService {
   Future<void> upsertPlayerIdentity({
     required String phone,
     required String name,
+    String? nationalId,
     String? birthDate,
     String? mainPosition,
+    String? preferredFoot,
+    int? height,
+    int? weight,
     String? caller,
   });
 

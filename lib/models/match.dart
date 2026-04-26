@@ -517,10 +517,13 @@ class PlayerModel {
     required this.id,
     required this.name,
     this.phone,
+    this.nationalId,
     this.birthDate,
     this.mainPosition,
     this.position,
     this.preferredFoot,
+    this.height,
+    this.weight,
     this.photoUrl,
     this.number,
     this.role = 'Futbolcu',
@@ -532,10 +535,13 @@ class PlayerModel {
   final String id;
   final String name;
   final String? phone;
+  final String? nationalId;
   final String? birthDate;
   final String? mainPosition;
   final String? position;
   final String? preferredFoot;
+  final int? height;
+  final int? weight;
   final String? photoUrl;
   final String? number;
   final String role;
@@ -583,14 +589,13 @@ class PlayerModel {
     final name = (v('playerName', 'player_name') ?? v('name', 'name') ?? '').toString().trim();
     final roleRaw = (v('role', 'role') ?? '').toString().trim();
     final role = roleRaw.isEmpty ? 'Futbolcu' : roleRaw;
-    final numberRaw = (v('jerseyNumber', 'jersey_number') ?? v('number', 'number'))
-        ?.toString()
-        .trim();
-    final number = (numberRaw ?? '').isEmpty ? null : numberRaw;
     final birthDate = normalizeBirthDate(v('birthDate', 'birth_date'));
     final mainPosition = (v('mainPosition', 'main_position') as String?)?.trim();
-    final position = (v('position', 'position') as String?)?.trim();
+    final position = (v('subPosition', 'sub_position') ?? v('position', 'position'))
+        ?.toString()
+        .trim();
     final preferredFoot = (v('preferredFoot', 'preferred_foot') as String?)?.trim();
+    final nationalId = (v('nationalId', 'national_id'))?.toString().trim();
     final photoUrl = (v('photoUrl', 'photo_url') as String?)?.trim();
     int readInt(dynamic v) {
       if (v == null) return 0;
@@ -601,7 +606,25 @@ class PlayerModel {
           0;
     }
 
+    int? readNullableInt(dynamic v) {
+      if (v == null) return null;
+      final n = readInt(v);
+      return n == 0 ? null : n;
+    }
+
+    final height = readNullableInt(v('height', 'height'));
+    final weight= readNullableInt(v('weight', 'weight'));
+
     final suspendedMatches = readInt(v('suspendedMatches', 'suspended_matches'));
+
+    final rosterNumberRaw = (v('jerseyNumber', 'jersey_number') ?? v('number', 'number'))
+        ?.toString()
+        .trim();
+    final defaultNumberRaw = v('defaultJerseyNumber', 'default_jersey_number')?.toString().trim();
+    final numberRaw = isRoster
+        ? rosterNumberRaw
+        : ((defaultNumberRaw ?? '').isNotEmpty ? defaultNumberRaw : rosterNumberRaw);
+    final number = (numberRaw ?? '').isEmpty ? null : numberRaw;
 
     if (isRoster) {
       final tournamentId = (v('leagueId', 'league_id') ?? '').toString().trim();
@@ -610,11 +633,14 @@ class PlayerModel {
         id: id,
         name: name,
         phone: phone,
+        nationalId: (nationalId ?? '').isEmpty ? null : nationalId,
         number: number,
         birthDate: birthDate,
         mainPosition: mainPosition,
-        position: position,
+        position: (position ?? '').isEmpty ? null : position,
         preferredFoot: preferredFoot,
+        height: height,
+        weight: weight,
         photoUrl: photoUrl,
         role: role,
         teamId: teamId.isEmpty ? null : teamId,
@@ -627,10 +653,13 @@ class PlayerModel {
       id: id,
       name: name,
       phone: phone,
+      nationalId: (nationalId ?? '').isEmpty ? null : nationalId,
       birthDate: birthDate,
       mainPosition: mainPosition,
-      position: position,
+      position: (position ?? '').isEmpty ? null : position,
       preferredFoot: preferredFoot,
+      height: height,
+      weight: weight,
       photoUrl: photoUrl,
       role: role,
       suspendedMatches: suspendedMatches,
@@ -638,7 +667,15 @@ class PlayerModel {
   }
 
   Map<String, dynamic> toPlayerIdentityMap() {
-    return {'name': name, 'birthDate': birthDate, 'mainPosition': mainPosition};
+    return {
+      'name': name,
+      'nationalId': nationalId,
+      'birthDate': birthDate,
+      'mainPosition': mainPosition,
+      'preferredFoot': preferredFoot,
+      'height': height,
+      'weight': weight,
+    };
   }
 
   Map<String, dynamic> toPlayerIdentityMapDb({bool snakeCase = false}) {

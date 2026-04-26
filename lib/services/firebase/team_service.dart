@@ -1,3 +1,5 @@
+import 'dart:ffi';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../models/league.dart';
@@ -102,15 +104,23 @@ class FirebaseTeamService implements ITeamService {
   Future<void> upsertPlayerIdentity({
     required String phone,
     required String name,
+    String? nationalId,
     String? birthDate,
     String? mainPosition,
+    String? preferredFoot,
+    int? height,
+    int? weight,
     String? caller,
   }) {
     return _db.upsertPlayerIdentity(
       phone: phone,
       name: name,
+      nationalId: nationalId,
       birthDate: birthDate,
       mainPosition: mainPosition,
+      preferredFoot: preferredFoot,
+      height: height,
+      weight: weight,
     );
   }
 

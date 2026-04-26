@@ -733,8 +733,12 @@ class DatabaseService {
   Future<void> upsertPlayerIdentity({
     required String phone,
     required String name,
+    String? nationalId,
     String? birthDate,
     String? mainPosition,
+    String? preferredFoot,
+    int? height,
+    int? weight,
   }) async {
     final p = phone.trim();
     if (p.isEmpty) throw Exception('Telefon boş olamaz.');
@@ -744,9 +748,13 @@ class DatabaseService {
       {
         'phone': p,
         'name': n,
+        'nationalId': (nationalId ?? '').trim().isEmpty ? null : nationalId!.trim(),
         'birthDate': (birthDate ?? '').trim().isEmpty ? null : birthDate!.trim(),
         'mainPosition':
             (mainPosition ?? '').trim().isEmpty ? null : mainPosition!.trim(),
+        'preferredFoot': (preferredFoot ?? '').trim().isEmpty ? null : preferredFoot!.trim(),
+        'height': height,
+        'weight': weight,
         'updatedAt': FieldValue.serverTimestamp(),
         'createdAt': FieldValue.serverTimestamp(),
       },

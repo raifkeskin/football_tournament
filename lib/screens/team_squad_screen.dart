@@ -424,6 +424,13 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
       return selected;
     }
 
+    final widgetTournamentId = widget.tournamentId.trim();
+    if (widgetTournamentId.isNotEmpty) {
+      setState(() => _selectedTournamentId = widgetTournamentId);
+      await _checkIfTeamManagerForTournament(widgetTournamentId);
+      return widgetTournamentId;
+    }
+
     if (_teamTournaments.isEmpty && !_isLoadingTournaments) {
       await _loadTeamTournaments();
     }
@@ -490,6 +497,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     if (!mounted) return;
 
     if (saved == true) {
+      setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -1477,6 +1485,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                                             teamId: widget.teamId,
                                             playerPhone: phone,
                                           );
+                                          if (mounted) setState(() {});
                                           if (!context.mounted) return;
                                           ScaffoldMessenger.of(context).showSnackBar(
                                             const SnackBar(content: Text('Kadrodan kaldırıldı.')),
@@ -1567,9 +1576,13 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
   final _imageUploadService = ImgBBUploadService();
 
   final _nameController = TextEditingController();
+  final _surnameController = TextEditingController();
+  final _identityNoController = TextEditingController();
   final _numberController = TextEditingController();
   final _birthDateController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _heightController = TextEditingController();
+  final _weightController = TextEditingController();
 
   static const _mainPositions = <String>[
     'Kaleci',
@@ -1584,10 +1597,12 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
     'Forvet': ['Santrfor', 'Kanat Forvet'],
   };
   static const _roles = <String>['Her İkisi', 'Takım Sorumlusu', 'Futbolcu'];
+  static const _feet = <String>['Sağ', 'Sol', 'Her İkisi'];
 
   String _mainPosition = _mainPositions.first;
   String _subPosition = _subPositionsByMain[_mainPositions.first]!.first;
   String _role = 'Futbolcu';
+  String _preferredFoot = '';
   String? _activePlayerId;
   String? _existingPhotoUrl;
   String? _implicitPhoneKey;
@@ -1646,11 +1661,19 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
       _activePlayerId = (e.phone ?? e.id).trim().isEmpty
           ? e.id
           : (e.phone ?? e.id);
-      _nameController.text = e.name;
+      _identityNoController.text = (e.nationalId ?? '').toString();
+      final full = e.name.trim().replaceAll(RegExp(r'\s+'), ' ');
+      final parts = full.isEmpty ? const <String>[] : full.split(' ');
+      _nameController.text = parts.isEmpty ? '' : parts.first;
+      _surnameController.text = parts.length <= 1 ? '' : parts.sublist(1).join(' ');
       _numberController.text = (e.number ?? '').toString();
       _birthDateController.text = (e.birthDate ?? '').toString();
       _mainPosition = _deriveMainPosition(e.mainPosition, e.position);
       _subPosition = _deriveSubPosition(_mainPosition, e.position);
+      final pf = (e.preferredFoot ?? '').trim();
+      _preferredFoot = _feet.contains(pf) ? pf : '';
+      _heightController.text = (e.height ?? '').toString();
+      _weightController.text = (e.weight ?? '').toString();
       final r = e.role.trim();
       _role = r.isEmpty ? 'Futbolcu' : r;
       if (!_roles.contains(_role)) _role = 'Futbolcu';
@@ -1685,9 +1708,13 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
   @override
   void dispose() {
     _nameController.dispose();
+    _surnameController.dispose();
+    _identityNoController.dispose();
     _numberController.dispose();
     _birthDateController.dispose();
     _phoneController.dispose();
+    _heightController.dispose();
+    _weightController.dispose();
     super.dispose();
   }
 
@@ -1797,11 +1824,19 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
 
   void _applySelectedPlayer(PlayerModel p) {
     _activePlayerId = p.id;
-    _nameController.text = p.name;
+    _identityNoController.text = (p.nationalId ?? '').toString();
+    final full = p.name.trim().replaceAll(RegExp(r'\s+'), ' ');
+    final parts = full.isEmpty ? const <String>[] : full.split(' ');
+    _nameController.text = parts.isEmpty ? '' : parts.first;
+    _surnameController.text = parts.length <= 1 ? '' : parts.sublist(1).join(' ');
     _numberController.text = (p.number ?? '').toString();
     _birthDateController.text = (p.birthDate ?? '').toString();
     _mainPosition = _deriveMainPosition(p.mainPosition, p.position);
     _subPosition = _deriveSubPosition(_mainPosition, p.position);
+    final pf = (p.preferredFoot ?? '').trim();
+    _preferredFoot = _feet.contains(pf) ? pf : '';
+    _heightController.text = (p.height ?? '').toString();
+    _weightController.text = (p.weight ?? '').toString();
     final r = p.role.trim();
     _role = _roles.contains(r) ? r : 'Futbolcu';
     final phoneRaw = (p.phone ?? '').toString();
@@ -1840,13 +1875,23 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
   }
 
   Future<void> _save() async {
-    final name = _nameController.text.trim();
-    if (name.isEmpty) {
+    final nationalId = _identityNoController.text.replaceAll(RegExp(r'\D'), '').trim();
+    if (nationalId.isNotEmpty && nationalId.length != 11) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Kimlik no 11 haneli olmalı.')),
+      );
+      return;
+    }
+
+    final firstName = _nameController.text.trim();
+    final surname = _surnameController.text.trim();
+    if (firstName.isEmpty || surname.isEmpty) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Lütfen ad soyad girin.')));
       return;
     }
+    final fullName = '$firstName $surname'.trim();
 
     final number = _numberController.text.trim();
     if (number.isEmpty) {
@@ -1901,15 +1946,35 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
       final resolvedBirthDate = birthDate.isEmpty ? null : birthDate;
       await _teamService.upsertPlayerIdentity(
         phone: keyPhone,
-        name: name,
+        name: fullName,
+        nationalId: nationalId.isEmpty ? null : nationalId,
         birthDate: resolvedBirthDate,
         mainPosition: _mainPosition,
+        preferredFoot: _preferredFoot.trim().isEmpty ? null : _preferredFoot.trim(),
+        height: int.tryParse(_heightController.text.replaceAll(RegExp(r'\D'), '').trim()),
+        weight: int.tryParse(_weightController.text.replaceAll(RegExp(r'\D'), '').trim()),
+      );
+      await _teamService.updatePlayer(
+        playerId: keyPhone,
+        data: {
+          'name': firstName,
+          'surname': surname,
+          'birthDate': resolvedBirthDate,
+          'nationalId': nationalId.isEmpty ? null : nationalId,
+          'mainPosition': _mainPosition,
+          'subPosition': _subPosition,
+          'preferredFoot': _preferredFoot.trim().isEmpty ? null : _preferredFoot.trim(),
+          'height': int.tryParse(_heightController.text.replaceAll(RegExp(r'\D'), '').trim()),
+          'weight': int.tryParse(_weightController.text.replaceAll(RegExp(r'\D'), '').trim()),
+          'defaultJerseyNumber': int.tryParse(number.replaceAll(RegExp(r'\D'), '').trim()),
+          'role': _role,
+        },
       );
       await _teamService.upsertRosterEntry(
         tournamentId: widget.tournamentId,
         teamId: widget.teamId,
         playerPhone: keyPhone,
-        playerName: name,
+        playerName: fullName,
         jerseyNumber: number,
         role: _role,
       );
@@ -2073,18 +2138,37 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
             padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
             child: Column(
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _nameController,
-                        enabled: !_saving,
-                        decoration: const InputDecoration(
-                          labelText: 'Ad Soyad',
-                          prefixIcon: Icon(Icons.badge_outlined),
-                        ),
-                      ),
-                    )
+                TextField(
+                  controller: _identityNoController,
+                  enabled: !_saving,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(11),
+                  ],
+                  decoration: const InputDecoration(
+                    labelText: 'Kimlik No',
+                    prefixIcon: Icon(Icons.badge_outlined),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _nameController,
+                  enabled: !_saving,
+                  decoration: const InputDecoration(
+                    labelText: 'Ad',
+                    prefixIcon: Icon(Icons.person_outline),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _surnameController,
+                  enabled: !_saving,
+                  decoration: const InputDecoration(
+                    labelText: 'Soyad',
+                    prefixIcon: Icon(Icons.person_outline),
+                  ),
+                ),
  /*                    const SizedBox(width: 10),
                     SizedBox(
                       height: 52,
@@ -2106,8 +2190,6 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                         ),
                       ),
                     ),*/
-                  ],
-                ),
                 const SizedBox(height: 10),
                 Row(
                   children: [
@@ -2136,6 +2218,53 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                           labelText: 'Doğum Tarihi',
                           prefixIcon: Icon(Icons.cake_outlined),
                           hintText: 'DD/MM/YYYY',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  value: _preferredFoot.trim().isEmpty ? null : _preferredFoot,
+                  decoration: const InputDecoration(
+                    labelText: 'Kullandığı Ayak',
+                    prefixIcon: Icon(Icons.directions_run_outlined),
+                  ),
+                  items: _feet
+                      .map(
+                        (f) => DropdownMenuItem<String>(
+                          value: f,
+                          child: Text(f),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: _saving ? null : (v) => setState(() => _preferredFoot = v ?? ''),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _heightController,
+                        enabled: !_saving,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        decoration: const InputDecoration(
+                          labelText: 'Boy (cm)',
+                          prefixIcon: Icon(Icons.height_outlined),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextField(
+                        controller: _weightController,
+                        enabled: !_saving,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        decoration: const InputDecoration(
+                          labelText: 'Kilo (kg)',
+                          prefixIcon: Icon(Icons.monitor_weight_outlined),
                         ),
                       ),
                     ),

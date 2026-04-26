@@ -328,6 +328,9 @@ RETURNING id
       final mainPosition = _sN(data, const ['mainPosition', 'main_position']);
       final position = _sN(data, const ['position']);
       final preferredFoot = _sN(data, const ['preferredFoot', 'preferred_foot']);
+      final nationalId = _sN(data, const ['nationalId', 'national_id']);
+      final height = _iN(data, const ['height', 'height']);
+      final weight = _iN(data, const ['weight', 'weight']);
       final photoUrl = _sN(data, const ['photoUrl', 'photo_url']);
       final authUid = _sN(data, const ['authUid', 'auth_uid', 'uid']);
 
@@ -339,11 +342,13 @@ RETURNING id
         sqlNamed: r'''
 INSERT INTO players (
   firebase_id, phone, name, birth_date, birth_year,
+  national_id, height, weight,
   main_position, position, preferred_foot, photo_url, auth_uid,
   created_at, updated_at
 )
 VALUES (
   @firebase_id, @phone, @name, @birth_date, @birth_year,
+  @national_id, @height, @weight,
   @main_position, @position, @preferred_foot, @photo_url, @auth_uid,
   @created_at, @updated_at
 )
@@ -355,6 +360,9 @@ RETURNING id
           'name': name,
           'birth_date': birthDate,
           'birth_year': birthYear,
+          'national_id': nationalId,
+          'height': height,
+          'weight': weight,
           'main_position': mainPosition,
           'position': position,
           'preferred_foot': preferredFoot,
