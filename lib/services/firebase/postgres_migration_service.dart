@@ -750,16 +750,19 @@ VALUES (@league_id, @player_id, @role)
             fieldName: 'team_id',
           );
           if (teamId.isNotEmpty) {
+            final jerseyRaw = (mem['jerseyNumber'] ?? mem['jersey_number'] ?? mem['number'] ?? '').toString();
+            final jersey = int.tryParse(jerseyRaw.replaceAll(RegExp(r'\D'), '').trim());
             await tx.execute(
               Sql.named(r'''
-INSERT INTO league_team_players (league_id, team_id, player_id, role)
-VALUES (@league_id, @team_id, @player_id, @role)
+INSERT INTO league_team_players (league_id, team_id, player_id, jersey_number, is_active)
+VALUES (@league_id, @team_id, @player_id, @jersey_number, @is_active)
 '''),
               parameters: {
                 'league_id': leagueId,
                 'team_id': teamId,
                 'player_id': playerId,
-                'role': resolvedRole,
+                'jersey_number': jersey,
+                'is_active': true,
               },
             );
             nLink++;

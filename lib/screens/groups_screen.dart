@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/league.dart';
 import '../models/match.dart';
 import '../models/team.dart';
+import '../config/app_config.dart';
 import '../services/interfaces/i_league_service.dart';
 import '../services/interfaces/i_match_service.dart';
 import '../services/interfaces/i_team_service.dart';
@@ -264,6 +266,27 @@ class _GroupStandingsTable extends StatelessWidget {
     required this.groupName,
   });
 
+  Stream<List<Map<String, dynamic>>> _watchLeagueMatchesRaw(String leagueId) {
+    final id = leagueId.trim();
+    if (id.isEmpty) return const Stream<List<Map<String, dynamic>>>.empty();
+    if (AppConfig.activeDatabase != DatabaseType.supabase) {
+      final matchService = ServiceLocator.matchService;
+      return matchService
+          .watchMatchesForLeague(id)
+          .map((matches) => matches.map((m) => m.toMap(snakeCase: true)).toList());
+    }
+    return Supabase.instance.client
+        .from('matches')
+        .stream(primaryKey: ['id'])
+        .order('match_date', ascending: true)
+        .map((rows) {
+          final filtered = rows.where((r) {
+            return (r['league_id'] ?? '').toString().trim() == id;
+          });
+          return filtered.map((e) => Map<String, dynamic>.from(e)).toList();
+        });
+  }
+
   int _asInt(dynamic v) {
     if (v == null) return 0;
     if (v is num) return v.toInt();
@@ -271,25 +294,25 @@ class _GroupStandingsTable extends StatelessWidget {
   }
 
   int _matchHomeScore(Map<String, dynamic> m) {
-    final score = m['score'];
+    final score = m['score'] ?? m['score_json'] ?? m['scoreJson'];
     if (score is Map) {
       final fullTime = score['fullTime'];
       if (fullTime is Map && fullTime['home'] != null) {
         return _asInt(fullTime['home']);
       }
     }
-    return _asInt(m['homeScore']);
+    return _asInt(m['homeScore'] ?? m['home_score']);
   }
 
   int _matchAwayScore(Map<String, dynamic> m) {
-    final score = m['score'];
+    final score = m['score'] ?? m['score_json'] ?? m['scoreJson'];
     if (score is Map) {
       final fullTime = score['fullTime'];
       if (fullTime is Map && fullTime['away'] != null) {
         return _asInt(fullTime['away']);
       }
     }
-    return _asInt(m['awayScore']);
+    return _asInt(m['awayScore'] ?? m['away_score']);
   }
 
   @override
@@ -301,12 +324,11 @@ class _GroupStandingsTable extends StatelessWidget {
     const trophy = Color(0xFFFBBF24);
 
     final ITeamService teamService = ServiceLocator.teamService;
-    final IMatchService matchService = ServiceLocator.matchService;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       child: StreamBuilder<List<Team>>(
-        stream: teamService.watchTeamsByGroup(groupId),
+        stream: teamService.watchAllTeams(),
         builder: (context, teamsSnapshot) {
           if (teamsSnapshot.connectionState == ConnectionState.waiting) {
             return const Padding(
@@ -315,7 +337,10 @@ class _GroupStandingsTable extends StatelessWidget {
             );
           }
 
-          final teams = teamsSnapshot.data ?? const <Team>[];
+          final teams = (teamsSnapshot.data ?? const <Team>[])
+              .where((t) => (t.leagueId ?? '').toString().trim() == leagueId.trim())
+              .where((t) => (t.groupId ?? '').toString().trim() == groupId.trim())
+              .toList(growable: false);
           final standings = <String, Map<String, dynamic>>{};
           final teamNames = <String, String>{};
           final teamLogos = <String, String>{};
@@ -352,9 +377,7 @@ class _GroupStandingsTable extends StatelessWidget {
           }
 
           return StreamBuilder<List<Map<String, dynamic>>>(
-            stream: matchService
-                .watchMatchesForLeague(leagueId)
-                .map((matches) => matches.map((m) => m.toMap()).toList()),
+            stream: _watchLeagueMatchesRaw(leagueId),
             builder: (context, mergedSnapshot) {
               if (mergedSnapshot.connectionState == ConnectionState.waiting) {
                 return const Padding(
@@ -367,7 +390,7 @@ class _GroupStandingsTable extends StatelessWidget {
                   mergedSnapshot.data ?? const <Map<String, dynamic>>[];
 
               for (final m in matchList) {
-                final matchGroup = (m['groupId'] ?? m['groupName'] ?? '')
+                final matchGroup = (m['group_id'] ?? m['groupId'] ?? m['groupName'] ?? '')
                     .toString()
                     .trim();
                 if (matchGroup.isNotEmpty &&
@@ -375,11 +398,13 @@ class _GroupStandingsTable extends StatelessWidget {
                     matchGroup != groupName.trim()) {
                   continue;
                 }
-                final hId = (m['homeTeamId'] ?? '').toString();
-                final aId = (m['awayTeamId'] ?? '').toString();
+                final hId = (m['home_team_id'] ?? m['homeTeamId'] ?? '').toString();
+                final aId = (m['away_team_id'] ?? m['awayTeamId'] ?? '').toString();
 
-                final isFinished = (m['status'] ?? '').toString().trim() == 'finished';
-                if (isFinished &&
+                final rawStatus = (m['status'] ?? '').toString().trim().toLowerCase();
+                final completedFlag = m['is_completed'] == true || m['isCompleted'] == true;
+                final isCompleted = completedFlag || rawStatus == 'finished' || rawStatus == 'completed';
+                if (isCompleted &&
                     standings.containsKey(hId) &&
                     standings.containsKey(aId)) {
                   final hS = _matchHomeScore(m);

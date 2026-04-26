@@ -3,6 +3,7 @@ import 'package:flutter/services.dart'; // TextInputFormatter için gerekli
 import 'package:intl/intl.dart';
 
 import '../models/league.dart';
+import '../models/league_extras.dart';
 import '../models/match.dart';
 import '../models/team.dart';
 import '../services/app_session.dart';
@@ -499,7 +500,8 @@ class _MatchCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isFinished = match.status == MatchStatus.finished;
-    final timeText = (match.matchTime ?? '').trim();
+    final timeTextRaw = (match.matchTime ?? '').trim();
+    final timeText = timeTextRaw.length >= 5 ? timeTextRaw.substring(0, 5) : timeTextRaw;
     final leftText = isFinished
         ? 'MS'
         : (timeText.isEmpty ? '--:--' : timeText);
@@ -797,17 +799,20 @@ class _MatchCard extends StatelessWidget {
     }
 
     final dCtrl = TextEditingController(text: initialDate);
-    final tCtrl = TextEditingController(text: match.matchTime ?? '');
+    final rawInitialTime = (match.matchTime ?? '').trim();
+    final initialTimeText = rawInitialTime.length >= 5 ? rawInitialTime.substring(0, 5) : rawInitialTime;
+    final tCtrl = TextEditingController(text: initialTimeText);
     final dateFocus = FocusNode();
     final timeFocus = FocusNode();
 
-    String? selectedPitch = match.pitchName;
+    String? selectedPitchId = (match.pitchId ?? '').trim().isEmpty ? null : match.pitchId!.trim();
+    String? selectedPitchName = (match.pitchName ?? '').trim().isEmpty ? null : match.pitchName!.trim();
 
-    final pitches = await _leagueService.listPitchesOnce();
+    final pitches = await _leagueService.watchPitches().first;
 
-    // Tek bir stad varsa otomatik seç
     if (pitches.length == 1) {
-      selectedPitch = pitches.first;
+      selectedPitchId = pitches.first.id;
+      selectedPitchName = pitches.first.name.trim().isEmpty ? null : pitches.first.name.trim();
     }
 
     // Tarih tamam olduğunda otomatik saat field'ine geç
@@ -867,8 +872,8 @@ class _MatchCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 30),
-                DropdownButtonFormField<String>(
-                  initialValue: pitches.contains(selectedPitch) ? selectedPitch : null,
+                DropdownButtonFormField<String?>(
+                  initialValue: pitches.any((p) => p.id == selectedPitchId) ? selectedPitchId : null,
                   dropdownColor: const Color(0xFF0F172A),
                   decoration: const InputDecoration(
                     labelText: 'Stad Seçin',
@@ -877,18 +882,31 @@ class _MatchCard extends StatelessWidget {
                       borderSide: BorderSide(color: Colors.white24),
                     ),
                   ),
-                  items: pitches
-                      .map(
-                        (p) => DropdownMenuItem(
-                          value: p,
-                          child: Text(
-                            p,
-                            style: const TextStyle(color: Colors.white),
-                          ),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text(
+                        'Stad Seçilmedi',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ),
+                    for (final p in pitches)
+                      DropdownMenuItem<String?>(
+                        value: p.id,
+                        child: Text(
+                          p.name,
+                          style: const TextStyle(color: Colors.white),
                         ),
-                      )
-                      .toList(),
-                  onChanged: (val) => setDialogState(() => selectedPitch = val),
+                      ),
+                  ],
+                  onChanged: (val) {
+                    final selected = pitches.where((e) => e.id == val).toList(growable: false);
+                    final name = selected.isEmpty ? '' : selected.first.name.trim();
+                    setDialogState(() {
+                      selectedPitchId = val;
+                      selectedPitchName = val == null || name.isEmpty ? null : name;
+                    });
+                  },
                 ),
               ],
             ),
@@ -910,7 +928,8 @@ class _MatchCard extends StatelessWidget {
                 final timeText = tCtrl.text;
 
                 // VALIDATION (Doğrulama)
-                if (dateText.length != 10) {
+                final dateMatch = RegExp(r'^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$').firstMatch(dateText);
+                if (dateMatch == null) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('Tarih formatı hatalı! (GG/AA/YYYY)'),
@@ -919,7 +938,8 @@ class _MatchCard extends StatelessWidget {
                   );
                   return;
                 }
-                if (timeText.length != 5) {
+                final timeMatch = RegExp(r'^(\d{2}):(\d{2})$').firstMatch(timeText);
+                if (timeMatch == null) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('Saat formatı hatalı! (SS:DD)'),
@@ -929,22 +949,41 @@ class _MatchCard extends StatelessWidget {
                   return;
                 }
 
-                // Tekrar DB Formatına Çevir (GG/AA/YYYY -> YYYY-MM-DD)
-                final parts = dateText.split('/');
-                final dbDate = '${parts[2]}-${parts[1]}-${parts[0]}';
+                final dd = dateMatch.group(1)!;
+                final mm = dateMatch.group(2)!;
+                final yyyy = dateMatch.group(3)!;
+                final dbDate = '$yyyy-$mm-$dd';
 
-                await _matchService.updateMatchSchedule(
-                  matchId: match.id,
-                  matchDateDb: dbDate,
-                  matchTime: timeText,
-                  pitchName: selectedPitch,
-                );
-                if (context.mounted) {
-                  dateFocus.dispose();
-                  timeFocus.dispose();
-                  dCtrl.dispose();
-                  tCtrl.dispose();
-                  Navigator.pop(c);
+                try {
+                  await _matchService.updateMatchSchedule(
+                    matchId: match.id,
+                    matchDateDb: dbDate,
+                    matchTime: timeText,
+                    pitchId: selectedPitchId,
+                    pitchName: selectedPitchName,
+                  );
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Maç güncellendi.'),
+                        backgroundColor: Colors.green,
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                    dateFocus.dispose();
+                    timeFocus.dispose();
+                    dCtrl.dispose();
+                    tCtrl.dispose();
+                    Navigator.pop(c);
+                  }
+                } catch (e) {
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Güncelleme başarısız: $e'),
+                      backgroundColor: Colors.redAccent,
+                    ),
+                  );
                 }
               },
               child: const Text(

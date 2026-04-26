@@ -137,13 +137,15 @@ class FirebaseMatchService implements IMatchService {
     required String matchId,
     required String matchDateDb,
     required String matchTime,
-    required String? pitchName,
+    String? pitchId,
+    String? pitchName,
   }) async {
     final id = matchId.trim();
     if (id.isEmpty) return;
     await _firestore.collection('matches').doc(id).update({
       'matchDate': matchDateDb,
       'matchTime': matchTime,
+      'pitchId': pitchId,
       'pitchName': pitchName,
     });
   }

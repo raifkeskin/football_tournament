@@ -34,32 +34,17 @@ class SupabaseTeamService implements ITeamService {
 
   Future<void> _bestEffortUpdatePlayerIdentityFields({
     required String playerId,
-    String? jerseyNumber,
     String? role,
   }) async {
     final pid = playerId.trim();
     if (pid.isEmpty) return;
-    final j = (jerseyNumber ?? '').replaceAll(RegExp(r'\D'), '').trim();
     final r = (role ?? '').trim();
-    if (j.isEmpty && r.isEmpty) return;
+    if (r.isEmpty) return;
 
     if (r.isNotEmpty) {
       try {
         await _client.from('players').update({
           'role': r,
-          'updated_at': DateTime.now().toIso8601String(),
-        }).eq('id', pid);
-      } on PostgrestException catch (e) {
-        if (e.code != 'PGRST204') rethrow;
-      }
-    }
-
-    if (j.isNotEmpty) {
-      final n = int.tryParse(j);
-      if (n == null) return;
-      try {
-        await _client.from('players').update({
-          'default_jersey_number': n,
           'updated_at': DateTime.now().toIso8601String(),
         }).eq('id', pid);
       } on PostgrestException catch (e) {
@@ -238,7 +223,7 @@ class SupabaseTeamService implements ITeamService {
           filters: 'id=$id | limit=1',
         );
         final res = await _client.from('teams').select().eq('id', id).limit(1);
-        if (res is! List || res.isEmpty) {
+        if (res.isEmpty) {
           AppConfig.sqlLogResult(
             table: 'teams',
             operation: 'SELECT',
@@ -295,7 +280,7 @@ class SupabaseTeamService implements ITeamService {
             .select()
             .or(clauses.join(','))
             .limit(1);
-        if (res is! List || res.isEmpty) {
+        if (res.isEmpty) {
           AppConfig.sqlLogResult(
             table: 'players',
             operation: 'SELECT',
@@ -429,16 +414,20 @@ class SupabaseTeamService implements ITeamService {
       return Stream.fromFuture(() async {
         final res = await _client
             .from('league_team_players')
-            .select('player_id')
+            .select('player_id, jersey_number')
             .eq('team_id', team) 
-            .eq('league_id', tId);
-        if (res is! List) return const <PlayerModel>[];
+            .eq('league_id', tId)
+            .eq('is_active', true);
 
         final rows = res.cast<Map<String, dynamic>>();
         final ids = <String>{};
+        final jerseyByPlayerId = <String, dynamic>{};
         for (final r in rows) {
           final pid = (r['player_id'] ?? '').toString().trim();
-          if (pid.isNotEmpty) ids.add(pid);
+          if (pid.isEmpty) continue;
+          ids.add(pid);
+          final j = r['jersey_number'];
+          if (j != null) jerseyByPlayerId[pid] = j;
         }
         if (ids.isEmpty) return const <PlayerModel>[];
 
@@ -446,11 +435,9 @@ class SupabaseTeamService implements ITeamService {
             .from('players')
             .select()
             .inFilter('id', ids.toList());
-        if (playersRes is! List) return const <PlayerModel>[];
 
         final list = <PlayerModel>[];
         for (final any in playersRes) {
-          if (any is! Map) continue;
           final row = _withDisplayName(any.cast<String, dynamic>());
           final pid = (row['id'] ?? '').toString().trim();
           if (pid.isEmpty) continue;
@@ -458,6 +445,7 @@ class SupabaseTeamService implements ITeamService {
             ...row,
             'league_id': tId,
             'team_id': team,
+            if (jerseyByPlayerId.containsKey(pid)) 'jersey_number': jerseyByPlayerId[pid],
           };
           list.add(PlayerModel.fromMap(merged, pid));
         }
@@ -488,6 +476,159 @@ class SupabaseTeamService implements ITeamService {
     }
   }
 
+  Future<List<PlayerModel>> getAvailablePlayersForLeague(String leagueId) async {
+    final lid = leagueId.trim();
+    if (lid.isEmpty) return const <PlayerModel>[];
+
+    final linked = await _client
+        .from('league_team_players')
+        .select('player_id')
+        .eq('league_id', lid)
+        .eq('is_active', true);
+    final excludeIds = <String>{};
+    for (final any in linked) {
+      if (any is! Map) continue;
+      final pid = (any['player_id'] ?? '').toString().trim();
+      if (pid.isNotEmpty) excludeIds.add(pid);
+    }
+  
+    final playersRes =
+        await _client.from('players').select().order('name', ascending: true).limit(500);
+    final list = <PlayerModel>[];
+    for (final any in playersRes) {
+      final row = _withDisplayName(any.cast<String, dynamic>());
+      final id = (row['id'] ?? '').toString().trim();
+      if (id.isEmpty) continue;
+      if (excludeIds.contains(id)) continue;
+      list.add(PlayerModel.fromMap(row, id));
+    }
+    return list;
+  }
+
+  Future<void> addMultiplePlayersToTeam(
+    List<String> playerIds,
+    String teamId,
+    String leagueId,
+  ) async {
+    final team = teamId.trim();
+    final league = leagueId.trim();
+    final ids = playerIds.map((e) => e.trim()).where((e) => e.isNotEmpty).toSet().toList();
+    if (team.isEmpty || league.isEmpty || ids.isEmpty) return;
+
+    await _client
+        .from('league_team_players')
+        .update({
+          'team_id': team,
+          'jersey_number': null,
+          'is_active': true,
+        })
+        .eq('league_id', league)
+        .inFilter('player_id', ids)
+        .or('is_active.is.false,is_active.is.null');
+
+    final existing = await _client
+        .from('league_team_players')
+        .select('player_id')
+        .eq('league_id', league)
+        .inFilter('player_id', ids);
+    final existingIds = <String>{};
+    for (final any in existing) {
+      if (any is! Map) continue;
+      final pid = (any['player_id'] ?? '').toString().trim();
+      if (pid.isNotEmpty) existingIds.add(pid);
+    }
+      final missing = ids.where((id) => !existingIds.contains(id)).toList();
+    if (missing.isEmpty) return;
+
+    final rows = missing
+        .map(
+          (pid) => <String, dynamic>{
+            'league_id': league,
+            'team_id': team,
+            'player_id': pid,
+            'jersey_number': null,
+            'is_active': true,
+          },
+        )
+        .toList();
+    await _client.from('league_team_players').insert(rows);
+  }
+
+  Future<void> updateJerseyNumber(
+    String playerId,
+    String teamId,
+    String leagueId,
+    int newNumber,
+  ) async {
+    final pid = playerId.trim();
+    final team = teamId.trim();
+    final league = leagueId.trim();
+    if (pid.isEmpty || team.isEmpty || league.isEmpty) return;
+    if (newNumber <= 0 || newNumber > 999) {
+      throw Exception('Forma numarası 1 ile 999 arasında olmalı.');
+    }
+
+    final dup = await _client
+        .from('league_team_players')
+        .select('player_id')
+        .eq('league_id', league)
+        .eq('team_id', team)
+        .eq('jersey_number', newNumber)
+        .eq('is_active', true)
+        .limit(1);
+    if (dup.isNotEmpty) {
+      final row = (dup.first as Map).cast<String, dynamic>();
+      final otherPid = (row['player_id'] ?? '').toString().trim();
+      if (otherPid.isNotEmpty && otherPid != pid) {
+        throw Exception('Bu forma numarası bu takımda zaten kullanılıyor.');
+      }
+    }
+
+    try {
+      await _client
+          .from('league_team_players')
+          .update({'jersey_number': newNumber})
+          .eq('league_id', league)
+          .eq('team_id', team)
+          .eq('player_id', pid)
+          .eq('is_active', true);
+    } on PostgrestException catch (e) {
+      if (e.code == 'PGRST204') {
+        throw Exception(
+          "league_team_players.jersey_number kolonu bulunamadı (PGRST204). "
+          "Önce şunu çalıştır:\n"
+          "alter table public.league_team_players add column if not exists jersey_number smallint;",
+        );
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> setJerseyNumber(
+    String playerId,
+    String teamId,
+    String leagueId,
+    int? newNumber,
+  ) async {
+    final pid = playerId.trim();
+    final team = teamId.trim();
+    final league = leagueId.trim();
+    if (pid.isEmpty || team.isEmpty || league.isEmpty) return;
+
+    if (newNumber == null) {
+      await _client
+          .from('league_team_players')
+          .update({'jersey_number': null})
+          .eq('league_id', league)
+          .eq('team_id', team)
+          .eq('player_id', pid)
+          .eq('is_active', true);
+      return;
+    }
+
+    await updateJerseyNumber(pid, team, league, newNumber);
+  }
+
   Future<String?> _resolvePlayerId(String phoneOrId, {String? caller, String? method}) async {
     final key = phoneOrId.trim();
     if (key.isEmpty) return null;
@@ -512,7 +653,7 @@ class SupabaseTeamService implements ITeamService {
           .select('id')
           .or(clauses.join(','))
           .limit(1);
-      if (res is! List || res.isEmpty) {
+      if (res.isEmpty) {
         AppConfig.sqlLogResult(
           table: 'players',
           operation: 'SELECT',
@@ -668,38 +809,92 @@ class SupabaseTeamService implements ITeamService {
     if (id.isEmpty) return Future.value();
     return Future(() async {
       try {
-        String mapKey(String k) {
-          switch (k) {
-            case 'photoUrl':
-              return 'photo_url';
-            case 'birthDate':
-              return 'birth_date';
-            case 'mainPosition':
-              return 'main_position';
-            case 'subPosition':
-              return 'sub_position';
-            case 'preferredFoot':
-              return 'preferred_foot';
-            case 'nationalId':
-              return 'national_id';
-            case 'defaultJerseyNumber':
-              return 'default_jersey_number';
-            case 'height':
-              return 'height';
-            case 'weight':
-              return 'weight';
-            case 'phoneRaw10':
-              return 'phone';
-            case 'suspendedMatches':
-              return 'suspended_matches';
-            default:
-              return k;
-          }
-        }
+        const fullKeys = <String>[
+          'name',
+          'surname',
+          'birth_date',
+          'preferred_foot',
+          'main_position',
+          'sub_position',
+          'photo_url',
+          'phone',
+          'height',
+          'weight',
+          'national_id',
+          'role',
+        ];
+        final hasFullPayload = fullKeys.every(data.containsKey);
 
-        final payload = <String, dynamic>{};
-        for (final e in data.entries) {
-          payload[mapKey(e.key)] = e.value;
+        Map<String, dynamic> payload;
+        if (hasFullPayload) {
+          String? cleanStr(dynamic v) {
+            final s = (v ?? '').toString().trim();
+            return s.isEmpty ? null : s;
+          }
+
+          int? cleanInt(dynamic v) {
+            if (v == null) return null;
+            if (v is int) return v;
+            if (v is num) return v.toInt();
+            final s = v.toString().trim();
+            return s.isEmpty ? null : int.tryParse(s);
+          }
+
+          final phoneInput = cleanStr(data['phone']);
+          final normalizedPhone = phoneInput == null
+              ? null
+              : phoneInput.startsWith('no_phone_')
+                  ? phoneInput
+                  : _normalizePhoneToRaw10(phoneInput);
+
+          payload = <String, dynamic>{
+            'name': cleanStr(data['name']),
+            'surname': cleanStr(data['surname']),
+            'birth_date': cleanStr(data['birth_date']),
+            'preferred_foot': cleanStr(data['preferred_foot']),
+            'main_position': cleanStr(data['main_position']),
+            'sub_position': cleanStr(data['sub_position']),
+            'photo_url': cleanStr(data['photo_url']),
+            'phone': normalizedPhone,
+            'height': cleanInt(data['height']),
+            'weight': cleanInt(data['weight']),
+            'national_id': cleanStr(data['national_id']),
+            'role': cleanStr(data['role']),
+          };
+        } else {
+          String mapKey(String k) {
+            switch (k) {
+              case 'photoUrl':
+                return 'photo_url';
+              case 'birthDate':
+                return 'birth_date';
+              case 'mainPosition':
+                return 'main_position';
+              case 'subPosition':
+                return 'sub_position';
+              case 'preferredFoot':
+                return 'preferred_foot';
+              case 'nationalId':
+                return 'national_id';
+              case 'defaultJerseyNumber':
+                return 'default_jersey_number';
+              case 'height':
+                return 'height';
+              case 'weight':
+                return 'weight';
+              case 'phoneRaw10':
+                return 'phone';
+              case 'suspendedMatches':
+                return 'suspended_matches';
+              default:
+                return k;
+            }
+          }
+
+          payload = <String, dynamic>{};
+          for (final e in data.entries) {
+            payload[mapKey(e.key)] = e.value;
+          }
         }
         payload['updated_at'] = DateTime.now().toIso8601String();
 
@@ -763,7 +958,7 @@ class SupabaseTeamService implements ITeamService {
             .select()
             .or('id.eq.$id,player_id.eq.$id')
             .limit(1);
-        if (res is! List || res.isEmpty) {
+        if (res.isEmpty) {
           AppConfig.sqlLogResult(
             table: 'penalties',
             operation: 'SELECT',
@@ -992,7 +1187,7 @@ class SupabaseTeamService implements ITeamService {
             'surname': surname.isEmpty ? null : surname,
             'updated_at': DateTime.now().toIso8601String(),
           }).select('id').limit(1);
-          if (inserted is List && inserted.isNotEmpty && inserted.first is Map) {
+          if (inserted.isNotEmpty) {
             final row = (inserted.first as Map).cast<String, dynamic>();
             pid = (row['id'] ?? '').toString().trim();
           }
@@ -1019,7 +1214,7 @@ class SupabaseTeamService implements ITeamService {
                   .select('id')
                   .or(clauses.join(','))
                   .limit(1);
-              if (res is List && res.isNotEmpty && res.first is Map) {
+              if (res.isNotEmpty) {
                 final row = (res.first as Map).cast<String, dynamic>();
                 pid = (row['id'] ?? '').toString().trim();
               }
@@ -1041,6 +1236,33 @@ class SupabaseTeamService implements ITeamService {
       if (pid.isEmpty) {
         throw Exception('Oyuncu ID bulunamadı (phone=$phone).');
       }
+
+      final jerseyStr = (jerseyNumber ?? '').replaceAll(RegExp(r'\D'), '').trim();
+      final jersey = jerseyStr.isEmpty ? null : int.tryParse(jerseyStr);
+      if (jerseyStr.isNotEmpty && jersey == null) {
+        throw Exception('Forma numarası geçersiz.');
+      }
+      if (jersey != null && (jersey <= 0 || jersey > 999)) {
+        throw Exception('Forma numarası 1 ile 999 arasında olmalı.');
+      }
+
+      if (jersey != null) {
+        final dup = await _client
+            .from('league_team_players')
+            .select('player_id')
+            .eq('league_id', t)
+            .eq('team_id', team)
+            .eq('jersey_number', jersey)
+            .eq('is_active', true);
+        for (final any in dup) {
+          if (any is! Map) continue;
+          final otherPid = (any['player_id'] ?? '').toString().trim();
+          if (otherPid.isNotEmpty && otherPid != pid) {
+            throw Exception('Bu forma numarası bu takımda zaten kullanılıyor.');
+          }
+        }
+            }
+
       try {
         _sbLog(
           table: 'league_team_players',
@@ -1059,11 +1281,25 @@ class SupabaseTeamService implements ITeamService {
           'league_id': t,
           'team_id': team,
           'player_id': pid,
+          'jersey_number': ?jersey,
+          'is_active': true,
         };
-        await _client.from('league_team_players').insert(base);
+        final updated = await _client
+            .from('league_team_players')
+            .update({
+              'jersey_number': ?jersey,
+              'is_active': true,
+            })
+            .eq('league_id', t)
+            .eq('team_id', team)
+            .eq('player_id', pid)
+            .select('id');
+        final didUpdate = updated.isNotEmpty;
+        if (!didUpdate) {
+          await _client.from('league_team_players').insert(base);
+        }
         await _bestEffortUpdatePlayerIdentityFields(
           playerId: pid,
-          jerseyNumber: jerseyNumber,
           role: role.trim().isEmpty ? null : role.trim(),
         );
         AppConfig.sqlLogResult(
@@ -1160,12 +1396,12 @@ class SupabaseTeamService implements ITeamService {
       try {
         _sbLog(
           table: 'league_team_players',
-          query: 'DELETE league_id=$t, team_id=$team, player_id=$pid',
+          query: 'UPDATE is_active=false | league_id=$t, team_id=$team, player_id=$pid',
           trace: StackTrace.current,
         );
         AppConfig.sqlLogStart(
           table: 'league_team_players',
-          operation: 'DELETE',
+          operation: 'UPDATE',
           caller: caller,
           service: _serviceName,
           method: 'deleteRosterEntry',
@@ -1173,13 +1409,13 @@ class SupabaseTeamService implements ITeamService {
         );
         await _client
             .from('league_team_players')
-            .delete()
+            .update({'is_active': false})
             .eq('league_id', t)
             .eq('team_id', team)
             .eq('player_id', pid);
         AppConfig.sqlLogResult(
           table: 'league_team_players',
-          operation: 'DELETE',
+          operation: 'UPDATE',
           caller: caller,
           service: _serviceName,
           method: 'deleteRosterEntry',
@@ -1187,15 +1423,31 @@ class SupabaseTeamService implements ITeamService {
         );
         _sbResult(rows: 1);
       } catch (e) {
+        if (e is PostgrestException &&
+            (e.code == '42501' ||
+                (e.message ?? '').toLowerCase().contains('row-level security'))) {
+          throw Exception(
+            'league_team_players UPDATE RLS tarafından engellendi (code=42501). '
+            'is_active güncellemesi için update policy açılmalı.',
+          );
+        }
+        if (e is PostgrestException && e.code == 'PGRST204') {
+          throw Exception(
+            "league_team_players.is_active kolonu bulunamadı (PGRST204). "
+            "Önce şunu çalıştır:\n"
+            "alter table public.league_team_players add column if not exists is_active boolean not null default true;",
+          );
+        }
         AppConfig.sqlLogResult(
           table: 'league_team_players',
-          operation: 'DELETE',
+          operation: 'UPDATE',
           caller: caller,
           service: _serviceName,
           method: 'deleteRosterEntry',
           error: e,
         );
         _sbResult(rows: 0, error: e);
+        rethrow;
       }
 
       try {
@@ -1279,8 +1531,9 @@ class SupabaseTeamService implements ITeamService {
             .eq('league_id', t)
             .eq('team_id', team)
             .eq('player_id', pid)
+            .eq('is_active', true)
             .limit(1);
-        if (linkRes is! List || linkRes.isEmpty) {
+        if (linkRes.isEmpty) {
           AppConfig.sqlLogResult(
             table: 'league_team_players',
             operation: 'SELECT',
@@ -1306,7 +1559,7 @@ class SupabaseTeamService implements ITeamService {
             .select('role')
             .eq('id', pid)
             .limit(1);
-        if (pr is! List || pr.isEmpty) return false;
+        if (pr.isEmpty) return false;
         final role = ((pr.first as Map)['role'] ?? '').toString().trim();
         return role == 'Takım Sorumlusu' || role == 'Her İkisi';
       } catch (e) {
@@ -1354,19 +1607,8 @@ class SupabaseTeamService implements ITeamService {
             .from('league_team_players')
             .select('player_id')
             .eq('league_id', t)
-            .eq('team_id', team);
-        if (res is! List) {
-          AppConfig.sqlLogResult(
-            table: 'league_team_players',
-            operation: 'SELECT',
-            caller: caller,
-            service: _serviceName,
-            method: 'managerExistsForTeamTournament',
-            count: 0,
-          );
-          _sbResult(rows: 0);
-          return false;
-        }
+            .eq('team_id', team)
+            .eq('is_active', true);
         AppConfig.sqlLogResult(
           table: 'league_team_players',
           operation: 'SELECT',
@@ -1398,9 +1640,7 @@ class SupabaseTeamService implements ITeamService {
             .from('players')
             .select('id, role')
             .inFilter('id', ids.toList());
-        if (pr is! List) return false;
         for (final any in pr) {
-          if (any is! Map) continue;
           final role = (any['role'] ?? '').toString().trim();
           if (role == 'Takım Sorumlusu' || role == 'Her İkisi') return true;
         }
@@ -1631,10 +1871,8 @@ class SupabaseTeamService implements ITeamService {
             .from('matches')
             .select('id, home_team_id, away_team_id')
             .or('home_team_id.eq.$id,away_team_id.eq.$id');
-        if (res is List) {
-          matchIds = res.map((e) => (e as Map)['id']?.toString() ?? '').where((e) => e.trim().isNotEmpty).toList();
-        }
-        AppConfig.sqlLogResult(
+        matchIds = res.map((e) => (e as Map)['id']?.toString() ?? '').where((e) => e.trim().isNotEmpty).toList();
+              AppConfig.sqlLogResult(
           table: 'matches',
           operation: 'SELECT',
           caller: caller,
@@ -1853,18 +2091,6 @@ class SupabaseTeamService implements ITeamService {
             .select()
             .eq('league_id', id)
             .order('name', ascending: true);
-        if (res is! List) {
-          AppConfig.sqlLogResult(
-            table: 'teams',
-            operation: 'SELECT',
-            caller: caller,
-            service: _serviceName,
-            method: 'getTeamsCached',
-            count: 0,
-          );
-          _sbResult(rows: 0);
-          return const <Team>[];
-        }
         AppConfig.sqlLogResult(
           table: 'teams',
           operation: 'SELECT',
@@ -1935,7 +2161,7 @@ class SupabaseTeamService implements ITeamService {
             })
             .select()
             .limit(1);
-        if (res is List && res.isNotEmpty) {
+        if (res.isNotEmpty) {
           AppConfig.sqlLogResult(
             table: 'teams',
             operation: 'INSERT',
@@ -1989,7 +2215,7 @@ class SupabaseTeamService implements ITeamService {
         filters: 'columns=id | all_rows',
       );
       final res = await _client.from('teams').select('id').neq('id', '');
-      final count = res is List ? res.length : 0;
+      final count = res.length;
       AppConfig.sqlLogResult(
         table: 'teams',
         operation: 'SELECT',
@@ -2055,7 +2281,7 @@ class SupabaseTeamService implements ITeamService {
         filters: 'columns=id | all_rows',
       );
       final res = await _client.from('players').select('id').neq('id', '');
-      final count = res is List ? res.length : 0;
+      final count = res.length;
       AppConfig.sqlLogResult(
         table: 'players',
         operation: 'SELECT',

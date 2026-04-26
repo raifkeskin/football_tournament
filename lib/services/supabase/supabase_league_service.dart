@@ -394,10 +394,6 @@ class SupabaseLeagueService implements ILeagueService {
     try {
       AppConfig.sqlLogStart(table: 'pitches', operation: 'SELECT', filters: 'columns=name | order=name asc');
       final res = await _client.from('pitches').select('name').order('name', ascending: true);
-      if (res is! List) {
-        AppConfig.sqlLogResult(table: 'pitches', operation: 'SELECT', count: 0);
-        return const [];
-      }
       AppConfig.sqlLogResult(table: 'pitches', operation: 'SELECT', count: res.length);
       return res
           .map((e) => (e as Map)['name']?.toString() ?? '')
@@ -681,10 +677,6 @@ class SupabaseLeagueService implements ILeagueService {
     try {
       AppConfig.sqlLogStart(table: name, operation: 'SELECT');
       final res = await _client.from(name).select();
-      if (res is! List) {
-        AppConfig.sqlLogResult(table: name, operation: 'SELECT', count: 0);
-        return '[]';
-      }
       AppConfig.sqlLogResult(table: name, operation: 'SELECT', count: res.length);
       return jsonEncode(res);
     } catch (e) {
@@ -703,7 +695,7 @@ class SupabaseLeagueService implements ILeagueService {
       try {
         AppConfig.sqlLogStart(table: c, operation: 'SELECT');
         final res = await _client.from(c).select();
-        out[c] = res is List ? res : const [];
+        out[c] = res;
         AppConfig.sqlLogResult(table: c, operation: 'SELECT', count: out[c] is List ? (out[c] as List).length : 0);
       } catch (_) {
         out[c] = const [];

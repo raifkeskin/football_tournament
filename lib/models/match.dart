@@ -570,6 +570,13 @@ class PlayerModel {
         final yyyy = m.group(3)!.padLeft(4, '0');
         return '$dd/$mm/$yyyy';
       }
+      final iso = RegExp(r'^(\d{4})-(\d{2})-(\d{2})').firstMatch(s);
+      if (iso != null) {
+        final yyyy = iso.group(1)!;
+        final mm = iso.group(2)!;
+        final dd = iso.group(3)!;
+        return '$dd/$mm/$yyyy';
+      }
       return null;
     }
 
@@ -617,13 +624,9 @@ class PlayerModel {
 
     final suspendedMatches = readInt(v('suspendedMatches', 'suspended_matches'));
 
-    final rosterNumberRaw = (v('jerseyNumber', 'jersey_number') ?? v('number', 'number'))
+    final numberRaw = (v('jerseyNumber', 'jersey_number') ?? v('number', 'number'))
         ?.toString()
         .trim();
-    final defaultNumberRaw = v('defaultJerseyNumber', 'default_jersey_number')?.toString().trim();
-    final numberRaw = isRoster
-        ? rosterNumberRaw
-        : ((defaultNumberRaw ?? '').isNotEmpty ? defaultNumberRaw : rosterNumberRaw);
     final number = (numberRaw ?? '').isEmpty ? null : numberRaw;
 
     if (isRoster) {

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../models/auth_models.dart';
 import '../services/interfaces/i_auth_service.dart';
 import '../services/service_locator.dart';
 import '../services/sms/sms_service_locator.dart';

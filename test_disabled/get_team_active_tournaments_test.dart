@@ -7,13 +7,13 @@ void main() {
   group('getTeamActiveTournaments Tests', () {
     late DatabaseService dbService;
     late FakeFirebaseFirestore firestore;
-    late DatabaseType _prevDb;
+    late DatabaseType prevDb;
     const testTeamId = 'OnbHjgCmq5MrMgqyiN0R';
     const expectedTournamentId = 'qAzYxC579QhxDDgsorgX';
     const inactiveTournamentId = 'inactive_tournament_123';
 
     setUp(() async {
-      _prevDb = AppConfig.activeDatabase;
+      prevDb = AppConfig.activeDatabase;
       AppConfig.activeDatabase = DatabaseType.firebase;
       firestore = FakeFirebaseFirestore();
 
@@ -45,7 +45,7 @@ void main() {
     });
 
     tearDown(() {
-      AppConfig.activeDatabase = _prevDb;
+      AppConfig.activeDatabase = prevDb;
     });
 
     test(

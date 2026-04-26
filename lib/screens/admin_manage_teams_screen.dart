@@ -10,6 +10,7 @@ import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../repositories/teams_repository.dart';
 import '../models/league.dart';
 import '../models/match.dart';
@@ -49,14 +50,24 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
   XFile? _teamLogo;
   String? _selectedLeagueId;
   bool _addingTeam = false;
+  Future<List<Map<String, dynamic>>>? _teamsFuture;
 
   @override
   void initState() {
     super.initState();
+    _teamsFuture = _fetchTeamsOnce();
     final initial = (widget.initialLeagueId ?? '').trim();
     if (initial.isNotEmpty) {
       _selectedLeagueId = initial;
     }
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchTeamsOnce() async {
+    final res = await Supabase.instance.client
+        .from('teams')
+        .select()
+        .order('name', ascending: true);
+    return res.map((e) => Map<String, dynamic>.from((e as Map))).toList();
   }
 
   /// Türkçe karakter duyarlı küçük harfe çevirme (Arama için)
@@ -137,6 +148,9 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                   logoUrl: logoUrl,
                 );
                 if (!context.mounted) return;
+                if (mounted) {
+                  setState(() => _teamsFuture = _fetchTeamsOnce());
+                }
                 Navigator.pop(context);
                 ScaffoldMessenger.of(
                   this.context,
@@ -285,6 +299,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Takım silindi.')));
+      setState(() => _teamsFuture = _fetchTeamsOnce());
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -382,7 +397,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                         Expanded(
                           flex: 2,
                           child: DropdownButtonFormField<String>(
-                            value: _selectedGroupId,
+                            initialValue: _selectedGroupId,
                             decoration: const InputDecoration(
                               border: OutlineInputBorder(),
                             ),
@@ -420,22 +435,38 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                     ),
                   ),
                   Expanded(
-                    child: StreamBuilder<List<Map<String, dynamic>>>(
-                      stream: _teamService.watchAllTeamsRaw(caller: 'AdminManageTeamsScreen'),
+                    child: FutureBuilder<List<Map<String, dynamic>>>(
+                      future: _teamsFuture,
                       builder: (context, snapshot) {
-                        if (snapshot.hasError) {
-                          return Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Text(
-                                'Takımlar yüklenemedi.\n\n${_friendlyLoadError(snapshot.error)}',
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
+                        Future<void> refresh() async {
+                          setState(() => _teamsFuture = _fetchTeamsOnce());
+                          await _teamsFuture;
+                        }
+
+                        Widget buildMessage(String text) {
+                          return ListView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            padding: const EdgeInsets.all(16),
+                            children: [
+                              const SizedBox(height: 120),
+                              Text(text, textAlign: TextAlign.center),
+                            ],
                           );
                         }
-                        if (!snapshot.hasData) {
-                          return const Center(child: CircularProgressIndicator());
+
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return RefreshIndicator(
+                            onRefresh: refresh,
+                            child: buildMessage('Takımlar yükleniyor...'),
+                          );
+                        }
+                        if (snapshot.hasError) {
+                          return RefreshIndicator(
+                            onRefresh: refresh,
+                            child: buildMessage(
+                              'Takımlar yüklenemedi.\n\n${_friendlyLoadError(snapshot.error)}',
+                            ),
+                          );
                         }
 
                         final teams = (snapshot.data ?? const <Map<String, dynamic>>[])
@@ -477,98 +508,111 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                             .toList();
 
                         if (teams.isEmpty) {
-                          return const Center(child: Text('Takım bulunamadı.'));
+                          return RefreshIndicator(
+                            onRefresh: refresh,
+                            child: buildMessage('Takım bulunamadı.'),
+                          );
                         }
 
-                        return ListView.builder(
-                          padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
-                          itemCount: teams.length,
-                          itemBuilder: (context, index) {
-                            final data = teams[index];
-                            final teamId = (data['id'] ?? '').toString();
-                            final teamName = (data['name'] ?? '').toString();
-                            final logoUrl = (data['logo_url'] ??'').toString();
+                        return RefreshIndicator(
+                          onRefresh: refresh,
+                          child: ListView.builder(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
+                            itemCount: teams.length,
+                            itemBuilder: (context, index) {
+                              final data = teams[index];
+                              final teamId = (data['id'] ?? '').toString();
+                              final teamName = (data['name'] ?? '').toString();
+                              final logoUrl = (data['logo_url'] ?? '').toString();
 
-                            Future<void> openEditDialog() async {
-                              final updated = await showDialog<bool>(
-                                context: context,
-                                barrierDismissible: false,
-                                builder: (_) => Dialog.fullscreen(
-                                  child: EditTeamScreen(teamId: teamId, data: data),
-                                ),
-                              );
-                              if (!context.mounted) return;
-                              if (updated == true) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Güncellendi')),
+                              Future<void> openEditDialog() async {
+                                final updated = await showDialog<bool>(
+                                  context: context,
+                                  barrierDismissible: false,
+                                  builder: (_) => Dialog.fullscreen(
+                                    child: EditTeamScreen(teamId: teamId, data: data),
+                                  ),
                                 );
-                                setState(() {});
+                                if (!context.mounted) return;
+                                if (updated == true) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Güncellendi')),
+                                  );
+                                  setState(() => _teamsFuture = _fetchTeamsOnce());
+                                }
                               }
-                            }
 
-                            return Card(
-                              margin: const EdgeInsets.symmetric(vertical: 4),
-                              child: ListTile(
-                                dense: true,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 2,
-                                ),
-                                leading: SizedBox(
-                                  width: 36,
-                                  height: 36,
-                                  child: WebSafeImage(
-                                    url: logoUrl,
+                              return Card(
+                                margin: const EdgeInsets.symmetric(vertical: 4),
+                                child: ListTile(
+                                  dense: true,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 2,
+                                  ),
+                                  leading: SizedBox(
                                     width: 36,
                                     height: 36,
-                                    borderRadius: BorderRadius.circular(8),
-                                    fallbackIconSize: 18,
+                                    child: WebSafeImage(
+                                      url: logoUrl,
+                                      width: 36,
+                                      height: 36,
+                                      borderRadius: BorderRadius.circular(8),
+                                      fallbackIconSize: 18,
+                                    ),
                                   ),
-                                ),
-                                title: Text(
-                                  teamName,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  softWrap: true,
-                                ),
-                                trailing: PopupMenuButton<String>(
-                                  itemBuilder: (context) => const [
-                                    PopupMenuItem(
-                                      value: 'edit',
-                                      child: Text('Düzenle'),
-                                    ),
-                                    PopupMenuItem(
-                                      value: 'delete',
-                                      child: Text('Sil'),
-                                    ),
-                                  ],
-                                  onSelected: (value) {
-                                    switch (value) {
-                                      case 'edit':
-                                        openEditDialog();
-                                        break;
-                                      case 'delete':
-                                        _takimSil(teamId);
-                                        break;
-                                    }
+                                  title: Text(
+                                    teamName,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    softWrap: true,
+                                  ),
+                                  trailing: PopupMenuButton<String>(
+                                    itemBuilder: (context) => const [
+                                      PopupMenuItem(
+                                        value: 'edit',
+                                        child: Text('Düzenle'),
+                                      ),
+                                      PopupMenuItem(
+                                        value: 'delete',
+                                        child: Text('Sil'),
+                                      ),
+                                    ],
+                                    onSelected: (value) {
+                                      switch (value) {
+                                        case 'edit':
+                                          openEditDialog();
+                                          break;
+                                        case 'delete':
+                                          _takimSil(teamId).then((_) {
+                                            if (!mounted) return;
+                                            setState(() => _teamsFuture = _fetchTeamsOnce());
+                                          });
+                                          break;
+                                      }
+                                    },
+                                  ),
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => TeamSquadScreen(
+                                          teamId: teamId,
+                                          tournamentId: effectiveLeagueId,
+                                          teamName: teamName,
+                                          teamLogoUrl: logoUrl,
+                                        ),
+                                      ),
+                                    ).then((_) {
+                                      if (!mounted) return;
+                                      setState(() => _teamsFuture = _fetchTeamsOnce());
+                                    });
                                   },
                                 ),
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => TeamSquadScreen(
-                                        teamId: teamId,
-                                        tournamentId: effectiveLeagueId,
-                                        teamName: teamName,
-                                        teamLogoUrl: logoUrl,
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            );
-                          },
+                              );
+                            },
+                          ),
                         );
                       },
                     ),

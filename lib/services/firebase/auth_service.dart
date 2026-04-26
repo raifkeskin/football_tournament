@@ -29,7 +29,7 @@ class FirebaseAuthService implements IAuthService {
     if (id.isEmpty) return const Stream<UserDoc?>.empty();
     return _firestore.collection('users').doc(id).snapshots().map((snap) {
       if (!snap.exists) return null;
-      final data = snap.data() as Map<String, dynamic>? ?? <String, dynamic>{};
+      final data = snap.data() ?? <String, dynamic>{};
       return UserDoc(
         uid: snap.id,
         role: (data['accessRole'] ?? data['role'])?.toString(),
@@ -281,7 +281,7 @@ class FirebaseAuthService implements IAuthService {
       {
         'accessRole': accessRole,
         'phone': raw10,
-        if (fullName != null) 'fullName': fullName,
+        'fullName': ?fullName,
         if (trimmedName.isNotEmpty) 'name': trimmedName,
         if (trimmedSurname.isNotEmpty) 'surname': trimmedSurname,
         'roles': FieldValue.arrayUnion([roleEntry]),
@@ -310,7 +310,7 @@ class FirebaseAuthService implements IAuthService {
           'teamId': (resolvedTeamId ?? 'free_agent_pool').trim().isEmpty
               ? 'free_agent_pool'
               : (resolvedTeamId ?? 'free_agent_pool').trim(),
-          if (fullName != null) 'name': fullName,
+          'name': ?fullName,
           'role': 'Futbolcu',
           'phone': raw10,
           'authUid': user.uid,

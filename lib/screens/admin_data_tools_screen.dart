@@ -436,7 +436,7 @@ class _AdminDataToolsScreenState extends State<AdminDataToolsScreen> {
                     SizedBox(
                       width: 170,
                       child: DropdownButtonFormField<SslMode>(
-                        value: sslMode,
+                        initialValue: sslMode,
                         decoration: const InputDecoration(labelText: 'SSL'),
                         items: const [
                           DropdownMenuItem(

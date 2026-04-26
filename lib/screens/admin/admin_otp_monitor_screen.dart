@@ -50,7 +50,7 @@ class _AdminOtpMonitorScreenState extends State<AdminOtpMonitorScreen> {
           return ListView.separated(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
             itemCount: items.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
+            separatorBuilder: (_, _) => const SizedBox(height: 10),
             itemBuilder: (context, i) {
               final e = items[i];
               final phone = e.phoneRaw10.trim();

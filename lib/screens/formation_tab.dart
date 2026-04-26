@@ -300,7 +300,6 @@ class _FormationTabState extends State<FormationTab> {
                 children: [
                   const SizedBox(height: 12),
                   _buildPitchSection(
-                    context: context,
                     isHome: true,
                     players: homePlayers,
                     formation: _homeFormation,
@@ -318,7 +317,6 @@ class _FormationTabState extends State<FormationTab> {
                   const SizedBox(height: 32),
                   const SizedBox(height: 12),
                   _buildPitchSection(
-                    context: context,
                     isHome: false,
                     players: awayPlayers,
                     formation: _awayFormation,
@@ -349,7 +347,6 @@ class _FormationTabState extends State<FormationTab> {
   }
 
   Widget _buildPitchSection({
-    required BuildContext context,
     required bool isHome,
     required List<FormationPlayer> players,
     required String formation,
@@ -434,13 +431,12 @@ class _FormationTabState extends State<FormationTab> {
                           top: top.clamp(0.0, constraints.maxHeight - tokenW),
                           width: tokenW,
                           child: DragTarget<_DragData>(
-                            onWillAccept: (data) {
+                            onWillAcceptWithDetails: (data) {
                               if (!isTeamManager) return false;
-                              if (data == null) return false;
-                              return data.isHome == isHome;
+                              return data.data.isHome == isHome;
                             },
-                            onAccept: (data) {
-                              _swapPlayers(isHome, data.index, index);
+                            onAcceptWithDetails: (data) {
+                              _swapPlayers(isHome, data.data.index, index);
                             },
                             builder: (context, candidateData, rejectedData) {
                               return draggableChild;
@@ -482,9 +478,9 @@ class _FormationPanel extends StatelessWidget {
       constraints: const BoxConstraints(minWidth: 96),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.35),
+          color: Colors.black.withValues(alpha: 0.35),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.white.withOpacity(0.18)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -598,7 +594,7 @@ class _PlayerToken extends StatelessWidget {
                         margin: const EdgeInsets.only(right: 1, bottom: 1),
                         padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.55),
+                          color: Colors.black.withValues(alpha: 0.55),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
@@ -619,9 +615,9 @@ class _PlayerToken extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.25),
+              color: Colors.black.withValues(alpha: 0.25),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.white.withOpacity(0.12)),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
             ),
             child: Text(
               pos,
@@ -685,7 +681,6 @@ class HalfPitchPainter extends CustomPainter {
 
     final centerX = pitchRect.center.dx;
 
-    final goalLineY = goalAtTop ? pitchRect.top : pitchRect.bottom;
     final centerLineY = goalAtTop ? pitchRect.bottom : pitchRect.top;
 
     canvas.drawLine(

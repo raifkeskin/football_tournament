@@ -19,6 +19,7 @@ import '../services/app_session.dart';
 import '../services/image_upload_service.dart';
 import '../services/interfaces/i_team_service.dart';
 import '../services/service_locator.dart';
+import '../services/supabase/supabase_team_service.dart';
 import '../widgets/web_safe_image.dart';
 
 class TeamSquadScreen extends StatefulWidget {
@@ -39,9 +40,452 @@ class TeamSquadScreen extends StatefulWidget {
   State<TeamSquadScreen> createState() => _TeamSquadScreenState();
 }
 
+Future<void> showSquadBulkUploadDialog({
+  required BuildContext context,
+  required ApprovalService approvalService,
+  required String leagueId,
+  required String teamId,
+  required String teamName,
+}) async {
+  final lid = leagueId.trim();
+  final tid = teamId.trim();
+  if (lid.isEmpty || tid.isEmpty) return;
+
+  bool busy = false;
+  String? pickedFileName;
+  List<Map<String, dynamic>> parsed = const [];
+  int skippedEmpty = 0;
+  int skippedShort = 0;
+  int skippedNoName = 0;
+
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (dialogContext, setDialogState) {
+        Future<void> downloadTemplate() async {
+          setDialogState(() => busy = true);
+          try {
+            final excel = Excel.createExcel();
+            final sheet = excel['Sheet1'];
+            sheet.appendRow([
+              TextCellValue('Forma No'),
+              TextCellValue('Futbolcu Adı'),
+              TextCellValue('Mevki'),
+              TextCellValue('Doğum Tarihi'),
+              TextCellValue('Kullandığı Ayak'),
+            ]);
+            final bytes = excel.encode();
+            if (bytes == null) throw Exception('Şablon üretilemedi.');
+
+            final dir = await getTemporaryDirectory();
+            final file = File('${dir.path}/futbolcu_sablonu.xlsx');
+            await file.writeAsBytes(bytes, flush: true);
+            await Share.shareXFiles([
+              XFile(file.path),
+            ], text: 'Futbolcu Excel Şablonu');
+          } catch (e) {
+            if (!dialogContext.mounted) return;
+            ScaffoldMessenger.of(dialogContext).showSnackBar(
+              SnackBar(content: Text('Hata: $e')),
+            );
+          } finally {
+            setDialogState(() => busy = false);
+          }
+        }
+
+        String normalizeHeader(String s) {
+          final cleaned = s
+              .replaceAll('\u00A0', ' ')
+              .replaceAll('\u0000', '')
+              .replaceAll('İ', 'i')
+              .replaceAll('I', 'ı')
+              .trim()
+              .toLowerCase();
+          return cleaned.replaceAll(RegExp(r'\s+'), ' ');
+        }
+
+        int? findIndex(
+          Map<String, int> headerToIndex,
+          List<String> variants,
+        ) {
+          for (final v in variants) {
+            final i = headerToIndex[normalizeHeader(v)];
+            if (i != null) return i;
+          }
+          return null;
+        }
+
+        String? birthDateFrom(dynamic value) {
+          if (value == null) return null;
+          if (value is DateTime) {
+            final dd = value.day.toString().padLeft(2, '0');
+            final mm = value.month.toString().padLeft(2, '0');
+            final yyyy = value.year.toString().padLeft(4, '0');
+            return '$dd/$mm/$yyyy';
+          }
+          if (value is num) {
+            final year = value.toInt();
+            if (year >= 1900 && year <= 2100) {
+              return '01/01/${year.toString().padLeft(4, '0')}';
+            }
+          }
+          final s = value.toString().replaceAll('\u0000', '').trim();
+          if (s.isEmpty) return null;
+          final m = RegExp(r'^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$').firstMatch(s);
+          if (m != null) {
+            final dd = m.group(1)!.padLeft(2, '0');
+            final mm = m.group(2)!.padLeft(2, '0');
+            final yyyy = m.group(3)!.padLeft(4, '0');
+            return '$dd/$mm/$yyyy';
+          }
+          final year = int.tryParse(s);
+          if (year != null && year >= 1900 && year <= 2100) {
+            return '01/01/${year.toString().padLeft(4, '0')}';
+          }
+          return null;
+        }
+
+        int? yearFromBirthDate(String? birthDate) {
+          final s = (birthDate ?? '').trim();
+          if (s.isEmpty) return null;
+          final m = RegExp(r'^\d{2}/\d{2}/(\d{4})$').firstMatch(s);
+          if (m == null) return null;
+          return int.tryParse(m.group(1)!);
+        }
+
+        Future<void> pickAndParse() async {
+          setDialogState(() => busy = true);
+          skippedEmpty = 0;
+          skippedShort = 0;
+          skippedNoName = 0;
+          try {
+            final picked = await FilePicker.platform.pickFiles(
+              type: FileType.custom,
+              allowedExtensions: const ['xlsx', 'xls', 'csv', 'numbers'],
+              withData: true,
+            );
+            if (picked == null || picked.files.isEmpty) return;
+            final f = picked.files.first;
+            pickedFileName = f.name;
+
+            final bytes = f.bytes;
+            if (bytes == null || bytes.isEmpty) {
+              throw Exception('Dosya okunamadı.');
+            }
+
+            List<Map<String, dynamic>> rows;
+            final lower = f.name.toLowerCase();
+            if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) {
+              final excel = Excel.decodeBytes(bytes);
+              final sheetName =
+                  excel.tables.keys.isEmpty ? null : excel.tables.keys.first;
+              if (sheetName == null) throw Exception('Excel sayfası bulunamadı.');
+              final table = excel.tables[sheetName];
+              if (table == null) throw Exception('Excel sayfası okunamadı.');
+
+              final data = table.rows;
+              if (data.isEmpty) throw Exception('Dosyada satır yok.');
+              final header = data.first;
+              final headerToIndex = <String, int>{};
+              for (var i = 0; i < header.length; i++) {
+                final v = header[i]?.value?.toString() ?? '';
+                final k = normalizeHeader(v);
+                if (k.isNotEmpty) headerToIndex[k] = i;
+              }
+              final idxNo = findIndex(headerToIndex, [
+                'Forma No',
+                'FormaNo',
+                'No',
+                'Forma',
+                '#',
+              ]);
+              final idxName = findIndex(headerToIndex, [
+                'Futbolcu Adı',
+                'Futbolcu Adi',
+                'Ad Soyad',
+                'Adı Soyadı',
+                'Oyuncu',
+              ]);
+              final idxPos = findIndex(headerToIndex, [
+                'Mevki',
+                'Pozisyon',
+                'Posizyon',
+              ]);
+              final idxBirth = findIndex(headerToIndex, [
+                'Doğum Yılı',
+                'Dogum Yili',
+                'Doğum Tarihi',
+                'Dogum Tarihi',
+                'Doğum',
+                'Dogum',
+                'Birth Year',
+                'Year',
+              ]);
+              final idxFoot = findIndex(headerToIndex, [
+                'Kullandığı Ayak',
+                'Kullandigi Ayak',
+                'Ayak',
+              ]);
+              if (idxName == null ||
+                  idxPos == null ||
+                  idxBirth == null ||
+                  idxFoot == null) {
+                throw Exception('Excel sütunları şablonla uyuşmuyor.');
+              }
+
+              rows = [];
+              for (var i = 1; i < data.length; i++) {
+                final cols = data[i];
+                if (cols.isEmpty) {
+                  skippedEmpty++;
+                  continue;
+                }
+                if (cols.length < 2 || idxName >= cols.length) {
+                  skippedShort++;
+                  continue;
+                }
+                final name = (cols[idxName]?.value?.toString() ?? '').trim();
+                if (name.isEmpty) {
+                  skippedNoName++;
+                  continue;
+                }
+                final number = (idxNo != null && idxNo < cols.length)
+                    ? (cols[idxNo]?.value?.toString() ?? '').trim()
+                    : '';
+                final position = idxPos < cols.length
+                    ? (cols[idxPos]?.value?.toString() ?? '').trim()
+                    : '';
+                final birthRaw =
+                    idxBirth < cols.length ? cols[idxBirth]?.value : null;
+                final foot = idxFoot < cols.length
+                    ? (cols[idxFoot]?.value?.toString() ?? '').trim()
+                    : '';
+                final birthDate = birthDateFrom(birthRaw);
+                final birthYear = yearFromBirthDate(birthDate);
+                rows.add({
+                  'number': number,
+                  'name': name,
+                  'position': position,
+                  'birthDate': birthDate,
+                  'birthYear': birthYear,
+                  'preferredFoot': foot.isEmpty ? null : foot,
+                });
+              }
+            } else if (lower.endsWith('.csv') || lower.endsWith('.numbers')) {
+              final content = utf8.decode(bytes, allowMalformed: true);
+              final lines = const LineSplitter().convert(content);
+              if (lines.isEmpty) throw Exception('Dosyada satır yok.');
+              final headers = lines.first.split(',');
+              final headerToIndex = <String, int>{};
+              for (var i = 0; i < headers.length; i++) {
+                final k = normalizeHeader(headers[i]);
+                if (k.isNotEmpty) headerToIndex[k] = i;
+              }
+              final idxNo = findIndex(headerToIndex, [
+                'Forma No',
+                'FormaNo',
+                'No',
+                'Forma',
+                '#',
+              ]);
+              final idxName = findIndex(headerToIndex, [
+                'Futbolcu Adı',
+                'Futbolcu Adi',
+                'Ad Soyad',
+                'Adı Soyadı',
+                'Oyuncu',
+              ]);
+              final idxPos = findIndex(headerToIndex, [
+                'Mevki',
+                'Pozisyon',
+                'Posizyon',
+              ]);
+              final idxBirth = findIndex(headerToIndex, [
+                'Doğum Yılı',
+                'Dogum Yili',
+                'Doğum Tarihi',
+                'Dogum Tarihi',
+                'Doğum',
+                'Dogum',
+                'Birth Year',
+                'Year',
+              ]);
+              final idxFoot = findIndex(headerToIndex, [
+                'Kullandığı Ayak',
+                'Kullandigi Ayak',
+                'Ayak',
+              ]);
+              if (idxName == null ||
+                  idxPos == null ||
+                  idxBirth == null ||
+                  idxFoot == null) {
+                throw Exception('CSV sütunları şablonla uyuşmuyor.');
+              }
+              rows = [];
+              for (var i = 1; i < lines.length; i++) {
+                final cols = lines[i].split(',');
+                if (cols.isEmpty) {
+                  skippedEmpty++;
+                  continue;
+                }
+                if (cols.length < 2 || idxName >= cols.length) {
+                  skippedShort++;
+                  continue;
+                }
+                final name = cols[idxName].trim();
+                if (name.isEmpty) {
+                  skippedNoName++;
+                  continue;
+                }
+                final number =
+                    (idxNo != null && idxNo < cols.length) ? cols[idxNo].trim() : '';
+                final position = idxPos < cols.length ? cols[idxPos].trim() : '';
+                final birthRaw =
+                    idxBirth < cols.length ? cols[idxBirth].trim() : '';
+                final foot = idxFoot < cols.length ? cols[idxFoot].trim() : '';
+                final birthDate = birthDateFrom(birthRaw);
+                final birthYear = yearFromBirthDate(birthDate);
+                rows.add({
+                  'number': number,
+                  'name': name,
+                  'position': position,
+                  'birthDate': birthDate,
+                  'birthYear': birthYear,
+                  'preferredFoot': foot.isEmpty ? null : foot,
+                });
+              }
+            } else {
+              throw Exception('Desteklenmeyen dosya türü.');
+            }
+
+            setDialogState(() => parsed = rows);
+          } catch (e) {
+            if (!dialogContext.mounted) return;
+            ScaffoldMessenger.of(dialogContext).showSnackBar(
+              SnackBar(content: Text('Hata: $e')),
+            );
+          } finally {
+            setDialogState(() => busy = false);
+          }
+        }
+
+        Future<void> submitForApproval() async {
+          if (parsed.isEmpty) {
+            ScaffoldMessenger.of(dialogContext).showSnackBar(
+              const SnackBar(content: Text('Yüklenecek kayıt bulunamadı.')),
+            );
+            return;
+          }
+          setDialogState(() => busy = true);
+          var shouldClose = false;
+          try {
+            final actionId =
+                'squad_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(10000)}';
+            await approvalService.submitPendingAction(
+              PendingAction(
+                actionId: actionId,
+                actionType: 'squad_upload',
+                leagueId: lid,
+                teamId: tid,
+                submittedBy: 'admin',
+                payload: {
+                  'teamName': teamName,
+                  'tournamentId': lid,
+                  'fileName': pickedFileName,
+                  'players': parsed,
+                },
+              ),
+            );
+            shouldClose = true;
+            if (!dialogContext.mounted) return;
+            Navigator.pop(dialogContext);
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!context.mounted) return;
+              final skipped = skippedEmpty + skippedShort + skippedNoName;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    'Onaya gönderildi: ${parsed.length} oyuncu • Atlanan satır: $skipped',
+                  ),
+                ),
+              );
+            });
+          } catch (e) {
+            if (!dialogContext.mounted) return;
+            ScaffoldMessenger.of(dialogContext).showSnackBar(
+              SnackBar(content: Text('Hata: $e')),
+            );
+          } finally {
+            if (!shouldClose && dialogContext.mounted) {
+              setDialogState(() => busy = false);
+            }
+          }
+        }
+
+        return AlertDialog(
+          title: Text('Toplu Kadro Yükle • $teamName'),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                FilledButton.tonalIcon(
+                  onPressed: busy ? null : downloadTemplate,
+                  icon: const Icon(Icons.download_rounded),
+                  label: const Text('Örnek Şablonunu İndir'),
+                ),
+                const SizedBox(height: 10),
+                FilledButton.tonalIcon(
+                  onPressed: busy ? null : pickAndParse,
+                  icon: const Icon(Icons.upload_file_rounded),
+                  label: const Text('Dosya Yükle (.xls/.xlsx/.csv/.numbers)'),
+                ),
+                const SizedBox(height: 12),
+                if (pickedFileName != null)
+                  Text(
+                    'Dosya: $pickedFileName',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                if (parsed.isNotEmpty)
+                  Text(
+                    'Okunan kayıt: ${parsed.length}',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                if (pickedFileName != null)
+                  Text(
+                    'Atlanan satır: ${skippedEmpty + skippedShort + skippedNoName}',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                if (busy) ...[
+                  const SizedBox(height: 12),
+                  const LinearProgressIndicator(),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: busy ? null : () => Navigator.pop(dialogContext),
+              child: const Text('Kapat'),
+            ),
+            FilledButton(
+              onPressed: busy ? null : submitForApproval,
+              child: const Text('Onaya Gönder'),
+            ),
+          ],
+        );
+      },
+    ),
+  );
+}
+
 class _TeamSquadScreenState extends State<TeamSquadScreen> {
   final _approvalService = ApprovalService();
   final ITeamService _teamService = ServiceLocator.teamService;
+
+  SupabaseTeamService? get _sbTeamService =>
+      _teamService is SupabaseTeamService ? _teamService : null;
 
   final _rosterSearchController = TextEditingController();
   String _rosterQuery = '';
@@ -64,6 +508,314 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
       teamId: teamId,
       playerPhone: playerPhone,
     );
+  }
+
+  Future<void> _openExistingPlayerPicker({
+    required String leagueId,
+    required String teamId,
+  }) async {
+    final svc = _sbTeamService;
+    if (svc == null) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bu özellik Supabase modunda kullanılabilir.')),
+      );
+      return;
+    }
+
+    final lid = leagueId.trim();
+    final tid = teamId.trim();
+    if (lid.isEmpty || tid.isEmpty) return;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) {
+        final selected = <String>{};
+        final searchController = TextEditingController();
+        var query = '';
+        var busy = false;
+        final future = svc.getAvailablePlayersForLeague(lid);
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            Future<void> addSelected(List<PlayerModel> items) async {
+              if (busy) return;
+              setSheetState(() => busy = true);
+              try {
+                await svc.addMultiplePlayersToTeam(selected.toList(), tid, lid);
+                if (context.mounted) Navigator.pop(context);
+                if (!mounted) return;
+                setState(() {});
+                if (!this.context.mounted) return;
+                ScaffoldMessenger.of(this.context).showSnackBar(
+                  const SnackBar(content: Text('Seçilen futbolcular kadroya eklendi.')),
+                );
+              } catch (e) {
+                if (!this.context.mounted) return;
+                final msg = e.toString().replaceFirst('Exception: ', '').trim();
+                ScaffoldMessenger.of(this.context).showSnackBar(
+                  SnackBar(content: Text('Eklenemedi: $msg')),
+                );
+              } finally {
+                if (context.mounted) setSheetState(() => busy = false);
+              }
+            }
+
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 12,
+                  right: 12,
+                  top: max(50, 12 + MediaQuery.of(context).padding.top),
+                  bottom: 12 + MediaQuery.of(context).viewInsets.bottom,
+                ),
+                child: SizedBox(
+                  height: MediaQuery.of(context).size.height * 0.95,
+                  child: FutureBuilder<List<PlayerModel>>(
+                    future: future,
+                    builder: (context, snapshot) {
+                      final cs = Theme.of(context).colorScheme;
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      if (snapshot.hasError) {
+                        return Center(child: Text('Hata: ${snapshot.error}'));
+                      }
+
+                      final items = snapshot.data ?? const <PlayerModel>[];
+                      if (items.isEmpty) {
+                        return const Center(child: Text('Bu turnuvada seçilebilecek boşta futbolcu yok.'));
+                      }
+                      final q = query.trim().toLowerCase();
+                      final filtered = q.isEmpty
+                          ? items
+                          : items.where((p) => p.name.toLowerCase().contains(q)).toList();
+
+                      return Column(
+                        children: [
+                          Row(
+                            children: [
+                              const Expanded(
+                                child: Text(
+                                  'Futbolcu Seç',
+                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: busy ? null : () => Navigator.pop(context),
+                                child: const Text('Kapat'),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          TextField(
+                            controller: searchController,
+                            enabled: !busy,
+                            onChanged: (v) => setSheetState(() => query = v),
+                            decoration: InputDecoration(
+                              prefixIcon: const Icon(Icons.search),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              isDense: true,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Expanded(
+                            child: ListView.builder(
+                              itemCount: filtered.length,
+                              itemBuilder: (context, i) {
+                                final p = filtered[i];
+                                final checked = selected.contains(p.id);
+                                final mainPos = (p.mainPosition ?? '').trim();
+                                final pos = _displayPosition(p).trim();
+                                final birth = (p.birthDate ?? '').trim();
+                                final posText = mainPos.isEmpty
+                                    ? 'Belirtilmedi'
+                                    : (pos.isEmpty ? 'Belirtilmedi' : pos);
+                                final birthText = birth.isEmpty ? '-' : birth;
+                                final subtitle = '$posText - $birthText';
+                                final photo = (p.photoUrl ?? '').trim();
+
+                                void toggle(bool v) {
+                                  setSheetState(() {
+                                    if (v) {
+                                      selected.add(p.id);
+                                    } else {
+                                      selected.remove(p.id);
+                                    }
+                                  });
+                                }
+
+                                return InkWell(
+                                  onTap: busy ? null : () => toggle(!checked),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 2),
+                                    child: Row(
+                                      children: [
+                                        Checkbox(
+                                          value: checked,
+                                          onChanged:
+                                              busy ? null : (v) => toggle(v ?? false),
+                                          activeColor: cs.primary,
+                                          visualDensity: VisualDensity.compact,
+                                        ),
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(8),
+                                          child: Container(
+                                            width: 34,
+                                            height: 34,
+                                            color: cs.primary.withValues(alpha: 0.10),
+                                            child: photo.isEmpty
+                                                ? Icon(
+                                                    Icons.person_rounded,
+                                                    size: 18,
+                                                    color: cs.primary
+                                                        .withValues(alpha: 0.75),
+                                                  )
+                                                : WebSafeImage(
+                                                    url: _normalizeUrl(photo),
+                                                    width: 34,
+                                                    height: 34,
+                                                    fit: BoxFit.cover,
+                                                    borderRadius:
+                                                        BorderRadius.circular(8),
+                                                    isCircle: false,
+                                                    fallbackIconSize: 18,
+                                                  ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                p.name.toUpperCase(),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.w900,
+                                                  fontSize: 13,
+                                                  height: 1.1,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 1),
+                                              Text(
+                                                subtitle,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  height: 1.1,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton(
+                              onPressed:
+                                  busy || selected.isEmpty ? null : () => addSelected(filtered),
+                              child: busy
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    )
+                                  : Text('EKLE (${selected.length})'),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _promptJerseyNumberEdit({
+    required PlayerModel player,
+    required String leagueId,
+    required String teamId,
+  }) async {
+    final svc = _sbTeamService;
+    if (svc == null) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bu özellik Supabase modunda kullanılabilir.')),
+      );
+      return;
+    }
+
+    final lid = leagueId.trim();
+    final tid = teamId.trim();
+    if (lid.isEmpty || tid.isEmpty) return;
+
+    final controller = TextEditingController(text: (player.number ?? '').trim());
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Forma No'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          decoration: const InputDecoration(hintText: 'Yeni Forma No'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('İptal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Kaydet'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    final raw = controller.text.replaceAll(RegExp(r'\D'), '').trim();
+    final n = int.tryParse(raw);
+    if (n == null) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Forma numarası geçersiz.')),
+      );
+      return;
+    }
+
+    try {
+      await svc.updateJerseyNumber(player.id, tid, lid, n);
+      if (!mounted) return;
+      setState(() {});
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Forma numarası güncellendi.')),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      final msg = e.toString().replaceFirst('Exception: ', '').trim();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Güncellenemedi: $msg')),
+      );
+    }
   }
 
   String _normalizeUrl(String raw) {
@@ -519,6 +1271,15 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
       );
       return;
     }
+
+    await showSquadBulkUploadDialog(
+      context: context,
+      approvalService: _approvalService,
+      leagueId: leagueId,
+      teamId: widget.teamId,
+      teamName: widget.teamName,
+    );
+    return;
 
     bool busy = false;
     String? pickedFileName;
@@ -1298,15 +2059,22 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
         actions: [
           if (canAdd)
             IconButton(
-              tooltip: 'Futbolcu Ekle',
-              onPressed: _openPlayerForm,
-              icon: const Icon(Icons.add),
-            ),
-          if (canAdd)
-            IconButton(
-              tooltip: 'Excel Yükle',
-              onPressed: _openBulkUpload,
-              icon: const Icon(Icons.upload_file),
+              icon: const Icon(Icons.add_rounded),
+              tooltip: 'Futbolcu Seç',
+              onPressed: () async {
+                final tId = effectiveTournamentId;
+                if (tId.trim().isEmpty) {
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Lütfen turnuva seçin.')),
+                  );
+                  return;
+                }
+                await _openExistingPlayerPicker(
+                  leagueId: tId,
+                  teamId: widget.teamId,
+                );
+              },
             ),
         ],
       ),
@@ -1426,11 +2194,26 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Text(
-                                    num.isEmpty ? '-' : num,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w800,
-                                      color: cs.onSurfaceVariant,
+                                  InkWell(
+                                    onTap: canAdd
+                                        ? () => _promptJerseyNumberEdit(
+                                              player: p,
+                                              leagueId: effectiveTournamentId,
+                                              teamId: widget.teamId,
+                                            )
+                                        : null,
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                      child: Text(
+                                        num.isEmpty ? '?' : num,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w900,
+                                          color: num.isEmpty
+                                              ? cs.onSurfaceVariant.withValues(alpha: 0.45)
+                                              : cs.onSurfaceVariant,
+                                        ),
+                                      ),
                                     ),
                                   ),
                                   PopupMenuButton<String>(
@@ -1453,7 +2236,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                                         case 'delete':
                                           final tId = effectiveTournamentId;
                                           final phone = (p.phone ?? '').trim();
-                                          if (tId == null || tId.trim().isEmpty || phone.isEmpty) {
+                                          if (tId.trim().isEmpty || phone.isEmpty) {
                                             if (!context.mounted) return;
                                             ScaffoldMessenger.of(context).showSnackBar(
                                               const SnackBar(content: Text('Silme için eksik bilgi.')),
@@ -1480,16 +2263,24 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                                             ),
                                           );
                                           if (ok != true) return;
-                                          await _deleteRosterPlayer(
-                                            tournamentId: tId,
-                                            teamId: widget.teamId,
-                                            playerPhone: phone,
-                                          );
-                                          if (mounted) setState(() {});
-                                          if (!context.mounted) return;
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            const SnackBar(content: Text('Kadrodan kaldırıldı.')),
-                                          );
+                                          try {
+                                            await _deleteRosterPlayer(
+                                              tournamentId: tId,
+                                              teamId: widget.teamId,
+                                              playerPhone: phone,
+                                            );
+                                            if (mounted) setState(() {});
+                                            if (!context.mounted) return;
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(content: Text('Kadrodan kaldırıldı.')),
+                                            );
+                                          } catch (e) {
+                                            if (!context.mounted) return;
+                                            final msg = e.toString().replaceFirst('Exception: ', '').trim();
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(content: Text('Silinemedi: $msg')),
+                                            );
+                                          }
                                           break;
                                       }
                                     },
@@ -1548,15 +2339,17 @@ class _CardRow extends StatelessWidget {
 class PlayerFormScreen extends StatefulWidget {
   const PlayerFormScreen({
     super.key,
-    required this.teamId,
-    required this.tournamentId,
+    this.teamId,
+    this.tournamentId,
     this.editing,
+    this.standalone = false,
     String Function(String raw)? normalizeUrl,
   }) : normalizeUrl = normalizeUrl ?? _defaultNormalizeUrl;
 
-  final String teamId;
-  final String tournamentId;
+  final String? teamId;
+  final String? tournamentId;
   final PlayerModel? editing;
+  final bool standalone;
   final String Function(String raw) normalizeUrl;
 
   static String _defaultNormalizeUrl(String raw) {
@@ -1584,6 +2377,8 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
   final _heightController = TextEditingController();
   final _weightController = TextEditingController();
 
+  static const String _unsetOption = 'Seçilmedi';
+
   static const _mainPositions = <String>[
     'Kaleci',
     'Defans',
@@ -1599,8 +2394,8 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
   static const _roles = <String>['Her İkisi', 'Takım Sorumlusu', 'Futbolcu'];
   static const _feet = <String>['Sağ', 'Sol', 'Her İkisi'];
 
-  String _mainPosition = _mainPositions.first;
-  String _subPosition = _subPositionsByMain[_mainPositions.first]!.first;
+  String _mainPosition = _unsetOption;
+  String _subPosition = _unsetOption;
   String _role = 'Futbolcu';
   String _preferredFoot = '';
   String? _activePlayerId;
@@ -1611,14 +2406,21 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
   bool _saving = false;
   bool _managerExists = false;
 
+  bool get _isMainPositionSelected =>
+      _mainPosition.trim().isNotEmpty && _mainPosition != _unsetOption;
+
   bool _isManagerRole(String role) =>
       role == 'Takım Sorumlusu' || role == 'Her İkisi';
+
+  String _birthDateToDisplay(String? raw) => birthDateDbToUi(raw);
+
+  String? _birthDateToDb(String raw) => birthDateUiToDb(raw);
 
   String _deriveMainPosition(String? main, String? subOrLegacy) {
     final m = (main ?? '').trim();
     if (_subPositionsByMain.containsKey(m)) return m;
     final s = (subOrLegacy ?? '').trim();
-    if (s.isEmpty) return _mainPositions.first;
+    if (s.isEmpty) return _unsetOption;
     switch (s) {
       case 'GK':
         return 'Kaleci';
@@ -1632,10 +2434,11 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
     for (final entry in _subPositionsByMain.entries) {
       if (entry.value.contains(s)) return entry.key;
     }
-    return _mainPositions.first;
+    return _unsetOption;
   }
 
   String _deriveSubPosition(String main, String? subOrLegacy) {
+    if (main.trim().isEmpty || main == _unsetOption) return _unsetOption;
     final options = _subPositionsByMain[main] ?? const <String>[];
     if (options.isEmpty) return '';
     final s = (subOrLegacy ?? '').trim();
@@ -1667,7 +2470,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
       _nameController.text = parts.isEmpty ? '' : parts.first;
       _surnameController.text = parts.length <= 1 ? '' : parts.sublist(1).join(' ');
       _numberController.text = (e.number ?? '').toString();
-      _birthDateController.text = (e.birthDate ?? '').toString();
+      _birthDateController.text = _birthDateToDisplay(e.birthDate);
       _mainPosition = _deriveMainPosition(e.mainPosition, e.position);
       _subPosition = _deriveSubPosition(_mainPosition, e.position);
       final pf = (e.preferredFoot ?? '').trim();
@@ -1687,7 +2490,9 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
       }
       _existingPhotoUrl = (e.photoUrl ?? '').trim().isEmpty ? null : e.photoUrl;
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadManagerState());
+    if (!widget.standalone) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadManagerState());
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) => _hydrateExistingPhotoFromIdentity());
   }
 
@@ -1719,9 +2524,13 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
   }
 
   Future<void> _loadManagerState() async {
+    if (widget.standalone) return;
+    final tournamentId = (widget.tournamentId ?? '').trim();
+    final teamId = (widget.teamId ?? '').trim();
+    if (tournamentId.isEmpty || teamId.isEmpty) return;
     final exists = await _teamService.managerExistsForTeamTournament(
-      tournamentId: widget.tournamentId,
-      teamId: widget.teamId,
+      tournamentId: tournamentId,
+      teamId: teamId,
       excludePlayerPhone: _activePlayerId,
     );
     if (!mounted) return;
@@ -1797,10 +2606,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
   bool _isValidBirthDate(String s) {
     final v = s.trim();
     if (v.isEmpty) return true;
-    if (!RegExp(r'^\d{2}/\d{2}/\d{4}$').hasMatch(v)) return false;
-    final y = _birthYearFromDate(v);
-    if (y == null) return false;
-    return y >= 1900 && y <= 2100;
+    return _birthDateToDb(v) != null;
   }
 
   bool _isValidPhoneRaw(String raw) {
@@ -1810,13 +2616,17 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
   }
 
   Future<PlayerModel?> _selectExistingPlayer() async {
+    if (widget.standalone) return null;
+    final teamId = (widget.teamId ?? '').trim();
+    final tournamentId = (widget.tournamentId ?? '').trim();
+    if (teamId.isEmpty || tournamentId.isEmpty) return null;
     return showModalBottomSheet<PlayerModel>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (context) => _PlayerPickerSheet(
-        teamId: widget.teamId,
-        tournamentId: widget.tournamentId,
+        teamId: teamId,
+        tournamentId: tournamentId,
         normalizeUrl: widget.normalizeUrl,
       ),
     );
@@ -1830,7 +2640,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
     _nameController.text = parts.isEmpty ? '' : parts.first;
     _surnameController.text = parts.length <= 1 ? '' : parts.sublist(1).join(' ');
     _numberController.text = (p.number ?? '').toString();
-    _birthDateController.text = (p.birthDate ?? '').toString();
+    _birthDateController.text = _birthDateToDisplay(p.birthDate);
     _mainPosition = _deriveMainPosition(p.mainPosition, p.position);
     _subPosition = _deriveSubPosition(_mainPosition, p.position);
     final pf = (p.preferredFoot ?? '').trim();
@@ -1894,10 +2704,11 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
     final fullName = '$firstName $surname'.trim();
 
     final number = _numberController.text.trim();
-    if (number.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Forma numarası zorunludur.')));
+    final jerseyInt = number.isEmpty ? null : int.tryParse(number);
+    if (number.isNotEmpty && jerseyInt == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Forma no sadece sayı olmalı.')),
+      );
       return;
     }
 
@@ -1905,7 +2716,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
     if (!_isValidBirthDate(birthDate)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Doğum tarihi DD/MM/YYYY formatında olmalı.'),
+          content: Text('Doğum tarihi DD-MM-YYYY formatında olmalı.'),
         ),
       );
       return;
@@ -1918,21 +2729,27 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
       );
       return;
     }
+    final isEditing = widget.editing != null;
     final keyPhone = rawPhone.isNotEmpty
         ? rawPhone
         : (_implicitPhoneKey ??= _generateNoPhoneKey());
 
-    if (_managerExists &&
-        _isManagerRole(_role) &&
-        !(widget.editing != null && _isManagerRole(widget.editing!.role))) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Bu takımda zaten takım sorumlusu var.')),
-      );
-      return;
+    if (!widget.standalone) {
+      if (_managerExists &&
+          _isManagerRole(_role) &&
+          !(widget.editing != null && _isManagerRole(widget.editing!.role))) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Bu takımda zaten takım sorumlusu var.')),
+        );
+        return;
+      }
     }
 
     setState(() => _saving = true);
     try {
+      final sbTeamService =
+          _teamService is SupabaseTeamService ? _teamService : null;
+
       String? uploadedPhotoUrl;
       if (_pickedPhoto != null) {
         uploadedPhotoUrl = await _imageUploadService.uploadImage(
@@ -1943,53 +2760,83 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
         }
       }
 
-      final resolvedBirthDate = birthDate.isEmpty ? null : birthDate;
-      await _teamService.upsertPlayerIdentity(
-        phone: keyPhone,
-        name: fullName,
-        nationalId: nationalId.isEmpty ? null : nationalId,
-        birthDate: resolvedBirthDate,
-        mainPosition: _mainPosition,
-        preferredFoot: _preferredFoot.trim().isEmpty ? null : _preferredFoot.trim(),
-        height: int.tryParse(_heightController.text.replaceAll(RegExp(r'\D'), '').trim()),
-        weight: int.tryParse(_weightController.text.replaceAll(RegExp(r'\D'), '').trim()),
-      );
+      final resolvedBirthDate = birthDate.isEmpty ? null : _birthDateToDb(birthDate);
+      final resolvedMainPosition = _isMainPositionSelected ? _mainPosition : null;
+      final resolvedSubPosition =
+          _isMainPositionSelected ? (_subPosition == _unsetOption ? null : _subPosition) : null;
+      final updateKey = (widget.editing?.id ?? '').toString().trim().isNotEmpty
+          ? widget.editing!.id
+          : keyPhone;
+      final finalPhotoUrl = uploadedPhotoUrl != null
+          ? uploadedPhotoUrl.trim()
+          : _removePhoto
+              ? null
+              : (_existingPhotoUrl ?? '').trim().isEmpty
+                  ? null
+                  : (_existingPhotoUrl ?? '').trim();
+      if (!isEditing) {
+        await _teamService.upsertPlayerIdentity(
+          phone: keyPhone,
+          name: fullName,
+          nationalId: nationalId.isEmpty ? null : nationalId,
+          birthDate: resolvedBirthDate,
+          mainPosition: resolvedMainPosition,
+          preferredFoot: _preferredFoot.trim().isEmpty ? null : _preferredFoot.trim(),
+          height: int.tryParse(_heightController.text.replaceAll(RegExp(r'\D'), '').trim()),
+          weight: int.tryParse(_weightController.text.replaceAll(RegExp(r'\D'), '').trim()),
+        );
+      }
       await _teamService.updatePlayer(
-        playerId: keyPhone,
+        playerId: updateKey,
         data: {
           'name': firstName,
           'surname': surname,
-          'birthDate': resolvedBirthDate,
-          'nationalId': nationalId.isEmpty ? null : nationalId,
-          'mainPosition': _mainPosition,
-          'subPosition': _subPosition,
-          'preferredFoot': _preferredFoot.trim().isEmpty ? null : _preferredFoot.trim(),
+          'birth_date': resolvedBirthDate,
+          'preferred_foot': _preferredFoot.trim().isEmpty ? null : _preferredFoot.trim(),
+          'main_position': resolvedMainPosition,
+          'sub_position': resolvedSubPosition,
+          'photo_url': finalPhotoUrl,
+          'phone': keyPhone,
           'height': int.tryParse(_heightController.text.replaceAll(RegExp(r'\D'), '').trim()),
           'weight': int.tryParse(_weightController.text.replaceAll(RegExp(r'\D'), '').trim()),
-          'defaultJerseyNumber': int.tryParse(number.replaceAll(RegExp(r'\D'), '').trim()),
+          'national_id': nationalId.isEmpty ? null : nationalId,
           'role': _role,
         },
       );
-      await _teamService.upsertRosterEntry(
-        tournamentId: widget.tournamentId,
-        teamId: widget.teamId,
-        playerPhone: keyPhone,
-        playerName: fullName,
-        jerseyNumber: number,
-        role: _role,
-      );
+      if (!widget.standalone) {
+        final teamId = (widget.teamId ?? '').trim();
+        final tournamentId = (widget.tournamentId ?? '').trim();
+        if (teamId.isNotEmpty && tournamentId.isNotEmpty) {
+          await _teamService.upsertRosterEntry(
+            tournamentId: tournamentId,
+            teamId: teamId,
+            playerPhone: keyPhone,
+            playerName: fullName,
+            jerseyNumber: sbTeamService == null ? number : null,
+            role: _role,
+          );
 
-      if (uploadedPhotoUrl != null) {
-        final url = uploadedPhotoUrl.trim();
-        await _teamService.updatePlayer(
-          playerId: keyPhone,
-          data: {'photoUrl': url},
-        );
-      } else if (_removePhoto) {
-        await _teamService.updatePlayer(
-          playerId: keyPhone,
-          data: {'photoUrl': null},
-        );
+          if (sbTeamService != null) {
+            final currentText = (widget.editing?.number ?? '').toString().trim();
+            final currentInt = currentText.isEmpty ? null : int.tryParse(currentText);
+            final jerseyChanged = currentInt != jerseyInt;
+            if (jerseyChanged) {
+              var pid = (widget.editing?.id ?? '').toString().trim();
+              if (pid.isEmpty) {
+                final resolved = await _teamService.getPlayerByPhoneOnce(keyPhone);
+                pid = (resolved?.id ?? '').toString().trim();
+              }
+              if (pid.isNotEmpty) {
+                await sbTeamService.setJerseyNumber(
+                  pid,
+                  teamId,
+                  tournamentId,
+                  jerseyInt,
+                );
+              }
+            }
+          }
+        }
       }
 
       if (!mounted) return;
@@ -2152,22 +2999,30 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                   ),
                 ),
                 const SizedBox(height: 10),
-                TextField(
-                  controller: _nameController,
-                  enabled: !_saving,
-                  decoration: const InputDecoration(
-                    labelText: 'Ad',
-                    prefixIcon: Icon(Icons.person_outline),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _surnameController,
-                  enabled: !_saving,
-                  decoration: const InputDecoration(
-                    labelText: 'Soyad',
-                    prefixIcon: Icon(Icons.person_outline),
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _nameController,
+                        enabled: !_saving,
+                        decoration: const InputDecoration(
+                          labelText: 'Ad',
+                          prefixIcon: Icon(Icons.person_outline),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextField(
+                        controller: _surnameController,
+                        enabled: !_saving,
+                        decoration: const InputDecoration(
+                          labelText: 'Soyad',
+                          prefixIcon: Icon(Icons.person_outline),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
  /*                    const SizedBox(width: 10),
                     SizedBox(
@@ -2194,17 +3049,35 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                 Row(
                   children: [
                     Expanded(
-                      child: TextField(
-                        controller: _numberController,
-                        enabled: !_saving,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                        ],
+                      child: DropdownButtonFormField<String>(
+                        initialValue: _role,
                         decoration: const InputDecoration(
-                          labelText: 'Forma No',
-                          prefixIcon: Icon(Icons.confirmation_number_outlined),
+                          labelText: 'Rolü',
+                          prefixIcon: Icon(Icons.manage_accounts_outlined),
                         ),
+                        items: _roles.map((r) {
+                          final disabled =
+                              _isManagerRole(r) && !allowManagerOptions;
+                          return DropdownMenuItem<String>(
+                            value: r,
+                            enabled: !disabled,
+                            child: Text(
+                              r,
+                              style: disabled
+                                  ? TextStyle(
+                                      color:
+                                          cs.onSurfaceVariant.withValues(alpha: 0.45),
+                                    )
+                                  : null,
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: _saving
+                            ? null
+                            : (v) {
+                                if (v == null) return;
+                                setState(() => _role = v);
+                              },
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -2217,28 +3090,54 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                         decoration: const InputDecoration(
                           labelText: 'Doğum Tarihi',
                           prefixIcon: Icon(Icons.cake_outlined),
-                          hintText: 'DD/MM/YYYY',
+                          hintText: 'DD-MM-YYYY',
                         ),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  value: _preferredFoot.trim().isEmpty ? null : _preferredFoot,
-                  decoration: const InputDecoration(
-                    labelText: 'Kullandığı Ayak',
-                    prefixIcon: Icon(Icons.directions_run_outlined),
-                  ),
-                  items: _feet
-                      .map(
-                        (f) => DropdownMenuItem<String>(
-                          value: f,
-                          child: Text(f),
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        initialValue: _preferredFoot.trim().isEmpty ? null : _preferredFoot,
+                        decoration: const InputDecoration(
+                          labelText: 'Kullandığı Ayak',
+                          prefixIcon: Icon(Icons.directions_run_outlined),
                         ),
-                      )
-                      .toList(),
-                  onChanged: _saving ? null : (v) => setState(() => _preferredFoot = v ?? ''),
+                        items: _feet
+                            .map(
+                              (f) => DropdownMenuItem<String>(
+                                value: f,
+                                child: Text(f),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: _saving
+                            ? null
+                            : (v) => setState(() => _preferredFoot = v ?? ''),
+                      ),
+                    ),
+                    if (!widget.standalone) ...[
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: _numberController,
+                          enabled: !_saving,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(3),
+                          ],
+                          decoration: const InputDecoration(
+                            labelText: 'Forma No',
+                            prefixIcon: Icon(Icons.numbers_outlined),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 10),
                 Row(
@@ -2280,7 +3179,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                           labelText: 'Ana Mevki',
                           prefixIcon: Icon(Icons.sports_soccer_outlined),
                         ),
-                        items: _mainPositions
+                        items: <String>[_unsetOption, ..._mainPositions]
                             .map(
                               (p) => DropdownMenuItem<String>(
                                 value: p,
@@ -2293,73 +3192,50 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                             : (v) {
                                 if (v == null) return;
                                 setState(() {
-                                  _mainPosition = v;
-                                  _subPosition =
-                                      (_subPositionsByMain[v] ??
-                                              const <String>[])
-                                          .first;
+                                  if (v == _unsetOption) {
+                                    _mainPosition = _unsetOption;
+                                    _subPosition = _unsetOption;
+                                  } else {
+                                    _mainPosition = v;
+                                    _subPosition =
+                                        (_subPositionsByMain[v] ?? const <String>[])
+                                            .first;
+                                  }
                                 });
                               },
                       ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: _subPosition,
-                        decoration: const InputDecoration(
-                          labelText: 'Alt Mevki',
-                          prefixIcon: Icon(Icons.sports_outlined),
+                      child: Visibility(
+                        visible: _isMainPositionSelected,
+                        maintainSize: true,
+                        maintainAnimation: true,
+                        maintainState: true,
+                        child: DropdownButtonFormField<String>(
+                          initialValue: _isMainPositionSelected ? _subPosition : null,
+                          decoration: const InputDecoration(
+                            labelText: 'Alt Mevki',
+                            prefixIcon: Icon(Icons.sports_outlined),
+                          ),
+                          items: (_subPositionsByMain[_mainPosition] ?? const <String>[])
+                              .map(
+                                (p) => DropdownMenuItem<String>(
+                                  value: p,
+                                  child: Text(p),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (_saving || !_isMainPositionSelected)
+                              ? null
+                              : (v) {
+                                  if (v == null) return;
+                                  setState(() => _subPosition = v);
+                                },
                         ),
-                        items:
-                            (_subPositionsByMain[_mainPosition] ??
-                                    const <String>[])
-                                .map(
-                                  (p) => DropdownMenuItem<String>(
-                                    value: p,
-                                    child: Text(p),
-                                  ),
-                                )
-                                .toList(),
-                        onChanged: _saving
-                            ? null
-                            : (v) {
-                                if (v == null) return;
-                                setState(() => _subPosition = v);
-                              },
                       ),
                     ),
                   ],
-                ),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  initialValue: _role,
-                  decoration: const InputDecoration(
-                    labelText: 'Rolü',
-                    prefixIcon: Icon(Icons.manage_accounts_outlined),
-                  ),
-                  items: _roles.map((r) {
-                    final disabled = _isManagerRole(r) && !allowManagerOptions;
-                    return DropdownMenuItem<String>(
-                      value: r,
-                      enabled: !disabled,
-                      child: Text(
-                        r,
-                        style: disabled
-                            ? TextStyle(
-                                color: cs.onSurfaceVariant.withValues(
-                                  alpha: 0.45,
-                                ),
-                              )
-                            : null,
-                      ),
-                    );
-                  }).toList(),
-                  onChanged: _saving
-                      ? null
-                      : (v) {
-                          if (v == null) return;
-                          setState(() => _role = v);
-                        },
                 ),
                 const SizedBox(height: 10),
                 TextField(
@@ -2374,6 +3250,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                     hintText: '(5XX) XXX XX XX',
                   ),
                 ),
+                const SizedBox(height: 10),
               ],
             ),
           ),
@@ -2582,6 +3459,69 @@ class _PlayerPickerSheetState extends State<_PlayerPickerSheet> {
   }
 }
 
+String birthDateDbToUi(String? raw) {
+  final s = (raw ?? '').toString().replaceAll('\u0000', '').trim();
+  if (s.isEmpty) return '';
+
+  final ui = RegExp(r'^(\d{2})[./-](\d{2})[./-](\d{4})$').firstMatch(s);
+  if (ui != null) {
+    final dd = ui.group(1)!.padLeft(2, '0');
+    final mm = ui.group(2)!.padLeft(2, '0');
+    final yyyy = ui.group(3)!.padLeft(4, '0');
+    return '$dd-$mm-$yyyy';
+  }
+
+  final iso = RegExp(r'^(\d{4})-(\d{2})-(\d{2})').firstMatch(s);
+  if (iso != null) {
+    final yyyy = iso.group(1)!;
+    final mm = iso.group(2)!;
+    final dd = iso.group(3)!;
+    return '$dd-$mm-$yyyy';
+  }
+
+  final dt = DateTime.tryParse(s);
+  if (dt != null) {
+    final dd = dt.day.toString().padLeft(2, '0');
+    final mm = dt.month.toString().padLeft(2, '0');
+    final yyyy = dt.year.toString().padLeft(4, '0');
+    return '$dd-$mm-$yyyy';
+  }
+
+  return s;
+}
+
+String? birthDateUiToDb(String raw) {
+  final s = raw.toString().replaceAll('\u0000', '').trim();
+  if (s.isEmpty) return null;
+
+  final iso = RegExp(r'^(\d{4})-(\d{2})-(\d{2})').firstMatch(s);
+  if (iso != null) {
+    final yyyy = int.tryParse(iso.group(1)!);
+    final mm = int.tryParse(iso.group(2)!);
+    final dd = int.tryParse(iso.group(3)!);
+    if (yyyy == null || mm == null || dd == null) return null;
+    if (yyyy < 1900 || yyyy > 2100) return null;
+    if (mm < 1 || mm > 12) return null;
+    if (dd < 1 || dd > 31) return null;
+    final mmStr = mm.toString().padLeft(2, '0');
+    final ddStr = dd.toString().padLeft(2, '0');
+    return '${yyyy.toString().padLeft(4, '0')}-$mmStr-$ddStr';
+  }
+
+  final ui = RegExp(r'^(\d{2})[./-](\d{2})[./-](\d{4})$').firstMatch(s);
+  if (ui == null) return null;
+  final dd = int.tryParse(ui.group(1)!);
+  final mm = int.tryParse(ui.group(2)!);
+  final yyyy = int.tryParse(ui.group(3)!);
+  if (dd == null || mm == null || yyyy == null) return null;
+  if (yyyy < 1900 || yyyy > 2100) return null;
+  if (mm < 1 || mm > 12) return null;
+  if (dd < 1 || dd > 31) return null;
+  final mmStr = mm.toString().padLeft(2, '0');
+  final ddStr = dd.toString().padLeft(2, '0');
+  return '${yyyy.toString().padLeft(4, '0')}-$mmStr-$ddStr';
+}
+
 class BirthDateInputFormatter extends TextInputFormatter {
   static String _digits(String text) => text.replaceAll(RegExp(r'\D'), '');
 
@@ -2596,9 +3536,9 @@ class BirthDateInputFormatter extends TextInputFormatter {
     final deletingOneChar = oldValue.text.length == newValue.text.length + 1;
     final deletedOnlySlash =
         deletingOneChar &&
-        oldValue.text.contains('/') &&
+        oldValue.text.contains('-') &&
         oldDigits == newDigits &&
-        !newValue.text.contains('//');
+        !newValue.text.contains('--');
     if (deletedOnlySlash) {
       final text = newValue.text.length > 10
           ? newValue.text.substring(0, 10)
@@ -2624,7 +3564,7 @@ class BirthDateInputFormatter extends TextInputFormatter {
 
     final b = StringBuffer();
     for (var i = 0; i < digits.length; i++) {
-      if (i == 2 || i == 4) b.write('/');
+      if (i == 2 || i == 4) b.write('-');
       b.write(digits[i]);
     }
     final text = b.toString(); // max 10

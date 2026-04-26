@@ -33,7 +33,7 @@ class SupabaseMatchService implements IMatchService {
           .select('match_period_duration, id')
           .eq('id', id)
           .limit(1);
-      if (res is List && res.isNotEmpty) {
+      if (res.isNotEmpty) {
         AppConfig.sqlLogResult(table: 'leagues', operation: 'SELECT', count: 1);
         final row = (res.first as Map).cast<String, dynamic>();
         final minutes = _readInt(row['match_period_duration'], fallback: 25);
@@ -53,6 +53,18 @@ class SupabaseMatchService implements IMatchService {
     final s = v.toString().trim();
     if (s.isEmpty) return null;
     return DateTime.tryParse(s);
+  }
+
+  String? _normalizeMatchTimeForDb(String? matchTime) {
+    final raw = (matchTime ?? '').trim();
+    if (raw.isEmpty) return null;
+    final m = RegExp(r'^(\d{1,2}):(\d{2})(?::(\d{2}))?$').firstMatch(raw);
+    if (m == null) return raw;
+    final hh = int.tryParse(m.group(1) ?? '');
+    final mm = int.tryParse(m.group(2) ?? '');
+    if (hh == null || mm == null) return raw;
+    if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return raw;
+    return '${hh.toString().padLeft(2, '0')}:${mm.toString().padLeft(2, '0')}';
   }
 
   @override
@@ -128,10 +140,6 @@ class SupabaseMatchService implements IMatchService {
           filters: 'columns=week,league_id',
         );
         final res = await _client.from('matches').select('week, league_id');
-        if (res is! List) {
-          AppConfig.sqlLogResult(table: 'matches', operation: 'SELECT', count: 0);
-          return null;
-        }
         AppConfig.sqlLogResult(table: 'matches', operation: 'SELECT', count: res.length);
         int? maxWeek;
         for (final rowAny in res) {
@@ -204,9 +212,10 @@ class SupabaseMatchService implements IMatchService {
       try {
         AppConfig.sqlLogStart(table: 'matches', operation: 'INSERT');
         final payload = match.toMap(snakeCase: true);
+        payload['match_time'] = _normalizeMatchTimeForDb(payload['match_time']?.toString());
         payload['created_at'] = DateTime.now().toIso8601String();
         final res = await _client.from('matches').insert(payload).select('id').limit(1);
-        if (res is List && res.isNotEmpty) {
+        if (res.isNotEmpty) {
           final row = (res.first as Map).cast<String, dynamic>();
           AppConfig.sqlLogResult(table: 'matches', operation: 'INSERT', count: 1);
           return (row['id'] ?? '').toString();
@@ -250,7 +259,7 @@ class SupabaseMatchService implements IMatchService {
             .select('home_team_id, away_team_id, home_score, away_score')
             .eq('id', event.matchId)
             .limit(1);
-        if (res is! List || res.isEmpty) {
+        if (res.isEmpty) {
           AppConfig.sqlLogResult(table: 'matches', operation: 'SELECT', count: 0);
           return;
         }
@@ -322,20 +331,49 @@ class SupabaseMatchService implements IMatchService {
     required String matchId,
     required String matchDateDb,
     required String matchTime,
-    required String? pitchName,
+    String? pitchId,
+    String? pitchName,
   }) {
     final id = matchId.trim();
     if (id.isEmpty) return Future.value();
     return Future(() async {
       try {
-        AppConfig.sqlLogStart(table: 'matches', operation: 'UPSERT', filters: 'onConflict=id | id=$id');
-        await _client.from('matches').upsert({
-          'id': id,
+        final payload = <String, dynamic>{
           'match_date': matchDateDb.trim().isEmpty ? null : matchDateDb.trim(),
-        }, onConflict: 'id');
-        AppConfig.sqlLogResult(table: 'matches', operation: 'UPSERT', count: 1);
+          'match_time': _normalizeMatchTimeForDb(matchTime),
+          'pitch_id': (pitchId ?? '').trim().isEmpty ? null : pitchId!.trim(),
+          'pitch_name': (pitchName ?? '').trim().isEmpty ? null : pitchName!.trim(),
+          'updated_at': DateTime.now().toIso8601String(),
+        };
+        AppConfig.sqlLogStart(table: 'matches', operation: 'UPDATE', filters: 'id=$id');
+        final res = await _client.from('matches').update(payload).eq('id', id).select('id').limit(1);
+        if (res.isEmpty) {
+          throw Exception('matches UPDATE: 0 satır etkilendi (id=$id)');
+        }
+        AppConfig.sqlLogResult(table: 'matches', operation: 'UPDATE', count: res.length);
       } catch (e) {
-        AppConfig.sqlLogResult(table: 'matches', operation: 'UPSERT', error: e);
+        try {
+          final fallbackPayload = <String, dynamic>{
+            'match_date': matchDateDb.trim().isEmpty ? null : matchDateDb.trim(),
+            'match_time': _normalizeMatchTimeForDb(matchTime),
+            'pitch_id': (pitchId ?? '').trim().isEmpty ? null : pitchId!.trim(),
+            'updated_at': DateTime.now().toIso8601String(),
+          };
+          AppConfig.sqlLogStart(
+            table: 'matches',
+            operation: 'UPDATE',
+            filters: 'id=$id | fallback=no pitch_name',
+          );
+          final res2 =
+              await _client.from('matches').update(fallbackPayload).eq('id', id).select('id').limit(1);
+          if (res2.isEmpty) {
+            throw Exception('matches UPDATE: 0 satır etkilendi (id=$id)');
+          }
+          AppConfig.sqlLogResult(table: 'matches', operation: 'UPDATE', count: res2.length);
+        } catch (e2) {
+          AppConfig.sqlLogResult(table: 'matches', operation: 'UPDATE', error: e2);
+          rethrow;
+        }
       }
     });
   }
@@ -386,7 +424,7 @@ class SupabaseMatchService implements IMatchService {
             .select('league_id, home_team_id')
             .eq('id', id)
             .limit(1);
-        if (res is List && res.isNotEmpty) {
+        if (res.isNotEmpty) {
           AppConfig.sqlLogResult(table: 'matches', operation: 'SELECT', count: 1);
           final row = (res.first as Map).cast<String, dynamic>();
           leagueId = (row['league_id'] ?? '').toString().trim();
@@ -512,7 +550,7 @@ class SupabaseMatchService implements IMatchService {
           filters: 'id=$id | limit=1',
         );
         final res = await _client.from('matches').select().eq('id', id).limit(1);
-        if (res is! List || res.isEmpty) {
+        if (res.isEmpty) {
           AppConfig.sqlLogResult(table: 'matches', operation: 'SELECT', count: 0);
           return;
         }
@@ -566,45 +604,41 @@ class SupabaseMatchService implements IMatchService {
             .from('match_events')
             .select('event_type, team_id, player_id, assist_player_id')
             .eq('match_id', id);
-        if (eventsRes is List) {
-          AppConfig.sqlLogResult(table: 'match_events', operation: 'SELECT', count: eventsRes.length);
-          for (final rowAny in eventsRes) {
-            final e = (rowAny as Map).cast<String, dynamic>();
-            final eventType = (e['event_type'] ?? '').toString().trim();
-            final teamId = (e['team_id'] ?? '').toString().trim();
-            final playerPhone = (e['player_id'] ?? '').toString().trim();
-            final assistPhone = (e['assist_player_id'] ?? '').toString().trim();
+        AppConfig.sqlLogResult(table: 'match_events', operation: 'SELECT', count: eventsRes.length);
+        for (final rowAny in eventsRes) {
+          final e = (rowAny as Map).cast<String, dynamic>();
+          final eventType = (e['event_type'] ?? '').toString().trim();
+          final teamId = (e['team_id'] ?? '').toString().trim();
+          final playerPhone = (e['player_id'] ?? '').toString().trim();
+          final assistPhone = (e['assist_player_id'] ?? '').toString().trim();
 
-            void bump(String phone, String field, {int by = 1, String? teamIdOverride}) {
-              final p = phone.trim();
-              if (p.isEmpty) return;
-              ensurePhone(p, teamId: (teamIdOverride ?? teamId).trim().isEmpty ? (teamByPhone[p] ?? '') : (teamIdOverride ?? teamId));
-              deltas[p]![field] = (deltas[p]![field] ?? 0) + by;
-            }
-
-            switch (eventType) {
-              case 'goal':
-                bump(playerPhone, 'goals');
-                if (assistPhone.isNotEmpty) bump(assistPhone, 'assists');
-                break;
-              case 'assist':
-                bump(playerPhone, 'assists');
-                break;
-              case 'yellow_card':
-                bump(playerPhone, 'yellow_cards');
-                break;
-              case 'red_card':
-                bump(playerPhone, 'red_cards');
-                break;
-              case 'man_of_the_match':
-                bump(playerPhone, 'man_of_the_match');
-                break;
-            }
+          void bump(String phone, String field, {int by = 1, String? teamIdOverride}) {
+            final p = phone.trim();
+            if (p.isEmpty) return;
+            ensurePhone(p, teamId: (teamIdOverride ?? teamId).trim().isEmpty ? (teamByPhone[p] ?? '') : (teamIdOverride ?? teamId));
+            deltas[p]![field] = (deltas[p]![field] ?? 0) + by;
           }
-        } else {
-          AppConfig.sqlLogResult(table: 'match_events', operation: 'SELECT', count: 0);
+
+          switch (eventType) {
+            case 'goal':
+              bump(playerPhone, 'goals');
+              if (assistPhone.isNotEmpty) bump(assistPhone, 'assists');
+              break;
+            case 'assist':
+              bump(playerPhone, 'assists');
+              break;
+            case 'yellow_card':
+              bump(playerPhone, 'yellow_cards');
+              break;
+            case 'red_card':
+              bump(playerPhone, 'red_cards');
+              break;
+            case 'man_of_the_match':
+              bump(playerPhone, 'man_of_the_match');
+              break;
+          }
         }
-      } catch (e) {
+            } catch (e) {
         AppConfig.sqlLogResult(table: 'match_events', operation: 'SELECT', error: e);
       }
 
@@ -619,17 +653,13 @@ class SupabaseMatchService implements IMatchService {
             .from('player_stats')
             .select()
             .inFilter('id', statIds);
-        if (res is List) {
-          AppConfig.sqlLogResult(table: 'player_stats', operation: 'SELECT', count: res.length);
-          for (final rowAny in res) {
-            final row = (rowAny as Map).cast<String, dynamic>();
-            final rid = (row['id'] ?? '').toString();
-            if (rid.isNotEmpty) existingById[rid] = row;
-          }
-        } else {
-          AppConfig.sqlLogResult(table: 'player_stats', operation: 'SELECT', count: 0);
+        AppConfig.sqlLogResult(table: 'player_stats', operation: 'SELECT', count: res.length);
+        for (final rowAny in res) {
+          final row = (rowAny as Map).cast<String, dynamic>();
+          final rid = (row['id'] ?? '').toString();
+          if (rid.isNotEmpty) existingById[rid] = row;
         }
-      } catch (e) {
+            } catch (e) {
         AppConfig.sqlLogResult(table: 'player_stats', operation: 'SELECT', error: e);
       }
 
@@ -697,17 +727,15 @@ class SupabaseMatchService implements IMatchService {
 
         final teamsRes = await _client.from('teams').select('id, name').eq('league_id', tId);
         final teamIdByName = <String, String>{};
-        if (teamsRes is List) {
-          for (final rowAny in teamsRes) {
-            final row = (rowAny as Map).cast<String, dynamic>();
-            final id = (row['id'] ?? '').toString().trim();
-            final name = (row['name'] ?? '').toString().trim().toLowerCase();
-            if (id.isNotEmpty && name.isNotEmpty) {
-              teamIdByName[name] = id;
-            }
+        for (final rowAny in teamsRes) {
+          final row = (rowAny as Map).cast<String, dynamic>();
+          final id = (row['id'] ?? '').toString().trim();
+          final name = (row['name'] ?? '').toString().trim().toLowerCase();
+          if (id.isNotEmpty && name.isNotEmpty) {
+            teamIdByName[name] = id;
           }
         }
-
+      
         AppConfig.sqlLogStart(table: 'matches', operation: 'INSERT', filters: 'rows=${matches.length} | league_id=$tId');
         for (final m in matches) {
           final homeId = teamIdByName[m.homeTeamName.trim().toLowerCase()];

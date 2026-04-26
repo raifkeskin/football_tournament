@@ -6,10 +6,14 @@ import 'package:flutter/services.dart';
 import 'admin_panel_screen.dart';
 import 'forgot_password_screen.dart';
 import 'online_registration_screen.dart';
+import 'team_squad_screen.dart';
 import '../main.dart';
 import 'main_navigator.dart';
 import '../services/app_session.dart';
 import '../models/auth_models.dart';
+import '../models/league.dart';
+import '../models/team.dart';
+import '../services/approval_service.dart';
 import '../services/interfaces/i_auth_service.dart';
 import '../services/interfaces/i_league_service.dart';
 import '../services/interfaces/i_team_service.dart';
@@ -35,6 +39,529 @@ class _ProfileScreenState extends State<ProfileScreen> {
   int _backdoorTapCount = 0;
   DateTime? _backdoorLastTapAt;
   Timer? _backdoorResetTimer;
+
+  Future<RosterAssignment?> _pickRosterAssignmentForPlayerActions(
+    String phone,
+  ) async {
+    final p = phone.trim();
+    if (p.isEmpty) return null;
+
+    return showModalBottomSheet<RosterAssignment>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+          child: SizedBox(
+            height: MediaQuery.of(context).size.height * 0.6,
+            child: StreamBuilder<List<RosterAssignment>>(
+              stream: _authService.watchRosterAssignmentsByPhone(p),
+              builder: (context, snap) {
+                final list = snap.data ?? const <RosterAssignment>[];
+                if (!snap.hasData) {
+                  return const Center(
+                    child: SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  );
+                }
+                if (list.isEmpty) {
+                  return const Center(
+                    child: Text('Takım kaydınız bulunamadı.'),
+                  );
+                }
+
+                return ListView.separated(
+                  itemCount: list.length,
+                  separatorBuilder: (_, _) => const Divider(height: 1),
+                  itemBuilder: (context, i) {
+                    final r = list[i];
+                    final lid = r.tournamentId.trim();
+                    final tid = r.teamId.trim();
+                    return StreamBuilder<String>(
+                      stream: lid.isEmpty
+                          ? const Stream<String>.empty()
+                          : _leagueService.watchLeagueName(lid),
+                      builder: (context, leagueSnap) {
+                        final leagueName = (leagueSnap.data ?? lid).trim();
+                        return StreamBuilder<String>(
+                          stream: tid.isEmpty
+                              ? const Stream<String>.empty()
+                              : _teamService.watchTeamName(tid),
+                          builder: (context, teamSnap) {
+                            final teamName = (teamSnap.data ?? tid).trim();
+                            return ListTile(
+                              onTap: () => Navigator.pop(context, r),
+                              title: Text(teamName.isEmpty ? '-' : teamName),
+                              subtitle: Text(leagueName.isEmpty ? '-' : leagueName),
+                              trailing: const Icon(Icons.chevron_right_rounded),
+                            );
+                          },
+                        );
+                      },
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<String?> _pickLeagueIdForAdmin() {
+    return showDialog<String>(
+      context: context,
+      builder: (context) => StreamBuilder<List<League>>(
+        stream: _leagueService.watchLeagues(),
+        builder: (context, snap) {
+          final leagues = snap.data ?? const <League>[];
+          return SimpleDialog(
+            title: const Text('Turnuva seçin'),
+            children: leagues.isEmpty
+                ? const [
+                    Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Text('Turnuva bulunamadı.'),
+                    ),
+                  ]
+                : leagues
+                    .map(
+                      (l) => SimpleDialogOption(
+                        onPressed: () => Navigator.pop(context, l.id),
+                        child: Text(l.name.trim().isEmpty ? l.id : l.name),
+                      ),
+                    )
+                    .toList(),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<String?> _pickTeamIdForAdmin(String leagueId) {
+    final lid = leagueId.trim();
+    if (lid.isEmpty) return Future.value(null);
+    return showDialog<String>(
+      context: context,
+      builder: (context) => StreamBuilder<List<Team>>(
+        stream: _teamService.watchAllTeams(),
+        builder: (context, snap) {
+          final all = snap.data ?? const <Team>[];
+          final teams = all
+              .where((t) => (t.leagueId ?? '').toString().trim() == lid)
+              .toList();
+          teams.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+          return SimpleDialog(
+            title: const Text('Takım seçin'),
+            children: teams.isEmpty
+                ? const [
+                    Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Text('Takım bulunamadı.'),
+                    ),
+                  ]
+                : teams
+                    .map(
+                      (t) => SimpleDialogOption(
+                        onPressed: () => Navigator.pop(context, t.id),
+                        child: Text(t.name.trim().isEmpty ? t.id : t.name),
+                      ),
+                    )
+                    .toList(),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<RosterAssignment?> _pickTeamTournamentForAdmin() async {
+    final leagueId = (await _pickLeagueIdForAdmin())?.trim() ?? '';
+    if (!mounted || leagueId.isEmpty) return null;
+    final teamId = (await _pickTeamIdForAdmin(leagueId))?.trim() ?? '';
+    if (!mounted || teamId.isEmpty) return null;
+    return RosterAssignment(
+      id: '${leagueId}_$teamId',
+      tournamentId: leagueId,
+      teamId: teamId,
+      role: 'Admin',
+    );
+  }
+
+  Future<void> _openPlayerLicenseMenu({
+    required String phone,
+    required bool isAdmin,
+  }) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.person_add_alt_1_rounded),
+              title: const Text('Yeni Futbolcu Oluştur'),
+              onTap: () => Navigator.pop(context, 'create'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.upload_file_rounded),
+              title: const Text('Toplu Yükle'),
+              onTap: () => Navigator.pop(context, 'bulk'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || action == null) return;
+
+    switch (action) {
+      case 'create':
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => PlayerFormScreen(
+              standalone: true,
+            ),
+          ),
+        );
+        return;
+      case 'bulk':
+        final picked = await _pickLeagueTeamForBulkUpload(
+          isAdmin: isAdmin,
+          phone: phone,
+        );
+        if (!mounted) return;
+        if (picked == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Takım seçimi iptal edildi.')),
+          );
+          return;
+        }
+        final leagueId = (picked['leagueId'] ?? '').trim();
+        final teamId = (picked['teamId'] ?? '').trim();
+        final teamName = (picked['teamName'] ?? '').trim();
+        if (leagueId.isEmpty || teamId.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Takım/turnuva bilgisi bulunamadı.')),
+          );
+          return;
+        }
+        await showSquadBulkUploadDialog(
+          context: context,
+          approvalService: ApprovalService(),
+          leagueId: leagueId,
+          teamId: teamId,
+          teamName: teamName.isEmpty ? teamId : teamName,
+        );
+        return;
+    }
+  }
+
+  Future<Map<String, String>?> _pickLeagueTeamForBulkUpload({
+    required bool isAdmin,
+    required String phone,
+  }) async {
+    String selectedLeagueId = '';
+    String selectedTeamId = '';
+    String selectedTeamName = '';
+
+    return showModalBottomSheet<Map<String, String>>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: StatefulBuilder(
+          builder: (context, setSheetState) {
+            Widget buildTeamList(List<Team> teams) {
+              final list = teams
+                  .where((t) => (t.leagueId ?? '').toString().trim() == selectedLeagueId)
+                  .toList();
+              list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+
+              if (selectedLeagueId.trim().isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Text('Önce turnuva seçin.'),
+                );
+              }
+              if (list.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Text('Bu turnuvada takım bulunamadı.'),
+                );
+              }
+              return ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: list.length,
+                separatorBuilder: (_, _) => const Divider(height: 1),
+                itemBuilder: (context, i) {
+                  final t = list[i];
+                  final selected = t.id == selectedTeamId;
+                  return ListTile(
+                    title: Text(t.name.trim().isEmpty ? t.id : t.name),
+                    trailing: selected ? const Icon(Icons.check_rounded) : null,
+                    onTap: () {
+                      setSheetState(() {
+                        selectedTeamId = t.id;
+                        selectedTeamName = t.name.trim();
+                      });
+                    },
+                  );
+                },
+              );
+            }
+
+            Widget buildAdminContent() {
+              return StreamBuilder<List<League>>(
+                stream: _leagueService.watchLeagues(),
+                builder: (context, leaguesSnap) {
+                  final leagues = leaguesSnap.data ?? const <League>[];
+                  leagues.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+                  if (selectedLeagueId.isEmpty && leagues.isNotEmpty) {
+                    selectedLeagueId = leagues.first.id;
+                  }
+
+                  return StreamBuilder<List<Team>>(
+                    stream: _teamService.watchAllTeams(),
+                    builder: (context, teamsSnap) {
+                      final teams = teamsSnap.data ?? const <Team>[];
+                      return Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
+                            child: DropdownButtonFormField<String>(
+                              initialValue: selectedLeagueId.isEmpty ? null : selectedLeagueId,
+                              decoration: const InputDecoration(
+                                labelText: 'Turnuva',
+                                prefixIcon: Icon(Icons.emoji_events_outlined),
+                              ),
+                              items: leagues
+                                  .map(
+                                    (l) => DropdownMenuItem<String>(
+                                      value: l.id,
+                                      child: Text(l.name.trim().isEmpty ? l.id : l.name),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (v) {
+                                setSheetState(() {
+                                  selectedLeagueId = v ?? '';
+                                  selectedTeamId = '';
+                                  selectedTeamName = '';
+                                });
+                              },
+                            ),
+                          ),
+                          Flexible(
+                            child: SingleChildScrollView(
+                              padding: const EdgeInsets.fromLTRB(0, 0, 0, 12),
+                              child: buildTeamList(teams),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                            child: SizedBox(
+                              width: double.infinity,
+                              height: 50,
+                              child: FilledButton(
+                                onPressed: selectedLeagueId.trim().isEmpty ||
+                                        selectedTeamId.trim().isEmpty
+                                    ? null
+                                    : () => Navigator.pop(
+                                          context,
+                                          {
+                                            'leagueId': selectedLeagueId,
+                                            'teamId': selectedTeamId,
+                                            'teamName': selectedTeamName,
+                                          },
+                                        ),
+                                child: const Text(
+                                  'Devam Et',
+                                  style: TextStyle(fontWeight: FontWeight.w900),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  );
+                },
+              );
+            }
+
+            Widget buildNonAdminContent() {
+              final p = phone.trim();
+              if (p.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('Telefon bilgisi bulunamadı.'),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: FilledButton.tonal(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Kapat'),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              return StreamBuilder<List<RosterAssignment>>(
+                stream: _authService.watchRosterAssignmentsByPhone(p),
+                builder: (context, rosterSnap) {
+                  final rosters = rosterSnap.data ?? const <RosterAssignment>[];
+                  final leagueIds = rosters
+                      .map((r) => r.tournamentId.trim())
+                      .where((id) => id.isNotEmpty)
+                      .toSet()
+                      .toList();
+                  leagueIds.sort();
+                  if (selectedLeagueId.isEmpty && leagueIds.isNotEmpty) {
+                    selectedLeagueId = leagueIds.first;
+                  }
+
+                  final teamsForSelected = rosters
+                      .where((r) => r.tournamentId.trim() == selectedLeagueId)
+                      .map((r) => r.teamId.trim())
+                      .where((id) => id.isNotEmpty)
+                      .toSet()
+                      .toList();
+                  teamsForSelected.sort();
+
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
+                        child: DropdownButtonFormField<String>(
+                          initialValue: selectedLeagueId.isEmpty ? null : selectedLeagueId,
+                          decoration: const InputDecoration(
+                            labelText: 'Turnuva',
+                            prefixIcon: Icon(Icons.emoji_events_outlined),
+                          ),
+                          items: leagueIds
+                              .map(
+                                (id) => DropdownMenuItem<String>(
+                                  value: id,
+                                  child: StreamBuilder<String>(
+                                    stream: _leagueService.watchLeagueName(id),
+                                    builder: (context, snap) {
+                                      final name = (snap.data ?? id).trim();
+                                      return Text(name.isEmpty ? id : name);
+                                    },
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (v) {
+                            setSheetState(() {
+                              selectedLeagueId = v ?? '';
+                              selectedTeamId = '';
+                              selectedTeamName = '';
+                            });
+                          },
+                        ),
+                      ),
+                      Flexible(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.fromLTRB(0, 0, 0, 12),
+                          child: selectedLeagueId.trim().isEmpty
+                              ? const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 12),
+                                  child: Text('Önce turnuva seçin.'),
+                                )
+                              : teamsForSelected.isEmpty
+                                  ? const Padding(
+                                      padding: EdgeInsets.symmetric(vertical: 12),
+                                      child: Text('Bu turnuvada takım bulunamadı.'),
+                                    )
+                                  : ListView.separated(
+                                      shrinkWrap: true,
+                                      physics: const NeverScrollableScrollPhysics(),
+                                      itemCount: teamsForSelected.length,
+                                      separatorBuilder: (_, _) =>
+                                          const Divider(height: 1),
+                                      itemBuilder: (context, i) {
+                                        final tid = teamsForSelected[i];
+                                        final selected = tid == selectedTeamId;
+                                        return StreamBuilder<String>(
+                                          stream: _teamService.watchTeamName(tid),
+                                          builder: (context, snap) {
+                                            final name = (snap.data ?? tid).trim();
+                                            return ListTile(
+                                              title: Text(name.isEmpty ? tid : name),
+                                              trailing: selected
+                                                  ? const Icon(Icons.check_rounded)
+                                                  : null,
+                                              onTap: () {
+                                                setSheetState(() {
+                                                  selectedTeamId = tid;
+                                                  selectedTeamName = name;
+                                                });
+                                              },
+                                            );
+                                          },
+                                        );
+                                      },
+                                    ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                        child: SizedBox(
+                          width: double.infinity,
+                          height: 50,
+                          child: FilledButton(
+                            onPressed: selectedLeagueId.trim().isEmpty ||
+                                    selectedTeamId.trim().isEmpty
+                                ? null
+                                : () => Navigator.pop(
+                                      context,
+                                      {
+                                        'leagueId': selectedLeagueId,
+                                        'teamId': selectedTeamId,
+                                        'teamName': selectedTeamName,
+                                      },
+                                    ),
+                            child: const Text(
+                              'Devam Et',
+                              style: TextStyle(fontWeight: FontWeight.w900),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              );
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: isAdmin ? buildAdminContent() : buildNonAdminContent(),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
 
   @override
   void dispose() {
@@ -310,6 +837,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 ?.copyWith(fontWeight: FontWeight.w900),
                           ),
                           const SizedBox(height: 14),
+                          SizedBox(
+                            height: 50,
+                            child: FilledButton.tonalIcon(
+                              onPressed: state.isLoading
+                                  ? null
+                                  : (state.isAdmin || phone.isNotEmpty)
+                                      ? () => _openPlayerLicenseMenu(
+                                            phone: phone,
+                                            isAdmin: state.isAdmin,
+                                          )
+                                      : null,
+                              style: FilledButton.styleFrom(
+                                minimumSize: const Size(double.infinity, 50),
+                              ),
+                              icon: const Icon(Icons.badge_outlined),
+                              label: const Text(
+                                'Futbolcu Lisans Ekle',
+                                style: TextStyle(fontWeight: FontWeight.w900),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
                           Text(
                             'Rol: $displayRole',
                             style: TextStyle(
@@ -519,12 +1068,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
             body: isAdminPanelVisible
-                ? AdminPanelWidget(onLogout: () => _logout(session))
+                ? Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                        child: SizedBox(
+                          height: 50,
+                          width: double.infinity,
+                          child: FilledButton.tonalIcon(
+                            onPressed: state.isLoading
+                                ? null
+                                : () => _openPlayerLicenseMenu(
+                                      phone: state.phone,
+                                      isAdmin: state.isAdmin,
+                                    ),
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size(double.infinity, 50),
+                            ),
+                            icon: const Icon(Icons.badge_outlined),
+                            label: const Text(
+                              'Futbolcu Lisans Ekle',
+                              style: TextStyle(fontWeight: FontWeight.w900),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: AdminPanelWidget(
+                          onLogout: () => _logout(session),
+                        ),
+                      ),
+                    ],
+                  )
                 : (user != null
                     ? _buildLoggedInProfileBody(context, state, session)
                     : Transform.translate(
-                    offset: const Offset(0, -20),
-                    child: Container(
+                        offset: const Offset(0, -20),
+                        child: Container(
                       decoration: const BoxDecoration(
                         color: Color(0xFF0F172A),
                         borderRadius: BorderRadius.vertical(

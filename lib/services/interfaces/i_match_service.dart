@@ -46,7 +46,8 @@ abstract class IMatchService {
     required String matchId,
     required String matchDateDb,
     required String matchTime,
-    required String? pitchName,
+    String? pitchId,
+    String? pitchName,
   });
 
   Future<void> updateMatchLineup({

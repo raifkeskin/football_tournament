@@ -499,7 +499,7 @@ class SupabaseAuthService implements IAuthService {
         'id': user.uid,
         'access_role': accessRole,
         'phone': raw10,
-        if (fullName != null) 'full_name': fullName,
+        'full_name': ?fullName,
         if (trimmedName.isNotEmpty) 'name': trimmedName,
         if (trimmedSurname.isNotEmpty) 'surname': trimmedSurname,
         'roles': [roleEntry],
@@ -554,7 +554,7 @@ class SupabaseAuthService implements IAuthService {
           'team_id': (resolvedTeamId ?? 'free_agent_pool').trim().isEmpty
               ? 'free_agent_pool'
               : (resolvedTeamId ?? 'free_agent_pool').trim(),
-          if (fullName != null) 'name': fullName,
+          'name': ?fullName,
           'role': 'Futbolcu',
           'phone': raw10,
           'phone_raw10': raw10,
