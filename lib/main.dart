@@ -4,12 +4,12 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'config/app_config.dart';
+import 'core/config/app_config.dart';
 import 'firebase_options.dart';
-import 'screens/main_navigator.dart';
-import 'services/app_session.dart';
-import 'services/database_service.dart';
-import 'widgets/web_responsive_frame.dart';
+import 'features/home/screens/main_navigator.dart';
+import 'core/services/app_session.dart';
+import 'core/services/database_service.dart';
+import 'core/widgets/web_responsive_frame.dart';
 
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 

@@ -5,7 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'package:football_tournament/services/supabase/supabase_team_service.dart';
+import 'package:football_tournament/features/team/services/supabase/supabase_team_service.dart';
 
 void main() {
   test('upsertRosterEntry writes league_team_players with league_id, team_id, player_id', () async {

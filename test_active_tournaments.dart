@@ -1,5 +1,5 @@
 import 'package:firebase_core/firebase_core.dart';
-import 'package:football_tournament/services/database_service.dart';
+import 'package:football_tournament/core/services/database_service.dart';
 
 void main() async {
   // Initialize Firebase

@@ -1,7 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:football_tournament/utils/otp_utils.dart';
+import 'package:football_tournament/core/utils/otp_utils.dart';
 
 void main() {
   test('generateOtp6 returns 6 digit numeric string', () {

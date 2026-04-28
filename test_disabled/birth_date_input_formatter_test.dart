@@ -1,6 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:football_tournament/screens/team_squad_screen.dart';
+import 'package:football_tournament/features/team/screens/team_squad_screen.dart';
 
 void main() {
   test('BirthDateInputFormatter formats 01011990 as 01/01/1990', () {

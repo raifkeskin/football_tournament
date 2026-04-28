@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:football_tournament/utils/admin_backdoor_utils.dart';
+import 'package:football_tournament/core/utils/admin_backdoor_utils.dart';
 
 void main() {
   test('matchesBackdoorPassword checks multiple field names', () {

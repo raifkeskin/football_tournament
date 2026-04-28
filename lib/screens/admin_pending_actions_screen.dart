@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import '../services/approval_service.dart';
-import '../services/app_session.dart';
-import '../services/interfaces/i_team_service.dart';
-import '../services/service_locator.dart';
+import 'package:football_tournament/features/admin/services/approval_service.dart';
+import '../core/services/app_session.dart';
+import '../features/team/services/interfaces/i_team_service.dart';
+import '../core/services/service_locator.dart';
 
 class AdminPendingActionsScreen extends StatefulWidget {
   const AdminPendingActionsScreen({super.key});

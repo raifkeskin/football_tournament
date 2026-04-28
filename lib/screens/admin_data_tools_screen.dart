@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:football_tournament/postgres_migration_service.dart';
 import 'package:postgres/postgres.dart';
 import 'package:universal_html/html.dart' as html;
 
@@ -11,15 +12,14 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import '../models/fixture_import.dart';
-import '../models/league.dart';
-import '../services/app_session.dart';
-import '../services/interfaces/i_league_service.dart';
-import '../services/interfaces/i_match_service.dart';
-import '../services/interfaces/i_team_service.dart';
-import '../services/postgres_migration_service.dart';
-import '../services/service_locator.dart';
-import '../utils/string_utils.dart';
+import '../features/match/models/fixture_import.dart';
+import '../features/tournament/models/league.dart';
+import '../core/services/app_session.dart';
+import '../features/tournament/services/interfaces/i_league_service.dart';
+import '../features/match/services/interfaces/i_match_service.dart';
+import '../features/team/services/interfaces/i_team_service.dart';
+import '../core/services/service_locator.dart';
+import '../core/utils/string_utils.dart';
 
 class AdminDataToolsScreen extends StatefulWidget {
   const AdminDataToolsScreen({super.key});
@@ -601,15 +601,6 @@ class _AdminDataToolsScreenState extends State<AdminDataToolsScreen> {
                   ),
                   const SizedBox(height: 12),
                   FilledButton.tonalIcon(
-                    onPressed: _busy ? null : _exportFirestoreBackup,
-                    icon: const Icon(Icons.download_rounded),
-                    label: const Text('Firestore JSON Yedek Al'),
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 52),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  FilledButton.tonalIcon(
                     onPressed: _busy ? null : _clearTeams,
                     icon: Icon(
                       Icons.delete_forever_rounded,
@@ -640,33 +631,6 @@ class _AdminDataToolsScreenState extends State<AdminDataToolsScreen> {
                       color: dangerColor,
                     ),
                     label: const Text('Futbolcu Verilerini Temizle'),
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 52),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  FilledButton.tonalIcon(
-                    onPressed: _busy ? null : _migrateMatchTimesFromTimestamp,
-                    icon: const Icon(Icons.sync_alt_rounded),
-                    label: const Text('Maç Zaman Migrasyonu'),
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 52),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  FilledButton.tonalIcon(
-                    onPressed: _busy ? null : _normalizeMatchesDocIds,
-                    icon: const Icon(Icons.rule_folder_outlined),
-                    label: const Text('Lig Bazlı Maç Verilerini Normalize Et'),
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 52),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  FilledButton.tonalIcon(
-                    onPressed: _busy ? null : _openPostgresMigrationDialog,
-                    icon: const Icon(Icons.swap_horiz_rounded),
-                    label: const Text('Firebase -> PostgreSQL Migrasyonu'),
                     style: FilledButton.styleFrom(
                       minimumSize: const Size(double.infinity, 52),
                     ),

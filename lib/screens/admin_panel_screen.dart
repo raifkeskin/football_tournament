@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'admin_manage_leagues_screen.dart';
-import 'admin_manage_news_screen.dart';
+import '../features/tournament/screens/admin_manage_leagues_screen.dart';
+import '../features/news/screens/admin_manage_news_screen.dart';
 import 'admin_data_tools_screen.dart';
 import 'admin_pending_actions_screen.dart';
-import 'admin_pitch_management_screen.dart';
-import 'admin/admin_otp_monitor_screen.dart';
+import '../features/tournament/screens/admin_pitch_management_screen.dart';
+import '../features/auth/screens/admin_otp_monitor_screen.dart';
 
 class AdminPanelWidget extends StatelessWidget {
   const AdminPanelWidget({super.key, required this.onLogout});
@@ -17,7 +17,7 @@ class AdminPanelWidget extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
       children: [
         _PanelButonu(
-          baslik: 'Turnuva Ayarları / Yönetimi',
+          baslik: 'Turnuva Yönetimi',
           ikon: Icons.settings_outlined,
           onPressed: () {
             Navigator.of(context).push(
