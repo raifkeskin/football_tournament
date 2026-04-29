@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:archive/archive.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -367,6 +368,16 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
         return StatefulBuilder(
           builder: (context, setSheetState) {
             final showLogoUrl = selectedLogo == null ? existingLogoUrl : '';
+
+            Future<void> openManagerPicker() async {
+              final picked = await pickManager();
+              if (picked == null) return;
+              setSheetState(() {
+                selectedManagerId = (picked['id'] ?? '').toString().trim();
+                managerController.text = (picked['name'] ?? '').toString().trim();
+              });
+            }
+
             return SizedBox(
               height: h,
               child: Padding(
@@ -379,8 +390,19 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(18),
+                    Container(
+                      clipBehavior: Clip.antiAlias,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(18),
+                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.14),
+                            blurRadius: 18,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
+                      ),
                       child: SizedBox(
                         width: double.infinity,
                         height: 220,
@@ -388,23 +410,70 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                           children: [
                             Positioned.fill(
                               child: selectedLogo != null
-                                  ? Image.file(
-                                      File(selectedLogo!.path),
-                                      fit: BoxFit.cover,
+                                  ? Stack(
+                                      children: [
+                                        Positioned.fill(
+                                          child: ImageFiltered(
+                                            imageFilter: ui.ImageFilter.blur(
+                                              sigmaX: 18,
+                                              sigmaY: 18,
+                                            ),
+                                            child: Image.file(
+                                              File(selectedLogo!.path),
+                                              fit: BoxFit.cover,
+                                            ),
+                                          ),
+                                        ),
+                                        Positioned.fill(
+                                          child: Container(
+                                            color: Colors.black.withValues(alpha: 0.10),
+                                          ),
+                                        ),
+                                        Center(
+                                          child: Image.file(
+                                            File(selectedLogo!.path),
+                                            fit: BoxFit.contain,
+                                          ),
+                                        ),
+                                      ],
                                     )
                                   : (showLogoUrl.isNotEmpty
-                                      ? WebSafeImage(
-                                          url: showLogoUrl,
-                                          width: double.infinity,
-                                          height: 220,
-                                          isCircle: false,
-                                          fit: BoxFit.cover,
-                                          fallbackIconSize: 64,
+                                      ? Stack(
+                                          children: [
+                                            Positioned.fill(
+                                              child: ImageFiltered(
+                                                imageFilter: ui.ImageFilter.blur(
+                                                  sigmaX: 18,
+                                                  sigmaY: 18,
+                                                ),
+                                                child: WebSafeImage(
+                                                  url: showLogoUrl,
+                                                  width: double.infinity,
+                                                  height: 220,
+                                                  isCircle: false,
+                                                  fit: BoxFit.cover,
+                                                  fallbackIconSize: 64,
+                                                ),
+                                              ),
+                                            ),
+                                            Positioned.fill(
+                                              child: Container(
+                                                color: Colors.black.withValues(alpha: 0.10),
+                                              ),
+                                            ),
+                                            Center(
+                                              child: WebSafeImage(
+                                                url: showLogoUrl,
+                                                width: double.infinity,
+                                                height: 220,
+                                                isCircle: false,
+                                                fit: BoxFit.contain,
+                                                fallbackIconSize: 64,
+                                              ),
+                                            ),
+                                          ],
                                         )
                                       : Container(
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .surfaceContainerHighest,
                                           child: Icon(
                                             Icons.shield_outlined,
                                             size: 64,
@@ -447,9 +516,11 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                     TextField(
                       controller: nameController,
                       enabled: !saving,
+                      maxLength: 30,
                       decoration: const InputDecoration(
                         labelText: 'Takım Adı',
                         border: OutlineInputBorder(),
+                        counterText: '',
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -472,7 +543,9 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                         Expanded(
                           child: TextField(
                             controller: managerController,
-                            enabled: false,
+                            enabled: !saving,
+                            readOnly: true,
+                            onTap: saving ? null : openManagerPicker,
                             decoration: const InputDecoration(
                               labelText: 'Takım Sorumlusu',
                               border: OutlineInputBorder(),
@@ -483,16 +556,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                         IconButton.filledTonal(
                           onPressed: saving
                               ? null
-                              : () async {
-                                  final picked = await pickManager();
-                                  if (picked == null) return;
-                                  setSheetState(() {
-                                    selectedManagerId =
-                                        (picked['id'] ?? '').toString().trim();
-                                    managerController.text =
-                                        (picked['name'] ?? '').toString().trim();
-                                  });
-                                },
+                              : openManagerPicker,
                           icon: const Icon(Icons.search_rounded),
                           tooltip: 'Seç',
                         ),
