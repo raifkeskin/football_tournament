@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-
+import '../../auth/screens/login_screen.dart';
+import '../../../core/services/app_session.dart';
 import '../../match/screens/fixture_screen.dart';
 import '../../team/screens/groups_screen.dart';
 import 'home_screen.dart';
@@ -35,7 +36,14 @@ class _MainNavigatorState extends State<MainNavigator> {
       const FixtureScreen(),
       const GroupsScreen(),
       const StatsScreen(),
-      ProfileScreen(onRequestHomeTab: () => _sekmeDegistir(0)),
+      Builder(
+        builder: (context) {
+          final session = AppSession.of(context).value;
+          final isLoggedIn = session.user != null;
+          if (!isLoggedIn) return const LoginScreen();
+          return ProfileScreen(onRequestHomeTab: () => _sekmeDegistir(0));
+        },
+      ),
     ];
 
     return Scaffold(

@@ -1,8 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
-
-import 'package:archive/archive.dart';
 import 'package:excel/excel.dart' hide Border;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -12,9 +10,9 @@ import 'package:football_tournament/features/admin/services/approval_service.dar
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
 import '../../tournament/models/league.dart';
 import '../../match/models/match.dart';
+import '../../player/widgets/player_card.dart';
 import '../../../core/services/app_session.dart';
 import '../../../core/services/image_upload_service.dart';
 import '../services/interfaces/i_team_service.dart';
@@ -481,7 +479,6 @@ Future<void> showSquadBulkUploadDialog({
 }
 
 class _TeamSquadScreenState extends State<TeamSquadScreen> {
-  final _approvalService = ApprovalService();
   final ITeamService _teamService = ServiceLocator.teamService;
 
   SupabaseTeamService? get _sbTeamService =>
@@ -904,159 +901,64 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
       barrierDismissible: true,
       builder: (context) {
         return Dialog(
-          insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
           backgroundColor: Colors.transparent,
           child: FutureBuilder<PlayerModel?>(
-            future: phone.isEmpty ? Future.value(null) : _teamService.getPlayerByPhoneOnce(phone),
+            future: phone.isEmpty
+                ? Future.value(null)
+                : _teamService.getPlayerByPhoneOnce(phone),
             builder: (context, snap) {
               final profile = snap.data;
-              final photoUrl = ((profile?.photoUrl ?? '').trim().isNotEmpty)
-                  ? (profile!.photoUrl ?? '').trim()
-                  : cachedPhoto;
-              final name = rosterPlayer.name.trim().isNotEmpty
+              final resolvedPhotoUrl =
+                  ((profile?.photoUrl ?? '').trim().isNotEmpty)
+                      ? (profile!.photoUrl ?? '').trim()
+                      : cachedPhoto;
+              final resolvedName = rosterPlayer.name.trim().isNotEmpty
                   ? rosterPlayer.name.trim()
                   : (profile?.name ?? '').trim();
-              final birthDate = (profile?.birthDate ?? rosterPlayer.birthDate ?? '').trim();
-              final age = _ageFromBirthDate(birthDate);
-              final mainPos = (profile?.mainPosition ?? rosterPlayer.mainPosition ?? '').trim();
-              final subPos = (profile?.position ?? rosterPlayer.position ?? '').trim();
-              final preferredFoot =
-                  (profile?.preferredFoot ?? rosterPlayer.preferredFoot ?? '').trim();
-              final number = (rosterPlayer.number ?? profile?.number ?? '').toString().trim();
+              final resolvedBirthDate =
+                  (profile?.birthDate ?? rosterPlayer.birthDate ?? '').trim();
+              final mainPos =
+                  (profile?.mainPosition ?? rosterPlayer.mainPosition ?? '').trim();
+              final subPos =
+                  (profile?.position ?? rosterPlayer.position ?? '').trim();
 
-              final cs = Theme.of(context).colorScheme;
-              final w = MediaQuery.of(context).size.width;
-              final dialogW = min(360.0, w - 36);
-              final topH = dialogW * 0.70;
+              String displayPos() {
+                final sub = subPos;
+                if (sub.isNotEmpty) {
+                  switch (sub) {
+                    case 'GK':
+                      return 'Kaleci';
+                    case 'DEF':
+                      return 'Defans';
+                    case 'ORT':
+                      return 'Orta Saha';
+                    case 'FOR':
+                      return 'Forvet';
+                  }
+                  return sub;
+                }
+                if (mainPos.isNotEmpty) return mainPos;
+                return '-';
+              }
 
-              return ClipRRect(
-                borderRadius: BorderRadius.circular(18),
-                child: Container(
-                  width: dialogW,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        cs.primary.withValues(alpha: 0.95),
-                        cs.secondary.withValues(alpha: 0.85),
-                        cs.tertiary.withValues(alpha: 0.80),
-                      ],
-                    ),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SizedBox(
-                        height: topH,
-                        width: double.infinity,
-                        child: Stack(
-                          children: [
-                            Positioned.fill(
-                              child: Container(
-                                color: Colors.black.withValues(alpha: 0.15),
-                                child: photoUrl.isNotEmpty
-                                    ? WebSafeImage(
-                                        url: _normalizeUrl(photoUrl),
-                                        width: dialogW,
-                                        height: topH,
-                                        isCircle: false,
-                                        fallbackIconSize: 74,
-                                        fit: BoxFit.cover,
-                                      )
-                                    : Icon(
-                                        Icons.person,
-                                        size: 96,
-                                        color: Colors.white.withValues(alpha: 0.92),
-                                      ),
-                              ),
-                            ),
-                            Positioned.fill(
-                              child: IgnorePointer(
-                                child: DecoratedBox(
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      begin: Alignment.topCenter,
-                                      end: Alignment.bottomCenter,
-                                      colors: [
-                                        Colors.black.withValues(alpha: 0.05),
-                                        Colors.black.withValues(alpha: 0.55),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              left: 14,
-                              right: 14,
-                              bottom: 14,
-                              child: Text(
-                                name.isEmpty ? '-' : name,
-                                textAlign: TextAlign.center,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: 0.2,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-                        color: Colors.black.withValues(alpha: 0.28),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            _CardRow(
-                              label: 'Forma Numarası',
-                              value: number.isEmpty ? '-' : number,
-                            ),
-                            _CardRow(
-                              label: 'Doğum Tarihi',
-                              value: birthDate.isEmpty
-                                  ? '-'
-                                  : (age == null ? birthDate : '$birthDate ($age)'),
-                            ),
-                            _CardRow(
-                              label: 'Ana / Alt Mevki',
-                              value: [
-                                if (mainPos.isNotEmpty) mainPos,
-                                if (subPos.isNotEmpty && subPos != mainPos) subPos,
-                              ].isEmpty
-                                  ? '-'
-                                  : [
-                                      if (mainPos.isNotEmpty) mainPos,
-                                      if (subPos.isNotEmpty && subPos != mainPos) subPos,
-                                    ].join(' • '),
-                            ),
-                            _CardRow(
-                              label: 'Kullandığı Ayak',
-                              value: preferredFoot.isEmpty ? '-' : preferredFoot,
-                            ),
-                            const SizedBox(height: 10),
-                            TextButton(
-                              onPressed: () => Navigator.of(context).pop(),
-                              child: const Text(
-                                'Kapat',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              final number =
+                  (rosterPlayer.number ?? profile?.number ?? '').toString().trim();
+              final initialSeasonId = (_selectedTournamentId ?? widget.tournamentId)
+                  .toString()
+                  .trim();
+
+              return PlayerCard(
+                playerPhone: phone.isEmpty ? rosterPlayer.id : phone,
+                name: resolvedName,
+                number: number,
+                photoUrl: resolvedPhotoUrl,
+                position: displayPos(),
+                birthDate: resolvedBirthDate,
+                height: profile?.height ?? rosterPlayer.height,
+                weight: profile?.weight ?? rosterPlayer.weight,
+                seasons: _teamTournaments,
+                initialSeasonId: initialSeasonId,
               );
             },
           ),
@@ -1303,778 +1205,6 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     }
   }
 
-  Future<void> _openBulkUpload() async {
-    final tournamentId = await _ensureSelectedTournament();
-    if (tournamentId == null || !mounted) return;
-
-    final leagueId = tournamentId.trim();
-    if (leagueId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Turnuva bilgisi bulunamadı.')),
-      );
-      return;
-    }
-
-    await showSquadBulkUploadDialog(
-      context: context,
-      approvalService: _approvalService,
-      leagueId: leagueId,
-      teamId: widget.teamId,
-      teamName: widget.teamName,
-    );
-    return;
-
-    bool busy = false;
-    String? pickedFileName;
-    List<Map<String, dynamic>> parsed = const [];
-    int skippedEmpty = 0;
-    int skippedShort = 0;
-    int skippedNoName = 0;
-
-    await showDialog<void>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          Future<void> downloadTemplate() async {
-            setDialogState(() => busy = true);
-            try {
-              final excel = Excel.createExcel();
-              final sheet = excel['Sheet1'];
-              sheet.appendRow([
-                TextCellValue('Forma No'),
-                TextCellValue('Futbolcu Adı'),
-                TextCellValue('Mevki'),
-                TextCellValue('Doğum Tarihi'),
-                TextCellValue('Kullandığı Ayak'),
-              ]);
-              final bytes = excel.encode();
-              if (bytes == null) throw Exception('Şablon üretilemedi.');
-
-              final dir = await getTemporaryDirectory();
-              final file = File('${dir.path}/futbolcu_sablonu.xlsx');
-              await file.writeAsBytes(bytes, flush: true);
-              await Share.shareXFiles([
-                XFile(file.path),
-              ], text: 'Futbolcu Excel Şablonu');
-            } catch (e) {
-              if (!context.mounted) return;
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text('Hata: $e')));
-            } finally {
-              setDialogState(() => busy = false);
-            }
-          }
-
-          String normalizeHeader(String s) {
-            final cleaned = s
-                .replaceAll('\u00A0', ' ')
-                .replaceAll('\u0000', '')
-                .replaceAll('İ', 'i')
-                .replaceAll('I', 'ı')
-                .trim()
-                .toLowerCase();
-            return cleaned.replaceAll(RegExp(r'\s+'), ' ');
-          }
-
-          int? findIndex(
-            Map<String, int> headerToIndex,
-            List<String> variants,
-          ) {
-            for (final v in variants) {
-              final i = headerToIndex[normalizeHeader(v)];
-              if (i != null) return i;
-            }
-            return null;
-          }
-
-          String? birthDateFrom(dynamic value) {
-            if (value == null) return null;
-            if (value is DateTime) {
-              final dd = value.day.toString().padLeft(2, '0');
-              final mm = value.month.toString().padLeft(2, '0');
-              final yyyy = value.year.toString().padLeft(4, '0');
-              return '$dd/$mm/$yyyy';
-            }
-            if (value is num) {
-              final year = value.toInt();
-              if (year >= 1900 && year <= 2100) {
-                return '01/01/${year.toString().padLeft(4, '0')}';
-              }
-            }
-            final s = value.toString().replaceAll('\u0000', '').trim();
-            if (s.isEmpty) return null;
-            final m = RegExp(
-              r'^(\\d{1,2})[./-](\\d{1,2})[./-](\\d{4})$',
-            ).firstMatch(s);
-            if (m != null) {
-              final dd = m.group(1)!.padLeft(2, '0');
-              final mm = m.group(2)!.padLeft(2, '0');
-              final yyyy = m.group(3)!.padLeft(4, '0');
-              return '$dd/$mm/$yyyy';
-            }
-            final year = int.tryParse(s);
-            if (year != null && year >= 1900 && year <= 2100) {
-              return '01/01/${year.toString().padLeft(4, '0')}';
-            }
-            final yr = int.tryParse(
-              RegExp(r'(19\\d{2}|20\\d{2}|2100)').firstMatch(s)?.group(0) ?? '',
-            );
-            if (yr != null && yr >= 1900 && yr <= 2100) {
-              return '01/01/${yr.toString().padLeft(4, '0')}';
-            }
-            return null;
-          }
-
-          int? yearFromBirthDate(String? birthDate) {
-            if (birthDate == null) return null;
-            final m = RegExp(r'(\\d{4})$').firstMatch(birthDate);
-            final y = m == null ? null : int.tryParse(m.group(1)!);
-            if (y == null) return null;
-            if (y < 1900 || y > 2100) return null;
-            return y;
-          }
-
-          String cellStr(Data? cell) {
-            final v = cell?.value;
-            if (v == null) return '';
-            return v.toString().trim();
-          }
-
-          String dynStr(dynamic v) =>
-              (v ?? '').toString().replaceAll('\u0000', '').trim();
-
-          Future<void> pickAndParse() async {
-            setDialogState(() => busy = true);
-            try {
-              skippedEmpty = 0;
-              skippedShort = 0;
-              skippedNoName = 0;
-              final result = await FilePicker.platform.pickFiles(
-                type: FileType.custom,
-                allowedExtensions: ['xlsx', 'xls', 'csv', 'numbers'],
-                withData: true,
-              );
-              if (result == null || result.files.isEmpty) return;
-              final file = result.files.first;
-              pickedFileName = file.name;
-
-              final path = file.path;
-              final ext = (pickedFileName!.split('.').last).toLowerCase();
-              final bytes =
-                  file.bytes ??
-                  (path == null ? null : await File(path).readAsBytes());
-              if (bytes == null && ext != 'csv') {
-                throw Exception('Dosya okunamadı.');
-              }
-
-              List<Map<String, dynamic>> rows;
-              if (ext == 'csv') {
-                final content = file.bytes != null
-                    ? String.fromCharCodes(file.bytes!)
-                    : await File(path!).readAsString();
-                final lines = content
-                    .split(RegExp(r'\r?\n'))
-                    .where((l) => l.trim().isNotEmpty)
-                    .toList();
-                if (lines.isEmpty) throw Exception('CSV boş.');
-                final header = lines.first.split(',');
-                final headerToIndex = <String, int>{};
-                for (var i = 0; i < header.length; i++) {
-                  headerToIndex[normalizeHeader(header[i])] = i;
-                }
-                final idxNo = findIndex(headerToIndex, [
-                  'Forma No',
-                  'FormaNo',
-                  'No',
-                  'Forma',
-                  '#',
-                ]);
-                final idxName = findIndex(headerToIndex, [
-                  'Futbolcu Adı',
-                  'Futbolcu Adi',
-                  'Ad Soyad',
-                  'Adı Soyadı',
-                  'Oyuncu',
-                ]);
-                final idxPos = findIndex(headerToIndex, [
-                  'Mevki',
-                  'Pozisyon',
-                  'Posizyon',
-                ]);
-                final idxBirth = findIndex(headerToIndex, [
-                  'Doğum Yılı',
-                  'Dogum Yili',
-                  'Doğum Tarihi',
-                  'Dogum Tarihi',
-                  'Doğum',
-                  'Dogum',
-                  'Birth Year',
-                  'Year',
-                ]);
-                final idxFoot = findIndex(headerToIndex, [
-                  'Kullandığı Ayak',
-                  'Kullandigi Ayak',
-                  'Ayak',
-                ]);
-                if (idxName == null ||
-                    idxPos == null ||
-                    idxBirth == null ||
-                    idxFoot == null) {
-                  throw Exception('CSV sütunları şablonla uyuşmuyor.');
-                }
-                rows = [];
-                for (var i = 1; i < lines.length; i++) {
-                  final cols = lines[i].split(',');
-                  if (cols.isEmpty) {
-                    skippedEmpty++;
-                    continue;
-                  }
-                  if (cols.length < 2 || idxName >= cols.length) {
-                    skippedShort++;
-                    continue;
-                  }
-                  final name = cols[idxName].trim();
-                  if (name.isEmpty) {
-                    skippedNoName++;
-                    continue;
-                  }
-                  final number = (idxNo != null && idxNo < cols.length)
-                      ? cols[idxNo].trim()
-                      : '';
-                  final position = idxPos < cols.length
-                      ? cols[idxPos].trim()
-                      : '';
-                  final birthRaw = idxBirth < cols.length
-                      ? cols[idxBirth].trim()
-                      : '';
-                  final foot = idxFoot < cols.length
-                      ? cols[idxFoot].trim()
-                      : '';
-                  final birthDate = birthDateFrom(birthRaw);
-                  final birthYear = yearFromBirthDate(birthDate);
-                  rows.add({
-                    'name': name,
-                    'number': number.isEmpty ? null : number,
-                    'position': position.isEmpty ? null : position,
-                    'birthDate': birthDate,
-                    'birthYear': birthYear,
-                    'preferredFoot': foot.isEmpty ? null : foot,
-                  });
-                }
-              } else if (ext == 'xlsx') {
-                List<Map<String, dynamic>> parseWithExcelPackage() {
-                  final excel = Excel.decodeBytes(bytes!);
-                  final availableSheets = excel.tables.entries.toList();
-                  if (availableSheets.isEmpty) {
-                    throw Exception('Excel sayfası bulunamadı.');
-                  }
-                  Sheet sheetResolved = availableSheets.first.value;
-                  for (final e in availableSheets) {
-                    if (e.value.rows.isNotEmpty) {
-                      sheetResolved = e.value;
-                      break;
-                    }
-                  }
-                  if (sheetResolved.rows.isEmpty) throw Exception('Excel boş.');
-
-                  int headerRowIndex = -1;
-                  int? idxName;
-                  int? idxPos;
-                  int? idxBirth;
-                  int? idxFoot;
-                  int? idxNo;
-                  final scanLimit = min(sheetResolved.rows.length, 20);
-                  for (var r = 0; r < scanLimit; r++) {
-                    final headerRow = sheetResolved.rows[r];
-                    final headerToIndex = <String, int>{};
-                    for (var i = 0; i < headerRow.length; i++) {
-                      final text = cellStr(headerRow[i]);
-                      if (text.isEmpty) continue;
-                      headerToIndex[normalizeHeader(text)] = i;
-                    }
-                    final foundName = findIndex(headerToIndex, [
-                      'Futbolcu Adı',
-                      'Futbolcu Adi',
-                      'Ad Soyad',
-                      'Adı Soyadı',
-                      'Oyuncu',
-                    ]);
-                    final foundPos = findIndex(headerToIndex, [
-                      'Mevki',
-                      'Pozisyon',
-                      'Posizyon',
-                    ]);
-                    final foundBirth = findIndex(headerToIndex, [
-                      'Doğum Yılı',
-                      'Dogum Yili',
-                      'Doğum Tarihi',
-                      'Dogum Tarihi',
-                      'Doğum',
-                      'Dogum',
-                      'Birth Year',
-                      'Year',
-                    ]);
-                    final foundFoot = findIndex(headerToIndex, [
-                      'Kullandığı Ayak',
-                      'Kullandigi Ayak',
-                      'Ayak',
-                    ]);
-                    final foundNo = findIndex(headerToIndex, [
-                      'Forma No',
-                      'FormaNo',
-                      'No',
-                      'Forma',
-                      '#',
-                    ]);
-                    if (foundName != null &&
-                        foundPos != null &&
-                        foundBirth != null &&
-                        foundFoot != null) {
-                      headerRowIndex = r;
-                      idxName = foundName;
-                      idxPos = foundPos;
-                      idxBirth = foundBirth;
-                      idxFoot = foundFoot;
-                      idxNo = foundNo;
-                      break;
-                    }
-                  }
-                  if (headerRowIndex == -1 ||
-                      idxName == null ||
-                      idxPos == null ||
-                      idxBirth == null ||
-                      idxFoot == null) {
-                    throw Exception(
-                      'Sütun başlıkları bulunamadı. Lütfen şablonu kullanın.',
-                    );
-                  }
-
-                  final parsedRows = <Map<String, dynamic>>[];
-                  for (
-                    var r = headerRowIndex + 1;
-                    r < sheetResolved.rows.length;
-                    r++
-                  ) {
-                    final row = sheetResolved.rows[r];
-                    if (row.isEmpty) {
-                      skippedEmpty++;
-                      continue;
-                    }
-                    if (row.length < 2) {
-                      skippedShort++;
-                      continue;
-                    }
-                    final nameCell = row.length > idxName ? row[idxName] : null;
-                    final nameValue = nameCell?.value;
-                    if (nameValue == null ||
-                        nameValue.toString().trim().isEmpty) {
-                      skippedNoName++;
-                      continue;
-                    }
-                    final name = cellStr(nameCell);
-                    final number = (idxNo != null && row.length > idxNo)
-                        ? cellStr(row[idxNo])
-                        : '';
-                    final position = row.length > idxPos
-                        ? cellStr(row[idxPos])
-                        : '';
-                    final birthRaw = row.length > idxBirth
-                        ? row[idxBirth]?.value
-                        : null;
-                    final foot = row.length > idxFoot
-                        ? cellStr(row[idxFoot])
-                        : '';
-                    final birthDate = birthDateFrom(birthRaw);
-                    final birthYear = yearFromBirthDate(birthDate);
-                    parsedRows.add({
-                      'name': name,
-                      'number': number.isEmpty ? null : number,
-                      'position': position.isEmpty ? null : position,
-                      'birthDate': birthDate,
-                      'birthYear': birthYear,
-                      'preferredFoot': foot.isEmpty ? null : foot,
-                    });
-                  }
-                  return parsedRows;
-                }
-
-                rows = parseWithExcelPackage();
-              } else if (ext == 'xls') {
-                final decoder = SpreadsheetDecoder.decodeBytes(bytes!);
-                if (decoder.tables.isEmpty) {
-                  throw Exception('Excel sayfası bulunamadı.');
-                }
-                SpreadsheetTable table = decoder.tables.values.first;
-                for (final e in decoder.tables.entries) {
-                  if (e.value.rows.isNotEmpty) {
-                    table = e.value;
-                    break;
-                  }
-                }
-                final rowsRaw = table.rows;
-                if (rowsRaw.isEmpty) throw Exception('Excel boş.');
-
-                int headerRowIndex = -1;
-                int? idxName;
-                int? idxPos;
-                int? idxBirth;
-                int? idxFoot;
-                int? idxNo;
-                final scanLimit = min(rowsRaw.length, 20);
-                for (var r = 0; r < scanLimit; r++) {
-                  final headerRow = rowsRaw[r];
-                  final headerToIndex = <String, int>{};
-                  for (var i = 0; i < headerRow.length; i++) {
-                    final text = dynStr(headerRow[i]);
-                    if (text.isEmpty) continue;
-                    headerToIndex[normalizeHeader(text)] = i;
-                  }
-                  final foundName = findIndex(headerToIndex, [
-                    'Futbolcu Adı',
-                    'Futbolcu Adi',
-                    'Ad Soyad',
-                    'Adı Soyadı',
-                    'Oyuncu',
-                  ]);
-                  final foundPos = findIndex(headerToIndex, [
-                    'Mevki',
-                    'Pozisyon',
-                    'Posizyon',
-                  ]);
-                  final foundBirth = findIndex(headerToIndex, [
-                    'Doğum Yılı',
-                    'Dogum Yili',
-                    'Doğum Tarihi',
-                    'Dogum Tarihi',
-                    'Doğum',
-                    'Dogum',
-                    'Birth Year',
-                    'Year',
-                  ]);
-                  final foundFoot = findIndex(headerToIndex, [
-                    'Kullandığı Ayak',
-                    'Kullandigi Ayak',
-                    'Ayak',
-                  ]);
-                  final foundNo = findIndex(headerToIndex, [
-                    'Forma No',
-                    'FormaNo',
-                    'No',
-                    'Forma',
-                    '#',
-                  ]);
-                  if (foundName != null &&
-                      foundPos != null &&
-                      foundBirth != null &&
-                      foundFoot != null) {
-                    headerRowIndex = r;
-                    idxName = foundName;
-                    idxPos = foundPos;
-                    idxBirth = foundBirth;
-                    idxFoot = foundFoot;
-                    idxNo = foundNo;
-                    break;
-                  }
-                }
-                if (headerRowIndex == -1 ||
-                    idxName == null ||
-                    idxPos == null ||
-                    idxBirth == null ||
-                    idxFoot == null) {
-                  throw Exception(
-                    'Sütun başlıkları bulunamadı. Lütfen şablonu kullanın.',
-                  );
-                }
-
-                rows = [];
-                for (var r = headerRowIndex + 1; r < rowsRaw.length; r++) {
-                  final row = rowsRaw[r];
-                  if (row.isEmpty) {
-                    skippedEmpty++;
-                    continue;
-                  }
-                  if (row.length < 2) {
-                    skippedShort++;
-                    continue;
-                  }
-                  final rawName = row.length > idxName ? row[idxName] : null;
-                  final name = dynStr(rawName);
-                  if (rawName == null || name.isEmpty) {
-                    skippedNoName++;
-                    continue;
-                  }
-                  final number = (idxNo != null && row.length > idxNo)
-                      ? dynStr(row[idxNo])
-                      : '';
-                  final position = row.length > idxPos
-                      ? dynStr(row[idxPos])
-                      : '';
-                  final birthRaw = row.length > idxBirth ? row[idxBirth] : null;
-                  final foot = row.length > idxFoot ? dynStr(row[idxFoot]) : '';
-                  final birthDate = birthDateFrom(birthRaw);
-                  final birthYear = yearFromBirthDate(birthDate);
-                  rows.add({
-                    'name': name,
-                    'number': number.isEmpty ? null : number,
-                    'position': position.isEmpty ? null : position,
-                    'birthDate': birthDate,
-                    'birthYear': birthYear,
-                    'preferredFoot': foot.isEmpty ? null : foot,
-                  });
-                }
-              } else if (ext == 'numbers') {
-                if (bytes != null &&
-                    bytes.length >= 2 &&
-                    bytes[0] == 0x50 &&
-                    bytes[1] == 0x4B) {
-                  final archive = ZipDecoder().decodeBytes(bytes);
-                  ArchiveFile? best;
-                  int bestScore = -1;
-                  for (final f in archive) {
-                    if (!f.isFile) continue;
-                    final name = f.name.toLowerCase();
-                    if (!name.endsWith('.csv')) continue;
-                    var score = 0;
-                    if (name.contains('preview')) score += 3;
-                    if (name.contains('export')) score += 2;
-                    if (name.contains('sheet')) score += 1;
-                    if (score > bestScore) {
-                      best = f;
-                      bestScore = score;
-                    }
-                  }
-                  if (best == null) {
-                    throw Exception(
-                      'Numbers dosyasında CSV bulunamadı. CSV olarak dışa aktarın.',
-                    );
-                  }
-                  final content = best.content;
-                  if (content is! List<int>) throw Exception('CSV okunamadı.');
-                  var decoded = utf8.decode(content, allowMalformed: true);
-                  if (decoded.isNotEmpty && decoded.codeUnitAt(0) == 0xFEFF) {
-                    decoded = decoded.substring(1);
-                  }
-                  final lines = decoded
-                      .split(RegExp(r'\r?\n'))
-                      .where((l) => l.trim().isNotEmpty)
-                      .toList();
-                  if (lines.isEmpty) throw Exception('CSV boş.');
-                  final header = lines.first.split(',');
-                  final headerToIndex = <String, int>{};
-                  for (var i = 0; i < header.length; i++) {
-                    headerToIndex[normalizeHeader(header[i])] = i;
-                  }
-                  final idxNo = findIndex(headerToIndex, [
-                    'Forma No',
-                    'FormaNo',
-                    'No',
-                    'Forma',
-                    '#',
-                  ]);
-                  final idxName = findIndex(headerToIndex, [
-                    'Futbolcu Adı',
-                    'Futbolcu Adi',
-                    'Ad Soyad',
-                    'Adı Soyadı',
-                    'Oyuncu',
-                  ]);
-                  final idxPos = findIndex(headerToIndex, [
-                    'Mevki',
-                    'Pozisyon',
-                    'Posizyon',
-                  ]);
-                  final idxBirth = findIndex(headerToIndex, [
-                    'Doğum Yılı',
-                    'Dogum Yili',
-                    'Doğum Tarihi',
-                    'Dogum Tarihi',
-                    'Doğum',
-                    'Dogum',
-                    'Birth Year',
-                    'Year',
-                  ]);
-                  final idxFoot = findIndex(headerToIndex, [
-                    'Kullandığı Ayak',
-                    'Kullandigi Ayak',
-                    'Ayak',
-                  ]);
-                  if (idxName == null ||
-                      idxPos == null ||
-                      idxBirth == null ||
-                      idxFoot == null) {
-                    throw Exception('CSV sütunları şablonla uyuşmuyor.');
-                  }
-                  rows = [];
-                  for (var i = 1; i < lines.length; i++) {
-                    final cols = lines[i].split(',');
-                    if (cols.isEmpty) {
-                      skippedEmpty++;
-                      continue;
-                    }
-                    if (cols.length < 2 || idxName >= cols.length) {
-                      skippedShort++;
-                      continue;
-                    }
-                    final name = cols[idxName].trim();
-                    if (name.isEmpty) {
-                      skippedNoName++;
-                      continue;
-                    }
-                    final number = (idxNo != null && idxNo < cols.length)
-                        ? cols[idxNo].trim()
-                        : '';
-                    final position = idxPos < cols.length
-                        ? cols[idxPos].trim()
-                        : '';
-                    final birthRaw = idxBirth < cols.length
-                        ? cols[idxBirth].trim()
-                        : '';
-                    final foot = idxFoot < cols.length
-                        ? cols[idxFoot].trim()
-                        : '';
-                    final birthDate = birthDateFrom(birthRaw);
-                    final birthYear = yearFromBirthDate(birthDate);
-                    rows.add({
-                      'name': name,
-                      'number': number.isEmpty ? null : number,
-                      'position': position.isEmpty ? null : position,
-                      'birthDate': birthDate,
-                      'birthYear': birthYear,
-                      'preferredFoot': foot.isEmpty ? null : foot,
-                    });
-                  }
-                } else {
-                  throw Exception(
-                    'Numbers formatı için lütfen dosyayı CSV’ye dışa aktarın.',
-                  );
-                }
-              } else {
-                throw Exception('Desteklenmeyen dosya türü.');
-              }
-
-              setDialogState(() => parsed = rows);
-            } catch (e) {
-              if (!context.mounted) return;
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text('Hata: $e')));
-            } finally {
-              setDialogState(() => busy = false);
-            }
-          }
-
-          Future<void> submitForApproval() async {
-            if (parsed.isEmpty) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Yüklenecek kayıt bulunamadı.')),
-              );
-              return;
-            }
-            setDialogState(() => busy = true);
-            var shouldClose = false;
-            try {
-              final actionId =
-                  'squad_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(10000)}';
-              await _approvalService.submitPendingAction(
-                PendingAction(
-                  actionId: actionId,
-                  actionType: 'squad_upload',
-                  leagueId: leagueId,
-                  teamId: widget.teamId,
-                  submittedBy: 'admin',
-                  payload: {
-                    'teamName': widget.teamName,
-                    'tournamentId': leagueId,
-                    'fileName': pickedFileName,
-                    'players': parsed,
-                  },
-                ),
-              );
-              shouldClose = true;
-              if (!context.mounted) return;
-              Navigator.pop(context);
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (!mounted) return;
-                final skipped = skippedEmpty + skippedShort + skippedNoName;
-                ScaffoldMessenger.of(this.context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      'Onaya gönderildi: ${parsed.length} oyuncu • Atlanan satır: $skipped',
-                    ),
-                  ),
-                );
-              });
-            } catch (e) {
-              if (!context.mounted) return;
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text('Hata: $e')));
-            } finally {
-              if (!shouldClose && context.mounted) {
-                setDialogState(() => busy = false);
-              }
-            }
-          }
-
-          return AlertDialog(
-            title: Text('Toplu Kadro Yükle • ${widget.teamName}'),
-            content: SizedBox(
-              width: 420,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  FilledButton.tonalIcon(
-                    onPressed: busy ? null : downloadTemplate,
-                    icon: const Icon(Icons.download_rounded),
-                    label: const Text('Örnek Şablonunu İndir'),
-                  ),
-                  const SizedBox(height: 10),
-                  FilledButton.tonalIcon(
-                    onPressed: busy ? null : pickAndParse,
-                    icon: const Icon(Icons.upload_file_rounded),
-                    label: const Text('Dosya Yükle (.xls/.xlsx/.csv/.numbers)'),
-                  ),
-                  const SizedBox(height: 12),
-                  if (pickedFileName != null)
-                    Text(
-                      'Dosya: $pickedFileName',
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                  if (parsed.isNotEmpty)
-                    Text(
-                      'Okunan kayıt: ${parsed.length}',
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                  if (pickedFileName != null)
-                    Text(
-                      'Atlanan satır: ${skippedEmpty + skippedShort + skippedNoName}',
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                  if (busy) ...[
-                    const SizedBox(height: 12),
-                    const LinearProgressIndicator(),
-                  ],
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: busy ? null : () => Navigator.pop(context),
-                child: const Text('Kapat'),
-              ),
-              FilledButton(
-                onPressed: busy ? null : submitForApproval,
-                child: const Text('Onaya Gönder'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -2096,7 +1226,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                 final tid = effectiveTournamentId;
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   if (!mounted) return;
-                  if (tid == null || tid.trim().isEmpty) return;
+                  if (tid.trim().isEmpty) return;
                   if (_playersStreamTournamentId == tid && _playersStream != null) return;
                   setState(() => _setPlayersStreamForTournament(tid));
                 });
@@ -2107,11 +1237,9 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                 );
               }();
     final canAdd = effectiveTournamentId != null && (isAdmin || _isTeamManager);
-    final headerTournamentName = _tournamentNameById(
+    _tournamentNameById(
       effectiveTournamentId ?? widgetTournamentId,
     );
-    final headerTeamName =
-        titleTeam.isEmpty ? widget.teamName.trim() : titleTeam;
 
     return Scaffold(
       appBar: AppBar(
@@ -2657,12 +1785,6 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
     return digits;
   }
 
-  int? _birthYearFromDate(String? birthDate) {
-    if (birthDate == null) return null;
-    final m = RegExp(r'(\d{4})$').firstMatch(birthDate.trim());
-    return m == null ? null : int.tryParse(m.group(1)!);
-  }
-
   bool _isValidBirthDate(String s) {
     final v = s.trim();
     if (v.isEmpty) return true;
@@ -2673,69 +1795,6 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
     if (raw.isEmpty) return true;
     if (!RegExp(r'^\d{10}$').hasMatch(raw)) return false;
     return true;
-  }
-
-  Future<PlayerModel?> _selectExistingPlayer() async {
-    if (widget.standalone) return null;
-    final teamId = (widget.teamId ?? '').trim();
-    final tournamentId = (widget.tournamentId ?? '').trim();
-    if (teamId.isEmpty || tournamentId.isEmpty) return null;
-    return showModalBottomSheet<PlayerModel>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (context) => _PlayerPickerSheet(
-        teamId: teamId,
-        tournamentId: tournamentId,
-        normalizeUrl: widget.normalizeUrl,
-      ),
-    );
-  }
-
-  void _applySelectedPlayer(PlayerModel p) {
-    _activePlayerId = p.id;
-    _identityNoController.text = (p.nationalId ?? '').toString();
-    final full = p.name.trim().replaceAll(RegExp(r'\s+'), ' ');
-    final parts = full.isEmpty ? const <String>[] : full.split(' ');
-    _nameController.text = parts.isEmpty ? '' : parts.first;
-    _surnameController.text = parts.length <= 1 ? '' : parts.sublist(1).join(' ');
-    _numberController.text = (p.number ?? '').toString();
-    _birthDateController.text = _birthDateToDisplay(p.birthDate);
-    _mainPosition = _deriveMainPosition(p.mainPosition, p.position);
-    _subPosition = _deriveSubPosition(_mainPosition, p.position);
-    final pf = (p.preferredFoot ?? '').trim();
-    _preferredFoot = _feet.contains(pf) ? pf : '';
-    _heightController.text = (p.height ?? '').toString();
-    _weightController.text = (p.weight ?? '').toString();
-    final r = p.role.trim();
-    _role = _roles.contains(r) ? r : 'Futbolcu';
-    final phoneRaw = (p.phone ?? '').toString();
-    if (phoneRaw.startsWith('no_phone_')) {
-      _implicitPhoneKey = phoneRaw;
-      _phoneController.text = '';
-    } else {
-      _implicitPhoneKey = null;
-      _phoneController.text = PhoneMaskFormatter.formatFromRaw(phoneRaw);
-    }
-    _existingPhotoUrl = (p.photoUrl ?? '').trim().isEmpty ? null : p.photoUrl;
-    _pickedPhoto = null;
-    _removePhoto = false;
-
-    if (_managerExists && _isManagerRole(_role)) {
-      _role = 'Futbolcu';
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Bu takımda zaten takım sorumlusu var. Rol "Futbolcu" olarak ayarlandı.',
-            ),
-          ),
-        );
-      });
-    }
-
-    WidgetsBinding.instance.addPostFrameCallback((_) => _hydrateExistingPhotoFromIdentity());
   }
 
   String _generateNoPhoneKey() {

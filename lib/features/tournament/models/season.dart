@@ -19,7 +19,7 @@ class Season {
     this.instagramUrl,
     this.youtubeUrl,
     this.matchPeriodDuration = 25,
-    this.groupCount = 1,
+    this.numberOfPlayerChanges = 3,
   });
 
   final String id;
@@ -41,7 +41,7 @@ class Season {
   final String? instagramUrl;
   final String? youtubeUrl;
   final int matchPeriodDuration;
-  final int groupCount;
+  final int numberOfPlayerChanges;
 
   factory Season.fromMap(Map<String, dynamic> map) {
     dynamic v(String camel, String snake) => map[camel] ?? map[snake];
@@ -91,7 +91,7 @@ class Season {
         v('numberOfGroups', 'number_of_groups'),
         fallback: 1,
       ),
-      groupCount: intFrom(v('groupCount', 'group_count'), fallback: 1),
+      numberOfPlayerChanges: intFrom(v('numberOfPlayerChanges', 'number_of_player_changes'), fallback: 1),
       teamsPerGroup:
           intFrom(v('teamsPerGroup', 'teams_per_group'), fallback: 4),
       isActive: boolFrom(v('isActive', 'is_active'), fallback: true),
@@ -138,7 +138,7 @@ class Season {
       'instagram_url': instagramUrl,
       'youtube_url': youtubeUrl,
       'match_period_duration': matchPeriodDuration,
-      'group_count': groupCount,
+      'number_of_player_changes': numberOfPlayerChanges,
       'league_id': leagueId.trim().isEmpty ? null : leagueId.trim(),
     };
   }
@@ -172,7 +172,7 @@ class Season {
         'instagramUrl': instagramUrl,
         'matchPeriodDuration': matchPeriodDuration,
         'numberOfGroups': numberOfGroups,
-        'groupCount': groupCount,
+        'numberOfPlayerChanges': numberOfPlayerChanges,
         'teamsPerGroup': teamsPerGroup,
       };
     }

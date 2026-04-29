@@ -26,19 +26,44 @@ class Team {
   final DateTime? updatedAt;
 
   factory Team.fromMap(Map<String, dynamic> map) {
-    dynamic v(String camel, String snake) => map[camel] ?? map[snake];
+    final nestedTeamRaw = map['team'] ?? map['teams'];
+    final nestedGroupRaw = map['group'] ?? map['groups'];
+    final teamMap = nestedTeamRaw is Map
+        ? Map<String, dynamic>.from(nestedTeamRaw as Map)
+        : map;
+    final groupMap = nestedGroupRaw is Map
+        ? Map<String, dynamic>.from(nestedGroupRaw as Map)
+        : const <String, dynamic>{};
+
+    dynamic v(String camel, String snake) =>
+        teamMap[camel] ?? teamMap[snake] ?? map[camel] ?? map[snake];
     String? readNullableString(dynamic value) {
       final s = (value ?? '').toString().trim();
       return s.isEmpty ? null : s;
     }
 
+    final seasonId = readNullableString(map['seasonId'] ?? map['season_id']) ??
+        readNullableString(teamMap['seasonId'] ?? teamMap['season_id']) ??
+        readNullableString(map['leagueId'] ?? map['league_id']) ??
+        readNullableString(teamMap['leagueId'] ?? teamMap['league_id']);
+
+    final groupId = readNullableString(map['groupId'] ?? map['group_id']) ??
+        readNullableString(teamMap['groupId'] ?? teamMap['group_id']);
+
+    final groupNameFromGroup = readNullableString(
+      groupMap['name'] ?? groupMap['group_name'] ?? groupMap['groupName'],
+    );
+    final groupName = readNullableString(map['groupName'] ?? map['group_name']) ??
+        readNullableString(teamMap['groupName'] ?? teamMap['group_name']) ??
+        groupNameFromGroup;
+
     return Team(
       id: (v('id', 'id') as String?) ?? '',
       name: (v('name', 'name') as String?) ?? '',
       logoUrl: (v('logoUrl', 'logo_url') ?? v('logo', 'logo')) as String? ?? '',
-      seasonId: readNullableString(v('seasonId', 'season_id')),
-      groupId: readNullableString(v('groupId', 'group_id')),
-      groupName: readNullableString(v('groupName', 'group_name')),
+      seasonId: seasonId,
+      groupId: groupId,
+      groupName: groupName,
       colors: v('colors', 'colors') as Map<String, dynamic>?,
       createdAt: _readDate(v('createdAt', 'created_at')),
       updatedAt: _readDate(v('updatedAt', 'updated_at')),

@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:football_tournament/features/team/screens/admin_manage_teams_screen.dart';
 import '../features/tournament/screens/admin_manage_leagues_screen.dart';
+import '../features/match/screens/admin_fixture_entry_screen.dart';
 import '../features/news/screens/admin_manage_news_screen.dart';
 import 'admin_data_tools_screen.dart';
 import 'admin_pending_actions_screen.dart';
-import '../features/tournament/screens/admin_pitch_management_screen.dart';
+import '../features/tournament/screens/admin_penalty_management_screen.dart';
+import 'package:football_tournament/features/tournament/screens/admin_pitch_management_screen.dart';
 import '../features/auth/screens/admin_otp_monitor_screen.dart';
 
 class AdminPanelWidget extends StatelessWidget {
@@ -23,6 +26,42 @@ class AdminPanelWidget extends StatelessWidget {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
                 builder: (_) => const AdminManageLeaguesScreen(),
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 12),
+        _PanelButonu(
+          baslik: 'Fikstür Planlama',
+          ikon: Icons.calendar_month_outlined,
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const AdminFixtureEntryScreen(),
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 12),
+        _PanelButonu(
+          baslik: 'Ceza Yönetimi',
+          ikon: Icons.gavel_outlined,
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const AdminPenaltyManagementScreen(),
+              ),
+            );
+          },
+        ),
+                const SizedBox(height: 12),
+        _PanelButonu(
+          baslik: 'Takım Yönetimi',
+          ikon: Icons.gavel_outlined,
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const AdminManageTeamsScreen(),
               ),
             );
           },

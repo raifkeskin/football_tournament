@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 import '../../tournament/models/league.dart';
 import '../../tournament/models/league_extras.dart';
 import '../models/match.dart';
+import '../../tournament/models/season.dart';
 import '../../team/models/team.dart';
 import '../../../core/services/app_session.dart';
+import '../../../core/config/app_config.dart';
 import '../../tournament/services/interfaces/i_league_service.dart';
 import '../services/interfaces/i_match_service.dart';
 import '../../team/services/interfaces/i_team_service.dart';
 import '../../../core/services/service_locator.dart';
+
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AdminFixtureEntryScreen extends StatefulWidget {
   const AdminFixtureEntryScreen({
@@ -29,6 +33,7 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
   final IMatchService _matchService = ServiceLocator.matchService;
   final ITeamService _teamService = ServiceLocator.teamService;
   String? _selectedLeagueId;
+  String? _selectedSeasonId;
   String? _selectedGroupId;
   String? _homeTeamId;
   String? _awayTeamId;
@@ -48,12 +53,31 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
     }
   }
 
+  Stream<List<Season>> _watchSeasonsForLeague(String leagueId) {
+    final id = leagueId.trim();
+    if (id.isEmpty) return const Stream<List<Season>>.empty();
+    if (AppConfig.activeDatabase != DatabaseType.supabase) {
+      return const Stream<List<Season>>.empty();
+    }
+    return Supabase.instance.client
+        .from('seasons')
+        .stream(primaryKey: ['id'])
+        .eq('league_id', id)
+        .order('start_date', ascending: false)
+        .map(
+          (rows) => rows
+              .cast<Map<String, dynamic>>()
+              .map(Season.fromJson)
+              .toList(),
+        );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isAdmin = AppSession.of(context).value.isAdmin;
     if (!isAdmin) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Fikstür Planlama')),
+        appBar: AppBar(title: const Text('Fikstür Planlama'), centerTitle: true),
         body: const Center(
           child: Text(
             'Bu sayfaya erişim yetkiniz yok.',
@@ -80,7 +104,7 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
     );
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Fikstür Planlama')),
+      appBar: AppBar(title: const Text('Fikstür Planlama'), centerTitle: true),
       backgroundColor: const Color(0xFF0F172A),
       body: Theme(
         data: themed,
@@ -121,17 +145,80 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                           ? null
                           : (val) => setState(() {
                                 _selectedLeagueId = val;
+                                _selectedSeasonId = null;
                                 _selectedGroupId = null;
+                                _homeTeamId = null;
+                                _awayTeamId = null;
                               }),
                     );
                   },
                 ),
                 const SizedBox(height: 16),
 
+                // 2. Sezon
+                if (AppConfig.activeDatabase == DatabaseType.supabase &&
+                    _selectedLeagueId != null)
+                  StreamBuilder<List<Season>>(
+                    stream: _watchSeasonsForLeague(_selectedLeagueId!),
+                    builder: (context, snapshot) {
+                      if (!snapshot.hasData) return const SizedBox();
+                      final seasons = snapshot.data ?? const <Season>[];
+                      if (seasons.isNotEmpty) {
+                        final hasSelected = _selectedSeasonId != null &&
+                            seasons.any((s) => s.id == _selectedSeasonId);
+                        if (!hasSelected) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (!mounted) return;
+                            setState(() {
+                              _selectedSeasonId = seasons.first.id;
+                              _selectedGroupId = null;
+                              _homeTeamId = null;
+                              _awayTeamId = null;
+                            });
+                          });
+                        }
+                      }
+                      return DropdownButtonFormField<String>(
+                        initialValue: _selectedSeasonId,
+                        decoration: const InputDecoration(labelText: 'Sezon'),
+                        dropdownColor: const Color(0xFF1E293B),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        items: seasons
+                            .map(
+                              (s) => DropdownMenuItem(
+                                value: s.id,
+                                child: Text(
+                                  s.name,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (val) => setState(() {
+                          _selectedSeasonId = val;
+                          _selectedGroupId = null;
+                          _homeTeamId = null;
+                          _awayTeamId = null;
+                        }),
+                        menuMaxHeight: 360,
+                      );
+                    },
+                  ),
+                if (AppConfig.activeDatabase == DatabaseType.supabase &&
+                    _selectedLeagueId != null)
+                  const SizedBox(height: 16),
+
                 // 2. Grup
-                if (_selectedLeagueId != null)
+                if (AppConfig.activeDatabase == DatabaseType.supabase &&
+                    _selectedSeasonId != null)
                   StreamBuilder<List<GroupModel>>(
-                    stream: _leagueService.watchGroups(_selectedLeagueId!),
+                    stream: _leagueService.watchGroups(_selectedSeasonId!),
                     builder: (context, snapshot) {
                       if (!snapshot.hasData) return const SizedBox();
                       final groups = [...snapshot.data!]
@@ -171,7 +258,9 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                       );
                     },
                   ),
-                const SizedBox(height: 16),
+                if (AppConfig.activeDatabase == DatabaseType.supabase &&
+                    _selectedSeasonId != null)
+                  const SizedBox(height: 16),
 
                 // 3. Takımlar
                 if (_selectedGroupId != null)
@@ -348,7 +437,7 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                     foregroundColor: Colors.white,
                     textStyle: const TextStyle(fontWeight: FontWeight.bold),
                   ),
-                  child: const Text('Maçı Kaydet / Planla'),
+                  child: const Text('MAÇI KAYDET / PLANLA'),
                 ),
               ],
             ),
@@ -409,14 +498,7 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
       if (home == null || away == null) {
         throw Exception('Takım bilgisi alınamadı.');
       }
-
-      String logoFromTeam(Team team) {
-        final raw = team.logoUrl.trim();
-        if (raw.isEmpty) return '';
-        if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
-        return 'https://$raw';
-      }
-
+      
       final match = MatchModel(
         id: '',
         leagueId: _selectedLeagueId!,

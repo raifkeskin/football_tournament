@@ -247,7 +247,6 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
 
   Future<void> _turnuvaEkle() async {
     final leagueName = _leagueNameController.text.trim();
-    final subtitle = _subtitleController.text.trim();
     final managerFullName = _managerFullNameController.text.trim();
     final managerPhone = _managerPhoneController.text.trim();
     final city = _cityController.text.trim();
@@ -560,7 +559,7 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
                     child: TextField(
                       controller: _teamsPerGroupController,
                       decoration: const InputDecoration(
-                        labelText: 'Grup Başı Takım',
+                        labelText: 'Toplam Takım Sayısı',
                         border: OutlineInputBorder(),
                       ),
                       keyboardType: TextInputType.number,

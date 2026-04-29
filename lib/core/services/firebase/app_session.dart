@@ -1,11 +1,8 @@
 import 'dart:async';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb; // Supabase çakışmasını önlemek için alias
-
 import '../../utils/admin_backdoor_utils.dart';
 
 @immutable
@@ -50,7 +47,6 @@ class AppSessionState {
 
 class AppSessionController extends ValueNotifier<AppSessionState> {
   final sb.SupabaseClient _supabase;
-  final FirebaseAuth _auth; // Firebase kodlarını silmiyoruz
   final FirebaseFirestore _firestore; // Admin kontrolü için şimdilik Firestore kalıyor
 
   StreamSubscription<sb.AuthState>? _sub;
@@ -61,7 +57,6 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
     FirebaseAuth? auth,
     FirebaseFirestore? firestore,
   })  : _supabase = supabase ?? sb.Supabase.instance.client,
-        _auth = auth ?? FirebaseAuth.instance,
         _firestore = firestore ?? FirebaseFirestore.instance,
         super(
           AppSessionState(

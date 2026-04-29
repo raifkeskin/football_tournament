@@ -24,6 +24,7 @@ void main() async {
   if (AppConfig.activeDatabase == DatabaseType.supabase) {
     try {
       final res = await Supabase.instance.client.from('pitches').select('id').limit(1);
+      // ignore: unnecessary_type_check
       final n = (res is List) ? res.length : 0;
       debugPrint('Supabase bağlantı kontrolü OK (pitches örnek kayıt: $n)');
     } catch (e) {

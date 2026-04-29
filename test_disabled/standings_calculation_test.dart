@@ -1,21 +1,17 @@
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:football_tournament/core/services/database_service.dart';
 
 void main() {
   group('Standings Calculation Tests', () {
     late FakeFirebaseFirestore firestore;
-    late DatabaseService service;
 
     const testTournamentId = 'tour123';
     const testGroupId = 'grp123';
     const team1Id = 'team1';
     const team2Id = 'team2';
-    const team3Id = 'team3';
 
     setUp(() async {
       firestore = FakeFirebaseFirestore();
-      service = DatabaseService(firestore: firestore);
     });
 
     test('Teams should initialize with zero standings', () async {
@@ -37,14 +33,11 @@ void main() {
           .collection('teams')
           .where('groupId', isEqualTo: testGroupId)
           .get();
-
-      print('\n✅ Teams Query Result:');
-      print('Teams count: ${teamsSnapshot.docs.length}');
       expect(teamsSnapshot.docs.length, 2);
 
       final standings = <String, Map<String, dynamic>>{};
       for (final teamDoc in teamsSnapshot.docs) {
-        final teamData = teamDoc.data();
+        teamDoc.data();
         final teamId = teamDoc.id;
         standings[teamId] = {
           'P': 0,

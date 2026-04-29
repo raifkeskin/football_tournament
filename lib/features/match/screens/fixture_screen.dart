@@ -505,7 +505,6 @@ class _MatchCard extends StatelessWidget {
         ? 'MS'
         : (timeText.isEmpty ? '--:--' : timeText);
 
-    const fg = Color(0xFFF8FAFC);
     const mid = Color(0xFF94A3B8);
     const accent = Color(0xFF10B981);
 

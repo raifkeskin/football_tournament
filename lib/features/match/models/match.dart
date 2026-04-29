@@ -489,12 +489,12 @@ class MatchEvent {
 
 class GroupModel {
   final String id;
-  final String leagueId;
+  final String seasonId;
   final String name;
 
   GroupModel({
     required this.id,
-    required this.leagueId,
+    required this.seasonId,
     required this.name,
   });
 
@@ -502,16 +502,16 @@ class GroupModel {
     dynamic v(String camel, String snake) => map[camel] ?? map[snake];
     return GroupModel(
       id: id,
-      leagueId: (v('leagueId', 'league_id') ?? '').toString(),
+      seasonId: (v('seasonId', 'season_id') ?? '').toString(),
       name: (v('name', 'name') ?? '').toString(),
     );
   }
 
   Map<String, dynamic> toMap({bool snakeCase = false}) {
     if (!snakeCase) {
-      return {'leagueId': leagueId, 'name': name};
+      return {'seasonId': seasonId, 'name': name};
     }
-    return {'league_id': leagueId, 'name': name};
+    return {'season_id': seasonId, 'name': name};
   }
 }
 

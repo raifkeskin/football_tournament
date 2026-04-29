@@ -211,7 +211,10 @@ class DatabaseService {
 
   // --- GROUP (GRUP) ---
   Future<void> addGroup(GroupModel group) async {
-    await _db.collection('groups').add({...group.toMap(), 'leagueId': group.leagueId});
+    await _db.collection('groups').add({
+      ...group.toMap(),
+      'seasonId': group.seasonId,
+    });
   }
 
   Stream<List<GroupModel>> getGroups(String leagueId) {
@@ -222,7 +225,7 @@ class DatabaseService {
         AppConfig.sqlLogStart(
           table: 'groups',
           operation: 'STREAM',
-          filters: 'primaryKey=id | clientFilter=league_id=$id',
+          filters: 'primaryKey=id | clientFilter=season_id=$id',
         );
         return Supabase.instance.client
             .from('groups')
@@ -231,8 +234,9 @@ class DatabaseService {
             .map((rows) {
               final list = rows
                   .where((r) {
-                    final league = (r['league_id'] ?? r['tournament_id'] ?? '').toString().trim();
-                    return league == id;
+                    final season =
+                        (r['season_id'] ?? r['seasonId'] ?? '').toString().trim();
+                    return season == id;
                   })
                   .map((r) => GroupModel.fromMap(Map<String, dynamic>.from(r), (r['id'] ?? '').toString()))
                   .toList();
@@ -246,7 +250,7 @@ class DatabaseService {
     }
     return _db
         .collection('groups')
-        .where('leagueId', isEqualTo: id)
+        .where('seasonId', isEqualTo: id)
         .snapshots()
         .map((snap) {
       final list = snap.docs.map((d) => GroupModel.fromMap(d.data(), d.id)).toList();
@@ -327,7 +331,7 @@ class DatabaseService {
     final leagueIds = <String>{};
     for (final doc in groupSnap.docs) {
       final g = GroupModel.fromMap(doc.data(), doc.id);
-      final lId = g.leagueId.trim();
+      final lId = g.seasonId.trim();
       if (lId.isNotEmpty) leagueIds.add(lId);
     }
 
@@ -497,60 +501,6 @@ class DatabaseService {
   }
 
   // --- PLAYER (OYUNCU) ---
-  Future<void> _assertPlayerUnique({
-    required String name,
-    required String? birthDate,
-    String? excludePlayerId,
-  }) async {
-    final normalizedBirthDate = (birthDate ?? '').trim();
-    if (normalizedBirthDate.isEmpty) return;
-    final key = StringUtils.normalizeTrKey(name);
-    final seen = <String>{};
-
-    Future<void> scan(QuerySnapshot<Map<String, dynamic>> snap) async {
-      for (final d in snap.docs) {
-        if (!seen.add(d.id)) continue;
-        if (excludePlayerId != null && d.id == excludePlayerId) continue;
-        final existingName = (d.data()['name'] ?? '').toString();
-        if (StringUtils.normalizeTrKey(existingName) == key) {
-          throw Exception(
-            'Bu futbolcu zaten sistemde kayıtlı!',
-          );
-        }
-      }
-    }
-
-    final byBirthDate = await _db
-        .collection('players')
-        .where('birthDate', isEqualTo: normalizedBirthDate)
-        .get();
-    await scan(byBirthDate);
-
-    final year = int.tryParse(
-      RegExp(r'(19\d{2}|20\d{2}|2100)$').firstMatch(normalizedBirthDate)?.group(0) ??
-          '',
-    );
-    if (year != null) {
-      final byInt = await _db
-          .collection('players')
-          .where('birthYear', isEqualTo: year)
-          .get();
-      await scan(byInt);
-
-      final byStr = await _db
-          .collection('players')
-          .where('birthYear', isEqualTo: year.toString())
-          .get();
-      await scan(byStr);
-
-      final byYearStringAsBirthDate = await _db
-          .collection('players')
-          .where('birthDate', isEqualTo: year.toString())
-          .get();
-      await scan(byYearStringAsBirthDate);
-    }
-  }
-
   Future<void> addPlayer(PlayerModel player) async {
     final phone = (player.phone ?? '').trim();
     await upsertPlayerIdentity(

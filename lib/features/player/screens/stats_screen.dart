@@ -21,22 +21,7 @@ class _StatsScreenState extends State<StatsScreen> {
   final IMatchService _matchService = ServiceLocator.matchService;
   final ITeamService _teamService = ServiceLocator.teamService;
   String? _selectedLeagueId;
-
-  String _trKey(String s) {
-    return s
-        .trim()
-        .toLowerCase()
-        .replaceAll('ç', 'c')
-        .replaceAll('ğ', 'g')
-        .replaceAll('ı', 'i')
-        .replaceAll('İ', 'i')
-        .replaceAll('i̇', 'i')
-        .replaceAll('ö', 'o')
-        .replaceAll('ş', 's')
-        .replaceAll('ü', 'u')
-        .replaceAll(RegExp(r'\s+'), ' ');
-  }
-
+  
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;

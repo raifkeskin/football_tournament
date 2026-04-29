@@ -1,8 +1,5 @@
 import 'dart:math';
-import 'dart:typed_data';
-
 import 'package:supabase_flutter/supabase_flutter.dart';
-
 import '../interfaces/i_team_service.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../tournament/models/league.dart';
@@ -75,28 +72,6 @@ class SupabaseTeamService implements ITeamService {
     return d;
   }
 
-  String _uuidV4() {
-    final rnd = Random.secure();
-    final bytes = Uint8List(16);
-    for (var i = 0; i < bytes.length; i++) {
-      bytes[i] = rnd.nextInt(256);
-    }
-    bytes[6] = (bytes[6] & 0x0f) | 0x40;
-    bytes[8] = (bytes[8] & 0x3f) | 0x80;
-
-    String hexByte(int b) => b.toRadixString(16).padLeft(2, '0');
-    final hex = bytes.map(hexByte).join();
-    return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
-  }
-
-  DateTime? _readDate(dynamic v) {
-    if (v == null) return null;
-    if (v is DateTime) return v;
-    final s = v.toString().trim();
-    if (s.isEmpty) return null;
-    return DateTime.tryParse(s);
-  }
-
   static Map<String, String> _traceInfo(StackTrace trace) {
     final lines = trace.toString().split('\n');
     final line = lines.length > 1 ? lines[1] : (lines.isNotEmpty ? lines.first : '');
@@ -137,26 +112,85 @@ class SupabaseTeamService implements ITeamService {
   Stream<List<Team>> watchAllTeams({String? caller}) {
     try {
       _sbLog(
-        table: 'teams',
-        query: 'STREAM order=name asc',
+        table: 'season_teams',
+        query: 'STREAM order=team_id asc (join teams + groups)',
         trace: StackTrace.current,
       );
       AppConfig.sqlLogStart(
-        table: 'teams',
+        table: 'season_teams',
         operation: 'STREAM',
         caller: caller,
         service: _serviceName,
         method: 'watchAllTeams',
-        filters: 'order=name asc',
+        filters: 'order=team_id asc',
       );
       return _client
-          .from('teams')
+          .from('season_teams')
           .stream(primaryKey: ['id'])
-          .order('name', ascending: true)
-          .map((rows) => rows.map((r) => Team.fromMap(r)).toList());
+          .order('team_id', ascending: true)
+          .asyncMap((rows) async {
+            final links = rows.cast<Map<String, dynamic>>();
+            final teamIds = <String>{};
+            final groupIds = <String>{};
+            for (final r in links) {
+              final tid = (r['team_id'] ?? '').toString().trim();
+              if (tid.isNotEmpty) teamIds.add(tid);
+              final gid = (r['group_id'] ?? '').toString().trim();
+              if (gid.isNotEmpty) groupIds.add(gid);
+            }
+
+            final teamById = <String, Map<String, dynamic>>{};
+            if (teamIds.isNotEmpty) {
+              final res = await _client
+                  .from('teams')
+                  .select()
+                  .inFilter('id', teamIds.toList());
+              for (final any in res) {
+                final row = (any as Map).cast<String, dynamic>();
+                final id = (row['id'] ?? '').toString().trim();
+                if (id.isNotEmpty) teamById[id] = row;
+              }
+            }
+
+            final groupNameById = <String, String>{};
+            if (groupIds.isNotEmpty) {
+              final res = await _client
+                  .from('groups')
+                  .select('id, name')
+                  .inFilter('id', groupIds.toList());
+              for (final any in res) {
+                final row = (any as Map).cast<String, dynamic>();
+                final id = (row['id'] ?? '').toString().trim();
+                if (id.isEmpty) continue;
+                final name = (row['name'] ?? '').toString().trim();
+                if (name.isNotEmpty) groupNameById[id] = name;
+              }
+            }
+
+            final list = <Team>[];
+            for (final link in links) {
+              final tid = (link['team_id'] ?? '').toString().trim();
+              final team = teamById[tid];
+              if (team == null) continue;
+              final gid = (link['group_id'] ?? '').toString().trim();
+              final merged = <String, dynamic>{
+                ...link,
+                'team': team,
+                if ((link['group_name'] ?? '').toString().trim().isEmpty &&
+                    gid.isNotEmpty &&
+                    (groupNameById[gid] ?? '').trim().isNotEmpty)
+                  'group_name': groupNameById[gid],
+                if (gid.isNotEmpty && (groupNameById[gid] ?? '').trim().isNotEmpty)
+                  'group': {'id': gid, 'name': groupNameById[gid]},
+              };
+              list.add(Team.fromMap(merged));
+            }
+            list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+            return list;
+          });
     } catch (e) {
       AppConfig.sqlLogResult(
-        table: 'teams',
+        table: 'season_teams',
         operation: 'STREAM',
         caller: caller,
         service: _serviceName,
@@ -172,26 +206,83 @@ class SupabaseTeamService implements ITeamService {
   Stream<List<Map<String, dynamic>>> watchAllTeamsRaw({String? caller}) {
     try {
       _sbLog(
-        table: 'teams',
-        query: 'STREAM order=name asc',
+        table: 'season_teams',
+        query: 'STREAM order=team_id asc (join teams + groups)',
         trace: StackTrace.current,
       );
       AppConfig.sqlLogStart(
-        table: 'teams',
+        table: 'season_teams',
         operation: 'STREAM',
         caller: caller,
         service: _serviceName,
         method: 'watchAllTeamsRaw',
-        filters: 'order=name asc',
+        filters: 'order=team_id asc',
       );
       return _client
-          .from('teams')
+          .from('season_teams')
           .stream(primaryKey: ['id'])
-          .order('name', ascending: true)
-          .map((rows) => rows.map((r) => Map<String, dynamic>.from(r)).toList());
+          .order('team_id', ascending: true)
+          .asyncMap((rows) async {
+            final links = rows.cast<Map<String, dynamic>>();
+            final teamIds = <String>{};
+            final groupIds = <String>{};
+            for (final r in links) {
+              final tid = (r['team_id'] ?? '').toString().trim();
+              if (tid.isNotEmpty) teamIds.add(tid);
+              final gid = (r['group_id'] ?? '').toString().trim();
+              if (gid.isNotEmpty) groupIds.add(gid);
+            }
+
+            final teamById = <String, Map<String, dynamic>>{};
+            if (teamIds.isNotEmpty) {
+              final res = await _client
+                  .from('teams')
+                  .select()
+                  .inFilter('id', teamIds.toList());
+              for (final any in res) {
+                final row = (any as Map).cast<String, dynamic>();
+                final id = (row['id'] ?? '').toString().trim();
+                if (id.isNotEmpty) teamById[id] = row;
+              }
+            }
+
+            final groupNameById = <String, String>{};
+            if (groupIds.isNotEmpty) {
+              final res = await _client
+                  .from('groups')
+                  .select('id, name')
+                  .inFilter('id', groupIds.toList());
+              for (final any in res) {
+                final row = (any as Map).cast<String, dynamic>();
+                final id = (row['id'] ?? '').toString().trim();
+                if (id.isEmpty) continue;
+                final name = (row['name'] ?? '').toString().trim();
+                if (name.isNotEmpty) groupNameById[id] = name;
+              }
+            }
+
+            final out = <Map<String, dynamic>>[];
+            for (final link in links) {
+              final tid = (link['team_id'] ?? '').toString().trim();
+              final team = teamById[tid];
+              if (team == null) continue;
+              final gid = (link['group_id'] ?? '').toString().trim();
+              out.add({
+                ...link,
+                'team': team,
+                if ((link['group_name'] ?? '').toString().trim().isEmpty &&
+                    gid.isNotEmpty &&
+                    (groupNameById[gid] ?? '').trim().isNotEmpty)
+                  'group_name': groupNameById[gid],
+                if (gid.isNotEmpty && (groupNameById[gid] ?? '').trim().isNotEmpty)
+                  'group': {'id': gid, 'name': groupNameById[gid]},
+              });
+            }
+            return out;
+          });
     } catch (e) {
       AppConfig.sqlLogResult(
-        table: 'teams',
+        table: 'season_teams',
         operation: 'STREAM',
         caller: caller,
         service: _serviceName,
@@ -360,28 +451,50 @@ class SupabaseTeamService implements ITeamService {
     if (gid.isEmpty) return const Stream<List<Team>>.empty();
     try {
       AppConfig.sqlLogStart(
-        table: 'teams',
+        table: 'season_teams',
         operation: 'STREAM',
         caller: caller,
         service: _serviceName,
         method: 'watchTeamsByGroup',
-        filters: 'primaryKey=id | clientFilter=group_id=$gid | order=name asc',
+        filters: 'primaryKey=id | clientFilter=group_id=$gid | order=team_id asc',
       );
       return _client
-          .from('teams')
+          .from('season_teams')
           .stream(primaryKey: ['id'])
-          .order('name', ascending: true)
-          .map((rows) {
-            final list = rows
-                .where((r) => (r['group_id'] ?? '').toString().trim() == gid)
-                .map((r) => Team.fromMap(Map<String, dynamic>.from(r)))
-                .toList();
+          .eq('group_id', gid)
+          .order('team_id', ascending: true)
+          .asyncMap((rows) async {
+            final links = rows.cast<Map<String, dynamic>>();
+            final teamIds = <String>{};
+            for (final r in links) {
+              final tid = (r['team_id'] ?? '').toString().trim();
+              if (tid.isNotEmpty) teamIds.add(tid);
+            }
+            final teamById = <String, Map<String, dynamic>>{};
+            if (teamIds.isNotEmpty) {
+              final res = await _client
+                  .from('teams')
+                  .select()
+                  .inFilter('id', teamIds.toList());
+              for (final any in res) {
+                final row = (any as Map).cast<String, dynamic>();
+                final id = (row['id'] ?? '').toString().trim();
+                if (id.isNotEmpty) teamById[id] = row;
+              }
+            }
+            final list = <Team>[];
+            for (final link in links) {
+              final tid = (link['team_id'] ?? '').toString().trim();
+              final team = teamById[tid];
+              if (team == null) continue;
+              list.add(Team.fromMap({...link, 'team': team}));
+            }
             list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
             return list;
           });
     } catch (e) {
       AppConfig.sqlLogResult(
-        table: 'teams',
+        table: 'season_teams',
         operation: 'STREAM',
         caller: caller,
         service: _serviceName,
@@ -404,19 +517,19 @@ class SupabaseTeamService implements ITeamService {
     if (tId.isEmpty) return const Stream<List<PlayerModel>>.empty();
     try {
       AppConfig.sqlLogStart(
-        table: 'league_team_players',
+        table: 'season_team_players',
         operation: 'SELECT',
         caller: caller,
         service: _serviceName,
         method: 'watchPlayers',
-        filters: 'team_id=$team, league_id=$tId | select=player_id',
+        filters: 'team_id=$team, season_id=$tId | select=player_id',
       );
       final stream = Stream.fromFuture(() async {
         final res = await _client
-            .from('league_team_players')
+            .from('season_team_players')
             .select('player_id, jersey_number')
             .eq('team_id', team) 
-            .eq('league_id', tId)
+            .eq('season_id', tId)
             .eq('is_active', true);
 
         final rows = res.cast<Map<String, dynamic>>();
@@ -443,7 +556,7 @@ class SupabaseTeamService implements ITeamService {
           if (pid.isEmpty) continue;
           final merged = <String, dynamic>{
             ...row,
-            'league_id': tId,
+            'season_id': tId,
             'team_id': team,
             if (jerseyByPlayerId.containsKey(pid)) 'jersey_number': jerseyByPlayerId[pid],
           };
@@ -466,7 +579,7 @@ class SupabaseTeamService implements ITeamService {
       return stream.asBroadcastStream();
     } catch (e) {
       AppConfig.sqlLogResult(
-        table: 'league_team_players',
+        table: 'season_team_players',
         operation: 'SELECT',
         caller: caller,
         service: _serviceName,
@@ -482,9 +595,9 @@ class SupabaseTeamService implements ITeamService {
     if (lid.isEmpty) return const <PlayerModel>[];
 
     final linked = await _client
-        .from('league_team_players')
+        .from('season_team_players')
         .select('player_id')
-        .eq('league_id', lid)
+        .eq('season_id', lid)
         .eq('is_active', true);
     final excludeIds = <String>{};
     for (final any in linked) {
@@ -516,20 +629,20 @@ class SupabaseTeamService implements ITeamService {
     if (team.isEmpty || league.isEmpty || ids.isEmpty) return;
 
     await _client
-        .from('league_team_players')
+        .from('season_team_players')
         .update({
           'team_id': team,
           'jersey_number': null,
           'is_active': true,
         })
-        .eq('league_id', league)
+        .eq('season_id', league)
         .inFilter('player_id', ids)
         .or('is_active.is.false,is_active.is.null');
 
     final existing = await _client
-        .from('league_team_players')
+        .from('season_team_players')
         .select('player_id')
-        .eq('league_id', league)
+        .eq('season_id', league)
         .inFilter('player_id', ids);
     final existingIds = <String>{};
     for (final any in existing) {
@@ -542,7 +655,7 @@ class SupabaseTeamService implements ITeamService {
     final rows = missing
         .map(
           (pid) => <String, dynamic>{
-            'league_id': league,
+            'season_id': league,
             'team_id': team,
             'player_id': pid,
             'jersey_number': null,
@@ -550,7 +663,7 @@ class SupabaseTeamService implements ITeamService {
           },
         )
         .toList();
-    await _client.from('league_team_players').insert(rows);
+    await _client.from('season_team_players').insert(rows);
   }
 
   Future<void> updateJerseyNumber(
@@ -568,9 +681,9 @@ class SupabaseTeamService implements ITeamService {
     }
 
     final dup = await _client
-        .from('league_team_players')
+        .from('season_team_players')
         .select('player_id')
-        .eq('league_id', league)
+        .eq('season_id', league)
         .eq('team_id', team)
         .eq('jersey_number', newNumber)
         .eq('is_active', true)
@@ -585,18 +698,18 @@ class SupabaseTeamService implements ITeamService {
 
     try {
       await _client
-          .from('league_team_players')
+          .from('season_team_players')
           .update({'jersey_number': newNumber})
-          .eq('league_id', league)
+          .eq('season_id', league)
           .eq('team_id', team)
           .eq('player_id', pid)
           .eq('is_active', true);
     } on PostgrestException catch (e) {
       if (e.code == 'PGRST204') {
         throw Exception(
-          "league_team_players.jersey_number kolonu bulunamadı (PGRST204). "
+          "season_team_players.jersey_number kolonu bulunamadı (PGRST204). "
           "Önce şunu çalıştır:\n"
-          "alter table public.league_team_players add column if not exists jersey_number smallint;",
+          "alter table public.season_team_players add column if not exists jersey_number smallint;",
         );
       }
       rethrow;
@@ -616,9 +729,9 @@ class SupabaseTeamService implements ITeamService {
 
     if (newNumber == null) {
       await _client
-          .from('league_team_players')
+          .from('season_team_players')
           .update({'jersey_number': null})
-          .eq('league_id', league)
+          .eq('season_id', league)
           .eq('team_id', team)
           .eq('player_id', pid)
           .eq('is_active', true);
@@ -1247,9 +1360,9 @@ class SupabaseTeamService implements ITeamService {
 
       if (jersey != null) {
         final dup = await _client
-            .from('league_team_players')
+            .from('season_team_players')
             .select('player_id')
-            .eq('league_id', t)
+            .eq('season_id', t)
             .eq('team_id', team)
             .eq('jersey_number', jersey)
             .eq('is_active', true);
@@ -1263,45 +1376,45 @@ class SupabaseTeamService implements ITeamService {
 
       try {
         _sbLog(
-          table: 'league_team_players',
-          query: 'INSERT | league_id=$t, team_id=$team, player_id=$pid',
+          table: 'season_team_players',
+          query: 'INSERT | season_id=$t, team_id=$team, player_id=$pid',
           trace: StackTrace.current,
         );
         AppConfig.sqlLogStart(
-          table: 'league_team_players',
+          table: 'season_team_players',
           operation: 'INSERT',
           caller: caller,
           service: _serviceName,
           method: 'upsertRosterEntry',
-          filters: 'league_id=$t, team_id=$team, player_id=$pid',
+          filters: 'season_id=$t, team_id=$team, player_id=$pid',
         );
         final base = <String, dynamic>{
-          'league_id': t,
+          'season_id': t,
           'team_id': team,
           'player_id': pid,
           'jersey_number': ?jersey,
           'is_active': true,
         };
         final updated = await _client
-            .from('league_team_players')
+            .from('season_team_players')
             .update({
               'jersey_number': ?jersey,
               'is_active': true,
             })
-            .eq('league_id', t)
+            .eq('season_id', t)
             .eq('team_id', team)
             .eq('player_id', pid)
             .select('id');
         final didUpdate = updated.isNotEmpty;
         if (!didUpdate) {
-          await _client.from('league_team_players').insert(base);
+          await _client.from('season_team_players').insert(base);
         }
         await _bestEffortUpdatePlayerIdentityFields(
           playerId: pid,
           role: role.trim().isEmpty ? null : role.trim(),
         );
         AppConfig.sqlLogResult(
-          table: 'league_team_players',
+          table: 'season_team_players',
           operation: 'INSERT',
           caller: caller,
           service: _serviceName,
@@ -1312,17 +1425,17 @@ class SupabaseTeamService implements ITeamService {
       } catch (e) {
         if (e is PostgrestException &&
             (e.code == '42501' ||
-                (e.message ?? '').toLowerCase().contains('row-level security'))) {
+                (e.message).toLowerCase().contains('row-level security'))) {
           throw Exception(
-            'league_team_players INSERT RLS tarafından engellendi (code=42501). '
+            'season_team_players INSERT RLS tarafından engellendi (code=42501). '
             'Bu client tarafında kodla çözülemez; Supabase tarafında policy açılmalı. '
             'En basit test için:\n'
-            'create policy "allow insert league_team_players" on public.league_team_players '
+            'create policy "allow insert season_team_players" on public.season_team_players '
             'for insert to anon, authenticated with check (true);',
           );
         }
         AppConfig.sqlLogResult(
-          table: 'league_team_players',
+          table: 'season_team_players',
           operation: 'INSERT',
           caller: caller,
           service: _serviceName,
@@ -1393,26 +1506,26 @@ class SupabaseTeamService implements ITeamService {
       if (pid.isEmpty) return;
       try {
         _sbLog(
-          table: 'league_team_players',
-          query: 'UPDATE is_active=false | league_id=$t, team_id=$team, player_id=$pid',
+          table: 'season_team_players',
+          query: 'UPDATE is_active=false | season_id=$t, team_id=$team, player_id=$pid',
           trace: StackTrace.current,
         );
         AppConfig.sqlLogStart(
-          table: 'league_team_players',
+          table: 'season_team_players',
           operation: 'UPDATE',
           caller: caller,
           service: _serviceName,
           method: 'deleteRosterEntry',
-          filters: 'league_id=$t, team_id=$team, player_id=$pid',
+          filters: 'season_id=$t, team_id=$team, player_id=$pid',
         );
         await _client
-            .from('league_team_players')
+            .from('season_team_players')
             .update({'is_active': false})
-            .eq('league_id', t)
+            .eq('season_id', t)
             .eq('team_id', team)
             .eq('player_id', pid);
         AppConfig.sqlLogResult(
-          table: 'league_team_players',
+          table: 'season_team_players',
           operation: 'UPDATE',
           caller: caller,
           service: _serviceName,
@@ -1423,21 +1536,21 @@ class SupabaseTeamService implements ITeamService {
       } catch (e) {
         if (e is PostgrestException &&
             (e.code == '42501' ||
-                (e.message ?? '').toLowerCase().contains('row-level security'))) {
+                (e.message).toLowerCase().contains('row-level security'))) {
           throw Exception(
-            'league_team_players UPDATE RLS tarafından engellendi (code=42501). '
+            'season_team_players UPDATE RLS tarafından engellendi (code=42501). '
             'is_active güncellemesi için update policy açılmalı.',
           );
         }
         if (e is PostgrestException && e.code == 'PGRST204') {
           throw Exception(
-            "league_team_players.is_active kolonu bulunamadı (PGRST204). "
+            "season_team_players.is_active kolonu bulunamadı (PGRST204). "
             "Önce şunu çalıştır:\n"
-            "alter table public.league_team_players add column if not exists is_active boolean not null default true;",
+            "alter table public.season_team_players add column if not exists is_active boolean not null default true;",
           );
         }
         AppConfig.sqlLogResult(
-          table: 'league_team_players',
+          table: 'season_team_players',
           operation: 'UPDATE',
           caller: caller,
           service: _serviceName,
@@ -1511,29 +1624,29 @@ class SupabaseTeamService implements ITeamService {
       if (pid.isEmpty) return false;
       try {
         _sbLog(
-          table: 'league_team_players',
-          query: 'SELECT id | league_id=$t, team_id=$team, player_id=$pid | limit=1',
+          table: 'season_team_players',
+          query: 'SELECT id | season_id=$t, team_id=$team, player_id=$pid | limit=1',
           trace: StackTrace.current,
         );
         AppConfig.sqlLogStart(
-          table: 'league_team_players',
+          table: 'season_team_players',
           operation: 'SELECT',
           caller: caller,
           service: _serviceName,
           method: 'isTeamManagerForTournament',
-          filters: 'league_id=$t, team_id=$team, player_id=$pid | limit=1',
+          filters: 'season_id=$t, team_id=$team, player_id=$pid | limit=1',
         );
         final linkRes = await _client
-            .from('league_team_players')
+            .from('season_team_players')
             .select('id')
-            .eq('league_id', t)
+            .eq('season_id', t)
             .eq('team_id', team)
             .eq('player_id', pid)
             .eq('is_active', true)
             .limit(1);
         if (linkRes.isEmpty) {
           AppConfig.sqlLogResult(
-            table: 'league_team_players',
+            table: 'season_team_players',
             operation: 'SELECT',
             caller: caller,
             service: _serviceName,
@@ -1544,7 +1657,7 @@ class SupabaseTeamService implements ITeamService {
           return false;
         }
         AppConfig.sqlLogResult(
-          table: 'league_team_players',
+          table: 'season_team_players',
           operation: 'SELECT',
           caller: caller,
           service: _serviceName,
@@ -1562,7 +1675,7 @@ class SupabaseTeamService implements ITeamService {
         return role == 'Takım Sorumlusu' || role == 'Her İkisi';
       } catch (e) {
         AppConfig.sqlLogResult(
-          table: 'league_team_players',
+          table: 'season_team_players',
           operation: 'SELECT',
           caller: caller,
           service: _serviceName,
@@ -1589,26 +1702,26 @@ class SupabaseTeamService implements ITeamService {
     return Future(() async {
       try {
         _sbLog(
-          table: 'league_team_players',
-          query: 'SELECT player_id | league_id=$t, team_id=$team',
+          table: 'season_team_players',
+          query: 'SELECT player_id | season_id=$t, team_id=$team',
           trace: StackTrace.current,
         );
         AppConfig.sqlLogStart(
-          table: 'league_team_players',
+          table: 'season_team_players',
           operation: 'SELECT',
           caller: caller,
           service: _serviceName,
           method: 'managerExistsForTeamTournament',
-          filters: 'league_id=$t, team_id=$team',
+          filters: 'season_id=$t, team_id=$team',
         );
         final res = await _client
-            .from('league_team_players')
+            .from('season_team_players')
             .select('player_id')
-            .eq('league_id', t)
+            .eq('season_id', t)
             .eq('team_id', team)
             .eq('is_active', true);
         AppConfig.sqlLogResult(
-          table: 'league_team_players',
+          table: 'season_team_players',
           operation: 'SELECT',
           caller: caller,
           service: _serviceName,
@@ -1645,7 +1758,7 @@ class SupabaseTeamService implements ITeamService {
         return false;
       } catch (e) {
         AppConfig.sqlLogResult(
-          table: 'league_team_players',
+          table: 'season_team_players',
           operation: 'SELECT',
           caller: caller,
           service: _serviceName,
@@ -1666,7 +1779,7 @@ class SupabaseTeamService implements ITeamService {
       try {
         _sbLog(
           table: 'league_registrations',
-          query: 'SELECT league_id | team_id=$tId',
+          query: 'SELECT season_id | team_id=$tId',
           trace: StackTrace.current,
         );
         AppConfig.sqlLogStart(
@@ -1675,11 +1788,11 @@ class SupabaseTeamService implements ITeamService {
           caller: caller,
           service: _serviceName,
           method: 'getTeamActiveTournaments',
-          filters: 'team_id=$tId | columns=league_id',
+          filters: 'team_id=$tId | columns=season_id',
         );
         final regRes = (await _client
                 .from('league_registrations')
-                .select('league_id')
+                .select('season_id')
                 .eq('team_id', tId))
             .cast<Map<String, dynamic>>();
         AppConfig.sqlLogResult(
@@ -1695,7 +1808,7 @@ class SupabaseTeamService implements ITeamService {
 
         final leagueIds = <String>{};
         for (final row in regRes) {
-          final id = (row['league_id'] ?? '').toString().trim();
+          final id = (row['season_id'] ?? '').toString().trim();
           if (id.isNotEmpty) leagueIds.add(id);
         }
         if (leagueIds.isEmpty) return const <League>[];
@@ -1753,50 +1866,136 @@ class SupabaseTeamService implements ITeamService {
     if (id.isEmpty) return Future.value();
     return Future(() async {
       try {
-        String mapKey(String k) {
+        String mapTeamKey(String k) {
           switch (k) {
             case 'logoUrl':
               return 'logo_url';
-            case 'groupId':
-              return 'group_id';
-            case 'groupName':
-              return 'group_name';
-            case 'leagueId':
-              return 'league_id';
             default:
               return k;
           }
         }
 
-        final payload = <String, dynamic>{};
-        for (final e in data.entries) {
-          payload[mapKey(e.key)] = e.value;
+        String? readStr(dynamic v) {
+          final s = (v ?? '').toString().trim();
+          return s.isEmpty ? null : s;
         }
-        payload['updated_at'] = DateTime.now().toIso8601String();
 
-        _sbLog(
-          table: 'teams',
-          query: 'UPDATE id=$id',
-          trace: StackTrace.current,
+        final seasonIdFromData = readStr(
+          data['seasonId'] ??
+              data['season_id'] ??
+              data['leagueId'] ??
+              data['league_id'] ??
+              data['tournamentId'] ??
+              data['tournament_id'],
         );
-        AppConfig.sqlLogStart(
-          table: 'teams',
-          operation: 'UPDATE',
-          caller: caller,
-          service: _serviceName,
-          method: 'updateTeam',
-          filters: 'id=$id',
-        );
-        await _client.from('teams').update(payload).eq('id', id);
-        AppConfig.sqlLogResult(
-          table: 'teams',
-          operation: 'UPDATE',
-          caller: caller,
-          service: _serviceName,
-          method: 'updateTeam',
-          count: 1,
-        );
-        _sbResult(rows: 1);
+        final groupIdFromData = readStr(data['groupId'] ?? data['group_id']);
+        final groupNameFromData = readStr(data['groupName'] ?? data['group_name']);
+
+        final wantsLinkUpdate = data.containsKey('groupId') ||
+            data.containsKey('group_id') ||
+            data.containsKey('groupName') ||
+            data.containsKey('group_name') ||
+            data.containsKey('seasonId') ||
+            data.containsKey('season_id') ||
+            data.containsKey('leagueId') ||
+            data.containsKey('league_id') ||
+            data.containsKey('tournamentId') ||
+            data.containsKey('tournament_id');
+
+        final teamPayload = <String, dynamic>{};
+        for (final e in data.entries) {
+          final k = e.key;
+          if (k == 'groupId' ||
+              k == 'group_id' ||
+              k == 'groupName' ||
+              k == 'group_name' ||
+              k == 'seasonId' ||
+              k == 'season_id' ||
+              k == 'leagueId' ||
+              k == 'league_id' ||
+              k == 'tournamentId' ||
+              k == 'tournament_id') {
+            continue;
+          }
+          teamPayload[mapTeamKey(k)] = e.value;
+        }
+        if (teamPayload.isNotEmpty) {
+          teamPayload['updated_at'] = DateTime.now().toIso8601String();
+          _sbLog(
+            table: 'teams',
+            query: 'UPDATE id=$id',
+            trace: StackTrace.current,
+          );
+          AppConfig.sqlLogStart(
+            table: 'teams',
+            operation: 'UPDATE',
+            caller: caller,
+            service: _serviceName,
+            method: 'updateTeam',
+            filters: 'id=$id',
+          );
+          await _client.from('teams').update(teamPayload).eq('id', id);
+          AppConfig.sqlLogResult(
+            table: 'teams',
+            operation: 'UPDATE',
+            caller: caller,
+            service: _serviceName,
+            method: 'updateTeam',
+            count: 1,
+          );
+          _sbResult(rows: 1);
+        }
+
+        if (wantsLinkUpdate) {
+          var seasonId = (seasonIdFromData ?? '').trim();
+          if (seasonId.isEmpty) {
+            final res = await _client
+                .from('season_teams')
+                .select('season_id')
+                .eq('team_id', id)
+                .limit(2);
+            if (res.length == 1) {
+              seasonId = (res.first['season_id'] ?? '').toString().trim();
+            }
+          }
+
+          if (seasonId.isNotEmpty) {
+            final linkPayload = <String, dynamic>{
+              if (data.containsKey('groupId') || data.containsKey('group_id'))
+                'group_id': groupIdFromData,
+              if (data.containsKey('groupName') || data.containsKey('group_name'))
+                'group_name': groupNameFromData,
+              'updated_at': DateTime.now().toIso8601String(),
+            };
+
+            if (linkPayload.length > 1 ||
+                linkPayload.containsKey('group_id') ||
+                linkPayload.containsKey('group_name')) {
+              _sbLog(
+                table: 'season_teams',
+                query: 'UPSERT season_id=$seasonId, team_id=$id',
+                trace: StackTrace.current,
+              );
+              final updated = await _client
+                  .from('season_teams')
+                  .update(linkPayload)
+                  .eq('season_id', seasonId)
+                  .eq('team_id', id)
+                  .select('id');
+              if (updated.isEmpty) {
+                await _client.from('season_teams').insert({
+                  'season_id': seasonId,
+                  'team_id': id,
+                  if (linkPayload.containsKey('group_id'))
+                    'group_id': linkPayload['group_id'],
+                  if (linkPayload.containsKey('group_name'))
+                    'group_name': linkPayload['group_name'],
+                  'created_at': DateTime.now().toIso8601String(),
+                });
+              }
+            }
+          }
+        }
       } catch (e) {
         AppConfig.sqlLogResult(
           table: 'teams',
@@ -2031,6 +2230,40 @@ class SupabaseTeamService implements ITeamService {
 
       try {
         _sbLog(
+          table: 'season_teams',
+          query: 'DELETE team_id=$id',
+          trace: StackTrace.current,
+        );
+        AppConfig.sqlLogStart(
+          table: 'season_teams',
+          operation: 'DELETE',
+          caller: caller,
+          service: _serviceName,
+          method: 'deleteTeamCascade',
+          filters: 'team_id=$id',
+        );
+        await _client.from('season_teams').delete().eq('team_id', id);
+        AppConfig.sqlLogResult(
+          table: 'season_teams',
+          operation: 'DELETE',
+          caller: caller,
+          service: _serviceName,
+          method: 'deleteTeamCascade',
+        );
+      } catch (e) {
+        AppConfig.sqlLogResult(
+          table: 'season_teams',
+          operation: 'DELETE',
+          caller: caller,
+          service: _serviceName,
+          method: 'deleteTeamCascade',
+          error: e,
+        );
+        _sbResult(rows: 0, error: e);
+      }
+
+      try {
+        _sbLog(
           table: 'teams',
           query: 'DELETE id=$id',
           trace: StackTrace.current,
@@ -2072,38 +2305,93 @@ class SupabaseTeamService implements ITeamService {
     return Future(() async {
       try {
         _sbLog(
-          table: 'teams',
-          query: 'SELECT league_id=$id | order=name asc',
+          table: 'season_teams',
+          query: 'SELECT season_id=$id (join teams + groups)',
           trace: StackTrace.current,
         );
         AppConfig.sqlLogStart(
-          table: 'teams',
+          table: 'season_teams',
           operation: 'SELECT',
           caller: caller,
           service: _serviceName,
           method: 'getTeamsCached',
-          filters: 'league_id=$id | order=name asc',
+          filters: 'season_id=$id',
         );
-        final res = await _client
-            .from('teams')
+        final linksRes = await _client
+            .from('season_teams')
             .select()
-            .eq('league_id', id)
-            .order('name', ascending: true);
+            .eq('season_id', id);
         AppConfig.sqlLogResult(
-          table: 'teams',
+          table: 'season_teams',
           operation: 'SELECT',
           caller: caller,
           service: _serviceName,
           method: 'getTeamsCached',
-          count: res.length,
+          count: linksRes.length,
         );
-        _sbResult(rows: res.length);
-        final list = res.map((e) => Team.fromMap((e as Map).cast<String, dynamic>())).toList();
+        _sbResult(rows: linksRes.length);
+
+        final links = linksRes.cast<Map<String, dynamic>>();
+        final teamIds = <String>{};
+        final groupIds = <String>{};
+        for (final r in links) {
+          final tid = (r['team_id'] ?? '').toString().trim();
+          if (tid.isNotEmpty) teamIds.add(tid);
+          final gid = (r['group_id'] ?? '').toString().trim();
+          if (gid.isNotEmpty) groupIds.add(gid);
+        }
+
+        final teamById = <String, Map<String, dynamic>>{};
+        if (teamIds.isNotEmpty) {
+          final res = await _client
+              .from('teams')
+              .select()
+              .inFilter('id', teamIds.toList());
+          for (final any in res) {
+            final row = (any as Map).cast<String, dynamic>();
+            final tid = (row['id'] ?? '').toString().trim();
+            if (tid.isNotEmpty) teamById[tid] = row;
+          }
+        }
+
+        final groupNameById = <String, String>{};
+        if (groupIds.isNotEmpty) {
+          final res = await _client
+              .from('groups')
+              .select('id, name')
+              .inFilter('id', groupIds.toList());
+          for (final any in res) {
+            final row = (any as Map).cast<String, dynamic>();
+            final gid = (row['id'] ?? '').toString().trim();
+            if (gid.isEmpty) continue;
+            final name = (row['name'] ?? '').toString().trim();
+            if (name.isNotEmpty) groupNameById[gid] = name;
+          }
+        }
+
+        final list = <Team>[];
+        for (final link in links) {
+          final tid = (link['team_id'] ?? '').toString().trim();
+          final team = teamById[tid];
+          if (team == null) continue;
+          final gid = (link['group_id'] ?? '').toString().trim();
+          final merged = <String, dynamic>{
+            ...link,
+            'team': team,
+            if ((link['group_name'] ?? '').toString().trim().isEmpty &&
+                gid.isNotEmpty &&
+                (groupNameById[gid] ?? '').trim().isNotEmpty)
+              'group_name': groupNameById[gid],
+            if (gid.isNotEmpty && (groupNameById[gid] ?? '').trim().isNotEmpty)
+              'group': {'id': gid, 'name': groupNameById[gid]},
+          };
+          list.add(Team.fromMap(merged));
+        }
         list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
         return list;
       } catch (e) {
         AppConfig.sqlLogResult(
-          table: 'teams',
+          table: 'season_teams',
           operation: 'SELECT',
           caller: caller,
           service: _serviceName,
@@ -2136,55 +2424,83 @@ class SupabaseTeamService implements ITeamService {
       try {
         _sbLog(
           table: 'teams',
-          query: 'INSERT league_id=$l',
+          query: 'UPSERT base + INSERT season_teams season_id=$l',
           trace: StackTrace.current,
         );
         AppConfig.sqlLogStart(
           table: 'teams',
-          operation: 'INSERT',
+          operation: 'UPSERT',
           caller: caller,
           service: _serviceName,
           method: 'addTeamAndUpsertCache',
-          filters: 'league_id=$l',
+          filters: 'season_id=$l (via season_teams)',
         );
-        final res = await _client
-            .from('teams')
-            .insert({
-              'league_id': l,
-              'name': name,
-              'logo_url': logoUrl.trim(),
-              'group_id': groupId?.trim(),
-              'group_name': groupName?.trim(),
-              'created_at': DateTime.now().toIso8601String(),
-            })
-            .select()
-            .limit(1);
-        if (res.isNotEmpty) {
-          AppConfig.sqlLogResult(
-            table: 'teams',
-            operation: 'INSERT',
-            caller: caller,
-            service: _serviceName,
-            method: 'addTeamAndUpsertCache',
-            count: 1,
-          );
-          _sbResult(rows: 1);
-          return Team.fromMap((res.first as Map).cast<String, dynamic>());
+        String teamId = '';
+        try {
+          final existing = await _client
+              .from('teams')
+              .select('id')
+              .eq('name', name)
+              .limit(1);
+          if (existing.isNotEmpty) {
+            teamId = (existing.first['id'] ?? '').toString().trim();
+          }
+        } catch (_) {}
+
+        if (teamId.isEmpty) {
+          final inserted = await _client
+              .from('teams')
+              .insert({
+                'name': name,
+                'logo_url': logoUrl.trim(),
+                'created_at': DateTime.now().toIso8601String(),
+              })
+              .select('id')
+              .single();
+          teamId = (inserted['id'] ?? '').toString().trim();
         }
+
+        if (teamId.isEmpty) {
+          throw Exception('Takım kaydı oluşturulamadı.');
+        }
+
+        final linkBase = <String, dynamic>{
+          'season_id': l,
+          'team_id': teamId,
+          'group_id': groupId?.trim().isEmpty ?? true ? null : groupId!.trim(),
+          'group_name': groupName?.trim().isEmpty ?? true ? null : groupName!.trim(),
+          'created_at': DateTime.now().toIso8601String(),
+        };
+        final updated = await _client
+            .from('season_teams')
+            .update(linkBase)
+            .eq('season_id', l)
+            .eq('team_id', teamId)
+            .select('id');
+        if (updated.isEmpty) {
+          await _client.from('season_teams').insert(linkBase);
+        }
+
+        final teamRow = await _client.from('teams').select().eq('id', teamId).limit(1);
+        final merged = <String, dynamic>{
+          ...linkBase,
+          'team': teamRow.isEmpty ? <String, dynamic>{'id': teamId, 'name': name, 'logo_url': logoUrl} : (teamRow.first as Map).cast<String, dynamic>(),
+        };
+
         AppConfig.sqlLogResult(
-          table: 'teams',
-          operation: 'INSERT',
+          table: 'season_teams',
+          operation: 'UPSERT',
           caller: caller,
           service: _serviceName,
           method: 'addTeamAndUpsertCache',
-          count: 0,
+          count: 1,
         );
-        _sbResult(rows: 0);
-        return Team(id: '', name: name, logoUrl: logoUrl, leagueId: l, groupId: groupId, groupName: groupName);
+        _sbResult(rows: 1);
+        return Team.fromMap(merged);
       } catch (e) {
         AppConfig.sqlLogResult(
-          table: 'teams',
-          operation: 'INSERT',
+          table: 'season_teams',
+          operation: 'UPSERT',
           caller: caller,
           service: _serviceName,
           method: 'addTeamAndUpsertCache',

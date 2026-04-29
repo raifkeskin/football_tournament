@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:football_tournament/features/admin/services/approval_service.dart';
 
-import '../../../screens/admin_panel_screen.dart';
+import 'package:football_tournament/screens/admin_panel_screen.dart';
 import '../../auth/screens/forgot_password_screen.dart';
 import '../../auth/screens/online_registration_screen.dart';
 import '../../team/screens/team_squad_screen.dart';
@@ -36,160 +36,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   bool _rememberMe = false;
-  int _backdoorTapCount = 0;
-  DateTime? _backdoorLastTapAt;
-  Timer? _backdoorResetTimer;
+  int _tapCount = 0;
+  Timer? _tapTimer;
 
-  Future<RosterAssignment?> _pickRosterAssignmentForPlayerActions(
-    String phone,
-  ) async {
-    final p = phone.trim();
-    if (p.isEmpty) return null;
-
-    return showModalBottomSheet<RosterAssignment>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-          child: SizedBox(
-            height: MediaQuery.of(context).size.height * 0.6,
-            child: StreamBuilder<List<RosterAssignment>>(
-              stream: _authService.watchRosterAssignmentsByPhone(p),
-              builder: (context, snap) {
-                final list = snap.data ?? const <RosterAssignment>[];
-                if (!snap.hasData) {
-                  return const Center(
-                    child: SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  );
-                }
-                if (list.isEmpty) {
-                  return const Center(
-                    child: Text('Takım kaydınız bulunamadı.'),
-                  );
-                }
-
-                return ListView.separated(
-                  itemCount: list.length,
-                  separatorBuilder: (_, _) => const Divider(height: 1),
-                  itemBuilder: (context, i) {
-                    final r = list[i];
-                    final lid = r.tournamentId.trim();
-                    final tid = r.teamId.trim();
-                    return StreamBuilder<String>(
-                      stream: lid.isEmpty
-                          ? const Stream<String>.empty()
-                          : _leagueService.watchLeagueName(lid),
-                      builder: (context, leagueSnap) {
-                        final leagueName = (leagueSnap.data ?? lid).trim();
-                        return StreamBuilder<String>(
-                          stream: tid.isEmpty
-                              ? const Stream<String>.empty()
-                              : _teamService.watchTeamName(tid),
-                          builder: (context, teamSnap) {
-                            final teamName = (teamSnap.data ?? tid).trim();
-                            return ListTile(
-                              onTap: () => Navigator.pop(context, r),
-                              title: Text(teamName.isEmpty ? '-' : teamName),
-                              subtitle: Text(leagueName.isEmpty ? '-' : leagueName),
-                              trailing: const Icon(Icons.chevron_right_rounded),
-                            );
-                          },
-                        );
-                      },
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<String?> _pickLeagueIdForAdmin() {
-    return showDialog<String>(
-      context: context,
-      builder: (context) => StreamBuilder<List<League>>(
-        stream: _leagueService.watchLeagues(),
-        builder: (context, snap) {
-          final leagues = snap.data ?? const <League>[];
-          return SimpleDialog(
-            title: const Text('Turnuva seçin'),
-            children: leagues.isEmpty
-                ? const [
-                    Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Text('Turnuva bulunamadı.'),
-                    ),
-                  ]
-                : leagues
-                    .map(
-                      (l) => SimpleDialogOption(
-                        onPressed: () => Navigator.pop(context, l.id),
-                        child: Text(l.name.trim().isEmpty ? l.id : l.name),
-                      ),
-                    )
-                    .toList(),
-          );
-        },
-      ),
-    );
-  }
-
-  Future<String?> _pickTeamIdForAdmin(String leagueId) {
-    final lid = leagueId.trim();
-    if (lid.isEmpty) return Future.value(null);
-    return showDialog<String>(
-      context: context,
-      builder: (context) => StreamBuilder<List<Team>>(
-        stream: _teamService.watchAllTeams(),
-        builder: (context, snap) {
-          final all = snap.data ?? const <Team>[];
-          final teams = all
-              .where((t) => (t.leagueId ?? '').toString().trim() == lid)
-              .toList();
-          teams.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
-          return SimpleDialog(
-            title: const Text('Takım seçin'),
-            children: teams.isEmpty
-                ? const [
-                    Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Text('Takım bulunamadı.'),
-                    ),
-                  ]
-                : teams
-                    .map(
-                      (t) => SimpleDialogOption(
-                        onPressed: () => Navigator.pop(context, t.id),
-                        child: Text(t.name.trim().isEmpty ? t.id : t.name),
-                      ),
-                    )
-                    .toList(),
-          );
-        },
-      ),
-    );
-  }
-
-  Future<RosterAssignment?> _pickTeamTournamentForAdmin() async {
-    final leagueId = (await _pickLeagueIdForAdmin())?.trim() ?? '';
-    if (!mounted || leagueId.isEmpty) return null;
-    final teamId = (await _pickTeamIdForAdmin(leagueId))?.trim() ?? '';
-    if (!mounted || teamId.isEmpty) return null;
-    return RosterAssignment(
-      id: '${leagueId}_$teamId',
-      tournamentId: leagueId,
-      teamId: teamId,
-      role: 'Admin',
-    );
-  }
 
   Future<void> _openPlayerLicenseMenu({
     required String phone,
@@ -565,7 +414,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   void dispose() {
-    _backdoorResetTimer?.cancel();
+    _tapTimer?.cancel();
     _phoneController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -644,22 +493,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Future<void> _handleBackdoorTap(AppSessionController session) async {
-    final now = DateTime.now();
-    final last = _backdoorLastTapAt;
-    final within = last != null && now.difference(last) < const Duration(milliseconds: 700);
-    _backdoorLastTapAt = now;
-    _backdoorTapCount = within ? _backdoorTapCount + 1 : 1;
-
-    _backdoorResetTimer?.cancel();
-    _backdoorResetTimer = Timer(const Duration(milliseconds: 900), () {
-      _backdoorTapCount = 0;
-      _backdoorLastTapAt = null;
-    });
-
-    if (_backdoorTapCount != 3) return;
-    _backdoorTapCount = 0;
-
+  Future<String?> _showBackdoorPasswordDialog() async {
     var password = '';
     final result = await showDialog<String>(
       context: context,
@@ -701,7 +535,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
     final pwd = (result ?? '').trim();
-    if (pwd.isEmpty) return;
+    return pwd.isEmpty ? null : pwd;
+  }
+
+  Future<void> _onProfileTitleTap(AppSessionController session) async {
+    _tapTimer?.cancel();
+    _tapCount += 1;
+    _tapTimer = Timer(const Duration(seconds: 1), () {
+      _tapCount = 0;
+    });
+
+    if (_tapCount != 3) return;
+    _tapTimer?.cancel();
+    _tapCount = 0;
+
+    final pwd = await _showBackdoorPasswordDialog();
+    if (!mounted || pwd == null) return;
 
     setState(() => _isLoading = true);
     try {
@@ -713,8 +562,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
         );
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sistem girişi başarılı.')),
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => AdminPanelScreen(
+            onLogout: () async {
+              await session.signOut();
+            },
+          ),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
@@ -1056,16 +911,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
           child: Scaffold(
             appBar: AppBar(
               centerTitle: true,
-              title: GestureDetector(
-                onTap: _isLoading ? null : () => _handleBackdoorTap(session),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: const [
-                    Icon(Icons.person_outline),
-                    SizedBox(width: 8),
-                    Text('Profil'),
-                  ],
-                ),
+              title: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.person_outline),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: _isLoading ? null : () => _onProfileTitleTap(session),
+                    child: const Text('Profil'),
+                  ),
+                ],
               ),
             ),
             body: isAdminPanelVisible
@@ -1379,6 +1234,29 @@ class _PhoneMaskFormatter extends TextInputFormatter {
     return TextEditingValue(
       text: formatted,
       selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+}
+
+class AdminPanelScreen extends StatelessWidget {
+  const AdminPanelScreen({super.key, required this.onLogout});
+
+  final Future<void> Function() onLogout;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Admin Panel'),
+        centerTitle: true,
+      ),
+      body: AdminPanelWidget(
+        onLogout: () async {
+          await onLogout();
+          if (!context.mounted) return;
+          Navigator.of(context).pop();
+        },
+      ),
     );
   }
 }
