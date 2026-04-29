@@ -40,10 +40,8 @@ class PlayerCard extends StatefulWidget {
 class _PlayerCardState extends State<PlayerCard> {
   final IMatchService _matchService = ServiceLocator.matchService;
   late String _selectedSeasonId;
+  String _selectedTournamentId = '';
   late final Future<_PlayerCardData> _future;
-
-  final Set<String> _expandedTournamentIds = <String>{};
-  final Set<String> _expandedSeasonIds = <String>{};
 
   @override
   void initState() {
@@ -246,6 +244,7 @@ class _PlayerCardState extends State<PlayerCard> {
     const navy = Color(0xFF0B1B3A);
     const muted = Color(0xFF64748B);
     const green = Color(0xFF10B981);
+    const badgeBlue = Color(0xFF0EA5E9);
     const border = Color(0xFFE2E8F0);
     const chipBg = Color(0xFFF8FAFC);
 
@@ -253,66 +252,68 @@ class _PlayerCardState extends State<PlayerCard> {
     final number = widget.number.trim();
     final pos = widget.position.trim().isEmpty ? '-' : widget.position.trim();
     final age = _ageFromBirthDate(widget.birthDate);
-    final seasons = widget.seasons.where((e) => e.id.trim().isNotEmpty).toList();
-    final hasSelected =
-        seasons.any((s) => s.id.trim() == _selectedSeasonId.trim());
-    final effectiveSeasonId = hasSelected
-        ? _selectedSeasonId.trim()
-        : (seasons.isEmpty ? '' : seasons.first.id.trim());
-    if (effectiveSeasonId != _selectedSeasonId.trim()) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        setState(() => _selectedSeasonId = effectiveSeasonId);
-      });
+
+    String birthYear() {
+      final s = widget.birthDate.trim();
+      if (s.isEmpty) return '-';
+      final m = RegExp(r'^(\d{2})/(\d{2})/(\d{4})$').firstMatch(s);
+      if (m != null) return m.group(3) ?? '-';
+      final anyYear = RegExp(r'(\d{4})').firstMatch(s);
+      return anyYear?.group(1) ?? '-';
     }
 
-    Widget infoChip(String label) {
+    Widget infoTile({
+      required String label,
+      required String value,
+      required double labelSize,
+      required double valueSize,
+      required EdgeInsets padding,
+    }) {
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        padding: padding,
         decoration: BoxDecoration(
           color: chipBg,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(color: border),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 14,
+              offset: const Offset(0, 8),
+            ),
+          ],
         ),
-        child: Text(
-          label,
-          style: const TextStyle(
-            color: navy,
-            fontWeight: FontWeight.w800,
-            fontSize: 12,
-          ),
-        ),
-      );
-    }
-
-    Widget miniStatItem({
-      required Widget icon,
-      required String value,
-      required String label,
-    }) {
-      return Expanded(
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
-            icon,
-            const SizedBox(height: 6),
-            Text(
-              value,
-              style: const TextStyle(
-                color: navy,
-                fontWeight: FontWeight.w900,
-                fontSize: 16,
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                label.toUpperCase(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: muted,
+                  fontWeight: FontWeight.w900,
+                  fontSize: labelSize,
+                  letterSpacing: 0.6,
+                ),
               ),
             ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: muted,
-                fontWeight: FontWeight.w700,
-                fontSize: 11,
+            const SizedBox(height: 6),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: navy,
+                  fontWeight: FontWeight.w900,
+                  fontSize: valueSize,
+                ),
               ),
             ),
           ],
@@ -323,499 +324,611 @@ class _PlayerCardState extends State<PlayerCard> {
     final coverUrl = _normalizeUrl(widget.photoUrl);
 
     return Material(
-      color: Colors.black,
-      child: SizedBox.expand(
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: coverUrl.isEmpty
-                  ? Container(
-                      color: const Color(0xFF0B1B3A),
-                      child: const Center(
-                        child: Icon(
-                          Icons.person,
-                          size: 120,
-                          color: Colors.white54,
+      color: const Color(0xFFF8FAFC),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final safeTop = MediaQuery.of(context).padding.top;
+          final h = constraints.maxHeight;
+          final heroH = (h * 0.25).clamp(160.0, 240.0);
+          const overlap = 22.0;
+          final isNarrow = constraints.maxWidth < 360;
+          final infoAspect = isNarrow ? 1.25 : 1.35;
+          final statAspect = isNarrow ? 1.75 : 1.95;
+
+          Widget statCard({
+            required String title,
+            required String value,
+            required Widget icon,
+            Color? valueColor,
+          }) {
+            return Container(
+              padding: EdgeInsets.all(isNarrow ? 12 : 14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: border),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 16,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: muted,
+                            fontWeight: FontWeight.w700,
+                            fontSize: isNarrow ? 11 : 12,
+                          ),
                         ),
-                      ),
-                    )
-                  : WebSafeImage(
-                      url: coverUrl,
-                      width: double.infinity,
-                      height: double.infinity,
-                      isCircle: false,
-                      fit: BoxFit.cover,
-                      fallbackIconSize: 120,
-                    ),
-            ),
-            Positioned.fill(
-              child: IgnorePointer(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.black.withValues(alpha: 0.15),
-                        Colors.black.withValues(alpha: 0.55),
-                        Colors.black.withValues(alpha: 0.75),
+                        SizedBox(height: isNarrow ? 6 : 8),
+                        Text(
+                          value,
+                          style: TextStyle(
+                            color: valueColor ?? navy,
+                            fontWeight: FontWeight.w900,
+                            fontSize: isNarrow ? 20 : 22,
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                ),
+                  const SizedBox(width: 10),
+                  icon,
+                ],
               ),
-            ),
-            Positioned(
-              top: MediaQuery.of(context).padding.top + 8,
-              right: 12,
-              child: Material(
-                color: Colors.white.withValues(alpha: 0.18),
-                shape: const CircleBorder(),
-                child: IconButton(
-                  onPressed: () => Navigator.of(context).maybePop(),
-                  icon: const Icon(Icons.close_rounded),
-                  color: Colors.white,
-                  tooltip: 'Kapat',
-                ),
+            );
+          }
+
+          Widget iconBadge(IconData icon) {
+            return Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: green.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(14),
               ),
-            ),
-            Positioned.fill(
-              top: MediaQuery.of(context).size.height * 0.40,
-              child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(32),
-                ),
-                child: Container(
-                  color: Colors.white,
-                  child: FutureBuilder<_PlayerCardData>(
-                    future: _future,
-                    builder: (context, snapshot) {
-                      final data = snapshot.data ?? _PlayerCardData.empty();
-                      return CustomScrollView(
-                        slivers: [
-                          SliverToBoxAdapter(
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 18, 16, 12),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  Row(
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          name,
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                            color: navy,
-                                            fontWeight: FontWeight.w900,
-                                            fontSize: 24,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Text(
-                                        number.isEmpty ? 'No: -' : 'No: $number',
-                                        style: const TextStyle(
-                                          color: navy,
-                                          fontWeight: FontWeight.w900,
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Wrap(
-                                    spacing: 10,
-                                    runSpacing: 10,
-                                    children: [
-                                      infoChip('MEVKİ: $pos'),
-                                      infoChip(age == null ? 'YAŞ: -' : 'YAŞ: $age'),
-                                      infoChip(
-                                        widget.height == null
-                                            ? 'BOY: -'
-                                            : 'BOY: ${widget.height} cm',
-                                      ),
-                                      infoChip(
-                                        widget.weight == null
-                                            ? 'KİLO: -'
-                                            : 'KİLO: ${widget.weight} kg',
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
+              child: Icon(icon, color: green, size: 20),
+            );
+          }
+
+          return Stack(
+            children: [
+              Positioned(
+                left: 0,
+                right: 0,
+                top: 0,
+                height: heroH,
+                child: coverUrl.isEmpty
+                    ? Container(
+                        color: const Color(0xFFE2E8F0),
+                        child: const Center(
+                          child: Icon(
+                            Icons.person,
+                            size: 70,
+                            color: Color(0xFF94A3B8),
                           ),
-                          SliverPersistentHeader(
-                            pinned: true,
-                            delegate: _PinnedHeaderDelegate(
-                              minHeight: 98,
-                              maxHeight: 98,
-                              child: Container(
-                                color: Colors.white,
-                                padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 12,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: chipBg,
-                                    borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(color: border),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      miniStatItem(
-                                        icon: const Icon(
-                                          Icons.sports_soccer_outlined,
-                                          color: green,
-                                          size: 20,
-                                        ),
-                                        value: '${data.overall.matches}',
-                                        label: 'TOPLAM MAÇ',
-                                      ),
-                                      miniStatItem(
-                                        icon: const Icon(
-                                          Icons.gps_fixed_rounded,
-                                          color: green,
-                                          size: 20,
-                                        ),
-                                        value: '${data.overall.goals}',
-                                        label: 'GOL',
-                                      ),
-                                      miniStatItem(
-                                        icon: const Icon(
-                                          Icons.group_outlined,
-                                          color: green,
-                                          size: 20,
-                                        ),
-                                        value: '${data.overall.assists}',
-                                        label: 'ASİST',
-                                      ),
-                                      miniStatItem(
-                                        icon: Container(
-                                          width: 18,
-                                          height: 18,
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFFFBBF24),
-                                            borderRadius: BorderRadius.circular(4),
-                                          ),
-                                        ),
-                                        value: '${data.overall.yellow}',
-                                        label: 'SARI',
-                                      ),
-                                      miniStatItem(
-                                        icon: Container(
-                                          width: 18,
-                                          height: 18,
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFFEF4444),
-                                            borderRadius: BorderRadius.circular(4),
-                                          ),
-                                        ),
-                                        value: '${data.overall.red}',
-                                        label: 'KIRMIZI',
-                                      ),
-                                    ],
+                        ),
+                      )
+                    : WebSafeImage(
+                        url: coverUrl,
+                        width: double.infinity,
+                        height: heroH,
+                        isCircle: false,
+                        fit: BoxFit.cover,
+                        fallbackIconSize: 70,
+                      ),
+              ),
+              Positioned(
+                top: safeTop + 10,
+                right: 12,
+                child: Material(
+                  color: Colors.black.withValues(alpha: 0.30),
+                  shape: const CircleBorder(),
+                  child: IconButton(
+                    onPressed: () => Navigator.of(context).maybePop(),
+                    icon: const Icon(Icons.close_rounded),
+                    color: Colors.white,
+                    tooltip: 'Kapat',
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 0,
+                right: 0,
+                top: heroH - overlap,
+                bottom: 0,
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(28),
+                  ),
+                  child: Container(
+                    color: Colors.white,
+                    child: FutureBuilder<_PlayerCardData>(
+                      future: _future,
+                      builder: (context, snapshot) {
+                        final data = snapshot.data ?? _PlayerCardData.empty();
+                        final tournaments = data.tournaments;
+
+                        String? findTournamentIdForSeason(String seasonId) {
+                          final sid = seasonId.trim();
+                          if (sid.isEmpty) return null;
+                          for (final t in tournaments) {
+                            for (final s in t.sortedSeasons) {
+                              if (s.seasonId.trim() == sid) return t.tournamentId;
+                            }
+                          }
+                          return null;
+                        }
+
+                        String? ensureTournament() {
+                          final current = _selectedTournamentId.trim();
+                          if (current.isNotEmpty &&
+                              tournaments.any((t) => t.tournamentId == current)) {
+                            return current;
+                          }
+                          final inferred = findTournamentIdForSeason(_selectedSeasonId);
+                          if (inferred != null) return inferred;
+                          if (tournaments.isNotEmpty) return tournaments.first.tournamentId;
+                          return null;
+                        }
+
+                        final effectiveTournamentId = ensureTournament() ?? '';
+
+                        final selectedTournament = tournaments
+                            .where((t) => t.tournamentId == effectiveTournamentId)
+                            .toList(growable: false);
+
+                        final seasonsInTournament = selectedTournament.isEmpty
+                            ? const <_SeasonNode>[]
+                            : selectedTournament.first.sortedSeasons;
+
+                        final effectiveSeasonId = seasonsInTournament.any(
+                          (s) => s.seasonId.trim() == _selectedSeasonId.trim(),
+                        )
+                            ? _selectedSeasonId.trim()
+                            : (seasonsInTournament.isEmpty
+                                ? ''
+                                : seasonsInTournament.first.seasonId.trim());
+
+                        if (effectiveTournamentId != _selectedTournamentId.trim() ||
+                            effectiveSeasonId != _selectedSeasonId.trim()) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (!mounted) return;
+                            setState(() {
+                              _selectedTournamentId = effectiveTournamentId;
+                              _selectedSeasonId = effectiveSeasonId;
+                            });
+                          });
+                        }
+
+                        Widget numberBadge() {
+                          final text = number.isEmpty ? '-' : number;
+                          return Container(
+                            width: 62,
+                            height: 62,
+                            decoration: BoxDecoration(
+                              color: badgeBlue,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.10),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 6),
+                                ),
+                              ],
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(8),
+                              child: Center(
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    text,
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 22,
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
-                          ),
-                          SliverToBoxAdapter(
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
-                              child: const Text(
-                                'Turnuva ve Sezon Kırılımları',
-                                style: TextStyle(
-                                  color: navy,
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 16,
+                          );
+                        }
+
+                        return ListView(
+                          padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    name,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: navy,
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 26,
+                                    ),
+                                  ),
                                 ),
-                              ),
+                                const SizedBox(width: 12),
+                                numberBadge(),
+                              ],
                             ),
-                          ),
-                          SliverToBoxAdapter(
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                              child: ExpansionPanelList(
-                                expansionCallback: (index, isExpanded) {
-                                  final id = data.tournaments[index].tournamentId;
-                                  setState(() {
-                                    if (isExpanded) {
-                                      _expandedTournamentIds.remove(id);
-                                    } else {
-                                      _expandedTournamentIds.add(id);
-                                    }
-                                  });
-                                },
-                                children: [
-                                  for (final t in data.tournaments)
-                                    ExpansionPanel(
-                                      canTapOnHeader: true,
-                                      isExpanded: _expandedTournamentIds.contains(t.tournamentId),
-                                      headerBuilder: (context, isExpanded) {
-                                        return ListTile(
+                            const SizedBox(height: 16),
+                            GridView.count(
+                              padding: EdgeInsets.zero,
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              crossAxisCount: 3,
+                              crossAxisSpacing: 12,
+                              mainAxisSpacing: 12,
+                              childAspectRatio: infoAspect,
+                              children: [
+                                infoTile(
+                                  label: 'Mevki',
+                                  value: pos,
+                                  labelSize: isNarrow ? 10 : 11,
+                                  valueSize: isNarrow ? 14 : 16,
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: isNarrow ? 10 : 12,
+                                    vertical: isNarrow ? 10 : 12,
+                                  ),
+                                ),
+                                infoTile(
+                                  label: 'Yaş',
+                                  value: age == null ? '-' : '$age',
+                                  labelSize: isNarrow ? 10 : 11,
+                                  valueSize: isNarrow ? 14 : 16,
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: isNarrow ? 10 : 12,
+                                    vertical: isNarrow ? 10 : 12,
+                                  ),
+                                ),
+                                infoTile(
+                                  label: 'Boy',
+                                  value: widget.height == null ? '-' : '${widget.height} cm',
+                                  labelSize: isNarrow ? 10 : 11,
+                                  valueSize: isNarrow ? 14 : 16,
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: isNarrow ? 10 : 12,
+                                    vertical: isNarrow ? 10 : 12,
+                                  ),
+                                ),
+                                infoTile(
+                                  label: 'Kilo',
+                                  value: widget.weight == null ? '-' : '${widget.weight} kg',
+                                  labelSize: isNarrow ? 10 : 11,
+                                  valueSize: isNarrow ? 14 : 16,
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: isNarrow ? 10 : 12,
+                                    vertical: isNarrow ? 10 : 12,
+                                  ),
+                                ),
+                                infoTile(
+                                  label: 'Doğum',
+                                  value: birthYear(),
+                                  labelSize: isNarrow ? 10 : 11,
+                                  valueSize: isNarrow ? 14 : 16,
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: isNarrow ? 10 : 12,
+                                    vertical: isNarrow ? 10 : 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 18),
+                            Row(
+                              children: const [
+                                Icon(Icons.insights_outlined, color: green, size: 20),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Genel istatistikler',
+                                  style: TextStyle(
+                                    color: navy,
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            GridView.count(
+                              padding: EdgeInsets.zero,
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              crossAxisCount: 2,
+                              crossAxisSpacing: 12,
+                              mainAxisSpacing: 12,
+                              childAspectRatio: statAspect,
+                              children: [
+                                statCard(
+                                  title: 'Oynanan Maç',
+                                  value: '${data.overall.matches}',
+                                  icon: iconBadge(Icons.sports_soccer_outlined),
+                                ),
+                                statCard(
+                                  title: 'Gol',
+                                  value: '${data.overall.goals}',
+                                  valueColor: green,
+                                  icon: iconBadge(Icons.gps_fixed_rounded),
+                                ),
+                                statCard(
+                                  title: 'Asist',
+                                  value: '${data.overall.assists}',
+                                  valueColor: const Color(0xFF7C3AED),
+                                  icon: Container(
+                                    width: 38,
+                                    height: 38,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF7C3AED).withValues(alpha: 0.12),
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                    child: const Icon(
+                                      Icons.group_outlined,
+                                      color: Color(0xFF7C3AED),
+                                      size: 20,
+                                    ),
+                                  ),
+                                ),
+                                statCard(
+                                  title: 'Kartlar (S/K)',
+                                  value: '${data.overall.yellow} / ${data.overall.red}',
+                                  icon: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        width: 10,
+                                        height: 18,
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFFBBF24),
+                                          borderRadius: BorderRadius.circular(3),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        width: 10,
+                                        height: 18,
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFEF4444),
+                                          borderRadius: BorderRadius.circular(3),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 18),
+                            Row(
+                              children: const [
+                                Icon(Icons.bar_chart_outlined, color: green, size: 20),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Turnuva istatistikleri',
+                                  style: TextStyle(
+                                    color: navy,
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            if (tournaments.isEmpty)
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 18),
+                                child: Center(child: Text('Turnuva verisi bulunamadı.')),
+                              )
+                            else
+                              Theme(
+                                data: Theme.of(context).copyWith(
+                                  dividerColor: Colors.transparent,
+                                  splashColor: Colors.transparent,
+                                  highlightColor: Colors.transparent,
+                                ),
+                                child: Column(
+                                  children: [
+                                    for (final t in tournaments)
+                                      Container(
+                                        margin: const EdgeInsets.only(bottom: 10),
+                                        decoration: BoxDecoration(
+                                          color: chipBg,
+                                          borderRadius: BorderRadius.circular(16),
+                                          border: Border.all(color: border),
+                                        ),
+                                        child: ExpansionTile(
+                                          key: PageStorageKey<String>('t_${t.tournamentId}'),
+                                          initiallyExpanded:
+                                              t.tournamentId.trim() == effectiveTournamentId,
+                                          tilePadding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 4,
+                                          ),
+                                          childrenPadding:
+                                              const EdgeInsets.fromLTRB(12, 0, 12, 12),
                                           title: Text(
-                                            t.tournamentName,
+                                            t.tournamentName.trim().isEmpty
+                                                ? 'Turnuva'
+                                                : t.tournamentName,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
                                             style: const TextStyle(
                                               color: navy,
                                               fontWeight: FontWeight.w900,
                                             ),
                                           ),
-                                        );
-                                      },
-                                      body: Column(
-                                        children: [
-                                          for (final s in t.sortedSeasons)
-                                            ExpansionTile(
-                                              initiallyExpanded: false,
-                                              onExpansionChanged: (open) {
-                                                setState(() {
-                                                  final key = '${t.tournamentId}::${s.seasonId}';
-                                                  if (open) {
-                                                    _expandedSeasonIds.add(key);
-                                                  } else {
-                                                    _expandedSeasonIds.remove(key);
-                                                  }
-                                                });
-                                              },
-                                              title: Text(
-                                                s.seasonName,
-                                                style: const TextStyle(
-                                                  color: navy,
-                                                  fontWeight: FontWeight.w800,
+                                          children: [
+                                            for (final ss in t.sortedSeasons)
+                                              InkWell(
+                                                borderRadius: BorderRadius.circular(14),
+                                                onTap: () {
+                                                  setState(() {
+                                                    _selectedTournamentId = t.tournamentId;
+                                                    _selectedSeasonId = ss.seasonId;
+                                                  });
+                                                },
+                                                child: Container(
+                                                  padding: const EdgeInsets.symmetric(
+                                                    horizontal: 12,
+                                                    vertical: 10,
+                                                  ),
+                                                  margin: const EdgeInsets.only(top: 8),
+                                                  decoration: BoxDecoration(
+                                                    color: ss.seasonId.trim() == effectiveSeasonId
+                                                        ? Colors.white
+                                                        : Colors.transparent,
+                                                    borderRadius: BorderRadius.circular(14),
+                                                    border: Border.all(
+                                                      color: ss.seasonId.trim() == effectiveSeasonId
+                                                          ? green
+                                                          : border,
+                                                      width: ss.seasonId.trim() == effectiveSeasonId
+                                                          ? 1.4
+                                                          : 1.0,
+                                                    ),
+                                                  ),
+                                                  child: Row(
+                                                    children: [
+                                                      Expanded(
+                                                        child: Text(
+                                                          ss.seasonName.trim().isEmpty
+                                                              ? ss.seasonId
+                                                              : ss.seasonName,
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow.ellipsis,
+                                                          style: TextStyle(
+                                                            color: navy,
+                                                            fontWeight:
+                                                                ss.seasonId.trim() ==
+                                                                        effectiveSeasonId
+                                                                    ? FontWeight.w900
+                                                                    : FontWeight.w800,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      if (ss.seasonId.trim() == effectiveSeasonId)
+                                                        const Icon(
+                                                          Icons.check_circle_rounded,
+                                                          color: green,
+                                                          size: 20,
+                                                        ),
+                                                    ],
+                                                  ),
                                                 ),
                                               ),
-                                              childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-                                              children: [
-                                                _StatRow(label: 'Maç', value: '${s.totals.matches}'),
-                                                _StatRow(label: 'Gol', value: '${s.totals.goals}'),
-                                                _StatRow(label: 'Asist', value: '${s.totals.assists}'),
-                                                _StatRow(
-                                                  label: 'Sarı Kart',
-                                                  value: '${s.totals.yellow}',
-                                                ),
-                                                _StatRow(
-                                                  label: 'Kırmızı Kart',
-                                                  value: '${s.totals.red}',
-                                                ),
-                                              ],
+                                          ],
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            const SizedBox(height: 14),
+                            StreamBuilder<PlayerStats>(
+                              stream: _watchSelectedStats(),
+                              builder: (context, snap) {
+                                final s = snap.data ??
+                                    const PlayerStats(
+                                      id: '',
+                                      playerPhone: '',
+                                      tournamentId: '',
+                                      teamId: '',
+                                    );
+                                final cardsValue = '${s.yellowCards} / ${s.redCards}';
+                                return GridView.count(
+                                  padding: EdgeInsets.zero,
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  crossAxisCount: 2,
+                                  crossAxisSpacing: 12,
+                                  mainAxisSpacing: 12,
+                                  childAspectRatio: statAspect,
+                                  children: [
+                                    statCard(
+                                      title: 'Oynanan Maç',
+                                      value: '${s.matchesPlayed}',
+                                      icon: iconBadge(Icons.sports_soccer_outlined),
+                                    ),
+                                    statCard(
+                                      title: 'Gol',
+                                      value: '${s.goals}',
+                                      valueColor: green,
+                                      icon: iconBadge(Icons.gps_fixed_rounded),
+                                    ),
+                                    statCard(
+                                      title: 'Asist',
+                                      value: '${s.assists}',
+                                      valueColor: const Color(0xFF7C3AED),
+                                      icon: Container(
+                                        width: 38,
+                                        height: 38,
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF7C3AED).withValues(alpha: 0.12),
+                                          borderRadius: BorderRadius.circular(14),
+                                        ),
+                                        child: const Icon(
+                                          Icons.group_outlined,
+                                          color: Color(0xFF7C3AED),
+                                          size: 20,
+                                        ),
+                                      ),
+                                    ),
+                                    statCard(
+                                      title: 'Kartlar (S/K)',
+                                      value: cardsValue,
+                                      icon: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Container(
+                                            width: 10,
+                                            height: 18,
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFFBBF24),
+                                              borderRadius: BorderRadius.circular(3),
                                             ),
-                                          const SizedBox(height: 6),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Container(
+                                            width: 10,
+                                            height: 18,
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFEF4444),
+                                              borderRadius: BorderRadius.circular(3),
+                                            ),
+                                          ),
                                         ],
                                       ),
                                     ),
-                                ],
-                              ),
+                                  ],
+                                );
+                              },
                             ),
-                          ),
-                          SliverToBoxAdapter(
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  const Text(
-                                    'Turnuva İstatistikleri',
-                                    style: TextStyle(
-                                      color: navy,
-                                      fontWeight: FontWeight.w900,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 10),
-                                  DropdownButtonFormField<String>(
-                                    value: effectiveSeasonId.isEmpty ? null : effectiveSeasonId,
-                                    isExpanded: true,
-                                    icon: const Icon(Icons.keyboard_arrow_down_rounded, color: navy),
-                                    decoration: InputDecoration(
-                                      labelText: 'Sezon Seçin',
-                                      labelStyle: const TextStyle(
-                                        color: muted,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                        borderSide: const BorderSide(color: border),
-                                      ),
-                                      enabledBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                        borderSide: const BorderSide(color: border),
-                                      ),
-                                      focusedBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                        borderSide: const BorderSide(color: green, width: 1.6),
-                                      ),
-                                      filled: true,
-                                      fillColor: Colors.white,
-                                    ),
-                                    dropdownColor: Colors.white,
-                                    items: [
-                                      for (final s in seasons)
-                                        DropdownMenuItem<String>(
-                                          value: s.id,
-                                          child: Text(
-                                            s.name.trim().isEmpty ? s.id : s.name,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              color: navy,
-                                              fontWeight: FontWeight.w800,
-                                            ),
-                                          ),
-                                        ),
-                                    ],
-                                    onChanged: seasons.isEmpty
-                                        ? null
-                                        : (v) => setState(() => _selectedSeasonId = (v ?? '').trim()),
-                                  ),
-                                  const SizedBox(height: 14),
-                                  StreamBuilder<PlayerStats>(
-                                    stream: _watchSelectedStats(),
-                                    builder: (context, snapshot) {
-                                      final s = snapshot.data ??
-                                          const PlayerStats(
-                                            id: '',
-                                            playerPhone: '',
-                                            tournamentId: '',
-                                            teamId: '',
-                                          );
-                                      return Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                        decoration: BoxDecoration(
-                                          color: chipBg,
-                                          borderRadius: BorderRadius.circular(14),
-                                          border: Border.all(color: border),
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            miniStatItem(
-                                              icon: const Icon(Icons.sports_soccer_outlined, color: green, size: 20),
-                                              value: '${s.matchesPlayed}',
-                                              label: 'MAÇ',
-                                            ),
-                                            miniStatItem(
-                                              icon: const Icon(Icons.gps_fixed_rounded, color: green, size: 20),
-                                              value: '${s.goals}',
-                                              label: 'GOL',
-                                            ),
-                                            miniStatItem(
-                                              icon: const Icon(Icons.group_outlined, color: green, size: 20),
-                                              value: '${s.assists}',
-                                              label: 'ASİST',
-                                            ),
-                                            miniStatItem(
-                                              icon: Container(
-                                                width: 18,
-                                                height: 18,
-                                                decoration: BoxDecoration(
-                                                  color: const Color(0xFFFBBF24),
-                                                  borderRadius: BorderRadius.circular(4),
-                                                ),
-                                              ),
-                                              value: '${s.yellowCards}',
-                                              label: 'SARI',
-                                            ),
-                                            miniStatItem(
-                                              icon: Container(
-                                                width: 18,
-                                                height: 18,
-                                                decoration: BoxDecoration(
-                                                  color: const Color(0xFFEF4444),
-                                                  borderRadius: BorderRadius.circular(4),
-                                                ),
-                                              ),
-                                              value: '${s.redCards}',
-                                              label: 'KIRMIZI',
-                                            ),
-                                          ],
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      );
-                    },
+                          ],
+                        );
+                      },
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
-  _PinnedHeaderDelegate({
-    required this.minHeight,
-    required this.maxHeight,
-    required this.child,
-  });
-
-  final double minHeight;
-  final double maxHeight;
-  final Widget child;
-
-  @override
-  double get minExtent => minHeight;
-
-  @override
-  double get maxExtent => maxHeight;
-
-  @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
-    return child;
-  }
-
-  @override
-  bool shouldRebuild(covariant _PinnedHeaderDelegate oldDelegate) {
-    return minHeight != oldDelegate.minHeight ||
-        maxHeight != oldDelegate.maxHeight ||
-        child != oldDelegate.child;
-  }
-}
-
-class _StatRow extends StatelessWidget {
-  const _StatRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    const navy = Color(0xFF0B1B3A);
-    const muted = Color(0xFF64748B);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(
-                color: muted,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-          Text(
-            value,
-            style: const TextStyle(
-              color: navy,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }

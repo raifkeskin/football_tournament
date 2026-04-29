@@ -1567,6 +1567,13 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
       body: StreamBuilder<List<GroupModel>>(
         stream: _leagueService.watchGroups(widget.seasonId),
         builder: (context, groupsSnap) {
+          if (groupsSnap.connectionState == ConnectionState.waiting &&
+              !groupsSnap.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (groupsSnap.hasError) {
+            return Center(child: Text('Hata: ${groupsSnap.error}'));
+          }
           final groups = (groupsSnap.data ?? const <GroupModel>[])
             ..sort(
               (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
