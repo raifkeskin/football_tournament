@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'admin_group_management_screen.dart';
 import 'admin_manage_leagues_screen.dart';
 import '../../team/screens/admin_manage_teams_screen.dart';
+import '../../player/screens/admin_player_management_screen.dart';
 import '../services/interfaces/i_league_service.dart';
 import '../../../core/services/service_locator.dart';
 
@@ -63,6 +64,22 @@ class TournamentAdminDashboardScreen extends StatelessWidget {
                 icon: const Icon(Icons.settings_outlined),
                 label: const Text(
                   'Turnuva Yönetimi',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ),
+              const SizedBox(height: 12),
+              FilledButton.tonalIcon(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const AdminPlayerManagementScreen(),
+                    ),
+                  );
+                },
+                style: buttonStyle(),
+                icon: const Icon(Icons.badge_outlined),
+                label: const Text(
+                  'Futbolcu Lisans Yönetimi',
                   style: TextStyle(fontWeight: FontWeight.w900),
                 ),
               ),
