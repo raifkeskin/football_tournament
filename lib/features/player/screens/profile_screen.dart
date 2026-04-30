@@ -934,10 +934,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           child: FilledButton.tonalIcon(
                             onPressed: state.isLoading
                                 ? null
-                                : () => _openPlayerLicenseMenu(
-                                      phone: state.phone,
-                                      isAdmin: state.isAdmin,
-                                    ),
+                                : () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute<void>(
+                                        builder: (_) => const FootballerLicenseScreen(),
+                                      ),
+                                    );
+                                  },
                             style: FilledButton.styleFrom(
                               minimumSize: const Size(double.infinity, 50),
                             ),
@@ -1234,29 +1237,6 @@ class _PhoneMaskFormatter extends TextInputFormatter {
     return TextEditingValue(
       text: formatted,
       selection: TextSelection.collapsed(offset: formatted.length),
-    );
-  }
-}
-
-class AdminPanelScreen extends StatelessWidget {
-  const AdminPanelScreen({super.key, required this.onLogout});
-
-  final Future<void> Function() onLogout;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Admin Panel'),
-        centerTitle: true,
-      ),
-      body: AdminPanelWidget(
-        onLogout: () async {
-          await onLogout();
-          if (!context.mounted) return;
-          Navigator.of(context).pop();
-        },
-      ),
     );
   }
 }

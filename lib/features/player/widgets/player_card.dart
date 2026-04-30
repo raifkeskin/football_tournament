@@ -664,14 +664,14 @@ class _PlayerCardState extends State<PlayerCard> {
                                   icon: iconBadge(Icons.sports_soccer_outlined),
                                 ),
                                 statCard(
-                                  title: 'Gol',
-                                  value: '${data.overall.goals}',
+                                  title: 'Gol / Asist',
+                                  value: '${data.overall.goals} / ${data.overall.assists}',
                                   valueColor: green,
                                   icon: iconBadge(Icons.gps_fixed_rounded),
                                 ),
                                 statCard(
-                                  title: 'Asist',
-                                  value: '${data.overall.assists}',
+                                  title: 'Maçın Adamı',
+                                  value: '${data.overall.matches}',
                                   valueColor: const Color(0xFF7C3AED),
                                   icon: Container(
                                     width: 38,

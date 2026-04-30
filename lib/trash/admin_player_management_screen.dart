@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:football_tournament/features/admin/services/approval_service.dart';
 
-import '../../match/models/match.dart';
-import '../../team/models/team.dart';
-import '../../team/services/interfaces/i_team_service.dart';
-import '../../tournament/models/league.dart';
-import '../../tournament/services/interfaces/i_league_service.dart';
-import '../../../core/config/app_config.dart';
-import '../../../core/services/app_session.dart';
-import '../../../core/services/service_locator.dart';
-import '../../../core/widgets/web_safe_image.dart';
-import '../../team/screens/team_squad_screen.dart';
-import '../services/player_service.dart';
+import '../../features/match/models/match.dart';
+import '../../features/team/models/team.dart';
+import '../../features/team/services/interfaces/i_team_service.dart';
+import '../../features/tournament/models/league.dart';
+import '../../features/tournament/services/interfaces/i_league_service.dart';
+import '../../core/config/app_config.dart';
+import '../../core/services/app_session.dart';
+import '../../core/services/service_locator.dart';
+import '../../core/widgets/web_safe_image.dart';
+import '../../features/team/screens/team_squad_screen.dart';
+import '../../features/player/widgets/player_card.dart';
+import '../../features/player/services/player_service.dart';
 
 class AdminPlayerManagementScreen extends StatefulWidget {
   const AdminPlayerManagementScreen({super.key});
@@ -37,6 +38,59 @@ class _AdminPlayerManagementScreenState extends State<AdminPlayerManagementScree
     if (url.isEmpty) return '';
     if (url.startsWith('http://') || url.startsWith('https://')) return url;
     return 'https://$url';
+  }
+
+  String _positionsBirthLine(PlayerModel p) {
+    final main = (p.mainPosition ?? '').trim();
+    final sub = (p.position ?? '').trim();
+    final pos = main.isEmpty ? (sub.isEmpty ? '-' : sub) : (sub.isEmpty ? main : '$main / $sub');
+    final birth = (p.birthDate ?? '').trim();
+    final birthText = birth.isEmpty ? '-' : birth;
+    return '$pos - $birthText';
+  }
+
+  Future<void> _openPlayerForm({PlayerModel? editing}) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => PlayerFormScreen(
+          standalone: true,
+          editing: editing,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openPlayerCard(PlayerModel p) async {
+    final phoneOrId = ((p.phone ?? '').trim().isNotEmpty ? p.phone! : p.id).trim();
+    final h = MediaQuery.of(context).size.height * 0.95;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      constraints: BoxConstraints(maxHeight: h),
+      showDragHandle: true,
+      clipBehavior: Clip.antiAlias,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return SizedBox(
+          height: h,
+          child: PlayerCard(
+            playerPhone: phoneOrId,
+            name: p.name,
+            number: (p.number ?? '').trim(),
+            photoUrl: (p.photoUrl ?? '').trim(),
+            position: (p.position ?? p.mainPosition ?? '').trim(),
+            birthDate: (p.birthDate ?? '').trim(),
+            height: p.height,
+            weight: p.weight,
+            seasons: const <League>[],
+            initialSeasonId: '',
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -71,7 +125,7 @@ class _AdminPlayerManagementScreenState extends State<AdminPlayerManagementScree
     if (!mounted || action == null) return;
     switch (action) {
       case 'create':
-        await _openCreatePlayerSheet();
+        await _openPlayerForm();
         return;
       case 'bulk':
         await _openBulkUploadFlow();
@@ -405,7 +459,7 @@ class _AdminPlayerManagementScreenState extends State<AdminPlayerManagementScree
             TextField(
               controller: _searchController,
               decoration: const InputDecoration(
-                labelText: 'Oyuncu Ara (Ad Soyad)',
+                labelText: 'Oyuncu Ara',
                 prefixIcon: Icon(Icons.search),
                 border: OutlineInputBorder(),
               ),
@@ -432,8 +486,6 @@ class _AdminPlayerManagementScreenState extends State<AdminPlayerManagementScree
                     itemBuilder: (context, i) {
                       final p = list[i];
                       final photo = _normalizeUrl((p.photoUrl ?? '').trim());
-                      final phone = (p.phone ?? '').trim();
-                      final role = p.role.trim();
                       return Card(
                         margin: const EdgeInsets.symmetric(vertical: 4),
                         child: ListTile(
@@ -442,6 +494,7 @@ class _AdminPlayerManagementScreenState extends State<AdminPlayerManagementScree
                             horizontal: 12,
                             vertical: 2,
                           ),
+                          onTap: () => _openPlayerCard(p),
                           leading: photo.isNotEmpty
                               ? WebSafeImage(
                                   url: photo,
@@ -462,14 +515,15 @@ class _AdminPlayerManagementScreenState extends State<AdminPlayerManagementScree
                             overflow: TextOverflow.ellipsis,
                           ),
                           subtitle: Text(
-                            [
-                              if (phone.isNotEmpty) phone,
-                              if (role.isNotEmpty) role,
-                            ].join(' • '),
+                            _positionsBirthLine(p),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          trailing: const Icon(Icons.chevron_right_rounded),
+                          trailing: IconButton(
+                            tooltip: 'Düzenle',
+                            onPressed: () => _openPlayerForm(editing: p),
+                            icon: const Icon(Icons.edit_outlined),
+                          ),
                         ),
                       );
                     },
@@ -483,3 +537,4 @@ class _AdminPlayerManagementScreenState extends State<AdminPlayerManagementScree
     );
   }
 }
+

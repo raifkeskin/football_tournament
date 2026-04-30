@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:football_tournament/features/team/screens/admin_manage_teams_screen.dart';
+import 'package:football_tournament/features/team/screens/team_squad_screen.dart';
 import '../features/tournament/screens/admin_manage_leagues_screen.dart';
 import '../features/match/screens/admin_fixture_entry_screen.dart';
 import '../features/news/screens/admin_manage_news_screen.dart';
@@ -26,6 +27,18 @@ class AdminPanelWidget extends StatelessWidget {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
                 builder: (_) => const AdminManageLeaguesScreen(),
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 12),
+        _PanelButonu(
+          baslik: 'Futbolcu Lisans Yönetimi',
+          ikon: Icons.badge_outlined,
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const FootballerLicenseScreen(),
               ),
             );
           },
@@ -141,6 +154,31 @@ class AdminPanelWidget extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class AdminPanelScreen extends StatelessWidget {
+  const AdminPanelScreen({super.key, required this.onLogout});
+
+  final Future<void> Function() onLogout;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Admin Panel'),
+        centerTitle: true,
+      ),
+      body: AdminPanelWidget(
+        onLogout: () {
+          () async {
+            await onLogout();
+            if (!context.mounted) return;
+            Navigator.of(context).pop();
+          }();
+        },
+      ),
     );
   }
 }

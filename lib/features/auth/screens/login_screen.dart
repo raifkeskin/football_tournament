@@ -101,7 +101,7 @@ class _LoginScreenState extends State<LoginScreen> {
         );
         return;
       }
-      Navigator.of(context).push(
+      Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute<void>(
           builder: (_) => AdminPanelScreen(
             onLogout: () async {
@@ -109,6 +109,7 @@ class _LoginScreenState extends State<LoginScreen> {
             },
           ),
         ),
+        (Route<dynamic> route) => false,
       );
     } catch (e) {
       if (!mounted) return;
@@ -332,29 +333,6 @@ class _PhoneMaskFormatter extends TextInputFormatter {
     return TextEditingValue(
       text: formatted,
       selection: TextSelection.collapsed(offset: formatted.length),
-    );
-  }
-}
-
-class AdminPanelScreen extends StatelessWidget {
-  const AdminPanelScreen({super.key, required this.onLogout});
-
-  final Future<void> Function() onLogout;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Admin Panel'),
-        centerTitle: true,
-      ),
-      body: AdminPanelWidget(
-        onLogout: () async {
-          await onLogout();
-          if (!context.mounted) return;
-          Navigator.of(context).pop();
-        },
-      ),
     );
   }
 }

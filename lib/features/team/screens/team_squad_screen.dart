@@ -10,11 +10,14 @@ import 'package:football_tournament/features/admin/services/approval_service.dar
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../../core/config/app_config.dart';
 import '../../tournament/models/league.dart';
+import '../../tournament/services/interfaces/i_league_service.dart';
 import '../../match/models/match.dart';
 import '../../player/widgets/player_card.dart';
 import '../../../core/services/app_session.dart';
 import '../../../core/services/image_upload_service.dart';
+import '../models/team.dart';
 import '../services/interfaces/i_team_service.dart';
 import '../../../core/services/service_locator.dart';
 import '../services/supabase/supabase_team_service.dart';
@@ -2749,6 +2752,409 @@ class PhoneMaskFormatter extends TextInputFormatter {
     return TextEditingValue(
       text: formatted,
       selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+}
+
+class FootballerLicenseScreen extends StatefulWidget {
+  const FootballerLicenseScreen({super.key});
+
+  @override
+  State<FootballerLicenseScreen> createState() => _FootballerLicenseScreenState();
+}
+
+class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
+  final ITeamService _teamService = ServiceLocator.teamService;
+  final ILeagueService _leagueService = ServiceLocator.leagueService;
+
+  final _searchController = TextEditingController();
+  String _q = '';
+
+  String _norm(String input) {
+    return input.replaceAll('İ', 'i').replaceAll('I', 'ı').toLowerCase().trim();
+  }
+
+  String _normalizeUrl(String raw) {
+    final url = raw.trim();
+    if (url.isEmpty) return '';
+    if (url.startsWith('http://') || url.startsWith('https://')) return url;
+    return 'https://$url';
+  }
+
+  bool _isFootballerRole(String role) {
+    final r = role.trim();
+    return r == 'Futbolcu' || r == 'Her İkisi';
+  }
+
+  String _positionsBirthLine(PlayerModel p) {
+    final main = (p.mainPosition ?? '').trim();
+    final sub = (p.position ?? '').trim();
+    final pos = main.isEmpty ? (sub.isEmpty ? '-' : sub) : (sub.isEmpty ? main : '$main($sub)');
+    final birth = birthDateDbToUi(p.birthDate).trim();
+    return '$pos - ${birth.isEmpty ? '/' : birth}';
+  }
+
+  Future<void> _openPlayerForm({PlayerModel? editing}) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => PlayerFormScreen(
+          standalone: true,
+          editing: editing,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openPlayerCard(PlayerModel p) async {
+    final phoneOrId = ((p.phone ?? '').trim().isNotEmpty ? p.phone! : p.id).trim();
+    final h = MediaQuery.of(context).size.height * 0.95;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      constraints: BoxConstraints(maxHeight: h),
+      showDragHandle: true,
+      clipBehavior: Clip.antiAlias,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return SizedBox(
+          height: h,
+          child: PlayerCard(
+            playerPhone: phoneOrId,
+            name: p.name,
+            number: (p.number ?? '').trim(),
+            photoUrl: (p.photoUrl ?? '').trim(),
+            position: (p.position ?? p.mainPosition ?? '').trim(),
+            birthDate: birthDateDbToUi(p.birthDate),
+            height: p.height,
+            weight: p.weight,
+            seasons: const <League>[],
+            initialSeasonId: '',
+          ),
+        );
+      },
+    );
+  }
+
+  Future<Map<String, String>?> _pickLeagueTeamForBulkUpload() async {
+    String selectedLeagueId = '';
+    String selectedTeamId = '';
+    String selectedTeamName = '';
+
+    return showModalBottomSheet<Map<String, String>>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.8),
+      showDragHandle: true,
+      clipBehavior: Clip.antiAlias,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => SafeArea(
+        child: StatefulBuilder(
+          builder: (context, setSheetState) {
+            Future<List<Team>> loadTeams() async {
+              final id = selectedLeagueId.trim();
+              if (id.isEmpty) return const <Team>[];
+              try {
+                return await _teamService.getTeamsCached(id, caller: 'FootballerLicenseScreen');
+              } catch (_) {
+                return const <Team>[];
+              }
+            }
+
+            return StreamBuilder<List<League>>(
+              stream: _leagueService.watchLeagues(),
+              builder: (context, leaguesSnap) {
+                final leagues = leaguesSnap.data ?? const <League>[];
+                leagues.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+                if (selectedLeagueId.isEmpty && leagues.isNotEmpty) {
+                  selectedLeagueId = leagues.first.id;
+                }
+
+                return FutureBuilder<List<Team>>(
+                  future: loadTeams(),
+                  builder: (context, teamsSnap) {
+                    final teams = teamsSnap.data ?? const <Team>[];
+                    final list = teams.toList()
+                      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+                    return Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 6, 16, 16),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          DropdownButtonFormField<String>(
+                            value: selectedLeagueId.isEmpty ? null : selectedLeagueId,
+                            decoration: const InputDecoration(
+                              labelText: 'Turnuva',
+                              prefixIcon: Icon(Icons.emoji_events_outlined),
+                              border: OutlineInputBorder(),
+                            ),
+                            items: [
+                              for (final l in leagues)
+                                DropdownMenuItem<String>(
+                                  value: l.id,
+                                  child: Text(l.name.trim().isEmpty ? l.id : l.name),
+                                ),
+                            ],
+                            onChanged: (v) {
+                              setSheetState(() {
+                                selectedLeagueId = v ?? '';
+                                selectedTeamId = '';
+                                selectedTeamName = '';
+                              });
+                            },
+                          ),
+                          const SizedBox(height: 12),
+                          if (selectedLeagueId.trim().isEmpty)
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                              child: Text('Önce turnuva seçin.'),
+                            )
+                          else if (teamsSnap.connectionState == ConnectionState.waiting)
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 18),
+                              child: Center(child: CircularProgressIndicator()),
+                            )
+                          else if (list.isEmpty)
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                              child: Text('Bu turnuvada takım bulunamadı.'),
+                            )
+                          else
+                            Flexible(
+                              child: ListView.separated(
+                                shrinkWrap: true,
+                                itemCount: list.length,
+                                separatorBuilder: (_, _) => const Divider(height: 1),
+                                itemBuilder: (context, i) {
+                                  final t = list[i];
+                                  final selected = t.id == selectedTeamId;
+                                  return ListTile(
+                                    title: Text(t.name.trim().isEmpty ? t.id : t.name),
+                                    trailing:
+                                        selected ? const Icon(Icons.check_rounded) : null,
+                                    onTap: () {
+                                      setSheetState(() {
+                                        selectedTeamId = t.id;
+                                        selectedTeamName = t.name.trim();
+                                      });
+                                    },
+                                  );
+                                },
+                              ),
+                            ),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 50,
+                            child: FilledButton(
+                              onPressed: selectedLeagueId.trim().isEmpty ||
+                                      selectedTeamId.trim().isEmpty
+                                  ? null
+                                  : () => Navigator.pop(
+                                        context,
+                                        {
+                                          'leagueId': selectedLeagueId,
+                                          'teamId': selectedTeamId,
+                                          'teamName': selectedTeamName,
+                                        },
+                                      ),
+                              child: const Text(
+                                'Devam Et',
+                                style: TextStyle(fontWeight: FontWeight.w900),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                );
+              },
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openBulkUploadFlow() async {
+    if (AppConfig.activeDatabase != DatabaseType.supabase) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bu işlem bu veritabanı modunda desteklenmiyor.')),
+      );
+      return;
+    }
+
+    final picked = await _pickLeagueTeamForBulkUpload();
+    if (!mounted || picked == null) return;
+
+    final leagueId = (picked['leagueId'] ?? '').trim();
+    final teamId = (picked['teamId'] ?? '').trim();
+    final teamName = (picked['teamName'] ?? '').trim();
+    if (leagueId.isEmpty || teamId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Takım/turnuva bilgisi bulunamadı.')),
+      );
+      return;
+    }
+
+    await showSquadBulkUploadDialog(
+      context: context,
+      approvalService: ApprovalService(),
+      leagueId: leagueId,
+      teamId: teamId,
+      teamName: teamName.isEmpty ? teamId : teamName,
+    );
+  }
+
+  Future<void> _openFabMenu() async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.person_add_alt_1_rounded),
+              title: const Text('Futbolcu Ekle'),
+              onTap: () => Navigator.pop(context, 'create'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.upload_file_rounded),
+              title: const Text('Toplu Yükle'),
+              onTap: () => Navigator.pop(context, 'bulk'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (!mounted || action == null) return;
+    switch (action) {
+      case 'create':
+        await _openPlayerForm();
+        return;
+      case 'bulk':
+        await _openBulkUploadFlow();
+        return;
+    }
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isAdmin = AppSession.of(context).value.isAdmin;
+    final cs = Theme.of(context).colorScheme;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Futbolcu Lisans Yönetimi'),
+        centerTitle: true,
+      ),
+      floatingActionButton: isAdmin
+          ? FloatingActionButton(
+              onPressed: _openFabMenu,
+              child: const Icon(Icons.add),
+            )
+          : null,
+      body: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+        child: Column(
+          children: [
+            TextField(
+              controller: _searchController,
+              decoration: const InputDecoration(
+                labelText: 'Oyuncu Ara',
+                prefixIcon: Icon(Icons.search),
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (v) => setState(() => _q = v),
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: StreamBuilder<List<PlayerModel>>(
+                stream: _teamService.watchAllPlayers(caller: 'FootballerLicenseScreen'),
+                initialData: const <PlayerModel>[],
+                builder: (context, snap) {
+                  if (snap.hasError) {
+                    return Center(child: Text('Hata: ${snap.error}'));
+                  }
+                  final q = _norm(_q);
+                  final list = (snap.data ?? const <PlayerModel>[])
+                      .where((p) => _isFootballerRole(p.role))
+                      .where((p) => q.isEmpty || _norm(p.name).contains(q))
+                      .toList()
+                    ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+
+                  if (list.isEmpty) {
+                    return const Center(child: Text('Futbolcu bulunamadı.'));
+                  }
+                  return ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(0, 0, 0, 12),
+                    itemCount: list.length,
+                    itemBuilder: (context, i) {
+                      final p = list[i];
+                      final photo = _normalizeUrl((p.photoUrl ?? '').trim());
+                      return Card(
+                        margin: const EdgeInsets.symmetric(vertical: 4),
+                        child: ListTile(
+                          dense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 2,
+                          ),
+                          onTap: () => _openPlayerCard(p),
+                          leading: photo.isNotEmpty
+                              ? WebSafeImage(
+                                  url: photo,
+                                  width: 38,
+                                  height: 38,
+                                  isCircle: true,
+                                  fit: BoxFit.cover,
+                                  fallbackIconSize: 18,
+                                )
+                              : CircleAvatar(
+                                  radius: 19,
+                                  backgroundColor: cs.primary.withValues(alpha: 0.12),
+                                  child: Icon(Icons.person, size: 18, color: cs.primary),
+                                ),
+                          title: Text(
+                            p.name.trim().isEmpty ? p.id : p.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: Text(
+                            _positionsBirthLine(p),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          trailing: IconButton(
+                            tooltip: 'Düzenle',
+                            onPressed: () => _openPlayerForm(editing: p),
+                            icon: const Icon(Icons.edit_outlined),
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

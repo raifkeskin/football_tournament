@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'admin_group_management_screen.dart';
 import 'admin_manage_leagues_screen.dart';
 import '../../team/screens/admin_manage_teams_screen.dart';
-import '../../player/screens/admin_player_management_screen.dart';
+import '../../team/screens/team_squad_screen.dart';
 import '../services/interfaces/i_league_service.dart';
 import '../../../core/services/service_locator.dart';
 
@@ -72,7 +72,7 @@ class TournamentAdminDashboardScreen extends StatelessWidget {
                 onPressed: () {
                   Navigator.of(context).push(
                     MaterialPageRoute<void>(
-                      builder: (_) => const AdminPlayerManagementScreen(),
+                      builder: (_) => const FootballerLicenseScreen(),
                     ),
                   );
                 },
