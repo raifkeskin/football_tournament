@@ -696,126 +696,193 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
     final cs = Theme.of(context).colorScheme;
     if (!isAdmin) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Turnuva Yönetimi')),
+        backgroundColor: const Color(0xFF0F172A),
+        appBar: AppBar(
+          title: const Text('Turnuva Yönetimi', style: TextStyle(color: Colors.white)),
+          backgroundColor: const Color(0xFF0F172A),
+          iconTheme: const IconThemeData(color: Colors.white),
+        ),
         body: const Center(
           child: Text(
             'Bu sayfaya erişim yetkiniz yok.',
             textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white),
           ),
         ),
       );
     }
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Turnuva Yönetimi'),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            onPressed: _createLeagueDialog,
-            icon: const Icon(Icons.add),
-            color: const Color(0xFF10B981),
-            tooltip: 'Yeni Turnuva Oluştur',
-          ),
-        ],
-      ),
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: const Color(0xFF0F172A),
       floatingActionButton: null,
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-        children: [
-          const SizedBox(height: 12),
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            expandedHeight: 200.0,
+            pinned: true,
+            stretch: true,
+            backgroundColor: const Color(0xFF0F172A),
+            iconTheme: const IconThemeData(color: Colors.white),
+            actions: [
+              Padding(
+                padding: const EdgeInsets.only(right: 8.0),
+                child: IconButton(
+                  onPressed: _createLeagueDialog,
+                  icon: const Icon(
+                    Icons.add_rounded,
+                    color: Colors.white,
+                    size: 32,
+                    weight: 900,
+                  ),
+                  tooltip: 'Yeni Turnuva Oluştur',
+                ),
+              ),
+            ],
+            flexibleSpace: FlexibleSpaceBar(
+              centerTitle: true,
+              title: const Text(
+                'Turnuva Yönetimi',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 18,
+                  letterSpacing: -0.5,
+                ),
+              ),
+              background: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Image.asset(
+                    'assets/admin/tournament_bg.jpg',
+                    fit: BoxFit.cover,
+                  ),
+                  Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.black.withOpacity(0.2),
+                          const Color(0xFF0F172A).withOpacity(0.8),
+                          const Color(0xFF0F172A),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(child: const SizedBox(height: 12)),
           StreamBuilder<List<League>>(
             stream: _watchActiveLeagues(),
             builder: (context, snapshot) {
               if (!snapshot.hasData) {
-                return const Center(child: CircularProgressIndicator());
+                return const SliverToBoxAdapter(
+                  child: Center(child: CircularProgressIndicator(color: Colors.white24)),
+                );
               }
               final leagues = snapshot.data ?? const <League>[];
 
               if (leagues.isEmpty) {
-                return const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 24),
-                  child: Center(child: Text('Turnuva bulunamadı.')),
+                return const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Center(child: Text('Turnuva bulunamadı.', style: TextStyle(color: Colors.white38))),
+                  ),
                 );
               }
 
-              return ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: leagues.length,
-                itemBuilder: (context, index) {
-                  final league = leagues[index];
-                  return Dismissible(
-                    key: ValueKey(league.id),
-                    direction: DismissDirection.endToStart,
-                    confirmDismiss: (_) => _softDeleteLeague(league),
-                    background: Container(
-                      margin: const EdgeInsets.symmetric(vertical: 4),
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      alignment: Alignment.centerRight,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEF4444),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(
-                        Icons.delete_outline,
-                        color: Colors.white,
-                      ),
-                    ),
-                    child: Card(
-                      margin: const EdgeInsets.symmetric(vertical: 4),
-                      child: ListTile(
-                        dense: true,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 2,
+              return SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      final league = leagues[index];
+                      return Dismissible(
+                        key: ValueKey(league.id),
+                        direction: DismissDirection.endToStart,
+                        confirmDismiss: (_) => _softDeleteLeague(league),
+                        background: Container(
+                          margin: const EdgeInsets.symmetric(vertical: 6),
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          alignment: Alignment.centerRight,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEF4444),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: const Icon(
+                            Icons.delete_outline,
+                            color: Colors.white,
+                          ),
                         ),
-                        leading: league.logoUrl.isNotEmpty
-                            ? SizedBox(
-                                width: 36,
-                                height: 36,
-                                child: WebSafeImage(
-                                  url: league.logoUrl,
-                                  width: 36,
-                                  height: 36,
-                                  borderRadius: BorderRadius.circular(8),
-                                  fallbackIconSize: 18,
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.white.withOpacity(0.08)),
+                          ),
+                          child: ListTile(
+                            dense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            leading: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF59E0B).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: league.logoUrl.isNotEmpty
+                                  ? WebSafeImage(
+                                      url: league.logoUrl,
+                                      width: 24,
+                                      height: 24,
+                                      borderRadius: BorderRadius.circular(6),
+                                      fallbackIconSize: 16,
+                                    )
+                                  : const Icon(
+                                      Icons.emoji_events_outlined,
+                                      color: Color(0xFFF59E0B),
+                                      size: 24,
+                                    ),
+                            ),
+                            title: Text(
+                              league.name,
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 15),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              softWrap: true,
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  onPressed: () => _editLeagueDialog(league),
+                                  icon: const Icon(Icons.edit_outlined, color: Colors.white54),
                                 ),
-                              )
-                            : Icon(
-                                Icons.emoji_events,
-                                color: cs.onSurfaceVariant,
-                              ),
-                        title: Text(
-                          league.name,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          softWrap: true,
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              onPressed: () => _editLeagueDialog(league),
-                              icon: const Icon(Icons.edit_outlined),
+                                const Icon(Icons.chevron_right, color: Colors.white24),
+                              ],
                             ),
-                          ],
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => SeasonManagementScreen(
+                                    leagueId: league.id,
+                                    leagueName: league.name,
+                                    leagueLogoUrl: league.logoUrl,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
                         ),
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => SeasonManagementScreen(
-                                leagueId: league.id,
-                                leagueName: league.name,
-                                leagueLogoUrl: league.logoUrl,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  );
-                },
+                      );
+                    },
+                    childCount: leagues.length,
+                  ),
+                ),
               );
             },
           ),

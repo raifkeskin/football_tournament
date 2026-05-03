@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../auth/screens/login_screen.dart';
-import '../../../core/services/app_session.dart';
 import '../../match/screens/fixture_screen.dart';
 import '../../team/screens/groups_screen.dart';
 import 'home_screen.dart';
@@ -36,14 +34,8 @@ class _MainNavigatorState extends State<MainNavigator> {
       const FixtureScreen(),
       const GroupsScreen(),
       const StatsScreen(),
-      Builder(
-        builder: (context) {
-          final session = AppSession.of(context).value;
-          final isLoggedIn = session.user != null;
-          if (!isLoggedIn) return const LoginScreen();
-          return ProfileScreen(onRequestHomeTab: () => _sekmeDegistir(0));
-        },
-      ),
+      // Builder ve if kontrollerini sildik, direkt ProfileScreen'i verdik
+      ProfileScreen(onRequestHomeTab: () => _sekmeDegistir(0)),
     ];
 
     return Scaffold(
@@ -51,10 +43,7 @@ class _MainNavigatorState extends State<MainNavigator> {
       body: Stack(
         children: [
           IndexedStack(index: _aktifSekme, children: ekranlar),
-          _HideShowBarButton(
-            isBarVisible: _isBarVisible,
-            onTap: _toggleBar,
-          ),
+          _HideShowBarButton(isBarVisible: _isBarVisible, onTap: _toggleBar),
           _FloatingNavBar(
             currentIndex: _aktifSekme,
             onTap: _sekmeDegistir,
@@ -155,10 +144,7 @@ class _FloatingNavBar extends StatelessWidget {
 }
 
 class _HideShowBarButton extends StatelessWidget {
-  const _HideShowBarButton({
-    required this.isBarVisible,
-    required this.onTap,
-  });
+  const _HideShowBarButton({required this.isBarVisible, required this.onTap});
 
   final bool isBarVisible;
   final VoidCallback onTap;

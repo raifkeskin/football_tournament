@@ -14,6 +14,7 @@ abstract class IMatchService {
     String leagueId,
     int week, {
     String? groupId,
+    String? seasonId,
   });
 
   Future<int?> getFixtureMaxWeek(String leagueId, {String? groupId});

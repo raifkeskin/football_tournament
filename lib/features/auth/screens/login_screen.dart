@@ -46,9 +46,9 @@ class _LoginScreenState extends State<LoginScreen> {
               alignment: Alignment.centerLeft,
               child: Text(
                 'Kullanıcı: masterclass',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
               ),
             ),
             const SizedBox(height: 12),
@@ -96,26 +96,24 @@ class _LoginScreenState extends State<LoginScreen> {
       final ok = await session.signInSuperAdminBackdoor(password: pwd);
       if (!mounted) return;
       if (!ok) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Şifre hatalı.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Şifre hatalı.')));
         return;
       }
-      Navigator.of(context).pushAndRemoveUntil(
+      Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
         MaterialPageRoute<void>(
-          builder: (_) => AdminPanelScreen(
-            onLogout: () async {
-              await session.signOut();
-            },
-          ),
+          builder: (_) => const MainNavigator(
+            initialTabIndex: 4,
+          ), // Direkt Profil sekmesine yönlendiriyoruz
         ),
         (Route<dynamic> route) => false,
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Hata: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Hata: $e')));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -147,9 +145,9 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Giriş başarısız: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Giriş başarısız: $e')));
     } finally {
       if (mounted) setState(() => _loading = false);
     }

@@ -6,6 +6,7 @@ import '../../../core/services/app_session.dart';
 import '../services/interfaces/i_match_service.dart';
 import '../../team/services/interfaces/i_team_service.dart';
 import '../../../core/services/service_locator.dart';
+import '../../player/services/penalty_service.dart';
 
 class AdminMatchLineupScreen extends StatefulWidget {
   const AdminMatchLineupScreen({
@@ -35,6 +36,7 @@ class _AdminMatchLineupScreenState extends State<AdminMatchLineupScreen>
     with SingleTickerProviderStateMixin {
   final IMatchService _matchService = ServiceLocator.matchService;
   final ITeamService _teamService = ServiceLocator.teamService;
+  final PenaltyService _penaltyService = PenaltyService();
 
   bool _saving = false;
   String? _activeNumberEditPlayerId;
@@ -216,6 +218,7 @@ class _AdminMatchLineupScreenState extends State<AdminMatchLineupScreen>
 
   Widget _availableList(
     List<PlayerModel> players, {
+    required Set<String> penalizedPlayerIds,
     required bool isStartingTab,
   }) {
     final otherSelectedIds = (isStartingTab ? _subs : _starting)
@@ -275,6 +278,7 @@ class _AdminMatchLineupScreenState extends State<AdminMatchLineupScreen>
                     final pid = _playerKey(p);
                     final isSelected = selectedIds.contains(pid);
                     final isOtherSelected = otherSelectedIds.contains(pid);
+                    final isPenalized = penalizedPlayerIds.contains(pid);
                     final selectedNumber =
                         (selectedNumberById[pid] ?? p.number ?? '').trim();
                     final numberController =
@@ -285,11 +289,11 @@ class _AdminMatchLineupScreenState extends State<AdminMatchLineupScreen>
                           ? null
                           : () {
                               if (isOtherSelected) return;
-                              if (p.suspendedMatches > 0) {
+                              if (isPenalized) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
                                     content: Text(
-                                      'Bu oyuncu ${p.suspendedMatches} maç cezalıdır, kadroya eklenemez!',
+                                      'Bu oyuncu cezalıdır ve kadroya eklenemez.',
                                     ),
                                   ),
                                 );
@@ -381,8 +385,7 @@ class _AdminMatchLineupScreenState extends State<AdminMatchLineupScreen>
                                   style: TextStyle(
                                     fontWeight: FontWeight.w800,
                                     fontSize: 13,
-                                    color: (p.suspendedMatches > 0 ||
-                                            isOtherSelected)
+                                    color: (isPenalized || isOtherSelected)
                                         ? Theme.of(context)
                                             .colorScheme
                                             .onSurfaceVariant
@@ -393,11 +396,9 @@ class _AdminMatchLineupScreenState extends State<AdminMatchLineupScreen>
                                 ),
                               ),
                               const SizedBox(width: 10),
-                              if (p.suspendedMatches > 0 || isOtherSelected)
+                              if (isPenalized || isOtherSelected)
                                 Icon(
-                                  p.suspendedMatches > 0
-                                      ? Icons.lock_outline
-                                      : Icons.block_rounded,
+                                  isPenalized ? Icons.lock : Icons.block_rounded,
                                   color: Theme.of(context)
                                       .colorScheme
                                       .onSurfaceVariant,
@@ -484,22 +485,37 @@ class _AdminMatchLineupScreenState extends State<AdminMatchLineupScreen>
         ),
         builder: (context, snapshot) {
           final players = snapshot.data ?? const <PlayerModel>[];
-          return TabBarView(
-            controller: _tabController,
-            children: [
-              ListView(
-                padding: const EdgeInsets.all(12),
+          return StreamBuilder<Set<String>>(
+            stream: _penaltyService.watchActivePenalizedPlayerIds(widget.match.leagueId),
+            initialData: const <String>{},
+            builder: (context, penSnap) {
+              final penalizedIds = penSnap.data ?? const <String>{};
+              return TabBarView(
+                controller: _tabController,
                 children: [
-                  _availableList(players, isStartingTab: true),
+                  ListView(
+                    padding: const EdgeInsets.all(12),
+                    children: [
+                      _availableList(
+                        players,
+                        penalizedPlayerIds: penalizedIds,
+                        isStartingTab: true,
+                      ),
+                    ],
+                  ),
+                  ListView(
+                    padding: const EdgeInsets.all(12),
+                    children: [
+                      _availableList(
+                        players,
+                        penalizedPlayerIds: penalizedIds,
+                        isStartingTab: false,
+                      ),
+                    ],
+                  ),
                 ],
-              ),
-              ListView(
-                padding: const EdgeInsets.all(12),
-                children: [
-                  _availableList(players, isStartingTab: false),
-                ],
-              ),
-            ],
+              );
+            },
           );
         },
       ),

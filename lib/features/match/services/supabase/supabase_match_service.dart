@@ -108,16 +108,31 @@ class SupabaseMatchService implements IMatchService {
     String leagueId,
     int week, {
     String? groupId,
+    String? seasonId,
   }) {
     final id = leagueId.trim();
     if (id.isEmpty) return const Stream<List<MatchModel>>.empty();
-    return watchMatchesForLeague(id).map((list) {
-      return list.where((m) {
-        final okWeek = (m.week ?? -1) == week;
-        if (!okWeek) return false;
-        return true;
-      }).toList();
-    });
+    
+    try {
+      var query = _client.from('matches').select();
+
+      if (seasonId != null && seasonId.isNotEmpty) {
+        query = query.eq('season_id', seasonId);
+      }
+
+      if (groupId != null && groupId.isNotEmpty && groupId != 'Tümü') {
+        query = query.eq('group_id', groupId);
+      }
+
+      query = query.eq('week', week);
+
+      return query.order('created_at', ascending: false).asStream().map((rows) {
+        return rows.map((r) => MatchModel.fromMap(Map<String, dynamic>.from(r), (r['id'] ?? '').toString())).toList();
+      });
+    } catch (e) {
+      AppConfig.sqlLogResult(table: 'matches', operation: 'SELECT_STREAM', error: e);
+      return const Stream<List<MatchModel>>.empty();
+    }
   }
 
   @override

@@ -6,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:football_tournament/core/widgets/custom_bottom_sheet_dropdown.dart';
 import 'package:football_tournament/features/admin/services/approval_service.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
@@ -86,9 +87,9 @@ Future<void> showSquadBulkUploadDialog({
             ], text: 'Futbolcu Excel Şablonu');
           } catch (e) {
             if (!dialogContext.mounted) return;
-            ScaffoldMessenger.of(dialogContext).showSnackBar(
-              SnackBar(content: Text('Hata: $e')),
-            );
+            ScaffoldMessenger.of(
+              dialogContext,
+            ).showSnackBar(SnackBar(content: Text('Hata: $e')));
           } finally {
             setDialogState(() => busy = false);
           }
@@ -105,10 +106,7 @@ Future<void> showSquadBulkUploadDialog({
           return cleaned.replaceAll(RegExp(r'\s+'), ' ');
         }
 
-        int? findIndex(
-          Map<String, int> headerToIndex,
-          List<String> variants,
-        ) {
+        int? findIndex(Map<String, int> headerToIndex, List<String> variants) {
           for (final v in variants) {
             final i = headerToIndex[normalizeHeader(v)];
             if (i != null) return i;
@@ -132,7 +130,9 @@ Future<void> showSquadBulkUploadDialog({
           }
           final s = value.toString().replaceAll('\u0000', '').trim();
           if (s.isEmpty) return null;
-          final m = RegExp(r'^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$').firstMatch(s);
+          final m = RegExp(
+            r'^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$',
+          ).firstMatch(s);
           if (m != null) {
             final dd = m.group(1)!.padLeft(2, '0');
             final mm = m.group(2)!.padLeft(2, '0');
@@ -178,9 +178,11 @@ Future<void> showSquadBulkUploadDialog({
             final lower = f.name.toLowerCase();
             if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) {
               final excel = Excel.decodeBytes(bytes);
-              final sheetName =
-                  excel.tables.keys.isEmpty ? null : excel.tables.keys.first;
-              if (sheetName == null) throw Exception('Excel sayfası bulunamadı.');
+              final sheetName = excel.tables.keys.isEmpty
+                  ? null
+                  : excel.tables.keys.first;
+              if (sheetName == null)
+                throw Exception('Excel sayfası bulunamadı.');
               final table = excel.tables[sheetName];
               if (table == null) throw Exception('Excel sayfası okunamadı.');
 
@@ -256,8 +258,9 @@ Future<void> showSquadBulkUploadDialog({
                 final position = idxPos < cols.length
                     ? (cols[idxPos]?.value?.toString() ?? '').trim()
                     : '';
-                final birthRaw =
-                    idxBirth < cols.length ? cols[idxBirth]?.value : null;
+                final birthRaw = idxBirth < cols.length
+                    ? cols[idxBirth]?.value
+                    : null;
                 final foot = idxFoot < cols.length
                     ? (cols[idxFoot]?.value?.toString() ?? '').trim()
                     : '';
@@ -338,11 +341,15 @@ Future<void> showSquadBulkUploadDialog({
                   skippedNoName++;
                   continue;
                 }
-                final number =
-                    (idxNo != null && idxNo < cols.length) ? cols[idxNo].trim() : '';
-                final position = idxPos < cols.length ? cols[idxPos].trim() : '';
-                final birthRaw =
-                    idxBirth < cols.length ? cols[idxBirth].trim() : '';
+                final number = (idxNo != null && idxNo < cols.length)
+                    ? cols[idxNo].trim()
+                    : '';
+                final position = idxPos < cols.length
+                    ? cols[idxPos].trim()
+                    : '';
+                final birthRaw = idxBirth < cols.length
+                    ? cols[idxBirth].trim()
+                    : '';
                 final foot = idxFoot < cols.length ? cols[idxFoot].trim() : '';
                 final birthDate = birthDateFrom(birthRaw);
                 final birthYear = yearFromBirthDate(birthDate);
@@ -362,9 +369,9 @@ Future<void> showSquadBulkUploadDialog({
             setDialogState(() => parsed = rows);
           } catch (e) {
             if (!dialogContext.mounted) return;
-            ScaffoldMessenger.of(dialogContext).showSnackBar(
-              SnackBar(content: Text('Hata: $e')),
-            );
+            ScaffoldMessenger.of(
+              dialogContext,
+            ).showSnackBar(SnackBar(content: Text('Hata: $e')));
           } finally {
             setDialogState(() => busy = false);
           }
@@ -413,9 +420,9 @@ Future<void> showSquadBulkUploadDialog({
             });
           } catch (e) {
             if (!dialogContext.mounted) return;
-            ScaffoldMessenger.of(dialogContext).showSnackBar(
-              SnackBar(content: Text('Hata: $e')),
-            );
+            ScaffoldMessenger.of(
+              dialogContext,
+            ).showSnackBar(SnackBar(content: Text('Hata: $e')));
           } finally {
             if (!shouldClose && dialogContext.mounted) {
               setDialogState(() => busy = false);
@@ -540,7 +547,9 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     if (svc == null) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Bu özellik Supabase modunda kullanılabilir.')),
+        const SnackBar(
+          content: Text('Bu özellik Supabase modunda kullanılabilir.'),
+        ),
       );
       return;
     }
@@ -570,14 +579,16 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                 _refreshPlayersStreamForTournament(lid);
                 if (!this.context.mounted) return;
                 ScaffoldMessenger.of(this.context).showSnackBar(
-                  const SnackBar(content: Text('Seçilen futbolcular kadroya eklendi.')),
+                  const SnackBar(
+                    content: Text('Seçilen futbolcular kadroya eklendi.'),
+                  ),
                 );
               } catch (e) {
                 if (!this.context.mounted) return;
                 final msg = e.toString().replaceFirst('Exception: ', '').trim();
-                ScaffoldMessenger.of(this.context).showSnackBar(
-                  SnackBar(content: Text('Eklenemedi: $msg')),
-                );
+                ScaffoldMessenger.of(
+                  this.context,
+                ).showSnackBar(SnackBar(content: Text('Eklenemedi: $msg')));
               } finally {
                 if (context.mounted) setSheetState(() => busy = false);
               }
@@ -606,12 +617,18 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
 
                       final items = snapshot.data ?? const <PlayerModel>[];
                       if (items.isEmpty) {
-                        return const Center(child: Text('Bu turnuvada seçilebilecek boşta futbolcu yok.'));
+                        return const Center(
+                          child: Text(
+                            'Bu turnuvada seçilebilecek boşta futbolcu yok.',
+                          ),
+                        );
                       }
                       final q = query.trim().toLowerCase();
                       final filtered = q.isEmpty
                           ? items
-                          : items.where((p) => p.name.toLowerCase().contains(q)).toList();
+                          : items
+                                .where((p) => p.name.toLowerCase().contains(q))
+                                .toList();
 
                       return Column(
                         children: [
@@ -620,11 +637,16 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                               const Expanded(
                                 child: Text(
                                   'Futbolcu Seç',
-                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900),
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w900,
+                                  ),
                                 ),
                               ),
                               TextButton(
-                                onPressed: busy ? null : () => Navigator.pop(context),
+                                onPressed: busy
+                                    ? null
+                                    : () => Navigator.pop(context),
                                 child: const Text('Kapat'),
                               ),
                             ],
@@ -672,28 +694,37 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                                 return InkWell(
                                   onTap: busy ? null : () => toggle(!checked),
                                   child: Padding(
-                                    padding: const EdgeInsets.symmetric(vertical: 2),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 2,
+                                    ),
                                     child: Row(
                                       children: [
                                         Checkbox(
                                           value: checked,
-                                          onChanged:
-                                              busy ? null : (v) => toggle(v ?? false),
+                                          onChanged: busy
+                                              ? null
+                                              : (v) => toggle(v ?? false),
                                           activeColor: cs.primary,
                                           visualDensity: VisualDensity.compact,
                                         ),
                                         ClipRRect(
-                                          borderRadius: BorderRadius.circular(8),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
                                           child: Container(
                                             width: 34,
                                             height: 34,
-                                            color: cs.primary.withValues(alpha: 0.10),
+                                            color: cs.primary.withValues(
+                                              alpha: 0.10,
+                                            ),
                                             child: photo.isEmpty
                                                 ? Icon(
                                                     Icons.person_rounded,
                                                     size: 18,
                                                     color: cs.primary
-                                                        .withValues(alpha: 0.75),
+                                                        .withValues(
+                                                          alpha: 0.75,
+                                                        ),
                                                   )
                                                 : WebSafeImage(
                                                     url: _normalizeUrl(photo),
@@ -701,7 +732,9 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                                                     height: 34,
                                                     fit: BoxFit.cover,
                                                     borderRadius:
-                                                        BorderRadius.circular(8),
+                                                        BorderRadius.circular(
+                                                          8,
+                                                        ),
                                                     isCircle: false,
                                                     fallbackIconSize: 18,
                                                   ),
@@ -710,7 +743,8 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                                         const SizedBox(width: 10),
                                         Expanded(
                                           child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
                                               Text(
                                                 p.name.toUpperCase(),
@@ -746,13 +780,16 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                           SizedBox(
                             width: double.infinity,
                             child: FilledButton(
-                              onPressed:
-                                  busy || selected.isEmpty ? null : () => addSelected(filtered),
+                              onPressed: busy || selected.isEmpty
+                                  ? null
+                                  : () => addSelected(filtered),
                               child: busy
                                   ? const SizedBox(
                                       width: 18,
                                       height: 18,
-                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
                                     )
                                   : Text('EKLE (${selected.length})'),
                             ),
@@ -779,7 +816,9 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     if (svc == null) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Bu özellik Supabase modunda kullanılabilir.')),
+        const SnackBar(
+          content: Text('Bu özellik Supabase modunda kullanılabilir.'),
+        ),
       );
       return;
     }
@@ -788,7 +827,9 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     final tid = teamId.trim();
     if (lid.isEmpty || tid.isEmpty) return;
 
-    final controller = TextEditingController(text: (player.number ?? '').trim());
+    final controller = TextEditingController(
+      text: (player.number ?? '').trim(),
+    );
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -817,9 +858,9 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     final n = int.tryParse(raw);
     if (n == null) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Forma numarası geçersiz.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Forma numarası geçersiz.')));
       return;
     }
 
@@ -834,9 +875,9 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     } catch (e) {
       if (!context.mounted) return;
       final msg = e.toString().replaceFirst('Exception: ', '').trim();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Güncellenemedi: $msg')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Güncellenemedi: $msg')));
     }
   }
 
@@ -896,15 +937,19 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
 
   Future<void> _openPlayerCard(PlayerModel rosterPlayer) async {
     final phone = (rosterPlayer.phone ?? '').trim();
-    final cachedPhoto =
-        phone.isEmpty ? '' : (_playerPhotoUrlByPhone[phone] ?? '').trim();
+    final cachedPhoto = phone.isEmpty
+        ? ''
+        : (_playerPhotoUrlByPhone[phone] ?? '').trim();
 
     await showDialog<void>(
       context: context,
       barrierDismissible: true,
       builder: (context) {
         return Dialog(
-          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 16,
+          ),
           backgroundColor: Colors.transparent,
           child: FutureBuilder<PlayerModel?>(
             future: phone.isEmpty
@@ -914,17 +959,18 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
               final profile = snap.data;
               final resolvedPhotoUrl =
                   ((profile?.photoUrl ?? '').trim().isNotEmpty)
-                      ? (profile!.photoUrl ?? '').trim()
-                      : cachedPhoto;
+                  ? (profile!.photoUrl ?? '').trim()
+                  : cachedPhoto;
               final resolvedName = rosterPlayer.name.trim().isNotEmpty
                   ? rosterPlayer.name.trim()
                   : (profile?.name ?? '').trim();
               final resolvedBirthDate =
                   (profile?.birthDate ?? rosterPlayer.birthDate ?? '').trim();
               final mainPos =
-                  (profile?.mainPosition ?? rosterPlayer.mainPosition ?? '').trim();
-              final subPos =
-                  (profile?.position ?? rosterPlayer.position ?? '').trim();
+                  (profile?.mainPosition ?? rosterPlayer.mainPosition ?? '')
+                      .trim();
+              final subPos = (profile?.position ?? rosterPlayer.position ?? '')
+                  .trim();
 
               String displayPos() {
                 final sub = subPos;
@@ -945,11 +991,13 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                 return '-';
               }
 
-              final number =
-                  (rosterPlayer.number ?? profile?.number ?? '').toString().trim();
-              final initialSeasonId = (_selectedTournamentId ?? widget.tournamentId)
+              final number = (rosterPlayer.number ?? profile?.number ?? '')
                   .toString()
                   .trim();
+              final initialSeasonId =
+                  (_selectedTournamentId ?? widget.tournamentId)
+                      .toString()
+                      .trim();
 
               return PlayerCard(
                 playerPhone: phone.isEmpty ? rosterPlayer.id : phone,
@@ -987,20 +1035,23 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
         if (_playerPhotoUrlByPhone.containsKey(phone)) continue;
         if (!_playerPhotoFetchInFlight.add(phone)) continue;
 
-        _teamService.getPlayerByPhoneOnce(phone).then((player) {
-          final url = (player?.photoUrl ?? '').trim();
-          if (!mounted) return;
-          setState(() {
-            _playerPhotoUrlByPhone[phone] = url;
-            _playerPhotoFetchInFlight.remove(phone);
-          });
-        }).catchError((_) {
-          if (!mounted) return;
-          setState(() {
-            _playerPhotoUrlByPhone[phone] = '';
-            _playerPhotoFetchInFlight.remove(phone);
-          });
-        });
+        _teamService
+            .getPlayerByPhoneOnce(phone)
+            .then((player) {
+              final url = (player?.photoUrl ?? '').trim();
+              if (!mounted) return;
+              setState(() {
+                _playerPhotoUrlByPhone[phone] = url;
+                _playerPhotoFetchInFlight.remove(phone);
+              });
+            })
+            .catchError((_) {
+              if (!mounted) return;
+              setState(() {
+                _playerPhotoUrlByPhone[phone] = '';
+                _playerPhotoFetchInFlight.remove(phone);
+              });
+            });
       }
     });
   }
@@ -1216,33 +1267,35 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     final isAdmin = session.isAdmin;
     final widgetTournamentId = widget.tournamentId.trim();
     final effectiveTournamentId =
-        (_selectedTournamentId != null && _selectedTournamentId!.trim().isNotEmpty)
-            ? _selectedTournamentId!.trim()
-            : (_teamTournaments.isEmpty && widgetTournamentId.isNotEmpty
-                ? widgetTournamentId
-                : null);
-    final Stream<List<PlayerModel>>? playersStream = effectiveTournamentId == null
+        (_selectedTournamentId != null &&
+            _selectedTournamentId!.trim().isNotEmpty)
+        ? _selectedTournamentId!.trim()
+        : (_teamTournaments.isEmpty && widgetTournamentId.isNotEmpty
+              ? widgetTournamentId
+              : null);
+    final Stream<List<PlayerModel>>? playersStream =
+        effectiveTournamentId == null
         ? null
-        : (_playersStreamTournamentId == effectiveTournamentId && _playersStream != null)
-            ? _playersStream
-            : () {
-                final tid = effectiveTournamentId;
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (!mounted) return;
-                  if (tid.trim().isEmpty) return;
-                  if (_playersStreamTournamentId == tid && _playersStream != null) return;
-                  setState(() => _setPlayersStreamForTournament(tid));
-                });
-                return _teamService.watchPlayers(
-                  teamId: widget.teamId,
-                  tournamentId: effectiveTournamentId!,
-                  caller: 'TeamSquadScreen',
-                );
-              }();
+        : (_playersStreamTournamentId == effectiveTournamentId &&
+              _playersStream != null)
+        ? _playersStream
+        : () {
+            final tid = effectiveTournamentId;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              if (tid.trim().isEmpty) return;
+              if (_playersStreamTournamentId == tid && _playersStream != null)
+                return;
+              setState(() => _setPlayersStreamForTournament(tid));
+            });
+            return _teamService.watchPlayers(
+              teamId: widget.teamId,
+              tournamentId: effectiveTournamentId!,
+              caller: 'TeamSquadScreen',
+            );
+          }();
     final canAdd = effectiveTournamentId != null && (isAdmin || _isTeamManager);
-    _tournamentNameById(
-      effectiveTournamentId ?? widgetTournamentId,
-    );
+    _tournamentNameById(effectiveTournamentId ?? widgetTournamentId);
 
     return Scaffold(
       appBar: AppBar(
@@ -1346,8 +1399,12 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                           final p = players[index];
                           final photo = (p.photoUrl ?? '').trim();
                           final phone = (p.phone ?? '').trim();
-                          final cached = phone.isEmpty ? '' : (_playerPhotoUrlByPhone[phone] ?? '');
-                          final resolvedPhoto = photo.isNotEmpty ? photo : cached;
+                          final cached = phone.isEmpty
+                              ? ''
+                              : (_playerPhotoUrlByPhone[phone] ?? '');
+                          final resolvedPhoto = photo.isNotEmpty
+                              ? photo
+                              : cached;
                           final num = (p.number ?? '').trim();
                           return Card(
                             margin: const EdgeInsets.symmetric(vertical: 4),
@@ -1368,7 +1425,9 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                                     )
                                   : CircleAvatar(
                                       radius: 18,
-                                      backgroundColor: cs.primary.withValues(alpha: 0.12),
+                                      backgroundColor: cs.primary.withValues(
+                                        alpha: 0.12,
+                                      ),
                                       child: Icon(
                                         Icons.person,
                                         size: 18,
@@ -1386,20 +1445,25 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                                   InkWell(
                                     onTap: canAdd
                                         ? () => _promptJerseyNumberEdit(
-                                              player: p,
-                                              leagueId: effectiveTournamentId,
-                                              teamId: widget.teamId,
-                                            )
+                                            player: p,
+                                            leagueId: effectiveTournamentId,
+                                            teamId: widget.teamId,
+                                          )
                                         : null,
                                     borderRadius: BorderRadius.circular(10),
                                     child: Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 8,
+                                      ),
                                       child: Text(
                                         num.isEmpty ? '?' : num,
                                         style: TextStyle(
                                           fontWeight: FontWeight.w900,
                                           color: num.isEmpty
-                                              ? cs.onSurfaceVariant.withValues(alpha: 0.45)
+                                              ? cs.onSurfaceVariant.withValues(
+                                                  alpha: 0.45,
+                                                )
                                               : cs.onSurfaceVariant,
                                         ),
                                       ),
@@ -1425,10 +1489,17 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                                         case 'delete':
                                           final tId = effectiveTournamentId;
                                           final phone = (p.phone ?? '').trim();
-                                          if (tId.trim().isEmpty || phone.isEmpty) {
+                                          if (tId.trim().isEmpty ||
+                                              phone.isEmpty) {
                                             if (!context.mounted) return;
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              const SnackBar(content: Text('Silme için eksik bilgi.')),
+                                            ScaffoldMessenger.of(
+                                              context,
+                                            ).showSnackBar(
+                                              const SnackBar(
+                                                content: Text(
+                                                  'Silme için eksik bilgi.',
+                                                ),
+                                              ),
                                             );
                                             return;
                                           }
@@ -1441,11 +1512,19 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                                               ),
                                               actions: [
                                                 TextButton(
-                                                  onPressed: () => Navigator.pop(context, false),
+                                                  onPressed: () =>
+                                                      Navigator.pop(
+                                                        context,
+                                                        false,
+                                                      ),
                                                   child: const Text('İptal'),
                                                 ),
                                                 FilledButton(
-                                                  onPressed: () => Navigator.pop(context, true),
+                                                  onPressed: () =>
+                                                      Navigator.pop(
+                                                        context,
+                                                        true,
+                                                      ),
                                                   child: const Text('Sil'),
                                                 ),
                                               ],
@@ -1459,17 +1538,34 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                                               playerPhone: phone,
                                             );
                                             if (mounted) {
-                                              _refreshPlayersStreamForTournament(tId);
+                                              _refreshPlayersStreamForTournament(
+                                                tId,
+                                              );
                                             }
                                             if (!context.mounted) return;
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              const SnackBar(content: Text('Kadrodan kaldırıldı.')),
+                                            ScaffoldMessenger.of(
+                                              context,
+                                            ).showSnackBar(
+                                              const SnackBar(
+                                                content: Text(
+                                                  'Kadrodan kaldırıldı.',
+                                                ),
+                                              ),
                                             );
                                           } catch (e) {
                                             if (!context.mounted) return;
-                                            final msg = e.toString().replaceFirst('Exception: ', '').trim();
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              SnackBar(content: Text('Silinemedi: $msg')),
+                                            final msg = e
+                                                .toString()
+                                                .replaceFirst('Exception: ', '')
+                                                .trim();
+                                            ScaffoldMessenger.of(
+                                              context,
+                                            ).showSnackBar(
+                                              SnackBar(
+                                                content: Text(
+                                                  'Silinemedi: $msg',
+                                                ),
+                                              ),
                                             );
                                           }
                                           break;
@@ -1659,7 +1755,9 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
       final full = e.name.trim().replaceAll(RegExp(r'\s+'), ' ');
       final parts = full.isEmpty ? const <String>[] : full.split(' ');
       _nameController.text = parts.isEmpty ? '' : parts.first;
-      _surnameController.text = parts.length <= 1 ? '' : parts.sublist(1).join(' ');
+      _surnameController.text = parts.length <= 1
+          ? ''
+          : parts.sublist(1).join(' ');
       _numberController.text = (e.number ?? '').toString();
       _birthDateController.text = _birthDateToDisplay(e.birthDate);
       _mainPosition = _deriveMainPosition(e.mainPosition, e.position);
@@ -1684,7 +1782,9 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
     if (!widget.standalone) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _loadManagerState());
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) => _hydrateExistingPhotoFromIdentity());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _hydrateExistingPhotoFromIdentity(),
+    );
   }
 
   Future<void> _hydrateExistingPhotoFromIdentity() async {
@@ -1807,7 +1907,9 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
   }
 
   Future<void> _save() async {
-    final nationalId = _identityNoController.text.replaceAll(RegExp(r'\D'), '').trim();
+    final nationalId = _identityNoController.text
+        .replaceAll(RegExp(r'\D'), '')
+        .trim();
     if (nationalId.isNotEmpty && nationalId.length != 11) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Kimlik no 11 haneli olmalı.')),
@@ -1861,7 +1963,9 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
           _isManagerRole(_role) &&
           !(widget.editing != null && _isManagerRole(widget.editing!.role))) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Bu takımda zaten takım sorumlusu var.')),
+          const SnackBar(
+            content: Text('Bu takımda zaten takım sorumlusu var.'),
+          ),
         );
         return;
       }
@@ -1869,8 +1973,9 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
 
     setState(() => _saving = true);
     try {
-      final sbTeamService =
-          _teamService is SupabaseTeamService ? _teamService : null;
+      final sbTeamService = _teamService is SupabaseTeamService
+          ? _teamService
+          : null;
 
       String? uploadedPhotoUrl;
       if (_pickedPhoto != null) {
@@ -1882,20 +1987,25 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
         }
       }
 
-      final resolvedBirthDate = birthDate.isEmpty ? null : _birthDateToDb(birthDate);
-      final resolvedMainPosition = _isMainPositionSelected ? _mainPosition : null;
-      final resolvedSubPosition =
-          _isMainPositionSelected ? (_subPosition == _unsetOption ? null : _subPosition) : null;
+      final resolvedBirthDate = birthDate.isEmpty
+          ? null
+          : _birthDateToDb(birthDate);
+      final resolvedMainPosition = _isMainPositionSelected
+          ? _mainPosition
+          : null;
+      final resolvedSubPosition = _isMainPositionSelected
+          ? (_subPosition == _unsetOption ? null : _subPosition)
+          : null;
       final updateKey = (widget.editing?.id ?? '').toString().trim().isNotEmpty
           ? widget.editing!.id
           : keyPhone;
       final finalPhotoUrl = uploadedPhotoUrl != null
           ? uploadedPhotoUrl.trim()
           : _removePhoto
-              ? null
-              : (_existingPhotoUrl ?? '').trim().isEmpty
-                  ? null
-                  : (_existingPhotoUrl ?? '').trim();
+          ? null
+          : (_existingPhotoUrl ?? '').trim().isEmpty
+          ? null
+          : (_existingPhotoUrl ?? '').trim();
       if (!isEditing) {
         await _teamService.upsertPlayerIdentity(
           phone: keyPhone,
@@ -1903,9 +2013,15 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
           nationalId: nationalId.isEmpty ? null : nationalId,
           birthDate: resolvedBirthDate,
           mainPosition: resolvedMainPosition,
-          preferredFoot: _preferredFoot.trim().isEmpty ? null : _preferredFoot.trim(),
-          height: int.tryParse(_heightController.text.replaceAll(RegExp(r'\D'), '').trim()),
-          weight: int.tryParse(_weightController.text.replaceAll(RegExp(r'\D'), '').trim()),
+          preferredFoot: _preferredFoot.trim().isEmpty
+              ? null
+              : _preferredFoot.trim(),
+          height: int.tryParse(
+            _heightController.text.replaceAll(RegExp(r'\D'), '').trim(),
+          ),
+          weight: int.tryParse(
+            _weightController.text.replaceAll(RegExp(r'\D'), '').trim(),
+          ),
         );
       }
       await _teamService.updatePlayer(
@@ -1914,13 +2030,19 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
           'name': firstName,
           'surname': surname,
           'birth_date': resolvedBirthDate,
-          'preferred_foot': _preferredFoot.trim().isEmpty ? null : _preferredFoot.trim(),
+          'preferred_foot': _preferredFoot.trim().isEmpty
+              ? null
+              : _preferredFoot.trim(),
           'main_position': resolvedMainPosition,
           'sub_position': resolvedSubPosition,
           'photo_url': finalPhotoUrl,
           'phone': keyPhone,
-          'height': int.tryParse(_heightController.text.replaceAll(RegExp(r'\D'), '').trim()),
-          'weight': int.tryParse(_weightController.text.replaceAll(RegExp(r'\D'), '').trim()),
+          'height': int.tryParse(
+            _heightController.text.replaceAll(RegExp(r'\D'), '').trim(),
+          ),
+          'weight': int.tryParse(
+            _weightController.text.replaceAll(RegExp(r'\D'), '').trim(),
+          ),
           'national_id': nationalId.isEmpty ? null : nationalId,
           'role': _role,
         },
@@ -1939,13 +2061,19 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
           );
 
           if (sbTeamService != null) {
-            final currentText = (widget.editing?.number ?? '').toString().trim();
-            final currentInt = currentText.isEmpty ? null : int.tryParse(currentText);
+            final currentText = (widget.editing?.number ?? '')
+                .toString()
+                .trim();
+            final currentInt = currentText.isEmpty
+                ? null
+                : int.tryParse(currentText);
             final jerseyChanged = currentInt != jerseyInt;
             if (jerseyChanged) {
               var pid = (widget.editing?.id ?? '').toString().trim();
               if (pid.isEmpty) {
-                final resolved = await _teamService.getPlayerByPhoneOnce(keyPhone);
+                final resolved = await _teamService.getPlayerByPhoneOnce(
+                  keyPhone,
+                );
                 pid = (resolved?.id ?? '').toString().trim();
               }
               if (pid.isNotEmpty) {
@@ -2146,7 +2274,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                     ),
                   ],
                 ),
- /*                    const SizedBox(width: 10),
+                /*                    const SizedBox(width: 10),
                     SizedBox(
                       height: 52,
                      child: FilledButton(
@@ -2171,35 +2299,31 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                 Row(
                   children: [
                     Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: _role,
-                        decoration: const InputDecoration(
+                      child: IgnorePointer(
+                        ignoring:
+                            _saving, // Kaydetme işlemi sırasında tıklamayı engeller
+                        child: CustomBottomSheetDropdown<String>(
                           labelText: 'Rolü',
-                          prefixIcon: Icon(Icons.manage_accounts_outlined),
+                          prefixIcon: Icons.manage_accounts_outlined,
+
+                          // Sihirli Kısım: Sadece kullanıcının seçmeye yetkisi olan rolleri listeye gönderiyoruz
+                          items: _roles.where((r) {
+                            final isDisabled =
+                                _isManagerRole(r) && !allowManagerOptions;
+                            return !isDisabled; // Sadece disabled OLMAYANLARI listeye dahil et
+                          }).toList(),
+
+                          value: _role,
+
+                          // Liste zaten String olduğu için direkt kendisini yazdırıyoruz
+                          itemLabelBuilder: (r) => r,
+
+                          onChanged: (String? v) {
+                            if (v != null) {
+                              setState(() => _role = v);
+                            }
+                          },
                         ),
-                        items: _roles.map((r) {
-                          final disabled =
-                              _isManagerRole(r) && !allowManagerOptions;
-                          return DropdownMenuItem<String>(
-                            value: r,
-                            enabled: !disabled,
-                            child: Text(
-                              r,
-                              style: disabled
-                                  ? TextStyle(
-                                      color:
-                                          cs.onSurfaceVariant.withValues(alpha: 0.45),
-                                    )
-                                  : null,
-                            ),
-                          );
-                        }).toList(),
-                        onChanged: _saving
-                            ? null
-                            : (v) {
-                                if (v == null) return;
-                                setState(() => _role = v);
-                              },
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -2222,23 +2346,24 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                 Row(
                   children: [
                     Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: _preferredFoot.trim().isEmpty ? null : _preferredFoot,
-                        decoration: const InputDecoration(
+                      child: IgnorePointer(
+                        ignoring: _saving, // Kayıt anında formu kilitler
+                        child: CustomBottomSheetDropdown<String>(
                           labelText: 'Kullandığı Ayak',
-                          prefixIcon: Icon(Icons.directions_run_outlined),
+                          prefixIcon: Icons.directions_run_outlined,
+                          // Sadece listeyi veriyoruz, döngülere (map) gerek kalmadı!
+                          items: _feet,
+                          // Değer boşsa null gönder, doluysa kendisini gönder
+                          value: _preferredFoot.trim().isEmpty
+                              ? null
+                              : _preferredFoot,
+                          // Liste elemanları zaten String olduğu için direkt f değerini ekrana basıyoruz
+                          itemLabelBuilder: (f) => f,
+                          onChanged: (String? v) {
+                            // Seçim yapılınca state'i güncelle (eğer null gelirse boş string ata)
+                            setState(() => _preferredFoot = v ?? '');
+                          },
                         ),
-                        items: _feet
-                            .map(
-                              (f) => DropdownMenuItem<String>(
-                                value: f,
-                                child: Text(f),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: _saving
-                            ? null
-                            : (v) => setState(() => _preferredFoot = v ?? ''),
                       ),
                     ),
                     if (!widget.standalone) ...[
@@ -2269,7 +2394,9 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                         controller: _heightController,
                         enabled: !_saving,
                         keyboardType: TextInputType.number,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
                         decoration: const InputDecoration(
                           labelText: 'Boy (cm)',
                           prefixIcon: Icon(Icons.height_outlined),
@@ -2282,7 +2409,9 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                         controller: _weightController,
                         enabled: !_saving,
                         keyboardType: TextInputType.number,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
                         decoration: const InputDecoration(
                           labelText: 'Kilo (kg)',
                           prefixIcon: Icon(Icons.monitor_weight_outlined),
@@ -2295,36 +2424,31 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                 Row(
                   children: [
                     Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: _mainPosition,
-                        decoration: const InputDecoration(
+                      child: IgnorePointer(
+                        ignoring: _saving,
+                        child: CustomBottomSheetDropdown<String>(
                           labelText: 'Ana Mevki',
-                          prefixIcon: Icon(Icons.sports_soccer_outlined),
+                          prefixIcon: Icons.sports_soccer_outlined,
+                          // Belirsiz seçeneği ve ana mevkileri birleştirip direkt veriyoruz
+                          items: [_unsetOption, ..._mainPositions],
+                          value: _mainPosition,
+                          itemLabelBuilder: (p) => p,
+                          onChanged: (String? v) {
+                            if (v == null) return;
+                            setState(() {
+                              if (v == _unsetOption) {
+                                _mainPosition = _unsetOption;
+                                _subPosition = _unsetOption;
+                              } else {
+                                _mainPosition = v;
+                                // Yeni mevkiye göre alt mevkilerin ilk elemanını otomatik seç
+                                _subPosition =
+                                    (_subPositionsByMain[v] ?? const <String>[])
+                                        .first;
+                              }
+                            });
+                          },
                         ),
-                        items: <String>[_unsetOption, ..._mainPositions]
-                            .map(
-                              (p) => DropdownMenuItem<String>(
-                                value: p,
-                                child: Text(p),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: _saving
-                            ? null
-                            : (v) {
-                                if (v == null) return;
-                                setState(() {
-                                  if (v == _unsetOption) {
-                                    _mainPosition = _unsetOption;
-                                    _subPosition = _unsetOption;
-                                  } else {
-                                    _mainPosition = v;
-                                    _subPosition =
-                                        (_subPositionsByMain[v] ?? const <String>[])
-                                            .first;
-                                  }
-                                });
-                              },
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -2334,26 +2458,28 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                         maintainSize: true,
                         maintainAnimation: true,
                         maintainState: true,
-                        child: DropdownButtonFormField<String>(
-                          initialValue: _isMainPositionSelected ? _subPosition : null,
-                          decoration: const InputDecoration(
+                        child: IgnorePointer(
+                          ignoring:
+                              _saving ||
+                              !_isMainPositionSelected, // Ana mevki seçilmeden burası açılmaz!
+                          child: CustomBottomSheetDropdown<String>(
                             labelText: 'Alt Mevki',
-                            prefixIcon: Icon(Icons.sports_outlined),
+                            prefixIcon: Icons.sports_outlined,
+                            // Ana mevkiye bağlı olarak alt mevki listesini getiriyoruz
+                            items:
+                                _subPositionsByMain[_mainPosition] ??
+                                const <String>[],
+                            // Sadece ana mevki seçiliyse değeri göster, yoksa boş (null) bırak
+                            value: _isMainPositionSelected
+                                ? _subPosition
+                                : null,
+                            itemLabelBuilder: (p) => p,
+                            onChanged: (String? v) {
+                              if (v != null) {
+                                setState(() => _subPosition = v);
+                              }
+                            },
                           ),
-                          items: (_subPositionsByMain[_mainPosition] ?? const <String>[])
-                              .map(
-                                (p) => DropdownMenuItem<String>(
-                                  value: p,
-                                  child: Text(p),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (_saving || !_isMainPositionSelected)
-                              ? null
-                              : (v) {
-                                  if (v == null) return;
-                                  setState(() => _subPosition = v);
-                                },
                         ),
                       ),
                     ),
@@ -2760,7 +2886,8 @@ class FootballerLicenseScreen extends StatefulWidget {
   const FootballerLicenseScreen({super.key});
 
   @override
-  State<FootballerLicenseScreen> createState() => _FootballerLicenseScreenState();
+  State<FootballerLicenseScreen> createState() =>
+      _FootballerLicenseScreenState();
 }
 
 class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
@@ -2789,7 +2916,9 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
   String _positionsBirthLine(PlayerModel p) {
     final main = (p.mainPosition ?? '').trim();
     final sub = (p.position ?? '').trim();
-    final pos = main.isEmpty ? (sub.isEmpty ? '-' : sub) : (sub.isEmpty ? main : '$main($sub)');
+    final pos = main.isEmpty
+        ? (sub.isEmpty ? '-' : sub)
+        : (sub.isEmpty ? main : '$main($sub)');
     final birth = birthDateDbToUi(p.birthDate).trim();
     return '$pos - ${birth.isEmpty ? '/' : birth}';
   }
@@ -2797,16 +2926,14 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
   Future<void> _openPlayerForm({PlayerModel? editing}) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => PlayerFormScreen(
-          standalone: true,
-          editing: editing,
-        ),
+        builder: (_) => PlayerFormScreen(standalone: true, editing: editing),
       ),
     );
   }
 
   Future<void> _openPlayerCard(PlayerModel p) async {
-    final phoneOrId = ((p.phone ?? '').trim().isNotEmpty ? p.phone! : p.id).trim();
+    final phoneOrId = ((p.phone ?? '').trim().isNotEmpty ? p.phone! : p.id)
+        .trim();
     final h = MediaQuery.of(context).size.height * 0.95;
     await showModalBottomSheet<void>(
       context: context,
@@ -2847,7 +2974,9 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.8),
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.8,
+      ),
       showDragHandle: true,
       clipBehavior: Clip.antiAlias,
       shape: const RoundedRectangleBorder(
@@ -2860,7 +2989,10 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
               final id = selectedLeagueId.trim();
               if (id.isEmpty) return const <Team>[];
               try {
-                return await _teamService.getTeamsCached(id, caller: 'FootballerLicenseScreen');
+                return await _teamService.getTeamsCached(
+                  id,
+                  caller: 'FootballerLicenseScreen',
+                );
               } catch (_) {
                 return const <Team>[];
               }
@@ -2870,7 +3002,10 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
               stream: _leagueService.watchLeagues(),
               builder: (context, leaguesSnap) {
                 final leagues = leaguesSnap.data ?? const <League>[];
-                leagues.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+                leagues.sort(
+                  (a, b) =>
+                      a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+                );
                 if (selectedLeagueId.isEmpty && leagues.isNotEmpty) {
                   selectedLeagueId = leagues.first.id;
                 }
@@ -2880,29 +3015,40 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
                   builder: (context, teamsSnap) {
                     final teams = teamsSnap.data ?? const <Team>[];
                     final list = teams.toList()
-                      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+                      ..sort(
+                        (a, b) => a.name.toLowerCase().compareTo(
+                          b.name.toLowerCase(),
+                        ),
+                      );
                     return Padding(
                       padding: const EdgeInsets.fromLTRB(16, 6, 16, 16),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          DropdownButtonFormField<String>(
-                            value: selectedLeagueId.isEmpty ? null : selectedLeagueId,
-                            decoration: const InputDecoration(
-                              labelText: 'Turnuva',
-                              prefixIcon: Icon(Icons.emoji_events_outlined),
-                              border: OutlineInputBorder(),
-                            ),
-                            items: [
-                              for (final l in leagues)
-                                DropdownMenuItem<String>(
-                                  value: l.id,
-                                  child: Text(l.name.trim().isEmpty ? l.id : l.name),
-                                ),
-                            ],
-                            onChanged: (v) {
+                          CustomBottomSheetDropdown<League>(
+                            labelText: 'Turnuva',
+                            prefixIcon: Icons
+                                .emoji_events_outlined, // İkonu doğrudan parametre olarak geçiyoruz
+                            // 1. Liste olarak elindeki leagues objelerini ver
+                            items: leagues,
+
+                            // 2. Seçili objeyi ID'sinden bulup value'ya atıyoruz
+                            value: selectedLeagueId.isEmpty
+                                ? null
+                                : leagues
+                                      .where((l) => l.id == selectedLeagueId)
+                                      .firstOrNull,
+                            // Not: Eğer Flutter/Dart sürümün firstOrNull desteklemiyorsa şunu kullanabilirsin:
+                            // : leagues.firstWhere((l) => l.id == selectedLeagueId, orElse: () => leagues.first),
+
+                            // 3. Objenin ekranda ve listede nasıl görüneceğini belirliyoruz
+                            itemLabelBuilder: (l) =>
+                                l.name.trim().isEmpty ? l.id : l.name,
+
+                            // 4. Seçim yapıldığında state'i güncelliyoruz
+                            onChanged: (League? selectedLeague) {
                               setSheetState(() {
-                                selectedLeagueId = v ?? '';
+                                selectedLeagueId = selectedLeague?.id ?? '';
                                 selectedTeamId = '';
                                 selectedTeamName = '';
                               });
@@ -2914,7 +3060,8 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
                               padding: EdgeInsets.symmetric(vertical: 12),
                               child: Text('Önce turnuva seçin.'),
                             )
-                          else if (teamsSnap.connectionState == ConnectionState.waiting)
+                          else if (teamsSnap.connectionState ==
+                              ConnectionState.waiting)
                             const Padding(
                               padding: EdgeInsets.symmetric(vertical: 18),
                               child: Center(child: CircularProgressIndicator()),
@@ -2929,14 +3076,18 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
                               child: ListView.separated(
                                 shrinkWrap: true,
                                 itemCount: list.length,
-                                separatorBuilder: (_, _) => const Divider(height: 1),
+                                separatorBuilder: (_, _) =>
+                                    const Divider(height: 1),
                                 itemBuilder: (context, i) {
                                   final t = list[i];
                                   final selected = t.id == selectedTeamId;
                                   return ListTile(
-                                    title: Text(t.name.trim().isEmpty ? t.id : t.name),
-                                    trailing:
-                                        selected ? const Icon(Icons.check_rounded) : null,
+                                    title: Text(
+                                      t.name.trim().isEmpty ? t.id : t.name,
+                                    ),
+                                    trailing: selected
+                                        ? const Icon(Icons.check_rounded)
+                                        : null,
                                     onTap: () {
                                       setSheetState(() {
                                         selectedTeamId = t.id;
@@ -2952,17 +3103,15 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
                             width: double.infinity,
                             height: 50,
                             child: FilledButton(
-                              onPressed: selectedLeagueId.trim().isEmpty ||
+                              onPressed:
+                                  selectedLeagueId.trim().isEmpty ||
                                       selectedTeamId.trim().isEmpty
                                   ? null
-                                  : () => Navigator.pop(
-                                        context,
-                                        {
-                                          'leagueId': selectedLeagueId,
-                                          'teamId': selectedTeamId,
-                                          'teamName': selectedTeamName,
-                                        },
-                                      ),
+                                  : () => Navigator.pop(context, {
+                                      'leagueId': selectedLeagueId,
+                                      'teamId': selectedTeamId,
+                                      'teamName': selectedTeamName,
+                                    }),
                               child: const Text(
                                 'Devam Et',
                                 style: TextStyle(fontWeight: FontWeight.w900),
@@ -2986,7 +3135,9 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
     if (AppConfig.activeDatabase != DatabaseType.supabase) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Bu işlem bu veritabanı modunda desteklenmiyor.')),
+        const SnackBar(
+          content: Text('Bu işlem bu veritabanı modunda desteklenmiyor.'),
+        ),
       );
       return;
     }
@@ -3085,18 +3236,25 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
             const SizedBox(height: 12),
             Expanded(
               child: StreamBuilder<List<PlayerModel>>(
-                stream: _teamService.watchAllPlayers(caller: 'FootballerLicenseScreen'),
+                stream: _teamService.watchAllPlayers(
+                  caller: 'FootballerLicenseScreen',
+                ),
                 initialData: const <PlayerModel>[],
                 builder: (context, snap) {
                   if (snap.hasError) {
                     return Center(child: Text('Hata: ${snap.error}'));
                   }
                   final q = _norm(_q);
-                  final list = (snap.data ?? const <PlayerModel>[])
-                      .where((p) => _isFootballerRole(p.role))
-                      .where((p) => q.isEmpty || _norm(p.name).contains(q))
-                      .toList()
-                    ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+                  final list =
+                      (snap.data ?? const <PlayerModel>[])
+                          .where((p) => _isFootballerRole(p.role))
+                          .where((p) => q.isEmpty || _norm(p.name).contains(q))
+                          .toList()
+                        ..sort(
+                          (a, b) => a.name.toLowerCase().compareTo(
+                            b.name.toLowerCase(),
+                          ),
+                        );
 
                   if (list.isEmpty) {
                     return const Center(child: Text('Futbolcu bulunamadı.'));
@@ -3127,8 +3285,14 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
                                 )
                               : CircleAvatar(
                                   radius: 19,
-                                  backgroundColor: cs.primary.withValues(alpha: 0.12),
-                                  child: Icon(Icons.person, size: 18, color: cs.primary),
+                                  backgroundColor: cs.primary.withValues(
+                                    alpha: 0.12,
+                                  ),
+                                  child: Icon(
+                                    Icons.person,
+                                    size: 18,
+                                    color: cs.primary,
+                                  ),
                                 ),
                           title: Text(
                             p.name.trim().isEmpty ? p.id : p.name,

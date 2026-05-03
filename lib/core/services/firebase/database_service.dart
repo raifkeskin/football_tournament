@@ -1019,6 +1019,7 @@ class DatabaseService {
     String leagueId,
     int week, {
     String? groupId,
+    String? seasonId,
   }) {
     final gid = (groupId ?? '').trim();
     final controller = StreamController<List<MatchModel>>.broadcast();
@@ -1056,6 +1057,10 @@ class DatabaseService {
         .collection('matches')
         .where('tournamentId', isEqualTo: leagueId)
         .where('week', isEqualTo: week);
+    if (seasonId != null && seasonId.isNotEmpty) {
+      baseLeague = baseLeague.where('seasonId', isEqualTo: seasonId);
+      baseTournament = baseTournament.where('seasonId', isEqualTo: seasonId);
+    }
     if (gid.isNotEmpty) {
       baseLeague = baseLeague.where('groupId', isEqualTo: gid);
       baseTournament = baseTournament.where('groupId', isEqualTo: gid);

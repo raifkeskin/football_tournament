@@ -96,7 +96,8 @@ flutter:
 
   # To add assets to your application, add an assets section, like this:
   assets:
-    - assets/
+    - assets/           # Ana dizindeki dosyalar için
+    - assets/admin/  # Admin paneli görselleri için (ŞART)
 fonts:
   - family: Batangas
     fonts:

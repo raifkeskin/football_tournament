@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // TextInputFormatter için gerekli
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/config/app_config.dart';
 import '../../tournament/models/league.dart';
+import '../../tournament/models/season.dart';
 import '../models/match.dart';
 import '../../team/models/team.dart';
 import '../../../core/services/app_session.dart';
@@ -25,8 +28,21 @@ class _FixtureScreenState extends State<FixtureScreen> {
   final IMatchService _matchService = ServiceLocator.matchService;
   final ITeamService _teamService = ServiceLocator.teamService;
   String? _leagueId;
+  String? _seasonId;
   String? _groupId;
   int? _week;
+
+  Stream<List<Season>> _watchSeasons(String leagueId) {
+    if (AppConfig.activeDatabase != DatabaseType.supabase) {
+      return Stream.value([]);
+    }
+    return Supabase.instance.client
+        .from('seasons')
+        .stream(primaryKey: ['id'])
+        .eq('league_id', leagueId)
+        .order('start_date', ascending: false)
+        .map((rows) => rows.map((r) => Season.fromMap(r)).toList());
+  }
 
   DateTime? _parseYyyyMmDd(String yyyyMmDd) {
     final s = yyyyMmDd.trim();
@@ -50,7 +66,6 @@ class _FixtureScreenState extends State<FixtureScreen> {
   Widget build(BuildContext context) {
     final bool isAdmin = AppSession.of(context).value.isAdmin;
 
-    const headerForest = Color(0xFF064E3B);
     const bgDark = Color(0xFF0F172A);
     const cardBg = Color(0xFF1E293B);
     const outline = Color(0xFF334155);
@@ -59,12 +74,21 @@ class _FixtureScreenState extends State<FixtureScreen> {
       backgroundColor: bgDark,
       appBar: AppBar(
         centerTitle: true,
+        backgroundColor: const Color(0xFF064E3B),
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: const [
-            Icon(Icons.calendar_month_outlined),
+            Icon(Icons.calendar_month_outlined, color: Colors.white),
             SizedBox(width: 8),
-            Text('Fikstür'),
+            Text(
+              'Fikstür',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ],
         ),
       ),
@@ -97,193 +121,263 @@ class _FixtureScreenState extends State<FixtureScreen> {
                   ? (leagues.where((l) => l.isDefault).first.id)
                   : leagues.first.id;
 
-              return StreamBuilder<List<GroupModel>>(
+              return StreamBuilder<List<Season>>(
                 stream: _leagueId == null
-                    ? const Stream<List<GroupModel>>.empty()
-                    : _leagueService.watchGroups(_leagueId!),
-                builder: (context, snapshot) {
-                  final groupsRaw = snapshot.data ?? const <GroupModel>[];
-                  final groups = [...groupsRaw]
-                    ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+                    ? Stream.value([])
+                    : _watchSeasons(_leagueId!),
+                builder: (context, seasonSnap) {
+                  final seasons = seasonSnap.data ?? [];
 
-                  String groupDisplayName(GroupModel g, int index) {
-                    final name = g.name.trim();
-                    if (name.isNotEmpty) return name;
-                    return 'Grup ${index + 1}';
+                  if (_leagueId != null && seasons.isNotEmpty) {
+                    final hasSelected =
+                        _seasonId != null &&
+                        seasons.any((s) => s.id == _seasonId);
+                    if (!hasSelected) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) {
+                          setState(() {
+                            _seasonId = seasons.first.id;
+                            _groupId = null;
+                            _week = null;
+                          });
+                        }
+                      });
+                    }
                   }
 
-                  final groupNameById = <String, String>{
-                    for (final e in groups.indexed) e.$2.id: groupDisplayName(e.$2, e.$1),
-                  };
+                  return StreamBuilder<List<GroupModel>>(
+                    stream: _seasonId == null
+                        ? const Stream<List<GroupModel>>.empty()
+                        : _leagueService.watchGroups(_seasonId!),
+                    builder: (context, snapshot) {
+                      final groupsRaw = snapshot.data ?? const <GroupModel>[];
+                      final groups = [...groupsRaw]
+                        ..sort(
+                          (a, b) => a.name.toLowerCase().compareTo(
+                            b.name.toLowerCase(),
+                          ),
+                        );
 
-                  final selectedGroupId =
-                      (_groupId != null && groupNameById.containsKey(_groupId)) ? _groupId : null;
-                  final showGroupInHeader = selectedGroupId == null && groups.length > 1;
-
-                  return FutureBuilder<int?>(
-                    key: ValueKey('$_leagueId|$selectedGroupId'),
-                    future: _matchService.getFixtureMaxWeek(
-                      _leagueId!,
-                      groupId: selectedGroupId,
-                    ),
-                    builder: (context, maxWeekSnap) {
-                      final maxWeek = maxWeekSnap.data ?? 30;
-                      final weeks = <int>[for (var i = 1; i <= maxWeek; i++) i];
-
-                      if (_week == null && maxWeek > 0) {
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          if (mounted) setState(() => _week = 1);
-                        });
+                      String groupDisplayName(GroupModel g, int index) {
+                        final name = g.name.trim();
+                        if (name.isNotEmpty) return name;
+                        return 'Grup ${index + 1}';
                       }
 
-                      return StreamBuilder<List<MatchModel>>(
-                        stream: _week == null
-                            ? Stream.empty()
-                            : _matchService.watchFixtureMatches(
-                                _leagueId!,
-                                _week!,
-                                groupId: selectedGroupId,
-                              ),
-                        builder: (context, matchesSnap) {
-                          if (matchesSnap.connectionState ==
-                              ConnectionState.waiting) {
-                            return const Center(
-                              child: CircularProgressIndicator(),
-                            );
+                      final groupNameById = <String, String>{
+                        for (final e in groups.indexed)
+                          e.$2.id: groupDisplayName(e.$2, e.$1),
+                      };
+
+                      final selectedGroupId =
+                          (_groupId != null &&
+                              groupNameById.containsKey(_groupId))
+                          ? _groupId
+                          : null;
+                      final showGroupInHeader =
+                          selectedGroupId == null && groups.length > 1;
+
+                      return FutureBuilder<int?>(
+                        key: ValueKey('$_seasonId|$selectedGroupId'),
+                        future: _matchService.getFixtureMaxWeek(
+                          _leagueId!,
+                          groupId: selectedGroupId,
+                        ),
+                        builder: (context, maxWeekSnap) {
+                          final maxWeek = maxWeekSnap.data ?? 30;
+                          final weeks = <int>[
+                            for (var i = 1; i <= maxWeek; i++) i,
+                          ];
+
+                          if (_week == null && maxWeek > 0) {
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (mounted) setState(() => _week = 1);
+                            });
                           }
 
-                          final matches = (matchesSnap.data ?? [])
-                            ..sort((a, b) {
-                              // Önce tarihe göre sırala (2026-04-18, 2026-04-19 gibi)
-                              int dateComp = (a.matchDate ?? '').compareTo(
-                                b.matchDate ?? '',
-                              );
-                              if (dateComp != 0) return dateComp;
+                          return StreamBuilder<List<MatchModel>>(
+                            stream: _week == null || _seasonId == null
+                                ? Stream.empty()
+                                : _matchService.watchFixtureMatches(
+                                    _leagueId!,
+                                    _week!,
+                                    groupId: selectedGroupId,
+                                  ),
+                            builder: (context, matchesSnap) {
+                              if (matchesSnap.connectionState ==
+                                  ConnectionState.waiting) {
+                                return const Center(
+                                  child: CircularProgressIndicator(),
+                                );
+                              }
 
-                              // Eğer tarihler aynıysa, saate göre sırala (18:00, 19:00 gibi)
-                              return (a.matchTime ?? '').compareTo(
-                                b.matchTime ?? '',
-                              );
-                            });
+                              final matches = (matchesSnap.data ?? [])
+                                ..sort((a, b) {
+                                  // Önce tarihe göre sırala (2026-04-18, 2026-04-19 gibi)
+                                  int dateComp = (a.matchDate ?? '').compareTo(
+                                    b.matchDate ?? '',
+                                  );
+                                  if (dateComp != 0) return dateComp;
 
-                          return Column(
-                            children: [
-                              Container(
-                                color: headerForest,
-                                padding: const EdgeInsets.fromLTRB(
-                                  16,
-                                  6,
-                                  16,
-                                  32,
-                                ),
-                                child: Column(
-                                  children: [
-                                    _buildDropdown(
-                                      'Turnuva Seçin',
-                                      _leagueId,
-                                      leagues
-                                          .map(
-                                            (l) => DropdownMenuItem(
-                                              value: l.id,
-                                              child: Text(l.name),
-                                            ),
-                                          )
-                                          .toList(),
-                                      (v) => setState(() {
-                                        _leagueId = v;
-                                        _groupId = null;
-                                        _week = null;
-                                      }),
+                                  // Eğer tarihler aynıysa, saate göre sırala (18:00, 19:00 gibi)
+                                  return (a.matchTime ?? '').compareTo(
+                                    b.matchTime ?? '',
+                                  );
+                                });
+
+                              return Column(
+                                children: [
+                                  Container(
+                                    color: bgDark,
+                                    padding: const EdgeInsets.fromLTRB(
+                                      16,
+                                      8,
+                                      16,
+                                      0,
                                     ),
-                                    const SizedBox(height: 10),
-                                    Row(
+                                    child: Column(
                                       children: [
-                                        Expanded(
-                                          child: _buildDropdown(
-                                            'Grup Seçin',
-                                            selectedGroupId,
-                                            [
-                                              const DropdownMenuItem(
-                                                value: null,
-                                                child: Text('Tümü'),
-                                              ),
-                                              ...groups.indexed.map((e) {
-                                                final g = e.$2;
-                                                final label = groupNameById[g.id] ?? '';
-                                                return DropdownMenuItem(
-                                                  value: g.id,
-                                                  child: Text(label),
-                                                );
-                                              }),
-                                            ],
-                                            (v) => setState(() => _groupId = v),
-                                          ),
+                                        _buildDropdown(
+                                          'Turnuva Seçin',
+                                          _leagueId,
+                                          leagues
+                                              .map(
+                                                (l) => DropdownMenuItem(
+                                                  value: l.id,
+                                                  child: Text(l.name),
+                                                ),
+                                              )
+                                              .toList(),
+                                          (v) => setState(() {
+                                            _leagueId = v;
+                                            _seasonId = null;
+                                            _groupId = null;
+                                            _week = null;
+                                          }),
                                         ),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          child: _buildDropdown(
-                                            'Hafta Seçin',
-                                            _week,
-                                            weeks
-                                                .map(
-                                                  (w) => DropdownMenuItem(
-                                                    value: w,
-                                                    child: Text('$w. Hafta'),
+                                        const SizedBox(height: 12),
+                                        _buildDropdown(
+                                          'Sezon Seçin',
+                                          _seasonId,
+                                          seasons
+                                              .map(
+                                                (s) => DropdownMenuItem(
+                                                  value: s.id,
+                                                  child: Text(s.name),
+                                                ),
+                                              )
+                                              .toList(),
+                                          (v) => setState(() {
+                                            _seasonId = v;
+                                            _groupId = null;
+                                            _week = null;
+                                          }),
+                                          key: ValueKey('season_$_leagueId'),
+                                        ),
+                                        const SizedBox(height: 12),
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: _buildDropdown(
+                                                'Grup Seçin',
+                                                selectedGroupId,
+                                                [
+                                                  const DropdownMenuItem(
+                                                    value: null,
+                                                    child: Text('Tümü'),
                                                   ),
-                                                )
-                                                .toList(),
-                                            (v) => setState(() => _week = v),
-                                          ),
+                                                  ...groups.indexed.map((e) {
+                                                    final g = e.$2;
+                                                    final label =
+                                                        groupNameById[g.id] ??
+                                                        '';
+                                                    return DropdownMenuItem(
+                                                      value: g.id,
+                                                      child: Text(label),
+                                                    );
+                                                  }),
+                                                ],
+                                                (v) => setState(
+                                                  () => _groupId = v,
+                                                ),
+                                                key: ValueKey(
+                                                  'group_$_seasonId',
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: _buildDropdown(
+                                                'Hafta Seçin',
+                                                _week,
+                                                weeks
+                                                    .map(
+                                                      (w) => DropdownMenuItem(
+                                                        value: w,
+                                                        child: Text(
+                                                          '$w. Hafta',
+                                                        ),
+                                                      ),
+                                                    )
+                                                    .toList(),
+                                                (v) =>
+                                                    setState(() => _week = v),
+                                                key: ValueKey(
+                                                  'week_$_seasonId',
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 16),
+                                        Divider(
+                                          color: Colors.white.withOpacity(0.1),
+                                          thickness: 1,
+                                          height: 24,
                                         ),
                                       ],
                                     ),
-                                  ],
-                                ),
-                              ),
-                              Expanded(
-                                child: Transform.translate(
-                                  offset: const Offset(0, -24),
-                                  child: Container(
-                                    decoration: const BoxDecoration(
-                                      color: bgDark,
-                                      borderRadius: BorderRadius.vertical(
-                                        top: Radius.circular(24),
-                                      ),
-                                    ),
-                                    padding: const EdgeInsets.only(top: 18),
-                                    child: matches.isEmpty
-                                        ? const Center(
-                                            child: Text(
-                                              'Maç bulunamadı.',
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                              ),
-                                            ),
-                                          )
-                                        : _FixtureList(
-                                            matches: matches,
-                                            dateStripText: _dateStripText,
-                                            groupNameById: groupNameById,
-                                            showGroupInHeader: showGroupInHeader,
-                                            teamLogoById: teamLogoById,
-                                          teamNameById: teamNameById,
-                                            isAdmin: isAdmin,
-                                            onMatchTap: (m) => Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (_) =>
-                                                    MatchDetailsScreen(
-                                                      match: m,
-                                                    ),
-                                              ),
-                                            ),
-                                            cardColor: cardBg,
-                                            outlineColor: outline,
-                                          ),
                                   ),
-                                ),
-                              ),
-                            ],
+                                  Expanded(
+                                    child: Container(
+                                      decoration: const BoxDecoration(
+                                        color: bgDark,
+                                      ),
+                                      child: matches.isEmpty
+                                          ? const Center(
+                                              child: Text(
+                                                'Maç bulunamadı.',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                            )
+                                          : _FixtureList(
+                                              matches: matches,
+                                              dateStripText: _dateStripText,
+                                              groupNameById: groupNameById,
+                                              showGroupInHeader:
+                                                  showGroupInHeader,
+                                              teamLogoById: teamLogoById,
+                                              teamNameById: teamNameById,
+                                              isAdmin: isAdmin,
+                                              onMatchTap: (m) => Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (_) =>
+                                                      MatchDetailsScreen(
+                                                        match: m,
+                                                      ),
+                                                ),
+                                              ),
+                                              cardColor: cardBg,
+                                              outlineColor: outline,
+                                            ),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
                           );
                         },
                       );
@@ -302,23 +396,36 @@ class _FixtureScreenState extends State<FixtureScreen> {
     String label,
     dynamic value,
     List<DropdownMenuItem<dynamic>> items,
-    Function(dynamic) onChanged,
-  ) {
+    Function(dynamic) onChanged, {
+    Key? key,
+  }) {
     return DropdownButtonFormField(
+      key: key,
       initialValue: value,
       isExpanded: true,
       dropdownColor: const Color(0xFF1E293B),
-      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
+      style: const TextStyle(
+        color: Colors.white,
+        fontWeight: FontWeight.w600,
+        fontSize: 14,
+      ),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: Colors.white70),
+        labelStyle: const TextStyle(color: Colors.white54, fontSize: 13),
         filled: true,
-        fillColor: Colors.white.withValues(alpha: 0.10),
+        fillColor: Colors.white.withOpacity(0.05),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Colors.white24),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 12,
+        ),
       ),
       items: items,
       onChanged: onChanged,
@@ -500,7 +607,9 @@ class _MatchCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isFinished = match.status == MatchStatus.finished;
     final timeTextRaw = (match.matchTime ?? '').trim();
-    final timeText = timeTextRaw.length >= 5 ? timeTextRaw.substring(0, 5) : timeTextRaw;
+    final timeText = timeTextRaw.length >= 5
+        ? timeTextRaw.substring(0, 5)
+        : timeTextRaw;
     final leftText = isFinished
         ? 'MS'
         : (timeText.isEmpty ? '--:--' : timeText);
@@ -523,11 +632,10 @@ class _MatchCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         onTap: onTap,
         onLongPress: () {
-          final role = AppSession.of(context).value.role;
-          if (role != 'super_admin') {
+          if (!isAdmin) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Bu işlem için Super Admin yetkisi gereklidir.'),
+                content: Text('Bu işlem için yetkiniz bulunmamaktadır.'),
                 duration: Duration(seconds: 2),
               ),
             );
@@ -798,19 +906,27 @@ class _MatchCard extends StatelessWidget {
 
     final dCtrl = TextEditingController(text: initialDate);
     final rawInitialTime = (match.matchTime ?? '').trim();
-    final initialTimeText = rawInitialTime.length >= 5 ? rawInitialTime.substring(0, 5) : rawInitialTime;
+    final initialTimeText = rawInitialTime.length >= 5
+        ? rawInitialTime.substring(0, 5)
+        : rawInitialTime;
     final tCtrl = TextEditingController(text: initialTimeText);
     final dateFocus = FocusNode();
     final timeFocus = FocusNode();
 
-    String? selectedPitchId = (match.pitchId ?? '').trim().isEmpty ? null : match.pitchId!.trim();
-    String? selectedPitchName = (match.pitchName ?? '').trim().isEmpty ? null : match.pitchName!.trim();
+    String? selectedPitchId = (match.pitchId ?? '').trim().isEmpty
+        ? null
+        : match.pitchId!.trim();
+    String? selectedPitchName = (match.pitchName ?? '').trim().isEmpty
+        ? null
+        : match.pitchName!.trim();
 
     final pitches = await _leagueService.watchPitches().first;
 
     if (pitches.length == 1) {
       selectedPitchId = pitches.first.id;
-      selectedPitchName = pitches.first.name.trim().isEmpty ? null : pitches.first.name.trim();
+      selectedPitchName = pitches.first.name.trim().isEmpty
+          ? null
+          : pitches.first.name.trim();
     }
 
     // Tarih tamam olduğunda otomatik saat field'ine geç
@@ -871,7 +987,9 @@ class _MatchCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 30),
                 DropdownButtonFormField<String?>(
-                  initialValue: pitches.any((p) => p.id == selectedPitchId) ? selectedPitchId : null,
+                  initialValue: pitches.any((p) => p.id == selectedPitchId)
+                      ? selectedPitchId
+                      : null,
                   dropdownColor: const Color(0xFF0F172A),
                   decoration: const InputDecoration(
                     labelText: 'Stad Seçin',
@@ -898,11 +1016,17 @@ class _MatchCard extends StatelessWidget {
                       ),
                   ],
                   onChanged: (val) {
-                    final selected = pitches.where((e) => e.id == val).toList(growable: false);
-                    final name = selected.isEmpty ? '' : selected.first.name.trim();
+                    final selected = pitches
+                        .where((e) => e.id == val)
+                        .toList(growable: false);
+                    final name = selected.isEmpty
+                        ? ''
+                        : selected.first.name.trim();
                     setDialogState(() {
                       selectedPitchId = val;
-                      selectedPitchName = val == null || name.isEmpty ? null : name;
+                      selectedPitchName = val == null || name.isEmpty
+                          ? null
+                          : name;
                     });
                   },
                 ),
@@ -926,7 +1050,9 @@ class _MatchCard extends StatelessWidget {
                 final timeText = tCtrl.text;
 
                 // VALIDATION (Doğrulama)
-                final dateMatch = RegExp(r'^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$').firstMatch(dateText);
+                final dateMatch = RegExp(
+                  r'^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$',
+                ).firstMatch(dateText);
                 if (dateMatch == null) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
@@ -936,7 +1062,9 @@ class _MatchCard extends StatelessWidget {
                   );
                   return;
                 }
-                final timeMatch = RegExp(r'^(\d{2}):(\d{2})$').firstMatch(timeText);
+                final timeMatch = RegExp(
+                  r'^(\d{2}):(\d{2})$',
+                ).firstMatch(timeText);
                 if (timeMatch == null) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(

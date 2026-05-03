@@ -55,8 +55,9 @@ class FirebaseMatchService implements IMatchService {
     String leagueId,
     int week, {
     String? groupId,
+    String? seasonId,
   }) {
-    return _db.watchFixtureMatches(leagueId, week, groupId: groupId);
+    return _db.watchFixtureMatches(leagueId, week, groupId: groupId, seasonId: seasonId);
   }
 
   @override

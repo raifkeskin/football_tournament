@@ -119,6 +119,7 @@ class MatchModel {
   final String? pitchName;
   final MatchStatus status;
   final int? minute;
+  final String? seasonId;
   final String? groupId;
   final String? youtubeUrl;
   final String? homeHighlightPhotoUrl;
@@ -141,6 +142,7 @@ class MatchModel {
     this.pitchId,
     this.pitchName,
     this.minute,
+    this.seasonId,
     this.groupId,
     this.firebaseId,
     this.youtubeUrl,
@@ -283,6 +285,9 @@ class MatchModel {
       pitchName: pitchNameRaw.isEmpty ? null : pitchNameRaw,
       status: resolvedStatus,
       minute: readScore(v('minute', 'minute')),
+      seasonId: (v('seasonId', 'season_id') ?? '').toString().trim().isEmpty
+          ? null
+          : (v('seasonId', 'season_id') ?? '').toString().trim(),
       groupId: (v('groupId', 'group_id') ?? '').toString().trim().isEmpty
           ? null
           : (v('groupId', 'group_id') ?? '').toString().trim(),
@@ -325,6 +330,7 @@ class MatchModel {
         'pitchName': pitchName,
         'status': status.name,
         'minute': minute,
+        'seasonId': seasonId,
         'groupId': groupId,
         'youtubeUrl': youtubeUrl,
         'homeHighlightPhotoUrl': homeHighlightPhotoUrl,
@@ -339,6 +345,7 @@ class MatchModel {
         'league_id': leagueId.trim().isEmpty ? null : leagueId.trim(),
         'home_team_id': homeTeamId,
         'away_team_id': awayTeamId,
+        'season_id': (seasonId ?? '').trim().isEmpty ? null : seasonId!.trim(),
         'group_id': (groupId ?? '').trim().isEmpty ? null : groupId!.trim(),
         'pitch_id': (pitchId ?? '').trim().isEmpty ? null : pitchId!.trim(),
         'pitch_name': (pitchName ?? '').trim().isEmpty ? null : pitchName!.trim(),
