@@ -124,6 +124,10 @@ class MatchModel {
   final MatchScore? score;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  final String? homeFormation;
+  final String? awayFormation;
+  final List<String>? homeOrder;
+  final List<String>? awayOrder;
 
   MatchModel({
     required this.id,
@@ -145,6 +149,10 @@ class MatchModel {
     this.score,
     this.createdAt,
     this.updatedAt,
+    this.homeFormation,
+    this.awayFormation,
+    this.homeOrder,
+    this.awayOrder,
   });
 
   factory MatchModel.fromMap(Map<String, dynamic> map, String id) {
@@ -258,6 +266,14 @@ class MatchModel {
       return null;
     }
 
+    List<String>? readStringList(dynamic value) {
+      if (value == null) return null;
+      if (value is List) {
+        return value.map((e) => e.toString()).toList();
+      }
+      return null;
+    }
+
     return MatchModel(
       id: id,
       leagueId: (map['leagueId'] ?? map['league_id'] ?? '').toString(),
@@ -284,6 +300,10 @@ class MatchModel {
       score: readScoreObject(),
       createdAt: readDate(v('createdAt', 'created_at')),
       updatedAt: readDate(v('updatedAt', 'updated_at')),
+      homeFormation: v('homeFormation', 'home_formation')?.toString(),
+      awayFormation: v('awayFormation', 'away_formation')?.toString(),
+      homeOrder: readStringList(v('homeOrder', 'home_order')),
+      awayOrder: readStringList(v('awayOrder', 'away_order')),
     );
   }
 

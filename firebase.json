@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "site": "masterfutbol", 
     "public": "build/web",
     "ignore": [
       "firebase.json",
@@ -12,8 +13,5 @@
         "destination": "/index.html"
       }
     ]
-  },
-  "firestore": {
-    "indexes": "firestore.indexes.json"
   }
 }

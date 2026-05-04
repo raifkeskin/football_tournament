@@ -46,6 +46,8 @@ class FormationTab extends StatefulWidget {
   final String tournamentId;
   final String homeTeamId;
   final String awayTeamId;
+  final String homeName;
+  final String awayName;
   final bool isTeamManager;
   final List<FormationPlayer> homePlayers;
   final List<FormationPlayer> awayPlayers;
@@ -60,6 +62,8 @@ class FormationTab extends StatefulWidget {
     required this.tournamentId,
     required this.homeTeamId,
     required this.awayTeamId,
+    required this.homeName,
+    required this.awayName,
     required this.isTeamManager,
     required this.homePlayers,
     required this.awayPlayers,
@@ -73,6 +77,8 @@ class FormationTab extends StatefulWidget {
     Key? key,
     required MatchModel match,
     required bool isTeamManager,
+    required String homeName,
+    required String awayName,
   }) {
     return FormationTab(
       key: key,
@@ -80,13 +86,15 @@ class FormationTab extends StatefulWidget {
       tournamentId: match.leagueId,
       homeTeamId: match.homeTeamId,
       awayTeamId: match.awayTeamId,
+      homeName: homeName,
+      awayName: awayName,
       isTeamManager: isTeamManager,
       homePlayers: const <FormationPlayer>[],
       awayPlayers: const <FormationPlayer>[],
-      initialHomeFormation: '4-4-2',
-      initialAwayFormation: '4-4-2',
-      initialHomeOrder: const <String>[],
-      initialAwayOrder: const <String>[],
+      initialHomeFormation: match.homeFormation ?? '4-4-2',
+      initialAwayFormation: match.awayFormation ?? '4-4-2',
+      initialHomeOrder: match.homeOrder ?? const <String>[],
+      initialAwayOrder: match.awayOrder ?? const <String>[],
     );
   }
 
@@ -106,6 +114,8 @@ class _FormationTabState extends State<FormationTab> {
   late List<FormationPlayer> _awayPlayers;
   late List<FormationPlayer> _homeDefault;
   late List<FormationPlayer> _awayDefault;
+
+  int _selectedTeamIndex = 0; // 0 for Home, 1 for Away
 
   String _compactName(String raw) {
     final s = raw.trim().replaceAll(RegExp(r'\s+'), ' ');
@@ -199,20 +209,29 @@ class _FormationTabState extends State<FormationTab> {
   @override
   void initState() {
     super.initState();
+    _initData();
+  }
+
+  @override
+  void didUpdateWidget(FormationTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialHomeFormation != widget.initialHomeFormation ||
+        oldWidget.initialAwayFormation != widget.initialAwayFormation ||
+        oldWidget.initialHomeOrder != widget.initialHomeOrder ||
+        oldWidget.initialAwayOrder != widget.initialAwayOrder) {
+      _initData();
+    }
+  }
+
+  void _initData() {
     _homeFormation = widget.initialHomeFormation;
     _awayFormation = widget.initialAwayFormation;
 
-    _homePlayers = _applyOrder(
-      List<FormationPlayer>.from(widget.homePlayers),
-      widget.initialHomeOrder,
-    );
-    _awayPlayers = _applyOrder(
-      List<FormationPlayer>.from(widget.awayPlayers),
-      widget.initialAwayOrder,
-    );
+    var homeP = _ensureEleven(List<FormationPlayer>.from(widget.homePlayers), isHome: true);
+    var awayP = _ensureEleven(List<FormationPlayer>.from(widget.awayPlayers), isHome: false);
 
-    _homePlayers = _ensureEleven(_homePlayers, isHome: true);
-    _awayPlayers = _ensureEleven(_awayPlayers, isHome: false);
+    _homePlayers = _applyOrder(homeP, widget.initialHomeOrder);
+    _awayPlayers = _applyOrder(awayP, widget.initialAwayOrder);
 
     _homeDefault = _homePlayers.map((e) => e.copyWith()).toList();
     _awayDefault = _awayPlayers.map((e) => e.copyWith()).toList();
@@ -298,39 +317,102 @@ class _FormationTabState extends State<FormationTab> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const SizedBox(height: 12),
-                  _buildPitchSection(
-                    isHome: true,
-                    players: homePlayers,
-                    formation: _homeFormation,
-                    onFormationChanged: widget.isTeamManager
-                        ? (val) {
-                            setState(() {
-                              _homeFormation = val;
-                            });
-                            _schedulePersist(home: true, away: false);
-                          }
-                        : null,
-                    formations: formations,
-                    isTeamManager: widget.isTeamManager,
+                  // TEAM TOGGLE HEADER
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white10),
+                    ),
+                    padding: const EdgeInsets.all(4),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setState(() => _selectedTeamIndex = 0),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              decoration: BoxDecoration(
+                                color: _selectedTeamIndex == 0
+                                    ? Colors.green.shade700
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                widget.homeName,
+                                textAlign: TextAlign.center,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: _selectedTeamIndex == 0 ? Colors.white : Colors.white60,
+                                  fontWeight: _selectedTeamIndex == 0 ? FontWeight.bold : FontWeight.normal,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setState(() => _selectedTeamIndex = 1),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              decoration: BoxDecoration(
+                                color: _selectedTeamIndex == 1
+                                    ? Colors.blue.shade700
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                widget.awayName,
+                                textAlign: TextAlign.center,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: _selectedTeamIndex == 1 ? Colors.white : Colors.white60,
+                                  fontWeight: _selectedTeamIndex == 1 ? FontWeight.bold : FontWeight.normal,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 32),
-                  const SizedBox(height: 12),
-                  _buildPitchSection(
-                    isHome: false,
-                    players: awayPlayers,
-                    formation: _awayFormation,
-                    onFormationChanged: widget.isTeamManager
-                        ? (val) {
-                            setState(() {
-                              _awayFormation = val;
-                            });
-                            _schedulePersist(home: false, away: true);
-                          }
-                        : null,
-                    formations: formations,
-                    isTeamManager: widget.isTeamManager,
-                  ),
+                  const SizedBox(height: 24),
+                  
+                  // PITCH SECTION
+                  if (_selectedTeamIndex == 0)
+                    _buildPitchSection(
+                      isHome: true,
+                      players: homePlayers,
+                      formation: _homeFormation,
+                      onFormationChanged: widget.isTeamManager
+                          ? (val) {
+                              setState(() {
+                                _homeFormation = val;
+                              });
+                              _schedulePersist(home: true, away: false);
+                            }
+                          : null,
+                      formations: formations,
+                      isTeamManager: widget.isTeamManager,
+                    )
+                  else
+                    _buildPitchSection(
+                      isHome: false,
+                      players: awayPlayers,
+                      formation: _awayFormation,
+                      onFormationChanged: widget.isTeamManager
+                          ? (val) {
+                              setState(() {
+                                _awayFormation = val;
+                              });
+                              _schedulePersist(home: false, away: true);
+                            }
+                          : null,
+                      formations: formations,
+                      isTeamManager: widget.isTeamManager,
+                    ),
                   const SizedBox(height: 24),
                   FilledButton.icon(
                     onPressed: _resetPositions,

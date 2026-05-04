@@ -76,11 +76,11 @@ class _TeamInfo extends StatelessWidget {
           softWrap: true,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: TextStyle(
+          style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.w700,
             fontSize: 18,
-            shadows: const [
+            shadows: [
               Shadow(color: Colors.black, blurRadius: 10, offset: Offset(0, 2)),
             ],
           ),
@@ -302,7 +302,6 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
         }
         final m = matchSnap.data ?? widget.match;
 
-        // HATA DÜZELTİLDİ: managedTeamId yerine teamId kullanıldı
         final bool isSuperAdmin = session.isAdmin;
         final bool isTeamManager =
             session.teamId == m.homeTeamId || session.teamId == m.awayTeamId;
@@ -548,17 +547,17 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                   ),
                   TabBar(
                     controller: _tabController,
-                    labelStyle: TextStyle(
+                    labelStyle: const TextStyle(
                       fontFamily: 'Batangas',
                       fontWeight: FontWeight.bold,
                       fontSize: 14,
                     ),
-                    unselectedLabelStyle: TextStyle(
+                    unselectedLabelStyle: const TextStyle(
                       fontFamily: 'Batangas',
                       fontWeight: FontWeight.bold,
                       fontSize: 14,
                     ),
-                    tabs: [
+                    tabs: const [
                       Tab(text: 'Detay'),
                       Tab(text: 'Kadrolar'),
                       Tab(text: 'Önemli Anlar'),
@@ -572,7 +571,15 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                         controller: _tabController,
                         children: [
                           _DetailTab(match: m),
-                          _LineupTab(homeName: homeName, awayName: awayName),
+                          
+                          // İŞTE DEĞİŞİKLİK YAPILAN YER: YENİ _LineupTab BAĞLANTISI
+                          _LineupTab(
+                            match: m,
+                            isAdminAccess: isAdminAccess,
+                            homeName: homeName,
+                            awayName: awayName,
+                          ),
+
                           _HighlightsTab(
                             key: ValueKey(_refreshKey),
                             match: m,
@@ -582,6 +589,8 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                           FormationTab.fromMatch(
                             match: m,
                             isTeamManager: isAdminAccess,
+                            homeName: homeName,
+                            awayName: awayName,
                           ),
                         ],
                       ),
@@ -973,12 +982,9 @@ class _SpeedDialFabState extends State<_SpeedDialFab> {
 
 // --- TAB İÇERİKLERİ ---
 
-// MatchDetailsScreen içindeki TabBarView kısmında paslıyoruz:
-// _HighlightsTab(match: m, isSuperAdmin: isSuperAdmin),
-
 class _HighlightsTab extends StatelessWidget {
   final MatchModel match;
-  final bool isSuperAdmin; // Yeni eklenen yetki kontrolü
+  final bool isSuperAdmin;
   final VoidCallback onDataChanged;
   const _HighlightsTab({
     super.key,
@@ -993,12 +999,14 @@ class _HighlightsTab extends StatelessWidget {
       stream: ServiceLocator.matchService.watchMatchMedia(match.id),
       builder: (context, snap) {
         if (snap.hasError) return Center(child: Text('Hata: ${snap.error}'));
-        if (!snap.hasData)
+        if (!snap.hasData) {
           return const Center(child: CircularProgressIndicator());
+        }
 
         final mediaList = snap.data ?? [];
-        if (mediaList.isEmpty)
+        if (mediaList.isEmpty) {
           return const Center(child: Text('Henüz medya eklenmedi.'));
+        }
 
         return ListView.separated(
           padding: const EdgeInsets.symmetric(vertical: 8),
@@ -1043,7 +1051,6 @@ class _HighlightsTab extends StatelessWidget {
             (isVideo ? 'Maç videosunu izle' : 'Görseli görüntüle'),
         style: const TextStyle(color: Colors.white60, fontSize: 12),
       ),
-      // Sadece Super Admin için Silme Butonu
       trailing: isSuperAdmin
           ? IconButton(
               icon: const Icon(
@@ -1089,11 +1096,8 @@ class _HighlightsTab extends StatelessWidget {
       }
     }
   }
-
-  // _openFullScreenMedia metodu burada devam eder...
 }
 
-// TAM EKRAN GÖRÜNTÜLEYİCİ (Metot artık sınıf içinde tanımlı)
 Future<void> _openFullScreenMedia(BuildContext context, MatchMediaModel media) async {
   if (media.mediaType == 'Maç Yayın Linki') {
     final uri = Uri.parse(media.url);
@@ -1120,15 +1124,10 @@ Future<void> _openFullScreenMedia(BuildContext context, MatchMediaModel media) a
           backgroundColor: Colors.black,
           iconTheme: const IconThemeData(color: Colors.white),
           actions: [
-            // PAYLAŞ BUTONU
             IconButton(
               icon: const Icon(Icons.share_outlined),
-              onPressed: () {
-                // Not: share_plus paketi yüklü olmalıdır.
-                // Share.share('Maç Detayı: ${media.url}');
-              },
+              onPressed: () {},
             ),
-            // İNDİR BUTONU
             IconButton(
               icon: const Icon(Icons.download_rounded),
               onPressed: () async {
@@ -1152,38 +1151,190 @@ Future<void> _openFullScreenMedia(BuildContext context, MatchMediaModel media) a
   );
 }
 
-class _LineupTab extends StatelessWidget {
-  const _LineupTab({required this.homeName, required this.awayName});
+// -----------------------------------------------------------------------------
+// YENİ EKLENEN KADROLAR (ESAME) TABI WIDGET'I
+// -----------------------------------------------------------------------------
 
+class _LineupTab extends StatefulWidget {
+  final MatchModel match;
+  final bool isAdminAccess;
   final String homeName;
   final String awayName;
+
+  const _LineupTab({
+    super.key,
+    required this.match,
+    required this.isAdminAccess,
+    required this.homeName,
+    required this.awayName,
+  });
+
+  @override
+  State<_LineupTab> createState() => _LineupTabState();
+}
+
+class _LineupTabState extends State<_LineupTab> {
+  int _selectedTeamIndex = 0; // 0: Ev Sahibi, 1: Deplasman
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return ListView(
-      padding: const EdgeInsets.all(16),
+    final selectedTeamId = _selectedTeamIndex == 0 ? widget.match.homeTeamId : widget.match.awayTeamId;
+
+    return Column(
       children: [
-        Text(
-          '$homeName - $awayName',
-          style: TextStyle(
-            color: cs.onSurface,
-            fontWeight: FontWeight.w900,
-            fontSize: 16,
+        // 1. ÜST KISIM: TAKIM SEÇİCİ BUTONLAR (TOGGLE)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: _TeamToggleButton(
+                  title: widget.homeName,
+                  isSelected: _selectedTeamIndex == 0,
+                  onTap: () => setState(() => _selectedTeamIndex = 0),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _TeamToggleButton(
+                  title: widget.awayName,
+                  isSelected: _selectedTeamIndex == 1,
+                  onTap: () => setState(() => _selectedTeamIndex = 1),
+                ),
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 12),
-        Text(
-          'Kadro verileri match_rosters tablosuna taşındığı için bu ekran yeniden düzenlenecek.',
-          style: TextStyle(
-            color: cs.onSurfaceVariant,
-            fontWeight: FontWeight.w600,
+
+        // 2. YETKİLİ MENÜSÜ: ESAME DÜZENLE BUTONU
+        if (widget.isAdminAccess)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  // TODO: Esame düzenleme popup'ı açılacak (Sonraki adımda bağlayacağız)
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Esame düzenleme ekranı yakında eklenecek!')),
+                  );
+                },
+                icon: const Icon(Icons.edit_document, size: 16),
+                label: const Text('Kadro Düzenle', style: TextStyle(fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: cs.primaryContainer,
+                  foregroundColor: cs.onPrimaryContainer,
+                  minimumSize: const Size(0, 36),
+                ),
+              ),
+            ),
+          ),
+
+        // 3. OYUNCU LİSTESİ (Şimdilik Tasarım Amaçlı Dummy Liste)
+        // İleride burayı StreamBuilder ile Supabase match_rosters tablosuna bağlayacağız.
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              _buildSectionHeader('İlk 11'),
+              _buildPlayerTile(jersey: '1', name: 'Ahmet Yılmaz (K)', isStarter: true),
+              _buildPlayerTile(jersey: '4', name: 'Mehmet Demir', isStarter: true),
+              _buildPlayerTile(jersey: '10', name: 'Ali Kaya', isStarter: true),
+              
+              const SizedBox(height: 16),
+              
+              _buildSectionHeader('Yedekler'),
+              _buildPlayerTile(jersey: '12', name: 'Can Öz', isStarter: false),
+              _buildPlayerTile(jersey: '17', name: 'Burak Şahin', isStarter: false),
+            ],
           ),
         ),
       ],
     );
   }
+
+  // LİSTE BAŞLIĞI WIDGET'I
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0),
+      child: Text(
+        title,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w900,
+          fontSize: 16,
+        ),
+      ),
+    );
+  }
+
+  // OYUNCU SATIRI WIDGET'I
+  Widget _buildPlayerTile({required String jersey, required String name, required bool isStarter}) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: ListTile(
+        dense: true,
+        leading: CircleAvatar(
+          backgroundColor: isStarter ? Colors.blueAccent.withOpacity(0.2) : Colors.grey.withOpacity(0.2),
+          child: Text(
+            jersey,
+            style: TextStyle(
+              color: isStarter ? Colors.blueAccent : Colors.grey,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        title: Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
+      ),
+    );
+  }
 }
+
+// TAKIM SEÇİCİ BUTON TASARIMI
+class _TeamToggleButton extends StatelessWidget {
+  final String title;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _TeamToggleButton({required this.title, required this.isSelected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF10B981) : Colors.transparent, // Seçiliyse yeşil
+          border: Border.all(color: isSelected ? const Color(0xFF10B981) : Colors.white24),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          title,
+          style: TextStyle(
+            color: isSelected ? Colors.white : Colors.white60,
+            fontWeight: FontWeight.w900,
+            fontSize: 13,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    );
+  }
+}
+
+// -----------------------------------------------------------------------------
+// DETAY TABI (MAÇ AKIŞI) 
+// -----------------------------------------------------------------------------
 
 class _DetailTab extends StatelessWidget {
   final MatchModel match;
@@ -1417,8 +1568,9 @@ class _DetailEventTile extends StatelessWidget {
 
   Widget _systemIcon(String title) {
     final t = title.toLowerCase();
-    if (t.contains('başla'))
+    if (t.contains('başla')) {
       return const Icon(Icons.play_arrow_rounded, size: 18);
+    }
     if (t.contains('devre') || t.contains('yarı')) {
       return const Icon(Icons.timelapse_rounded, size: 18);
     }

@@ -525,10 +525,29 @@ class SupabaseMatchService implements IMatchService {
     String? awayFormation,
     List<String>? homeOrder,
     List<String>? awayOrder,
-  }) {
+  }) async {
     final id = matchId.trim();
-    if (id.isEmpty) return Future.value();
-    return Future.value();
+    if (id.isEmpty) return;
+
+    final updates = <String, dynamic>{};
+    if (homeFormation != null) updates['home_formation'] = homeFormation;
+    if (awayFormation != null) updates['away_formation'] = awayFormation;
+    if (homeOrder != null) updates['home_order'] = homeOrder;
+    if (awayOrder != null) updates['away_order'] = awayOrder;
+
+    if (updates.isEmpty) return;
+
+    try {
+      AppConfig.sqlLogStart(
+        table: 'matches',
+        operation: 'UPDATE',
+        filters: 'id=$id | keys=${updates.keys.join(',')}',
+      );
+      await _client.from('matches').update(updates).eq('id', id);
+      AppConfig.sqlLogResult(table: 'matches', operation: 'UPDATE', count: 1);
+    } catch (e) {
+      AppConfig.sqlLogResult(table: 'matches', operation: 'UPDATE', error: e);
+    }
   }
 
   @override
