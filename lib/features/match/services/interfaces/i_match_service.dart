@@ -1,5 +1,6 @@
 import '../../models/fixture_import.dart';
 import '../../models/match.dart';
+import '../../models/match_media.dart';
 import '../../../player/models/player_stats.dart';
 
 abstract class IMatchService {
@@ -27,21 +28,14 @@ abstract class IMatchService {
 
   Future<void> addMatchEvent(MatchEvent event);
 
-  Future<void> updateMatchYoutubeUrl({
-    required String matchId,
-    required String? youtubeUrl,
-  });
-
   Future<void> updateMatchPitchName({
     required String matchId,
     required String? pitchName,
   });
 
-  Future<void> updateMatchHighlightPhotoUrl({
-    required String matchId,
-    required bool isHome,
-    required String? photoUrl,
-  });
+  Future<void> addMatchMedia(MatchMediaModel media);
+
+  Stream<List<MatchMediaModel>> watchMatchMedia(String matchId);
 
   Future<void> updateMatchSchedule({
     required String matchId,
@@ -71,6 +65,8 @@ abstract class IMatchService {
     required int awayScore,
   });
 
+  Future<void> insertDefaultMatchEvents(String matchId, int duration);
+
   Stream<List<PlayerStats>> watchPlayerStats({required String tournamentId});
 
   Future<void> commitPlayerStatsForCompletedMatch({required String matchId});
@@ -86,4 +82,10 @@ abstract class IMatchService {
   Future<Map<String, int>> migrateMatchesTimeTimestampToMatchFields();
 
   Future<Map<String, int>> normalizeMatchesDocIdsByLeagueWeekHomeTeam();
+
+  // i_match_service.dart içine ekle
+  Future<void> deleteMatchMedia(String mediaId);
+
+  Future<bool> hasBroadcast(String matchId);
+  Future<String?> getBroadcastUrl(String matchId);
 }

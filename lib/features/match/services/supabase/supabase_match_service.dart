@@ -5,10 +5,12 @@ import '../interfaces/i_match_service.dart';
 import '../../../../core/config/app_config.dart';
 import '../../models/fixture_import.dart';
 import '../../models/match.dart';
+import '../../models/match_media.dart';
 import '../../../player/models/player_stats.dart';
 
 class SupabaseMatchService implements IMatchService {
-  SupabaseMatchService({SupabaseClient? client}) : _client = client ?? Supabase.instance.client;
+  SupabaseMatchService({SupabaseClient? client})
+    : _client = client ?? Supabase.instance.client;
 
   final SupabaseClient _client;
 
@@ -16,7 +18,9 @@ class SupabaseMatchService implements IMatchService {
     if (v == null) return fallback;
     if (v is num) return v.toInt();
     final s = v.toString().replaceAll('\u0000', '').trim();
-    return int.tryParse(s) ?? double.tryParse(s.replaceAll(',', '.'))?.toInt() ?? fallback;
+    return int.tryParse(s) ??
+        double.tryParse(s.replaceAll(',', '.'))?.toInt() ??
+        fallback;
   }
 
   Future<int> _readMatchPeriodDurationMinutes(String tournamentId) async {
@@ -67,7 +71,8 @@ class SupabaseMatchService implements IMatchService {
       AppConfig.sqlLogStart(
         table: 'matches',
         operation: 'STREAM',
-        filters: 'primaryKey=id | clientFilter=league_id=$id | order=match_date asc',
+        filters:
+            'primaryKey=id | clientFilter=league_id=$id | order=match_date asc',
       );
       return _client
           .from('matches')
@@ -78,7 +83,12 @@ class SupabaseMatchService implements IMatchService {
               return (r['league_id'] ?? '').toString().trim() == id;
             });
             return filtered
-                .map((r) => MatchModel.fromMap(Map<String, dynamic>.from(r), (r['id'] ?? '').toString()))
+                .map(
+                  (r) => MatchModel.fromMap(
+                    Map<String, dynamic>.from(r),
+                    (r['id'] ?? '').toString(),
+                  ),
+                )
                 .toList();
           });
     } catch (e) {
@@ -112,9 +122,11 @@ class SupabaseMatchService implements IMatchService {
   }) {
     final id = leagueId.trim();
     if (id.isEmpty) return const Stream<List<MatchModel>>.empty();
-    
+
     try {
       var query = _client.from('matches').select();
+
+      query = query.eq('league_id', id);
 
       if (seasonId != null && seasonId.isNotEmpty) {
         query = query.eq('season_id', seasonId);
@@ -127,10 +139,21 @@ class SupabaseMatchService implements IMatchService {
       query = query.eq('week', week);
 
       return query.order('created_at', ascending: false).asStream().map((rows) {
-        return rows.map((r) => MatchModel.fromMap(Map<String, dynamic>.from(r), (r['id'] ?? '').toString())).toList();
+        return rows
+            .map(
+              (r) => MatchModel.fromMap(
+                Map<String, dynamic>.from(r),
+                (r['id'] ?? '').toString(),
+              ),
+            )
+            .toList();
       });
     } catch (e) {
-      AppConfig.sqlLogResult(table: 'matches', operation: 'SELECT_STREAM', error: e);
+      AppConfig.sqlLogResult(
+        table: 'matches',
+        operation: 'SELECT_STREAM',
+        error: e,
+      );
       return const Stream<List<MatchModel>>.empty();
     }
   }
@@ -147,7 +170,11 @@ class SupabaseMatchService implements IMatchService {
           filters: 'columns=week,league_id',
         );
         final res = await _client.from('matches').select('week, league_id');
-        AppConfig.sqlLogResult(table: 'matches', operation: 'SELECT', count: res.length);
+        AppConfig.sqlLogResult(
+          table: 'matches',
+          operation: 'SELECT',
+          count: res.length,
+        );
         int? maxWeek;
         for (final rowAny in res) {
           final row = (rowAny as Map).cast<String, dynamic>();
@@ -204,11 +231,17 @@ class SupabaseMatchService implements IMatchService {
           .stream(primaryKey: ['id'])
           .order('minute', ascending: true)
           .map((rows) {
-            final filtered = rows.where((r) => (r['match_id'] ?? '').toString().trim() == id);
+            final filtered = rows.where(
+              (r) => (r['match_id'] ?? '').toString().trim() == id,
+            );
             return filtered.map((r) => Map<String, dynamic>.from(r)).toList();
           });
     } catch (e) {
-      AppConfig.sqlLogResult(table: 'match_events', operation: 'STREAM', error: e);
+      AppConfig.sqlLogResult(
+        table: 'match_events',
+        operation: 'STREAM',
+        error: e,
+      );
       return const Stream<List<Map<String, dynamic>>>.empty();
     }
   }
@@ -219,12 +252,22 @@ class SupabaseMatchService implements IMatchService {
       try {
         AppConfig.sqlLogStart(table: 'matches', operation: 'INSERT');
         final payload = match.toMap(snakeCase: true);
-        payload['match_time'] = _normalizeMatchTimeForDb(payload['match_time']?.toString());
+        payload['match_time'] = _normalizeMatchTimeForDb(
+          payload['match_time']?.toString(),
+        );
         payload['created_at'] = DateTime.now().toIso8601String();
-        final res = await _client.from('matches').insert(payload).select('id').limit(1);
+        final res = await _client
+            .from('matches')
+            .insert(payload)
+            .select('id')
+            .limit(1);
         if (res.isNotEmpty) {
           final row = (res.first as Map).cast<String, dynamic>();
-          AppConfig.sqlLogResult(table: 'matches', operation: 'INSERT', count: 1);
+          AppConfig.sqlLogResult(
+            table: 'matches',
+            operation: 'INSERT',
+            count: 1,
+          );
           return (row['id'] ?? '').toString();
         }
         AppConfig.sqlLogResult(table: 'matches', operation: 'INSERT', count: 0);
@@ -248,9 +291,17 @@ class SupabaseMatchService implements IMatchService {
         final payload = event.toMap(snakeCase: true);
         payload['created_at'] = DateTime.now().toIso8601String();
         await _client.from('match_events').insert(payload);
-        AppConfig.sqlLogResult(table: 'match_events', operation: 'INSERT', count: 1);
+        AppConfig.sqlLogResult(
+          table: 'match_events',
+          operation: 'INSERT',
+          count: 1,
+        );
       } catch (e) {
-        AppConfig.sqlLogResult(table: 'match_events', operation: 'INSERT', error: e);
+        AppConfig.sqlLogResult(
+          table: 'match_events',
+          operation: 'INSERT',
+          error: e,
+        );
       }
 
       if (event.type != 'goal') return;
@@ -259,7 +310,8 @@ class SupabaseMatchService implements IMatchService {
         AppConfig.sqlLogStart(
           table: 'matches',
           operation: 'SELECT',
-          filters: 'id=${event.matchId} | columns=home_team_id,away_team_id,home_score,away_score | limit=1',
+          filters:
+              'id=${event.matchId} | columns=home_team_id,away_team_id,home_score,away_score | limit=1',
         );
         final res = await _client
             .from('matches')
@@ -267,7 +319,11 @@ class SupabaseMatchService implements IMatchService {
             .eq('id', event.matchId)
             .limit(1);
         if (res.isEmpty) {
-          AppConfig.sqlLogResult(table: 'matches', operation: 'SELECT', count: 0);
+          AppConfig.sqlLogResult(
+            table: 'matches',
+            operation: 'SELECT',
+            count: 0,
+          );
           return;
         }
         AppConfig.sqlLogResult(table: 'matches', operation: 'SELECT', count: 1);
@@ -289,27 +345,18 @@ class SupabaseMatchService implements IMatchService {
         AppConfig.sqlLogStart(
           table: 'matches',
           operation: 'UPDATE',
-          filters: 'id=${event.matchId} | home_score=$nextHome, away_score=$nextAway',
+          filters:
+              'id=${event.matchId} | home_score=$nextHome, away_score=$nextAway',
         );
-        await _client.from('matches').update({
-          'home_score': nextHome,
-          'away_score': nextAway,
-        }).eq('id', event.matchId);
+        await _client
+            .from('matches')
+            .update({'home_score': nextHome, 'away_score': nextAway})
+            .eq('id', event.matchId);
         AppConfig.sqlLogResult(table: 'matches', operation: 'UPDATE', count: 1);
       } catch (e) {
         AppConfig.sqlLogResult(table: 'matches', operation: 'UPDATE', error: e);
       }
     });
-  }
-
-  @override
-  Future<void> updateMatchYoutubeUrl({
-    required String matchId,
-    required String? youtubeUrl,
-  }) {
-    final id = matchId.trim();
-    if (id.isEmpty) return Future.value();
-    return Future.value();
   }
 
   @override
@@ -323,14 +370,60 @@ class SupabaseMatchService implements IMatchService {
   }
 
   @override
-  Future<void> updateMatchHighlightPhotoUrl({
-    required String matchId,
-    required bool isHome,
-    required String? photoUrl,
-  }) {
+  Future<void> addMatchMedia(MatchMediaModel media) async {
+    try {
+      AppConfig.sqlLogStart(table: 'match_media', operation: 'INSERT');
+      await _client.from('match_media').insert(media.toMap(snakeCase: true));
+      AppConfig.sqlLogResult(
+        table: 'match_media',
+        operation: 'INSERT',
+        count: 1,
+      );
+    } catch (e) {
+      AppConfig.sqlLogResult(
+        table: 'match_media',
+        operation: 'INSERT',
+        error: e,
+      );
+    }
+  }
+
+  @override
+  Stream<List<MatchMediaModel>> watchMatchMedia(String matchId) {
     final id = matchId.trim();
-    if (id.isEmpty) return Future.value();
-    return Future.value();
+    if (id.isEmpty) return Stream.value([]);
+    try {
+      AppConfig.sqlLogStart(
+        table: 'match_media',
+        operation: 'STREAM',
+        filters:
+            'primaryKey=id | clientFilter=match_id=$id | order=created_at desc',
+      );
+      return _client
+          .from('match_media')
+          .stream(primaryKey: ['id'])
+          .order('created_at', ascending: false)
+          .map((rows) {
+            final filtered = rows.where(
+              (r) => (r['match_id'] ?? '').toString().trim() == id,
+            );
+            return filtered
+                .map(
+                  (r) => MatchMediaModel.fromMap(
+                    Map<String, dynamic>.from(r),
+                    (r['id'] ?? '').toString(),
+                  ),
+                )
+                .toList();
+          });
+    } catch (e) {
+      AppConfig.sqlLogResult(
+        table: 'match_media',
+        operation: 'STREAM',
+        error: e,
+      );
+      return Stream.value([]);
+    }
   }
 
   @override
@@ -349,19 +442,36 @@ class SupabaseMatchService implements IMatchService {
           'match_date': matchDateDb.trim().isEmpty ? null : matchDateDb.trim(),
           'match_time': _normalizeMatchTimeForDb(matchTime),
           'pitch_id': (pitchId ?? '').trim().isEmpty ? null : pitchId!.trim(),
-          'pitch_name': (pitchName ?? '').trim().isEmpty ? null : pitchName!.trim(),
+          'pitch_name': (pitchName ?? '').trim().isEmpty
+              ? null
+              : pitchName!.trim(),
           'updated_at': DateTime.now().toIso8601String(),
         };
-        AppConfig.sqlLogStart(table: 'matches', operation: 'UPDATE', filters: 'id=$id');
-        final res = await _client.from('matches').update(payload).eq('id', id).select('id').limit(1);
+        AppConfig.sqlLogStart(
+          table: 'matches',
+          operation: 'UPDATE',
+          filters: 'id=$id',
+        );
+        final res = await _client
+            .from('matches')
+            .update(payload)
+            .eq('id', id)
+            .select('id')
+            .limit(1);
         if (res.isEmpty) {
           throw Exception('matches UPDATE: 0 satır etkilendi (id=$id)');
         }
-        AppConfig.sqlLogResult(table: 'matches', operation: 'UPDATE', count: res.length);
+        AppConfig.sqlLogResult(
+          table: 'matches',
+          operation: 'UPDATE',
+          count: res.length,
+        );
       } catch (e) {
         try {
           final fallbackPayload = <String, dynamic>{
-            'match_date': matchDateDb.trim().isEmpty ? null : matchDateDb.trim(),
+            'match_date': matchDateDb.trim().isEmpty
+                ? null
+                : matchDateDb.trim(),
             'match_time': _normalizeMatchTimeForDb(matchTime),
             'pitch_id': (pitchId ?? '').trim().isEmpty ? null : pitchId!.trim(),
             'updated_at': DateTime.now().toIso8601String(),
@@ -371,14 +481,26 @@ class SupabaseMatchService implements IMatchService {
             operation: 'UPDATE',
             filters: 'id=$id | fallback=no pitch_name',
           );
-          final res2 =
-              await _client.from('matches').update(fallbackPayload).eq('id', id).select('id').limit(1);
+          final res2 = await _client
+              .from('matches')
+              .update(fallbackPayload)
+              .eq('id', id)
+              .select('id')
+              .limit(1);
           if (res2.isEmpty) {
             throw Exception('matches UPDATE: 0 satır etkilendi (id=$id)');
           }
-          AppConfig.sqlLogResult(table: 'matches', operation: 'UPDATE', count: res2.length);
+          AppConfig.sqlLogResult(
+            table: 'matches',
+            operation: 'UPDATE',
+            count: res2.length,
+          );
         } catch (e2) {
-          AppConfig.sqlLogResult(table: 'matches', operation: 'UPDATE', error: e2);
+          AppConfig.sqlLogResult(
+            table: 'matches',
+            operation: 'UPDATE',
+            error: e2,
+          );
           rethrow;
         }
       }
@@ -432,7 +554,11 @@ class SupabaseMatchService implements IMatchService {
             .eq('id', id)
             .limit(1);
         if (res.isNotEmpty) {
-          AppConfig.sqlLogResult(table: 'matches', operation: 'SELECT', count: 1);
+          AppConfig.sqlLogResult(
+            table: 'matches',
+            operation: 'SELECT',
+            count: 1,
+          );
           final row = (res.first as Map).cast<String, dynamic>();
           leagueId = (row['league_id'] ?? '').toString().trim();
           homeTeamId = (row['home_team_id'] ?? '').toString().trim();
@@ -452,6 +578,7 @@ class SupabaseMatchService implements IMatchService {
           'home_score': homeScore,
           'away_score': awayScore,
           'is_completed': true,
+          'status': 'finished',
         }, onConflict: 'id');
         AppConfig.sqlLogResult(table: 'matches', operation: 'UPSERT', count: 1);
       } catch (e) {
@@ -459,50 +586,62 @@ class SupabaseMatchService implements IMatchService {
       }
 
       final period = await _readMatchPeriodDurationMinutes(leagueId);
-      final createdAt = DateTime.now().toIso8601String();
-      try {
-        AppConfig.sqlLogStart(
-          table: 'match_events',
-          operation: 'INSERT',
-          filters: 'match_id=$id | 3 status events',
-        );
-        await _client.from('match_events').insert([
-          {
-            'match_id': id,
-            'league_id': leagueId.isEmpty ? null : leagueId,
-            'team_id': homeTeamId.isEmpty ? null : homeTeamId,
-            'event_type': 'status',
-            'minute': 0,
-            'player_name': 'Maç Başladı',
-            'is_own_goal': false,
-            'created_at': createdAt,
-          },
-          {
-            'match_id': id,
-            'league_id': leagueId.isEmpty ? null : leagueId,
-            'team_id': homeTeamId.isEmpty ? null : homeTeamId,
-            'event_type': 'status',
-            'minute': period,
-            'player_name': 'İlk Yarı Bitti',
-            'is_own_goal': false,
-            'created_at': createdAt,
-          },
-          {
-            'match_id': id,
-            'league_id': leagueId.isEmpty ? null : leagueId,
-            'team_id': homeTeamId.isEmpty ? null : homeTeamId,
-            'event_type': 'status',
-            'minute': period * 2,
-            'player_name': 'Maç Bitti',
-            'is_own_goal': false,
-            'created_at': createdAt,
-          },
-        ]);
-        AppConfig.sqlLogResult(table: 'match_events', operation: 'INSERT', count: 3);
-      } catch (e) {
-        AppConfig.sqlLogResult(table: 'match_events', operation: 'INSERT', error: e);
-      }
+      final duration = period * 2;
+      
+      await insertDefaultMatchEvents(id, duration);
     });
+  }
+
+  @override
+  Future<void> insertDefaultMatchEvents(String matchId, int duration) async {
+    final id = matchId.trim();
+    if (id.isEmpty) return;
+
+    final createdAt = DateTime.now().toIso8601String();
+    try {
+      AppConfig.sqlLogStart(
+        table: 'match_events',
+        operation: 'INSERT',
+        filters: 'match_id=$id | 3 status events',
+      );
+      
+      final halfTime = duration ~/ 2;
+
+      await _client.from('match_events').insert([
+        {
+          'match_id': id,
+          'event_type': 'status',
+          'minute': 0,
+          'player_name': 'Maç Başladı',
+          'created_at': createdAt,
+        },
+        {
+          'match_id': id,
+          'event_type': 'status',
+          'minute': halfTime,
+          'player_name': 'İlk Yarı',
+          'created_at': createdAt,
+        },
+        {
+          'match_id': id,
+          'event_type': 'status',
+          'minute': duration,
+          'player_name': 'Maç Sonucu',
+          'created_at': createdAt,
+        },
+      ]);
+      AppConfig.sqlLogResult(
+        table: 'match_events',
+        operation: 'INSERT',
+        count: 3,
+      );
+    } catch (e) {
+      AppConfig.sqlLogResult(
+        table: 'match_events',
+        operation: 'INSERT',
+        error: e,
+      );
+    }
   }
 
   @override
@@ -515,18 +654,29 @@ class SupabaseMatchService implements IMatchService {
         operation: 'STREAM',
         filters: 'primaryKey=id | clientFilter=league_id=$id',
       );
-      return _client.from('player_stats').stream(primaryKey: ['id']).map((rows) {
+      return _client.from('player_stats').stream(primaryKey: ['id']).map((
+        rows,
+      ) {
         final filtered = rows.where((r) {
           return (r['league_id'] ?? '').toString().trim() == id;
         });
         final list = filtered
-            .map((r) => PlayerStats.fromMap(Map<String, dynamic>.from(r), (r['id'] ?? '').toString()))
+            .map(
+              (r) => PlayerStats.fromMap(
+                Map<String, dynamic>.from(r),
+                (r['id'] ?? '').toString(),
+              ),
+            )
             .toList();
         list.sort((a, b) => b.goals.compareTo(a.goals));
         return list;
       });
     } catch (e) {
-      AppConfig.sqlLogResult(table: 'player_stats', operation: 'STREAM', error: e);
+      AppConfig.sqlLogResult(
+        table: 'player_stats',
+        operation: 'STREAM',
+        error: e,
+      );
       return const Stream<List<PlayerStats>>.empty();
     }
   }
@@ -540,12 +690,17 @@ class SupabaseMatchService implements IMatchService {
       if (v == null) return 0;
       if (v is num) return v.toInt();
       final s = v.toString().replaceAll('\u0000', '').trim();
-      return int.tryParse(s) ?? double.tryParse(s.replaceAll(',', '.'))?.toInt() ?? 0;
+      return int.tryParse(s) ??
+          double.tryParse(s.replaceAll(',', '.'))?.toInt() ??
+          0;
     }
 
     List<String> asPhones(dynamic v) {
       if (v is! List) return const <String>[];
-      return v.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
+      return v
+          .map((e) => e.toString().trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
     }
 
     return Future(() async {
@@ -556,9 +711,17 @@ class SupabaseMatchService implements IMatchService {
           operation: 'SELECT',
           filters: 'id=$id | limit=1',
         );
-        final res = await _client.from('matches').select().eq('id', id).limit(1);
+        final res = await _client
+            .from('matches')
+            .select()
+            .eq('id', id)
+            .limit(1);
         if (res.isEmpty) {
-          AppConfig.sqlLogResult(table: 'matches', operation: 'SELECT', count: 0);
+          AppConfig.sqlLogResult(
+            table: 'matches',
+            operation: 'SELECT',
+            count: 0,
+          );
           return;
         }
         AppConfig.sqlLogResult(table: 'matches', operation: 'SELECT', count: 1);
@@ -575,7 +738,9 @@ class SupabaseMatchService implements IMatchService {
           status.toLowerCase() == 'completed' ||
           status.toLowerCase() == 'finished';
       if (!finished) return;
-      if (match['stats_committed_at'] != null || match['stats_committed'] == true) return;
+      if (match['stats_committed_at'] != null ||
+          match['stats_committed'] == true)
+        return;
 
       final tournamentId = (match['league_id'] ?? '').toString().trim();
       if (tournamentId.isEmpty) return;
@@ -606,12 +771,20 @@ class SupabaseMatchService implements IMatchService {
       }
 
       try {
-        AppConfig.sqlLogStart(table: 'match_events', operation: 'SELECT', filters: 'match_id=$id');
+        AppConfig.sqlLogStart(
+          table: 'match_events',
+          operation: 'SELECT',
+          filters: 'match_id=$id',
+        );
         final eventsRes = await _client
             .from('match_events')
             .select('event_type, team_id, player_id, assist_player_id')
             .eq('match_id', id);
-        AppConfig.sqlLogResult(table: 'match_events', operation: 'SELECT', count: eventsRes.length);
+        AppConfig.sqlLogResult(
+          table: 'match_events',
+          operation: 'SELECT',
+          count: eventsRes.length,
+        );
         for (final rowAny in eventsRes) {
           final e = (rowAny as Map).cast<String, dynamic>();
           final eventType = (e['event_type'] ?? '').toString().trim();
@@ -619,10 +792,20 @@ class SupabaseMatchService implements IMatchService {
           final playerPhone = (e['player_id'] ?? '').toString().trim();
           final assistPhone = (e['assist_player_id'] ?? '').toString().trim();
 
-          void bump(String phone, String field, {int by = 1, String? teamIdOverride}) {
+          void bump(
+            String phone,
+            String field, {
+            int by = 1,
+            String? teamIdOverride,
+          }) {
             final p = phone.trim();
             if (p.isEmpty) return;
-            ensurePhone(p, teamId: (teamIdOverride ?? teamId).trim().isEmpty ? (teamByPhone[p] ?? '') : (teamIdOverride ?? teamId));
+            ensurePhone(
+              p,
+              teamId: (teamIdOverride ?? teamId).trim().isEmpty
+                  ? (teamByPhone[p] ?? '')
+                  : (teamIdOverride ?? teamId),
+            );
             deltas[p]![field] = (deltas[p]![field] ?? 0) + by;
           }
 
@@ -645,35 +828,59 @@ class SupabaseMatchService implements IMatchService {
               break;
           }
         }
-            } catch (e) {
-        AppConfig.sqlLogResult(table: 'match_events', operation: 'SELECT', error: e);
+      } catch (e) {
+        AppConfig.sqlLogResult(
+          table: 'match_events',
+          operation: 'SELECT',
+          error: e,
+        );
       }
 
       final phones = deltas.keys.toList();
       if (phones.isEmpty) return;
-      final statIds = phones.map((p) => PlayerStats.docId(playerPhone: p, tournamentId: tournamentId)).toList();
+      final statIds = phones
+          .map(
+            (p) =>
+                PlayerStats.docId(playerPhone: p, tournamentId: tournamentId),
+          )
+          .toList();
 
       final existingById = <String, Map<String, dynamic>>{};
       try {
-        AppConfig.sqlLogStart(table: 'player_stats', operation: 'SELECT', filters: 'id IN (${statIds.length})');
+        AppConfig.sqlLogStart(
+          table: 'player_stats',
+          operation: 'SELECT',
+          filters: 'id IN (${statIds.length})',
+        );
         final res = await _client
             .from('player_stats')
             .select()
             .inFilter('id', statIds);
-        AppConfig.sqlLogResult(table: 'player_stats', operation: 'SELECT', count: res.length);
+        AppConfig.sqlLogResult(
+          table: 'player_stats',
+          operation: 'SELECT',
+          count: res.length,
+        );
         for (final rowAny in res) {
           final row = (rowAny as Map).cast<String, dynamic>();
           final rid = (row['id'] ?? '').toString();
           if (rid.isNotEmpty) existingById[rid] = row;
         }
-            } catch (e) {
-        AppConfig.sqlLogResult(table: 'player_stats', operation: 'SELECT', error: e);
+      } catch (e) {
+        AppConfig.sqlLogResult(
+          table: 'player_stats',
+          operation: 'SELECT',
+          error: e,
+        );
       }
 
       final nowIso = DateTime.now().toIso8601String();
       final upserts = <Map<String, dynamic>>[];
       for (final phone in phones) {
-        final statsId = PlayerStats.docId(playerPhone: phone, tournamentId: tournamentId);
+        final statsId = PlayerStats.docId(
+          playerPhone: phone,
+          tournamentId: tournamentId,
+        );
         final teamId = (teamByPhone[phone] ?? '').trim();
         final existing = existingById[statsId] ?? const <String, dynamic>{};
         final next = <String, dynamic>{
@@ -681,12 +888,21 @@ class SupabaseMatchService implements IMatchService {
           'player_phone': phone,
           'league_id': tournamentId,
           'team_id': teamId,
-          'matches_played': readInt(existing['matches_played']) + (deltas[phone]!['matches_played'] ?? 0),
+          'matches_played':
+              readInt(existing['matches_played']) +
+              (deltas[phone]!['matches_played'] ?? 0),
           'goals': readInt(existing['goals']) + (deltas[phone]!['goals'] ?? 0),
-          'assists': readInt(existing['assists']) + (deltas[phone]!['assists'] ?? 0),
-          'yellow_cards': readInt(existing['yellow_cards']) + (deltas[phone]!['yellow_cards'] ?? 0),
-          'red_cards': readInt(existing['red_cards']) + (deltas[phone]!['red_cards'] ?? 0),
-          'man_of_the_match': readInt(existing['man_of_the_match']) + (deltas[phone]!['man_of_the_match'] ?? 0),
+          'assists':
+              readInt(existing['assists']) + (deltas[phone]!['assists'] ?? 0),
+          'yellow_cards':
+              readInt(existing['yellow_cards']) +
+              (deltas[phone]!['yellow_cards'] ?? 0),
+          'red_cards':
+              readInt(existing['red_cards']) +
+              (deltas[phone]!['red_cards'] ?? 0),
+          'man_of_the_match':
+              readInt(existing['man_of_the_match']) +
+              (deltas[phone]!['man_of_the_match'] ?? 0),
           'updated_at': nowIso,
           if (existing.isEmpty) 'created_at': nowIso,
         };
@@ -694,15 +910,31 @@ class SupabaseMatchService implements IMatchService {
       }
 
       try {
-        AppConfig.sqlLogStart(table: 'player_stats', operation: 'UPSERT', filters: 'onConflict=id | rows=${upserts.length}');
+        AppConfig.sqlLogStart(
+          table: 'player_stats',
+          operation: 'UPSERT',
+          filters: 'onConflict=id | rows=${upserts.length}',
+        );
         await _client.from('player_stats').upsert(upserts, onConflict: 'id');
-        AppConfig.sqlLogResult(table: 'player_stats', operation: 'UPSERT', count: upserts.length);
+        AppConfig.sqlLogResult(
+          table: 'player_stats',
+          operation: 'UPSERT',
+          count: upserts.length,
+        );
       } catch (e) {
-        AppConfig.sqlLogResult(table: 'player_stats', operation: 'UPSERT', error: e);
+        AppConfig.sqlLogResult(
+          table: 'player_stats',
+          operation: 'UPSERT',
+          error: e,
+        );
       }
 
       try {
-        AppConfig.sqlLogStart(table: 'matches', operation: 'UPDATE', filters: 'id=$id | stats_committed=true');
+        AppConfig.sqlLogStart(
+          table: 'matches',
+          operation: 'UPDATE',
+          filters: 'id=$id | stats_committed=true',
+        );
         AppConfig.sqlLogResult(table: 'matches', operation: 'UPDATE', count: 0);
       } catch (e) {
         AppConfig.sqlLogResult(table: 'matches', operation: 'UPDATE', error: e);
@@ -721,7 +953,11 @@ class SupabaseMatchService implements IMatchService {
 
     return Future(() async {
       try {
-        AppConfig.sqlLogStart(table: 'teams', operation: 'INSERT', filters: 'rows=${teams.length} | league_id=$tId');
+        AppConfig.sqlLogStart(
+          table: 'teams',
+          operation: 'INSERT',
+          filters: 'rows=${teams.length} | league_id=$tId',
+        );
         for (final team in teams) {
           final name = team.name.trim();
           if (name.isEmpty) continue;
@@ -732,7 +968,10 @@ class SupabaseMatchService implements IMatchService {
           });
         }
 
-        final teamsRes = await _client.from('teams').select('id, name').eq('league_id', tId);
+        final teamsRes = await _client
+            .from('teams')
+            .select('id, name')
+            .eq('league_id', tId);
         final teamIdByName = <String, String>{};
         for (final rowAny in teamsRes) {
           final row = (rowAny as Map).cast<String, dynamic>();
@@ -742,8 +981,12 @@ class SupabaseMatchService implements IMatchService {
             teamIdByName[name] = id;
           }
         }
-      
-        AppConfig.sqlLogStart(table: 'matches', operation: 'INSERT', filters: 'rows=${matches.length} | league_id=$tId');
+
+        AppConfig.sqlLogStart(
+          table: 'matches',
+          operation: 'INSERT',
+          filters: 'rows=${matches.length} | league_id=$tId',
+        );
         for (final m in matches) {
           final homeId = teamIdByName[m.homeTeamName.trim().toLowerCase()];
           final awayId = teamIdByName[m.awayTeamName.trim().toLowerCase()];
@@ -753,7 +996,9 @@ class SupabaseMatchService implements IMatchService {
           if (dateStr.isNotEmpty && timeStr.isNotEmpty) {
             matchDateTime = DateTime.tryParse('${dateStr}T$timeStr:00');
           }
-          matchDateTime ??= (dateStr.isEmpty ? null : DateTime.tryParse(dateStr));
+          matchDateTime ??= (dateStr.isEmpty
+              ? null
+              : DateTime.tryParse(dateStr));
           await _client.from('matches').insert({
             'league_id': tId,
             'week': m.week,
@@ -765,7 +1010,11 @@ class SupabaseMatchService implements IMatchService {
             'away_score': 0,
           });
         }
-        AppConfig.sqlLogResult(table: 'matches', operation: 'INSERT', count: matches.length);
+        AppConfig.sqlLogResult(
+          table: 'matches',
+          operation: 'INSERT',
+          count: matches.length,
+        );
       } catch (e) {
         AppConfig.sqlLogResult(table: 'matches', operation: 'INSERT', error: e);
       }
@@ -784,9 +1033,17 @@ class SupabaseMatchService implements IMatchService {
       final res = await _client.from('match_events').delete().neq('id', '');
       final deleted = res is List ? res.length : 0;
       total += deleted;
-      AppConfig.sqlLogResult(table: 'match_events', operation: 'DELETE', count: deleted);
+      AppConfig.sqlLogResult(
+        table: 'match_events',
+        operation: 'DELETE',
+        count: deleted,
+      );
     } catch (e) {
-      AppConfig.sqlLogResult(table: 'match_events', operation: 'DELETE', error: e);
+      AppConfig.sqlLogResult(
+        table: 'match_events',
+        operation: 'DELETE',
+        error: e,
+      );
     }
 
     try {
@@ -798,7 +1055,11 @@ class SupabaseMatchService implements IMatchService {
       final res = await _client.from('matches').delete().neq('id', '');
       final deleted = res is List ? res.length : 0;
       total += deleted;
-      AppConfig.sqlLogResult(table: 'matches', operation: 'DELETE', count: deleted);
+      AppConfig.sqlLogResult(
+        table: 'matches',
+        operation: 'DELETE',
+        count: deleted,
+      );
     } catch (e) {
       AppConfig.sqlLogResult(table: 'matches', operation: 'DELETE', error: e);
     }
@@ -822,5 +1083,54 @@ class SupabaseMatchService implements IMatchService {
       'eventsMoved': 0,
       'matchEventsUpdated': 0,
     };
+  }
+
+  @override
+  Future<void> deleteMatchMedia(String mediaId) async {
+    await _client.from('match_media').delete().eq('id', mediaId);
+  }
+
+  @override
+  Future<bool> hasBroadcast(String matchId) async {
+    final id = matchId.trim();
+    if (id.isEmpty) return false;
+    try {
+      AppConfig.sqlLogStart(table: 'match_media', operation: 'SELECT', filters: 'match_id=$id | media_type=Maç Yayın Linki');
+      final res = await _client
+          .from('match_media')
+          .select('id')
+          .eq('match_id', id)
+          .eq('media_type', 'Maç Yayın Linki')
+          .limit(1);
+      AppConfig.sqlLogResult(table: 'match_media', operation: 'SELECT', count: res.length);
+      return res.isNotEmpty;
+    } catch (e) {
+      AppConfig.sqlLogResult(table: 'match_media', operation: 'SELECT', error: e);
+      return false;
+    }
+  }
+
+  @override
+  Future<String?> getBroadcastUrl(String matchId) async {
+    final id = matchId.trim();
+    if (id.isEmpty) return null;
+    try {
+      AppConfig.sqlLogStart(table: 'match_media', operation: 'SELECT', filters: 'match_id=$id | media_type=Maç Yayın Linki | url');
+      final res = await _client
+          .from('match_media')
+          .select('url')
+          .eq('match_id', id)
+          .eq('media_type', 'Maç Yayın Linki')
+          .limit(1);
+      AppConfig.sqlLogResult(table: 'match_media', operation: 'SELECT', count: res.length);
+      if (res.isNotEmpty) {
+        final row = (res.first as Map).cast<String, dynamic>();
+        return row['url']?.toString();
+      }
+      return null;
+    } catch (e) {
+      AppConfig.sqlLogResult(table: 'match_media', operation: 'SELECT', error: e);
+      return null;
+    }
   }
 }

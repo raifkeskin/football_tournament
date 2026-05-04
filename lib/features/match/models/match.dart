@@ -121,9 +121,6 @@ class MatchModel {
   final int? minute;
   final String? seasonId;
   final String? groupId;
-  final String? youtubeUrl;
-  final String? homeHighlightPhotoUrl;
-  final String? awayHighlightPhotoUrl;
   final MatchScore? score;
   final DateTime? createdAt;
   final DateTime? updatedAt;
@@ -145,9 +142,6 @@ class MatchModel {
     this.seasonId,
     this.groupId,
     this.firebaseId,
-    this.youtubeUrl,
-    this.homeHighlightPhotoUrl,
-    this.awayHighlightPhotoUrl,
     this.score,
     this.createdAt,
     this.updatedAt,
@@ -249,10 +243,6 @@ class MatchModel {
 
     final pitchIdRaw = (v('pitchId', 'pitch_id') ?? '').toString().trim();
     final pitchNameRaw = (v('pitchName', 'pitch_name') ?? '').toString().trim();
-    final homePhotoRaw =
-        (v('homeHighlightPhotoUrl', 'home_highlight_photo_url') ?? '').toString().trim();
-    final awayPhotoRaw =
-        (v('awayHighlightPhotoUrl', 'away_highlight_photo_url') ?? '').toString().trim();
 
     final rawStatus = (v('status', 'status') ?? '').toString().trim();
     final resolvedStatus = MatchStatus.values.firstWhere(
@@ -291,11 +281,6 @@ class MatchModel {
       groupId: (v('groupId', 'group_id') ?? '').toString().trim().isEmpty
           ? null
           : (v('groupId', 'group_id') ?? '').toString().trim(),
-      youtubeUrl: (v('youtubeUrl', 'youtube_url') ?? '').toString().trim().isEmpty
-          ? null
-          : (v('youtubeUrl', 'youtube_url') ?? '').toString().trim(),
-      homeHighlightPhotoUrl: homePhotoRaw.isEmpty ? null : homePhotoRaw,
-      awayHighlightPhotoUrl: awayPhotoRaw.isEmpty ? null : awayPhotoRaw,
       score: readScoreObject(),
       createdAt: readDate(v('createdAt', 'created_at')),
       updatedAt: readDate(v('updatedAt', 'updated_at')),
@@ -332,9 +317,6 @@ class MatchModel {
         'minute': minute,
         'seasonId': seasonId,
         'groupId': groupId,
-        'youtubeUrl': youtubeUrl,
-        'homeHighlightPhotoUrl': homeHighlightPhotoUrl,
-        'awayHighlightPhotoUrl': awayHighlightPhotoUrl,
         'createdAt': createdAt?.toIso8601String(),
         'updatedAt': updatedAt?.toIso8601String(),
       });
@@ -356,11 +338,6 @@ class MatchModel {
         'minute': minute,
         'home_score': homeScore,
         'away_score': awayScore,
-        'youtube_url': (youtubeUrl ?? '').trim().isEmpty ? null : youtubeUrl!.trim(),
-        'home_highlight_photo_url':
-            (homeHighlightPhotoUrl ?? '').trim().isEmpty ? null : homeHighlightPhotoUrl!.trim(),
-        'away_highlight_photo_url':
-            (awayHighlightPhotoUrl ?? '').trim().isEmpty ? null : awayHighlightPhotoUrl!.trim(),
         'score_json': computedScore,
         'created_at': createdAt?.toIso8601String(),
         'updated_at': updatedAt?.toIso8601String(),

@@ -6,7 +6,7 @@ import '../../features/auth/services/interfaces/i_auth_service.dart';
 import '../../features/tournament/services/interfaces/i_league_service.dart';
 import '../../features/match/services/interfaces/i_match_service.dart';
 import '../../features/team/services/interfaces/i_team_service.dart';
-import '../../features/match/services/match_service.dart';
+import '../../features/match/services/match_service.dart' hide SupabaseMatchService;
 import '../../features/auth/services/supabase/supabase_auth_service.dart';
 import '../../features/tournament/services/supabase/supabase_league_service.dart';
 import '../../features/match/services/supabase/supabase_match_service.dart';
@@ -20,7 +20,6 @@ class ServiceLocator {
   static final ILeagueService _firebaseLeagueService = FirebaseLeagueService();
   static final ILeagueService _supabaseLeagueService = SupabaseLeagueService();
 
-  static final IMatchService _firebaseMatchService = FirebaseMatchService();
   static final IMatchService _supabaseMatchService = SupabaseMatchService();
 
   static final ITeamService _firebaseTeamService = FirebaseTeamService();
@@ -33,8 +32,7 @@ class ServiceLocator {
   static ILeagueService get leagueService =>
       _useSupabase ? _supabaseLeagueService : _firebaseLeagueService;
 
-  static IMatchService get matchService =>
-      _useSupabase ? _supabaseMatchService : _firebaseMatchService;
+  static IMatchService get matchService => _supabaseMatchService;
 
   static ITeamService get teamService => _useSupabase ? _supabaseTeamService : _firebaseTeamService;
 }

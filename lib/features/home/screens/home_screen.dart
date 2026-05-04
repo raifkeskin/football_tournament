@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../../core/config/app_config.dart';
 import '../../tournament/models/league.dart';
+import '../../tournament/models/season.dart';
 import '../../match/models/match.dart';
 import '../../../core/services/app_session.dart';
 import '../../team/models/team.dart';
@@ -50,6 +54,18 @@ class _HomeScreenState extends State<HomeScreen> {
     _rebuildDates(bugun);
   }
 
+  Stream<List<Season>> _watchSeasons(String leagueId) {
+    if (AppConfig.activeDatabase != DatabaseType.supabase) {
+      return Stream.value([]);
+    }
+    return Supabase.instance.client
+        .from('seasons')
+        .stream(primaryKey: ['id'])
+        .eq('league_id', leagueId)
+        .order('start_date', ascending: false)
+        .map((rows) => rows.map((r) => Season.fromMap(r)).toList());
+  }
+
   bool _bugunMu(DateTime t) {
     final n = DateTime.now();
     return t.year == n.year && t.month == n.month && t.day == n.day;
@@ -91,6 +107,166 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  // YENİ EKLENEN: Erişim Kodu Soran Dialog
+  void _showAccessCodeDialog(BuildContext parentContext, League league) {
+    final TextEditingController codeCtrl = TextEditingController();
+    String? errorMsg;
+
+    showDialog(
+      context: parentContext,
+      builder: (c) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            backgroundColor: const Color(0xFF0F172A),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(
+              children: [
+                const Icon(Icons.lock, color: Colors.white, size: 24),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    league.name,
+                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Bu turnuva gizlidir. Görüntüleyebilmek için lütfen erişim kodunu girin.',
+                  style: TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: codeCtrl,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                  decoration: InputDecoration(
+                    hintText: 'Erişim Kodu',
+                    hintStyle: const TextStyle(color: Colors.white38),
+                    filled: true,
+                    fillColor: Colors.white10,
+                    errorText: errorMsg,
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: Colors.white24),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: Color(0xFF10B981)),
+                    ),
+                    errorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: Colors.redAccent),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(c),
+                child: const Text('İptal', style: TextStyle(color: Colors.white54)),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF10B981),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                onPressed: () {
+                  final enteredCode = codeCtrl.text.trim().toLowerCase();
+                  // League modelindeki accessCode değişkeninin adından emin olunuz (accessCode veya access_code olabilir)
+                  final actualCode = (league.accessCode ?? '').trim().toLowerCase(); 
+                  
+                  if (enteredCode.isNotEmpty && enteredCode == actualCode) {
+                    setState(() => _activeLeagueId = league.id);
+                    Navigator.pop(c); // Dialogu kapat
+                    Navigator.pop(parentContext); // Alttaki menüyü kapat
+                  } else {
+                    setDialogState(() => errorMsg = 'Hatalı kod girdiniz.');
+                  }
+                },
+                child: const Text('Onayla', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              )
+            ],
+          );
+        }
+      )
+    );
+  }
+
+  // YENİ EKLENEN: Özel Turnuva Seçici (Bottom Sheet)
+  void _showLeagueSelectorBottomSheet(BuildContext context, List<League> leagues, bool isAdmin) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E293B),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24))
+      ),
+      builder: (c) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(2)
+                    ),
+                  ),
+                ),
+                const Text(
+                  'Turnuva Seçin',
+                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 16),
+                Flexible(
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: leagues.map((l) {
+                      // Gizli ve admin değilse kilitli kabul et
+                      final isLocked = l.isPrivate && !isAdmin;
+                      final isSelected = l.id == _activeLeagueId;
+
+                      return ListTile(
+                        leading: isLocked 
+                          ? const Icon(Icons.lock_rounded, color: Colors.white54, size: 22) 
+                          : Icon(Icons.emoji_events_rounded, color: isSelected ? const Color(0xFF10B981) : Colors.white70, size: 22),
+                        title: Text(
+                          l.name,
+                          style: TextStyle(
+                            color: isLocked ? Colors.white54 : (isSelected ? const Color(0xFF10B981) : Colors.white),
+                            fontWeight: isSelected ? FontWeight.w900 : FontWeight.bold,
+                          ),
+                        ),
+                        trailing: isSelected ? const Icon(Icons.check_circle_rounded, color: Color(0xFF10B981), size: 20) : null,
+                        onTap: () {
+                          if (isLocked) {
+                            _showAccessCodeDialog(context, l);
+                          } else {
+                            setState(() => _activeLeagueId = l.id);
+                            Navigator.pop(c);
+                          }
+                        },
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -99,10 +275,7 @@ class _HomeScreenState extends State<HomeScreen> {
       body: Stack(
         children: [
           Positioned.fill(
-            child: Image.asset(
-              'assets/anasayfa.jpg',
-              fit: BoxFit.cover,
-            ),
+            child: Image.asset('assets/anasayfa.jpg', fit: BoxFit.cover),
           ),
           Positioned.fill(
             child: DecoratedBox(
@@ -127,19 +300,26 @@ class _HomeScreenState extends State<HomeScreen> {
                 }
 
                 final isAdmin = AppSession.of(context).value.isAdmin;
-                final allLeagues = (leagueSnapshot.data ?? const <League>[])
-                    .where((l) => isAdmin || l.isActive)
-                    .toList();
+
+                // GÜNCELLENDİ: isPrivate olanları listede TUTUYORUZ (Kilitli göstermek için)
+                final allLeagues = (leagueSnapshot.data ?? const <League>[]).where((l) {
+                  if (isAdmin) return true; // Admin her şeyi görür
+                  if (!l.isActive) return false; // Pasif turnuvalar görünmez
+                  return true; // isPrivate olanlar da gelsin, UI'da kilitleyeceğiz
+                }).toList();
 
                 if (allLeagues.isEmpty) {
-                  return const Center(child: Text('Henüz aktif turnuva yok.'));
+                  return const Center(
+                    child: Text('Görüntülenebilir turnuva yok.', style: TextStyle(color: Colors.white)),
+                  );
                 }
 
                 if (!_didAutoSelectDefaultLeague ||
                     !allLeagues.any((l) => l.id == _activeLeagueId)) {
-                  final def = allLeagues.any((l) => l.isDefault)
-                      ? allLeagues.firstWhere((l) => l.isDefault).id
-                      : allLeagues.first.id;
+                  // İlk girişte gizli turnuvanın default gelmesini önlemek için küçük kontrol
+                  final def = allLeagues.any((l) => l.isDefault && (!l.isPrivate || isAdmin))
+                      ? allLeagues.firstWhere((l) => l.isDefault && (!l.isPrivate || isAdmin)).id
+                      : allLeagues.firstWhere((l) => !l.isPrivate || isAdmin, orElse: () => allLeagues.first).id;
                   _activeLeagueId = def;
                   _didAutoSelectDefaultLeague = true;
                 }
@@ -151,7 +331,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 return Stack(
                   children: [
-                    // 1. KATMAN: YEŞİL ARKA PLAN (OVAL GEÇİŞİN ARKASI)
+                    // 1. KATMAN: YEŞİL ARKA PLAN
                     Container(
                       height: 250,
                       decoration: BoxDecoration(
@@ -173,12 +353,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
 
-                    // 2. KATMAN: ANA LİSTE (OVAL HATLARI OLAN KISIM)
+                    // 2. KATMAN: ANA LİSTE
                     Column(
                       children: [
-                        const SizedBox(
-                          height: 185,
-                        ), // Başlıkların ezilmemesi için ayarlandı
+                        const SizedBox(height: 185), 
                         Expanded(
                           child: Container(
                             decoration: BoxDecoration(
@@ -205,36 +383,41 @@ class _HomeScreenState extends State<HomeScreen> {
                             Row(
                               children: [
                                 Expanded(
-                                  child: DropdownButtonHideUnderline(
-                                    child: DropdownButton<String>(
-                                      value: _activeLeagueId,
-                                      dropdownColor: cs.surfaceContainerHighest,
-                                      icon: Icon(
-                                        Icons.keyboard_arrow_down_rounded,
-                                        color: cs.onPrimaryContainer,
-                                      ),
-                                      style: TextStyle(
-                                        color: cs.onPrimaryContainer,
-                                        fontWeight: FontWeight.w900,
-                                        fontSize: 18,
-                                        shadows: const [
-                                          Shadow(
-                                            color: Colors.black87,
-                                            blurRadius: 4,
-                                            offset: Offset(0, 2),
+                                  // YENİ EKLENEN: Standart Dropdown Yerine Kendi Tasarımımız
+                                  child: InkWell(
+                                    onTap: () => _showLeagueSelectorBottomSheet(context, allLeagues, isAdmin),
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 8.0),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Flexible(
+                                            child: Text(
+                                              currentLeague.name,
+                                              style: TextStyle(
+                                                color: cs.onPrimaryContainer,
+                                                fontWeight: FontWeight.w900,
+                                                fontSize: 20,
+                                                shadows: const [
+                                                  Shadow(
+                                                    color: Colors.black87,
+                                                    blurRadius: 4,
+                                                    offset: Offset(0, 2),
+                                                  ),
+                                                ],
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Icon(
+                                            Icons.keyboard_arrow_down_rounded,
+                                            color: cs.onPrimaryContainer,
+                                            shadows: const [Shadow(color: Colors.black87, blurRadius: 4, offset: Offset(0, 2))],
                                           ),
                                         ],
                                       ),
-                                      items: allLeagues
-                                          .map(
-                                            (l) => DropdownMenuItem(
-                                              value: l.id,
-                                              child: Text(l.name),
-                                            ),
-                                          )
-                                          .toList(),
-                                      onChanged: (val) =>
-                                          setState(() => _activeLeagueId = val),
                                     ),
                                   ),
                                 ),
@@ -243,6 +426,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   icon: Icon(
                                     Icons.calendar_month_outlined,
                                     color: cs.onPrimaryContainer,
+                                    shadows: const [Shadow(color: Colors.black87, blurRadius: 4, offset: Offset(0, 2))],
                                   ),
                                 ),
                               ],
@@ -252,9 +436,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               children: [
                                 IconButton(
                                   onPressed: () => _setSelectedDate(
-                                    _selectedDate.subtract(
-                                      const Duration(days: 1),
-                                    ),
+                                    _selectedDate.subtract(const Duration(days: 1)),
                                   ),
                                   icon: Icon(
                                     Icons.chevron_left_rounded,
@@ -309,36 +491,15 @@ class _HomeScreenState extends State<HomeScreen> {
           }
         }
 
-        return StreamBuilder<List<GroupModel>>(
+        return StreamBuilder<List<Season>>(
           stream: _activeLeagueId == null
-              ? const Stream<List<GroupModel>>.empty()
-              : _leagueService.watchGroups(_activeLeagueId!),
-          builder: (context, groupsSnap) {
-            final groups = groupsSnap.data ?? const <GroupModel>[];
-            final groupNameById = <String, String>{
-              for (final g in groups) g.id: g.name.trim(),
+              ? const Stream<List<Season>>.empty()
+              : _watchSeasons(_activeLeagueId!),
+          builder: (context, seasonsSnap) {
+            final seasons = seasonsSnap.data ?? const <Season>[];
+            final seasonNameById = <String, String>{
+              for (final s in seasons) s.id: s.name.trim(),
             };
-
-            int effectiveGroupCount() {
-              if (groups.isNotEmpty) return groups.length;
-              final n1 = currentLeague.numberOfGroups;
-              if (n1 > 0) return n1;
-              final n2 = currentLeague.groupCount;
-              if (n2 > 0) return n2;
-              final n3 = currentLeague.groups.length;
-              if (n3 > 0) return n3;
-              return 1;
-            }
-
-            final groupCount = effectiveGroupCount();
-
-            String bannerTitleForGroupId(String groupId) {
-              final leagueName = currentLeague.name.trim();
-              if (groupCount <= 1) return leagueName;
-              final groupName = (groupNameById[groupId] ?? '').trim();
-              if (groupName.isEmpty) return leagueName;
-              return '$leagueName - $groupName';
-            }
 
             return StreamBuilder<List<MatchModel>>(
               stream: _activeLeagueId == null
@@ -353,6 +514,17 @@ class _HomeScreenState extends State<HomeScreen> {
                 }
 
                 final matches = matchSnapshot.data ?? [];
+                matches.sort((a, b) {
+                  final timeA = (a.matchTime ?? '').trim();
+                  final timeB = (b.matchTime ?? '').trim();
+
+                  if (timeA.isEmpty && timeB.isEmpty) return 0;
+                  if (timeA.isEmpty) return 1;
+                  if (timeB.isEmpty) return -1;
+
+                  return timeA.compareTo(timeB);
+                });
+                
                 if (matches.isEmpty) {
                   return const Center(
                     child: Column(
@@ -375,21 +547,26 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 final Map<String, List<MatchModel>> sectionMap = {};
                 for (var m in matches) {
-                  final gId = m.groupId ?? 'default';
-                  (sectionMap[gId] ??= []).add(m);
+                  final sId = m.seasonId ?? 'default';
+                  (sectionMap[sId] ??= []).add(m);
                 }
 
-                final sortedGroupIds = sectionMap.keys.toList()
+                final sortedSeasonIds = sectionMap.keys.toList()
                   ..sort((a, b) {
                     if (a == 'default') return 1;
                     if (b == 'default') return -1;
-                    return a.toUpperCase().compareTo(b.toUpperCase());
+                    final nameA = seasonNameById[a] ?? a;
+                    final nameB = seasonNameById[b] ?? b;
+                    return nameA.toUpperCase().compareTo(nameB.toUpperCase());
                   });
 
                 return ListView(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
-                  children: sortedGroupIds.map((groupId) {
-                    final titleText = bannerTitleForGroupId(groupId);
+                  children: sortedSeasonIds.map((sId) {
+                    final seasonName = seasonNameById[sId] ?? '';
+                    final titleText = seasonName.isEmpty
+                        ? currentLeague.name
+                        : '${currentLeague.name} - $seasonName';
 
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -408,7 +585,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             child: Row(
                               children: [
                                 const Icon(
-                                  Icons.shield_outlined,
+                                  Icons.emoji_events_outlined,
                                   color: Color(0xFFFBBF24),
                                   size: 18,
                                 ),
@@ -435,15 +612,17 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ),
                         ),
-                        ...sectionMap[groupId]!.map(
+                        ...sectionMap[sId]!.map(
                           (m) => _MatchCard(
                             match: m,
                             homeLogo: logoMap[m.homeTeamId] ?? '',
                             awayLogo: logoMap[m.awayTeamId] ?? '',
-                            homeName: (nameMap[m.homeTeamId] ?? '').trim().isEmpty
+                            homeName:
+                                (nameMap[m.homeTeamId] ?? '').trim().isEmpty
                                 ? 'Ev Sahibi'
                                 : (nameMap[m.homeTeamId] ?? '').trim(),
-                            awayName: (nameMap[m.awayTeamId] ?? '').trim().isEmpty
+                            awayName:
+                                (nameMap[m.awayTeamId] ?? '').trim().isEmpty
                                 ? 'Deplasman'
                                 : (nameMap[m.awayTeamId] ?? '').trim(),
                           ),
@@ -461,7 +640,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-class _MatchCard extends StatelessWidget {
+class _MatchCard extends StatefulWidget {
   final MatchModel match;
   final String homeLogo;
   final String awayLogo;
@@ -476,34 +655,61 @@ class _MatchCard extends StatelessWidget {
   });
 
   @override
+  State<_MatchCard> createState() => _MatchCardState();
+}
+
+class _MatchCardState extends State<_MatchCard> {
+  String? _broadcastUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkBroadcast();
+  }
+
+  Future<void> _checkBroadcast() async {
+    final url = await ServiceLocator.matchService.getBroadcastUrl(widget.match.id);
+    if (mounted && url != _broadcastUrl) {
+      setState(() => _broadcastUrl = url);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _MatchCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.match.id != widget.match.id) {
+      _broadcastUrl = null;
+      _checkBroadcast();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isAdmin = AppSession.of(context).value.isAdmin;
-    final hs = match.homeScore;
-    final as = match.awayScore;
-    final timeText = (match.matchTime ?? '').trim();
+    final hs = widget.match.homeScore;
+    final as = widget.match.awayScore;
+    final timeText = (widget.match.matchTime ?? '').trim();
 
-    // Skorun gösterilip gösterilmeyeceği kontrolü
     final showScore =
-        match.status == MatchStatus.finished ||
-        match.status == MatchStatus.live ||
+        widget.match.status == MatchStatus.finished ||
+        widget.match.status == MatchStatus.live ||
         hs != 0 ||
         as != 0;
 
-    // PANEL YEŞİLİ SKOR KUTUCUĞU
     Widget scoreBox(int score) {
       return Container(
         width: 30,
         height: 30,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: cs.primaryContainer, // Paneldeki Forest Green tonu
+          color: cs.primaryContainer,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Text(
           showScore ? '$score' : '-',
           style: TextStyle(
-            color: cs.onPrimaryContainer, // Yeşil üzerindeki okunaklı renk
+            color: cs.onPrimaryContainer,
             fontWeight: FontWeight.w900,
             fontSize: 14,
           ),
@@ -512,54 +718,34 @@ class _MatchCard extends StatelessWidget {
     }
 
     Widget? statusUnderTime() {
-      switch (match.status) {
+      switch (widget.match.status) {
         case MatchStatus.notStarted:
           return null;
         case MatchStatus.finished:
           return const Text(
             'MS',
-            style: TextStyle(
-              color: Color(0xFF10B981),
-              fontWeight: FontWeight.w900,
-              fontSize: 10,
-            ),
+            style: TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.w900, fontSize: 10),
           );
         case MatchStatus.halftime:
           return const Text(
             'İY',
-            style: TextStyle(
-              color: Colors.redAccent,
-              fontWeight: FontWeight.w900,
-              fontSize: 10,
-            ),
+            style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w900, fontSize: 10),
           );
         case MatchStatus.live:
-          final m = match.minute;
+          final m = widget.match.minute;
           return Text(
             m == null ? "CANLI" : "$m'",
-            style: const TextStyle(
-              color: Colors.redAccent,
-              fontWeight: FontWeight.w900,
-              fontSize: 10,
-            ),
+            style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w900, fontSize: 10),
           );
         case MatchStatus.cancelled:
           return const Text(
             'IPT',
-            style: TextStyle(
-              color: Colors.white70,
-              fontWeight: FontWeight.w900,
-              fontSize: 10,
-            ),
+            style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w900, fontSize: 10),
           );
         case MatchStatus.postponed:
           return const Text(
             'ERT',
-            style: TextStyle(
-              color: Colors.white70,
-              fontWeight: FontWeight.w900,
-              fontSize: 10,
-            ),
+            style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w900, fontSize: 10),
           );
       }
     }
@@ -569,23 +755,42 @@ class _MatchCard extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       color: const Color(0xFF1E293B).withOpacity(0.78),
       child: InkWell(
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => MatchDetailsScreen(match: match, isAdmin: isAdmin),
-          ),
-        ),
+        onTap: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => MatchDetailsScreen(match: widget.match, isAdmin: isAdmin),
+            ),
+          );
+          _checkBroadcast(); // Geri dönüldüğünde ikonu güncelle
+        },
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Row(
             children: [
-              // SAAT VE CANLI DURUMU
               SizedBox(
                 width: 50,
                 child: Column(
                   children: [
+                    if (_broadcastUrl != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4.0),
+                        child: InkWell(
+                          onTap: () async {
+                            final uri = Uri.tryParse(_broadcastUrl!);
+                            if (uri != null && await canLaunchUrl(uri)) {
+                              await launchUrl(uri, mode: LaunchMode.externalApplication);
+                            }
+                          },
+                          child: const Icon(
+                            Icons.play_circle_fill,
+                            color: Colors.redAccent,
+                            size: 22,
+                          ),
+                        ),
+                      ),
                     Text(
-                      match.status == MatchStatus.notStarted && timeText.isEmpty
+                      widget.match.status == MatchStatus.notStarted && timeText.isEmpty
                           ? ''
                           : (timeText.isEmpty ? '--:--' : timeText),
                       style: TextStyle(
@@ -606,13 +811,12 @@ class _MatchCard extends StatelessWidget {
               ),
               const SizedBox(width: 12),
 
-              // TAKIMLAR VE SKOR KUTUCUKLARI
               Expanded(
                 child: Column(
                   children: [
-                    _row(homeName, homeLogo, scoreBox(hs)),
+                    _row(widget.homeName, widget.homeLogo, scoreBox(hs)),
                     const SizedBox(height: 12),
-                    _row(awayName, awayLogo, scoreBox(as)),
+                    _row(widget.awayName, widget.awayLogo, scoreBox(as)),
                   ],
                 ),
               ),
@@ -623,7 +827,6 @@ class _MatchCard extends StatelessWidget {
     );
   }
 
-  // Satır yapısını skorWidget'ını kabul edecek şekilde güncelledik
   Widget _row(String name, String logo, Widget scoreWidget) {
     return Row(
       children: [
@@ -637,7 +840,7 @@ class _MatchCard extends StatelessWidget {
             style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
           ),
         ),
-        scoreWidget, // Artık burada yeşil kutucuk görünecek
+        scoreWidget,
       ],
     );
   }

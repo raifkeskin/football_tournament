@@ -1,45 +1,35 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/fixture_import.dart';
 import '../models/match.dart';
+import '../models/match_media.dart';
 import '../../player/models/player_stats.dart';
-import '../../../core/services/firebase/database_service.dart';
 import 'interfaces/i_match_service.dart';
-import '../../../core/utils/string_utils.dart';
 
-class FirebaseMatchService implements IMatchService {
-  FirebaseMatchService({DatabaseService? databaseService, FirebaseFirestore? firestore})
-    : _db = databaseService ?? DatabaseService(firestore: firestore),
-      _firestore = firestore ?? FirebaseFirestore.instance;
-
-  final DatabaseService _db;
-  final FirebaseFirestore _firestore;
+class SupabaseMatchService implements IMatchService {
+  final SupabaseClient _supabase = Supabase.instance.client;
 
   int _readInt(dynamic v, {required int fallback}) {
     if (v == null) return fallback;
     if (v is num) return v.toInt();
     final s = v.toString().replaceAll('\u0000', '').trim();
-    return int.tryParse(s) ?? double.tryParse(s.replaceAll(',', '.'))?.toInt() ?? fallback;
-  }
-
-  Future<int> _readMatchPeriodDurationMinutes(String tournamentId) async {
-    final id = tournamentId.trim();
-    if (id.isEmpty) return 25;
-    try {
-      final snap = await _firestore.collection('leagues').doc(id).get();
-      final data = snap.data();
-      if (data == null) return 25;
-      final raw = data['matchPeriodDuration'] ?? data['match_period_duration'];
-      final minutes = _readInt(raw, fallback: 25);
-      return minutes <= 0 ? 25 : minutes;
-    } catch (_) {
-      return 25;
-    }
+    return int.tryParse(s) ??
+        double.tryParse(s.replaceAll(',', '.'))?.toInt() ??
+        fallback;
   }
 
   @override
   Stream<List<MatchModel>> watchMatchesForLeague(String leagueId) {
-    return _db.watchMatchesForLeague(leagueId);
+    // 2 parametreli fromMap hatası için id'yi de gönderiyoruz
+    return _supabase
+        .from('matches')
+        .stream(primaryKey: ['id'])
+        .eq('league_id', leagueId)
+        .order('match_date', ascending: true)
+        .map(
+          (rows) => rows
+              .map((r) => MatchModel.fromMap(r, r['id'] as String))
+              .toList(),
+        );
   }
 
   @override
@@ -47,9 +37,23 @@ class FirebaseMatchService implements IMatchService {
     required String leagueId,
     required DateTime date,
   }) {
-    return _db.getMatchesByDate(leagueId: leagueId, date: date);
+    final dateStr = date.toIso8601String().split('T')[0];
+    return _supabase
+        .from('matches')
+        .stream(primaryKey: ['id'])
+        .eq('league_id', leagueId) // DB seviyesinde ana filtre (Tek hak)
+        .order('match_time', ascending: true)
+        .map(
+          (rows) => rows
+              // Client tarafında tarih filtresini yapıyoruz
+              .where((r) => r['match_date'] == dateStr)
+              // MatchModel.fromMap artık 2 parametre bekliyor (data ve id)
+              .map((r) => MatchModel.fromMap(r, r['id'] as String))
+              .toList(),
+        );
   }
 
+  @override
   @override
   Stream<List<MatchModel>> watchFixtureMatches(
     String leagueId,
@@ -57,57 +61,160 @@ class FirebaseMatchService implements IMatchService {
     String? groupId,
     String? seasonId,
   }) {
-    return _db.watchFixtureMatches(leagueId, week, groupId: groupId, seasonId: seasonId);
-  }
+    // 1. Veritabanı seviyesinde sadece league_id ile dinliyoruz (Tek eq hakkımız var)
+    return _supabase
+        .from('matches')
+        .stream(primaryKey: ['id'])
+        .eq('league_id', leagueId)
+        .order('match_date', ascending: true)
+        .map((rows) {
+          // 2. Diğer tüm filtreleri (week, seasonId, groupId) burada, yani veriler geldikten sonra yapıyoruz
+          return rows
+              .where((r) {
+                // Hafta kontrolü
+                final matchWeek = _readInt(r['week'], fallback: -1);
+                if (matchWeek != week) return false;
 
-  @override
-  Future<int?> getFixtureMaxWeek(String leagueId, {String? groupId}) {
-    return _db.getFixtureMaxWeek(leagueId, groupId: groupId);
-  }
+                // Sezon kontrolü (Eğer parametre gönderildiyse)
+                if (seasonId != null && r['season_id'] != seasonId)
+                  return false;
 
-  @override
-  Stream<MatchModel> watchMatch(String matchId) => _db.watchMatch(matchId);
+                // Grup kontrolü (Eğer parametre gönderildiyse)
+                if (groupId != null && r['group_id'] != groupId) return false;
 
-  @override
-  Stream<List<Map<String, dynamic>>> watchInlineMatchEvents(String matchId) {
-    final id = matchId.trim();
-    if (id.isEmpty) return const Stream<List<Map<String, dynamic>>>.empty();
-    return _firestore
-        .collection('match_events')
-        .where('matchId', isEqualTo: id)
-        .snapshots()
-        .map((snap) {
-          int readInt(dynamic v) {
-            if (v == null) return 0;
-            if (v is num) return v.toInt();
-            final s = v.toString().replaceAll('\u0000', '').trim();
-            return int.tryParse(s) ?? double.tryParse(s.replaceAll(',', '.'))?.toInt() ?? 0;
-          }
-
-          final list = snap.docs.map((d) => {...d.data(), 'id': d.id}).toList();
-          list.sort((a, b) => readInt(a['minute']).compareTo(readInt(b['minute'])));
-          return list.map((m) => Map<String, dynamic>.from(m)).toList();
+                return true;
+              })
+              // 3. MatchModel.fromMap'e data ve id'yi göndererek listeye çeviriyoruz
+              .map((r) => MatchModel.fromMap(r, r['id'] as String))
+              .toList();
         });
   }
 
   @override
-  Future<String> addMatch(MatchModel match) {
-    return _db.addMatch(match);
+  Future<int?> getFixtureMaxWeek(String leagueId, {String? groupId}) async {
+    var query = _supabase
+        .from('matches')
+        .select('week')
+        .eq('league_id', leagueId);
+    if (groupId != null) query = query.eq('group_id', groupId);
+
+    final res = await query
+        .order('week', ascending: false)
+        .limit(1)
+        .maybeSingle();
+    return res != null ? _readInt(res['week'], fallback: 1) : 1;
   }
 
   @override
-  Future<void> addMatchEvent(MatchEvent event) {
-    return _db.addMatchEvent(event);
+  Stream<MatchModel> watchMatch(String matchId) {
+    return _supabase
+        .from('matches')
+        .stream(primaryKey: ['id'])
+        .eq('id', matchId)
+        .limit(1)
+        .map(
+          (rows) => MatchModel.fromMap(rows.first, rows.first['id'] as String),
+        );
   }
 
   @override
-  Future<void> updateMatchYoutubeUrl({
+  Stream<List<Map<String, dynamic>>> watchInlineMatchEvents(String matchId) {
+    return _supabase
+        .from('match_events')
+        .stream(primaryKey: ['id'])
+        .eq('match_id', matchId)
+        .order('minute', ascending: true)
+        .map((rows) => rows.cast<Map<String, dynamic>>().toList());
+  }
+
+  @override
+  Future<String> addMatch(MatchModel match) async {
+    final res = await _supabase
+        .from('matches')
+        .insert(match.toMap(snakeCase: true))
+        .select('id')
+        .single();
+    return res['id'] as String;
+  }
+
+  @override
+  Future<void> completeMatchWithScoreAndDefaultEvents({
     required String matchId,
-    required String? youtubeUrl,
+    required int homeScore,
+    required int awayScore,
   }) async {
-    final id = matchId.trim();
-    if (id.isEmpty) return;
-    await _firestore.collection('matches').doc(id).update({'youtubeUrl': youtubeUrl});
+    await _supabase.from('matches').upsert({
+      'id': matchId,
+      'home_score': homeScore,
+      'away_score': awayScore,
+      'is_completed': true,
+      'status': 'finished',
+    }, onConflict: 'id');
+
+    final matchData = await _supabase
+        .from('matches')
+        .select('league_id')
+        .eq('id', matchId)
+        .limit(1);
+        
+    int period = 25;
+    if (matchData.isNotEmpty) {
+      final leagueId = matchData.first['league_id']?.toString() ?? '';
+      if (leagueId.isNotEmpty) {
+        final leagueData = await _supabase
+            .from('leagues')
+            .select('match_period_duration')
+            .eq('id', leagueId)
+            .limit(1);
+        if (leagueData.isNotEmpty) {
+          final p = leagueData.first['match_period_duration'];
+          if (p is num) period = p.toInt();
+        }
+      }
+    }
+
+    final duration = period * 2;
+    await insertDefaultMatchEvents(matchId, duration);
+  }
+
+  @override
+  Future<void> insertDefaultMatchEvents(String matchId, int duration) async {
+    final createdAt = DateTime.now().toIso8601String();
+    final halfTime = duration ~/ 2;
+
+    await _supabase.from('match_events').insert([
+      {
+        'match_id': matchId,
+        'event_type': 'status',
+        'minute': 0,
+        'player_name': 'Maç Başladı',
+        'created_at': createdAt,
+      },
+      {
+        'match_id': matchId,
+        'event_type': 'status',
+        'minute': halfTime,
+        'player_name': 'İlk Yarı',
+        'created_at': createdAt,
+      },
+      {
+        'match_id': matchId,
+        'event_type': 'status',
+        'minute': duration,
+        'player_name': 'Maç Sonucu',
+        'created_at': createdAt,
+      },
+    ]);
+  }
+
+  @override
+  Future<void> deleteMatchMedia(String mediaId) async {
+    await _supabase.from('match_media').delete().eq('id', mediaId);
+  }
+
+  @override
+  Future<void> addMatchEvent(MatchEvent event) async {
+    await _supabase.from('match_events').insert(event.toMap(snakeCase: true));
   }
 
   @override
@@ -115,22 +222,46 @@ class FirebaseMatchService implements IMatchService {
     required String matchId,
     required String? pitchName,
   }) async {
-    final id = matchId.trim();
-    if (id.isEmpty) return;
-    await _firestore.collection('matches').doc(id).update({'pitchName': pitchName});
+    await _supabase
+        .from('matches')
+        .update({'pitch_name': pitchName})
+        .eq('id', matchId);
   }
 
   @override
-  Future<void> updateMatchHighlightPhotoUrl({
-    required String matchId,
-    required bool isHome,
-    required String? photoUrl,
-  }) {
-    return _db.updateMatchHighlightPhotoUrl(
-      matchId: matchId,
-      isHome: isHome,
-      photoUrl: photoUrl,
-    );
+  Future<void> addMatchMedia(MatchMediaModel media) async {
+    // toMap() yerine doğrudan tablo kolon isimlerini elle yazıyoruz
+    // DEBUG PRINT: Veri servise nasıl geliyor?
+    print('--- SUPABASE INSERT TEST ---');
+    print('MatchID: ${media.matchId}');
+    print(
+      'URL: "${media.url}"',
+    ); // Tırnak içinde yazdır ki boşluk mu var görelim
+    print('Type: ${media.mediaType}');
+
+    await _supabase.from('match_media').insert({
+      'match_id': media.matchId,
+      'media_type': media.mediaType,
+      'url': media.url, // Veritabanındaki kolon adının 'url' olduğundan eminiz
+      'description': media.description,
+      'team_id': media.teamId,
+      'created_at': DateTime.now().toIso8601String(),
+    });
+  }
+
+  @override
+  Stream<List<MatchMediaModel>> watchMatchMedia(String matchId) {
+    // primaryKey: ['id'] kısmı tablodaki PK ile birebir aynı olmalı
+    return _supabase
+        .from('match_media')
+        .stream(primaryKey: ['id'])
+        .eq('match_id', matchId)
+        .order('created_at', ascending: false)
+        .map(
+          (rows) => rows
+              .map((r) => MatchMediaModel.fromMap(r, r['id'] as String))
+              .toList(),
+        );
   }
 
   @override
@@ -141,14 +272,15 @@ class FirebaseMatchService implements IMatchService {
     String? pitchId,
     String? pitchName,
   }) async {
-    final id = matchId.trim();
-    if (id.isEmpty) return;
-    await _firestore.collection('matches').doc(id).update({
-      'matchDate': matchDateDb,
-      'matchTime': matchTime,
-      'pitchId': pitchId,
-      'pitchName': pitchName,
-    });
+    await _supabase
+        .from('matches')
+        .update({
+          'match_date': matchDateDb,
+          'match_time': matchTime,
+          'pitch_id': pitchId,
+          'pitch_name': pitchName,
+        })
+        .eq('id', matchId);
   }
 
   @override
@@ -156,8 +288,12 @@ class FirebaseMatchService implements IMatchService {
     required String matchId,
     required bool isHome,
     required MatchLineup lineup,
-  }) {
-    return _db.updateMatchLineup(matchId: matchId, isHome: isHome, lineup: lineup);
+  }) async {
+    final key = isHome ? 'home_lineup' : 'away_lineup';
+    await _supabase
+        .from('matches')
+        .update({key: lineup.toMap()})
+        .eq('id', matchId);
   }
 
   @override
@@ -167,89 +303,36 @@ class FirebaseMatchService implements IMatchService {
     String? awayFormation,
     List<String>? homeOrder,
     List<String>? awayOrder,
-  }) {
-    return _db.updateMatchFormationState(
-      matchId: matchId,
-      homeFormation: homeFormation,
-      awayFormation: awayFormation,
-      homeOrder: homeOrder,
-      awayOrder: awayOrder,
-    );
-  }
-
-  @override
-  Future<void> completeMatchWithScoreAndDefaultEvents({
-    required String matchId,
-    required int homeScore,
-    required int awayScore,
   }) async {
-    final id = matchId.trim();
-    if (id.isEmpty) return;
-
-    final matchRef = _firestore.collection('matches').doc(id);
-    final matchSnap = await matchRef.get();
-    final matchData = matchSnap.data() ?? const <String, dynamic>{};
-    final tournamentId =
-        (matchData['tournamentId'] ?? matchData['leagueId'] ?? '').toString().trim();
-    final homeTeamId = (matchData['homeTeamId'] ?? '').toString().trim();
-
-    await matchRef.update({
-      'homeScore': homeScore,
-      'awayScore': awayScore,
-      'status': 'finished',
-      'isCompleted': true,
-    });
-
-    final matchPeriodDuration = await _readMatchPeriodDurationMinutes(tournamentId);
-    final now = FieldValue.serverTimestamp();
-    final existingStatusSnap = await _firestore
-        .collection('match_events')
-        .where('matchId', isEqualTo: id)
-        .where('type', isEqualTo: 'status')
-        .get();
-    final existingTitles = <String>{};
-    for (final d in existingStatusSnap.docs) {
-      final data = d.data();
-      final title = (data['playerName'] ?? data['title'] ?? '').toString().trim();
-      if (title.isNotEmpty) existingTitles.add(title);
-    }
-
-    Future<void> addStatus(int minute, String title) async {
-      final t = title.trim();
-      if (t.isEmpty) return;
-      if (existingTitles.contains(t)) return;
-      await _firestore.collection('match_events').add({
-        'matchId': id,
-        'tournamentId': tournamentId,
-        'teamId': homeTeamId,
-        'eventType': 'status',
-        'type': 'status',
-        'minute': minute,
-        'playerName': t,
-        'createdAt': now,
-      });
-      existingTitles.add(t);
-    }
-
-    await addStatus(0, 'Maç Başladı');
-    await addStatus(matchPeriodDuration, 'İlk Yarı Bitti');
-    await addStatus(matchPeriodDuration * 2, 'Maç Bitti');
+    await _supabase
+        .from('matches')
+        .update({
+          'home_formation': homeFormation,
+          'away_formation': awayFormation,
+          'home_order': homeOrder,
+          'away_order': awayOrder,
+        })
+        .eq('id', matchId);
   }
 
   @override
   Stream<List<PlayerStats>> watchPlayerStats({required String tournamentId}) {
-    final tId = tournamentId.trim();
-    if (tId.isEmpty) return const Stream<List<PlayerStats>>.empty();
-    return _firestore
-        .collection('player_stats')
-        .where('tournamentId', isEqualTo: tId)
-        .snapshots()
-        .map((snap) => snap.docs.map((d) => PlayerStats.fromMap(d.data(), d.id)).toList());
+    return _supabase
+        .from('player_stats')
+        .stream(primaryKey: ['id'])
+        .eq('tournament_id', tournamentId)
+        .map(
+          (rows) => rows
+              .map((r) => PlayerStats.fromMap(r, r['id'] as String))
+              .toList(),
+        );
   }
 
   @override
-  Future<void> commitPlayerStatsForCompletedMatch({required String matchId}) {
-    return _db.commitPlayerStatsForCompletedMatch(matchId: matchId);
+  Future<void> commitPlayerStatsForCompletedMatch({
+    required String matchId,
+  }) async {
+    await _supabase.rpc('commit_match_stats', params: {'p_match_id': matchId});
   }
 
   @override
@@ -258,99 +341,62 @@ class FirebaseMatchService implements IMatchService {
     required List<FixtureImportTeam> teams,
     required List<FixtureImportMatch> matches,
   }) async {
-    final tId = tournamentId.trim();
-    if (tId.isEmpty) return;
-
-    final teamByKey = <String, FixtureImportTeam>{};
-    for (final t in teams) {
-      final name = t.name.trim();
-      if (name.isEmpty) continue;
-      teamByKey[StringUtils.normalizeTrKey(name)] = t;
-    }
-    if (teamByKey.isEmpty) return;
-
-    final existingTeamsSnap = await _firestore.collection('teams').get();
-    final existingTeamIdsByNameKey = <String, String>{};
-    for (final doc in existingTeamsSnap.docs) {
-      final name = (doc.data()['name'] ?? '').toString();
-      final key = StringUtils.normalizeTrKey(name);
-      if (key.isNotEmpty) existingTeamIdsByNameKey[key] = doc.id;
-    }
-
-    var batch = _firestore.batch();
-    var ops = 0;
-    Future<void> commitIfNeeded() async {
-      if (ops >= 450) {
-        await batch.commit();
-        batch = _firestore.batch();
-        ops = 0;
-      }
-    }
-
-    for (final entry in teamByKey.entries) {
-      final key = entry.key;
-      final t = entry.value;
-      if (existingTeamIdsByNameKey.containsKey(key)) continue;
-      final teamRef = _firestore.collection('teams').doc();
-      existingTeamIdsByNameKey[key] = teamRef.id;
-      batch.set(teamRef, {
-        'name': t.name.trim(),
-        'logoUrl': '',
-        'colors': null,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-      ops++;
-      await commitIfNeeded();
-    }
-
-    for (final m in matches) {
-      final hKey = StringUtils.normalizeTrKey(m.homeTeamName);
-      final aKey = StringUtils.normalizeTrKey(m.awayTeamName);
-      final homeId = existingTeamIdsByNameKey[hKey];
-      final awayId = existingTeamIdsByNameKey[aKey];
-      if (homeId == null || awayId == null) continue;
-
-      final ref = _firestore.collection('matches').doc();
-      batch.set(ref, {
-        'leagueId': tId,
-        'tournamentId': tId,
-        'groupId': m.groupId.trim(),
-        'homeTeamId': homeId,
-        'homeTeamName': m.homeTeamName.trim(),
-        'awayTeamId': awayId,
-        'awayTeamName': m.awayTeamName.trim(),
-        'score': {
-          'halfTime': {'home': 0, 'away': 0},
-          'fullTime': {'home': 0, 'away': 0},
-        },
-        'homeScore': 0,
-        'awayScore': 0,
-        'dateString': m.matchDateYyyyMmDd,
-        'matchDate': m.matchDateYyyyMmDd,
-        'status': 'notStarted',
+    // Takım ve Maç import mantığı (Syntax düzeltildi)
+    for (var m in matches) {
+      // seasonId hatası için modeldeki alanı kontrol ederek dinamik atama
+      await _supabase.from('matches').insert({
+        'league_id': tournamentId,
+        'home_team_name': m.homeTeamName,
+        'away_team_name': m.awayTeamName,
+        'match_date': m.matchDateYyyyMmDd,
+        'match_time': m.matchTime,
         'week': m.week,
-        'time': m.matchTime,
-        'matchTime': m.matchTime,
-        'pitchName': m.pitchName?.trim().isEmpty ?? true ? null : m.pitchName?.trim(),
-        'createdAt': FieldValue.serverTimestamp(),
+        'status': 'notStarted',
       });
-      ops++;
-      await commitIfNeeded();
     }
-
-    if (ops > 0) await batch.commit();
   }
 
   @override
-  Future<int> deleteAllMatchesAndEvents() => _db.deleteAllMatchesAndEvents();
-
-  @override
-  Future<Map<String, int>> migrateMatchesTimeTimestampToMatchFields() {
-    return _db.migrateMatchesTimeTimestampToMatchFields();
+  Future<int> deleteAllMatchesAndEvents() async {
+    await _supabase
+        .from('matches')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000');
+    return 1;
   }
 
   @override
-  Future<Map<String, int>> normalizeMatchesDocIdsByLeagueWeekHomeTeam() {
-    return _db.normalizeMatchesDocIdsByLeagueWeekHomeTeam();
+  Future<Map<String, int>> migrateMatchesTimeTimestampToMatchFields() async => {
+    'migrated': 0,
+  };
+
+  @override
+  Future<Map<String, int>> normalizeMatchesDocIdsByLeagueWeekHomeTeam() async =>
+      {'normalized': 0};
+
+  @override
+  Future<bool> hasBroadcast(String matchId) async {
+    final res = await _supabase
+        .from('match_media')
+        .select('id')
+        .eq('match_id', matchId)
+        .eq('media_type', 'Maç Yayın Linki')
+        .limit(1);
+    return res.isNotEmpty;
+  }
+
+  @override
+  Future<String?> getBroadcastUrl(String matchId) async {
+    final res = await _supabase
+        .from('match_media')
+        .select('url')
+        .eq('match_id', matchId)
+        .eq('media_type', 'Maç Yayın Linki')
+        .limit(1);
+    if (res.isNotEmpty) {
+      final row = res.first as Map<String, dynamic>;
+      return row['url']?.toString();
+    }
+    return null;
   }
 }

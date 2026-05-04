@@ -1331,28 +1331,6 @@ class DatabaseService {
     }
   }
 
-  Future<void> updateMatchYoutubeUrl({
-    required String matchId,
-    required String? youtubeUrl,
-  }) async {
-    final url = (youtubeUrl ?? '').trim();
-    await _db.collection('matches').doc(matchId).update({
-      'youtubeUrl': url.isEmpty ? null : url,
-    });
-  }
-
-  Future<void> updateMatchHighlightPhotoUrl({
-    required String matchId,
-    required bool isHome,
-    required String? photoUrl,
-  }) async {
-    final url = (photoUrl ?? '').trim();
-    await _db.collection('matches').doc(matchId).update({
-      isHome ? 'homeHighlightPhotoUrl' : 'awayHighlightPhotoUrl':
-          url.isEmpty ? null : url,
-    });
-  }
-
   Future<void> updateMatchFormationState({
     required String matchId,
     String? homeFormation,

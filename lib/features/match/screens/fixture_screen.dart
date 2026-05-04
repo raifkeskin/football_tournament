@@ -177,7 +177,7 @@ class _FixtureScreenState extends State<FixtureScreen> {
                       final showGroupInHeader =
                           selectedGroupId == null && groups.length > 1;
 
-                      return FutureBuilder<int?>(
+return FutureBuilder<int?>(
                         key: ValueKey('$_seasonId|$selectedGroupId'),
                         future: _matchService.getFixtureMaxWeek(
                           _leagueId!,
@@ -185,22 +185,29 @@ class _FixtureScreenState extends State<FixtureScreen> {
                         ),
                         builder: (context, maxWeekSnap) {
                           final maxWeek = maxWeekSnap.data ?? 30;
+                          
+                          // GÜVENLİK 1: Hafta listesi asla boş kalmasın (en az 1 hafta olsun)
+                          final safeMaxWeek = maxWeek > 0 ? maxWeek : 1;
                           final weeks = <int>[
-                            for (var i = 1; i <= maxWeek; i++) i,
+                            for (var i = 1; i <= safeMaxWeek; i++) i,
                           ];
 
-                          if (_week == null && maxWeek > 0) {
+                          // GÜVENLİK 2: Eğer hafızadaki _week yeni listede yoksa, güvenli olarak ilk haftayı baz al.
+                          final displayWeek = weeks.contains(_week) ? _week : weeks.first;
+
+                          // State'i de güvenli haftayla güncelle ki alt taraf da ona göre veri çeksin
+                          if (_week != displayWeek) {
                             WidgetsBinding.instance.addPostFrameCallback((_) {
-                              if (mounted) setState(() => _week = 1);
+                              if (mounted) setState(() => _week = displayWeek);
                             });
                           }
 
                           return StreamBuilder<List<MatchModel>>(
-                            stream: _week == null || _seasonId == null
+                            stream: displayWeek == null || _seasonId == null
                                 ? Stream.empty()
                                 : _matchService.watchFixtureMatches(
                                     _leagueId!,
-                                    _week!,
+                                    displayWeek, // _week yerine güvenli olan displayWeek kullanılıyor
                                     groupId: selectedGroupId,
                                   ),
                             builder: (context, matchesSnap) {
@@ -213,40 +220,26 @@ class _FixtureScreenState extends State<FixtureScreen> {
 
                               final matches = (matchesSnap.data ?? [])
                                 ..sort((a, b) {
-                                  // Önce tarihe göre sırala (2026-04-18, 2026-04-19 gibi)
-                                  int dateComp = (a.matchDate ?? '').compareTo(
-                                    b.matchDate ?? '',
-                                  );
+                                  int dateComp = (a.matchDate ?? '').compareTo(b.matchDate ?? '');
                                   if (dateComp != 0) return dateComp;
-
-                                  // Eğer tarihler aynıysa, saate göre sırala (18:00, 19:00 gibi)
-                                  return (a.matchTime ?? '').compareTo(
-                                    b.matchTime ?? '',
-                                  );
+                                  return (a.matchTime ?? '').compareTo(b.matchTime ?? '');
                                 });
 
                               return Column(
                                 children: [
                                   Container(
                                     color: bgDark,
-                                    padding: const EdgeInsets.fromLTRB(
-                                      16,
-                                      8,
-                                      16,
-                                      0,
-                                    ),
+                                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                                     child: Column(
                                       children: [
                                         _buildDropdown(
                                           'Turnuva Seçin',
                                           _leagueId,
                                           leagues
-                                              .map(
-                                                (l) => DropdownMenuItem(
-                                                  value: l.id,
-                                                  child: Text(l.name),
-                                                ),
-                                              )
+                                              .map((l) => DropdownMenuItem(
+                                                    value: l.id,
+                                                    child: Text(l.name),
+                                                  ))
                                               .toList(),
                                           (v) => setState(() {
                                             _leagueId = v;
@@ -260,12 +253,10 @@ class _FixtureScreenState extends State<FixtureScreen> {
                                           'Sezon Seçin',
                                           _seasonId,
                                           seasons
-                                              .map(
-                                                (s) => DropdownMenuItem(
-                                                  value: s.id,
-                                                  child: Text(s.name),
-                                                ),
-                                              )
+                                              .map((s) => DropdownMenuItem(
+                                                    value: s.id,
+                                                    child: Text(s.name),
+                                                  ))
                                               .toList(),
                                           (v) => setState(() {
                                             _seasonId = v;
@@ -288,43 +279,34 @@ class _FixtureScreenState extends State<FixtureScreen> {
                                                   ),
                                                   ...groups.indexed.map((e) {
                                                     final g = e.$2;
-                                                    final label =
-                                                        groupNameById[g.id] ??
-                                                        '';
+                                                    final label = groupNameById[g.id] ?? '';
                                                     return DropdownMenuItem(
                                                       value: g.id,
                                                       child: Text(label),
                                                     );
                                                   }),
                                                 ],
-                                                (v) => setState(
-                                                  () => _groupId = v,
-                                                ),
-                                                key: ValueKey(
-                                                  'group_$_seasonId',
-                                                ),
+                                                // GÜVENLİK 3: Grup değiştiğinde hafızadaki haftayı sıfırla!
+                                                (v) => setState(() {
+                                                  _groupId = v;
+                                                  _week = null; 
+                                                }),
+                                                key: ValueKey('group_$_seasonId'),
                                               ),
                                             ),
                                             const SizedBox(width: 12),
                                             Expanded(
                                               child: _buildDropdown(
                                                 'Hafta Seçin',
-                                                _week,
+                                                displayWeek, // Hata veren _week yerine korumalı değişkeni koyduk
                                                 weeks
-                                                    .map(
-                                                      (w) => DropdownMenuItem(
-                                                        value: w,
-                                                        child: Text(
-                                                          '$w. Hafta',
-                                                        ),
-                                                      ),
-                                                    )
+                                                    .map((w) => DropdownMenuItem(
+                                                          value: w,
+                                                          child: Text('$w. Hafta'),
+                                                        ))
                                                     .toList(),
-                                                (v) =>
-                                                    setState(() => _week = v),
-                                                key: ValueKey(
-                                                  'week_$_seasonId',
-                                                ),
+                                                (v) => setState(() => _week = v),
+                                                key: ValueKey('week_$_seasonId'),
                                               ),
                                             ),
                                           ],
@@ -372,6 +354,7 @@ class _FixtureScreenState extends State<FixtureScreen> {
                                               ),
                                               cardColor: cardBg,
                                               outlineColor: outline,
+                                              onDataChanged: () => setState(() {}),
                                             ),
                                     ),
                                   ),
@@ -445,6 +428,7 @@ class _FixtureList extends StatelessWidget {
     required this.cardColor,
     required this.outlineColor,
     required this.isAdmin,
+    required this.onDataChanged,
   });
 
   final List<MatchModel> matches;
@@ -457,6 +441,7 @@ class _FixtureList extends StatelessWidget {
   final Color cardColor;
   final Color outlineColor;
   final bool isAdmin;
+  final VoidCallback onDataChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -562,6 +547,7 @@ class _FixtureList extends StatelessWidget {
               teamNameById: teamNameById,
               isAdmin: isAdmin,
               onTap: () => onMatchTap(m),
+              onDataChanged: onDataChanged,
             ),
           ),
         );
@@ -578,6 +564,7 @@ class _MatchCard extends StatelessWidget {
     required this.teamNameById,
     required this.onTap,
     required this.isAdmin,
+    required this.onDataChanged,
   });
 
   static final IMatchService _matchService = ServiceLocator.matchService;
@@ -588,6 +575,7 @@ class _MatchCard extends StatelessWidget {
   final Map<String, String> teamNameById;
   final VoidCallback onTap;
   final bool isAdmin;
+  final VoidCallback onDataChanged;
 
   Widget _logo(String url) {
     return SizedBox(
@@ -879,7 +867,10 @@ class _MatchCard extends StatelessWidget {
                 awayScore: awayScore,
               );
 
-              if (c.mounted) Navigator.pop(c);
+              if (c.mounted) {
+                Navigator.pop(c);
+                onDataChanged();
+              }
             },
             child: const Text(
               'KAYDET',
@@ -1101,6 +1092,7 @@ class _MatchCard extends StatelessWidget {
                     dCtrl.dispose();
                     tCtrl.dispose();
                     Navigator.pop(c);
+                    onDataChanged();
                   }
                 } catch (e) {
                   if (!context.mounted) return;

@@ -10,4 +10,6 @@ Clean UI: Tasarımlar şeffaf, modern ve tutarlı olmalı; "Batangas" fontu ve "
 
 Interface Driven Development: Servisler önce 'abstract class' (interface) olarak tanımlanmalı, somut implementasyonlar (Firebase/Supabase) bu arayüzü türetmelidir.
 
+Build Onayı: Her yapılan kod değişikliğinden sonra uygulamanın sorunsuz bir şekilde derlendiğinden emin olmak için flutter build kontrolü yapmalı ve başarılı build onayını (sıfır hata) vermelisin.
+
 Raporlama Dili: Asistanın raporları ve açıklamaları her zaman Türkçe olmalı.

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../tournament/models/league_extras.dart';
 import '../models/match.dart';
+import '../models/match_media.dart';
 import '../../team/models/team.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../../core/services/app_session.dart';
@@ -81,11 +81,7 @@ class _TeamInfo extends StatelessWidget {
             fontWeight: FontWeight.w700,
             fontSize: 18,
             shadows: const [
-              Shadow(
-                color: Colors.black,
-                blurRadius: 10,
-                offset: Offset(0, 2),
-              ),
+              Shadow(color: Colors.black, blurRadius: 10, offset: Offset(0, 2)),
             ],
           ),
         ),
@@ -99,10 +95,12 @@ class _TeamInfo extends StatelessWidget {
 class MatchDetailsScreen extends StatefulWidget {
   final MatchModel match;
   final bool isAdmin;
+  final int initialTabIndex;
   const MatchDetailsScreen({
     super.key,
     required this.match,
     this.isAdmin = false,
+    this.initialTabIndex = 0,
   });
 
   @override
@@ -120,10 +118,18 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 4, vsync: this, initialIndex: widget.initialTabIndex);
     _tabController.addListener(() {
       if (mounted) setState(() {});
     });
+  }
+
+  int _refreshKey = 0;
+
+  void _triggerRefresh() {
+    if (mounted) {
+      setState(() => _refreshKey++);
+    }
   }
 
   @override
@@ -138,7 +144,8 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     if (lower.contains('permission-denied')) {
       return 'Yetki hatası. Giriş yapıldı mı ve kullanıcı yetkisi doğru mu kontrol edin.\n\n$s';
     }
-    if (lower.contains('requires an index') || lower.contains('failed-precondition')) {
+    if (lower.contains('requires an index') ||
+        lower.contains('failed-precondition')) {
       return 'Sorgu için Firestore index gerekli olabilir.\n\n$s';
     }
     if (lower.contains('unavailable') || lower.contains('network')) {
@@ -174,7 +181,10 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     return '';
   }
 
-  Future<void> _openPitchLocation(BuildContext context, String rawLocation) async {
+  Future<void> _openPitchLocation(
+    BuildContext context,
+    String rawLocation,
+  ) async {
     if (rawLocation.isEmpty) return;
     final uri = Uri.tryParse(rawLocation);
     if (uri == null || uri.scheme.isEmpty) {
@@ -194,7 +204,10 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
         ).showSnackBar(const SnackBar(content: Text('Link açılamadı.')));
         return;
       }
-      final ok = await launchUrl(uri, mode: LaunchMode.externalNonBrowserApplication);
+      final ok = await launchUrl(
+        uri,
+        mode: LaunchMode.externalNonBrowserApplication,
+      );
       if (!ok) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
       }
@@ -254,14 +267,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
         key: const ValueKey('fab_highlights'),
         actions: [
           _SpeedDialAction(
-            label: 'Yayın Linki',
-            icon: Icons.videocam_rounded,
-            onTap: () => _openYoutubeLinkEditor(match),
-          ),
-          _SpeedDialAction(
             label: 'Medya Ekle',
             icon: Icons.perm_media_rounded,
-            onTap: () => _openHighlightMediaAdder(match),
+            onTap: () => _openHighlightMediaAdder(match, _triggerRefresh),
           ),
         ],
       );
@@ -335,84 +343,71 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                 ? 'Deplasman'
                 : (nameMap[m.awayTeamId] ?? '').trim();
 
-        return Scaffold(
-                extendBodyBehindAppBar: true,
-                appBar: AppBar(
-                  title: const Text(
-                    'Maç Detayı',
-                    style: TextStyle(fontWeight: FontWeight.w900),
-                  ),
-                  centerTitle: true,
-                  backgroundColor: Colors.transparent,
-                  surfaceTintColor: Colors.transparent,
-                  elevation: 0,
+            return Scaffold(
+              extendBodyBehindAppBar: true,
+              appBar: AppBar(
+                title: const Text(
+                  'Maç Detayı',
+                  style: TextStyle(fontWeight: FontWeight.w900),
                 ),
-                floatingActionButton:
-                    !isSuperAdmin ? null : _buildTabFab(match: m, tabIndex: _tabController.index),
-                body: Column(
-                  children: [
-                Stack(
-                  children: [
-                    Positioned.fill(
-                      child: Image.asset(
-                        'assets/anasayfa.jpg',
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                    Positioned.fill(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.3),
+                centerTitle: true,
+                backgroundColor: Colors.transparent,
+                surfaceTintColor: Colors.transparent,
+                elevation: 0,
+              ),
+              floatingActionButton: !isSuperAdmin
+                  ? null
+                  : _buildTabFab(match: m, tabIndex: _tabController.index),
+              body: Column(
+                children: [
+                  Stack(
+                    children: [
+                      Positioned.fill(
+                        child: Image.asset(
+                          'assets/anasayfa.jpg',
+                          fit: BoxFit.cover,
                         ),
                       ),
-                    ),
-                    Padding(
-                      padding: EdgeInsets.only(
-                        top: MediaQuery.of(context).padding.top + (kToolbarHeight - 16),
+                      Positioned.fill(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.3),
+                          ),
+                        ),
                       ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  child: _TeamInfo(
-                                    name: homeName,
-                                    logoUrl: homeLogo,
+                      Padding(
+                        padding: EdgeInsets.only(
+                          top:
+                              MediaQuery.of(context).padding.top +
+                              (kToolbarHeight - 16),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: _TeamInfo(
+                                      name: homeName,
+                                      logoUrl: homeLogo,
+                                    ),
                                   ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 8,
-                                  ),
-                                  child: Column(
-                                    children: [
-                                      Text(
-                                        "${m.homeScore} - ${m.awayScore}",
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.w900,
-                                          fontSize: 38,
-                                          shadows: [
-                                            Shadow(
-                                              color: Colors.black,
-                                              blurRadius: 10,
-                                              offset: Offset(0, 2),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      if (m.status == MatchStatus.live)
-                                        const Text(
-                                          "CANLI",
-                                          style: TextStyle(
-                                            color: Colors.amber,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 11,
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 8,
+                                    ),
+                                    child: Column(
+                                      children: [
+                                        Text(
+                                          "${m.homeScore} - ${m.awayScore}",
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w900,
+                                            fontSize: 38,
                                             shadows: [
                                               Shadow(
                                                 color: Colors.black,
@@ -422,48 +417,47 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                             ],
                                           ),
                                         ),
-                                    ],
+                                        if (m.status == MatchStatus.live)
+                                          const Text(
+                                            "CANLI",
+                                            style: TextStyle(
+                                              color: Colors.amber,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 11,
+                                              shadows: [
+                                                Shadow(
+                                                  color: Colors.black,
+                                                  blurRadius: 10,
+                                                  offset: Offset(0, 2),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                                Expanded(
-                                  child: _TeamInfo(
-                                    name: awayName,
-                                    logoUrl: awayLogo,
+                                  Expanded(
+                                    child: _TeamInfo(
+                                      name: awayName,
+                                      logoUrl: awayLogo,
+                                    ),
                                   ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 24),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(
-                                  Icons.access_time_filled_rounded,
-                                  size: 14,
-                                  color: Colors.white70,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  "${_formatDate(m.matchDate ?? '')}  |  ${m.matchTime}",
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                    shadows: [
-                                      Shadow(
-                                        color: Colors.black,
-                                        blurRadius: 10,
-                                        offset: Offset(0, 2),
-                                      ),
-                                    ],
+                                ],
+                              ),
+                              const SizedBox(height: 24),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.access_time_filled_rounded,
+                                    size: 14,
+                                    color: Colors.white70,
                                   ),
-                                ),
-                                if ((m.pitchName ?? '').isNotEmpty) ...[
-                                  const SizedBox(width: 12),
-                                  const Text(
-                                    "|",
-                                    style: TextStyle(
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    "${_formatDate(m.matchDate ?? '')}  |  ${m.matchTime}",
+                                    style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 11,
                                       fontWeight: FontWeight.w700,
@@ -476,128 +470,129 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                       ],
                                     ),
                                   ),
-                                  const SizedBox(width: 12),
-                                  const Icon(
-                                    Icons.location_on_rounded,
-                                    size: 14,
-                                    color: Colors.white70,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Flexible(
-                                    child: StreamBuilder<List<Pitch>>(
-                                      stream: _leagueService.watchPitches(),
-                                      builder: (context, pitchSnap) {
-                                        final pitchName = m.pitchName!.trim();
-                                        final pitchId = (m.pitchId ?? '').trim();
-                                        final pitches = pitchSnap.data ?? const <Pitch>[];
-                                        final location = _resolvePitchLocation(
-                                          pitches: pitches,
-                                          pitchId: pitchId,
-                                          pitchName: pitchName,
-                                        );
-
-                                        return InkWell(
-                                          onTap: location.isEmpty
-                                              ? null
-                                              : () => _openPitchLocation(context, location),
-                                          child: Text(
-                                            pitchName,
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w700,
-                                              shadows: [
-                                                Shadow(
-                                                  color: Colors.black,
-                                                  blurRadius: 10,
-                                                  offset: Offset(0, 2),
-                                                ),
-                                              ],
-                                            ),
-                                            overflow: TextOverflow.ellipsis,
+                                  if ((m.pitchName ?? '').isNotEmpty) ...[
+                                    const SizedBox(width: 12),
+                                    const Text(
+                                      "|",
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        shadows: [
+                                          Shadow(
+                                            color: Colors.black,
+                                            blurRadius: 10,
+                                            offset: Offset(0, 2),
                                           ),
-                                        );
-                                      },
+                                        ],
+                                      ),
                                     ),
-                                  ),
+                                    const SizedBox(width: 12),
+                                    const Icon(
+                                      Icons.location_on_rounded,
+                                      size: 14,
+                                      color: Colors.white70,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Flexible(
+                                      child: StreamBuilder<List<Pitch>>(
+                                        stream: _leagueService.watchPitches(),
+                                        builder: (context, pitchSnap) {
+                                          final pitchName = m.pitchName!.trim();
+                                          final pitchId = (m.pitchId ?? '')
+                                              .trim();
+                                          final pitches =
+                                              pitchSnap.data ?? const <Pitch>[];
+                                          final location =
+                                              _resolvePitchLocation(
+                                                pitches: pitches,
+                                                pitchId: pitchId,
+                                                pitchName: pitchName,
+                                              );
+
+                                          return InkWell(
+                                            onTap: location.isEmpty
+                                                ? null
+                                                : () => _openPitchLocation(
+                                                    context,
+                                                    location,
+                                                  ),
+                                            child: Text(
+                                              pitchName,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w700,
+                                                shadows: [
+                                                  Shadow(
+                                                    color: Colors.black,
+                                                    blurRadius: 10,
+                                                    offset: Offset(0, 2),
+                                                  ),
+                                                ],
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ],
                                 ],
-                              ],
-                            ),
-                          ],
+                              ),
+                            ],
+                          ),
                         ),
                       ),
+                    ],
+                  ),
+                  TabBar(
+                    controller: _tabController,
+                    labelStyle: TextStyle(
+                      fontFamily: 'Batangas',
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
                     ),
-                  ],
-                ),
-                TabBar(
-                  controller: _tabController,
-                  labelStyle: TextStyle(
-                    fontFamily: 'Batangas',
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
+                    unselectedLabelStyle: TextStyle(
+                      fontFamily: 'Batangas',
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                    tabs: [
+                      Tab(text: 'Detay'),
+                      Tab(text: 'Kadrolar'),
+                      Tab(text: 'Önemli Anlar'),
+                      Tab(text: 'Diziliş'),
+                    ],
                   ),
-                  unselectedLabelStyle: TextStyle(
-                    fontFamily: 'Batangas',
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                  tabs: [
-                    Tab(text: 'Detay'),
-                    Tab(text: 'Kadrolar'),
-                    Tab(text: 'Önemli Anlar'),
-                    Tab(text: 'Diziliş'),
-                  ],
-                ),
-                Expanded(
-                  child: Container(
-                    color: Theme.of(context).scaffoldBackgroundColor,
-                    child: TabBarView(
-                      controller: _tabController,
-                      children: [
-                        _DetailTab(match: m),
-                        _LineupTab(homeName: homeName, awayName: awayName),
-                        _HighlightsTab(match: m),
-                        FormationTab.fromMatch(
-                          match: m,
-                          isTeamManager: isAdminAccess,
-                        ),
-                      ],
+                  Expanded(
+                    child: Container(
+                      color: Theme.of(context).scaffoldBackgroundColor,
+                      child: TabBarView(
+                        controller: _tabController,
+                        children: [
+                          _DetailTab(match: m),
+                          _LineupTab(homeName: homeName, awayName: awayName),
+                          _HighlightsTab(
+                            key: ValueKey(_refreshKey),
+                            match: m,
+                            isSuperAdmin: isSuperAdmin,
+                            onDataChanged: _triggerRefresh,
+                          ),
+                          FormationTab.fromMatch(
+                            match: m,
+                            isTeamManager: isAdminAccess,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
-          );
+                ],
+              ),
+            );
           },
         );
       },
-    );
-  }
-
-  void _openYoutubeLinkEditor(MatchModel m) {
-    final ctrl = TextEditingController(text: m.youtubeUrl);
-    showDialog(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: const Text('YouTube URL'),
-        content: TextField(controller: ctrl),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(c),
-            child: const Text('İptal'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              await _matchService.updateMatchYoutubeUrl(
-                matchId: m.id,
-                youtubeUrl: ctrl.text,
-              );
-              Navigator.pop(c);
-            },
-            child: const Text('KAYDET'),
-          ),
-        ],
-      ),
     );
   }
 
@@ -637,86 +632,223 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     );
   }
 
-  Future<void> _openHighlightMediaAdder(MatchModel m) async {
-    final isHome = await showModalBottomSheet<bool>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (c) {
-        return SafeArea(
-          child: Container(
-            margin: const EdgeInsets.all(12),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Theme.of(c).colorScheme.surface,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.home_rounded),
-                  title: const Text('Ev Sahibi Fotoğrafı'),
-                  onTap: () => Navigator.pop(c, true),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.flight_takeoff_rounded),
-                  title: const Text('Deplasman Fotoğrafı'),
-                  onTap: () => Navigator.pop(c, false),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-    if (isHome == null) return;
-    if (!mounted) return;
-
-    final picked = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 85,
-    );
-    if (picked == null || !mounted) return;
-
+  Future<void> _openHighlightMediaAdder(MatchModel matchModel, VoidCallback onSuccess) async {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (c) => const AlertDialog(
-        content: SizedBox(
-          height: 64,
-          child: Center(child: CircularProgressIndicator()),
+      builder: (c) => _MediaAdderDialog(match: matchModel, onSuccess: onSuccess),
+    );
+  }
+}
+
+class _MediaAdderDialog extends StatefulWidget {
+  final MatchModel match;
+  final VoidCallback onSuccess;
+  const _MediaAdderDialog({required this.match, required this.onSuccess});
+
+  @override
+  State<_MediaAdderDialog> createState() => _MediaAdderDialogState();
+}
+
+class _MediaAdderDialogState extends State<_MediaAdderDialog> {
+  String _selectedType = 'Maç Yayın Linki';
+  final _urlCtrl = TextEditingController();
+  final _descCtrl = TextEditingController();
+  bool _isHomeTeam = true;
+  File? _pickedFile;
+  bool _isUploading = false;
+
+  final List<String> _types = [
+    'Maç Yayın Linki',
+    'Takım Fotosu',
+    'Önemli An',
+    'Maçın Adamı',
+    'Diğer',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final m = widget.match;
+    return AlertDialog(
+      title: const Text('Medya Ekle'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            DropdownButtonFormField<String>(
+              value: _selectedType,
+              items: _types
+                  .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                  .toList(),
+              onChanged: (v) {
+                if (v != null) {
+                  setState(() {
+                    _selectedType = v;
+                    _pickedFile = null;
+                  });
+                }
+              },
+              decoration: const InputDecoration(labelText: 'Medya Türü'),
+            ),
+            const SizedBox(height: 16),
+            if (_selectedType == 'Maç Yayın Linki')
+              TextField(
+                controller: _urlCtrl,
+                decoration: const InputDecoration(labelText: 'YouTube URL'),
+              )
+            else ...[
+              if (_pickedFile != null)
+                Image.file(_pickedFile!, height: 100, fit: BoxFit.cover),
+              ElevatedButton.icon(
+                onPressed: () async {
+                  final picked = await ImagePicker().pickImage(
+                    source: ImageSource.gallery,
+                    imageQuality: 85,
+                  );
+                  if (picked != null) {
+                    setState(() => _pickedFile = File(picked.path));
+                  }
+                },
+                icon: const Icon(Icons.image),
+                label: const Text('Galeriden Seç'),
+              ),
+            ],
+            const SizedBox(height: 16),
+            if (_selectedType == 'Takım Fotosu')
+              Row(
+                children: [
+                  Expanded(
+                    child: RadioListTile<bool>(
+                      title: const Text(
+                        'Ev Sahibi',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                      value: true,
+                      groupValue: _isHomeTeam,
+                      onChanged: (v) => setState(() => _isHomeTeam = v!),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                  Expanded(
+                    child: RadioListTile<bool>(
+                      title: const Text(
+                        'Deplasman',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                      value: false,
+                      groupValue: _isHomeTeam,
+                      onChanged: (v) => setState(() => _isHomeTeam = v!),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                ],
+              ),
+            TextField(
+              controller: _descCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Açıklama (Opsiyonel)',
+              ),
+              maxLines: 2,
+            ),
+            if (_isUploading) ...[
+              const SizedBox(height: 16),
+              const CircularProgressIndicator(),
+            ],
+          ],
         ),
       ),
+      actions: [
+        TextButton(
+          onPressed: _isUploading ? null : () => Navigator.pop(context),
+          child: const Text('İptal'),
+        ),
+        ElevatedButton(
+          onPressed: _isUploading ? null : _save,
+          child: const Text('KAYDET'),
+        ),
+      ],
     );
+  }
 
-    try {
-      final url = await ImgBBUploadService().uploadImage(File(picked.path));
-      if (url == null || url.trim().isEmpty) {
-        if (mounted) Navigator.pop(context);
-        if (!mounted) return;
+  Future<void> _save() async {
+    final m = widget.match;
+    String finalUrl = '';
+
+    if (_selectedType == 'Maç Yayın Linki') {
+      finalUrl = _urlCtrl.text.trim();
+      if (finalUrl.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Medya yüklenemedi.')),
+          const SnackBar(
+            content: Text('Lütfen geçerli bir yayın linki girin.'),
+          ),
         );
         return;
       }
+    } else {
+      if (_pickedFile == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Lütfen bir görsel seçin.')),
+        );
+        return;
+      }
+      setState(() => _isUploading = true);
+      try {
+        final uploadedUrl = await ImgBBUploadService().uploadImage(
+          _pickedFile!,
+        );
+        if (uploadedUrl == null) {
+          throw Exception('Görsel yüklenemedi.');
+        }
+        finalUrl = uploadedUrl;
+      } catch (e) {
+        setState(() => _isUploading = false);
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Yükleme hatası: $e')));
+        }
+        return;
+      }
+    }
 
-      await _matchService.updateMatchHighlightPhotoUrl(
-        matchId: m.id,
-        isHome: isHome,
-        photoUrl: url,
-      );
+    final media = MatchMediaModel(
+      id: '',
+      matchId: m.id,
+      mediaType: _selectedType,
+      url: finalUrl,
+      description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
+      teamId: _selectedType == 'Takım Fotosu'
+          ? (_isHomeTeam ? m.homeTeamId : m.awayTeamId)
+          : null,
+      createdAt: DateTime.now(),
+    );
 
-      if (mounted) Navigator.pop(context);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Fotoğraf kaydedildi.')),
-      );
-    } catch (_) {
-      if (mounted) Navigator.pop(context);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Medya yüklenemedi.')),
-      );
+    try {
+      await ServiceLocator.matchService.addMatchMedia(media);
+
+      if (mounted) {
+        Navigator.pop(context);
+        widget.onSuccess();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Medya başarıyla eklendi.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Kayıt Hatası: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted && _isUploading) {
+        setState(() => _isUploading = false);
+      }
     }
   }
 }
@@ -736,10 +868,7 @@ class _SpeedDialAction {
 class _SpeedDialFab extends StatefulWidget {
   final List<_SpeedDialAction> actions;
 
-  const _SpeedDialFab({
-    super.key,
-    required this.actions,
-  });
+  const _SpeedDialFab({super.key, required this.actions});
 
   @override
   State<_SpeedDialFab> createState() => _SpeedDialFabState();
@@ -844,92 +973,183 @@ class _SpeedDialFabState extends State<_SpeedDialFab> {
 
 // --- TAB İÇERİKLERİ ---
 
+// MatchDetailsScreen içindeki TabBarView kısmında paslıyoruz:
+// _HighlightsTab(match: m, isSuperAdmin: isSuperAdmin),
+
 class _HighlightsTab extends StatelessWidget {
   final MatchModel match;
-  const _HighlightsTab({required this.match});
+  final bool isSuperAdmin; // Yeni eklenen yetki kontrolü
+  final VoidCallback onDataChanged;
+  const _HighlightsTab({
+    super.key,
+    required this.match,
+    required this.isSuperAdmin,
+    required this.onDataChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final homePhoto = (match.homeHighlightPhotoUrl ?? '').trim();
-    final awayPhoto = (match.awayHighlightPhotoUrl ?? '').trim();
-    final hasPhoto = homePhoto.isNotEmpty || awayPhoto.isNotEmpty;
+    return StreamBuilder<List<MatchMediaModel>>(
+      stream: ServiceLocator.matchService.watchMatchMedia(match.id),
+      builder: (context, snap) {
+        if (snap.hasError) return Center(child: Text('Hata: ${snap.error}'));
+        if (!snap.hasData)
+          return const Center(child: CircularProgressIndicator());
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        if (match.youtubeUrl != null && match.youtubeUrl!.isNotEmpty)
-          _YoutubePlayerSection(url: match.youtubeUrl!),
-        if (match.youtubeUrl != null && match.youtubeUrl!.isNotEmpty)
-          const SizedBox(height: 16),
-        const Text(
-          'Maç Fotoğrafları',
-          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+        final mediaList = snap.data ?? [];
+        if (mediaList.isEmpty)
+          return const Center(child: Text('Henüz medya eklenmedi.'));
+
+        return ListView.separated(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          itemCount: mediaList.length,
+          separatorBuilder: (c, i) =>
+              const Divider(color: Colors.white10, height: 1, indent: 72),
+          itemBuilder: (context, index) =>
+              _buildCompactMediaItem(context, mediaList[index]),
+        );
+      },
+    );
+  }
+
+  Widget _buildCompactMediaItem(BuildContext context, MatchMediaModel media) {
+    final bool isVideo = media.mediaType == 'Maç Yayın Linki';
+
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: isVideo
+              ? Colors.red.withOpacity(0.1)
+              : Colors.blue.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
         ),
-        const SizedBox(height: 10),
-        if (!hasPhoto)
-          const Text(
-            'Henüz fotoğraf eklenmedi.',
-            style: TextStyle(color: Colors.white70),
-          ),
-        if (homePhoto.isNotEmpty) ...[
-          ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: WebSafeImage(
-              url: homePhoto,
-              width: double.infinity,
-              height: 220,
-              fit: BoxFit.cover,
-              isCircle: false,
-              fallbackIconSize: 32,
-            ),
-          ),
-          const SizedBox(height: 12),
-        ],
-        if (awayPhoto.isNotEmpty) ...[
-          ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: WebSafeImage(
-              url: awayPhoto,
-              width: double.infinity,
-              height: 220,
-              fit: BoxFit.cover,
-              isCircle: false,
-              fallbackIconSize: 32,
-            ),
-          ),
-          const SizedBox(height: 12),
-        ],
-      ],
+        child: Icon(
+          isVideo ? Icons.play_arrow_rounded : Icons.camera_alt_rounded,
+          color: isVideo ? Colors.redAccent : Colors.blueAccent,
+        ),
+      ),
+      title: Text(
+        media.mediaType,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
+          fontSize: 14,
+        ),
+      ),
+      subtitle: Text(
+        media.description ??
+            (isVideo ? 'Maç videosunu izle' : 'Görseli görüntüle'),
+        style: const TextStyle(color: Colors.white60, fontSize: 12),
+      ),
+      // Sadece Super Admin için Silme Butonu
+      trailing: isSuperAdmin
+          ? IconButton(
+              icon: const Icon(
+                Icons.delete_outline,
+                color: Colors.redAccent,
+                size: 22,
+              ),
+              onPressed: () => _confirmDelete(context, media),
+            )
+          : const Icon(Icons.chevron_right, color: Colors.white24, size: 16),
+      onTap: () => _openFullScreenMedia(context, media),
     );
   }
+
+  Future<void> _confirmDelete(
+    BuildContext context,
+    MatchMediaModel media,
+  ) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Medyayı Sil'),
+        content: const Text('Bu medya kalıcı olarak silinecek. Emin misiniz?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('İptal'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Sil'),
+          ),
+        ],
+      ),
+    );
+
+    if (ok == true) {
+      await ServiceLocator.matchService.deleteMatchMedia(media.id);
+
+      if (context.mounted) {
+        onDataChanged();
+      }
+    }
+  }
+
+  // _openFullScreenMedia metodu burada devam eder...
 }
 
-class _YoutubePlayerSection extends StatefulWidget {
-  final String url;
-  const _YoutubePlayerSection({required this.url});
-  @override
-  State<_YoutubePlayerSection> createState() => _YoutubePlayerSectionState();
-}
-
-class _YoutubePlayerSectionState extends State<_YoutubePlayerSection> {
-  late YoutubePlayerController _controller;
-  @override
-  void initState() {
-    super.initState();
-    final id = YoutubePlayerController.convertUrlToId(widget.url);
-    _controller = YoutubePlayerController.fromVideoId(
-      videoId: id ?? '',
-      params: const YoutubePlayerParams(showFullscreenButton: true),
-    );
+// TAM EKRAN GÖRÜNTÜLEYİCİ (Metot artık sınıf içinde tanımlı)
+Future<void> _openFullScreenMedia(BuildContext context, MatchMediaModel media) async {
+  if (media.mediaType == 'Maç Yayın Linki') {
+    final uri = Uri.parse(media.url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Video linki açılamadı.')),
+        );
+      }
+    }
+    return;
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: YoutubePlayer(controller: _controller),
-    );
-  }
+  if (!context.mounted) return;
+
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (_) => Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(
+          backgroundColor: Colors.black,
+          iconTheme: const IconThemeData(color: Colors.white),
+          actions: [
+            // PAYLAŞ BUTONU
+            IconButton(
+              icon: const Icon(Icons.share_outlined),
+              onPressed: () {
+                // Not: share_plus paketi yüklü olmalıdır.
+                // Share.share('Maç Detayı: ${media.url}');
+              },
+            ),
+            // İNDİR BUTONU
+            IconButton(
+              icon: const Icon(Icons.download_rounded),
+              onPressed: () async {
+                final uri = Uri.parse(media.url);
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              },
+            ),
+          ],
+        ),
+        body: Center(
+          child: InteractiveViewer(
+            child: WebSafeImage(
+              url: media.url,
+              width: double.infinity,
+              fit: BoxFit.contain,
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 class _LineupTab extends StatelessWidget {
@@ -955,7 +1175,10 @@ class _LineupTab extends StatelessWidget {
         const SizedBox(height: 12),
         Text(
           'Kadro verileri match_rosters tablosuna taşındığı için bu ekran yeniden düzenlenecek.',
-          style: TextStyle(color: cs.onSurfaceVariant, fontWeight: FontWeight.w600),
+          style: TextStyle(
+            color: cs.onSurfaceVariant,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ],
     );
@@ -972,7 +1195,8 @@ class _DetailTab extends StatelessWidget {
     if (lower.contains('permission-denied')) {
       return 'Yetki hatası. Giriş yapıldı mı ve kullanıcı yetkisi doğru mu kontrol edin.\n\n$s';
     }
-    if (lower.contains('requires an index') || lower.contains('failed-precondition')) {
+    if (lower.contains('requires an index') ||
+        lower.contains('failed-precondition')) {
       return 'Sorgu için Firestore index gerekli olabilir.\n\n$s';
     }
     if (lower.contains('unavailable') || lower.contains('network')) {
@@ -985,7 +1209,9 @@ class _DetailTab extends StatelessWidget {
     if (v == null) return 0;
     if (v is num) return v.toInt();
     final s = v.toString().replaceAll('\u0000', '').trim();
-    return int.tryParse(s) ?? double.tryParse(s.replaceAll(',', '.'))?.toInt() ?? 0;
+    return int.tryParse(s) ??
+        double.tryParse(s.replaceAll(',', '.'))?.toInt() ??
+        0;
   }
 
   String _readString(dynamic v) => (v ?? '').toString().trim();
@@ -1047,15 +1273,16 @@ class _DetailTab extends StatelessWidget {
         final raw = snap.data ?? const <Map<String, dynamic>>[];
 
         final systemStory = _fallbackSystemStory();
-        final List<Map<String, dynamic>> normalized =
-            raw.map((e) => _asMap(e)).toList();
+        final List<Map<String, dynamic>> normalized = raw
+            .map((e) => _asMap(e))
+            .toList();
 
         String pickType(Map<String, dynamic> e) {
           return _readString(e['type']).isNotEmpty
               ? _readString(e['type'])
               : _readString(e['eventType']).isNotEmpty
-                  ? _readString(e['eventType'])
-                  : _readString(e['event_type']);
+              ? _readString(e['eventType'])
+              : _readString(e['event_type']);
         }
 
         String pickTitle(Map<String, dynamic> e) {
@@ -1129,11 +1356,16 @@ class _DetailTab extends StatelessWidget {
             final teamId = pickTeamId(e);
             final system = isSystem(e);
 
-            final subIn =
-                _readString(e['subInPlayerName']).isNotEmpty ? _readString(e['subInPlayerName']) : _readString(e['sub_in_player_name']);
-            final assist =
-                _readString(e['assistPlayerName']).isNotEmpty ? _readString(e['assistPlayerName']) : _readString(e['assist_player_name']);
-            final isOwnGoal = (e['isOwnGoal'] as bool?) ?? (e['is_own_goal'] as bool?) ?? false;
+            final subIn = _readString(e['subInPlayerName']).isNotEmpty
+                ? _readString(e['subInPlayerName'])
+                : _readString(e['sub_in_player_name']);
+            final assist = _readString(e['assistPlayerName']).isNotEmpty
+                ? _readString(e['assistPlayerName'])
+                : _readString(e['assist_player_name']);
+            final isOwnGoal =
+                (e['isOwnGoal'] as bool?) ??
+                (e['is_own_goal'] as bool?) ??
+                false;
 
             String displayTitle() {
               if (type == 'substitution') {
@@ -1185,7 +1417,8 @@ class _DetailEventTile extends StatelessWidget {
 
   Widget _systemIcon(String title) {
     final t = title.toLowerCase();
-    if (t.contains('başla')) return const Icon(Icons.play_arrow_rounded, size: 18);
+    if (t.contains('başla'))
+      return const Icon(Icons.play_arrow_rounded, size: 18);
     if (t.contains('devre') || t.contains('yarı')) {
       return const Icon(Icons.timelapse_rounded, size: 18);
     }
@@ -1230,7 +1463,10 @@ class _DetailEventTile extends StatelessWidget {
       child: system
           ? Center(
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white10,
                   borderRadius: BorderRadius.circular(999),
@@ -1257,8 +1493,9 @@ class _DetailEventTile extends StatelessWidget {
               ),
             )
           : Row(
-              mainAxisAlignment:
-                  isHome ? MainAxisAlignment.start : MainAxisAlignment.end,
+              mainAxisAlignment: isHome
+                  ? MainAxisAlignment.start
+                  : MainAxisAlignment.end,
               children: isHome
                   ? [
                       Text(

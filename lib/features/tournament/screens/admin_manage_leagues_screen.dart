@@ -101,10 +101,10 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
           await _sb.from('leagues').update({'logo_url': url}).eq('id', leagueId);
         }
         if (!mounted) return;
-        Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Turnuva oluşturuldu.')),
         );
+        Navigator.of(context).pop();
       } catch (e) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -318,51 +318,58 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
       return n.toString();
     }
 
-    Future<void> submit(void Function(void Function()) setSheetState) async {
-      final name = nameController.text.trim();
-      if (name.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Turnuva adı zorunludur.')),
-        );
-        return;
-      }
-      final access = accessCodeController.text.trim();
-      if (isPrivate && access.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Gizli turnuva için erişim kodu zorunludur.')),
-        );
-        return;
-      }
+Future<void> submit(void Function(void Function()) setSheetState) async {
+  final name = nameController.text.trim();
+  if (name.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Turnuva adı zorunludur.')),
+    );
+    return;
+  }
+  final access = accessCodeController.text.trim();
+  if (isPrivate && access.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Gizli turnuva için erişim kodu zorunludur.')),
+    );
+    return;
+  }
 
-      setSheetState(() => saving = true);
-      try {
-        final update = <String, dynamic>{'name': name};
-        if (removedLogo) update['logo_url'] = null;
-        update['is_private'] = isPrivate;
-        update['access_code'] = isPrivate ? access : null;
+  setSheetState(() => saving = true);
+  
+  // Navigator ve Messenger'ı en başta güvenli bir yere alalım
+  final navigator = Navigator.of(context);
+  final messenger = ScaffoldMessenger.of(context);
 
-        await _sb.from('leagues').update(update).eq('id', league.id);
+  try {
+    final update = <String, dynamic>{'name': name};
+    if (removedLogo) update['logo_url'] = null;
+    update['is_private'] = isPrivate;
+    update['access_code'] = isPrivate ? access : null;
 
-        if (!removedLogo && selectedLogo != null) {
-          final url = await _uploadLeagueLogo(
-            file: selectedLogo!,
-          );
-          await _sb.from('leagues').update({'logo_url': url}).eq('id', league.id);
-        }
-        if (!mounted) return;
-        Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Güncellendi.')),
-        );
-      } catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Hata: $e')),
-        );
-      } finally {
-        if (mounted) setSheetState(() => saving = false);
-      }
+    await _sb.from('leagues').update(update).eq('id', league.id);
+
+    if (!removedLogo && selectedLogo != null) {
+      final url = await _uploadLeagueLogo(file: selectedLogo!);
+      await _sb.from('leagues').update({'logo_url': url}).eq('id', league.id);
     }
+
+    if (!mounted) return;
+    
+    messenger.showSnackBar(const SnackBar(content: Text('Güncellendi.')));
+    
+    // BURASI KRİTİK: Başarılıysa doğrudan kapatıyoruz.
+    // finally bloğunda tekrar setSheetState çalışmaması için navigator.pop'u burada yapıyoruz.
+    navigator.pop(); 
+    
+  } catch (e) {
+    if (!mounted) return;
+    messenger.showSnackBar(SnackBar(content: Text('Hata: $e')));
+    
+    // Sadece hata durumunda state'i güncelle ki kullanıcı tekrar deneyebilsin.
+    setSheetState(() => saving = false);
+  } 
+  // Artık finally bloğuna ihtiyacımız yok, çünkü başarıda kapandı, hatada saving = false yapıldı.
+}
 
     await showModalBottomSheet<void>(
       context: context,
@@ -1036,6 +1043,11 @@ class _EditLeagueScreenState extends State<EditLeagueScreen> {
 
     FocusManager.instance.primaryFocus?.unfocus();
     setState(() => _isLoading = true);
+    
+    // Değişiklik: Context'i değişkene alıp Navigator.pop() için kullanacağız.
+    final nav = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    
     try {
       String normalizePhoneToRaw10(String input) {
         final digits = input.replaceAll(RegExp(r'\D'), '');
@@ -1089,13 +1101,17 @@ class _EditLeagueScreenState extends State<EditLeagueScreen> {
       );
 
       await ServiceLocator.leagueService.updateLeague(updatedLeague);
+      
       if (!mounted) return;
-      Navigator.pop(context, true);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Turnuva başarıyla güncellendi.')),
+      );
+      
+      // Sayfa kapatılacağı için setState ile loading durumunu değiştirmeye gerek yok
+      nav.pop(true);
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Hata: $e')));
-    } finally {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text('Hata: $e')));
       setState(() => _isLoading = false);
     }
   }
