@@ -316,6 +316,50 @@ class SupabaseMatchService implements IMatchService {
   }
 
   @override
+  Stream<List<MatchRosterModel>> watchMatchRosters(String matchId, String teamId) {
+    return _supabase
+        .from('match_rosters')
+        .stream(primaryKey: ['id'])
+        .map((rows) {
+          final filtered = rows.where((r) => r['match_id'] == matchId && r['team_id'] == teamId);
+          return filtered.map((r) => MatchRosterModel.fromMap(r, r['id'] as String)).toList();
+        });
+  }
+
+  @override
+  Future<void> updateMatchRoster({
+    required String matchId,
+    required String leagueId,
+    required String teamId,
+    required bool isHome,
+    required List<MatchRosterModel> rosters,
+  }) async {
+    // 1. Delete existing for this match and team
+    await _supabase
+        .from('match_rosters')
+        .delete()
+        .eq('match_id', matchId)
+        .eq('team_id', teamId);
+
+    // 2. Insert new ones
+    if (rosters.isEmpty) return;
+
+    final List<Map<String, dynamic>> toInsert = rosters.map((r) {
+      return {
+        'match_id': matchId,
+        'league_id': leagueId,
+        'team_id': teamId,
+        'player_id': r.playerId,
+        'is_home': isHome,
+        'is_starting': r.isStarting,
+        'jersey_number': r.jerseyNumber,
+      };
+    }).toList();
+
+    await _supabase.from('match_rosters').insert(toInsert);
+  }
+
+  @override
   Stream<List<PlayerStats>> watchPlayerStats({required String tournamentId}) {
     return _supabase
         .from('player_stats')

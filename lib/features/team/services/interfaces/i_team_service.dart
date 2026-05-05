@@ -23,6 +23,8 @@ abstract class ITeamService {
     String? caller,
   });
 
+  Future<List<PlayerModel>> getEligiblePlayers(String teamId, String seasonId, {String? caller});
+
   Stream<List<PlayerModel>> watchAllPlayers({String? caller});
 
   Future<void> upsertPlayerIdentity({

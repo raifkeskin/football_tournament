@@ -95,6 +95,15 @@ class FirebaseTeamService implements ITeamService {
   }
 
   @override
+  Future<List<PlayerModel>> getEligiblePlayers(String teamId, String seasonId, {String? caller}) async {
+    try {
+      return await _db.getPlayers(teamId, tournamentId: seasonId).first;
+    } catch (e) {
+      return [];
+    }
+  }
+
+  @override
   Stream<List<PlayerModel>> watchAllPlayers({String? caller}) {
     return _db.watchAllPlayers();
   }

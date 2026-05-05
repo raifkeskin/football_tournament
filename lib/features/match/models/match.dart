@@ -714,3 +714,53 @@ class PlayerModel {
     };
   }
 }
+
+class MatchRosterModel {
+  final String id;
+  final String matchId;
+  final String leagueId;
+  final String teamId;
+  final String playerId; // phone
+  final bool isHome;
+  final bool isStarting;
+  final String? jerseyNumber;
+  final PlayerModel? playerInfo;
+
+  const MatchRosterModel({
+    required this.id,
+    required this.matchId,
+    required this.leagueId,
+    required this.teamId,
+    required this.playerId,
+    required this.isHome,
+    required this.isStarting,
+    this.jerseyNumber,
+    this.playerInfo,
+  });
+
+  factory MatchRosterModel.fromMap(Map<String, dynamic> map, String id, {PlayerModel? playerInfo}) {
+    return MatchRosterModel(
+      id: id,
+      matchId: (map['match_id'] ?? '').toString(),
+      leagueId: (map['league_id'] ?? '').toString(),
+      teamId: (map['team_id'] ?? '').toString(),
+      playerId: (map['player_id'] ?? '').toString(),
+      isHome: map['is_home'] == true,
+      isStarting: map['is_starting'] == true,
+      jerseyNumber: map['jersey_number']?.toString(),
+      playerInfo: playerInfo,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'match_id': matchId,
+      'league_id': leagueId,
+      'team_id': teamId,
+      'player_id': playerId,
+      'is_home': isHome,
+      'is_starting': isStarting,
+      'jersey_number': jerseyNumber,
+    };
+  }
+}

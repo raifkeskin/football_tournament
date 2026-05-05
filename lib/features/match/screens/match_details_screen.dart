@@ -118,7 +118,11 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this, initialIndex: widget.initialTabIndex);
+    _tabController = TabController(
+      length: 4,
+      vsync: this,
+      initialIndex: widget.initialTabIndex,
+    );
     _tabController.addListener(() {
       if (mounted) setState(() {});
     });
@@ -571,7 +575,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                         controller: _tabController,
                         children: [
                           _DetailTab(match: m),
-                          
+
                           // İŞTE DEĞİŞİKLİK YAPILAN YER: YENİ _LineupTab BAĞLANTISI
                           _LineupTab(
                             match: m,
@@ -641,11 +645,15 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     );
   }
 
-  Future<void> _openHighlightMediaAdder(MatchModel matchModel, VoidCallback onSuccess) async {
+  Future<void> _openHighlightMediaAdder(
+    MatchModel matchModel,
+    VoidCallback onSuccess,
+  ) async {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (c) => _MediaAdderDialog(match: matchModel, onSuccess: onSuccess),
+      builder: (c) =>
+          _MediaAdderDialog(match: matchModel, onSuccess: onSuccess),
     );
   }
 }
@@ -1098,16 +1106,19 @@ class _HighlightsTab extends StatelessWidget {
   }
 }
 
-Future<void> _openFullScreenMedia(BuildContext context, MatchMediaModel media) async {
+Future<void> _openFullScreenMedia(
+  BuildContext context,
+  MatchMediaModel media,
+) async {
   if (media.mediaType == 'Maç Yayın Linki') {
     final uri = Uri.parse(media.url);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } else {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Video linki açılamadı.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Video linki açılamadı.')));
       }
     }
     return;
@@ -1179,7 +1190,9 @@ class _LineupTabState extends State<_LineupTab> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final selectedTeamId = _selectedTeamIndex == 0 ? widget.match.homeTeamId : widget.match.awayTeamId;
+    final selectedTeamId = _selectedTeamIndex == 0
+        ? widget.match.homeTeamId
+        : widget.match.awayTeamId;
 
     return Column(
       children: [
@@ -1212,16 +1225,18 @@ class _LineupTabState extends State<_LineupTab> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4),
             child: Align(
-              alignment: Alignment.centerRight,
+              alignment: _selectedTeamIndex == 0
+                  ? Alignment.centerLeft
+                  : Alignment.centerRight,
               child: ElevatedButton.icon(
                 onPressed: () {
-                  // TODO: Esame düzenleme popup'ı açılacak (Sonraki adımda bağlayacağız)
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Esame düzenleme ekranı yakında eklenecek!')),
-                  );
+                  _showRosterEditSheet(context, selectedTeamId);
                 },
                 icon: const Icon(Icons.edit_document, size: 16),
-                label: const Text('Kadro Düzenle', style: TextStyle(fontWeight: FontWeight.bold)),
+                label: const Text(
+                  'Esame Listesi',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: cs.primaryContainer,
                   foregroundColor: cs.onPrimaryContainer,
@@ -1231,23 +1246,97 @@ class _LineupTabState extends State<_LineupTab> {
             ),
           ),
 
-        // 3. OYUNCU LİSTESİ (Şimdilik Tasarım Amaçlı Dummy Liste)
-        // İleride burayı StreamBuilder ile Supabase match_rosters tablosuna bağlayacağız.
+        // 3. OYUNCU LİSTESİ (Gerçek Veri)
         Expanded(
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              _buildSectionHeader('İlk 11'),
-              _buildPlayerTile(jersey: '1', name: 'Ahmet Yılmaz (K)', isStarter: true),
-              _buildPlayerTile(jersey: '4', name: 'Mehmet Demir', isStarter: true),
-              _buildPlayerTile(jersey: '10', name: 'Ali Kaya', isStarter: true),
-              
-              const SizedBox(height: 16),
-              
-              _buildSectionHeader('Yedekler'),
-              _buildPlayerTile(jersey: '12', name: 'Can Öz', isStarter: false),
-              _buildPlayerTile(jersey: '17', name: 'Burak Şahin', isStarter: false),
-            ],
+          child: StreamBuilder<List<MatchRosterModel>>(
+            stream: ServiceLocator.matchService.watchMatchRosters(
+              widget.match.id,
+              selectedTeamId,
+            ),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError) {
+                return Center(
+                  child: Text(
+                    'Kadro yüklenirken hata oluştu: ${snapshot.error}',
+                  ),
+                );
+              }
+              final rosters = snapshot.data ?? [];
+              if (rosters.isEmpty) {
+                return const Center(
+                  child: Text(
+                    'Henüz maç kadrosu girilmemiş.',
+                    style: TextStyle(color: Colors.white54),
+                  ),
+                );
+              }
+
+              // Sadece isStarting=true olanlar İlk 11, false olanlar Yedek
+              final starters = rosters.where((r) => r.isStarting).toList();
+              final substitutes = rosters.where((r) => !r.isStarting).toList();
+
+              return ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  if (starters.isNotEmpty) ...[
+                    _buildSectionHeader('İlk 11'),
+                    ...starters.map((r) {
+                      // name bilgisi için PlayerModel eklemeliyiz. Aslında match_rosters'ta sadece ID var.
+                      // Neyse ki UI'da takım oyuncularını dinleyip isimleri oradan alabiliriz,
+                      // ya da StreamBuilder içinde iç içe Future/Stream kullanabiliriz.
+                      return StreamBuilder<List<PlayerModel>>(
+                        stream: ServiceLocator.teamService.watchPlayers(
+                          teamId: selectedTeamId,
+                          tournamentId: widget.match.seasonId,
+                        ),
+                        builder: (ctx, playerSnap) {
+                          final pList = playerSnap.data ?? [];
+                          final p = pList
+                              .where((x) => x.id == r.playerId)
+                              .firstOrNull;
+                          final name = p?.name ?? 'Bilinmeyen Oyuncu';
+                          final jersey = r.jerseyNumber ?? p?.number ?? '-';
+                          return _buildPlayerTile(
+                            jersey: jersey,
+                            name: name,
+                            isStarter: true,
+                          );
+                        },
+                      );
+                    }),
+                  ],
+
+                  if (substitutes.isNotEmpty) ...[
+                    if (starters.isNotEmpty) const SizedBox(height: 16),
+                    _buildSectionHeader('Yedekler'),
+                    ...substitutes.map((r) {
+                      return StreamBuilder<List<PlayerModel>>(
+                        stream: ServiceLocator.teamService.watchPlayers(
+                          teamId: selectedTeamId,
+                          tournamentId: widget.match.seasonId,
+                        ),
+                        builder: (ctx, playerSnap) {
+                          final pList = playerSnap.data ?? [];
+                          final p = pList
+                              .where((x) => x.id == r.playerId)
+                              .firstOrNull;
+                          final name = p?.name ?? r.playerId;
+                          final jersey = r.jerseyNumber ?? p?.number ?? '-';
+                          return _buildPlayerTile(
+                            jersey: jersey,
+                            name: name,
+                            isStarter: false,
+                          );
+                        },
+                      );
+                    }),
+                  ],
+                ],
+              );
+            },
           ),
         ),
       ],
@@ -1257,7 +1346,7 @@ class _LineupTabState extends State<_LineupTab> {
   // LİSTE BAŞLIĞI WIDGET'I
   Widget _buildSectionHeader(String title) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8.0),
+      padding: const EdgeInsets.only(bottom: 8.0, top: 16.0),
       child: Text(
         title,
         style: const TextStyle(
@@ -1270,7 +1359,11 @@ class _LineupTabState extends State<_LineupTab> {
   }
 
   // OYUNCU SATIRI WIDGET'I
-  Widget _buildPlayerTile({required String jersey, required String name, required bool isStarter}) {
+  Widget _buildPlayerTile({
+    required String jersey,
+    required String name,
+    required bool isStarter,
+  }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
       decoration: BoxDecoration(
@@ -1281,7 +1374,9 @@ class _LineupTabState extends State<_LineupTab> {
       child: ListTile(
         dense: true,
         leading: CircleAvatar(
-          backgroundColor: isStarter ? Colors.blueAccent.withOpacity(0.2) : Colors.grey.withOpacity(0.2),
+          backgroundColor: isStarter
+              ? Colors.blueAccent.withOpacity(0.2)
+              : Colors.grey.withOpacity(0.2),
           child: Text(
             jersey,
             style: TextStyle(
@@ -1294,6 +1389,316 @@ class _LineupTabState extends State<_LineupTab> {
       ),
     );
   }
+
+  void _showRosterEditSheet(BuildContext context, String teamId) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      builder: (context) {
+        return _RosterEditSheet(
+          match: widget.match,
+          teamId: teamId,
+          isHome: teamId == widget.match.homeTeamId,
+        );
+      },
+    );
+  }
+}
+
+class _RosterEditSheet extends StatefulWidget {
+  final MatchModel match;
+  final String teamId;
+  final bool isHome;
+
+  const _RosterEditSheet({
+    required this.match,
+    required this.teamId,
+    required this.isHome,
+  });
+
+  @override
+  State<_RosterEditSheet> createState() => _RosterEditSheetState();
+}
+
+class _RosterEditSheetState extends State<_RosterEditSheet>
+    with SingleTickerProviderStateMixin {
+  final _teamService = ServiceLocator.teamService;
+  final _matchService = ServiceLocator.matchService;
+
+  late TabController _tabController;
+  List<PlayerModel> _teamPlayers = [];
+  final Set<String> _starterIds = {};
+  final Set<String> _subIds = {};
+  Map<String, TextEditingController> _jerseyControllers = {};
+  bool _isLoading = true;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    _loadData();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    for (var c in _jerseyControllers.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _loadData() async {
+    try {
+      print('--- DEBUG: UI Veri Yükleme ---');
+      print('Match ID: ${widget.match.id}');
+      print(
+        'Match League ID (Sezon ID olarak kullanılıyor): ${widget.match.seasonId}',
+      );
+      print('Team ID: ${widget.teamId}');
+      final players = await _teamService.getEligiblePlayers(
+        widget.teamId,
+        widget.match.seasonId ?? '',
+      );
+      final rosters = await _matchService
+          .watchMatchRosters(widget.match.id, widget.teamId)
+          .first;
+
+      setState(() {
+        _teamPlayers = players;
+        for (var p in _teamPlayers) {
+          final pid = p.id; // (p.phone ?? p.id) yerine sadece p.id
+          final r = rosters.where((x) => x.playerId == pid).firstOrNull;
+          if (r == null) {
+            _jerseyControllers[pid] = TextEditingController(
+              text: p.number ?? '',
+            );
+          } else {
+            if (r.isStarting) {
+              _starterIds.add(pid);
+            } else {
+              _subIds.add(pid);
+            }
+            _jerseyControllers[pid] = TextEditingController(
+              text: r.jerseyNumber ?? p.number ?? '',
+            );
+          }
+        }
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _save() async {
+    setState(() => _isSaving = true);
+    try {
+      final newRosters = <MatchRosterModel>[];
+      for (var p in _teamPlayers) {
+        final pid = p.id;
+        final isStarter = _starterIds.contains(pid);
+        final isSub = _subIds.contains(pid);
+
+        if (!isStarter && !isSub) continue;
+
+        newRosters.add(
+          MatchRosterModel(
+            id: '',
+            matchId: widget.match.id,
+            leagueId: widget.match.leagueId,
+            teamId: widget.teamId,
+            playerId: pid,
+            isHome: widget.isHome,
+            isStarting: isStarter,
+            jerseyNumber: _jerseyControllers[pid]?.text.trim(),
+          ),
+        );
+      }
+
+      await _matchService.updateMatchRoster(
+        matchId: widget.match.id,
+        leagueId: widget.match.leagueId,
+        teamId: widget.teamId,
+        isHome: widget.isHome,
+        rosters: newRosters,
+      );
+
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Hata: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  Widget _buildPlayerList(bool isStarterTab) {
+    final filteredPlayers = _teamPlayers.where((p) {
+      // İlk 11 Tabı: Yedeklerde (subIds) olanları gösterme
+      // Yedekler Tabı: İlk 11'de (starterIds) olanları gösterme
+      if (isStarterTab) {
+        return !_subIds.contains(p.id);
+      } else {
+        return !_starterIds.contains(p.id);
+      }
+    }).toList();
+
+    return ListView.builder(
+      padding: const EdgeInsets.only(top: 8, bottom: 80),
+      itemCount: filteredPlayers.length,
+      itemBuilder: (context, index) {
+        final p = filteredPlayers[index];
+        final pid = p.id; // Doğrudan UUID kullanıyoruz, phone ile işimiz yok.
+        final isChecked = isStarterTab
+            ? _starterIds.contains(pid)
+            : _subIds.contains(pid);
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 6),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.white10),
+          ),
+          child: Row(
+            children: [
+              Checkbox(
+                value: isChecked,
+                activeColor: isStarterTab
+                    ? Colors.green.shade600
+                    : Colors.blue.shade600,
+                onChanged: (val) {
+                  setState(() {
+                    if (val == true) {
+                      if (isStarterTab) {
+                        _starterIds.add(pid);
+                        _subIds.remove(pid);
+                      } else {
+                        _subIds.add(pid);
+                        _starterIds.remove(pid);
+                      }
+                    } else {
+                      if (isStarterTab) {
+                        _starterIds.remove(pid);
+                      } else {
+                        _subIds.remove(pid);
+                      }
+                    }
+                  });
+                },
+              ),
+              Expanded(
+                child: Text(
+                  p.name,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 50,
+                child: TextFormField(
+                  controller: _jerseyControllers[pid],
+                  enabled: isChecked,
+                  keyboardType: TextInputType.number,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                  decoration: const InputDecoration(
+                    hintText: '#',
+                    contentPadding: EdgeInsets.symmetric(vertical: 8),
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomInset),
+      child: Container(
+        height: MediaQuery.of(context).size.height * 0.85,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Esame Listesi',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+            const Divider(),
+            if (!_isLoading)
+              TabBar(
+                controller: _tabController,
+                indicatorColor: Theme.of(context).colorScheme.primary,
+                labelColor: Colors.white,
+                unselectedLabelColor: Colors.white54,
+                tabs: const [
+                  Tab(text: 'İlk 11'),
+                  Tab(text: 'Yedekler'),
+                ],
+              ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : TabBarView(
+                      controller: _tabController,
+                      children: [
+                        _buildPlayerList(true),
+                        _buildPlayerList(false),
+                      ],
+                    ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: _isSaving ? null : _save,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  foregroundColor: Colors.white,
+                ),
+                child: _isSaving
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : const Text(
+                        'Kaydet',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 // TAKIM SEÇİCİ BUTON TASARIMI
@@ -1302,7 +1707,11 @@ class _TeamToggleButton extends StatelessWidget {
   final bool isSelected;
   final VoidCallback onTap;
 
-  const _TeamToggleButton({required this.title, required this.isSelected, required this.onTap});
+  const _TeamToggleButton({
+    required this.title,
+    required this.isSelected,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1312,8 +1721,12 @@ class _TeamToggleButton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF10B981) : Colors.transparent, // Seçiliyse yeşil
-          border: Border.all(color: isSelected ? const Color(0xFF10B981) : Colors.white24),
+          color: isSelected
+              ? const Color(0xFF10B981)
+              : Colors.transparent, // Seçiliyse yeşil
+          border: Border.all(
+            color: isSelected ? const Color(0xFF10B981) : Colors.white24,
+          ),
           borderRadius: BorderRadius.circular(8),
         ),
         alignment: Alignment.center,
@@ -1333,7 +1746,7 @@ class _TeamToggleButton extends StatelessWidget {
 }
 
 // -----------------------------------------------------------------------------
-// DETAY TABI (MAÇ AKIŞI) 
+// DETAY TABI (MAÇ AKIŞI)
 // -----------------------------------------------------------------------------
 
 class _DetailTab extends StatelessWidget {

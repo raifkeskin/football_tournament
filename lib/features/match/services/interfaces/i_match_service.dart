@@ -67,6 +67,16 @@ abstract class IMatchService {
 
   Future<void> insertDefaultMatchEvents(String matchId, int duration);
 
+  Stream<List<MatchRosterModel>> watchMatchRosters(String matchId, String teamId);
+
+  Future<void> updateMatchRoster({
+    required String matchId,
+    required String leagueId,
+    required String teamId,
+    required bool isHome,
+    required List<MatchRosterModel> rosters,
+  });
+
   Stream<List<PlayerStats>> watchPlayerStats({required String tournamentId});
 
   Future<void> commitPlayerStatsForCompletedMatch({required String matchId});
