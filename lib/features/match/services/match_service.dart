@@ -330,6 +330,7 @@ class SupabaseMatchService implements IMatchService {
   Future<void> updateMatchRoster({
     required String matchId,
     required String leagueId,
+    required String seasonId,
     required String teamId,
     required bool isHome,
     required List<MatchRosterModel> rosters,

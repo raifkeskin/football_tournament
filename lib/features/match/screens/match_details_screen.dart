@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../tournament/models/league_extras.dart';
@@ -1434,6 +1435,9 @@ class _RosterEditSheetState extends State<_RosterEditSheet>
   bool _isLoading = true;
   bool _isSaving = false;
 
+  int _startingLimit = 11;
+  int _subLimit = 7;
+
   @override
   void initState() {
     super.initState();
@@ -1458,6 +1462,23 @@ class _RosterEditSheetState extends State<_RosterEditSheet>
         'Match League ID (Sezon ID olarak kullanılıyor): ${widget.match.seasonId}',
       );
       print('Team ID: ${widget.teamId}');
+
+      int sCount = 11;
+      int subCount = 7;
+      if (widget.match.seasonId != null && widget.match.seasonId!.isNotEmpty) {
+        try {
+          final sRes = await Supabase.instance.client
+              .from('seasons')
+              .select('starting_player_count, sub_player_count')
+              .eq('id', widget.match.seasonId!)
+              .maybeSingle();
+          if (sRes != null) {
+            sCount = sRes['starting_player_count'] ?? 11;
+            subCount = sRes['sub_player_count'] ?? 7;
+          }
+        } catch (_) {}
+      }
+
       final players = await _teamService.getEligiblePlayers(
         widget.teamId,
         widget.match.seasonId ?? '',
@@ -1467,6 +1488,8 @@ class _RosterEditSheetState extends State<_RosterEditSheet>
           .first;
 
       setState(() {
+        _startingLimit = sCount;
+        _subLimit = subCount;
         _teamPlayers = players;
         for (var p in _teamPlayers) {
           final pid = p.id; // (p.phone ?? p.id) yerine sadece p.id
@@ -1494,6 +1517,48 @@ class _RosterEditSheetState extends State<_RosterEditSheet>
   }
 
   Future<void> _save() async {
+    final selectedIds = {..._starterIds, ..._subIds};
+    final numericRegExp = RegExp(r'^\d+$');
+    final usedNumbers = <String>{};
+
+    for (final pid in selectedIds) {
+      final numberText = _jerseyControllers[pid]?.text.trim() ?? '';
+      if (numberText.isEmpty || !numericRegExp.hasMatch(numberText)) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Hata'),
+            content: const Text('Lütfen seçilen tüm oyuncuların forma numaralarını kontrol ediniz (Sadece sayı girilmelidir).'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Tamam'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+      
+      if (usedNumbers.contains(numberText)) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Hata'),
+            content: const Text('Aynı takımda birden fazla oyuncu aynı forma numarasını kullanamaz.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Tamam'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+      usedNumbers.add(numberText);
+    }
+
     setState(() => _isSaving = true);
     try {
       final newRosters = <MatchRosterModel>[];
@@ -1509,6 +1574,7 @@ class _RosterEditSheetState extends State<_RosterEditSheet>
             id: '',
             matchId: widget.match.id,
             leagueId: widget.match.leagueId,
+            seasonId: widget.match.seasonId,
             teamId: widget.teamId,
             playerId: pid,
             isHome: widget.isHome,
@@ -1521,6 +1587,7 @@ class _RosterEditSheetState extends State<_RosterEditSheet>
       await _matchService.updateMatchRoster(
         matchId: widget.match.id,
         leagueId: widget.match.leagueId,
+        seasonId: widget.match.seasonId,
         teamId: widget.teamId,
         isHome: widget.isHome,
         rosters: newRosters,
@@ -1549,77 +1616,110 @@ class _RosterEditSheetState extends State<_RosterEditSheet>
       }
     }).toList();
 
+    // Sort by: 'Kaleci', 'Defans', 'Orta Saha', 'Forvet'
+    filteredPlayers.sort((a, b) {
+      final posA = (a.mainPosition ?? a.position ?? '').trim();
+      final posB = (b.mainPosition ?? b.position ?? '').trim();
+
+      int getPosOrder(String pos) {
+        final p = pos.toLowerCase();
+        if (p.contains('kaleci')) return 0;
+        if (p.contains('defans')) return 1;
+        if (p.contains('orta saha')) return 2;
+        if (p.contains('forvet')) return 3;
+        return 4;
+      }
+
+      final orderA = getPosOrder(posA);
+      final orderB = getPosOrder(posB);
+      if (orderA != orderB) return orderA.compareTo(orderB);
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
+
     return ListView.builder(
       padding: const EdgeInsets.only(top: 8, bottom: 80),
       itemCount: filteredPlayers.length,
       itemBuilder: (context, index) {
         final p = filteredPlayers[index];
-        final pid = p.id; // Doğrudan UUID kullanıyoruz, phone ile işimiz yok.
+        final pid = p.id;
         final isChecked = isStarterTab
             ? _starterIds.contains(pid)
             : _subIds.contains(pid);
 
-        return Container(
-          margin: const EdgeInsets.only(bottom: 6),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.05),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.white10),
-          ),
-          child: Row(
-            children: [
-              Checkbox(
-                value: isChecked,
-                activeColor: isStarterTab
-                    ? Colors.green.shade600
-                    : Colors.blue.shade600,
-                onChanged: (val) {
-                  setState(() {
-                    if (val == true) {
-                      if (isStarterTab) {
-                        _starterIds.add(pid);
-                        _subIds.remove(pid);
-                      } else {
-                        _subIds.add(pid);
-                        _starterIds.remove(pid);
-                      }
-                    } else {
-                      if (isStarterTab) {
-                        _starterIds.remove(pid);
-                      } else {
-                        _subIds.remove(pid);
-                      }
-                    }
-                  });
-                },
-              ),
-              Expanded(
-                child: Text(
-                  p.name,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 50,
-                child: TextFormField(
-                  controller: _jerseyControllers[pid],
-                  enabled: isChecked,
-                  keyboardType: TextInputType.number,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                  decoration: const InputDecoration(
-                    hintText: '#',
-                    contentPadding: EdgeInsets.symmetric(vertical: 8),
-                    border: OutlineInputBorder(),
-                    isDense: true,
+        final positionText = (p.mainPosition ?? p.position ?? '').trim();
+        final displayPos = positionText.isNotEmpty ? ' ($positionText)' : '';
+
+        return GestureDetector(
+          onTap: () {
+            setState(() {
+              if (!isChecked) {
+                // Check if limit is reached
+                if (isStarterTab) {
+                  if (_starterIds.length >= _startingLimit) return;
+                  _starterIds.add(pid);
+                  _subIds.remove(pid);
+                } else {
+                  if (_subIds.length >= _subLimit) return;
+                  _subIds.add(pid);
+                  _starterIds.remove(pid);
+                }
+              } else {
+                if (isStarterTab) {
+                  _starterIds.remove(pid);
+                } else {
+                  _subIds.remove(pid);
+                }
+              }
+            });
+          },
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 6),
+            decoration: BoxDecoration(
+              color: isChecked 
+                  ? Theme.of(context).colorScheme.primaryContainer 
+                  : Colors.white.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.white10),
+            ),
+            child: Row(
+              children: [
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 50,
+                  child: TextFormField(
+                    controller: _jerseyControllers[pid],
+                    enabled: isChecked,
+                    keyboardType: TextInputType.number,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                    decoration: const InputDecoration(
+                      hintText: '#',
+                      contentPadding: EdgeInsets.symmetric(vertical: 8),
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-            ],
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: Text(
+                      '${p.name}$displayPos',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: isChecked 
+                            ? Theme.of(context).colorScheme.onPrimaryContainer
+                            : null,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+              ],
+            ),
           ),
         );
       },
@@ -1632,7 +1732,7 @@ class _RosterEditSheetState extends State<_RosterEditSheet>
     return Padding(
       padding: EdgeInsets.only(bottom: bottomInset),
       child: Container(
-        height: MediaQuery.of(context).size.height * 0.85,
+        height: MediaQuery.of(context).size.height * 0.90,
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
@@ -1656,12 +1756,31 @@ class _RosterEditSheetState extends State<_RosterEditSheet>
                 indicatorColor: Theme.of(context).colorScheme.primary,
                 labelColor: Colors.white,
                 unselectedLabelColor: Colors.white54,
-                tabs: const [
-                  Tab(text: 'İlk 11'),
-                  Tab(text: 'Yedekler'),
+                tabs: [
+                  Tab(text: 'İlk $_startingLimit'),
+                  Tab(text: 'Yedekler ($_subLimit)'),
                 ],
               ),
             const SizedBox(height: 8),
+            if (!_isLoading)
+              AnimatedBuilder(
+                animation: _tabController,
+                builder: (context, _) {
+                  final isStarterTab = _tabController.index == 0;
+                  final current = isStarterTab ? _starterIds.length : _subIds.length;
+                  final limit = isStarterTab ? _startingLimit : _subLimit;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8.0),
+                    child: Text(
+                      'Seçilen: $current / $limit',
+                      style: TextStyle(
+                        color: current == limit ? Colors.green : Colors.white70,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  );
+                },
+              ),
             Expanded(
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())

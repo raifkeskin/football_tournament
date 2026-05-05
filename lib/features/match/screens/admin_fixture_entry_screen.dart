@@ -502,6 +502,7 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
       final match = MatchModel(
         id: '',
         leagueId: _selectedLeagueId!,
+        seasonId: _selectedSeasonId!,
         groupId: _selectedGroupId!,
         homeTeamId: _homeTeamId!,
         awayTeamId: _awayTeamId!,

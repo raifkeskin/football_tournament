@@ -119,7 +119,7 @@ class MatchModel {
   final String? pitchName;
   final MatchStatus status;
   final int? minute;
-  final String? seasonId;
+  final String seasonId;
   final String? groupId;
   final MatchScore? score;
   final DateTime? createdAt;
@@ -143,7 +143,7 @@ class MatchModel {
     this.pitchId,
     this.pitchName,
     this.minute,
-    this.seasonId,
+    required this.seasonId,
     this.groupId,
     this.firebaseId,
     this.score,
@@ -291,12 +291,7 @@ class MatchModel {
       pitchName: pitchNameRaw.isEmpty ? null : pitchNameRaw,
       status: resolvedStatus,
       minute: readScore(v('minute', 'minute')),
-      seasonId: (v('seasonId', 'season_id') ?? '').toString().trim().isEmpty
-          ? null
-          : (v('seasonId', 'season_id') ?? '').toString().trim(),
-      groupId: (v('groupId', 'group_id') ?? '').toString().trim().isEmpty
-          ? null
-          : (v('groupId', 'group_id') ?? '').toString().trim(),
+      seasonId:(map['seasonId'] ?? map['season_id'] ?? '').toString(),
       score: readScoreObject(),
       createdAt: readDate(v('createdAt', 'created_at')),
       updatedAt: readDate(v('updatedAt', 'updated_at')),
@@ -719,6 +714,7 @@ class MatchRosterModel {
   final String id;
   final String matchId;
   final String leagueId;
+  final String seasonId;
   final String teamId;
   final String playerId; // phone
   final bool isHome;
@@ -730,6 +726,7 @@ class MatchRosterModel {
     required this.id,
     required this.matchId,
     required this.leagueId,
+    required this.seasonId,
     required this.teamId,
     required this.playerId,
     required this.isHome,
@@ -743,6 +740,7 @@ class MatchRosterModel {
       id: id,
       matchId: (map['match_id'] ?? '').toString(),
       leagueId: (map['league_id'] ?? '').toString(),
+      seasonId: (map['season_id'] ?? '').toString(),
       teamId: (map['team_id'] ?? '').toString(),
       playerId: (map['player_id'] ?? '').toString(),
       isHome: map['is_home'] == true,

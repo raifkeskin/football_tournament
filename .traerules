@@ -13,3 +13,7 @@ Interface Driven Development: Servisler önce 'abstract class' (interface) olara
 Build Onayı: Her yapılan kod değişikliğinden sonra uygulamanın sorunsuz bir şekilde derlendiğinden emin olmak için flutter build kontrolü yapmalı ve başarılı build onayını (sıfır hata) vermelisin.
 
 Raporlama Dili: Asistanın raporları ve açıklamaları her zaman Türkçe olmalı.
+
+Database olarak supabase i kullanıyoruz eski kodlara bakıp firabase eklemeleri yapılmamalı.
+Database : Supabase
+Supabase : https://raifkeskin.supabase.co/

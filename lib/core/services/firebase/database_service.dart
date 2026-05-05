@@ -1889,6 +1889,9 @@ class DatabaseService {
       final leagueId = (groupData['leagueId'] as String?) ?? '';
       if (leagueId.isEmpty) continue;
 
+      final seasonId = (groupData['seasonId'] as String?) ?? '';
+      if (seasonId.isEmpty) continue;
+
       final teamsSnap = await _db
           .collection('teams')
           .where('groupId', isEqualTo: groupDoc.id)
@@ -1959,6 +1962,7 @@ class DatabaseService {
           final match = MatchModel(
             id: '',
             leagueId: leagueId,
+            seasonId: seasonId,
             groupId: groupDoc.id,
             homeTeamId: home.id,
             awayTeamId: away.id,
