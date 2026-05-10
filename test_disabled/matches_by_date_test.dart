@@ -31,6 +31,8 @@ void main() {
         id: '',
         leagueId: 'L2',
         groupId: 'G2',
+        seasonId: 'S1',
+        week: 5,
         homeTeamId: 'H2',
         awayTeamId: 'A2',
         homeScore: 1,
