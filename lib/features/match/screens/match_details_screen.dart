@@ -70,7 +70,7 @@ class _TeamInfo extends StatelessWidget {
           isCircle: true,
           fallbackIconSize: 26,
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 4),
         Text(
           displayName,
           textAlign: TextAlign.center,
@@ -296,7 +296,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
             appBar: AppBar(title: const Text('Maç Detayı')),
             body: Center(
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                 child: Text(
                   'Maç verisi yüklenemedi.\n\n${_friendlyLoadError(matchSnap.error)}',
                   textAlign: TextAlign.center,
@@ -402,7 +402,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                   Padding(
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 16,
-                                      vertical: 8,
+                                      vertical: 0,
                                     ),
                                     child: Column(
                                       children: [
@@ -448,7 +448,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 24),
+                              const SizedBox(height: 8),
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 mainAxisSize: MainAxisSize.min,
@@ -474,7 +474,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                       ],
                                     ),
                                   ),
-                                  if ((m.pitchName ?? '').isNotEmpty) ...[
+                                  if ((m.pitchId ?? '').isNotEmpty) ...[
                                     const SizedBox(width: 12),
                                     const Text(
                                       "|",
@@ -502,17 +502,23 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                       child: StreamBuilder<List<Pitch>>(
                                         stream: _leagueService.watchPitches(),
                                         builder: (context, pitchSnap) {
-                                          final pitchName = m.pitchName!.trim();
                                           final pitchId = (m.pitchId ?? '')
                                               .trim();
                                           final pitches =
                                               pitchSnap.data ?? const <Pitch>[];
-                                          final location =
-                                              _resolvePitchLocation(
-                                                pitches: pitches,
-                                                pitchId: pitchId,
-                                                pitchName: pitchName,
-                                              );
+
+                                          // pitchId ile eşleşen stadı bul
+                                          String displayPitchName =
+                                              'Bilinmeyen Saha';
+                                          String location = '';
+
+                                          for (final p in pitches) {
+                                            if (p.id == pitchId) {
+                                              displayPitchName = p.name;
+                                              location = p.location;
+                                              break;
+                                            }
+                                          }
 
                                           return InkWell(
                                             onTap: location.isEmpty
@@ -522,7 +528,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                                     location,
                                                   ),
                                             child: Text(
-                                              pitchName,
+                                              displayPitchName,
                                               style: const TextStyle(
                                                 color: Colors.white,
                                                 fontSize: 11,
@@ -1249,95 +1255,82 @@ class _LineupTabState extends State<_LineupTab> {
 
         // 3. OYUNCU LİSTESİ (Gerçek Veri)
         Expanded(
-          child: StreamBuilder<List<MatchRosterModel>>(
-            stream: ServiceLocator.matchService.watchMatchRosters(
-              widget.match.id,
-              selectedTeamId,
+          child: StreamBuilder<List<PlayerModel>>(
+            stream: ServiceLocator.teamService.watchPlayers(
+              teamId: selectedTeamId,
+              tournamentId: widget.match.seasonId,
             ),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (snapshot.hasError) {
-                return Center(
-                  child: Text(
-                    'Kadro yüklenirken hata oluştu: ${snapshot.error}',
-                  ),
-                );
-              }
-              final rosters = snapshot.data ?? [];
-              if (rosters.isEmpty) {
-                return const Center(
-                  child: Text(
-                    'Henüz maç kadrosu girilmemiş.',
-                    style: TextStyle(color: Colors.white54),
-                  ),
-                );
-              }
+            builder: (ctx, playerSnap) {
+              final pList = playerSnap.data ?? [];
+              
+              return StreamBuilder<List<MatchRosterModel>>(
+                stream: ServiceLocator.matchService.watchMatchRosters(
+                  widget.match.id,
+                  selectedTeamId,
+                ),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Text(
+                        'Kadro yüklenirken hata oluştu: ${snapshot.error}',
+                      ),
+                    );
+                  }
+                  final rosters = snapshot.data ?? [];
+                  if (rosters.isEmpty) {
+                    return const Center(
+                      child: Text(
+                        'Henüz maç kadrosu girilmemiş.',
+                        style: TextStyle(color: Colors.white54),
+                      ),
+                    );
+                  }
 
-              // Sadece isStarting=true olanlar İlk 11, false olanlar Yedek
-              final starters = rosters.where((r) => r.isStarting).toList();
-              final substitutes = rosters.where((r) => !r.isStarting).toList();
+                  // Sadece isStarting=true olanlar İlk 11, false olanlar Yedek
+                  final starters = rosters.where((r) => r.isStarting).toList();
+                  final substitutes = rosters.where((r) => !r.isStarting).toList();
 
-              return ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  if (starters.isNotEmpty) ...[
-                    _buildSectionHeader('İlk 11'),
-                    ...starters.map((r) {
-                      // name bilgisi için PlayerModel eklemeliyiz. Aslında match_rosters'ta sadece ID var.
-                      // Neyse ki UI'da takım oyuncularını dinleyip isimleri oradan alabiliriz,
-                      // ya da StreamBuilder içinde iç içe Future/Stream kullanabiliriz.
-                      return StreamBuilder<List<PlayerModel>>(
-                        stream: ServiceLocator.teamService.watchPlayers(
-                          teamId: selectedTeamId,
-                          tournamentId: widget.match.seasonId,
-                        ),
-                        builder: (ctx, playerSnap) {
-                          final pList = playerSnap.data ?? [];
-                          final p = pList
-                              .where((x) => x.id == r.playerId)
-                              .firstOrNull;
-                          final name = p?.name ?? 'Bilinmeyen Oyuncu';
+                  return ListView(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    children: [
+                      if (starters.isNotEmpty) ...[
+                        _buildSectionHeader('İlk 11'),
+                        ...starters.map((r) {
+                          final p = pList.where((x) => x.id == r.playerId).firstOrNull;
+                          final name = p?.name ?? '-';
                           final jersey = r.jerseyNumber ?? p?.number ?? '-';
                           return _buildPlayerTile(
                             jersey: jersey,
                             name: name,
                             isStarter: true,
+                            photoUrl: p?.photoUrl,
                           );
-                        },
-                      );
-                    }),
-                  ],
+                        }),
+                      ],
 
-                  if (substitutes.isNotEmpty) ...[
-                    if (starters.isNotEmpty) const SizedBox(height: 16),
-                    _buildSectionHeader('Yedekler'),
-                    ...substitutes.map((r) {
-                      return StreamBuilder<List<PlayerModel>>(
-                        stream: ServiceLocator.teamService.watchPlayers(
-                          teamId: selectedTeamId,
-                          tournamentId: widget.match.seasonId,
-                        ),
-                        builder: (ctx, playerSnap) {
-                          final pList = playerSnap.data ?? [];
-                          final p = pList
-                              .where((x) => x.id == r.playerId)
-                              .firstOrNull;
-                          final name = p?.name ?? r.playerId;
+                      if (substitutes.isNotEmpty) ...[
+                        if (starters.isNotEmpty) const SizedBox(height: 12),
+                        _buildSectionHeader('Yedekler'),
+                        ...substitutes.map((r) {
+                          final p = pList.where((x) => x.id == r.playerId).firstOrNull;
+                          final name = p?.name ?? '-';
                           final jersey = r.jerseyNumber ?? p?.number ?? '-';
                           return _buildPlayerTile(
                             jersey: jersey,
                             name: name,
                             isStarter: false,
+                            photoUrl: p?.photoUrl,
                           );
-                        },
-                      );
-                    }),
-                  ],
-                ],
+                        }),
+                      ],
+                    ],
+                  );
+                },
               );
-            },
+            }
           ),
         ),
       ],
@@ -1346,14 +1339,19 @@ class _LineupTabState extends State<_LineupTab> {
 
   // LİSTE BAŞLIĞI WIDGET'I
   Widget _buildSectionHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8.0, top: 16.0),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4, top: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(6),
+      ),
       child: Text(
         title,
         style: const TextStyle(
           color: Colors.white,
           fontWeight: FontWeight.w900,
-          fontSize: 16,
+          fontSize: 14,
         ),
       ),
     );
@@ -1364,29 +1362,43 @@ class _LineupTabState extends State<_LineupTab> {
     required String jersey,
     required String name,
     required bool isStarter,
+    String? photoUrl,
   }) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white10),
+      height: 45,
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: Colors.white10, width: 0.5)),
       ),
-      child: ListTile(
-        dense: true,
-        leading: CircleAvatar(
-          backgroundColor: isStarter
-              ? Colors.blueAccent.withOpacity(0.2)
-              : Colors.grey.withOpacity(0.2),
-          child: Text(
-            jersey,
-            style: TextStyle(
-              color: isStarter ? Colors.blueAccent : Colors.grey,
-              fontWeight: FontWeight.bold,
+      child: Row(
+        children: [
+          WebSafeImage(
+            url: photoUrl ?? '',
+            width: 32,
+            height: 32,
+            isCircle: true,
+            fit: BoxFit.cover,
+          ),
+          SizedBox(
+            width: 36,
+            child: Center(
+              child: Text(
+                jersey,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 16,
+                ),
+              ),
             ),
           ),
-        ),
-        title: Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
+          Expanded(
+            child: Text(
+              name,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1528,7 +1540,9 @@ class _RosterEditSheetState extends State<_RosterEditSheet>
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text('Hata'),
-            content: const Text('Lütfen seçilen tüm oyuncuların forma numaralarını kontrol ediniz (Sadece sayı girilmelidir).'),
+            content: const Text(
+              'Lütfen seçilen tüm oyuncuların forma numaralarını kontrol ediniz (Sadece sayı girilmelidir).',
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
@@ -1539,13 +1553,15 @@ class _RosterEditSheetState extends State<_RosterEditSheet>
         );
         return;
       }
-      
+
       if (usedNumbers.contains(numberText)) {
         showDialog(
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text('Hata'),
-            content: const Text('Aynı takımda birden fazla oyuncu aynı forma numarasını kullanamaz.'),
+            content: const Text(
+              'Aynı takımda birden fazla oyuncu aynı forma numarasını kullanamaz.',
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
@@ -1675,8 +1691,8 @@ class _RosterEditSheetState extends State<_RosterEditSheet>
           child: Container(
             margin: const EdgeInsets.only(bottom: 6),
             decoration: BoxDecoration(
-              color: isChecked 
-                  ? Theme.of(context).colorScheme.primaryContainer 
+              color: isChecked
+                  ? Theme.of(context).colorScheme.primaryContainer
                   : Colors.white.withOpacity(0.05),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: Colors.white10),
@@ -1708,7 +1724,7 @@ class _RosterEditSheetState extends State<_RosterEditSheet>
                       '${p.name}$displayPos',
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
-                        color: isChecked 
+                        color: isChecked
                             ? Theme.of(context).colorScheme.onPrimaryContainer
                             : null,
                       ),
@@ -1767,7 +1783,9 @@ class _RosterEditSheetState extends State<_RosterEditSheet>
                 animation: _tabController,
                 builder: (context, _) {
                   final isStarterTab = _tabController.index == 0;
-                  final current = isStarterTab ? _starterIds.length : _subIds.length;
+                  final current = isStarterTab
+                      ? _starterIds.length
+                      : _subIds.length;
                   final limit = isStarterTab ? _startingLimit : _subLimit;
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 8.0),

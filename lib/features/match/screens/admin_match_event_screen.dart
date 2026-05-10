@@ -40,8 +40,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
   }
 
   String _playerKey(PlayerModel p) {
-    final phone = (p.phone ?? '').trim();
-    return phone.isEmpty ? p.id.trim() : phone;
+    return p.id.trim();
   }
 
   List<LineupPlayer> _toLineupPlayers(List<PlayerModel> players) {
@@ -246,21 +245,14 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
         teamId: _teamId!,
         eventType: _eventType,
         minute: minute,
-        playerName: player.name.trim(),
-        playerPhone: player.playerId.trim().isEmpty ? null : player.playerId.trim(),
-        assistPlayerName: _eventType == 'goal' && !_isOwnGoal ? _selectedAssist?.name.trim() : null,
-        assistPlayerPhone: _eventType == 'goal' && !_isOwnGoal
-            ? (_selectedAssist?.playerId.trim().isEmpty ?? true
+        eventName: player.name.trim(),
+        playerId: player.playerId.trim().isEmpty ? null : player.playerId.trim(),
+        assistPlayerId: _eventType == 'goal' && !_isOwnGoal ? _selectedAssist?.playerId.trim().toString() : null,
+        subInPlayerId: _eventType == 'substitution'
+            ? (_selectedSubIn?.playerId.trim().isEmpty ?? true
                   ? null
                   : _selectedAssist!.playerId.trim())
             : null,
-        subInPlayerName: _eventType == 'substitution' ? _selectedSubIn?.name.trim() : null,
-        subInPlayerPhone: _eventType == 'substitution'
-            ? (_selectedSubIn?.playerId.trim().isEmpty ?? true
-                  ? null
-                  : _selectedSubIn!.playerId.trim())
-            : null,
-        type: _eventType,
         isOwnGoal: _eventType == 'goal' ? _isOwnGoal : false,
       );
 
@@ -313,57 +305,73 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
             ? 'Deplasman'
             : (nameById[widget.match.awayTeamId] ?? '').trim();
 
-        return StreamBuilder<List<PlayerModel>>(
+        return StreamBuilder<List<MatchRosterModel>>(
           stream: (_teamId ?? '').trim().isEmpty
-              ? const Stream<List<PlayerModel>>.empty()
-              : _teamService.watchPlayers(
-                  teamId: _teamId!,
-                  tournamentId: widget.match.leagueId,
-                ),
-          builder: (context, playersSnap) {
-            final players = _toLineupPlayers(playersSnap.data ?? const <PlayerModel>[]);
-            final startingPlayers = players;
-            final subsPlayers = players;
-            final enabled = players.isNotEmpty && !_isLoading;
+              ? const Stream<List<MatchRosterModel>>.empty()
+              : _matchService.watchMatchRosters(widget.match.id, _teamId!),
+          builder: (context, rosterSnap) {
+            final rosters = rosterSnap.data ?? [];
+            final rosterPlayerIds = rosters.map((r) => r.playerId).toSet();
+            final startingIds = rosters.where((r) => r.isStarting).map((r) => r.playerId).toSet();
+            final subIds = rosters.where((r) => !r.isStarting).map((r) => r.playerId).toSet();
 
-            if (enabled && _selectedPlayer != null) {
-              final exists =
-                  players.any((p) => p.playerId == _selectedPlayer!.playerId);
-              if (!exists) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (!mounted) return;
-                  setState(() => _selectedPlayer = null);
-                });
-              }
-            }
-            if (_eventType != 'goal' && _selectedAssist != null) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (!mounted) return;
-                setState(() => _selectedAssist = null);
-              });
-            }
-            if (_eventType != 'goal' && _isOwnGoal) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (!mounted) return;
-                setState(() => _isOwnGoal = false);
-              });
-            }
-            if (_eventType != 'substitution' && _selectedSubIn != null) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (!mounted) return;
-                setState(() => _selectedSubIn = null);
-              });
-            }
+            return StreamBuilder<List<PlayerModel>>(
+              stream: (_teamId ?? '').trim().isEmpty
+                  ? const Stream<List<PlayerModel>>.empty()
+                  : _teamService.watchPlayers(
+                      teamId: _teamId!,
+                      tournamentId: widget.match.seasonId,
+                    ),
+              builder: (context, playersSnap) {
+                final allPlayers = playersSnap.data ?? const <PlayerModel>[];
+                
+                final filteredPlayers = allPlayers.where((p) => rosterPlayerIds.contains(p.id)).toList();
+                final filteredStarting = allPlayers.where((p) => startingIds.contains(p.id)).toList();
+                final filteredSubs = allPlayers.where((p) => subIds.contains(p.id)).toList();
 
-            return Scaffold(
-              appBar: AppBar(title: const Text('Maç Olayı Ekle')),
-              backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-              body: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : ListView(
-                      padding: const EdgeInsets.all(16),
-                      children: [
-                        _selectorTile(
+                final players = _toLineupPlayers(filteredPlayers);
+                final startingPlayers = _toLineupPlayers(filteredStarting);
+                final subsPlayers = _toLineupPlayers(filteredSubs);
+                final enabled = players.isNotEmpty && !_isLoading;
+
+                if (enabled && _selectedPlayer != null) {
+                  final exists =
+                      players.any((p) => p.playerId == _selectedPlayer!.playerId);
+                  if (!exists) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (!mounted) return;
+                      setState(() => _selectedPlayer = null);
+                    });
+                  }
+                }
+                if (_eventType != 'goal' && _selectedAssist != null) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!mounted) return;
+                    setState(() => _selectedAssist = null);
+                  });
+                }
+                if (_eventType != 'goal' && _isOwnGoal) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!mounted) return;
+                    setState(() => _isOwnGoal = false);
+                  });
+                }
+                if (_eventType != 'substitution' && _selectedSubIn != null) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!mounted) return;
+                    setState(() => _selectedSubIn = null);
+                  });
+                }
+
+                return Scaffold(
+                  appBar: AppBar(title: const Text('Maç Olayı Ekle')),
+                  backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+                  body: _isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : ListView(
+                          padding: const EdgeInsets.all(16),
+                          children: [
+                            _selectorTile(
                           label: 'Takım Seçimi',
                           valueText: _teamId == widget.match.homeTeamId
                               ? homeName
@@ -498,78 +506,73 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                   visible: _eventType == 'goal',
                   child: Material(
                     color: Theme.of(context).colorScheme.surfaceContainerLow,
-                    elevation: 0.5,
                     borderRadius: BorderRadius.circular(16),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 8,
-                      ),
-                      child: Row(
-                        children: [
-                          const Expanded(
-                            child: Text(
-                              'Kendi kalesine (KK)',
-                              style: TextStyle(fontWeight: FontWeight.w800),
-                            ),
-                          ),
-                          Switch(
-                            value: _isOwnGoal,
-                            onChanged: _isLoading
-                                ? null
-                                : (v) => setState(() {
-                                    _isOwnGoal = v;
-                                    if (_isOwnGoal) _selectedAssist = null;
-                                  }),
-                          ),
-                        ],
-                      ),
+                    child: CheckboxListTile(
+                      title: const Text('Kendi Kalesine'),
+                      value: _isOwnGoal,
+                      onChanged: _isLoading
+                          ? null
+                          : (v) {
+                              setState(() {
+                                _isOwnGoal = v ?? false;
+                                if (_isOwnGoal) _selectedAssist = null;
+                              });
+                            },
                     ),
                   ),
                 ),
-                if (_eventType == 'goal') const SizedBox(height: 12),
                 Visibility(
                   visible: _eventType == 'goal' && !_isOwnGoal,
-                  child: _selectorTile(
-                    label: 'Asist Yapan',
-                    valueText: _selectedAssist == null
-                        ? 'Seçiniz'
-                        : _labelFor(_selectedAssist!),
-                    onTap: enabled
-                        ? () async {
-                            final picked = await _pickFromSheet<LineupPlayer>(
-                              title: 'Asist Yapan',
-                              selected: _selectedAssist,
-                              options: [
-                                for (final p in players)
-                                  _PickerOption(p, _labelFor(p)),
-                              ],
-                            );
-                            if (picked == null || !mounted) return;
-                            setState(() => _selectedAssist = picked);
-                          }
-                        : null,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: _selectorTile(
+                      label: 'Asist Yapan (İsteğe Bağlı)',
+                      valueText: _selectedAssist == null
+                          ? 'Yok'
+                          : _labelFor(_selectedAssist!),
+                      onTap: enabled
+                          ? () async {
+                              final picked = await _pickFromSheet<LineupPlayer>(
+                                title: 'Asist Yapan',
+                                selected: _selectedAssist,
+                                options: [
+                                  for (final p in players)
+                                    if (_selectedPlayer == null ||
+                                        p.playerId != _selectedPlayer!.playerId)
+                                      _PickerOption(p, _labelFor(p)),
+                                ],
+                              );
+                              if (picked == null || !mounted) return;
+                              setState(() => _selectedAssist = picked);
+                            }
+                          : null,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 18),
-                ElevatedButton(
-                  onPressed: _addEvent,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF2E7D32),
-                    foregroundColor: Colors.white,
-                    minimumSize: const Size(double.infinity, 50),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    textStyle: const TextStyle(fontWeight: FontWeight.w900),
+                const SizedBox(height: 24),
+                SizedBox(
+                  height: 54,
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: _isLoading ? null : _addEvent,
+                    child: _isLoading
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Text('Kaydet'),
                   ),
-                  child: const Text('KAYDET'),
                 ),
-                      ],
-                    ),
-            );
-          },
-        );
+              ],
+            ),
+          );
+        },
+      );
+    },
+  );
       },
     );
   }

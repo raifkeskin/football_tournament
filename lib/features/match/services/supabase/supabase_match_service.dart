@@ -304,7 +304,7 @@ class SupabaseMatchService implements IMatchService {
         );
       }
 
-      if (event.type != 'goal') return;
+      if (event.eventType != 'goal') return;
 
       try {
         AppConfig.sqlLogStart(

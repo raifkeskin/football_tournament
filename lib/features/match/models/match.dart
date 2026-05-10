@@ -365,18 +365,13 @@ class MatchModel {
 class MatchEvent {
   final String id;
   final String matchId;
-  final String seasonId;
-  String get leagueId => seasonId;
   final String teamId;
   final String eventType;
   final int minute;
-  final String playerName;
-  final String? playerPhone;
-  final String? assistPlayerPhone;
-  final String? assistPlayerName;
-  final String? subInPlayerPhone;
-  final String? subInPlayerName;
-  final String type;
+  final String eventName;
+  final String? playerId;
+  final String? assistPlayerId;
+  final String? subInPlayerId;
   final bool isOwnGoal;
 
   MatchEvent({
@@ -387,16 +382,12 @@ class MatchEvent {
     required this.teamId,
     required this.eventType,
     required this.minute,
-    required this.playerName,
-    this.playerPhone,
-    this.assistPlayerPhone,
-    this.assistPlayerName,
-    this.subInPlayerPhone,
-    this.subInPlayerName,
-    String? type,
+    required this.eventName,
+    this.playerId,
+    this.assistPlayerId,
+    this.subInPlayerId,
     this.isOwnGoal = false,
-  })  : seasonId = (seasonId ?? leagueId ?? '').trim(),
-        type = (type ?? eventType);
+  });
 
   factory MatchEvent.fromMap(Map<String, dynamic> map, String id) {
     dynamic v(String camel, String snake) => map[camel] ?? map[snake];
@@ -417,36 +408,13 @@ class MatchEvent {
       seasonId: (v('seasonId', 'season_id') ?? v('tournamentId', 'season_id') ?? '')
           .toString()
           .trim(),
-      playerName: (v('playerName', 'player_name') ?? '').toString(),
-      playerPhone:
-          (v('playerPhone', 'player_phone') ?? v('playerId', 'player_id'))?.toString().trim().isEmpty ??
-              true
-          ? null
-          : (v('playerPhone', 'player_phone') ?? v('playerId', 'player_id')).toString().trim(),
-      assistPlayerPhone:
-          (v('assistPlayerPhone', 'assist_player_phone') ?? v('assistPlayerId', 'assist_player_id'))
-                  ?.toString()
-                  .trim()
-                  .isEmpty ??
-              true
-          ? null
-          : (v('assistPlayerPhone', 'assist_player_phone') ?? v('assistPlayerId', 'assist_player_id'))
-                .toString()
-                .trim(),
-      assistPlayerName: (v('assistPlayerName', 'assist_player_name') as String?)?.trim(),
-      subInPlayerPhone:
-          (v('subInPlayerPhone', 'sub_in_player_phone') ?? v('subInPlayerId', 'sub_in_player_id'))
-                  ?.toString()
-                  .trim()
-                  .isEmpty ??
-              true
-          ? null
-          : (v('subInPlayerPhone', 'sub_in_player_phone') ?? v('subInPlayerId', 'sub_in_player_id'))
-              .toString()
-              .trim(),
-      subInPlayerName: (v('subInPlayerName', 'sub_in_player_name') as String?)?.trim(),
-      eventType: (v('eventType', 'event_type') ?? v('type', 'type') ?? 'goal').toString(),
-      type: (v('type', 'type') ?? v('eventType', 'event_type') ?? 'goal').toString(),
+      eventName: (v('playerName', 'player_name') ?? '').toString(),
+      playerId:
+          (v('playerId', 'player_id'))?.toString(),
+      assistPlayerId:
+          (v('assistPlayerId', 'assist_player_id')).toString(),
+      subInPlayerId: (v('subInPlayerId', 'sub_in_player_id')).toString(),
+      eventType: (v('eventType', 'event_type') ?? '').toString(),
       minute: minute,
       teamId: (v('teamId', 'team_id') ?? '').toString(),
       isOwnGoal: (v('isOwnGoal', 'is_own_goal') as bool?) ?? false,
@@ -457,29 +425,24 @@ class MatchEvent {
     if (!snakeCase) {
       return {
         'matchId': matchId,
-        'seasonId': seasonId,
         'teamId': teamId,
         'eventType': eventType,
-        'playerName': playerName,
-        'playerPhone': playerPhone,
-        'assistPlayerPhone': assistPlayerPhone,
-        'assistPlayerName': assistPlayerName,
-        'subInPlayerPhone': subInPlayerPhone,
-        'subInPlayerName': subInPlayerName,
-        'type': type,
+        'playerName': eventName,
+        'playerId': playerId,
+        'assistPlayerId': assistPlayerId,
+        'subInPlayerId': subInPlayerId,
         'minute': minute,
         'isOwnGoal': isOwnGoal,
       };
     }
     return {
       'match_id': matchId,
-      'season_id': seasonId,
       'team_id': teamId,
-      'player_id': playerPhone,
-      'assist_player_id': assistPlayerPhone,
-      'sub_in_player_id': subInPlayerPhone,
+      'player_id': playerId,
+      'assist_player_id': assistPlayerId,
+      'sub_in_player_id': subInPlayerId,
       'event_type': eventType,
-      'player_name': playerName,
+      'player_name': eventName,
       'minute': minute,
       'is_own_goal': isOwnGoal,
     };

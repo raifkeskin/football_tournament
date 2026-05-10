@@ -1632,7 +1632,7 @@ class DatabaseService {
     await _db.collection('match_events').add(event.toMap());
 
     // 1. Maç skorunu güncelle (Eğer gol ise)
-    if (event.type == 'goal') {
+    if (event.eventType == 'goal') {
       await _db.runTransaction((txn) async {
         final matchRef = _db.collection('matches').doc(event.matchId);
         final matchDoc = await txn.get(matchRef);
@@ -1791,7 +1791,7 @@ class DatabaseService {
       final eventRef = _db.collection('match_events').doc(event.id);
       final matchRef = _db.collection('matches').doc(event.matchId);
 
-      if (event.type == 'goal') {
+      if (event.eventType == 'goal') {
         final matchDoc = await txn.get(matchRef);
         if (matchDoc.exists) {
           final data = matchDoc.data() ?? const <String, dynamic>{};
@@ -2027,9 +2027,8 @@ class DatabaseService {
                 eventType: 'goal',
                 teamId: home.id,
                 minute: random.nextInt(89) + 1,
-                playerName: scorer.name,
-                assistPlayerName: assist?.name,
-                type: 'goal',
+                eventName: scorer.name,
+                assistPlayerId: assist?.id.trim().toString(),
               ),
             );
           }
@@ -2049,9 +2048,8 @@ class DatabaseService {
                 eventType: 'goal',
                 teamId: away.id,
                 minute: random.nextInt(89) + 1,
-                playerName: scorer.name,
-                assistPlayerName: assist?.name,
-                type: 'goal',
+                eventName: scorer.name,
+                assistPlayerId: assist?.id.trim().toString(),
               ),
             );
           }
@@ -2068,8 +2066,7 @@ class DatabaseService {
                 eventType: 'yellow_card',
                 teamId: teamId,
                 minute: random.nextInt(89) + 1,
-                playerName: p.name,
-                type: 'yellow_card',
+                eventName: p.name,
               ),
             );
           }
@@ -2091,8 +2088,7 @@ class DatabaseService {
                 eventType: 'yellow_card',
                 teamId: teamId,
                 minute: m1,
-                playerName: p.name,
-                type: 'yellow_card',
+                eventName: p.name,
               ),
             );
             await addMatchEvent(
@@ -2103,8 +2099,7 @@ class DatabaseService {
                 eventType: 'yellow_card',
                 teamId: teamId,
                 minute: m2,
-                playerName: p.name,
-                type: 'yellow_card',
+                eventName: p.name,
               ),
             );
           }
@@ -2121,8 +2116,7 @@ class DatabaseService {
                 eventType: 'red_card',
                 teamId: teamId,
                 minute: 10 + random.nextInt(80),
-                playerName: p.name,
-                type: 'red_card',
+                eventName: p.name,
               ),
             );
           }

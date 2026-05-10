@@ -60,6 +60,7 @@ class SupabaseLeagueService implements ILeagueService {
     return _client
         .from('leagues')
         .stream(primaryKey: ['id'])
+        .eq('is_active', true)
         .order('name', ascending: true)
         .map((rows) => rows.map((r) => League.fromMap(r)).toList());
   }

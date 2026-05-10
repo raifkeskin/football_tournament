@@ -382,9 +382,22 @@ return FutureBuilder<int?>(
     Function(dynamic) onChanged, {
     Key? key,
   }) {
+    // GÜVENLİK: Duplicate item'ları temizle ve value'nun listede olduğundan emin ol
+    final uniqueItems = <DropdownMenuItem<dynamic>>[];
+    final seenValues = <dynamic>{};
+    for (final item in items) {
+      if (!seenValues.contains(item.value)) {
+        seenValues.add(item.value);
+        uniqueItems.add(item);
+      }
+    }
+
+    final isValid = uniqueItems.any((item) => item.value == value);
+    final safeValue = isValid ? value : (uniqueItems.isNotEmpty ? uniqueItems.first.value : null);
+
     return DropdownButtonFormField(
       key: key,
-      initialValue: value,
+      initialValue: safeValue,
       isExpanded: true,
       dropdownColor: const Color(0xFF1E293B),
       style: const TextStyle(
@@ -410,7 +423,7 @@ return FutureBuilder<int?>(
           vertical: 12,
         ),
       ),
-      items: items,
+      items: uniqueItems,
       onChanged: onChanged,
     );
   }

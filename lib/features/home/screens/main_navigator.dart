@@ -77,7 +77,7 @@ class _FloatingNavBar extends StatelessWidget {
       ('Ana Sayfa', Icons.home_outlined),
       ('Fikstür', Icons.calendar_month_outlined),
       ('Gruplar', Icons.groups_outlined),
-      ('İstatistik', Icons.bar_chart_outlined),
+      //('İstatistik', Icons.bar_chart_outlined),
       ('Profil', Icons.person_outline),
     ];
 

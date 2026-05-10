@@ -172,7 +172,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             }
           },
           child: Scaffold(
-            appBar: AppBar(
+            appBar: user == null ? null : AppBar(
               centerTitle: true,
               leading: isAdminPanelVisible
                   ? IconButton(

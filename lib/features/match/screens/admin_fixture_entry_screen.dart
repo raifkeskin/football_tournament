@@ -119,8 +119,10 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                   builder: (context, snapshot) {
                     if (!snapshot.hasData) return const SizedBox();
                     final leagues = snapshot.data ?? const <League>[];
+                    final isValid = _selectedLeagueId == null || leagues.any((l) => l.id == _selectedLeagueId);
+                    final safeValue = isValid ? _selectedLeagueId : null;
                     return DropdownButtonFormField<String>(
-                      initialValue: _selectedLeagueId,
+                      initialValue: safeValue,
                       decoration: const InputDecoration(labelText: 'Turnuva'),
                       dropdownColor: const Color(0xFF1E293B),
                       style: const TextStyle(
@@ -178,8 +180,10 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                           });
                         }
                       }
+                      final isValid = _selectedSeasonId == null || seasons.any((s) => s.id == _selectedSeasonId);
+                      final safeValue = isValid ? _selectedSeasonId : null;
                       return DropdownButtonFormField<String>(
-                        initialValue: _selectedSeasonId,
+                        initialValue: safeValue,
                         decoration: const InputDecoration(labelText: 'Sezon'),
                         dropdownColor: const Color(0xFF1E293B),
                         style: const TextStyle(
@@ -227,8 +231,10 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                             b.name.toLowerCase(),
                           ),
                         );
+                      final isValid = _selectedGroupId == null || groups.any((g) => g.id == _selectedGroupId);
+                      final safeValue = isValid ? _selectedGroupId : null;
                       return DropdownButtonFormField<String>(
-                        initialValue: _selectedGroupId,
+                        initialValue: safeValue,
                         decoration: const InputDecoration(labelText: 'Grup'),
                         dropdownColor: const Color(0xFF1E293B),
                         style: const TextStyle(
@@ -269,10 +275,15 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                     builder: (context, snapshot) {
                       if (!snapshot.hasData) return const SizedBox();
                       final teams = snapshot.data!;
+                      final isHomeValid = _homeTeamId == null || teams.any((t) => t.id == _homeTeamId);
+                      final safeHome = isHomeValid ? _homeTeamId : null;
+                      final isAwayValid = _awayTeamId == null || teams.any((t) => t.id == _awayTeamId);
+                      final safeAway = isAwayValid ? _awayTeamId : null;
+
                       return Column(
                         children: [
                           DropdownButtonFormField<String>(
-                            initialValue: _homeTeamId,
+                            initialValue: safeHome,
                             decoration: const InputDecoration(labelText: 'Ev Sahibi'),
                             dropdownColor: const Color(0xFF1E293B),
                             style: const TextStyle(
@@ -298,7 +309,7 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                           ),
                           const SizedBox(height: 10),
                           DropdownButtonFormField<String>(
-                            initialValue: _awayTeamId,
+                            initialValue: safeAway,
                             decoration: const InputDecoration(labelText: 'Deplasman'),
                             dropdownColor: const Color(0xFF1E293B),
                             style: const TextStyle(
@@ -332,9 +343,11 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                   stream: _leagueService.watchPitches(),
                   builder: (context, snapshot) {
                     final pitches = snapshot.data ?? const <Pitch>[];
+                    final isValid = _selectedPitchId == null || pitches.any((p) => p.id == _selectedPitchId);
+                    final safeValue = isValid ? _selectedPitchId : null;
                     return DropdownButtonFormField<String?>(
                       key: ValueKey(_selectedPitchId),
-                      initialValue: _selectedPitchId,
+                      initialValue: safeValue,
                       decoration: const InputDecoration(labelText: 'Saha Seç'),
                       dropdownColor: const Color(0xFF1E293B),
                       style: const TextStyle(
