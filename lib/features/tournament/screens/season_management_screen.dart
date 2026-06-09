@@ -117,7 +117,7 @@ class SeasonManagementScreen extends StatelessWidget {
     var isDefault = season?.isDefault ?? false;
     var saving = false;
 
-    String _norm(String input) {
+    String norm(String input) {
       return input
           .replaceAll('İ', 'i')
           .replaceAll('I', 'ı')
@@ -125,7 +125,7 @@ class SeasonManagementScreen extends StatelessWidget {
           .trim();
     }
 
-    Future<void> _pickTurkeyCity({
+    Future<void> pickTurkeyCity({
       required void Function(void Function()) setSheetState,
     }) async {
       final picked = await showModalBottomSheet<String>(
@@ -146,10 +146,10 @@ class SeasonManagementScreen extends StatelessWidget {
           final qController = TextEditingController();
           return StatefulBuilder(
             builder: (context, setPickerState) {
-              final q = _norm(qController.text);
+              final q = norm(qController.text);
               final items = AppConstants.turkeyCities.where((c) {
                 if (q.isEmpty) return true;
-                return _norm(c).contains(q);
+                return norm(c).contains(q);
               }).toList();
               return SizedBox(
                 height: h,
@@ -349,7 +349,7 @@ class SeasonManagementScreen extends StatelessWidget {
         }
 
         if (isEdit) {
-          await _sb.from('seasons').update(payload).eq('id', season!.id);
+          await _sb.from('seasons').update(payload).eq('id', season.id);
         } else {
           await _sb.from('seasons').insert(payload);
         }
@@ -544,7 +544,7 @@ class SeasonManagementScreen extends StatelessWidget {
                                 readOnly: true,
                                 onTap: saving
                                     ? null
-                                    : () => _pickTurkeyCity(
+                                    : () => pickTurkeyCity(
                                         setSheetState: setSheetState,
                                       ),
                                 decoration: const InputDecoration(
@@ -1777,7 +1777,7 @@ class _TeamListScreenState extends State<TeamListScreen> {
                   children: [
                     Expanded(
                       child: DropdownButtonFormField<String>(
-                        value: effectiveGroup,
+                        initialValue: effectiveGroup,
                         decoration: const InputDecoration(
                           labelText: 'Grup',
                           prefixIcon: Icon(Icons.groups_outlined),

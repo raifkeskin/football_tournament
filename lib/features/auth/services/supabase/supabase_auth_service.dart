@@ -85,10 +85,16 @@ class SupabaseAuthService implements IAuthService {
           orElse: () => const <String, dynamic>{},
         );
         if (row.isEmpty) return null;
+        final name = (row['name'] ?? '').toString().trim();
+        final surname = (row['surname'] ?? '').toString().trim();
+        final fullName = (row['full_name'] ?? '').toString().trim();
+        final displayName = fullName.isNotEmpty ? fullName : (name.isNotEmpty || surname.isNotEmpty ? '$name $surname'.trim() : null);
         return UserDoc(
           uid: (row['id'] ?? '').toString(),
           role: (row['access_role'] ?? row['role'])?.toString(),
           phone: (row['phone'] ?? '').toString(),
+          displayName: displayName,
+          isAdmin: (row['access_role']?.toString() == 'admin' || row['access_role']?.toString() == 'super_admin'),
         );
       });
     } catch (e) {

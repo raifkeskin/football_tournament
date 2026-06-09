@@ -1,9 +1,17 @@
 class UserDoc {
-  const UserDoc({required this.uid, required this.role, required this.phone});
+  const UserDoc({
+    required this.uid,
+    required this.role,
+    required this.phone,
+    this.displayName,
+    this.isAdmin = false,
+  });
 
   final String uid;
   final String? role;
   final String phone;
+  final String? displayName;
+  final bool isAdmin;
 }
 
 class RosterAssignment {

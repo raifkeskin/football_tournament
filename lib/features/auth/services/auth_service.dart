@@ -30,10 +30,16 @@ class FirebaseAuthService implements IAuthService {
     return _firestore.collection('users').doc(id).snapshots().map((snap) {
       if (!snap.exists) return null;
       final data = snap.data() ?? <String, dynamic>{};
+      final name = (data['name'] ?? '').toString().trim();
+      final surname = (data['surname'] ?? '').toString().trim();
+      final fullName = (data['fullName'] ?? '').toString().trim();
+      final displayName = fullName.isNotEmpty ? fullName : (name.isNotEmpty || surname.isNotEmpty ? '$name $surname'.trim() : null);
       return UserDoc(
         uid: snap.id,
         role: (data['accessRole'] ?? data['role'])?.toString(),
         phone: (data['phone'] ?? '').toString(),
+        displayName: displayName,
+        isAdmin: (data['accessRole']?.toString() == 'admin' || data['accessRole']?.toString() == 'super_admin'),
       );
     });
   }

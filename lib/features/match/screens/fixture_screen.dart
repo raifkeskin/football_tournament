@@ -14,6 +14,7 @@ import '../services/interfaces/i_match_service.dart';
 import '../../team/services/interfaces/i_team_service.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/widgets/web_safe_image.dart';
+import '../../../core/services/global_filter.dart';
 import 'match_details_screen.dart';
 
 class FixtureScreen extends StatefulWidget {
@@ -32,6 +33,46 @@ class _FixtureScreenState extends State<FixtureScreen> {
   String? _groupId;
   int? _week;
 
+  Stream<List<Team>>? _teamsStream;
+  Stream<List<League>>? _leaguesStream;
+  
+  String? _lastLeagueIdForSeason;
+  Stream<List<Season>>? _seasonsStream;
+
+  String? _lastSeasonIdForGroup;
+  Stream<List<GroupModel>>? _groupsStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _teamsStream = _teamService.watchAllTeams();
+    _leaguesStream = _leagueService.watchLeagues();
+    _leagueId = GlobalFilter.leagueId.value;
+    _seasonId = GlobalFilter.seasonId.value;
+    _groupId = GlobalFilter.groupId.value;
+    
+    GlobalFilter.leagueId.addListener(_onGlobalFilterChanged);
+    GlobalFilter.seasonId.addListener(_onGlobalFilterChanged);
+    GlobalFilter.groupId.addListener(_onGlobalFilterChanged);
+  }
+
+  void _onGlobalFilterChanged() {
+    if (!mounted) return;
+    setState(() {
+      _leagueId = GlobalFilter.leagueId.value ?? _leagueId;
+      _seasonId = GlobalFilter.seasonId.value ?? _seasonId;
+      _groupId = GlobalFilter.groupId.value ?? _groupId;
+    });
+  }
+
+  @override
+  void dispose() {
+    GlobalFilter.leagueId.removeListener(_onGlobalFilterChanged);
+    GlobalFilter.seasonId.removeListener(_onGlobalFilterChanged);
+    GlobalFilter.groupId.removeListener(_onGlobalFilterChanged);
+    super.dispose();
+  }
+
   Stream<List<Season>> _watchSeasons(String leagueId) {
     if (AppConfig.activeDatabase != DatabaseType.supabase) {
       return Stream.value([]);
@@ -42,6 +83,22 @@ class _FixtureScreenState extends State<FixtureScreen> {
         .eq('league_id', leagueId)
         .order('start_date', ascending: false)
         .map((rows) => rows.map((r) => Season.fromMap(r)).toList());
+  }
+
+  Stream<List<Season>> _getSeasonsStream(String leagueId) {
+    if (_lastLeagueIdForSeason != leagueId || _seasonsStream == null) {
+      _lastLeagueIdForSeason = leagueId;
+      _seasonsStream = _watchSeasons(leagueId);
+    }
+    return _seasonsStream!;
+  }
+
+  Stream<List<GroupModel>> _getGroupsStream(String seasonId) {
+    if (_lastSeasonIdForGroup != seasonId || _groupsStream == null) {
+      _lastSeasonIdForGroup = seasonId;
+      _groupsStream = _leagueService.watchGroups(seasonId);
+    }
+    return _groupsStream!;
   }
 
   DateTime? _parseYyyyMmDd(String yyyyMmDd) {
@@ -93,7 +150,7 @@ class _FixtureScreenState extends State<FixtureScreen> {
         ),
       ),
       body: StreamBuilder<List<Team>>(
-        stream: _teamService.watchAllTeams(),
+        stream: _teamsStream,
         builder: (context, teamsSnap) {
           final teamLogoById = <String, String>{};
           final teamNameById = <String, String>{};
@@ -105,7 +162,7 @@ class _FixtureScreenState extends State<FixtureScreen> {
           }
 
           return StreamBuilder<List<League>>(
-            stream: _leagueService.watchLeagues(),
+            stream: _leaguesStream,
             builder: (context, leaguesSnap) {
               if (!leaguesSnap.hasData) {
                 return const Center(child: CircularProgressIndicator());
@@ -117,14 +174,27 @@ class _FixtureScreenState extends State<FixtureScreen> {
                 return const Center(child: Text('Turnuva bulunamadı.'));
               }
 
-              _leagueId ??= leagues.any((l) => l.isDefault)
-                  ? (leagues.where((l) => l.isDefault).first.id)
-                  : leagues.first.id;
+              if (_leagueId == null || !leagues.any((l) => l.id == _leagueId)) {
+                final newLeagueId = leagues.any((l) => l.isDefault)
+                    ? (leagues.where((l) => l.isDefault).first.id)
+                    : leagues.first.id;
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted) return;
+                  setState(() {
+                    _leagueId = newLeagueId;
+                    _seasonId = null;
+                    _groupId = null;
+                    _week = null;
+                  });
+                  GlobalFilter.setLeague(newLeagueId);
+                });
+                _leagueId = newLeagueId;
+              }
 
               return StreamBuilder<List<Season>>(
                 stream: _leagueId == null
                     ? Stream.value([])
-                    : _watchSeasons(_leagueId!),
+                    : _getSeasonsStream(_leagueId!),
                 builder: (context, seasonSnap) {
                   final seasons = seasonSnap.data ?? [];
 
@@ -140,6 +210,7 @@ class _FixtureScreenState extends State<FixtureScreen> {
                             _groupId = null;
                             _week = null;
                           });
+                          GlobalFilter.setSeason(seasons.first.id);
                         }
                       });
                     }
@@ -148,7 +219,7 @@ class _FixtureScreenState extends State<FixtureScreen> {
                   return StreamBuilder<List<GroupModel>>(
                     stream: _seasonId == null
                         ? const Stream<List<GroupModel>>.empty()
-                        : _leagueService.watchGroups(_seasonId!),
+                        : _getGroupsStream(_seasonId!),
                     builder: (context, snapshot) {
                       final groupsRaw = snapshot.data ?? const <GroupModel>[];
                       final groups = [...groupsRaw]
@@ -241,12 +312,15 @@ return FutureBuilder<int?>(
                                                     child: Text(l.name),
                                                   ))
                                               .toList(),
-                                          (v) => setState(() {
-                                            _leagueId = v;
-                                            _seasonId = null;
-                                            _groupId = null;
-                                            _week = null;
-                                          }),
+                                          (v) {
+                                            setState(() {
+                                              _leagueId = v;
+                                              _seasonId = null;
+                                              _groupId = null;
+                                              _week = null;
+                                            });
+                                            GlobalFilter.setLeague(v);
+                                          },
                                         ),
                                         const SizedBox(height: 12),
                                         _buildDropdown(
@@ -258,11 +332,14 @@ return FutureBuilder<int?>(
                                                     child: Text(s.name),
                                                   ))
                                               .toList(),
-                                          (v) => setState(() {
-                                            _seasonId = v;
-                                            _groupId = null;
-                                            _week = null;
-                                          }),
+                                          (v) {
+                                            setState(() {
+                                              _seasonId = v;
+                                              _groupId = null;
+                                              _week = null;
+                                            });
+                                            GlobalFilter.setSeason(v);
+                                          },
                                           key: ValueKey('season_$_leagueId'),
                                         ),
                                         const SizedBox(height: 12),
@@ -287,10 +364,13 @@ return FutureBuilder<int?>(
                                                   }),
                                                 ],
                                                 // GÜVENLİK 3: Grup değiştiğinde hafızadaki haftayı sıfırla!
-                                                (v) => setState(() {
-                                                  _groupId = v;
-                                                  _week = null; 
-                                                }),
+                                                (v) {
+                                                  setState(() {
+                                                    _groupId = v;
+                                                    _week = null; 
+                                                  });
+                                                  GlobalFilter.setGroup(v);
+                                                },
                                                 key: ValueKey('group_$_seasonId'),
                                               ),
                                             ),

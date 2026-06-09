@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/services/app_session.dart';
-import 'package:football_tournament/screens/admin_panel_screen.dart';
 import 'forgot_password_screen.dart';
 import '../../home/screens/main_navigator.dart';
 import 'online_registration_screen.dart';

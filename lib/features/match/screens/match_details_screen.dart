@@ -700,7 +700,7 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
           mainAxisSize: MainAxisSize.min,
           children: [
             DropdownButtonFormField<String>(
-              value: _selectedType,
+              initialValue: _selectedType,
               items: _types
                   .map((t) => DropdownMenuItem(value: t, child: Text(t)))
                   .toList(),
@@ -1180,7 +1180,6 @@ class _LineupTab extends StatefulWidget {
   final String awayName;
 
   const _LineupTab({
-    super.key,
     required this.match,
     required this.isAdminAccess,
     required this.homeName,
@@ -1443,7 +1442,7 @@ class _RosterEditSheetState extends State<_RosterEditSheet>
   List<PlayerModel> _teamPlayers = [];
   final Set<String> _starterIds = {};
   final Set<String> _subIds = {};
-  Map<String, TextEditingController> _jerseyControllers = {};
+  final Map<String, TextEditingController> _jerseyControllers = {};
   bool _isLoading = true;
   bool _isSaving = false;
 
@@ -1477,12 +1476,12 @@ class _RosterEditSheetState extends State<_RosterEditSheet>
 
       int sCount = 11;
       int subCount = 7;
-      if (widget.match.seasonId != null && widget.match.seasonId!.isNotEmpty) {
+      if (widget.match.seasonId.isNotEmpty) {
         try {
           final sRes = await Supabase.instance.client
               .from('seasons')
               .select('starting_player_count, sub_player_count')
-              .eq('id', widget.match.seasonId!)
+              .eq('id', widget.match.seasonId)
               .maybeSingle();
           if (sRes != null) {
             sCount = sRes['starting_player_count'] ?? 11;

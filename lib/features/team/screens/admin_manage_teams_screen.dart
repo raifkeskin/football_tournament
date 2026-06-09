@@ -305,7 +305,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
               ? null
               : selectedManagerId!.trim(),
           'updated_at': DateTime.now().toIso8601String(),
-          if (foundedYear != null) 'founded_year': foundedYear,
+          'founded_year': ?foundedYear,
         };
 
         Future<void> doUpdateInsert({required bool includeFounded}) async {

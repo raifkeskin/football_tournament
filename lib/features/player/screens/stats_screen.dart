@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../core/config/app_config.dart';
 import '../../tournament/models/league.dart';
+import '../../tournament/models/season.dart';
 import '../../match/models/match.dart';
 import '../models/player_stats.dart';
 import '../../team/models/team.dart';
@@ -8,6 +11,7 @@ import '../../match/services/interfaces/i_match_service.dart';
 import '../../team/services/interfaces/i_team_service.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/widgets/web_safe_image.dart';
+import '../../../core/services/global_filter.dart';
 
 class StatsScreen extends StatefulWidget {
   const StatsScreen({super.key});
@@ -20,15 +24,67 @@ class _StatsScreenState extends State<StatsScreen> {
   final ILeagueService _leagueService = ServiceLocator.leagueService;
   final IMatchService _matchService = ServiceLocator.matchService;
   final ITeamService _teamService = ServiceLocator.teamService;
+  
   String? _selectedLeagueId;
+  String? _selectedSeasonId;
+
+  Stream<List<League>>? _leaguesStream;
+
+  String? _lastLeagueIdForSeason;
+  Stream<List<Season>>? _seasonsStream;
+
+  Stream<List<Season>> _watchSeasons(String leagueId) {
+    if (AppConfig.activeDatabase != DatabaseType.supabase) {
+      return Stream.value([]);
+    }
+    return Supabase.instance.client
+        .from('seasons')
+        .stream(primaryKey: ['id'])
+        .eq('league_id', leagueId)
+        .order('start_date', ascending: false)
+        .map((rows) => rows.map((r) => Season.fromMap(r)).toList());
+  }
+
+  Stream<List<Season>> _getSeasonsStream(String leagueId) {
+    if (_lastLeagueIdForSeason != leagueId || _seasonsStream == null) {
+      _lastLeagueIdForSeason = leagueId;
+      _seasonsStream = _watchSeasons(leagueId);
+    }
+    return _seasonsStream!;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _leaguesStream = _leagueService.watchLeagues();
+    _selectedLeagueId = GlobalFilter.leagueId.value;
+    _selectedSeasonId = GlobalFilter.seasonId.value;
+    GlobalFilter.leagueId.addListener(_onGlobalFilterChanged);
+    GlobalFilter.seasonId.addListener(_onGlobalFilterChanged);
+  }
+
+  void _onGlobalFilterChanged() {
+    if (!mounted) return;
+    setState(() {
+      _selectedLeagueId = GlobalFilter.leagueId.value;
+      _selectedSeasonId = GlobalFilter.seasonId.value;
+    });
+  }
+
+  @override
+  void dispose() {
+    GlobalFilter.leagueId.removeListener(_onGlobalFilterChanged);
+    GlobalFilter.seasonId.removeListener(_onGlobalFilterChanged);
+    super.dispose();
+  }
   
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return StreamBuilder<List<League>>(
-      stream: _leagueService.watchLeagues(),
+      stream: _leaguesStream,
       builder: (context, leaguesSnap) {
-        if (!leaguesSnap.hasData) {
+        if (!leaguesSnap.hasData && leaguesSnap.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
@@ -37,31 +93,16 @@ class _StatsScreenState extends State<StatsScreen> {
         final leagues = leaguesSnap.data ?? const <League>[];
         if (leagues.isEmpty) {
           return const Scaffold(
-            body: Center(child: Text('Turnuva bulunamadı.')),
+            body: Center(child: Text('Turnuva bulunamadı.', style: TextStyle(color: Colors.white))),
+            backgroundColor: Color(0xFF0F172A),
           );
         }
 
-        if (_selectedLeagueId == null) {
-          final defaults = leagues.where((l) => l.isDefault).toList();
-          if (defaults.isNotEmpty) {
-            defaults.sort(
-              (a, b) =>
-                  (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)),
-            );
-            _selectedLeagueId = defaults.first.id;
-          } else {
-            leagues.sort(
-              (a, b) =>
-                  (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)),
-            );
-            _selectedLeagueId = leagues.first.id;
-          }
-        }
-
-        final leagueId = _selectedLeagueId!;
-
         return Scaffold(
+          backgroundColor: const Color(0xFF0F172A),
           appBar: AppBar(
+            backgroundColor: const Color(0xFF064E3B),
+            foregroundColor: Colors.white,
             centerTitle: true,
             title: Row(
               mainAxisSize: MainAxisSize.min,
@@ -75,93 +116,146 @@ class _StatsScreenState extends State<StatsScreen> {
           body: Column(
             children: [
               Container(
-                color: const Color(0xFF064E3B),
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
-                child: DropdownButtonFormField<String>(
-                  initialValue: leagueId,
-                  isExpanded: true,
-                  dropdownColor: const Color(0xFF1E293B),
-                  icon: const Icon(
-                    Icons.keyboard_arrow_down_rounded,
-                    color: Colors.white,
-                  ),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                  ),
-                  decoration: InputDecoration(
-                    labelText: 'Turnuva Seçin',
-                    labelStyle: const TextStyle(
-                      color: Colors.white70,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    floatingLabelBehavior: FloatingLabelBehavior.always,
-                    filled: true,
-                    fillColor: Colors.white.withValues(alpha: 0.10),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: const BorderSide(color: Colors.white24),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: const BorderSide(color: Colors.white54),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 8,
-                    ),
-                  ),
-                  items: leagues
-                      .map(
-                        (l) => DropdownMenuItem(
-                          value: l.id,
-                          child: Text(
-                            l.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontWeight: FontWeight.w900),
+                color: const Color(0xFF0F172A),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: StreamBuilder<List<Season>>(
+                  stream: _selectedLeagueId == null
+                      ? Stream.value([])
+                      : _getSeasonsStream(_selectedLeagueId!),
+                  builder: (context, seasonSnap) {
+                    final seasons = seasonSnap.data ?? const <Season>[];
+                    
+                    if (seasons.isNotEmpty && _selectedSeasonId == null && GlobalFilter.seasonId.value == null) {
+                      final defaultSeason = seasons.any((s) => s.isDefault)
+                          ? seasons.firstWhere((s) => s.isDefault).id
+                          : (seasons.any((s) => s.isActive)
+                              ? seasons.firstWhere((s) => s.isActive).id
+                              : seasons.first.id);
+                              
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        GlobalFilter.setSeason(defaultSeason);
+                      });
+                    }
+
+                    return Row(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1E293B),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.white12),
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value: leagues.any((l) => l.id == _selectedLeagueId)
+                                    ? _selectedLeagueId
+                                    : null,
+                                isExpanded: true,
+                                dropdownColor: const Color(0xFF1E293B),
+                                icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white),
+                                hint: const Text('Turnuva Seçin', style: TextStyle(color: Colors.white54)),
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                                items: leagues.map((l) => DropdownMenuItem(
+                                  value: l.id,
+                                  child: Text(l.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                )).toList(),
+                                onChanged: (String? val) {
+                                  if (val != null) {
+                                    setState(() => _selectedLeagueId = val);
+                                    GlobalFilter.setLeague(val);
+                                  }
+                                },
+                              ),
+                            ),
                           ),
                         ),
-                      )
-                      .toList(),
-                  onChanged: (val) => setState(() => _selectedLeagueId = val),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1E293B),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.white12),
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value: seasons.any((s) => s.id == _selectedSeasonId)
+                                    ? _selectedSeasonId
+                                    : null,
+                                isExpanded: true,
+                                dropdownColor: const Color(0xFF1E293B),
+                                icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white),
+                                hint: const Text('Sezon Seçin', style: TextStyle(color: Colors.white54)),
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                                items: seasons.map((s) => DropdownMenuItem(
+                                  value: s.id,
+                                  child: Text(s.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                )).toList(),
+                                onChanged: (String? val) {
+                                  if (val != null) {
+                                    setState(() => _selectedSeasonId = val);
+                                    GlobalFilter.setSeason(val);
+                                  }
+                                },
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ),
               Expanded(
-                child: Transform.translate(
-                  offset: const Offset(0, -20),
-                  child: Container(
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF0F172A),
-                      borderRadius:
-                          BorderRadius.vertical(top: Radius.circular(24)),
-                    ),
-                    padding: const EdgeInsets.only(top: 34),
-                    child: StreamBuilder<List<Team>>(
-                      stream: _teamService.watchAllTeams(),
-                      builder: (context, teamsSnap) {
-                        if (!teamsSnap.hasData) {
-                          return const Center(child: CircularProgressIndicator());
-                        }
-
-                        final teams =
-                            (teamsSnap.data ?? const <Team>[])
-                                .where((t) => t.id != 'free_agent_pool')
-                                .toList();
-                        final teamById = {for (final t in teams) t.id: t};
-
-                        return StreamBuilder<List<PlayerStats>>(
-                          stream: _matchService.watchPlayerStats(tournamentId: leagueId),
-                          builder: (context, statsSnap) {
-                            if (!statsSnap.hasData) {
+                child: _selectedSeasonId == null
+                    ? const Center(
+                        child: Text(
+                          'Lütfen bir turnuva ve sezon seçin.',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                      )
+                    : Padding(
+                        padding: const EdgeInsets.only(top: 20),
+                        child: StreamBuilder<List<Team>>(
+                          stream: _teamService.watchAllTeams(),
+                          builder: (context, teamsSnap) {
+                            if (!teamsSnap.hasData && teamsSnap.connectionState == ConnectionState.waiting) {
                               return const Center(child: CircularProgressIndicator());
                             }
-                            final stats =
-                                (statsSnap.data ?? const <PlayerStats>[])
-                                    .where((s) => s.playerPhone.trim().isNotEmpty)
-                                    .toList();
 
-                            List<PlayerStats> topBy(int Function(PlayerStats s) getValue) {
+                            final teams =
+                                (teamsSnap.data ?? const <Team>[])
+                                    .where((t) => t.id != 'free_agent_pool')
+                                    .toList();
+                            final teamById = {for (final t in teams) t.id: t};
+
+                            return StreamBuilder<List<PlayerStats>>(
+                              stream: _matchService.watchPlayerStats(tournamentId: _selectedLeagueId ?? ''),
+                              builder: (context, statsSnap) {
+                                if (!statsSnap.hasData && statsSnap.connectionState == ConnectionState.waiting) {
+                                  return const Center(child: CircularProgressIndicator());
+                                }
+                                
+                                final stats = (statsSnap.data ?? const <PlayerStats>[])
+                                     .where((s) => s.playerPhone.trim().isNotEmpty)
+                                     .toList();
+
+                                 if (stats.isEmpty) {
+                                  return Center(
+                                    child: Text(
+                                      'Bu sezon için istatistik bulunmuyor.',
+                                      style: TextStyle(
+                                        color: cs.onSurfaceVariant,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  );
+                                }
+
+                                List<PlayerStats> topBy(int Function(PlayerStats s) getValue) {
                               final list = [...stats];
                               list.sort((a, b) {
                                 final cmp = getValue(b).compareTo(getValue(a));
@@ -432,12 +526,11 @@ class _StatsScreenState extends State<StatsScreen> {
                     ),
                   ),
                 ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
+              ],
+            ),
+          );
+        },
+      );
   }
 }
 

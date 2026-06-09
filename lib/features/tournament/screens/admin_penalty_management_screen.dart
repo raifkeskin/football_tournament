@@ -231,7 +231,7 @@ class _AdminPenaltyManagementScreenState
                 }
 
                 return DropdownButtonFormField<String>(
-                  value:
+                  initialValue:
                       _selectedLeagueId.isEmpty ||
                           !byId.containsKey(_selectedLeagueId)
                       ? null
@@ -305,7 +305,7 @@ class _AdminPenaltyManagementScreenState
                 }
 
                 return DropdownButtonFormField<String>(
-                  value:
+                  initialValue:
                       _selectedSeasonId.isEmpty ||
                           !byId.containsKey(_selectedSeasonId)
                       ? null
@@ -633,8 +633,9 @@ class _AdminPenaltyManagementScreenState
                                                             (row?['name'] ?? '')
                                                                 .toString()
                                                                 .trim();
-                                                        if (n.isNotEmpty)
+                                                        if (n.isNotEmpty) {
                                                           displayName = n;
+                                                        }
                                                       } catch (_) {}
                                                     }
                                                     final ok = await showDialog<bool>(
@@ -680,8 +681,9 @@ class _AdminPenaltyManagementScreenState
                                                           .deletePenaltyById(
                                                             pen.id,
                                                           );
-                                                      if (!context.mounted)
+                                                      if (!context.mounted) {
                                                         return;
+                                                      }
                                                       setState(
                                                         () => _hiddenPenaltyIds
                                                             .add(pen.id),
@@ -696,8 +698,9 @@ class _AdminPenaltyManagementScreenState
                                                         ),
                                                       );
                                                     } catch (e) {
-                                                      if (!context.mounted)
+                                                      if (!context.mounted) {
                                                         return;
+                                                      }
                                                       ScaffoldMessenger.of(
                                                         context,
                                                       ).showSnackBar(
@@ -1069,7 +1072,7 @@ child: ListView(
                 });
 
               return DropdownButtonFormField<String>(
-                value: _seasonId.isEmpty || !byId.containsKey(_seasonId)
+                initialValue: _seasonId.isEmpty || !byId.containsKey(_seasonId)
                     ? null
                     : _seasonId,
                 isExpanded: true,
@@ -1129,7 +1132,7 @@ child: ListView(
                 );
 
               return DropdownButtonFormField<String>(
-                value: _teamId.isEmpty || !byId.containsKey(_teamId)
+                initialValue: _teamId.isEmpty || !byId.containsKey(_teamId)
                     ? null
                     : _teamId,
                 isExpanded: true,
@@ -1161,8 +1164,9 @@ child: ListView(
             stream: () {
               final tid = _teamId.trim();
               final sid = _seasonId.trim();
-              if (tid.isEmpty || sid.isEmpty)
+              if (tid.isEmpty || sid.isEmpty) {
                 return Stream.value(const <PlayerModel>[]);
+              }
               return widget.teamService.watchPlayers(
                 teamId: tid,
                 tournamentId: sid,
@@ -1187,7 +1191,7 @@ child: ListView(
                     );
 
               return DropdownButtonFormField<String>(
-                value: _playerId.isEmpty || !byId.containsKey(_playerId)
+                initialValue: _playerId.isEmpty || !byId.containsKey(_playerId)
                     ? null
                     : _playerId,
                 isExpanded: true,

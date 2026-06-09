@@ -14,6 +14,6 @@ Build Onayı: Her yapılan kod değişikliğinden sonra uygulamanın sorunsuz bi
 
 Raporlama Dili: Asistanın raporları ve açıklamaları her zaman Türkçe olmalı.
 
-Database olarak supabase i kullanıyoruz eski kodlara bakıp firabase eklemeleri yapılmamalı.
+Database olarak supabase i kullanıyoruz eski kodlara bakıp firabase/firestore eklemeleri yapılmamalı. Uygulama tamamen Supabase'e geçirilmiştir.
 Database : Supabase
 Supabase : https://raifkeskin.supabase.co/

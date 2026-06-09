@@ -181,8 +181,9 @@ Future<void> showSquadBulkUploadDialog({
               final sheetName = excel.tables.keys.isEmpty
                   ? null
                   : excel.tables.keys.first;
-              if (sheetName == null)
+              if (sheetName == null) {
                 throw Exception('Excel sayfası bulunamadı.');
+              }
               final table = excel.tables[sheetName];
               if (table == null) throw Exception('Excel sayfası okunamadı.');
 
@@ -1284,13 +1285,14 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (!mounted) return;
               if (tid.trim().isEmpty) return;
-              if (_playersStreamTournamentId == tid && _playersStream != null)
+              if (_playersStreamTournamentId == tid && _playersStream != null) {
                 return;
+              }
               setState(() => _setPlayersStreamForTournament(tid));
             });
             return _teamService.watchPlayers(
               teamId: widget.teamId,
-              tournamentId: effectiveTournamentId!,
+              tournamentId: effectiveTournamentId,
               caller: 'TeamSquadScreen',
             );
           }();

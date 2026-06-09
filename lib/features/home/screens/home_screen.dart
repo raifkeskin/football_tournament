@@ -12,6 +12,7 @@ import '../../match/services/interfaces/i_match_service.dart';
 import '../../team/services/interfaces/i_team_service.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/widgets/web_safe_image.dart';
+import '../../../core/services/global_filter.dart';
 import '../../team/screens/groups_screen.dart';
 import '../../match/screens/match_details_screen.dart';
 
@@ -52,6 +53,22 @@ class _HomeScreenState extends State<HomeScreen> {
     final bugun = DateTime(now.year, now.month, now.day);
     _selectedDate = bugun;
     _rebuildDates(bugun);
+    _activeLeagueId = GlobalFilter.leagueId.value;
+    
+    GlobalFilter.leagueId.addListener(_onGlobalFilterChanged);
+  }
+
+  void _onGlobalFilterChanged() {
+    if (!mounted) return;
+    setState(() {
+      _activeLeagueId = GlobalFilter.leagueId.value ?? _activeLeagueId;
+    });
+  }
+
+  @override
+  void dispose() {
+    GlobalFilter.leagueId.removeListener(_onGlobalFilterChanged);
+    super.dispose();
   }
 
   Stream<List<Season>> _watchSeasons(String leagueId) {
@@ -181,6 +198,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   
                   if (enteredCode.isNotEmpty && enteredCode == actualCode) {
                     setState(() => _activeLeagueId = league.id);
+                    GlobalFilter.setLeague(league.id);
                     Navigator.pop(c); // Dialogu kapat
                     Navigator.pop(parentContext); // Alttaki menüyü kapat
                   } else {
@@ -252,6 +270,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             _showAccessCodeDialog(context, l);
                           } else {
                             setState(() => _activeLeagueId = l.id);
+                            GlobalFilter.setLeague(l.id);
                             Navigator.pop(c);
                           }
                         },
@@ -321,6 +340,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ? allLeagues.firstWhere((l) => l.isDefault && (!l.isPrivate || isAdmin)).id
                       : allLeagues.firstWhere((l) => !l.isPrivate || isAdmin, orElse: () => allLeagues.first).id;
                   _activeLeagueId = def;
+                  GlobalFilter.setLeague(def);
                   _didAutoSelectDefaultLeague = true;
                 }
 
@@ -497,6 +517,19 @@ class _HomeScreenState extends State<HomeScreen> {
               : _watchSeasons(_activeLeagueId!),
           builder: (context, seasonsSnap) {
             final seasons = seasonsSnap.data ?? const <Season>[];
+            
+            if (seasons.isNotEmpty && GlobalFilter.seasonId.value == null) {
+              final defaultSeason = seasons.any((s) => s.isDefault)
+                  ? seasons.firstWhere((s) => s.isDefault).id
+                  : (seasons.any((s) => s.isActive)
+                      ? seasons.firstWhere((s) => s.isActive).id
+                      : seasons.first.id);
+                      
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                GlobalFilter.setSeason(defaultSeason);
+              });
+            }
+
             final seasonNameById = <String, String>{
               for (final s in seasons) s.id: s.name.trim(),
             };
@@ -572,14 +605,19 @@ class _HomeScreenState extends State<HomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         InkWell(
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => GroupsScreen(
-                                initialLeagueId: _activeLeagueId!,
+                          onTap: () {
+                            GlobalFilter.setLeague(_activeLeagueId);
+                            GlobalFilter.setSeason(sId);
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => GroupsScreen(
+                                  initialLeagueId: _activeLeagueId!,
+                                  initialSeasonId: sId,
+                                ),
                               ),
-                            ),
-                          ),
+                            );
+                          },
                           child: Padding(
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             child: Row(

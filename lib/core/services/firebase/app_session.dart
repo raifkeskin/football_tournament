@@ -1,9 +1,6 @@
 import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb; // Supabase çakışmasını önlemek için alias
-import '../../utils/admin_backdoor_utils.dart';
 
 @immutable
 class AppSessionState {
@@ -47,17 +44,13 @@ class AppSessionState {
 
 class AppSessionController extends ValueNotifier<AppSessionState> {
   final sb.SupabaseClient _supabase;
-  final FirebaseFirestore _firestore; // Admin kontrolü için şimdilik Firestore kalıyor
 
   StreamSubscription<sb.AuthState>? _sub;
-  StreamSubscription<DocumentSnapshot>? _profileSub;
+  StreamSubscription<List<Map<String, dynamic>>>? _profileSub;
 
   AppSessionController({
     sb.SupabaseClient? supabase,
-    FirebaseAuth? auth,
-    FirebaseFirestore? firestore,
   })  : _supabase = supabase ?? sb.Supabase.instance.client,
-        _firestore = firestore ?? FirebaseFirestore.instance,
         super(
           AppSessionState(
             user: (supabase ?? sb.Supabase.instance.client).auth.currentUser,
@@ -78,7 +71,13 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
   }
 
   Future<void> signOut() async {
-    await _supabase.auth.signOut();
+    try {
+      await _supabase.auth.signOut();
+    } catch (e) {
+      // ignore
+    } finally {
+      _onAuthChanged(null);
+    }
   }
 
   String? _resolveEmailFromPhoneInput(String input) {
@@ -132,30 +131,19 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
     for (final email in adminEmails) {
       try {
         await _supabase.auth.signInWithPassword(email: email, password: pwd);
-        return _supabase.auth.currentUser != null;
+        if (_supabase.auth.currentUser != null) {
+          value = value.copyWith(isAdmin: true, role: 'super_admin');
+          return true;
+        }
       } catch (_) {}
     }
 
-    final refs = <DocumentReference<Map<String, dynamic>>>[
-      _firestore.collection('admins').doc('backdoor'),
-      _firestore.collection('admins').doc('masterclass'),
-      _firestore.collection('config').doc('admin_backdoor'),
-      _firestore.collection('config').doc('backdoor'),
-    ];
-
-    for (final ref in refs) {
-      try {
-        final snap = await ref.get();
-        final data = snap.data();
-        if (data == null) continue;
-        if (!matchesBackdoorPassword(data, pwd)) continue;
-
-        value = value.copyWith(isAdmin: true, role: 'super_admin');
-        return true;
-      } catch (_) {}
-    }
-
+    // Firestore fallback was removed. Supabase Auth MUST succeed.
     return false;
+  }
+
+  void setAdmin(bool isAdmin) {
+    value = value.copyWith(isAdmin: isAdmin);
   }
 
   Future<void> _onAuthChanged(sb.User? user) async {
@@ -180,31 +168,22 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
   }
 
   Future<bool> _checkAdmin(sb.User user) async {
-    final admins = _firestore.collection('admins');
-
-    // Supabase User ID'si ile Firestore'da adminlik sorguluyoruz
-    try {
-      final docByUid = await admins.doc(user.id).get();
-      if (docByUid.exists) return true;
-    } catch (_) {}
-
-    final email = user.email?.trim() ?? '';
-    if (email.isNotEmpty) {
-      try {
-        final docByEmail = await admins.doc(email).get();
-        if (docByEmail.exists) return true;
-      } catch (_) {}
-
-      try {
-        final q = await admins.where('email', isEqualTo: email).limit(1).get();
-        if (q.docs.isNotEmpty) return true;
-      } catch (_) {}
+    final emailAddress = user.email?.trim() ?? '';
+    if (emailAddress == 'admin@masterclass.com' || emailAddress == 'masterclass@masterclass.com') {
+      return true;
     }
 
     try {
-      final q = await admins.where('uid', isEqualTo: user.id).limit(1).get();
-      if (q.docs.isNotEmpty) return true;
+      final res = await _supabase.from('admins').select().eq('id', user.id).limit(1);
+      if (res.isNotEmpty) return true;
     } catch (_) {}
+
+    if (emailAddress.isNotEmpty) {
+      try {
+        final res = await _supabase.from('admins').select().eq('email', emailAddress).limit(1);
+        if (res.isNotEmpty) return true;
+      } catch (_) {}
+    }
 
     return false;
   }
@@ -212,13 +191,12 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
   void _loadProfile(sb.User user, bool isAdmin) {
     _profileSub?.cancel();
     
-    // Profil verileri Firestore'da olduğu sürece buradan okumaya devam eder
-    _profileSub = _firestore
-        .collection('users')
-        .doc(user.id)
-        .snapshots()
-        .listen((snap) {
-      if (!snap.exists) {
+    _profileSub = _supabase
+        .from('users')
+        .stream(primaryKey: ['id'])
+        .eq('id', user.id)
+        .listen((rows) {
+      if (rows.isEmpty) {
         value = value.copyWith(
           user: user,
           isAdmin: isAdmin,
@@ -228,12 +206,12 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
         return;
       }
 
-      final data = snap.data() ?? <String, dynamic>{};
+      final data = rows.first;
       value = value.copyWith(
         user: user,
         isAdmin: isAdmin,
-        role: (data['role'] ?? (isAdmin ? 'admin' : 'user')).toString(),
-        teamId: data['teamId']?.toString(),
+        role: (data['role'] ?? data['access_role'] ?? (isAdmin ? 'admin' : 'user')).toString(),
+        teamId: data['team_id']?.toString(),
         phone: data['phone']?.toString() ?? '',
         isLoading: false,
       );

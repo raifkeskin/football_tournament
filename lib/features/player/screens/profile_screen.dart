@@ -1,18 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:football_tournament/features/admin/services/approval_service.dart';
 import 'package:football_tournament/screens/admin_panel_screen.dart';
-import '../../team/screens/team_squad_screen.dart';
-import '../../../main.dart';
 import '../../home/screens/main_navigator.dart';
 import '../../../core/services/app_session.dart';
-import '../../auth/models/auth_models.dart';
-import '../../tournament/models/league.dart';
-import '../../team/models/team.dart';
 import '../../auth/services/interfaces/i_auth_service.dart';
-import '../../tournament/services/interfaces/i_league_service.dart';
-import '../../team/services/interfaces/i_team_service.dart';
 import '../../../core/services/service_locator.dart';
 import '../../auth/screens/login_screen.dart';
 
@@ -40,7 +31,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   /// Admin paneli geçişi için başlığa tıklama mantığı (Backdoor)
   void _onProfileTitleTap(dynamic session) {
-    if (session == null || session.value.user == null) return;
+    if (session == null) return;
+    final user = session.value.user;
+    if (user == null && !session.value.isAdmin) return;
+
     _tapTimer?.cancel();
     _tapCount++;
     if (_tapCount >= 3) {
@@ -147,21 +141,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final dynamic session = AppSession.of(context);
     final sessionData = session.value;
     final user = sessionData.user;
+    final isRealUser = user != null && !(user.isAnonymous ?? false);
+    final isAdminPanelVisible = sessionData.isAdmin;
+    final isSuperAdminMode = isAdminPanelVisible && !isRealUser;
 
     return StreamBuilder<dynamic>(
-      stream: (_authService as dynamic).watchUserDoc(user?.id ?? ''),
+      stream: isSuperAdminMode ? const Stream.empty() : (_authService as dynamic).watchUserDoc(user?.id ?? ''),
       builder: (context, snapshot) {
         final dynamic doc = snapshot.data;
+        final isLoading = snapshot.connectionState == ConnectionState.waiting;
+        
         final state = doc == null
-            ? const ProfileState()
+            ? ProfileState(
+                phone: sessionData.phone,
+                role: sessionData.role,
+                isAdmin: sessionData.isAdmin,
+                isLoading: isLoading,
+              )
             : ProfileState(
                 displayName: doc.displayName,
-                phone: doc.phone,
-                role: doc.role,
-                isAdmin: doc.isAdmin ?? false,
+                phone: doc.phone ?? sessionData.phone,
+                role: doc.role ?? sessionData.role,
+                isAdmin: doc.isAdmin ?? sessionData.isAdmin,
+                isLoading: false,
               );
 
-        final isAdminPanelVisible = user != null && sessionData.isAdmin;
+        final showAppBar = isRealUser || isAdminPanelVisible;
 
         return PopScope(
           canPop: !isAdminPanelVisible,
@@ -172,7 +177,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             }
           },
           child: Scaffold(
-            appBar: user == null ? null : AppBar(
+            appBar: !showAppBar ? null : AppBar(
               centerTitle: true,
               leading: isAdminPanelVisible
                   ? IconButton(
@@ -216,7 +221,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ],
                   )
-                : (user != null
+                : (isRealUser
                       ? _buildLoggedInProfileBody(context, state, session)
                       : const LoginScreen()),
           ),
@@ -251,7 +256,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _buildInfoRow(
                   context,
                   'İsim Soyisim',
-                  state.displayName ?? 'Yükleniyor...',
+                  state.displayName ?? (state.isLoading ? 'Yükleniyor...' : 'Belirtilmemiş'),
                   Icons.badge_outlined,
                 ),
                 const Divider(height: 24),

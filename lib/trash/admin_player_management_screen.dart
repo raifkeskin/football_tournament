@@ -342,7 +342,7 @@ class _AdminPlayerManagementScreenState extends State<AdminPlayerManagementScree
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           DropdownButtonFormField<String>(
-                            value: selectedLeagueId.isEmpty ? null : selectedLeagueId,
+                            initialValue: selectedLeagueId.isEmpty ? null : selectedLeagueId,
                             decoration: const InputDecoration(
                               labelText: 'Turnuva',
                               prefixIcon: Icon(Icons.emoji_events_outlined),

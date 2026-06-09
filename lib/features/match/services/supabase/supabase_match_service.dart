@@ -803,8 +803,9 @@ class SupabaseMatchService implements IMatchService {
           status.toLowerCase() == 'finished';
       if (!finished) return;
       if (match['stats_committed_at'] != null ||
-          match['stats_committed'] == true)
+          match['stats_committed'] == true) {
         return;
+      }
 
       final tournamentId = (match['league_id'] ?? '').toString().trim();
       if (tournamentId.isEmpty) return;

@@ -76,8 +76,9 @@ class SupabaseMatchService implements IMatchService {
                 if (matchWeek != week) return false;
 
                 // Sezon kontrolü (Eğer parametre gönderildiyse)
-                if (seasonId != null && r['season_id'] != seasonId)
+                if (seasonId != null && r['season_id'] != seasonId) {
                   return false;
+                }
 
                 // Grup kontrolü (Eğer parametre gönderildiyse)
                 if (groupId != null && r['group_id'] != groupId) return false;
@@ -439,7 +440,7 @@ class SupabaseMatchService implements IMatchService {
         .eq('media_type', 'Maç Yayın Linki')
         .limit(1);
     if (res.isNotEmpty) {
-      final row = res.first as Map<String, dynamic>;
+      final row = res.first;
       return row['url']?.toString();
     }
     return null;

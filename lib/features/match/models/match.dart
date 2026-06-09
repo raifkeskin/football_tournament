@@ -342,7 +342,7 @@ class MatchModel {
         'league_id': leagueId.trim().isEmpty ? null : leagueId.trim(),
         'home_team_id': homeTeamId,
         'away_team_id': awayTeamId,
-        'season_id': (seasonId ?? '').trim().isEmpty ? null : seasonId!.trim(),
+        'season_id': (seasonId ?? '').trim().isEmpty ? null : seasonId.trim(),
         'group_id': (groupId ?? '').trim().isEmpty ? null : groupId!.trim(),
         'pitch_id': (pitchId ?? '').trim().isEmpty ? null : pitchId!.trim(),
         'pitch_name': (pitchName ?? '').trim().isEmpty ? null : pitchName!.trim(),

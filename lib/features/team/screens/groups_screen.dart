@@ -6,15 +6,21 @@ import '../../match/models/match.dart';
 import '../models/team.dart';
 import '../../../core/config/app_config.dart';
 import '../../tournament/services/interfaces/i_league_service.dart';
-import '../services/interfaces/i_team_service.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/widgets/web_safe_image.dart';
+import '../../../core/services/global_filter.dart';
 import 'team_squad_screen.dart';
 
 class GroupsScreen extends StatefulWidget {
-  const GroupsScreen({super.key, this.initialLeagueId, this.initialGroupId});
+  const GroupsScreen({
+    super.key,
+    this.initialLeagueId,
+    this.initialSeasonId,
+    this.initialGroupId,
+  });
 
   final String? initialLeagueId;
+  final String? initialSeasonId;
   final String? initialGroupId;
 
   @override
@@ -26,6 +32,14 @@ class _GroupsScreenState extends State<GroupsScreen> {
   String? _selectedLeagueId;
   String? _selectedSeasonId;
   String? _selectedGroupId;
+
+  Stream<List<League>>? _leaguesStream;
+
+  String? _lastLeagueIdForSeason;
+  Stream<List<Season>>? _seasonsStream;
+
+  String? _lastSeasonIdForGroup;
+  Stream<List<GroupModel>>? _groupsStream;
 
   Stream<List<Season>> _watchSeasons(String leagueId) {
     if (AppConfig.activeDatabase != DatabaseType.supabase) {
@@ -42,8 +56,44 @@ class _GroupsScreenState extends State<GroupsScreen> {
   @override
   void initState() {
     super.initState();
-    _selectedLeagueId = widget.initialLeagueId;
+    _leaguesStream = _leagueService.watchLeagues();
+    _selectedLeagueId = widget.initialLeagueId ?? GlobalFilter.leagueId.value;
+    _selectedSeasonId = widget.initialSeasonId ?? GlobalFilter.seasonId.value;
     _selectedGroupId = widget.initialGroupId;
+    
+    GlobalFilter.leagueId.addListener(_onGlobalFilterChanged);
+    GlobalFilter.seasonId.addListener(_onGlobalFilterChanged);
+  }
+
+  void _onGlobalFilterChanged() {
+    if (!mounted) return;
+    setState(() {
+      _selectedLeagueId = GlobalFilter.leagueId.value ?? _selectedLeagueId;
+      _selectedSeasonId = GlobalFilter.seasonId.value ?? _selectedSeasonId;
+    });
+  }
+
+  @override
+  void dispose() {
+    GlobalFilter.leagueId.removeListener(_onGlobalFilterChanged);
+    GlobalFilter.seasonId.removeListener(_onGlobalFilterChanged);
+    super.dispose();
+  }
+
+  Stream<List<Season>> _getSeasonsStream(String leagueId) {
+    if (_lastLeagueIdForSeason != leagueId || _seasonsStream == null) {
+      _lastLeagueIdForSeason = leagueId;
+      _seasonsStream = _watchSeasons(leagueId);
+    }
+    return _seasonsStream!;
+  }
+
+  Stream<List<GroupModel>> _getGroupsStream(String seasonId) {
+    if (_lastSeasonIdForGroup != seasonId || _groupsStream == null) {
+      _lastSeasonIdForGroup = seasonId;
+      _groupsStream = _leagueService.watchGroups(seasonId);
+    }
+    return _groupsStream!;
   }
 
   @override
@@ -75,7 +125,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
       body: Column(
         children: [
           StreamBuilder<List<League>>(
-            stream: _leagueService.watchLeagues(),
+            stream: _leaguesStream,
             builder: (context, snapshot) {
               if (!snapshot.hasData) return const SizedBox();
               final leagues = snapshot.data ?? const <League>[];
@@ -91,6 +141,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                     _selectedSeasonId = null;
                     _selectedGroupId = null;
                   });
+                  GlobalFilter.setLeague(leagues.first.id);
                 });
               }
 
@@ -125,7 +176,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                 child: StreamBuilder<List<Season>>(
                   stream: _selectedLeagueId == null
                       ? Stream.value([])
-                      : _watchSeasons(_selectedLeagueId!),
+                      : _getSeasonsStream(_selectedLeagueId!),
                   builder: (context, seasonSnap) {
                     final seasons = seasonSnap.data ?? [];
                     if (_selectedLeagueId != null && seasons.isNotEmpty) {
@@ -137,6 +188,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                             _selectedSeasonId = seasons.first.id;
                             _selectedGroupId = null;
                           });
+                          GlobalFilter.setSeason(seasons.first.id);
                         });
                       }
                     }
@@ -175,6 +227,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                               _selectedSeasonId = null;
                               _selectedGroupId = null;
                             });
+                            GlobalFilter.setLeague(val);
                           },
                         ),
                         const SizedBox(height: 12),
@@ -209,11 +262,12 @@ class _GroupsScreenState extends State<GroupsScreen> {
                                     )
                                     .toList(),
                                 onChanged: (val) {
-                                  setState(() {
-                                    _selectedSeasonId = val;
-                                    _selectedGroupId = null;
-                                  });
-                                },
+                                                  setState(() {
+                                                    _selectedSeasonId = val;
+                                                    _selectedGroupId = null;
+                                                  });
+                                                  GlobalFilter.setSeason(val);
+                                                },
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -221,7 +275,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                               child: _selectedSeasonId == null
                                   ? const SizedBox.shrink()
                                   : StreamBuilder<List<GroupModel>>(
-                                      stream: _leagueService.watchGroups(_selectedSeasonId!),
+                                      stream: _getGroupsStream(_selectedSeasonId!),
                                       builder: (context, snapshot) {
                                         final groups = snapshot.data ?? const <GroupModel>[];
 
@@ -291,7 +345,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                     ),
                   )
                 : StreamBuilder<List<GroupModel>>(
-                    stream: _leagueService.watchGroups(_selectedSeasonId!),
+                    stream: _getGroupsStream(_selectedSeasonId!),
                     builder: (context, snapshot) {
                       if (!snapshot.hasData) {
                         return const Center(child: CircularProgressIndicator());
@@ -334,7 +388,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
   }
 }
 
-class _GroupStandingsTable extends StatelessWidget {
+class _GroupStandingsTable extends StatefulWidget {
   final String leagueId;
   final String seasonId;
   final String groupId;
@@ -348,6 +402,39 @@ class _GroupStandingsTable extends StatelessWidget {
     required this.groupName,
     required this.fetchGroupId,
   });
+
+  @override
+  State<_GroupStandingsTable> createState() => _GroupStandingsTableState();
+}
+
+class _GroupStandingsTableState extends State<_GroupStandingsTable> {
+  Stream<List<Map<String, dynamic>>>? _matchesStream;
+  Stream<List<Team>>? _teamsStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _initStreams();
+  }
+
+  @override
+  void didUpdateWidget(covariant _GroupStandingsTable oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.leagueId != widget.leagueId ||
+        oldWidget.seasonId != widget.seasonId ||
+        oldWidget.fetchGroupId != widget.fetchGroupId) {
+      _initStreams();
+    }
+  }
+
+  void _initStreams() {
+    _matchesStream = _watchLeagueMatchesRaw(
+      widget.leagueId,
+      widget.seasonId,
+      widget.fetchGroupId,
+    );
+    _teamsStream = ServiceLocator.teamService.watchAllTeams();
+  }
 
   Stream<List<Map<String, dynamic>>> _watchLeagueMatchesRaw(String leagueId, String seasonId, String? fetchGroupId) {
     final id = leagueId.trim();
@@ -413,13 +500,11 @@ class _GroupStandingsTable extends StatelessWidget {
     const accentGreen = Color(0xFF10B981);
     const trophy = Color(0xFFFBBF24);
 
-    final ITeamService teamService = ServiceLocator.teamService;
-
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       child: StreamBuilder<List<Map<String, dynamic>>>(
         // MAÇLARI ÖNCE ÇEKİYORUZ: Takımları maçlardan okuma çözümü
-        stream: _watchLeagueMatchesRaw(leagueId, seasonId, fetchGroupId),
+        stream: _matchesStream,
         builder: (context, mergedSnapshot) {
           if (mergedSnapshot.connectionState == ConnectionState.waiting) {
             return const Padding(
@@ -434,7 +519,7 @@ class _GroupStandingsTable extends StatelessWidget {
           final groupMatches = matchListRaw.where((m) {
             final matchGroup = (m['group_id'] ?? m['groupId'] ?? m['groupName'] ?? '').toString().trim();
             if (matchGroup.isEmpty) return false;
-            return matchGroup == groupId || matchGroup == groupName.trim();
+            return matchGroup == widget.groupId || matchGroup == widget.groupName.trim();
           }).toList();
 
           // Bu grupta maçı olan tüm takımların ID'lerini topla
@@ -447,7 +532,7 @@ class _GroupStandingsTable extends StatelessWidget {
           }
 
           return StreamBuilder<List<Team>>(
-            stream: teamService.watchAllTeams(),
+            stream: _teamsStream,
             builder: (context, teamsSnapshot) {
               if (teamsSnapshot.connectionState == ConnectionState.waiting) {
                 return const Padding(
@@ -465,7 +550,7 @@ class _GroupStandingsTable extends StatelessWidget {
                 final tLeague = (t.leagueId ?? '').toString().trim();
                 final tGroup = (t.groupId ?? '').toString().trim();
                 final playedInGroup = groupTeamIds.contains(t.id);
-                final explicitlyAssigned = (tLeague == leagueId.trim() && tGroup == groupId.trim());
+                final explicitlyAssigned = (tLeague == widget.leagueId.trim() && tGroup == widget.groupId.trim());
                 return playedInGroup || explicitlyAssigned;
               }).toList(growable: false);
 
@@ -488,7 +573,7 @@ class _GroupStandingsTable extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Center(
                     child: Text(
-                      'Grup $groupName için henüz takım/maç verisi yok.',
+                      'Grup ${widget.groupName} için henüz takım/maç verisi yok.',
                       style: const TextStyle(color: Colors.white),
                     ),
                   ),
@@ -540,15 +625,60 @@ class _GroupStandingsTable extends StatelessWidget {
                 ..sort((a, b) {
                   final sa = standings[a]!;
                   final sb = standings[b]!;
+                  
+                  // 1. Puan Kontrolü
                   final pA = _asInt(sa['Puan']);
                   final pB = _asInt(sb['Puan']);
                   if (pB != pA) return pB.compareTo(pA);
+
+                  // 2. İkili Averaj Kontrolü
+                  int h2hPointsA = 0;
+                  int h2hPointsB = 0;
+                  int h2hGoalDiffA = 0;
+                  int h2hGoalDiffB = 0;
+
+                  for (final m in groupMatches) {
+                    final hId = (m['home_team_id'] ?? m['homeTeamId'] ?? '').toString();
+                    final aId = (m['away_team_id'] ?? m['awayTeamId'] ?? '').toString();
+                    
+                    final rawStatus = (m['status'] ?? '').toString().trim().toLowerCase();
+                    final completedFlag = m['is_completed'] == true || m['isCompleted'] == true;
+                    final isCompleted = completedFlag || rawStatus == 'finished' || rawStatus == 'completed';
+                    
+                    if (isCompleted && ((hId == a && aId == b) || (hId == b && aId == a))) {
+                      final hS = _matchHomeScore(m);
+                      final aS = _matchAwayScore(m);
+                      
+                      if (hId == a) {
+                        h2hGoalDiffA += (hS - aS);
+                        h2hGoalDiffB += (aS - hS);
+                        if (hS > aS) { h2hPointsA += 3; }
+                        else if (hS < aS) { h2hPointsB += 3; }
+                        else { h2hPointsA += 1; h2hPointsB += 1; }
+                      } else {
+                        h2hGoalDiffB += (hS - aS);
+                        h2hGoalDiffA += (aS - hS);
+                        if (hS > aS) { h2hPointsB += 3; }
+                        else if (hS < aS) { h2hPointsA += 3; }
+                        else { h2hPointsB += 1; h2hPointsA += 1; }
+                      }
+                    }
+                  }
+
+                  if (h2hPointsB != h2hPointsA) return h2hPointsB.compareTo(h2hPointsA);
+                  if (h2hGoalDiffB != h2hGoalDiffA) return h2hGoalDiffB.compareTo(h2hGoalDiffA);
+
+                  // 3. Genel Averaj Kontrolü
                   final avA = _asInt(sa['AV']);
                   final avB = _asInt(sb['AV']);
                   if (avB != avA) return avB.compareTo(avA);
+                  
+                  // 4. Atılan Gol Kontrolü
                   final agA = _asInt(sa['AG']);
                   final agB = _asInt(sb['AG']);
                   if (agB != agA) return agB.compareTo(agA);
+                  
+                  // 5. Alfabetik Sıralama
                   return teamNames[a]!.toLowerCase().compareTo(
                     teamNames[b]!.toLowerCase(),
                   );
@@ -575,7 +705,7 @@ class _GroupStandingsTable extends StatelessWidget {
               }
 
               String groupLabel() {
-                final name = groupName.trim();
+                final name = widget.groupName.trim();
                 if (name.isEmpty) return 'GRUP';
                 final upper = name.toUpperCase();
                 return upper.contains('GRUP') ? upper : '$upper GRUBU';
@@ -695,7 +825,7 @@ class _GroupStandingsTable extends StatelessWidget {
                               MaterialPageRoute(
                                 builder: (_) => TeamSquadScreen(
                                   teamId: tId,
-                                  tournamentId: leagueId,
+                                  tournamentId: widget.leagueId,
                                   teamName: tName,
                                   teamLogoUrl: tLogo,
                                 ),

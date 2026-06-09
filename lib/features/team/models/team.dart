@@ -29,10 +29,10 @@ class Team {
     final nestedTeamRaw = map['team'] ?? map['teams'];
     final nestedGroupRaw = map['group'] ?? map['groups'];
     final teamMap = nestedTeamRaw is Map
-        ? Map<String, dynamic>.from(nestedTeamRaw as Map)
+        ? Map<String, dynamic>.from(nestedTeamRaw)
         : map;
     final groupMap = nestedGroupRaw is Map
-        ? Map<String, dynamic>.from(nestedGroupRaw as Map)
+        ? Map<String, dynamic>.from(nestedGroupRaw)
         : const <String, dynamic>{};
 
     dynamic v(String camel, String snake) =>
