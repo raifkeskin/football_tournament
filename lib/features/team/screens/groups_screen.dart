@@ -99,7 +99,6 @@ class _GroupsScreenState extends State<GroupsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const headerGreen = Color(0xFF064E3B);
     const bgDark = Color(0xFF0F172A);
     return Scaffold(
       backgroundColor: bgDark,
