@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:football_tournament/core/widgets/master_class_app_bar.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/config/app_config.dart';
 import '../../tournament/models/league.dart';
@@ -100,19 +101,7 @@ class _StatsScreenState extends State<StatsScreen> {
 
         return Scaffold(
           backgroundColor: const Color(0xFF0F172A),
-          appBar: AppBar(
-            backgroundColor: const Color(0xFF064E3B),
-            foregroundColor: Colors.white,
-            centerTitle: true,
-            title: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: const [
-                Icon(Icons.bar_chart_outlined),
-                SizedBox(width: 8),
-                Text('İstatistik'),
-              ],
-            ),
-          ),
+          appBar: const MasterClassAppBar(title: 'İstatistik'),
           body: Column(
             children: [
               Container(

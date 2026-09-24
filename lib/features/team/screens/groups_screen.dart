@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:football_tournament/core/widgets/master_class_app_bar.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../tournament/models/league.dart';
 import '../../tournament/models/season.dart';
@@ -102,26 +103,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
     const bgDark = Color(0xFF0F172A);
     return Scaffold(
       backgroundColor: bgDark,
-      appBar: AppBar(
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: const [
-            Icon(Icons.table_chart_outlined, color: Colors.white),
-            SizedBox(width: 8),
-            Text(
-              'Gruplar',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-        centerTitle: true,
-        backgroundColor: headerGreen,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
-      ),
+      appBar: const MasterClassAppBar(title: 'Gruplar'),
       body: Column(
         children: [
           StreamBuilder<List<League>>(

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // TextInputFormatter için gerekli
+import 'package:football_tournament/core/widgets/master_class_app_bar.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:ui';
 
 import '../../../core/config/app_config.dart';
 import '../../tournament/models/league.dart';
@@ -35,7 +37,7 @@ class _FixtureScreenState extends State<FixtureScreen> {
 
   Stream<List<Team>>? _teamsStream;
   Stream<List<League>>? _leaguesStream;
-  
+
   String? _lastLeagueIdForSeason;
   Stream<List<Season>>? _seasonsStream;
 
@@ -50,7 +52,7 @@ class _FixtureScreenState extends State<FixtureScreen> {
     _leagueId = GlobalFilter.leagueId.value;
     _seasonId = GlobalFilter.seasonId.value;
     _groupId = GlobalFilter.groupId.value;
-    
+
     GlobalFilter.leagueId.addListener(_onGlobalFilterChanged);
     GlobalFilter.seasonId.addListener(_onGlobalFilterChanged);
     GlobalFilter.groupId.addListener(_onGlobalFilterChanged);
@@ -124,387 +126,553 @@ class _FixtureScreenState extends State<FixtureScreen> {
     final bool isAdmin = AppSession.of(context).value.isAdmin;
 
     const bgDark = Color(0xFF0F172A);
-    const cardBg = Color(0xFF1E293B);
-    const outline = Color(0xFF334155);
+    // Kart ve öğelerin arka plan görseli üzerinde okunabilmesi için transparanlık
+    final cardBg = Colors.black.withOpacity(0.3);
+    final outline = Colors.white.withOpacity(0.08);
 
     return Scaffold(
       backgroundColor: bgDark,
-      appBar: AppBar(
-        centerTitle: true,
-        backgroundColor: const Color(0xFF064E3B),
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: const [
-            Icon(Icons.calendar_month_outlined, color: Colors.white),
-            SizedBox(width: 8),
-            Text(
-              'Fikstür',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
+      extendBodyBehindAppBar: true,
+      appBar: const MasterClassAppBar(title: 'Fikstür'),
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: Opacity(
+              opacity: 0.15,
+              child: Image.asset(
+                'assets/images/background_ball.jpg',
+                fit: BoxFit.cover,
+                alignment: Alignment.center,
               ),
             ),
-          ],
-        ),
-      ),
-      body: StreamBuilder<List<Team>>(
-        stream: _teamsStream,
-        builder: (context, teamsSnap) {
-          final teamLogoById = <String, String>{};
-          final teamNameById = <String, String>{};
-          if (teamsSnap.hasData) {
-            for (final t in teamsSnap.data!) {
-              teamLogoById[t.id] = t.logoUrl;
-              teamNameById[t.id] = t.name;
-            }
-          }
-
-          return StreamBuilder<List<League>>(
-            stream: _leaguesStream,
-            builder: (context, leaguesSnap) {
-              if (!leaguesSnap.hasData) {
-                return const Center(child: CircularProgressIndicator());
-              }
-
-              final leagues = [...(leaguesSnap.data ?? const <League>[])];
-
-              if (leagues.isEmpty) {
-                return const Center(child: Text('Turnuva bulunamadı.'));
-              }
-
-              if (_leagueId == null || !leagues.any((l) => l.id == _leagueId)) {
-                final newLeagueId = leagues.any((l) => l.isDefault)
-                    ? (leagues.where((l) => l.isDefault).first.id)
-                    : leagues.first.id;
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (!mounted) return;
-                  setState(() {
-                    _leagueId = newLeagueId;
-                    _seasonId = null;
-                    _groupId = null;
-                    _week = null;
-                  });
-                  GlobalFilter.setLeague(newLeagueId);
-                });
-                _leagueId = newLeagueId;
-              }
-
-              return StreamBuilder<List<Season>>(
-                stream: _leagueId == null
-                    ? Stream.value([])
-                    : _getSeasonsStream(_leagueId!),
-                builder: (context, seasonSnap) {
-                  final seasons = seasonSnap.data ?? [];
-
-                  if (_leagueId != null && seasons.isNotEmpty) {
-                    final hasSelected =
-                        _seasonId != null &&
-                        seasons.any((s) => s.id == _seasonId);
-                    if (!hasSelected) {
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (mounted) {
-                          setState(() {
-                            _seasonId = seasons.first.id;
-                            _groupId = null;
-                            _week = null;
-                          });
-                          GlobalFilter.setSeason(seasons.first.id);
-                        }
-                      });
-                    }
+          ),
+          SafeArea(
+            child: StreamBuilder<List<Team>>(
+              stream: _teamsStream,
+              builder: (context, teamsSnap) {
+                final teamLogoById = <String, String>{};
+                final teamNameById = <String, String>{};
+                if (teamsSnap.hasData) {
+                  for (final t in teamsSnap.data!) {
+                    teamLogoById[t.id] = t.logoUrl;
+                    teamNameById[t.id] = t.name;
                   }
+                }
 
-                  return StreamBuilder<List<GroupModel>>(
-                    stream: _seasonId == null
-                        ? const Stream<List<GroupModel>>.empty()
-                        : _getGroupsStream(_seasonId!),
-                    builder: (context, snapshot) {
-                      final groupsRaw = snapshot.data ?? const <GroupModel>[];
-                      final groups = [...groupsRaw]
-                        ..sort(
-                          (a, b) => a.name.toLowerCase().compareTo(
-                            b.name.toLowerCase(),
-                          ),
-                        );
+                return StreamBuilder<List<League>>(
+                  stream: _leaguesStream,
+                  builder: (context, leaguesSnap) {
+                    if (!leaguesSnap.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
 
-                      String groupDisplayName(GroupModel g, int index) {
-                        final name = g.name.trim();
-                        if (name.isNotEmpty) return name;
-                        return 'Grup ${index + 1}';
-                      }
+                    final leagues = [...(leaguesSnap.data ?? const <League>[])];
 
-                      final groupNameById = <String, String>{
-                        for (final e in groups.indexed)
-                          e.$2.id: groupDisplayName(e.$2, e.$1),
-                      };
-
-                      final selectedGroupId =
-                          (_groupId != null &&
-                              groupNameById.containsKey(_groupId))
-                          ? _groupId
-                          : null;
-                      final showGroupInHeader =
-                          selectedGroupId == null && groups.length > 1;
-
-return FutureBuilder<int?>(
-                        key: ValueKey('$_seasonId|$selectedGroupId'),
-                        future: _matchService.getFixtureMaxWeek(
-                          _leagueId!,
-                          groupId: selectedGroupId,
+                    if (leagues.isEmpty) {
+                      return const Center(
+                        child: Text(
+                          'Turnuva bulunamadı.',
+                          style: TextStyle(color: Colors.white),
                         ),
-                        builder: (context, maxWeekSnap) {
-                          final maxWeek = maxWeekSnap.data ?? 30;
-                          
-                          // GÜVENLİK 1: Hafta listesi asla boş kalmasın (en az 1 hafta olsun)
-                          final safeMaxWeek = maxWeek > 0 ? maxWeek : 1;
-                          final weeks = <int>[
-                            for (var i = 1; i <= safeMaxWeek; i++) i,
-                          ];
+                      );
+                    }
 
-                          // GÜVENLİK 2: Eğer hafızadaki _week yeni listede yoksa, güvenli olarak ilk haftayı baz al.
-                          final displayWeek = weeks.contains(_week) ? _week : weeks.first;
+                    if (_leagueId == null ||
+                        !leagues.any((l) => l.id == _leagueId)) {
+                      final newLeagueId = leagues.any((l) => l.isDefault)
+                          ? (leagues.where((l) => l.isDefault).first.id)
+                          : leagues.first.id;
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (!mounted) return;
+                        setState(() {
+                          _leagueId = newLeagueId;
+                          _seasonId = null;
+                          _groupId = null;
+                          _week = null;
+                        });
+                        GlobalFilter.setLeague(newLeagueId);
+                      });
+                      _leagueId = newLeagueId;
+                    }
 
-                          // State'i de güvenli haftayla güncelle ki alt taraf da ona göre veri çeksin
-                          if (_week != displayWeek) {
+                    return StreamBuilder<List<Season>>(
+                      stream: _leagueId == null
+                          ? Stream.value([])
+                          : _getSeasonsStream(_leagueId!),
+                      builder: (context, seasonSnap) {
+                        final seasons = seasonSnap.data ?? [];
+
+                        if (_leagueId != null && seasons.isNotEmpty) {
+                          final hasSelected =
+                              _seasonId != null &&
+                              seasons.any((s) => s.id == _seasonId);
+                          if (!hasSelected) {
                             WidgetsBinding.instance.addPostFrameCallback((_) {
-                              if (mounted) setState(() => _week = displayWeek);
+                              if (mounted) {
+                                setState(() {
+                                  _seasonId = seasons.first.id;
+                                  _groupId = null;
+                                  _week = null;
+                                });
+                                GlobalFilter.setSeason(seasons.first.id);
+                              }
                             });
                           }
+                        }
 
-                          return StreamBuilder<List<MatchModel>>(
-                            stream: displayWeek == null || _seasonId == null
-                                ? Stream.empty()
-                                : _matchService.watchFixtureMatches(
-                                    _leagueId!,
-                                    displayWeek, // _week yerine güvenli olan displayWeek kullanılıyor
-                                    groupId: selectedGroupId,
-                                  ),
-                            builder: (context, matchesSnap) {
-                              if (matchesSnap.connectionState ==
-                                  ConnectionState.waiting) {
-                                return const Center(
-                                  child: CircularProgressIndicator(),
-                                );
-                              }
+                        return StreamBuilder<List<GroupModel>>(
+                          stream: _seasonId == null
+                              ? const Stream<List<GroupModel>>.empty()
+                              : _getGroupsStream(_seasonId!),
+                          builder: (context, snapshot) {
+                            final groupsRaw =
+                                snapshot.data ?? const <GroupModel>[];
+                            final groups = [...groupsRaw]
+                              ..sort(
+                                (a, b) => a.name.toLowerCase().compareTo(
+                                  b.name.toLowerCase(),
+                                ),
+                              );
 
-                              final matches = (matchesSnap.data ?? [])
-                                ..sort((a, b) {
-                                  int dateComp = (a.matchDate ?? '').compareTo(b.matchDate ?? '');
-                                  if (dateComp != 0) return dateComp;
-                                  return (a.matchTime ?? '').compareTo(b.matchTime ?? '');
-                                });
+                            String groupDisplayName(GroupModel g, int index) {
+                              final name = g.name.trim();
+                              if (name.isNotEmpty) return name;
+                              return 'Grup ${index + 1}';
+                            }
 
-                              return Column(
-                                children: [
-                                  Container(
-                                    color: bgDark,
-                                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                                    child: Column(
+                            final groupNameById = <String, String>{
+                              for (final e in groups.indexed)
+                                e.$2.id: groupDisplayName(e.$2, e.$1),
+                            };
+
+                            final selectedGroupId =
+                                (_groupId != null &&
+                                    groupNameById.containsKey(_groupId))
+                                ? _groupId
+                                : null;
+                            final showGroupInHeader =
+                                selectedGroupId == null && groups.length > 1;
+
+                            return FutureBuilder<int?>(
+                              key: ValueKey('$_seasonId|$selectedGroupId'),
+                              future: _matchService.getFixtureMaxWeek(
+                                _leagueId!,
+                                groupId: selectedGroupId,
+                              ),
+                              builder: (context, maxWeekSnap) {
+                                final maxWeek = maxWeekSnap.data ?? 30;
+
+                                final safeMaxWeek = maxWeek > 0 ? maxWeek : 1;
+                                final weeks = <int>[
+                                  for (var i = 1; i <= safeMaxWeek; i++) i,
+                                ];
+
+                                final displayWeek = weeks.contains(_week)
+                                    ? _week
+                                    : weeks.first;
+
+                                if (_week != displayWeek) {
+                                  WidgetsBinding.instance.addPostFrameCallback((
+                                    _,
+                                  ) {
+                                    if (mounted) {
+                                      setState(() => _week = displayWeek);
+                                    }
+                                  });
+                                }
+
+                                return StreamBuilder<List<MatchModel>>(
+                                  stream:
+                                      displayWeek == null || _seasonId == null
+                                      ? Stream.empty()
+                                      : _matchService.watchFixtureMatches(
+                                          _leagueId!,
+                                          displayWeek,
+                                          groupId: selectedGroupId,
+                                        ),
+                                  builder: (context, matchesSnap) {
+                                    if (matchesSnap.connectionState ==
+                                        ConnectionState.waiting) {
+                                      return const Center(
+                                        child: CircularProgressIndicator(),
+                                      );
+                                    }
+
+                                    final matches = (matchesSnap.data ?? [])
+                                      ..sort((a, b) {
+                                        int dateComp = (a.matchDate ?? '')
+                                            .compareTo(b.matchDate ?? '');
+                                        if (dateComp != 0) return dateComp;
+                                        return (a.matchTime ?? '').compareTo(
+                                          b.matchTime ?? '',
+                                        );
+                                      });
+
+                                    return Column(
                                       children: [
-                                        _buildDropdown(
-                                          'Turnuva Seçin',
-                                          _leagueId,
-                                          leagues
-                                              .map((l) => DropdownMenuItem(
-                                                    value: l.id,
-                                                    child: Text(l.name),
-                                                  ))
-                                              .toList(),
-                                          (v) {
-                                            setState(() {
-                                              _leagueId = v;
-                                              _seasonId = null;
-                                              _groupId = null;
-                                              _week = null;
-                                            });
-                                            GlobalFilter.setLeague(v);
-                                          },
-                                        ),
-                                        const SizedBox(height: 12),
-                                        _buildDropdown(
-                                          'Sezon Seçin',
-                                          _seasonId,
-                                          seasons
-                                              .map((s) => DropdownMenuItem(
-                                                    value: s.id,
-                                                    child: Text(s.name),
-                                                  ))
-                                              .toList(),
-                                          (v) {
-                                            setState(() {
-                                              _seasonId = v;
-                                              _groupId = null;
-                                              _week = null;
-                                            });
-                                            GlobalFilter.setSeason(v);
-                                          },
-                                          key: ValueKey('season_$_leagueId'),
-                                        ),
-                                        const SizedBox(height: 12),
-                                        Row(
-                                          children: [
-                                            Expanded(
-                                              child: _buildDropdown(
-                                                'Grup Seçin',
-                                                selectedGroupId,
-                                                [
-                                                  const DropdownMenuItem(
-                                                    value: null,
-                                                    child: Text('Tümü'),
-                                                  ),
-                                                  ...groups.indexed.map((e) {
-                                                    final g = e.$2;
-                                                    final label = groupNameById[g.id] ?? '';
-                                                    return DropdownMenuItem(
-                                                      value: g.id,
-                                                      child: Text(label),
-                                                    );
-                                                  }),
-                                                ],
-                                                // GÜVENLİK 3: Grup değiştiğinde hafızadaki haftayı sıfırla!
-                                                (v) {
-                                                  setState(() {
-                                                    _groupId = v;
-                                                    _week = null; 
-                                                  });
-                                                  GlobalFilter.setGroup(v);
-                                                },
-                                                key: ValueKey('group_$_seasonId'),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 12),
-                                            Expanded(
-                                              child: _buildDropdown(
-                                                'Hafta Seçin',
-                                                displayWeek, // Hata veren _week yerine korumalı değişkeni koyduk
-                                                weeks
-                                                    .map((w) => DropdownMenuItem(
-                                                          value: w,
-                                                          child: Text('$w. Hafta'),
-                                                        ))
+                                        // MODAL POPUP SEÇİCİLER
+                                        Container(
+                                          color: Colors.transparent,
+                                          padding: const EdgeInsets.fromLTRB(
+                                            16,
+                                            8,
+                                            16,
+                                            0,
+                                          ),
+                                          child: Column(
+                                            children: [
+                                              _buildPopupSelector<String>(
+                                                label: 'Turnuva',
+                                                selectedValue: _leagueId,
+                                                items: leagues
+                                                    .map((l) => l.id)
                                                     .toList(),
-                                                (v) => setState(() => _week = v),
-                                                key: ValueKey('week_$_seasonId'),
+                                                labelBuilder: (id) => leagues
+                                                    .firstWhere(
+                                                      (l) => l.id == id,
+                                                      orElse: () =>
+                                                          leagues.first,
+                                                    )
+                                                    .name,
+                                                onChanged: (v) {
+                                                  setState(() {
+                                                    _leagueId = v;
+                                                    _seasonId = null;
+                                                    _groupId = null;
+                                                    _week = null;
+                                                  });
+                                                  GlobalFilter.setLeague(v);
+                                                },
                                               ),
-                                            ),
-                                          ],
+                                              const SizedBox(height: 12),
+                                              _buildPopupSelector<String>(
+                                                label: 'Sezon',
+                                                selectedValue: _seasonId,
+                                                items: seasons
+                                                    .map((s) => s.id)
+                                                    .toList(),
+                                                labelBuilder: (id) => seasons
+                                                    .firstWhere(
+                                                      (s) => s.id == id,
+                                                      orElse: () =>
+                                                          seasons.first,
+                                                    )
+                                                    .name,
+                                                onChanged: (v) {
+                                                  setState(() {
+                                                    _seasonId = v;
+                                                    _groupId = null;
+                                                    _week = null;
+                                                  });
+                                                  GlobalFilter.setSeason(v);
+                                                },
+                                              ),
+                                              const SizedBox(height: 12),
+                                              Row(
+                                                children: [
+                                                  Expanded(
+                                                    child:
+                                                        _buildPopupSelector<
+                                                          String
+                                                        >(
+                                                          label: 'Grup',
+                                                          selectedValue:
+                                                              selectedGroupId,
+                                                          items: [
+                                                            null,
+                                                            ...groups.map(
+                                                              (g) => g.id,
+                                                            ),
+                                                          ],
+                                                          labelBuilder: (id) =>
+                                                              id == null
+                                                              ? 'Tümü'
+                                                              : (groupNameById[id] ??
+                                                                    ''),
+                                                          onChanged: (v) {
+                                                            setState(() {
+                                                              _groupId = v;
+                                                              _week = null;
+                                                            });
+                                                            GlobalFilter.setGroup(
+                                                              v,
+                                                            );
+                                                          },
+                                                        ),
+                                                  ),
+                                                  const SizedBox(width: 12),
+                                                  Expanded(
+                                                    child:
+                                                        _buildPopupSelector<
+                                                          int
+                                                        >(
+                                                          label: 'Hafta',
+                                                          selectedValue:
+                                                              displayWeek,
+                                                          items: weeks,
+                                                          labelBuilder: (w) =>
+                                                              '$w. Hafta',
+                                                          onChanged: (v) =>
+                                                              setState(
+                                                                () => _week = v,
+                                                              ),
+                                                        ),
+                                                  ),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 16),
+                                            ],
+                                          ),
                                         ),
-                                        const SizedBox(height: 16),
-                                        Divider(
-                                          color: Colors.white.withOpacity(0.1),
-                                          thickness: 1,
-                                          height: 24,
+
+                                        // Liste Kısmı
+                                        Expanded(
+                                          child: Container(
+                                            color: Colors.transparent,
+                                            child: matches.isEmpty
+                                                ? const Center(
+                                                    child: Text(
+                                                      'Maç bulunamadı.',
+                                                      style: TextStyle(
+                                                        color: Colors.white,
+                                                      ),
+                                                    ),
+                                                  )
+                                                : _FixtureList(
+                                                    matches: matches,
+                                                    dateStripText:
+                                                        _dateStripText,
+                                                    groupNameById:
+                                                        groupNameById,
+                                                    showGroupInHeader:
+                                                        showGroupInHeader,
+                                                    teamLogoById: teamLogoById,
+                                                    teamNameById: teamNameById,
+                                                    isAdmin: isAdmin,
+                                                    onMatchTap: (m) =>
+                                                        Navigator.push(
+                                                          context,
+                                                          MaterialPageRoute(
+                                                            builder: (_) =>
+                                                                MatchDetailsScreen(
+                                                                  match: m,
+                                                                ),
+                                                          ),
+                                                        ),
+                                                    cardColor: cardBg,
+                                                    outlineColor: outline,
+                                                    onDataChanged: () =>
+                                                        setState(() {}),
+                                                  ),
+                                          ),
                                         ),
                                       ],
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: Container(
-                                      decoration: const BoxDecoration(
-                                        color: bgDark,
-                                      ),
-                                      child: matches.isEmpty
-                                          ? const Center(
-                                              child: Text(
-                                                'Maç bulunamadı.',
-                                                style: TextStyle(
-                                                  color: Colors.white,
-                                                ),
-                                              ),
-                                            )
-                                          : _FixtureList(
-                                              matches: matches,
-                                              dateStripText: _dateStripText,
-                                              groupNameById: groupNameById,
-                                              showGroupInHeader:
-                                                  showGroupInHeader,
-                                              teamLogoById: teamLogoById,
-                                              teamNameById: teamNameById,
-                                              isAdmin: isAdmin,
-                                              onMatchTap: (m) => Navigator.push(
-                                                context,
-                                                MaterialPageRoute(
-                                                  builder: (_) =>
-                                                      MatchDetailsScreen(
-                                                        match: m,
-                                                      ),
-                                                ),
-                                              ),
-                                              cardColor: cardBg,
-                                              outlineColor: outline,
-                                              onDataChanged: () => setState(() {}),
-                                            ),
-                                    ),
-                                  ),
-                                ],
-                              );
-                            },
-                          );
-                        },
-                      );
-                    },
-                  );
-                },
-              );
-            },
-          );
-        },
+                                    );
+                                  },
+                                );
+                              },
+                            );
+                          },
+                        );
+                      },
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildDropdown(
-    String label,
-    dynamic value,
-    List<DropdownMenuItem<dynamic>> items,
-    Function(dynamic) onChanged, {
-    Key? key,
+  // YENİ POPUP SEÇİCİ WIDGET (Dropdown'ın Yerini Aldı)
+  // YENİ POPUP SEÇİCİ WIDGET
+  Widget _buildPopupSelector<T>({
+    required String label,
+    required T? selectedValue,
+    required List<T?> items,
+    required String Function(T?) labelBuilder,
+    required Function(T?) onChanged,
   }) {
-    // GÜVENLİK: Duplicate item'ları temizle ve value'nun listede olduğundan emin ol
-    final uniqueItems = <DropdownMenuItem<dynamic>>[];
-    final seenValues = <dynamic>{};
+    // Benzersiz değerleri ayırır
+    final uniqueItems = <T?>[];
+    final seenValues = <T?>{};
     for (final item in items) {
-      if (!seenValues.contains(item.value)) {
-        seenValues.add(item.value);
+      if (!seenValues.contains(item)) {
+        seenValues.add(item);
         uniqueItems.add(item);
       }
     }
 
-    final isValid = uniqueItems.any((item) => item.value == value);
-    final safeValue = isValid ? value : (uniqueItems.isNotEmpty ? uniqueItems.first.value : null);
+    final isValid = uniqueItems.contains(selectedValue);
+    final safeValue = isValid
+        ? selectedValue
+        : (uniqueItems.isNotEmpty ? uniqueItems.first : null);
 
-    return DropdownButtonFormField(
-      key: key,
-      initialValue: safeValue,
-      isExpanded: true,
-      dropdownColor: const Color(0xFF1E293B),
-      style: const TextStyle(
-        color: Colors.white,
-        fontWeight: FontWeight.w600,
-        fontSize: 14,
+    // DÜZELTME: null değeri listede geçerli bir elemansa (Grup "Tümü" gibi), labelBuilder çalıştırılır.
+    final displayText = uniqueItems.contains(safeValue)
+        ? labelBuilder(safeValue)
+        : 'Seçiniz';
+
+    return InkWell(
+      onTap: () {
+        _showSelectionDialog(
+          title: label,
+          items: uniqueItems,
+          selectedValue: safeValue,
+          labelBuilder: labelBuilder,
+          onChanged: onChanged,
+        );
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(color: Colors.white70, fontSize: 13),
+          filled: true,
+          fillColor: Colors.black.withOpacity(0.4),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: Colors.white.withOpacity(0.15)),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 12,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Text(
+                displayText,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const Icon(Icons.arrow_drop_down, color: Colors.white70),
+          ],
+        ),
       ),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: const TextStyle(color: Colors.white54, fontSize: 13),
-        filled: true,
-        fillColor: Colors.white.withOpacity(0.05),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
-        ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 12,
-        ),
-      ),
-      items: uniqueItems,
-      onChanged: onChanged,
+    );
+  }
+
+  // MODAL EKRANI GÖSTEREN FONKSİYON
+  // MODAL EKRANI GÖSTEREN FONKSİYON
+  void _showSelectionDialog<T>({
+    required String title,
+    required List<T?> items,
+    required T? selectedValue,
+    required String Function(T?) labelBuilder,
+    required Function(T?) onChanged,
+  }) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent, // Arka plan şeffaf
+          insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            constraints: const BoxConstraints(maxHeight: 400),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF1E293B), // Üst sol lacivert
+                  Color(0xFF064E3B), // Alt sağ koyu zümrüt yeşili
+                ],
+              ),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.08),
+              ), // Çok hafif çerçeve
+              boxShadow: const [
+                BoxShadow(
+                  color: Colors.black54,
+                  blurRadius: 15,
+                  offset: Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 8,
+                  ),
+                  child: Text(
+                    '$title Seç',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const Divider(color: Colors.white24),
+                Flexible(
+                  child: ListView.separated(
+                    // DÜZELTME: builder yerine separated kullanıldı
+                    shrinkWrap: true,
+                    itemCount: items.length,
+                    separatorBuilder: (context, index) => const Divider(
+                      color: Colors
+                          .white12, // Seçenekler arasına ince ve hafif şeffaf bir çizgi eklendi
+                      height: 1,
+                      indent:
+                          24, // Çizgiyi sağdan ve soldan biraz içeriden başlat
+                      endIndent: 24,
+                    ),
+                    itemBuilder: (context, index) {
+                      final item = items[index];
+                      final isSelected = item == selectedValue;
+                      return ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                        ),
+                        title: Text(
+                          labelBuilder(item),
+                          style: TextStyle(
+                            color: isSelected
+                                ? const Color(0xFF10B981)
+                                : Colors.white,
+                            fontWeight: isSelected
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                          ),
+                        ),
+                        trailing: isSelected
+                            ? const Icon(Icons.check, color: Color(0xFF10B981))
+                            : null,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        onTap: () {
+                          Navigator.pop(context); // Tıklandığı an popup kapanır
+                          if (!isSelected) {
+                            onChanged(
+                              item,
+                            ); // Ve yeni seçim hemen filtreye uygulanır
+                          }
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -543,7 +711,6 @@ class _FixtureList extends StatelessWidget {
       return name.toLowerCase().contains('grup') ? name : '$name Grubu';
     }
 
-    // 1. AŞAMA: Maçları Tarihe Göre Grupla
     final byDate = <String, List<MatchModel>>{};
     for (final m in matches) {
       final dateKey = (m.matchDate ?? '').trim().isEmpty
@@ -555,41 +722,48 @@ class _FixtureList extends StatelessWidget {
     final sortedDates = byDate.keys.toList()..sort();
 
     return ListView(
+      physics:
+          const ClampingScrollPhysics(), // Android/iOS esnemesini sabitler, uzamayı engeller
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 120),
       children: [
         for (final dKey in sortedDates)
-          Container(
-            margin: const EdgeInsets.only(bottom: 16),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: cardColor,
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: ClipRRect(
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: outlineColor.withOpacity(0.5)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // ANA TARİH BAŞLIĞI (Panelin en üstünde tek sefer)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8, top: 4),
-                  child: Text(
-                    dKey == '__NO_DATE__'
-                        ? 'Tarih Belirlenmedi'
-                        : dateStripText(dKey),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w900,
-                      color: Colors.white,
-                      fontSize: 14,
-                      letterSpacing: 0.5,
-                    ),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: cardColor,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: outlineColor),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8, top: 4),
+                        child: Text(
+                          dKey == '__NO_DATE__'
+                              ? 'Tarih Belirlenmedi'
+                              : dateStripText(dKey),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w900,
+                            color: Colors.white,
+                            fontSize: 14,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                      const Divider(color: Colors.white10, height: 1),
+                      const SizedBox(height: 12),
+                      ..._buildGroupedSection(byDate[dKey]!, groupLabel),
+                    ],
                   ),
                 ),
-                const Divider(color: Colors.white10, height: 1),
-                const SizedBox(height: 12),
-
-                // 2. AŞAMA: O Günkü Maçları Gruplara Bölerek Listele
-                ..._buildGroupedSection(byDate[dKey]!, groupLabel),
-              ],
+              ),
             ),
           ),
       ],
@@ -600,7 +774,6 @@ class _FixtureList extends StatelessWidget {
     List<MatchModel> matchesInDate,
     String Function(String) groupLabel,
   ) {
-    // O tarihteki maçları kendi içinde gruplara ayır
     final groupedByGroup = <String, List<MatchModel>>{};
     for (var m in matchesInDate) {
       final gId = m.groupId ?? '';
@@ -611,7 +784,6 @@ class _FixtureList extends StatelessWidget {
     final List<Widget> items = [];
 
     for (var gId in sortedGroupIds) {
-      // Eğer "Tümü" seçiliyse (showGroupInHeader true) grup başlıklarını göster
       if (showGroupInHeader && gId.isNotEmpty) {
         items.add(
           Padding(
@@ -629,7 +801,6 @@ class _FixtureList extends StatelessWidget {
         );
       }
 
-      // Grubun maçlarını ekle
       for (var m in groupedByGroup[gId]!) {
         items.add(
           Padding(
@@ -709,6 +880,8 @@ class _MatchCard extends StatelessWidget {
 
     return Card(
       margin: EdgeInsets.zero,
+      color: Colors.transparent,
+      elevation: 0,
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
         onTap: onTap,
@@ -979,7 +1152,6 @@ class _MatchCard extends StatelessWidget {
   }
 
   void _showEditPopup(BuildContext context) async {
-    // DB Formatını (YYYY-MM-DD) -> GG/AA/YYYY'ye Çevir
     String initialDate = '';
     if (match.matchDate != null && match.matchDate!.contains('-')) {
       final p = match.matchDate!.split('-');
@@ -1013,10 +1185,8 @@ class _MatchCard extends StatelessWidget {
           : pitches.first.name.trim();
     }
 
-    // Tarih tamam olduğunda otomatik saat field'ine geç
     dCtrl.addListener(() {
       if (dCtrl.text.length == 10) {
-        // DD/MM/YYYY = 10 karakter
         timeFocus.requestFocus();
       }
     });
@@ -1036,7 +1206,6 @@ class _MatchCard extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // TARİH INPUT
                 TextField(
                   controller: dCtrl,
                   focusNode: dateFocus,
@@ -1051,10 +1220,7 @@ class _MatchCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(
-                  height: 25,
-                ), // Üst üste binmeyi engellemek için boşluk artırıldı
-                // SAAT INPUT
+                const SizedBox(height: 25),
                 TextField(
                   controller: tCtrl,
                   focusNode: timeFocus,
@@ -1133,7 +1299,6 @@ class _MatchCard extends StatelessWidget {
                 final dateText = dCtrl.text;
                 final timeText = tCtrl.text;
 
-                // VALIDATION (Doğrulama)
                 final dateMatch = RegExp(
                   r'^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$',
                 ).firstMatch(dateText);
@@ -1209,36 +1374,21 @@ class _MatchCard extends StatelessWidget {
   }
 }
 
-// --- OTOMATİK FORMATLAYICILAR ---
-
 class _DateInputFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(
     TextEditingValue oldValue,
     TextEditingValue newValue,
   ) {
-    // Silme işlemini izin ver
     if (newValue.text.isEmpty) return newValue;
     if (newValue.text.length < oldValue.text.length) return newValue;
-
-    // Sadece rakamları al
     String digitsOnly = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
-
-    // Max 8 rakam (DD/MM/YYYY)
-    if (digitsOnly.length > 8) {
-      digitsOnly = digitsOnly.substring(0, 8);
-    }
-
-    // Formatla
+    if (digitsOnly.length > 8) digitsOnly = digitsOnly.substring(0, 8);
     String formatted = '';
     for (int i = 0; i < digitsOnly.length; i++) {
       formatted += digitsOnly[i];
-      // 2. ve 4. rakamdan sonra / ekle
-      if (i == 1 || i == 3) {
-        formatted += '/';
-      }
+      if (i == 1 || i == 3) formatted += '/';
     }
-
     return TextEditingValue(
       text: formatted,
       selection: TextSelection.collapsed(offset: formatted.length),
@@ -1252,21 +1402,14 @@ class _TimeInputFormatter extends TextInputFormatter {
     TextEditingValue oldValue,
     TextEditingValue newValue,
   ) {
-    if (newValue.text.length < oldValue.text.length) {
-      return newValue; // Silme işlemi
-    }
-
+    if (newValue.text.length < oldValue.text.length) return newValue;
     String cleanText = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
-    if (cleanText.length > 4) {
-      cleanText = cleanText.substring(0, 4); // Max 4 rakam
-    }
-
+    if (cleanText.length > 4) cleanText = cleanText.substring(0, 4);
     StringBuffer buffer = StringBuffer();
     for (int i = 0; i < cleanText.length; i++) {
       buffer.write(cleanText[i]);
-      if (i == 1) buffer.write(':'); // 2. rakamdan sonra anında : ekle
+      if (i == 1) buffer.write(':');
     }
-
     String finalString = buffer.toString();
     return TextEditingValue(
       text: finalString,

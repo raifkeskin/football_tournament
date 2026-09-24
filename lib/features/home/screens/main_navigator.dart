@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
+import 'dart:ui'; // Cam efekti (BackdropFilter) için eklendi
+
 import '../../match/screens/fixture_screen.dart';
 import '../../team/screens/groups_screen.dart';
 import 'home_screen.dart';
 import '../../player/screens/profile_screen.dart';
 import '../../player/screens/stats_screen.dart';
 
-/// Alt menü çubuğu ve dört ana ekran arasında geçiş.
+/// Sol yan menü (Drawer) ile dört ana ekran arasında geçiş.
 class MainNavigator extends StatefulWidget {
   const MainNavigator({super.key, this.initialTabIndex = 0});
 
@@ -17,14 +19,13 @@ class MainNavigator extends StatefulWidget {
 
 class _MainNavigatorState extends State<MainNavigator> {
   late int _aktifSekme = widget.initialTabIndex;
-  bool _isBarVisible = true;
 
   void _sekmeDegistir(int index) {
-    setState(() => _aktifSekme = index);
-  }
-
-  void _toggleBar() {
-    setState(() => _isBarVisible = !_isBarVisible);
+    setState(() {
+      _aktifSekme = index;
+    });
+    // Menüden bir sayfa seçildiğinde çekmeceyi (Drawer) otomatik kapat
+    Navigator.of(context).pop();
   }
 
   @override
@@ -34,46 +35,17 @@ class _MainNavigatorState extends State<MainNavigator> {
       const FixtureScreen(),
       const GroupsScreen(),
       const StatsScreen(),
-      // Builder ve if kontrollerini sildik, direkt ProfileScreen'i verdik
-      ProfileScreen(onRequestHomeTab: () => _sekmeDegistir(0)),
+      ProfileScreen(
+        onRequestHomeTab: () {
+          setState(() {
+            _aktifSekme = 0;
+          });
+        },
+      ),
     ];
 
-    return Scaffold(
-      extendBody: true,
-      body: Stack(
-        children: [
-          IndexedStack(index: _aktifSekme, children: ekranlar),
-          _HideShowBarButton(isBarVisible: _isBarVisible, onTap: _toggleBar),
-          _FloatingNavBar(
-            currentIndex: _aktifSekme,
-            onTap: _sekmeDegistir,
-            isBarVisible: _isBarVisible,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FloatingNavBar extends StatelessWidget {
-  const _FloatingNavBar({
-    required this.currentIndex,
-    required this.onTap,
-    required this.isBarVisible,
-  });
-
-  final int currentIndex;
-  final void Function(int index) onTap;
-  final bool isBarVisible;
-
-  @override
-  Widget build(BuildContext context) {
-    const bg = Color(0xFF1E293B);
-    const active = Color(0xFF10B981);
-    const inactive = Color(0xFF64748B);
-    final bottomPad = MediaQuery.paddingOf(context).bottom;
-    const visibleBottom = 30.0;
-    final items = const [
+    // Menü Seçenekleri Tanımlaması
+    final menuItems = const [
       ('Ana Sayfa', Icons.home_outlined),
       ('Fikstür', Icons.calendar_month_outlined),
       ('Gruplar', Icons.groups_outlined),
@@ -81,115 +53,181 @@ class _FloatingNavBar extends StatelessWidget {
       ('Profil', Icons.person_outline),
     ];
 
-    return AnimatedPositioned(
-      duration: const Duration(milliseconds: 260),
-      curve: Curves.easeOutCubic,
-      left: 20,
-      right: 20,
-      bottom: isBarVisible ? (visibleBottom + bottomPad) : (-110 + bottomPad),
-      child: Material(
-        color: Colors.transparent,
-        child: Container(
-          height: 64,
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(40),
-            boxShadow: const [
-              BoxShadow(
-                color: Colors.black54,
-                blurRadius: 16,
-                offset: Offset(0, 10),
+    return Scaffold(
+      extendBody: true,
+
+      // SOL YAN MENÜ (DRAWER) ENTEGRASYONU
+      drawer: Drawer(
+        backgroundColor:
+            Colors.transparent, // Arka plan şeffaf (Cam efekti için gerekli)
+        elevation: 0,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(
+            sigmaX: 12.0,
+            sigmaY: 12.0,
+          ), // Cam efekti bulanıklığı
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF1E293B), // Üst sol lacivert
+                  Color(0xFF064E3B), // Alt sağ koyu zümrüt yeşili
+                ],
               ),
-            ],
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: List.generate(items.length, (i) {
-              final selected = i == currentIndex;
-              final color = selected ? active : inactive;
-              final (label, icon) = items[i];
-              return Expanded(
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(32),
-                  onTap: () => onTap(i),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
+              border: Border(
+                right: BorderSide(
+                  color: Colors.white.withOpacity(
+                    0.1,
+                  ), // Menü ile ekran arasına ince şık çizgi
+                  width: 1,
+                ),
+              ),
+            ),
+            child: SafeArea(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // MENÜ ÜST KISMI (Logo veya Kullanıcı Bilgisi)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 32,
+                    ),
                     child: Column(
-                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(icon, color: color, size: 24),
+                        Container(
+                          width: 64,
+                          height: 64,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.white.withOpacity(0.1),
+                            border: Border.all(
+                              color: Colors.white.withOpacity(0.3),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: const Icon(
+                            Icons.sports_soccer,
+                            size: 36,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Master Class Lig',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
                         const SizedBox(height: 4),
                         Text(
-                          label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                          'Hoş Geldiniz',
                           style: TextStyle(
-                            color: color,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 11,
+                            color: Colors.white.withOpacity(0.7),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ],
                     ),
                   ),
-                ),
-              );
-            }),
-          ),
-        ),
-      ),
-    );
-  }
-}
 
-class _HideShowBarButton extends StatelessWidget {
-  const _HideShowBarButton({required this.isBarVisible, required this.onTap});
+                  Divider(color: Colors.white.withOpacity(0.15), height: 1),
+                  const SizedBox(height: 16),
 
-  final bool isBarVisible;
-  final VoidCallback onTap;
+                  // MENÜ LİSTESİ (Sayfalar)
+                  Expanded(
+                    child: ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      itemCount: menuItems.length,
+                      itemBuilder: (context, index) {
+                        final isSelected = _aktifSekme == index;
+                        final label = menuItems[index].$1;
+                        final icon = menuItems[index].$2;
 
-  @override
-  Widget build(BuildContext context) {
-    final bottomPad = MediaQuery.paddingOf(context).bottom;
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            color: isSelected
+                                ? const Color(0xFF10B981).withOpacity(0.15)
+                                : Colors.transparent,
+                            border: isSelected
+                                ? Border.all(
+                                    color: const Color(
+                                      0xFF10B981,
+                                    ).withOpacity(0.5),
+                                    width: 1,
+                                  )
+                                : Border.all(color: Colors.transparent),
+                          ),
+                          child: ListTile(
+                            leading: Icon(
+                              icon,
+                              color: isSelected
+                                  ? const Color(0xFF10B981)
+                                  : Colors.white70,
+                              size: 26,
+                            ),
+                            title: Text(
+                              label,
+                              style: TextStyle(
+                                color: isSelected
+                                    ? const Color(0xFF10B981)
+                                    : Colors.white,
+                                fontWeight: isSelected
+                                    ? FontWeight.w800
+                                    : FontWeight.w600,
+                                fontSize: 16,
+                              ),
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            onTap: () => _sekmeDegistir(index),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
 
-    return AnimatedPositioned(
-      duration: const Duration(milliseconds: 260),
-      curve: Curves.easeOutCubic,
-      right: 18,
-      bottom: isBarVisible ? (30 + bottomPad + 74) : (18 + bottomPad),
-      child: AnimatedOpacity(
-        duration: const Duration(milliseconds: 180),
-        opacity: isBarVisible ? 0.95 : 1,
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(999),
-            child: Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: const Color(0xFF1E293B),
-                borderRadius: BorderRadius.circular(999),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Colors.black54,
-                    blurRadius: 14,
-                    offset: Offset(0, 10),
+                  // ÇIKIŞ YAP BUTONU
+                  Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white70,
+                        side: BorderSide(color: Colors.white.withOpacity(0.3)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      icon: const Icon(Icons.logout, size: 20),
+                      label: const Text(
+                        'Çıkış Yap',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      onPressed: () {
+                        // TODO: Çıkış yapma işlemleri (Auth servisi ile) buraya eklenebilir.
+                      },
+                    ),
                   ),
                 ],
-              ),
-              child: Icon(
-                isBarVisible
-                    ? Icons.visibility_off_outlined
-                    : Icons.visibility_outlined,
-                color: Colors.white,
               ),
             ),
           ),
         ),
       ),
+
+      // ANA EKRAN GÖSTERİMİ
+      body: IndexedStack(index: _aktifSekme, children: ekranlar),
     );
   }
 }
