@@ -2,12 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:football_tournament/features/team/screens/admin_manage_teams_screen.dart';
 import 'package:football_tournament/features/team/screens/team_squad_screen.dart';
 import 'package:football_tournament/features/tournament/screens/admin_manage_leagues_screen.dart';
+import 'package:football_tournament/features/tournament/screens/admin_pitch_management_screen.dart';
 import '../features/match/screens/admin_fixture_entry_screen.dart';
 import '../features/news/screens/admin_manage_news_screen.dart';
-import 'admin_data_tools_screen.dart';
-import 'admin_pending_actions_screen.dart';
 import '../features/tournament/screens/admin_penalty_management_screen.dart';
-import 'package:football_tournament/features/tournament/screens/admin_pitch_management_screen.dart';
+import 'admin_pending_actions_screen.dart';
 import '../features/auth/screens/admin_otp_monitor_screen.dart';
 
 class AdminPanelWidget extends StatelessWidget {
@@ -36,7 +35,10 @@ class AdminPanelWidget extends StatelessWidget {
         ikon: Icons.assignment_ind_rounded,
         resimYolu: 'assets/images/admin_license.jpg',
         onPressed: () {
-          // Yönlendirme kodun
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const FootballerLicenseScreen()),
+          );
         },
       ),
       _AdminMenuData(
@@ -44,7 +46,10 @@ class AdminPanelWidget extends StatelessWidget {
         ikon: Icons.calendar_month_rounded,
         resimYolu: 'assets/images/admin_fixture.jpg',
         onPressed: () {
-          // Yönlendirme kodun
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AdminFixtureEntryScreen()),
+          );
         },
       ),
       _AdminMenuData(
@@ -52,7 +57,10 @@ class AdminPanelWidget extends StatelessWidget {
         ikon: Icons.gavel_rounded,
         resimYolu: 'assets/images/admin_penalty.jpg',
         onPressed: () {
-          // Yönlendirme kodun
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AdminPenaltyManagementScreen()),
+          );
         },
       ),
       _AdminMenuData(
@@ -60,23 +68,32 @@ class AdminPanelWidget extends StatelessWidget {
         ikon: Icons.shield_rounded,
         resimYolu: 'assets/images/admin_team.jpg',
         onPressed: () {
-          // Yönlendirme kodun
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AdminManageTeamsScreen()),
+          );
         },
       ),
       _AdminMenuData(
         baslik: 'Haber Yönetimi',
         ikon: Icons.newspaper_rounded,
-        resimYolu: 'assets/images/admin_news.jpg',
+        resimYolu: 'assets/admin/news_bg.jpg',
         onPressed: () {
-          // Yönlendirme kodun
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AdminManageNewsScreen()),
+          );
         },
       ),
       _AdminMenuData(
         baslik: 'Saha Yönetimi',
         ikon: Icons.stadium_rounded,
-        resimYolu: 'assets/images/admin_pitch.jpg',
+        resimYolu: 'assets/admin/pitch_bg.jpg',
         onPressed: () {
-          // Yönlendirme kodun
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AdminPitchManagementScreen()),
+          );
         },
       ),
     ];

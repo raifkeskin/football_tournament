@@ -1644,7 +1644,9 @@ class SupabaseTeamService implements ITeamService {
             method: 'deleteRosterEntry',
           ))?.trim() ??
           '';
-      if (pid.isEmpty) return;
+      if (pid.isEmpty) {
+        throw Exception('Kadrodan çıkarılamadı: oyuncu bulunamadı ($phone).');
+      }
       try {
         _sbLog(
           table: 'season_team_players',
@@ -1660,21 +1662,31 @@ class SupabaseTeamService implements ITeamService {
           method: 'deleteRosterEntry',
           filters: 'season_id=$t, team_id=$team, player_id=$pid',
         );
-        await _client
+        // RLS bir UPDATE'i engellediğinde veya filtre eşleşmediğinde Supabase
+        // hata vermez, 0 satır günceller; bu yüzden etkilenen satırlar kontrol
+        // edilir. Aksi halde ekran "kaldırıldı" der ama oyuncu listede kalır.
+        final updated = await _client
             .from('season_team_players')
             .update({'is_active': false})
             .eq('season_id', t)
             .eq('team_id', team)
-            .eq('player_id', pid);
+            .eq('player_id', pid)
+            .select('id');
+        if (updated.isEmpty) {
+          throw Exception(
+            'Kadrodan çıkarılamadı: season_team_players satırı güncellenmedi '
+            '(0 satır). Kayıt bulunamadı ya da RLS UPDATE yetkisi yok.',
+          );
+        }
         AppConfig.sqlLogResult(
           table: 'season_team_players',
           operation: 'UPDATE',
           caller: caller,
           service: _serviceName,
           method: 'deleteRosterEntry',
-          count: 1,
+          count: updated.length,
         );
-        _sbResult(rows: 1);
+        _sbResult(rows: updated.length);
       } catch (e) {
         if (e is PostgrestException &&
             (e.code == '42501' ||

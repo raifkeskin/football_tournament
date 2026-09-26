@@ -243,8 +243,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                       selectedMonth + 1,
                                       0,
                                     ).day;
-                                    if (selectedDay > maxDays)
+                                    if (selectedDay > maxDays) {
                                       selectedDay = maxDays;
+                                    }
                                   });
                                 }
                               },
@@ -598,8 +599,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-// YENİ EKLENEN: Özel Turnuva Seçici (Ortadan Açılan Ortak Dialog Tasarımı)
-  void _showLeagueSelectionDialog(BuildContext context, List<League> leagues, bool isAdmin) {
+  // YENİ EKLENEN: Özel Turnuva Seçici (Ortadan Açılan Ortak Dialog Tasarımı)
+  void _showLeagueSelectionDialog(
+    BuildContext context,
+    List<League> leagues,
+    bool isAdmin,
+  ) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -619,9 +624,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   Color(0xFF064E3B), // Alt sağ koyu zümrüt yeşili
                 ],
               ),
-              border: Border.all(color: Colors.white.withOpacity(0.08)), // Çok hafif çerçeve
+              border: Border.all(
+                color: Colors.white.withOpacity(0.08),
+              ), // Çok hafif çerçeve
               boxShadow: const [
-                BoxShadow(color: Colors.black54, blurRadius: 15, offset: Offset(0, 8)),
+                BoxShadow(
+                  color: Colors.black54,
+                  blurRadius: 15,
+                  offset: Offset(0, 8),
+                ),
               ],
             ),
             child: Column(
@@ -644,9 +655,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     shrinkWrap: true,
                     itemCount: leagues.length,
                     separatorBuilder: (context, index) => const Divider(
-                      color: Colors.white12, 
-                      height: 1, 
-                      indent: 24, 
+                      color: Colors.white12,
+                      height: 1,
+                      indent: 24,
                       endIndent: 24,
                     ),
                     itemBuilder: (context, index) {
@@ -656,12 +667,20 @@ class _HomeScreenState extends State<HomeScreen> {
                       final isSelected = l.id == _activeLeagueId;
 
                       return ListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                        ),
                         leading: isLocked
-                            ? const Icon(Icons.lock_rounded, color: Colors.white54, size: 22)
+                            ? const Icon(
+                                Icons.lock_rounded,
+                                color: Colors.white54,
+                                size: 22,
+                              )
                             : Icon(
                                 Icons.emoji_events_rounded,
-                                color: isSelected ? const Color(0xFF10B981) : Colors.white70,
+                                color: isSelected
+                                    ? const Color(0xFF10B981)
+                                    : Colors.white70,
                                 size: 22,
                               ),
                         title: Text(
@@ -669,8 +688,12 @@ class _HomeScreenState extends State<HomeScreen> {
                           style: TextStyle(
                             color: isLocked
                                 ? Colors.white54
-                                : (isSelected ? const Color(0xFF10B981) : Colors.white),
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                : (isSelected
+                                      ? const Color(0xFF10B981)
+                                      : Colors.white),
+                            fontWeight: isSelected
+                                ? FontWeight.bold
+                                : FontWeight.normal,
                           ),
                         ),
                         trailing: isSelected
@@ -682,11 +705,16 @@ class _HomeScreenState extends State<HomeScreen> {
                         onTap: () {
                           if (isLocked) {
                             Navigator.pop(context); // Önce seçiciyi kapat
-                            _showAccessCodeDialog(context, l); // Sonra erişim kodu ekranını aç
+                            _showAccessCodeDialog(
+                              context,
+                              l,
+                            ); // Sonra erişim kodu ekranını aç
                           } else {
                             setState(() => _activeLeagueId = l.id);
                             GlobalFilter.setLeague(l.id);
-                            Navigator.pop(context); // Tıklandığı an popup kapanır
+                            Navigator.pop(
+                              context,
+                            ); // Tıklandığı an popup kapanır
                           }
                         },
                       );

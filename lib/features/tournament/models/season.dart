@@ -91,7 +91,10 @@ class Season {
         v('numberOfGroups', 'number_of_groups'),
         fallback: 1,
       ),
-      numberOfPlayerChanges: intFrom(v('numberOfPlayerChanges', 'number_of_player_changes'), fallback: 1),
+      numberOfPlayerChanges: intFrom(
+        v('numberOfPlayerChanges', 'number_of_player_changes'),
+        fallback: 3,
+      ),
       teamsPerGroup:
           intFrom(v('teamsPerGroup', 'teams_per_group'), fallback: 4),
       isActive: boolFrom(v('isActive', 'is_active'), fallback: true),

@@ -77,19 +77,21 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
     Map<String, dynamic>? existing,
   }) async {
     final isEdit = (teamId ?? '').trim().isNotEmpty && existing != null;
-    final nameController =
-        TextEditingController(text: (existing?['name'] ?? '').toString().trim());
+    final nameController = TextEditingController(
+      text: (existing?['name'] ?? '').toString().trim(),
+    );
     final foundedController = TextEditingController(
       text: (existing?['founded_year'] ?? existing?['foundedYear'] ?? '')
           .toString()
           .trim(),
     );
     final managerController = TextEditingController();
-    final existingLogoUrl = (existing?['logo_url'] ?? existing?['logoUrl'] ?? '')
-        .toString()
-        .trim();
+    final existingLogoUrl =
+        (existing?['logo_url'] ?? existing?['logoUrl'] ?? '').toString().trim();
     String? selectedManagerId =
-        (existing?['manager_id'] ?? existing?['managerId'] ?? '').toString().trim();
+        (existing?['manager_id'] ?? existing?['managerId'] ?? '')
+            .toString()
+            .trim();
     XFile? selectedLogo;
     var saving = false;
 
@@ -113,6 +115,14 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
     await hydrateManagerName();
 
     Future<Map<String, dynamic>?> pickManager() async {
+      // Controller ve sorgu builder dışında bir kez oluşturulur; klavye
+      // açılıp sheet yeniden build edildiğinde sıfırlanmaz / tekrar çekilmez.
+      final searchController = TextEditingController();
+      final future = Supabase.instance.client
+          .from('players')
+          .select('id, name, role, photo_url')
+          .inFilter('role', const ['Takım Sorumlusu', 'Her İkisi'])
+          .order('name', ascending: true);
       final picked = await showModalBottomSheet<Map<String, dynamic>>(
         context: context,
         isScrollControlled: true,
@@ -126,17 +136,11 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         builder: (context) {
-          final viewInsets = MediaQuery.of(context).viewInsets;
-          final h = MediaQuery.of(context).size.height * 0.8;
-          final searchController = TextEditingController();
           return StatefulBuilder(
             builder: (context, setPickerState) {
+              final viewInsets = MediaQuery.of(context).viewInsets;
+              final h = MediaQuery.of(context).size.height * 0.8;
               final q = _toTurkishLow(searchController.text.trim());
-              final future = Supabase.instance.client
-                  .from('players')
-                  .select('id, name, role, photo_url')
-                  .inFilter('role', const ['Takım Sorumlusu', 'Her İkisi'])
-                  .order('name', ascending: true);
               return SizedBox(
                 height: h,
                 child: Padding(
@@ -170,18 +174,18 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                               );
                             }
                             if (snap.hasError) {
-                              return Center(
-                                child: Text('Hata: ${snap.error}'),
-                              );
+                              return Center(child: Text('Hata: ${snap.error}'));
                             }
-                            final rows = (snap.data as List?)
+                            final rows =
+                                (snap.data as List?)
                                     ?.cast<Map<String, dynamic>>() ??
                                 const <Map<String, dynamic>>[];
                             final filtered = q.isEmpty
                                 ? rows
                                 : rows.where((r) {
-                                    final name =
-                                        _toTurkishLow((r['name'] ?? '').toString());
+                                    final name = _toTurkishLow(
+                                      (r['name'] ?? '').toString(),
+                                    );
                                     return name.contains(q);
                                   }).toList();
                             if (filtered.isEmpty) {
@@ -195,12 +199,16 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                                 final r = filtered[index];
                                 final id = (r['id'] ?? '').toString().trim();
                                 final n = (r['name'] ?? '').toString().trim();
-                                final role =
-                                    (r['role'] ?? '').toString().trim();
-                                final photo =
-                                    (r['photo_url'] ?? '').toString().trim();
+                                final role = (r['role'] ?? '')
+                                    .toString()
+                                    .trim();
+                                final photo = (r['photo_url'] ?? '')
+                                    .toString()
+                                    .trim();
                                 return Card(
-                                  margin: const EdgeInsets.symmetric(vertical: 4),
+                                  margin: const EdgeInsets.symmetric(
+                                    vertical: 4,
+                                  ),
                                   child: ListTile(
                                     leading: SizedBox(
                                       width: 36,
@@ -232,10 +240,9 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                     subtitle: role.isEmpty ? null : Text(role),
-                                    onTap: () => Navigator.of(context).pop({
-                                      'id': id,
-                                      'name': n,
-                                    }),
+                                    onTap: () => Navigator.of(
+                                      context,
+                                    ).pop({'id': id, 'name': n}),
                                   ),
                                 );
                               },
@@ -262,6 +269,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
           );
         },
       );
+      _disposeControllersLater([searchController]);
       return picked;
     }
 
@@ -274,7 +282,10 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
       setSheetState(() => selectedLogo = picked);
     }
 
-    Future<void> submit(void Function(void Function()) setSheetState) async {
+    Future<void> submit(
+      BuildContext sheetContext,
+      void Function(void Function()) setSheetState,
+    ) async {
       final teamName = nameController.text.trim();
       if (teamName.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -287,8 +298,9 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
       try {
         var logoUrl = existingLogoUrl;
         if (selectedLogo != null) {
-          final uploaded =
-              await _imageUploadService.uploadImage(File(selectedLogo!.path));
+          final uploaded = await _imageUploadService.uploadImage(
+            File(selectedLogo!.path),
+          );
           if ((uploaded ?? '').trim().isEmpty) {
             throw Exception('Logo yüklenemedi.');
           }
@@ -334,19 +346,21 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
           }
         }
 
+        // Başarılı kayıtta sheet kapanır; kapanmış sheet'e setState yapılmaz.
+        if (sheetContext.mounted) Navigator.of(sheetContext).pop();
         if (!mounted) return;
-        setState(() => _teamsFuture = _fetchTeamsOnce());
-        Navigator.of(context).pop();
+        setState(() {
+          _teamsFuture = _fetchTeamsOnce();
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(isEdit ? 'Güncellendi.' : 'Takım eklendi.')),
         );
       } catch (e) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Hata: $e')),
-        );
-      } finally {
-        if (mounted) setSheetState(() => saving = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Hata: $e')));
+        if (sheetContext.mounted) setSheetState(() => saving = false);
       }
     }
 
@@ -362,11 +376,11 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) {
-        final viewInsets = MediaQuery.of(context).viewInsets;
-        final h = MediaQuery.of(context).size.height * 0.8;
+      builder: (sheetContext) {
         return StatefulBuilder(
           builder: (context, setSheetState) {
+            final viewInsets = MediaQuery.of(context).viewInsets;
+            final h = MediaQuery.of(context).size.height * 0.8;
             final showLogoUrl = selectedLogo == null ? existingLogoUrl : '';
 
             Future<void> openManagerPicker() async {
@@ -374,19 +388,16 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
               if (picked == null) return;
               setSheetState(() {
                 selectedManagerId = (picked['id'] ?? '').toString().trim();
-                managerController.text = (picked['name'] ?? '').toString().trim();
+                managerController.text = (picked['name'] ?? '')
+                    .toString()
+                    .trim();
               });
             }
 
             return SizedBox(
               height: h,
               child: Padding(
-                padding: EdgeInsets.fromLTRB(
-                  16,
-                  8,
-                  16,
-                  16 + viewInsets.bottom,
-                ),
+                padding: EdgeInsets.fromLTRB(16, 8, 16, 16 + viewInsets.bottom),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -394,7 +405,9 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                       clipBehavior: Clip.antiAlias,
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(18),
-                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.surfaceContainerHighest,
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.14),
@@ -426,7 +439,9 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                                         ),
                                         Positioned.fill(
                                           child: Container(
-                                            color: Colors.black.withValues(alpha: 0.10),
+                                            color: Colors.black.withValues(
+                                              alpha: 0.10,
+                                            ),
                                           ),
                                         ),
                                         Center(
@@ -438,50 +453,52 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                                       ],
                                     )
                                   : (showLogoUrl.isNotEmpty
-                                      ? Stack(
-                                          children: [
-                                            Positioned.fill(
-                                              child: ImageFiltered(
-                                                imageFilter: ui.ImageFilter.blur(
-                                                  sigmaX: 18,
-                                                  sigmaY: 18,
+                                        ? Stack(
+                                            children: [
+                                              Positioned.fill(
+                                                child: ImageFiltered(
+                                                  imageFilter:
+                                                      ui.ImageFilter.blur(
+                                                        sigmaX: 18,
+                                                        sigmaY: 18,
+                                                      ),
+                                                  child: WebSafeImage(
+                                                    url: showLogoUrl,
+                                                    width: double.infinity,
+                                                    height: 220,
+                                                    isCircle: false,
+                                                    fit: BoxFit.cover,
+                                                    fallbackIconSize: 64,
+                                                  ),
                                                 ),
+                                              ),
+                                              Positioned.fill(
+                                                child: Container(
+                                                  color: Colors.black
+                                                      .withValues(alpha: 0.10),
+                                                ),
+                                              ),
+                                              Center(
                                                 child: WebSafeImage(
                                                   url: showLogoUrl,
                                                   width: double.infinity,
                                                   height: 220,
                                                   isCircle: false,
-                                                  fit: BoxFit.cover,
+                                                  fit: BoxFit.contain,
                                                   fallbackIconSize: 64,
                                                 ),
                                               ),
+                                            ],
+                                          )
+                                        : Container(
+                                            child: Icon(
+                                              Icons.shield_outlined,
+                                              size: 64,
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.onSurfaceVariant,
                                             ),
-                                            Positioned.fill(
-                                              child: Container(
-                                                color: Colors.black.withValues(alpha: 0.10),
-                                              ),
-                                            ),
-                                            Center(
-                                              child: WebSafeImage(
-                                                url: showLogoUrl,
-                                                width: double.infinity,
-                                                height: 220,
-                                                isCircle: false,
-                                                fit: BoxFit.contain,
-                                                fallbackIconSize: 64,
-                                              ),
-                                            ),
-                                          ],
-                                        )
-                                      : Container(
-                                          child: Icon(
-                                            Icons.shield_outlined,
-                                            size: 64,
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .onSurfaceVariant,
-                                          ),
-                                        )),
+                                          )),
                             ),
                             Positioned(
                               right: 10,
@@ -501,8 +518,8 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                                     onPressed: saving
                                         ? null
                                         : () => setSheetState(() {
-                                              selectedLogo = null;
-                                            }),
+                                            selectedLogo = null;
+                                          }),
                                     icon: const Icon(Icons.delete_outline),
                                   ),
                                 ],
@@ -554,9 +571,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                         ),
                         const SizedBox(width: 10),
                         IconButton.filledTonal(
-                          onPressed: saving
-                              ? null
-                              : openManagerPicker,
+                          onPressed: saving ? null : openManagerPicker,
                           icon: const Icon(Icons.search_rounded),
                           tooltip: 'Seç',
                         ),
@@ -566,17 +581,22 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton(
-                        onPressed:
-                            saving ? null : () => submit(setSheetState),
+                        onPressed: saving
+                            ? null
+                            : () => submit(sheetContext, setSheetState),
                         child: saving
                             ? const SizedBox(
                                 width: 18,
                                 height: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : Text(
                                 isEdit ? 'GÜNCELLE' : 'KAYDET',
-                                style: const TextStyle(fontWeight: FontWeight.w900),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                ),
                               ),
                       ),
                     ),
@@ -584,8 +604,9 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                     SizedBox(
                       width: double.infinity,
                       child: OutlinedButton(
-                        onPressed:
-                            saving ? null : () => Navigator.of(context).pop(),
+                        onPressed: saving
+                            ? null
+                            : () => Navigator.of(context).pop(),
                         child: const Text(
                           'VAZGEÇ',
                           style: TextStyle(fontWeight: FontWeight.w900),
@@ -601,9 +622,22 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
       },
     );
 
-    nameController.dispose();
-    foundedController.dispose();
-    managerController.dispose();
+    _disposeControllersLater([
+      nameController,
+      foundedController,
+      managerController,
+    ]);
+  }
+
+  /// Sheet kapanış animasyonu sürerken TextField'lar controller'ı kullanmaya
+  /// devam eder; hemen dispose etmek "_dependents.isEmpty" /
+  /// "used after being disposed" hatalarına yol açar.
+  void _disposeControllersLater(List<TextEditingController> controllers) {
+    Future<void>.delayed(const Duration(milliseconds: 600), () {
+      for (final c in controllers) {
+        c.dispose();
+      }
+    });
   }
 
   Future<void> _takimSil(String teamId) async {
@@ -637,7 +671,9 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Takım silindi.')));
-      setState(() => _teamsFuture = _fetchTeamsOnce());
+      setState(() {
+        _teamsFuture = _fetchTeamsOnce();
+      });
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -697,7 +733,9 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
               future: _teamsFuture,
               builder: (context, snapshot) {
                 Future<void> refresh() async {
-                  setState(() => _teamsFuture = _fetchTeamsOnce());
+                  setState(() {
+                    _teamsFuture = _fetchTeamsOnce();
+                  });
                   await _teamsFuture;
                 }
 
@@ -755,7 +793,10 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                       final logoUrl = (data['logo_url'] ?? '').toString();
 
                       Future<void> openEditDialog() async {
-                        await _openTeamFormSheet(teamId: teamId, existing: data);
+                        await _openTeamFormSheet(
+                          teamId: teamId,
+                          existing: data,
+                        );
                       }
 
                       return Card(
@@ -802,9 +843,9 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                                 case 'delete':
                                   _takimSil(teamId).then((_) {
                                     if (!mounted) return;
-                                    setState(
-                                      () => _teamsFuture = _fetchTeamsOnce(),
-                                    );
+                                    setState(() {
+                                      _teamsFuture = _fetchTeamsOnce();
+                                    });
                                   });
                                   break;
                               }
@@ -925,7 +966,7 @@ class _EditTeamScreenState extends State<EditTeamScreen> {
         context,
       ).showSnackBar(SnackBar(content: Text('Hata: $e')));
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 

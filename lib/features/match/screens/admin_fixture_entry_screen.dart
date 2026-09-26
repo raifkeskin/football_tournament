@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../tournament/models/league.dart';
 import '../../tournament/models/league_extras.dart';
 import '../models/match.dart';
@@ -43,6 +44,7 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
   DateTime _selectedDate = DateTime.now();
   TimeOfDay _selectedTime = TimeOfDay.now();
   bool _isLoading = false;
+  final _weekController = TextEditingController();
 
   @override
   void initState() {
@@ -50,7 +52,22 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
     final initial = (widget.initialLeagueId ?? '').trim();
     if (initial.isNotEmpty) {
       _selectedLeagueId = initial;
+      _prefillWeek(initial);
     }
+  }
+
+  @override
+  void dispose() {
+    _weekController.dispose();
+    super.dispose();
+  }
+
+  /// Fikstür ekranı maçları haftaya göre listeler; hafta boş olan maç hiçbir
+  /// haftada görünmez. Varsayılan olarak turnuvadaki son haftanın bir sonrası.
+  Future<void> _prefillWeek(String leagueId) async {
+    final maxWeek = await _matchService.getFixtureMaxWeek(leagueId);
+    if (!mounted || _selectedLeagueId != leagueId) return;
+    setState(() => _weekController.text = '${(maxWeek ?? 0) + 1}');
   }
 
   Stream<List<Season>> _watchSeasonsForLeague(String leagueId) {
@@ -145,13 +162,16 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                           .toList(),
                       onChanged: widget.lockLeagueSelection
                           ? null
-                          : (val) => setState(() {
+                          : (val) {
+                              setState(() {
                                 _selectedLeagueId = val;
                                 _selectedSeasonId = null;
                                 _selectedGroupId = null;
                                 _homeTeamId = null;
                                 _awayTeamId = null;
-                              }),
+                              });
+                              if (val != null) _prefillWeek(val);
+                            },
                     );
                   },
                 ),
@@ -339,6 +359,24 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                   ),
                 const SizedBox(height: 16),
 
+                TextField(
+                  controller: _weekController,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(3),
+                  ],
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  decoration: const InputDecoration(
+                    labelText: 'Hafta',
+                    prefixIcon: Icon(Icons.format_list_numbered),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
                 StreamBuilder<List<Pitch>>(
                   stream: _leagueService.watchPitches(),
                   builder: (context, snapshot) {
@@ -477,12 +515,20 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
   }
 
   Future<void> _saveFixture() async {
+    final week = int.tryParse(_weekController.text.trim());
     if (_selectedLeagueId == null ||
+        _selectedSeasonId == null ||
         _selectedGroupId == null ||
         _homeTeamId == null ||
         _awayTeamId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Lütfen tüm alanları seçin.')),
+      );
+      return;
+    }
+    if (week == null || week < 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Lütfen geçerli bir hafta girin.')),
       );
       return;
     }
@@ -521,6 +567,7 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
         awayTeamId: _awayTeamId!,
         homeScore: 0,
         awayScore: 0,
+        week: week,
         matchDate: matchDateTime == null
             ? null
             : "${matchDateTime.year}-${matchDateTime.month.toString().padLeft(2, '0')}-${matchDateTime.day.toString().padLeft(2, '0')}",
@@ -532,7 +579,10 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
         status: MatchStatus.notStarted,
       );
 
-      await _matchService.addMatch(match);
+      final newId = await _matchService.addMatch(match);
+      if (newId.trim().isEmpty) {
+        throw Exception('Maç kaydedilemedi.');
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -542,6 +592,7 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
       );
       Navigator.pop(context);
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red),
       );

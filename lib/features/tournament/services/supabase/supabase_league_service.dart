@@ -399,14 +399,14 @@ class SupabaseLeagueService implements ILeagueService {
       AppConfig.sqlLogResult(table: 'matches', operation: 'DELETE', error: e);
     }
     try {
-      AppConfig.sqlLogStart(table: 'teams', operation: 'UPDATE', filters: 'group_id=null WHERE group_id=$id');
+      AppConfig.sqlLogStart(table: 'season_teams', operation: 'UPDATE', filters: 'group_id=null WHERE group_id=$id');
       await _client
-          .from('teams')
+          .from('season_teams')
           .update({'group_id': null, 'group_name': null})
           .eq('group_id', id);
-      AppConfig.sqlLogResult(table: 'teams', operation: 'UPDATE');
+      AppConfig.sqlLogResult(table: 'season_teams', operation: 'UPDATE');
     } catch (e) {
-      AppConfig.sqlLogResult(table: 'teams', operation: 'UPDATE', error: e);
+      AppConfig.sqlLogResult(table: 'season_teams', operation: 'UPDATE', error: e);
     }
     try {
       AppConfig.sqlLogStart(table: 'groups', operation: 'DELETE', filters: 'id=$id');

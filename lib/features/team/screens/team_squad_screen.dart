@@ -2910,9 +2910,14 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
     return 'https://$url';
   }
 
+  /// Uygulama rolleri Türkçe yazar ('Futbolcu', 'Her İkisi'); dışarıdan
+  /// eklenen kayıtlarda İngilizce kodlar ('player', 'both') veya boş rol
+  /// olabiliyor. Takım sorumlusu olmayan herkes futbolcu kabul edilir.
   bool _isFootballerRole(String role) {
-    final r = role.trim();
-    return r == 'Futbolcu' || r == 'Her İkisi';
+    final r = role.trim().toLowerCase();
+    if (r.isEmpty) return true;
+    return const {'futbolcu', 'her i̇kisi', 'her ikisi', 'player', 'both'}
+        .contains(r);
   }
 
   String _positionsBirthLine(PlayerModel p) {

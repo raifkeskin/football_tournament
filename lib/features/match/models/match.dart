@@ -337,25 +337,24 @@ class MatchModel {
       });
     } else {
       base.addAll({
+        // Yalnızca Supabase `matches` tablosunda gerçekten var olan kolonlar.
+        // firebase_id, pitch_name, minute ve score_json kolonları tabloda
+        // yok; gönderilirse INSERT tamamen başarısız olur.
         if (id.trim().isNotEmpty) 'id': id.trim(),
-        'firebase_id': (firebaseId ?? '').trim().isEmpty ? null : firebaseId!.trim(),
         'league_id': leagueId.trim().isEmpty ? null : leagueId.trim(),
         'home_team_id': homeTeamId,
         'away_team_id': awayTeamId,
         'season_id': (seasonId ?? '').trim().isEmpty ? null : seasonId.trim(),
         'group_id': (groupId ?? '').trim().isEmpty ? null : groupId!.trim(),
         'pitch_id': (pitchId ?? '').trim().isEmpty ? null : pitchId!.trim(),
-        'pitch_name': (pitchName ?? '').trim().isEmpty ? null : pitchName!.trim(),
         'week': week,
         'match_date': dateStr.isEmpty ? null : dateStr,
         'match_time': timeStr.isEmpty ? null : timeStr,
         'status': status.name,
-        'minute': minute,
         'home_score': homeScore,
         'away_score': awayScore,
-        'score_json': computedScore,
-        'created_at': createdAt?.toIso8601String(),
-        'updated_at': updatedAt?.toIso8601String(),
+        if (createdAt != null) 'created_at': createdAt!.toIso8601String(),
+        if (updatedAt != null) 'updated_at': updatedAt!.toIso8601String(),
       });
     }
     return base;

@@ -883,7 +883,8 @@ class _MatchCard extends StatelessWidget {
     );
   }
 
-  void _showQuickScoreDialog(BuildContext context) {
+  void _showQuickScoreDialog(BuildContext context) async {
+    const accent = Color(0xFF10B981);
     final homeName = (teamNameById[match.homeTeamId] ?? '').trim();
     final awayName = (teamNameById[match.awayTeamId] ?? '').trim();
     final homeScoreCtrl = TextEditingController(
@@ -892,147 +893,229 @@ class _MatchCard extends StatelessWidget {
     final awayScoreCtrl = TextEditingController(
       text: match.awayScore.toString(),
     );
+    var saving = false;
 
-    showDialog(
-      context: context,
-      builder: (c) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
-        titlePadding: EdgeInsets.zero,
-        contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
-        title: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          decoration: const BoxDecoration(
-            color: Color(0xFF064E3B),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-          ),
-          child: const Text(
-            'Hızlı Skor Girişi',
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w900,
-              fontSize: 18,
-            ),
-          ),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
+    Widget scoreBox(String teamName, TextEditingController ctrl) {
+      return Expanded(
+        child: Column(
           children: [
             Text(
-              '${homeName.isEmpty ? 'Ev Sahibi' : homeName} - ${awayName.isEmpty ? 'Deplasman' : awayName}',
-              style: const TextStyle(color: Colors.white70, fontSize: 14),
+              teamName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+              ),
             ),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: homeScoreCtrl,
-                    keyboardType: TextInputType.number,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w900,
-                    ),
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: Colors.white.withValues(alpha: 0.05),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: Colors.white24),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(
-                          color: Color(0xFF10B981),
-                          width: 2,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                const Text(
-                  '-',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: awayScoreCtrl,
-                    keyboardType: TextInputType.number,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w900,
-                    ),
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: Colors.white.withValues(alpha: 0.05),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: Colors.white24),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(
-                          color: Color(0xFF10B981),
-                          width: 2,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: ctrl,
+              keyboardType: TextInputType.number,
+              textAlign: TextAlign.center,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(2),
               ],
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 32,
+                fontWeight: FontWeight.w900,
+              ),
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: Colors.black.withValues(alpha: 0.4),
+                contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: Colors.white.withValues(alpha: 0.15),
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: accent, width: 2),
+                ),
+              ),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(c),
-            child: const Text('İptal', style: TextStyle(color: Colors.white70)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF10B981),
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            onPressed: () async {
-              final homeScore = int.tryParse(homeScoreCtrl.text) ?? 0;
-              final awayScore = int.tryParse(awayScoreCtrl.text) ?? 0;
+      );
+    }
 
+    await showDialog<void>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setDialogState) {
+          Future<void> save() async {
+            setDialogState(() => saving = true);
+            try {
               await _matchService.completeMatchWithScoreAndDefaultEvents(
                 matchId: match.id,
-                homeScore: homeScore,
-                awayScore: awayScore,
+                homeScore: int.tryParse(homeScoreCtrl.text) ?? 0,
+                awayScore: int.tryParse(awayScoreCtrl.text) ?? 0,
               );
+              if (!c.mounted) return;
+              Navigator.pop(c);
+              onDataChanged();
+            } catch (e) {
+              if (!c.mounted) return;
+              setDialogState(() => saving = false);
+              ScaffoldMessenger.of(c).showSnackBar(
+                SnackBar(
+                  content: Text('Hata: $e'),
+                  backgroundColor: Colors.redAccent,
+                ),
+              );
+            }
+          }
 
-              if (c.mounted) {
-                Navigator.pop(c);
-                onDataChanged();
-              }
-            },
-            child: const Text(
-              'KAYDET',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(24),
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF1E293B), Color(0xFF064E3B)],
+                ),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black54,
+                    blurRadius: 15,
+                    offset: Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.scoreboard_outlined, color: accent, size: 22),
+                        SizedBox(width: 8),
+                        Text(
+                          'Hızlı Skor Girişi',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 18,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    const Divider(color: Colors.white24, height: 1),
+                    const SizedBox(height: 20),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        scoreBox(
+                          homeName.isEmpty ? 'Ev Sahibi' : homeName,
+                          homeScoreCtrl,
+                        ),
+                        const Padding(
+                          padding: EdgeInsets.fromLTRB(12, 0, 12, 18),
+                          child: Text(
+                            '-',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 28,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                        scoreBox(
+                          awayName.isEmpty ? 'Deplasman' : awayName,
+                          awayScoreCtrl,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Kaydedildiğinde maç "Bitti" olarak işaretlenir.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.55),
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      height: 50,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: accent,
+                          disabledBackgroundColor: accent.withValues(
+                            alpha: 0.5,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: saving ? null : save,
+                        child: saving
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text(
+                                'KAYDET',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      height: 50,
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white70,
+                          side: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.2),
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: saving ? null : () => Navigator.pop(c),
+                        child: const Text(
+                          'VAZGEÇ',
+                          style: TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          );
+        },
       ),
     );
+
+    // Dialog kapanış animasyonu bitene kadar TextField'lar controller'ı
+    // kullanmaya devam eder; hemen dispose etmek hata verir.
+    Future<void>.delayed(const Duration(milliseconds: 600), () {
+      homeScoreCtrl.dispose();
+      awayScoreCtrl.dispose();
+    });
   }
 
   void _showEditPopup(BuildContext context) async {

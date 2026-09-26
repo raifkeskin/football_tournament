@@ -271,10 +271,11 @@ class SupabaseMatchService implements IMatchService {
           return (row['id'] ?? '').toString();
         }
         AppConfig.sqlLogResult(table: 'matches', operation: 'INSERT', count: 0);
-        return '';
+        throw Exception('Maç kaydedilemedi (matches INSERT 0 satır).');
       } catch (e) {
         AppConfig.sqlLogResult(table: 'matches', operation: 'INSERT', error: e);
-        return '';
+        // Hata yutulmaz: aksi halde ekran "başarılı" der ama kayıt oluşmaz.
+        rethrow;
       }
     });
   }
