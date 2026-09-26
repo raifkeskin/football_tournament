@@ -18,54 +18,66 @@ class AdminPanelWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Mevcut buton verilerini modern yapıya uygun şekilde listeliyoruz
-    final menuItems = [
+    // admin_panel_screen.dart içindeki menü listeni buna göre güncelle:
+    final List<_AdminMenuData> menuItems = [
       _AdminMenuData(
         baslik: 'Turnuva Yönetimi',
-        ikon: Icons.emoji_events_outlined,
-        resimYolu: 'assets/admin/tournament_bg.jpg',
-        onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => AdminManageLeaguesScreen())),
+        ikon: Icons.emoji_events_rounded,
+        resimYolu: 'assets/images/admin_tournament.jpg',
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AdminManageLeaguesScreen()),
+          );
+        },
       ),
       _AdminMenuData(
-        baslik: 'Futbolcu Lisans', // İsim kısaltıldı (UI uyumu için)
-        ikon: Icons.badge_outlined,
-        resimYolu: 'assets/admin/news_bg.jpg', // Uygun bir görselle değiştirilebilir
-        onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => FootballerLicenseScreen())),
+        baslik: 'Futbolcu Lisans',
+        ikon: Icons.assignment_ind_rounded,
+        resimYolu: 'assets/images/admin_license.jpg',
+        onPressed: () {
+          // Yönlendirme kodun
+        },
       ),
       _AdminMenuData(
         baslik: 'Fikstür Planlama',
-        ikon: Icons.calendar_month_outlined,
-        resimYolu: 'assets/admin/fixture_bg.jpg',
-        onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => AdminFixtureEntryScreen())),
+        ikon: Icons.calendar_month_rounded,
+        resimYolu: 'assets/images/admin_fixture.jpg',
+        onPressed: () {
+          // Yönlendirme kodun
+        },
       ),
       _AdminMenuData(
         baslik: 'Ceza Yönetimi',
-        ikon: Icons.gavel_outlined,
-        resimYolu: 'assets/admin/penalty_bg.jpg',
-        onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => AdminPenaltyManagementScreen())),
+        ikon: Icons.gavel_rounded,
+        resimYolu: 'assets/images/admin_penalty.jpg',
+        onPressed: () {
+          // Yönlendirme kodun
+        },
       ),
       _AdminMenuData(
         baslik: 'Takım Yönetimi',
-        ikon: Icons.shield_outlined, // İkon kalkan olarak güncellendi
-        resimYolu: 'assets/admin/teams_bg.jpg',
-        onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => AdminManageTeamsScreen())),
+        ikon: Icons.shield_rounded,
+        resimYolu: 'assets/images/admin_team.jpg',
+        onPressed: () {
+          // Yönlendirme kodun
+        },
       ),
       _AdminMenuData(
         baslik: 'Haber Yönetimi',
-        ikon: Icons.newspaper_outlined,
-        resimYolu: 'assets/admin/news_bg.jpg',
-        onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => AdminManageNewsScreen())),
+        ikon: Icons.newspaper_rounded,
+        resimYolu: 'assets/images/admin_news.jpg',
+        onPressed: () {
+          // Yönlendirme kodun
+        },
       ),
       _AdminMenuData(
         baslik: 'Saha Yönetimi',
-        ikon: Icons.location_on_outlined,
-        resimYolu: 'assets/admin/pitch_bg.jpg',
-        onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => AdminPitchManagementScreen())),
-      ),
-      _AdminMenuData(
-        baslik: 'Veri Araçları',
-        ikon: Icons.construction_outlined,
-        resimYolu: 'assets/admin/penalty_bg.jpg', // Mevcut görsellerden biri atandı
-        onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => AdminDataToolsScreen())),
+        ikon: Icons.stadium_rounded,
+        resimYolu: 'assets/images/admin_pitch.jpg',
+        onPressed: () {
+          // Yönlendirme kodun
+        },
       ),
     ];
 
@@ -73,16 +85,18 @@ class AdminPanelWidget extends StatelessWidget {
       slivers: [
         // Grid Menü
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          sliver: SliverGrid(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              childAspectRatio: 1.1,
-            ),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          sliver: SliverList(
             delegate: SliverChildBuilderDelegate(
-              (context, index) => _ModernImageMenuCard(data: menuItems[index]),
+              (context, index) => Padding(
+                padding: const EdgeInsets.only(
+                  bottom: 10.0,
+                ), // Kartlar arası boşluk 12'den 10'a düştü
+                child: SizedBox(
+                  height: 80, // KİLİT NOKTA: Yükseklik 100'den 80'e düşürüldü
+                  child: _ModernImageMenuCard(data: menuItems[index]),
+                ),
+              ),
               childCount: menuItems.length,
             ),
           ),
@@ -98,17 +112,23 @@ class AdminPanelWidget extends StatelessWidget {
                   context,
                   'OTP Takip',
                   Icons.sms_outlined,
-                  () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => AdminOtpMonitorScreen())),
+                  () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => AdminOtpMonitorScreen()),
+                  ),
                 ),
                 const SizedBox(height: 8),
                 _buildSmallActionTile(
                   context,
                   'Bekleyen Onaylar',
                   Icons.rule_folder_outlined,
-                  () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => AdminPendingActionsScreen())),
+                  () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => AdminPendingActionsScreen(),
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 24),
-                
+
                 // Çıkış Butonu
                 SizedBox(
                   width: double.infinity,
@@ -118,10 +138,15 @@ class AdminPanelWidget extends StatelessWidget {
                     style: FilledButton.styleFrom(
                       backgroundColor: const Color(0xFFFFEBEE),
                       foregroundColor: const Color(0xFFC62828),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
                     ),
                     icon: const Icon(Icons.logout_rounded),
-                    label: const Text('Çıkış Yap', style: TextStyle(fontWeight: FontWeight.w900)),
+                    label: const Text(
+                      'Çıkış Yap',
+                      style: TextStyle(fontWeight: FontWeight.w900),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 40),
@@ -133,11 +158,23 @@ class AdminPanelWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildSmallActionTile(BuildContext context, String title, IconData icon, VoidCallback onTap) {
+  Widget _buildSmallActionTile(
+    BuildContext context,
+    String title,
+    IconData icon,
+    VoidCallback onTap,
+  ) {
     return ListTile(
       onTap: onTap,
       leading: Icon(icon, color: Colors.white70),
-      title: Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+      title: Text(
+        title,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
+          fontSize: 14,
+        ),
+      ),
       trailing: const Icon(Icons.chevron_right, color: Colors.white24),
       tileColor: Colors.white.withOpacity(0.05),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -167,12 +204,18 @@ class _ModernImageMenuCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16), // Daha zarif bir kavis
+        border: Border.all(color: Colors.white.withOpacity(0.12)),
+        boxShadow: const [
+          BoxShadow(color: Colors.black45, blurRadius: 8, offset: Offset(0, 4)),
+        ],
         image: DecorationImage(
           image: AssetImage(data.resimYolu),
           fit: BoxFit.cover,
           colorFilter: ColorFilter.mode(
-            Colors.black.withOpacity(0.6), // Görseli karartarak yazıyı ön plana çıkarır
+            Colors.black.withOpacity(
+              0.75,
+            ), // Resmi biraz daha karartarak yazıyı patlattık
             BlendMode.darken,
           ),
         ),
@@ -181,28 +224,52 @@ class _ModernImageMenuCard extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: data.onPressed,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(16),
           child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            padding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 12,
+            ), // Padding ufaldı
+            child: Row(
               children: [
+                // Sol taraftaki şeffaf arka planlı ikon kutusu
                 Container(
-                  padding: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.all(10), // Padding ufaldı
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
+                    color: Colors.white.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.white.withOpacity(0.2)),
                   ),
-                  child: Icon(data.ikon, color: Colors.white, size: 24),
-                ),
-                Text(
-                  data.baslik,
-                  style: const TextStyle(
+                  child: Icon(
+                    data.ikon,
                     color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 14,
-                    letterSpacing: -0.5,
+                    size: 22,
+                  ), // İkon 28'den 22'ye düştü
+                ),
+                const SizedBox(width: 14),
+                // Orta alan: Menü Başlığı
+                Expanded(
+                  child: Text(
+                    data.baslik,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 16, // Font 18'den 16'ya düştü
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ),
+                // Sağ alan: Ok İkonu
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.05),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    color: Colors.white70,
+                    size: 14,
                   ),
                 ),
               ],

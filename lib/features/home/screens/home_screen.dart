@@ -598,65 +598,70 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // YENİ EKLENEN: Özel Turnuva Seçici (Bottom Sheet)
-  void _showLeagueSelectorBottomSheet(
-    BuildContext context,
-    List<League> leagues,
-    bool isAdmin,
-  ) {
-    showModalBottomSheet(
+// YENİ EKLENEN: Özel Turnuva Seçici (Ortadan Açılan Ortak Dialog Tasarımı)
+  void _showLeagueSelectionDialog(BuildContext context, List<League> leagues, bool isAdmin) {
+    showDialog(
       context: context,
-      backgroundColor: const Color(0xFF1E293B),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (c) {
-        return SafeArea(
-          child: Padding(
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent, // Arka plan şeffaf
+          insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Container(
             padding: const EdgeInsets.symmetric(vertical: 16),
+            constraints: const BoxConstraints(maxHeight: 400),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF1E293B), // Üst sol lacivert
+                  Color(0xFF064E3B), // Alt sağ koyu zümrüt yeşili
+                ],
+              ),
+              border: Border.all(color: Colors.white.withOpacity(0.08)), // Çok hafif çerçeve
+              boxShadow: const [
+                BoxShadow(color: Colors.black54, blurRadius: 15, offset: Offset(0, 8)),
+              ],
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.white24,
-                      borderRadius: BorderRadius.circular(2),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  child: Text(
+                    'Turnuva Seçin',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
-                const Text(
-                  'Turnuva Seçin',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 16),
+                const Divider(color: Colors.white24),
                 Flexible(
-                  child: ListView(
+                  child: ListView.separated(
                     shrinkWrap: true,
-                    children: leagues.map((l) {
+                    itemCount: leagues.length,
+                    separatorBuilder: (context, index) => const Divider(
+                      color: Colors.white12, 
+                      height: 1, 
+                      indent: 24, 
+                      endIndent: 24,
+                    ),
+                    itemBuilder: (context, index) {
+                      final l = leagues[index];
                       // Gizli ve admin değilse kilitli kabul et
                       final isLocked = l.isPrivate && !isAdmin;
                       final isSelected = l.id == _activeLeagueId;
 
                       return ListTile(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 24),
                         leading: isLocked
-                            ? const Icon(
-                                Icons.lock_rounded,
-                                color: Colors.white54,
-                                size: 22,
-                              )
+                            ? const Icon(Icons.lock_rounded, color: Colors.white54, size: 22)
                             : Icon(
                                 Icons.emoji_events_rounded,
-                                color: isSelected
-                                    ? const Color(0xFF10B981)
-                                    : Colors.white70,
+                                color: isSelected ? const Color(0xFF10B981) : Colors.white70,
                                 size: 22,
                               ),
                         title: Text(
@@ -664,32 +669,28 @@ class _HomeScreenState extends State<HomeScreen> {
                           style: TextStyle(
                             color: isLocked
                                 ? Colors.white54
-                                : (isSelected
-                                      ? const Color(0xFF10B981)
-                                      : Colors.white),
-                            fontWeight: isSelected
-                                ? FontWeight.w900
-                                : FontWeight.bold,
+                                : (isSelected ? const Color(0xFF10B981) : Colors.white),
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                           ),
                         ),
                         trailing: isSelected
-                            ? const Icon(
-                                Icons.check_circle_rounded,
-                                color: Color(0xFF10B981),
-                                size: 20,
-                              )
+                            ? const Icon(Icons.check, color: Color(0xFF10B981))
                             : null,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                         onTap: () {
                           if (isLocked) {
-                            _showAccessCodeDialog(context, l);
+                            Navigator.pop(context); // Önce seçiciyi kapat
+                            _showAccessCodeDialog(context, l); // Sonra erişim kodu ekranını aç
                           } else {
                             setState(() => _activeLeagueId = l.id);
                             GlobalFilter.setLeague(l.id);
-                            Navigator.pop(c);
+                            Navigator.pop(context); // Tıklandığı an popup kapanır
                           }
                         },
                       );
-                    }).toList(),
+                    },
                   ),
                 ),
               ],
@@ -868,7 +869,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 // ----------------------------------------------------
                                 Expanded(
                                   child: InkWell(
-                                    onTap: () => _showLeagueSelectorBottomSheet(
+                                    onTap: () => _showLeagueSelectionDialog(
                                       context,
                                       allLeagues,
                                       isAdmin,
