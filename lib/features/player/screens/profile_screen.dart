@@ -5,8 +5,6 @@ import '../../../core/config/app_config.dart'; // AppConfig için
 import 'package:football_tournament/screens/admin_panel_screen.dart';
 import '../../home/screens/main_navigator.dart';
 import '../../../core/services/app_session.dart';
-import '../../auth/services/interfaces/i_auth_service.dart';
-import '../../../core/services/service_locator.dart';
 import '../../auth/screens/login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -19,7 +17,6 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  final IAuthService _authService = ServiceLocator.authService;
   bool _isLoading = false;
 
   Future<void> _logout(dynamic session) async {
@@ -83,32 +80,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     final isAdminPanelVisible = sessionData.isAdmin;
-    final isSuperAdminMode = isAdminPanelVisible && !isRealUser;
 
     const bgDark = Color(0xFF0F172A);
 
-    return StreamBuilder<dynamic>(
-      stream: isSuperAdminMode
-          ? const Stream.empty()
-          : (_authService as dynamic).watchUserDoc(user?.id ?? ''),
-      builder: (context, snapshot) {
-        final dynamic doc = snapshot.data;
-        final isLoading = snapshot.connectionState == ConnectionState.waiting;
-
-        final state = doc == null
-            ? ProfileState(
-                phone: sessionData.phone,
-                role: sessionData.role,
-                isAdmin: sessionData.isAdmin,
-                isLoading: isLoading,
-              )
-            : ProfileState(
-                displayName: doc.displayName,
-                phone: doc.phone ?? sessionData.phone,
-                role: doc.role ?? sessionData.role,
-                isAdmin: doc.isAdmin ?? sessionData.isAdmin,
-                isLoading: false,
-              );
+    // Profil bilgisi oturumdan gelir (app_users + players üzerinden
+    // AppSessionController tarafından yüklenir).
+    return Builder(
+      builder: (context) {
+        final state = ProfileState(
+          displayName: sessionData.displayName,
+          phone: sessionData.phone,
+          role: sessionData.role,
+          isAdmin: sessionData.isAdmin,
+          isLoading: sessionData.isLoading,
+        );
 
         final showAppBar = isRealUser || isAdminPanelVisible;
 
@@ -254,12 +239,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 'Rol',
                 state.isAdmin
                     ? 'Sistem Yöneticisi'
-                    : (state.role == 'manager' ? 'Takım Sorumlusu' : 'Oyuncu'),
+                    : (state.role == 'manager'
+                          ? 'Takım Sorumlusu'
+                          : 'Futbolcu'),
                 Icons.workspace_premium_rounded,
               ),
             ],
           ),
         ),
+        // Takım sorumlusuna özel işlemler (ör. kadroya oyuncu ekleme talebi)
+        // ileride buraya eklenecek: if (state.role == 'manager') ...
         const SizedBox(height: 32),
         SizedBox(
           width: double.infinity,

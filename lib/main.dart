@@ -32,6 +32,10 @@ void main() async {
     }
   }
 
+  // "Beni Hatırla" işaretlenmediyse önceki oturumu kapat: uygulama giriş
+  // ekranıyla açılır.
+  await AppSessionController.enforceRememberMe();
+
   runApp(const MyApp());
 }
 

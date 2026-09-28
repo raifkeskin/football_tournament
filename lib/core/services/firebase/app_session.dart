@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb; // Supabase çakışmasını önlemek için alias
+
+const _kRememberMeKey = 'auth_remember_me';
 
 @immutable
 class AppSessionState {
@@ -11,6 +14,7 @@ class AppSessionState {
     required this.teamId,
     required this.phone,
     required this.isLoading,
+    this.displayName,
   });
 
   static const _unset = Object();
@@ -22,6 +26,9 @@ class AppSessionState {
   final String? teamId;
   final String phone;
   final bool isLoading;
+  final String? displayName;
+
+  bool get isManager => role == 'manager';
 
   AppSessionState copyWith({
     Object? user = _unset,
@@ -30,6 +37,7 @@ class AppSessionState {
     Object? teamId = _unset,
     String? phone,
     bool? isLoading,
+    Object? displayName = _unset,
   }) {
     return AppSessionState(
       user: identical(user, _unset) ? this.user : user as sb.User?,
@@ -38,6 +46,9 @@ class AppSessionState {
       teamId: identical(teamId, _unset) ? this.teamId : teamId as String?,
       phone: phone ?? this.phone,
       isLoading: isLoading ?? this.isLoading,
+      displayName: identical(displayName, _unset)
+          ? this.displayName
+          : displayName as String?,
     );
   }
 }
@@ -70,7 +81,32 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
     _onAuthChanged(_supabase.auth.currentUser);
   }
 
+  /// Uygulama açılışında çağrılır: "Beni Hatırla" işaretlenmeden açılmış bir
+  /// oturum varsa kapatılır; böylece uygulama giriş ekranıyla açılır.
+  /// (Supabase oturumu cihazda kalıcı sakladığı için bu kontrol gerekli.)
+  static Future<void> enforceRememberMe() async {
+    final auth = sb.Supabase.instance.client.auth;
+    if (auth.currentSession == null) return;
+    var remember = false;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      remember = prefs.getBool(_kRememberMeKey) ?? false;
+    } catch (_) {}
+    if (remember) return;
+    try {
+      await auth.signOut();
+    } catch (_) {}
+  }
+
+  static Future<void> _setRememberMe(bool value) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_kRememberMeKey, value);
+    } catch (_) {}
+  }
+
   Future<void> signOut() async {
+    await _setRememberMe(false);
     try {
       await _supabase.auth.signOut();
     } catch (e) {
@@ -113,10 +149,10 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
     final email = _resolveEmailFromPhoneInput(raw);
     if (email != null) {
       await _supabase.auth.signInWithPassword(email: email, password: password);
-      return;
+    } else {
+      await _supabase.auth.signInWithPassword(phone: raw, password: password);
     }
-
-    await _supabase.auth.signInWithPassword(phone: raw, password: password);
+    await _setRememberMe(rememberMe);
   }
 
   Future<bool> signInSuperAdminBackdoor({required String password}) async {
@@ -132,6 +168,8 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
       try {
         await _supabase.auth.signInWithPassword(email: email, password: pwd);
         if (_supabase.auth.currentUser != null) {
+          // Gizli admin girişi hatırlanmaz; uygulama tekrar açılınca kapanır.
+          await _setRememberMe(false);
           value = value.copyWith(isAdmin: true, role: 'super_admin');
           return true;
         }
@@ -156,6 +194,7 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
         teamId: null,
         phone: '',
         isLoading: false,
+        displayName: null,
       );
       return;
     }
@@ -188,34 +227,87 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
     return false;
   }
 
-  void _loadProfile(sb.User user, bool isAdmin) {
-    _profileSub?.cancel();
-    
-    _profileSub = _supabase
-        .from('users')
-        .stream(primaryKey: ['id'])
-        .eq('id', user.id)
-        .listen((rows) {
-      if (rows.isEmpty) {
-        value = value.copyWith(
-          user: user,
-          isAdmin: isAdmin,
-          role: isAdmin ? 'admin' : 'user',
-          isLoading: false,
-        );
-        return;
-      }
+  static String _raw10(String input) {
+    var d = input.replaceAll(RegExp(r'\D'), '');
+    if (d.startsWith('90') && d.length >= 12) d = d.substring(2);
+    if (d.startsWith('0')) d = d.substring(1);
+    if (d.length > 10) d = d.substring(d.length - 10);
+    return d;
+  }
 
-      final data = rows.first;
-      value = value.copyWith(
-        user: user,
-        isAdmin: isAdmin,
-        role: (data['role'] ?? data['access_role'] ?? (isAdmin ? 'admin' : 'user')).toString(),
-        teamId: data['team_id']?.toString(),
-        phone: data['phone']?.toString() ?? '',
-        isLoading: false,
-      );
-    });
+  /// Profil bilgisi: önce `app_users` (auth_uid), sonra telefonla `players`.
+  /// (Önceden var olmayan `users` tablosu dinleniyordu; isim/rol hep boştu.)
+  Future<void> _loadProfile(sb.User user, bool isAdmin) async {
+    _profileSub?.cancel();
+
+    // Giriş e-postası "5xxxxxxxxx@masterclass.com" biçiminde.
+    final email = (user.email ?? '').trim();
+    var phone = _raw10((user.phone ?? '').trim());
+    if (phone.isEmpty && email.endsWith('@masterclass.com')) {
+      phone = _raw10(email.split('@').first);
+    }
+
+    String? name;
+    String? role;
+    String? teamId;
+
+    try {
+      final res = await _supabase
+          .from('app_users')
+          .select('name, role, phone, team_id')
+          .eq('auth_uid', user.id)
+          .limit(1);
+      if (res.isNotEmpty) {
+        final r = res.first;
+        name = (r['name'] ?? '').toString().trim();
+        role = (r['role'] ?? '').toString().trim();
+        teamId = r['team_id']?.toString();
+        final p = _raw10((r['phone'] ?? '').toString());
+        if (phone.isEmpty) phone = p;
+      }
+    } catch (_) {}
+
+    if (phone.isNotEmpty) {
+      try {
+        final res = await _supabase
+            .from('players')
+            .select('name, surname, role')
+            .eq('phone', phone)
+            .limit(1);
+        if (res.isNotEmpty) {
+          final r = res.first;
+          final full = [
+            (r['name'] ?? '').toString().trim(),
+            (r['surname'] ?? '').toString().trim(),
+          ].where((e) => e.isNotEmpty).join(' ');
+          if ((name ?? '').isEmpty && full.isNotEmpty) name = full;
+          final pr = (r['role'] ?? '').toString().trim().toLowerCase();
+          if ((role ?? '').isEmpty && pr.isNotEmpty) {
+            role = (pr.contains('sorumlu') || pr.contains('her') ||
+                    pr == 'manager' || pr == 'both')
+                ? 'manager'
+                : 'player';
+          }
+        }
+      } catch (_) {}
+    }
+
+    // Uygulama içinde rol kodları: admin, manager, player.
+    final r = (role ?? '').toLowerCase();
+    final resolvedRole = isAdmin
+        ? 'admin'
+        : (r.contains('sorumlu') || r == 'manager' ? 'manager' : 'player');
+
+    if (_supabase.auth.currentUser?.id != user.id) return; // bu arada çıkış
+    value = value.copyWith(
+      user: user,
+      isAdmin: isAdmin,
+      role: resolvedRole,
+      teamId: teamId,
+      phone: phone,
+      displayName: (name ?? '').isEmpty ? null : name,
+      isLoading: false,
+    );
   }
 
   @override

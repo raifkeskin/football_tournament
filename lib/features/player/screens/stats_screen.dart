@@ -291,7 +291,7 @@ class _StatsScreenState extends State<StatsScreen> {
                                   final teamById = {for (final t in teams) t.id: t};
 
                                   return StreamBuilder<List<PlayerStats>>(
-                                    stream: _matchService.watchPlayerStats(tournamentId: _selectedLeagueId ?? ''),
+                                    stream: _matchService.watchPlayerStats(tournamentId: _selectedSeasonId ?? ''),
                                     builder: (context, statsSnap) {
                                       if (!statsSnap.hasData && statsSnap.connectionState == ConnectionState.waiting) {
                                         return const Center(child: CircularProgressIndicator());

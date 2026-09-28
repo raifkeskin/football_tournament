@@ -251,7 +251,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
         subInPlayerId: _eventType == 'substitution'
             ? (_selectedSubIn?.playerId.trim().isEmpty ?? true
                   ? null
-                  : _selectedAssist!.playerId.trim())
+                  : _selectedSubIn!.playerId.trim())
             : null,
         isOwnGoal: _eventType == 'goal' ? _isOwnGoal : false,
       );

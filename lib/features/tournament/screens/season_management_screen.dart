@@ -492,7 +492,7 @@ class SeasonManagementScreen extends StatelessWidget {
                         Expanded(
                           child: numberField(
                             matchPeriodDurationController,
-                            'Maç Süresi',
+                            'Devre Süresi (dk)',
                           ),
                         ),
                         const SizedBox(width: 10),

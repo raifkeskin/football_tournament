@@ -38,6 +38,54 @@ class _FixtureScreenState extends State<FixtureScreen> {
   String? _groupId;
   int? _week;
 
+  /// Filtre (turnuva|sezon|grup) başına hafta bilgisi önbelleği.
+  final Map<String, Future<({int? maxWeek, int? nextWeek})>> _weekInfo = {};
+
+  /// En büyük hafta ve varsayılan hafta: oynanmış son maçtan sonraki ilk
+  /// oynanmamış maçın haftası. Hiç oynanmamış maç kalmadıysa son oynanan hafta.
+  Future<({int? maxWeek, int? nextWeek})> _loadWeekInfo(
+    String leagueId,
+    String? seasonId,
+    String? groupId,
+  ) async {
+    final maxWeek = await _matchService.getFixtureMaxWeek(
+      leagueId,
+      groupId: groupId,
+    );
+    int? nextWeek;
+    try {
+      var q = Supabase.instance.client
+          .from('matches')
+          .select('week, status')
+          .eq('league_id', leagueId);
+      if (seasonId != null) q = q.eq('season_id', seasonId);
+      if (groupId != null) q = q.eq('group_id', groupId);
+      final rows = await q;
+
+      int? lastPlayed;
+      final unplayed = <int>[];
+      for (final r in rows) {
+        final w = r['week'];
+        final week = w is num ? w.toInt() : int.tryParse('${w ?? ''}');
+        if (week == null) continue;
+        final status = (r['status'] ?? '').toString().trim();
+        if (status == MatchStatus.finished.name) {
+          if (lastPlayed == null || week > lastPlayed) lastPlayed = week;
+        } else if (status != MatchStatus.cancelled.name) {
+          unplayed.add(week);
+        }
+      }
+      unplayed.sort();
+      final afterLast = unplayed.where(
+        (w) => lastPlayed == null || w > lastPlayed,
+      );
+      nextWeek = afterLast.isNotEmpty
+          ? afterLast.first
+          : (unplayed.isNotEmpty ? unplayed.first : lastPlayed);
+    } catch (_) {}
+    return (maxWeek: maxWeek, nextWeek: nextWeek);
+  }
+
   Stream<List<Team>>? _teamsStream;
   Stream<List<League>>? _leaguesStream;
 
@@ -382,23 +430,44 @@ class _FixtureScreenState extends State<FixtureScreen> {
                             final showGroupInHeader =
                                 selectedGroupId == null || groups.length > 1;
 
-                            return FutureBuilder<int?>(
-                              key: ValueKey('$_seasonId|$selectedGroupId'),
-                              future: _matchService.getFixtureMaxWeek(
-                                _leagueId!,
-                                groupId: selectedGroupId,
+                            final weekKey =
+                                '$_leagueId|$_seasonId|$selectedGroupId';
+                            return FutureBuilder<
+                              ({int? maxWeek, int? nextWeek})
+                            >(
+                              key: ValueKey(weekKey),
+                              future: _weekInfo.putIfAbsent(
+                                weekKey,
+                                () => _loadWeekInfo(
+                                  _leagueId!,
+                                  _seasonId,
+                                  selectedGroupId,
+                                ),
                               ),
-                              builder: (context, maxWeekSnap) {
-                                final maxWeek = maxWeekSnap.data ?? 30;
+                              builder: (context, weekSnap) {
+                                // Bilgi gelmeden hafta seçilmez; aksi halde
+                                // geçici olarak 1. hafta seçilip kalıcı oluyordu.
+                                if (!weekSnap.hasData) {
+                                  return const Center(
+                                    child: CircularProgressIndicator(),
+                                  );
+                                }
+                                final info = weekSnap.data!;
+                                final maxWeek = info.maxWeek ?? 30;
 
                                 final safeMaxWeek = maxWeek > 0 ? maxWeek : 1;
                                 final weeks = <int>[
                                   for (var i = 1; i <= safeMaxWeek; i++) i,
                                 ];
 
+                                // Kullanıcı hafta seçmediyse: oynanmamış ilk
+                                // maçın haftası.
+                                final defaultWeek = weeks.contains(info.nextWeek)
+                                    ? info.nextWeek
+                                    : weeks.first;
                                 final displayWeek = weeks.contains(_week)
                                     ? _week
-                                    : weeks.first;
+                                    : defaultWeek;
 
                                 if (_week != displayWeek) {
                                   WidgetsBinding.instance.addPostFrameCallback((

@@ -441,7 +441,8 @@ class MatchEvent {
       'assist_player_id': assistPlayerId,
       'sub_in_player_id': subInPlayerId,
       'event_type': eventType,
-      'player_name': eventName,
+      // match_events tablosunda player_name kolonu yok; oyuncu adı okurken
+      // player_id üzerinden players tablosundan bulunur.
       'minute': minute,
       'is_own_goal': isOwnGoal,
     };
@@ -682,6 +683,10 @@ class MatchRosterModel {
   final bool isHome;
   final bool isStarting;
   final String? jerseyNumber;
+  final bool isCaptain;
+
+  /// Diziliş sekmesinde oyuncunun saha sırası (match_rosters.pos_x).
+  final int? slot;
   final PlayerModel? playerInfo;
 
   const MatchRosterModel({
@@ -694,6 +699,8 @@ class MatchRosterModel {
     required this.isHome,
     required this.isStarting,
     this.jerseyNumber,
+    this.isCaptain = false,
+    this.slot,
     this.playerInfo,
   });
 
@@ -708,6 +715,8 @@ class MatchRosterModel {
       isHome: map['is_home'] == true,
       isStarting: map['is_starting'] == true,
       jerseyNumber: map['jersey_number']?.toString(),
+      isCaptain: map['is_captain'] == true,
+      slot: (map['pos_x'] as num?)?.toInt(),
       playerInfo: playerInfo,
     );
   }
