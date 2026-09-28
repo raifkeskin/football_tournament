@@ -11,6 +11,8 @@ import '../../match/models/match.dart';
 import '../../team/models/team.dart';
 import '../../team/services/interfaces/i_team_service.dart';
 import '../../../core/services/service_locator.dart';
+import '../../../core/utils/resilient_stream.dart';
+import '../../../core/widgets/app_date_picker.dart';
 import '../../../core/widgets/master_class_app_bar.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../team/screens/team_squad_screen.dart';
@@ -36,15 +38,15 @@ class SeasonManagementScreen extends StatelessWidget {
   SupabaseClient get _sb => Supabase.instance.client;
 
   Stream<List<Season>> _watchSeasons() {
-    return _sb
-        .from('seasons')
-        .stream(primaryKey: ['id'])
-        .eq('league_id', leagueId)
-        .order('start_date', ascending: false)
-        .map(
-          (rows) =>
-              rows.cast<Map<String, dynamic>>().map(Season.fromJson).toList(),
-        );
+    return resilientStream(
+      () => _sb
+          .from('seasons')
+          .stream(primaryKey: ['id'])
+          .eq('league_id', leagueId)
+          .order('start_date', ascending: false),
+    ).map(
+      (rows) => rows.cast<Map<String, dynamic>>().map(Season.fromJson).toList(),
+    );
   }
 
   static String _fmt(DateTime? date) {
@@ -189,11 +191,11 @@ class SeasonManagementScreen extends StatelessWidget {
       final initial = isStart
           ? (startDate ?? now)
           : (endDate ?? startDate ?? now);
-      final picked = await showDatePicker(
+      final picked = await showAppDatePicker(
         context: context,
         initialDate: initial,
-        firstDate: DateTime(now.year - 2),
-        lastDate: DateTime(now.year + 5),
+        firstYear: now.year - 2,
+        lastYear: now.year + 5,
       );
       if (picked == null) return;
       setSheetState(() {
@@ -215,11 +217,11 @@ class SeasonManagementScreen extends StatelessWidget {
       final initial = isStart
           ? (transferStartDate ?? now)
           : (transferEndDate ?? transferStartDate ?? now);
-      final picked = await showDatePicker(
+      final picked = await showAppDatePicker(
         context: context,
         initialDate: initial,
-        firstDate: DateTime(now.year - 2),
-        lastDate: DateTime(now.year + 5),
+        firstYear: now.year - 2,
+        lastYear: now.year + 5,
       );
       if (picked == null) return;
       setSheetState(() {
@@ -709,9 +711,10 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
     super.initState();
     // Stream'ler build içinde değil burada bir kez dinlenir; aksi halde her
     // rebuild'de yeni realtime aboneliği açılıyordu.
-    _groupsSub = _leagueService
-        .watchGroups(widget.seasonId)
-        .listen(
+    _groupsSub =
+        resilientStream(
+          () => _leagueService.watchGroups(widget.seasonId),
+        ).listen(
           (groups) {
             if (!mounted) return;
             setState(() {
@@ -1310,9 +1313,18 @@ class _TeamListScreenState extends State<TeamListScreen> {
   Stream<List<Team>> _watchTeams() {
     final sid = widget.seasonId.trim();
     if (sid.isEmpty) return Stream.value(const <Team>[]);
-    return _teamService.watchAllTeams(caller: 'TeamListScreen').map((all) {
+    // Uygulama arka plandan dönünce kopan bağlantı otomatik yenilenir.
+    return resilientStream(
+      () => _teamService.watchAllTeams(caller: 'TeamListScreen'),
+    ).map((all) {
+      // Yalnızca bu sezonda bir gruba atanmış takımlar; gruba atanmamış
+      // (ör. gruptan çıkarılmış) takımlar "Tümü"de görünmez.
       final filtered = all
-          .where((t) => (t.seasonId ?? '').trim() == sid)
+          .where(
+            (t) =>
+                (t.seasonId ?? '').trim() == sid &&
+                (t.groupName ?? '').trim().isNotEmpty,
+          )
           .toList();
       filtered.sort(
         (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
@@ -1342,9 +1354,6 @@ class _TeamListScreenState extends State<TeamListScreen> {
         stream: _teamsStream,
         initialData: const <Team>[],
         builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return _EmptyText('Hata: ${snapshot.error}');
-          }
           final teams = snapshot.data ?? const <Team>[];
           final qName = _norm(_teamNameQuery);
           final groupOptions =
@@ -1355,12 +1364,17 @@ class _TeamListScreenState extends State<TeamListScreen> {
                   .toList()
                 ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 
-          final effectiveGroup =
-              _selectedGroup == '__ALL__' ||
-                  groupOptions.contains(_selectedGroup)
-              ? _selectedGroup
-              : '__ALL__';
-          if (effectiveGroup != _selectedGroup && teams.isNotEmpty) {
+          // Tek grup varsa filtre gizlenir ve o grup kendiliğinden seçilir.
+          final singleGroup = groupOptions.length <= 1;
+          final effectiveGroup = singleGroup
+              ? '__ALL__'
+              : (_selectedGroup == '__ALL__' ||
+                        groupOptions.contains(_selectedGroup)
+                    ? _selectedGroup
+                    : '__ALL__');
+          if (!singleGroup &&
+              effectiveGroup != _selectedGroup &&
+              teams.isNotEmpty) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (!mounted) return;
               setState(() => _selectedGroup = '__ALL__');
@@ -1382,38 +1396,40 @@ class _TeamListScreenState extends State<TeamListScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
                 child: Row(
                   children: [
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        key: ValueKey(effectiveGroup),
-                        initialValue: effectiveGroup,
-                        dropdownColor: _sheetBg,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Grup',
-                          prefixIcon: Icon(Icons.groups_outlined),
-                        ),
-                        items: <DropdownMenuItem<String>>[
-                          const DropdownMenuItem(
-                            value: '__ALL__',
-                            child: Text('Tümü'),
+                    if (!singleGroup) ...[
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          key: ValueKey(effectiveGroup),
+                          initialValue: effectiveGroup,
+                          dropdownColor: _sheetBg,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Grup',
+                            prefixIcon: Icon(Icons.groups_outlined),
                           ),
-                          for (final g in groupOptions)
-                            DropdownMenuItem(
-                              value: g,
-                              child: Text(
-                                g,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                          items: <DropdownMenuItem<String>>[
+                            const DropdownMenuItem(
+                              value: '__ALL__',
+                              child: Text('Tümü'),
                             ),
-                        ],
-                        onChanged: (v) {
-                          if (v == null) return;
-                          setState(() => _selectedGroup = v);
-                        },
+                            for (final g in groupOptions)
+                              DropdownMenuItem(
+                                value: g,
+                                child: Text(
+                                  g,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                          ],
+                          onChanged: (v) {
+                            if (v == null) return;
+                            setState(() => _selectedGroup = v);
+                          },
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 10),
+                      const SizedBox(width: 10),
+                    ],
                     Expanded(
                       child: TextField(
                         controller: _teamNameQueryController,

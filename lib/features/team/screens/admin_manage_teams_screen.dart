@@ -10,6 +10,7 @@ import '../../../core/services/app_session.dart';
 import '../../../core/services/image_upload_service.dart';
 import '../services/interfaces/i_team_service.dart';
 import '../../../core/services/service_locator.dart';
+import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/web_safe_image.dart';
 
 class AdminManageTeamsScreen extends StatefulWidget {
@@ -123,18 +124,8 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
           .select('id, name, role, photo_url')
           .inFilter('role', const ['Takım Sorumlusu', 'Her İkisi'])
           .order('name', ascending: true);
-      final picked = await showModalBottomSheet<Map<String, dynamic>>(
+      final picked = await showAdminPopup<Map<String, dynamic>>(
         context: context,
-        isScrollControlled: true,
-        useSafeArea: true,
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.8,
-        ),
-        showDragHandle: true,
-        clipBehavior: Clip.antiAlias,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
         builder: (context) {
           return StatefulBuilder(
             builder: (context, setPickerState) {
@@ -364,18 +355,8 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
       }
     }
 
-    await showModalBottomSheet<void>(
+    await showAdminPopup<void>(
       context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.8,
-      ),
-      showDragHandle: true,
-      clipBehavior: Clip.antiAlias,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
       builder: (sheetContext) {
         return StatefulBuilder(
           builder: (context, setSheetState) {
@@ -641,26 +622,13 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
   }
 
   Future<void> _takimSil(String teamId) async {
-    final ok = await showDialog<bool>(
+    final ok = await showAdminConfirmDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Takım Sil'),
-        content: const Text(
+      title: 'Takımı Sil',
+      message:
           'Takım ve ilişkili veriler silinecektir. Devam etmek istiyor musunuz?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Hayır'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Evet'),
-          ),
-        ],
-      ),
     );
-    if (ok != true) return;
+    if (!ok) return;
 
     try {
       await _teamService.deleteTeamCascade(
@@ -691,38 +659,47 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
   Widget build(BuildContext context) {
     final isAdmin = AppSession.of(context).value.isAdmin;
     if (!isAdmin) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Takım Yönetimi')),
-        body: const Center(
+      return const AdminPageScaffold(
+        title: 'Takım Yönetimi',
+        body: Center(
           child: Text(
             'Bu sayfaya erişim yetkiniz yok.',
             textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white70),
           ),
         ),
       );
     }
-    return Scaffold(
-      appBar: AppBar(
-        centerTitle: true,
-        title: const Text('Takımların Listesi'),
-        actions: [
-          IconButton(
-            onPressed: () => _openTeamFormSheet(),
-            icon: const Icon(Icons.add_rounded),
-            tooltip: 'Takım Ekle',
-          ),
-        ],
-      ),
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+    return AdminPageScaffold(
+      title: 'Takım Yönetimi',
+      actions: [
+        AdminBarAction(
+          icon: Icons.group_add_rounded,
+          tooltip: 'Takım Ekle',
+          onPressed: () => _openTeamFormSheet(),
+        ),
+      ],
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
             child: TextField(
-              decoration: const InputDecoration(
-                labelText: 'Takım Ara',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: 'Takım ara',
+                prefixIcon: const Icon(Icons.search, color: kAdminAccent),
+                filled: true,
+                fillColor: Colors.black.withValues(alpha: 0.3),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide(
+                    color: Colors.white.withValues(alpha: 0.1),
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: const BorderSide(color: kAdminAccent),
+                ),
               ),
               onChanged: (val) =>
                   setState(() => _searchQuery = _toTurkishLow(val)),
@@ -745,7 +722,11 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                     padding: const EdgeInsets.all(16),
                     children: [
                       const SizedBox(height: 120),
-                      Text(text, textAlign: TextAlign.center),
+                      Text(
+                        text,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.white54),
+                      ),
                     ],
                   );
                 }
@@ -784,7 +765,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                   onRefresh: refresh,
                   child: ListView.builder(
                     physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
+                    padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
                     itemCount: teams.length,
                     itemBuilder: (context, index) {
                       final data = teams[index];
@@ -799,13 +780,15 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                         );
                       }
 
-                      return Card(
-                        margin: const EdgeInsets.symmetric(vertical: 4),
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        decoration: adminCardDecoration(),
                         child: ListTile(
-                          dense: true,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 2,
+                          contentPadding: const EdgeInsets.fromLTRB(
+                            12,
+                            4,
+                            10,
+                            4,
                           ),
                           leading: SizedBox(
                             width: 36,
@@ -823,33 +806,28 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             softWrap: true,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
-                          trailing: PopupMenuButton<String>(
-                            itemBuilder: (context) => const [
-                              PopupMenuItem(
-                                value: 'edit',
-                                child: Text('Düzenle'),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              AdminSmallAction(
+                                icon: Icons.edit_outlined,
+                                tooltip: 'Düzenle',
+                                color: Colors.white70,
+                                onTap: openEditDialog,
                               ),
-                              PopupMenuItem(
-                                value: 'delete',
-                                child: Text('Sil'),
+                              const SizedBox(width: 6),
+                              AdminSmallAction(
+                                icon: Icons.delete_outline_rounded,
+                                tooltip: 'Sil',
+                                color: kAdminDanger,
+                                onTap: () => _takimSil(teamId),
                               ),
                             ],
-                            onSelected: (value) {
-                              switch (value) {
-                                case 'edit':
-                                  openEditDialog();
-                                  break;
-                                case 'delete':
-                                  _takimSil(teamId).then((_) {
-                                    if (!mounted) return;
-                                    setState(() {
-                                      _teamsFuture = _fetchTeamsOnce();
-                                    });
-                                  });
-                                  break;
-                              }
-                            },
                           ),
                           onTap: openEditDialog,
                         ),

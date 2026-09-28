@@ -13,6 +13,8 @@ import '../../team/services/interfaces/i_team_service.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../../core/services/global_filter.dart';
+import '../../../core/utils/resilient_stream.dart';
+import '../../../core/widgets/app_date_picker.dart';
 import '../../team/screens/groups_screen.dart';
 import '../../match/screens/match_details_screen.dart';
 
@@ -45,6 +47,71 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _activeLeagueId;
   bool _didAutoSelectDefaultLeague = false;
   late DateTime _selectedDate;
+
+  /// Üst banttaki turnuva seçici. Şimdilik gizli: ana sayfa tüm turnuvaların
+  /// maçlarını gösterir. Tekrar açmak için true yapın.
+  static const bool _showLeagueFilter = false;
+
+  /// Ana sayfada gösterilecek turnuvalar (seçici gizliyken hepsi).
+  Set<String> _visibleLeagueIds = const <String>{};
+  Map<String, String> _leagueNameById = const <String, String>{};
+
+  static String _dateKey(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-'
+      '${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
+
+  /// Seçilen günün tüm turnuvalardaki maçları.
+  Stream<List<MatchModel>> _watchMatchesOnDate(DateTime date) {
+    final key = _dateKey(date);
+    return resilientStream(
+      () => Supabase.instance.client
+          .from('matches')
+          .stream(primaryKey: ['id'])
+          .eq('match_date', key),
+    ).map(
+      (rows) => rows
+          .where(
+            (r) =>
+                _visibleLeagueIds.contains((r['league_id'] ?? '').toString()),
+          )
+          .map((r) => MatchModel.fromMap(r, (r['id'] ?? '').toString()))
+          .toList(),
+    );
+  }
+
+  Stream<List<Season>> _watchAllSeasons() {
+    if (AppConfig.activeDatabase != DatabaseType.supabase) {
+      return Stream.value(const <Season>[]);
+    }
+    return resilientStream(
+      () => Supabase.instance.client.from('seasons').stream(primaryKey: ['id']),
+    ).map((rows) => rows.map((r) => Season.fromMap(r)).toList());
+  }
+
+  /// Takvimde işaretlenecek, maç olan günler (verilen ay için).
+  Future<Set<int>> _loadMatchDays(int year, int month) async {
+    try {
+      final first = DateTime(year, month, 1);
+      final last = DateTime(year, month + 1, 0);
+      final rows = await Supabase.instance.client
+          .from('matches')
+          .select('match_date, league_id')
+          .gte('match_date', _dateKey(first))
+          .lte('match_date', _dateKey(last));
+      final days = <int>{};
+      for (final r in rows) {
+        if (!_visibleLeagueIds.contains((r['league_id'] ?? '').toString())) {
+          continue;
+        }
+        final d = DateTime.tryParse((r['match_date'] ?? '').toString());
+        if (d != null) days.add(d.day);
+      }
+      return days;
+    } catch (_) {
+      return const <int>{};
+    }
+  }
 
   @override
   void initState() {
@@ -113,378 +180,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _openModernCalendar() async {
-    // Geçici olarak seçili tarihi tutuyoruz ki modal içinde anlık değişebilsin
-    int selectedYear = _selectedDate.year;
-    int selectedMonth = _selectedDate.month;
-    int selectedDay = _selectedDate.day;
-
-    // Türkçe ay isimleri
-    final List<String> months = [
-      'Ocak',
-      'Şubat',
-      'Mart',
-      'Nisan',
-      'Mayıs',
-      'Haziran',
-      'Temmuz',
-      'Ağustos',
-      'Eylül',
-      'Ekim',
-      'Kasım',
-      'Aralık',
-    ];
-
-    // Yıl listesi (Örn: 2020 - 2035 arası)
-    final List<int> years = List.generate(16, (index) => 2020 + index);
-
-    await showModalBottomSheet(
+    final picked = await showAppDatePicker(
       context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            // Seçilen ayın gün sayısını ve ilk günün haftanın hangi günü olduğunu hesapla
-            final firstDayOfMonth = DateTime(selectedYear, selectedMonth, 1);
-            final daysInMonth = DateTime(
-              selectedYear,
-              selectedMonth + 1,
-              0,
-            ).day;
-            // Pazartesi ile başlatmak için (1=Pzt, 7=Paz)
-            final startingWeekday = firstDayOfMonth.weekday;
-
-            return Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(24),
-                ),
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Color(0xFF1E293B), // Üst sol lacivert
-                    Color(0xFF064E3B), // Alt sağ zümrüt yeşili
-                  ],
-                ),
-                border: Border.all(color: Colors.white.withOpacity(0.12)),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Colors.black87,
-                    blurRadius: 20,
-                    offset: Offset(0, -5),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Üst Tutamaç Çubuğu
-                  Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.white24,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  const Text(
-                    'Tarih Seçin',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  // AY VE YIL AYRI AYRI DEĞİŞTİRME KISMI (Dropdownlar)
-                  Row(
-                    children: [
-                      // Ay Seçimi
-                      Expanded(
-                        flex: 3,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.3),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.white24),
-                          ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<int>(
-                              value: selectedMonth,
-                              dropdownColor: const Color(0xFF1E293B),
-                              icon: const Icon(
-                                Icons.keyboard_arrow_down,
-                                color: Colors.white70,
-                              ),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                              items: List.generate(12, (index) {
-                                return DropdownMenuItem<int>(
-                                  value: index + 1,
-                                  child: Text(months[index]),
-                                );
-                              }),
-                              onChanged: (val) {
-                                if (val != null) {
-                                  setModalState(() {
-                                    selectedMonth = val;
-                                    // Ay değiştiğinde gün sınır aşımını önle (Örn: 31 Ağustos -> Şubat'a geçince)
-                                    final maxDays = DateTime(
-                                      selectedYear,
-                                      selectedMonth + 1,
-                                      0,
-                                    ).day;
-                                    if (selectedDay > maxDays) {
-                                      selectedDay = maxDays;
-                                    }
-                                  });
-                                }
-                              },
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      // Yıl Seçimi
-                      Expanded(
-                        flex: 2,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.3),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.white24),
-                          ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<int>(
-                              value: selectedYear,
-                              dropdownColor: const Color(0xFF1E293B),
-                              icon: const Icon(
-                                Icons.keyboard_arrow_down,
-                                color: Colors.white70,
-                              ),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                              items: years.map((y) {
-                                return DropdownMenuItem<int>(
-                                  value: y,
-                                  child: Text('$y'),
-                                );
-                              }).toList(),
-                              onChanged: (val) {
-                                if (val != null) {
-                                  setModalState(() {
-                                    selectedYear = val;
-                                  });
-                                }
-                              },
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-
-                  // HAFTA GÜNLERİ BAŞLIKLARI
-                  const Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      Text(
-                        'Pzt',
-                        style: TextStyle(
-                          color: Colors.white60,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-                      Text(
-                        'Sal',
-                        style: TextStyle(
-                          color: Colors.white60,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-                      Text(
-                        'Çar',
-                        style: TextStyle(
-                          color: Colors.white60,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-                      Text(
-                        'Per',
-                        style: TextStyle(
-                          color: Colors.white60,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-                      Text(
-                        'Cum',
-                        style: TextStyle(
-                          color: Colors.white60,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-                      Text(
-                        'Cmt',
-                        style: TextStyle(
-                          color: Colors.white60,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-                      Text(
-                        'Paz',
-                        style: TextStyle(
-                          color: Colors.white60,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-
-                  // TAKVİM GÜN KUTULARI (Grid)
-                  GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 7,
-                          mainAxisSpacing: 6,
-                          crossAxisSpacing: 6,
-                        ),
-                    itemCount: daysInMonth + (startingWeekday - 1),
-                    itemBuilder: (context, index) {
-                      // Boşluk günleri
-                      if (index < startingWeekday - 1) {
-                        return const SizedBox.shrink();
-                      }
-
-                      final dayNumber = index - (startingWeekday - 2);
-                      final isSelected = dayNumber == selectedDay;
-
-                      return InkWell(
-                        onTap: () {
-                          setModalState(() {
-                            selectedDay = dayNumber;
-                          });
-                        },
-                        borderRadius: BorderRadius.circular(8),
-                        child: Container(
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? const Color(
-                                    0xFF10B981,
-                                  ) // Seçili gün zümrüt yeşili
-                                : Colors.white.withOpacity(0.06),
-                            borderRadius: BorderRadius.circular(8),
-                            border: isSelected
-                                ? Border.all(color: Colors.white, width: 1)
-                                : null,
-                          ),
-                          child: Text(
-                            '$dayNumber',
-                            style: TextStyle(
-                              color: isSelected ? Colors.white : Colors.white70,
-                              fontWeight: isSelected
-                                  ? FontWeight.w900
-                                  : FontWeight.w600,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 24),
-
-                  // ALT AKSİYON BUTONLARI (Bugün & Onayla)
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.white70,
-                            side: BorderSide(
-                              color: Colors.white.withOpacity(0.3),
-                            ),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          onPressed: () {
-                            final now = DateTime.now();
-                            Navigator.pop(context);
-                            _setSelectedDate(
-                              DateTime(now.year, now.month, now.day),
-                            );
-                          },
-                          child: const Text(
-                            'Bugüne Git',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF10B981),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          onPressed: () {
-                            Navigator.pop(context);
-                            // Seçilen tarihi ana sayfaya uygula
-                            _setSelectedDate(
-                              DateTime(
-                                selectedYear,
-                                selectedMonth,
-                                selectedDay,
-                              ),
-                            );
-                          },
-                          child: const Text(
-                            'Seç',
-                            style: TextStyle(fontWeight: FontWeight.w900),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                ],
-              ),
-            );
-          },
-        );
-      },
+      initialDate: _selectedDate,
+      firstYear: 2020,
+      lastYear: DateTime.now().year + 5,
+      markedDays: _loadMatchDays, // maç olan günlerde nokta
     );
+    if (picked != null) _setSelectedDate(picked);
   }
 
   // YENİ EKLENEN: Erişim Kodu Soran Dialog
@@ -809,6 +512,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   orElse: () => allLeagues.first,
                 );
 
+                // Seçici gizliyken: normal kullanıcı için gizli (kodlu) ve
+                // pasif turnuvalar hariç tüm turnuvalar; admin hepsini görür.
+                _visibleLeagueIds = _showLeagueFilter
+                    ? {currentLeague.id}
+                    : {
+                        for (final l in allLeagues)
+                          if (isAdmin || (l.isActive && !l.isPrivate)) l.id,
+                      };
+                _leagueNameById = {for (final l in allLeagues) l.id: l.name};
+
                 return Stack(
                   children: [
                     // 1. KATMAN: YEŞİL ARKA PLAN
@@ -895,56 +608,76 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
 
                                 // ----------------------------------------------------
-                                Expanded(
-                                  child: InkWell(
-                                    onTap: () => _showLeagueSelectionDialog(
-                                      context,
-                                      allLeagues,
-                                      isAdmin,
-                                    ),
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 8.0,
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Flexible(
-                                            child: Text(
-                                              currentLeague.name,
-                                              style: TextStyle(
-                                                color: cs.onPrimaryContainer,
-                                                fontWeight: FontWeight.w900,
-                                                fontSize: 20,
-                                                shadows: const [
-                                                  Shadow(
-                                                    color: Colors.black87,
-                                                    blurRadius: 4,
-                                                    offset: Offset(0, 2),
-                                                  ),
-                                                ],
-                                              ),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Icon(
-                                            Icons.keyboard_arrow_down_rounded,
-                                            color: cs.onPrimaryContainer,
-                                            shadows: const [
-                                              Shadow(
-                                                color: Colors.black87,
-                                                blurRadius: 4,
-                                                offset: Offset(0, 2),
-                                              ),
-                                            ],
+                                if (!_showLeagueFilter)
+                                  const Expanded(
+                                    child: Text(
+                                      '',
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 20,
+                                        shadows: [
+                                          Shadow(
+                                            color: Colors.black87,
+                                            blurRadius: 4,
+                                            offset: Offset(0, 2),
                                           ),
                                         ],
                                       ),
                                     ),
+                                  )
+                                else
+                                  Expanded(
+                                    child: InkWell(
+                                      onTap: () => _showLeagueSelectionDialog(
+                                        context,
+                                        allLeagues,
+                                        isAdmin,
+                                      ),
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 8.0,
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Flexible(
+                                              child: Text(
+                                                currentLeague.name,
+                                                style: TextStyle(
+                                                  color: cs.onPrimaryContainer,
+                                                  fontWeight: FontWeight.w900,
+                                                  fontSize: 20,
+                                                  shadows: const [
+                                                    Shadow(
+                                                      color: Colors.black87,
+                                                      blurRadius: 4,
+                                                      offset: Offset(0, 2),
+                                                    ),
+                                                  ],
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Icon(
+                                              Icons.keyboard_arrow_down_rounded,
+                                              color: cs.onPrimaryContainer,
+                                              shadows: const [
+                                                Shadow(
+                                                  color: Colors.black87,
+                                                  blurRadius: 4,
+                                                  offset: Offset(0, 2),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
                                   ),
-                                ),
                                 IconButton(
                                   onPressed: _openModernCalendar,
                                   icon: Icon(
@@ -1024,13 +757,17 @@ class _HomeScreenState extends State<HomeScreen> {
         }
 
         return StreamBuilder<List<Season>>(
-          stream: _activeLeagueId == null
-              ? const Stream<List<Season>>.empty()
-              : _watchSeasons(_activeLeagueId!),
+          stream: _showLeagueFilter
+              ? (_activeLeagueId == null
+                    ? const Stream<List<Season>>.empty()
+                    : _watchSeasons(_activeLeagueId!))
+              : _watchAllSeasons(),
           builder: (context, seasonsSnap) {
             final seasons = seasonsSnap.data ?? const <Season>[];
 
-            if (seasons.isNotEmpty && GlobalFilter.seasonId.value == null) {
+            if (_showLeagueFilter &&
+                seasons.isNotEmpty &&
+                GlobalFilter.seasonId.value == null) {
               final defaultSeason = seasons.any((s) => s.isDefault)
                   ? seasons.firstWhere((s) => s.isDefault).id
                   : (seasons.any((s) => s.isActive)
@@ -1045,9 +782,14 @@ class _HomeScreenState extends State<HomeScreen> {
             final seasonNameById = <String, String>{
               for (final s in seasons) s.id: s.name.trim(),
             };
+            final seasonLeagueById = <String, String>{
+              for (final s in seasons) s.id: s.leagueId,
+            };
 
             return StreamBuilder<List<MatchModel>>(
-              stream: _activeLeagueId == null
+              stream: !_showLeagueFilter
+                  ? _watchMatchesOnDate(_selectedDate)
+                  : _activeLeagueId == null
                   ? const Stream<List<MatchModel>>.empty()
                   : _matchService.watchMatchesByDate(
                       leagueId: _activeLeagueId!,
@@ -1109,22 +851,29 @@ class _HomeScreenState extends State<HomeScreen> {
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
                   children: sortedSeasonIds.map((sId) {
                     final seasonName = seasonNameById[sId] ?? '';
+                    // Bölümün turnuvası: tüm turnuvalar gösterilirken
+                    // sezonun bağlı olduğu turnuva.
+                    final sectionLeagueId =
+                        seasonLeagueById[sId] ??
+                        sectionMap[sId]!.first.leagueId;
+                    final leagueName =
+                        _leagueNameById[sectionLeagueId] ?? currentLeague.name;
                     final titleText = seasonName.isEmpty
-                        ? currentLeague.name
-                        : '${currentLeague.name} - $seasonName';
+                        ? leagueName
+                        : '$leagueName - $seasonName';
 
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         InkWell(
                           onTap: () {
-                            GlobalFilter.setLeague(_activeLeagueId);
+                            GlobalFilter.setLeague(sectionLeagueId);
                             GlobalFilter.setSeason(sId);
                             Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (_) => GroupsScreen(
-                                  initialLeagueId: _activeLeagueId!,
+                                  initialLeagueId: sectionLeagueId,
                                   initialSeasonId: sId,
                                 ),
                               ),

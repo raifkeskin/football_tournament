@@ -22,6 +22,10 @@ import '../models/team.dart';
 import '../services/interfaces/i_team_service.dart';
 import '../../../core/services/service_locator.dart';
 import '../services/supabase/supabase_team_service.dart';
+import '../../../core/utils/resilient_stream.dart';
+import '../../../core/widgets/admin_page.dart';
+import '../../../core/widgets/app_date_picker.dart';
+import '../../../core/widgets/master_class_app_bar.dart';
 import '../../../core/widgets/web_safe_image.dart';
 
 class TeamSquadScreen extends StatefulWidget {
@@ -526,6 +530,62 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
   void _refreshPlayersStreamForTournament(String tournamentId) {
     if (!mounted) return;
     setState(() => _setPlayersStreamForTournament(tournamentId));
+  }
+
+  Future<void> _confirmAndRemovePlayer(
+    PlayerModel p,
+    String tournamentId,
+  ) async {
+    final tId = tournamentId.trim();
+    // Telefonu olmayan oyuncular id ile bulunur.
+    final key = (p.phone ?? '').trim().isNotEmpty ? p.phone!.trim() : p.id;
+    if (tId.isEmpty || key.trim().isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Silme için eksik bilgi.')));
+      return;
+    }
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Futbolcu Sil'),
+        content: Text(
+          '${p.name} oyuncusunu bu takımdan kaldırmak istiyor musunuz?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('İptal'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Sil'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await _deleteRosterPlayer(
+        tournamentId: tId,
+        teamId: widget.teamId,
+        playerPhone: key,
+      );
+      if (!mounted) return;
+      _refreshPlayersStreamForTournament(tId);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Kadrodan kaldırıldı.')));
+    } catch (e) {
+      if (!mounted) return;
+      final msg = e.toString().replaceFirst('Exception: ', '').trim();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Silinemedi: $msg')));
+    }
   }
 
   Future<void> _deleteRosterPlayer({
@@ -1235,14 +1295,13 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     final tournamentId = await _ensureSelectedTournament();
     if (tournamentId == null || !mounted) return;
 
-    final saved = await Navigator.of(context).push<bool?>(
-      MaterialPageRoute(
-        builder: (_) => PlayerFormScreen(
-          teamId: widget.teamId,
-          tournamentId: tournamentId,
-          normalizeUrl: _normalizeUrl,
-          editing: editing,
-        ),
+    final saved = await showPlayerFormPopup(
+      context,
+      PlayerFormScreen(
+        teamId: widget.teamId,
+        tournamentId: tournamentId,
+        normalizeUrl: _normalizeUrl,
+        editing: editing,
       ),
     );
 
@@ -1299,14 +1358,21 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     final canAdd = effectiveTournamentId != null && (isAdmin || _isTeamManager);
     _tournamentNameById(effectiveTournamentId ?? widgetTournamentId);
 
+    // Bir üst menüyle (sezon/grup/takım listeleri) aynı tema: koyu zemin,
+    // soluk saha görseli ve şeffaf başlık.
     return Scaffold(
-      appBar: AppBar(
-        title: Text(titleTeam.isEmpty ? 'Takım Kadrosu' : '$titleTeam Kadrosu'),
-        centerTitle: true,
+      backgroundColor: const Color(0xFF0F172A),
+      extendBodyBehindAppBar: true,
+      appBar: MasterClassAppBar(
+        title: titleTeam.isEmpty ? 'Takım Kadrosu' : '$titleTeam Kadrosu',
         actions: [
           if (canAdd)
             IconButton(
-              icon: const Icon(Icons.add_rounded),
+              icon: const Icon(
+                Icons.add_rounded,
+                color: Colors.white,
+                size: 28,
+              ),
               tooltip: 'Futbolcu Seç',
               onPressed: () async {
                 final tId = effectiveTournamentId;
@@ -1325,265 +1391,245 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
             ),
         ],
       ),
-      body: Column(
+      body: Stack(
         children: [
-          if (_isLoadingTournaments)
-            const LinearProgressIndicator(minHeight: 2),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+          Positioned.fill(
+            child: Opacity(
+              opacity: 0.15,
+              child: Image.asset(
+                'assets/images/background_ball.jpg',
+                fit: BoxFit.cover,
+              ),
+            ),
+          ),
+          SafeArea(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _rosterSearchController,
-                  onChanged: (v) =>
-                      setState(() => _rosterQuery = v.trim().toLowerCase()),
-                  decoration: InputDecoration(
-                    hintText: 'Futbolcu Ara',
-                    prefixIcon: Icon(Icons.search, color: cs.primary),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide(
-                        color: cs.primary.withValues(alpha: 0.35),
+                if (_isLoadingTournaments)
+                  const LinearProgressIndicator(minHeight: 2),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: _rosterSearchController,
+                        onChanged: (v) => setState(
+                          () => _rosterQuery = v.trim().toLowerCase(),
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Futbolcu Ara',
+                          prefixIcon: Icon(Icons.search, color: cs.primary),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(
+                              color: cs.primary.withValues(alpha: 0.35),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(color: cs.primary, width: 2),
+                          ),
+                        ),
                       ),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide(color: cs.primary, width: 2),
-                    ),
+                    ],
                   ),
+                ),
+                Expanded(
+                  child: effectiveTournamentId == null
+                      ? Center(
+                          child: Text(
+                            'Lütfen turnuva seçin.',
+                            style: TextStyle(color: cs.onSurfaceVariant),
+                          ),
+                        )
+                      : StreamBuilder<List<PlayerModel>>(
+                          stream: playersStream,
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState ==
+                                ConnectionState.waiting) {
+                              return const Center(
+                                child: CircularProgressIndicator(),
+                              );
+                            }
+                            if (snapshot.hasError) {
+                              return Center(
+                                child: Text('Hata: ${snapshot.error}'),
+                              );
+                            }
+                            final allPlayers =
+                                snapshot.data ?? const <PlayerModel>[];
+                            if (allPlayers.isEmpty) {
+                              return const Center(
+                                child: Text('Henüz kadro girişi yapılmamış.'),
+                              );
+                            }
+                            final q = _rosterQuery;
+                            final players = q.isEmpty
+                                ? allPlayers
+                                : allPlayers
+                                      .where(
+                                        (p) => p.name.toLowerCase().contains(q),
+                                      )
+                                      .toList();
+                            if (players.isEmpty) {
+                              return const Center(
+                                child: Text(
+                                  'Aramanıza uygun futbolcu bulunamadı.',
+                                ),
+                              );
+                            }
+
+                            _prefetchPlayerPhotos(players);
+
+                            return ListView.builder(
+                              padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
+                              itemCount: players.length,
+                              itemBuilder: (context, index) {
+                                final p = players[index];
+                                final photo = (p.photoUrl ?? '').trim();
+                                final phone = (p.phone ?? '').trim();
+                                final cached = phone.isEmpty
+                                    ? ''
+                                    : (_playerPhotoUrlByPhone[phone] ?? '');
+                                final resolvedPhoto = photo.isNotEmpty
+                                    ? photo
+                                    : cached;
+                                final num = (p.number ?? '').trim();
+                                return Card(
+                                  margin: const EdgeInsets.symmetric(
+                                    vertical: 4,
+                                  ),
+                                  child: ListTile(
+                                    dense: true,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 2,
+                                    ),
+                                    onTap: () => _openPlayerCard(p),
+                                    leading: resolvedPhoto.isNotEmpty
+                                        ? WebSafeImage(
+                                            url: _normalizeUrl(resolvedPhoto),
+                                            width: 36,
+                                            height: 36,
+                                            isCircle: true,
+                                            fallbackIconSize: 18,
+                                          )
+                                        : CircleAvatar(
+                                            radius: 18,
+                                            backgroundColor: cs.primary
+                                                .withValues(alpha: 0.12),
+                                            child: Icon(
+                                              Icons.person,
+                                              size: 18,
+                                              color: cs.primary,
+                                            ),
+                                          ),
+                                    title: Text(
+                                      p.name,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        InkWell(
+                                          onTap: canAdd
+                                              ? () => _promptJerseyNumberEdit(
+                                                  player: p,
+                                                  leagueId:
+                                                      effectiveTournamentId,
+                                                  teamId: widget.teamId,
+                                                )
+                                              : null,
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 10,
+                                              vertical: 8,
+                                            ),
+                                            child: Text(
+                                              num.isEmpty ? '?' : num,
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w900,
+                                                color: num.isEmpty
+                                                    ? cs.onSurfaceVariant
+                                                          .withValues(
+                                                            alpha: 0.45,
+                                                          )
+                                                    : cs.onSurfaceVariant,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        _SmallActionButton(
+                                          icon: Icons.edit_outlined,
+                                          tooltip: 'Düzenle',
+                                          color: cs.onSurfaceVariant,
+                                          onTap: () =>
+                                              _openPlayerForm(editing: p),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        _SmallActionButton(
+                                          icon: Icons.delete_outline_rounded,
+                                          tooltip: 'Kadrodan çıkar',
+                                          color: const Color(0xFFF87171),
+                                          onTap: () => _confirmAndRemovePlayer(
+                                            p,
+                                            effectiveTournamentId,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            );
+                          },
+                        ),
                 ),
               ],
             ),
           ),
-          Expanded(
-            child: effectiveTournamentId == null
-                ? Center(
-                    child: Text(
-                      'Lütfen turnuva seçin.',
-                      style: TextStyle(color: cs.onSurfaceVariant),
-                    ),
-                  )
-                : StreamBuilder<List<PlayerModel>>(
-                    stream: playersStream,
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
-                      if (snapshot.hasError) {
-                        return Center(child: Text('Hata: ${snapshot.error}'));
-                      }
-                      final allPlayers = snapshot.data ?? const <PlayerModel>[];
-                      if (allPlayers.isEmpty) {
-                        return const Center(
-                          child: Text('Henüz kadro girişi yapılmamış.'),
-                        );
-                      }
-                      final q = _rosterQuery;
-                      final players = q.isEmpty
-                          ? allPlayers
-                          : allPlayers
-                                .where((p) => p.name.toLowerCase().contains(q))
-                                .toList();
-                      if (players.isEmpty) {
-                        return const Center(
-                          child: Text('Aramanıza uygun futbolcu bulunamadı.'),
-                        );
-                      }
-
-                      _prefetchPlayerPhotos(players);
-
-                      return ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
-                        itemCount: players.length,
-                        itemBuilder: (context, index) {
-                          final p = players[index];
-                          final photo = (p.photoUrl ?? '').trim();
-                          final phone = (p.phone ?? '').trim();
-                          final cached = phone.isEmpty
-                              ? ''
-                              : (_playerPhotoUrlByPhone[phone] ?? '');
-                          final resolvedPhoto = photo.isNotEmpty
-                              ? photo
-                              : cached;
-                          final num = (p.number ?? '').trim();
-                          return Card(
-                            margin: const EdgeInsets.symmetric(vertical: 4),
-                            child: ListTile(
-                              dense: true,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 2,
-                              ),
-                              onTap: () => _openPlayerCard(p),
-                              leading: resolvedPhoto.isNotEmpty
-                                  ? WebSafeImage(
-                                      url: _normalizeUrl(resolvedPhoto),
-                                      width: 36,
-                                      height: 36,
-                                      isCircle: true,
-                                      fallbackIconSize: 18,
-                                    )
-                                  : CircleAvatar(
-                                      radius: 18,
-                                      backgroundColor: cs.primary.withValues(
-                                        alpha: 0.12,
-                                      ),
-                                      child: Icon(
-                                        Icons.person,
-                                        size: 18,
-                                        color: cs.primary,
-                                      ),
-                                    ),
-                              title: Text(
-                                p.name,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  InkWell(
-                                    onTap: canAdd
-                                        ? () => _promptJerseyNumberEdit(
-                                            player: p,
-                                            leagueId: effectiveTournamentId,
-                                            teamId: widget.teamId,
-                                          )
-                                        : null,
-                                    borderRadius: BorderRadius.circular(10),
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 8,
-                                      ),
-                                      child: Text(
-                                        num.isEmpty ? '?' : num,
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w900,
-                                          color: num.isEmpty
-                                              ? cs.onSurfaceVariant.withValues(
-                                                  alpha: 0.45,
-                                                )
-                                              : cs.onSurfaceVariant,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  PopupMenuButton<String>(
-                                    icon: const Icon(Icons.more_vert),
-                                    itemBuilder: (context) => const [
-                                      PopupMenuItem(
-                                        value: 'edit',
-                                        child: Text('Düzenle'),
-                                      ),
-                                      PopupMenuItem(
-                                        value: 'delete',
-                                        child: Text('Sil'),
-                                      ),
-                                    ],
-                                    onSelected: (value) async {
-                                      switch (value) {
-                                        case 'edit':
-                                          _openPlayerForm(editing: p);
-                                          break;
-                                        case 'delete':
-                                          final tId = effectiveTournamentId;
-                                          final phone = (p.phone ?? '').trim();
-                                          if (tId.trim().isEmpty ||
-                                              phone.isEmpty) {
-                                            if (!context.mounted) return;
-                                            ScaffoldMessenger.of(
-                                              context,
-                                            ).showSnackBar(
-                                              const SnackBar(
-                                                content: Text(
-                                                  'Silme için eksik bilgi.',
-                                                ),
-                                              ),
-                                            );
-                                            return;
-                                          }
-                                          final ok = await showDialog<bool>(
-                                            context: context,
-                                            builder: (context) => AlertDialog(
-                                              title: const Text('Futbolcu Sil'),
-                                              content: Text(
-                                                '${p.name} oyuncusunu bu takımdan kaldırmak istiyor musunuz?',
-                                              ),
-                                              actions: [
-                                                TextButton(
-                                                  onPressed: () =>
-                                                      Navigator.pop(
-                                                        context,
-                                                        false,
-                                                      ),
-                                                  child: const Text('İptal'),
-                                                ),
-                                                FilledButton(
-                                                  onPressed: () =>
-                                                      Navigator.pop(
-                                                        context,
-                                                        true,
-                                                      ),
-                                                  child: const Text('Sil'),
-                                                ),
-                                              ],
-                                            ),
-                                          );
-                                          if (ok != true) return;
-                                          try {
-                                            await _deleteRosterPlayer(
-                                              tournamentId: tId,
-                                              teamId: widget.teamId,
-                                              playerPhone: phone,
-                                            );
-                                            if (mounted) {
-                                              _refreshPlayersStreamForTournament(
-                                                tId,
-                                              );
-                                            }
-                                            if (!context.mounted) return;
-                                            ScaffoldMessenger.of(
-                                              context,
-                                            ).showSnackBar(
-                                              const SnackBar(
-                                                content: Text(
-                                                  'Kadrodan kaldırıldı.',
-                                                ),
-                                              ),
-                                            );
-                                          } catch (e) {
-                                            if (!context.mounted) return;
-                                            final msg = e
-                                                .toString()
-                                                .replaceFirst('Exception: ', '')
-                                                .trim();
-                                            ScaffoldMessenger.of(
-                                              context,
-                                            ).showSnackBar(
-                                              SnackBar(
-                                                content: Text(
-                                                  'Silinemedi: $msg',
-                                                ),
-                                              ),
-                                            );
-                                          }
-                                          break;
-                                      }
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      );
-                    },
-                  ),
-          ),
         ],
+      ),
+    );
+  }
+}
+
+class _SmallActionButton extends StatelessWidget {
+  const _SmallActionButton({
+    required this.icon,
+    required this.tooltip,
+    required this.color,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          width: 32,
+          height: 32,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, size: 17, color: color),
+        ),
       ),
     );
   }
@@ -1623,6 +1669,24 @@ class _CardRow extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Futbolcu ekle / güncelle formunu ortada açılan temalı popup olarak açar.
+/// Dışarı dokunmak kaydetmeden kapatır. Kaydedilirse true döner.
+Future<bool?> showPlayerFormPopup(BuildContext context, PlayerFormScreen form) {
+  return showDialog<bool>(
+    context: context,
+    builder: (ctx) => Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
+      child: Container(
+        height: MediaQuery.of(ctx).size.height * 0.9,
+        clipBehavior: Clip.antiAlias,
+        decoration: adminDialogDecoration(),
+        child: form,
+      ),
+    ),
+  );
 }
 
 class PlayerFormScreen extends StatefulWidget {
@@ -1702,6 +1766,26 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
       role == 'Takım Sorumlusu' || role == 'Her İkisi';
 
   String _birthDateToDisplay(String? raw) => birthDateDbToUi(raw);
+
+  Future<void> _pickBirthDate() async {
+    final current = DateTime.tryParse(
+      _birthDateToDb(_birthDateController.text) ?? '',
+    );
+    final now = DateTime.now();
+    final picked = await showAppDatePicker(
+      context: context,
+      initialDate: current ?? DateTime(1990, 1, 1),
+      firstYear: 1940,
+      lastYear: now.year,
+      title: 'Doğum Tarihi',
+    );
+    if (picked == null || !mounted) return;
+    final iso =
+        '${picked.year.toString().padLeft(4, '0')}-'
+        '${picked.month.toString().padLeft(2, '0')}-'
+        '${picked.day.toString().padLeft(2, '0')}';
+    setState(() => _birthDateController.text = birthDateDbToUi(iso));
+  }
 
   String? _birthDateToDb(String raw) => birthDateUiToDb(raw);
 
@@ -1956,9 +2040,16 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
       return;
     }
     final isEditing = widget.editing != null;
+    // Telefonu olmayan mevcut oyuncu düzenlenirken sahte "no_phone_" anahtarı
+    // üretilip telefon alanına yazılmaz; oyuncu id'si ile işlem yapılır.
+    final editingWithoutPhone =
+        isEditing && rawPhone.isEmpty && _implicitPhoneKey == null;
     final keyPhone = rawPhone.isNotEmpty
         ? rawPhone
+        : editingWithoutPhone
+        ? widget.editing!.id
         : (_implicitPhoneKey ??= _generateNoPhoneKey());
+    final phoneToStore = editingWithoutPhone ? null : keyPhone;
 
     if (!widget.standalone) {
       if (_managerExists &&
@@ -2038,7 +2129,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
           'main_position': resolvedMainPosition,
           'sub_position': resolvedSubPosition,
           'photo_url': finalPhotoUrl,
-          'phone': keyPhone,
+          'phone': phoneToStore,
           'height': int.tryParse(
             _heightController.text.replaceAll(RegExp(r'\D'), '').trim(),
           ),
@@ -2107,7 +2198,6 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final editing = widget.editing != null;
     final allowManagerOptions = !_managerExists || _isManagerRole(_role);
 
@@ -2116,167 +2206,177 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
     final hasEditingUrl = editingUrl.isNotEmpty;
     final hasPhoto = hasPicked || hasEditingUrl;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(editing ? 'Oyuncu Güncelle' : 'Futbolcu Ekle'),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.only(bottom: 110),
-        children: [
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final h = min(MediaQuery.of(context).size.height * 0.38, 340.0);
-              return SizedBox(
-                height: h,
-                width: double.infinity,
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: cs.primary.withValues(alpha: 0.10),
-                          border: Border(
-                            bottom: BorderSide(
-                              color: cs.primary.withValues(alpha: 0.35),
-                              width: 1,
-                            ),
-                          ),
-                        ),
-                        child: hasPicked
-                            ? Image.file(
-                                File(_pickedPhoto!.path),
-                                fit: BoxFit.cover,
-                              )
-                            : hasEditingUrl
-                            ? WebSafeImage(
-                                url: widget.normalizeUrl(editingUrl),
-                                width: constraints.maxWidth,
-                                height: h,
-                                isCircle: false,
-                                fallbackIconSize: 64,
-                                fit: BoxFit.cover,
-                              )
-                            : Icon(Icons.person, size: 88, color: cs.primary),
+    Widget photoButton({
+      required IconData icon,
+      required String tooltip,
+      required Color color,
+      required VoidCallback? onPressed,
+    }) {
+      return Material(
+        color: onPressed == null ? color.withValues(alpha: 0.35) : color,
+        shape: const CircleBorder(),
+        child: IconButton(
+          tooltip: tooltip,
+          onPressed: onPressed,
+          icon: Icon(icon, color: Colors.white, size: 20),
+          constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+        ),
+      );
+    }
+
+    // Popup içinde kendi ScaffoldMessenger'ı: uyarılar popup'ın içinde görünür.
+    return ScaffoldMessenger(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: ListView(
+          padding: const EdgeInsets.only(bottom: 16),
+          children: [
+            // Başlık
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        editing
+                            ? Icons.manage_accounts_rounded
+                            : Icons.person_add_alt_1_rounded,
+                        color: kAdminAccent,
                       ),
-                    ),
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                Colors.black.withValues(alpha: 0.00),
-                                Colors.black.withValues(alpha: 0.25),
-                              ],
-                            ),
-                          ),
+                      const SizedBox(width: 8),
+                      Text(
+                        editing ? 'Futbolcu Güncelle' : 'Futbolcu Ekle',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
                         ),
                       ),
-                    ),
-                    Positioned(
-                      right: 16,
-                      bottom: 16,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Material(
-                            color: _saving
-                                ? cs.primary.withValues(alpha: 0.45)
-                                : cs.primary,
-                            shape: const CircleBorder(),
-                            child: IconButton(
-                              onPressed: _saving ? null : _pickPhoto,
-                              icon: const Icon(Icons.photo_camera_outlined),
-                              color: Colors.white,
-                              iconSize: 30,
-                              padding: const EdgeInsets.all(14),
-                              constraints: const BoxConstraints(
-                                minWidth: 56,
-                                minHeight: 56,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Material(
-                            color: (!_saving && hasPhoto)
-                                ? cs.error
-                                : cs.error.withValues(alpha: 0.35),
-                            shape: const CircleBorder(),
-                            child: IconButton(
-                              tooltip: 'Fotoğrafı Kaldır',
-                              onPressed: (_saving || !hasPhoto)
-                                  ? null
-                                  : () {
-                                      setState(() {
-                                        _pickedPhoto = null;
-                                        _existingPhotoUrl = null;
-                                        _removePhoto = true;
-                                      });
-                                    },
-                              icon: const Icon(Icons.delete_outline),
-                              color: Colors.white,
-                              iconSize: 28,
-                              padding: const EdgeInsets.all(14),
-                              constraints: const BoxConstraints(
-                                minWidth: 56,
-                                minHeight: 56,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
-            child: Column(
-              children: [
-                TextField(
-                  controller: _identityNoController,
-                  enabled: !_saving,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(11),
-                  ],
-                  decoration: const InputDecoration(
-                    labelText: 'Kimlik No',
-                    prefixIcon: Icon(Icons.badge_outlined),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _nameController,
-                        enabled: !_saving,
-                        decoration: const InputDecoration(
-                          labelText: 'Ad',
-                          prefixIcon: Icon(Icons.person_outline),
-                        ),
+                  const SizedBox(height: 14),
+                  const Divider(color: Colors.white24, height: 1),
+                ],
+              ),
+            ),
+            // Fotoğraf: yuvarlak önizleme + ekle/kaldır butonları
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 96,
+                    height: 96,
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: kAdminAccent.withValues(alpha: 0.7),
+                        width: 2,
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: TextField(
-                        controller: _surnameController,
-                        enabled: !_saving,
-                        decoration: const InputDecoration(
-                          labelText: 'Soyad',
-                          prefixIcon: Icon(Icons.person_outline),
+                    child: ClipOval(
+                      child: hasPicked
+                          ? Image.file(
+                              File(_pickedPhoto!.path),
+                              fit: BoxFit.cover,
+                            )
+                          : hasEditingUrl
+                          ? WebSafeImage(
+                              url: widget.normalizeUrl(editingUrl),
+                              width: 90,
+                              height: 90,
+                              isCircle: true,
+                              fallbackIconSize: 40,
+                              fit: BoxFit.cover,
+                            )
+                          : Container(
+                              color: Colors.black.withValues(alpha: 0.3),
+                              child: Icon(
+                                Icons.person,
+                                size: 48,
+                                color: kAdminAccent.withValues(alpha: 0.7),
+                              ),
+                            ),
+                    ),
+                  ),
+                  const SizedBox(width: 18),
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      photoButton(
+                        icon: Icons.photo_camera_outlined,
+                        tooltip: 'Fotoğraf Seç',
+                        color: kAdminAccent,
+                        onPressed: _saving ? null : _pickPhoto,
+                      ),
+                      const SizedBox(height: 10),
+                      photoButton(
+                        icon: Icons.delete_outline,
+                        tooltip: 'Fotoğrafı Kaldır',
+                        color: const Color(0xFFDC2626),
+                        onPressed: (_saving || !hasPhoto)
+                            ? null
+                            : () {
+                                setState(() {
+                                  _pickedPhoto = null;
+                                  _existingPhotoUrl = null;
+                                  _removePhoto = true;
+                                });
+                              },
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
+              child: Column(
+                children: [
+                  TextField(
+                    controller: _identityNoController,
+                    enabled: !_saving,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(11),
+                    ],
+                    decoration: const InputDecoration(
+                      labelText: 'Kimlik No',
+                      prefixIcon: Icon(Icons.badge_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _nameController,
+                          enabled: !_saving,
+                          decoration: const InputDecoration(
+                            labelText: 'Ad',
+                            prefixIcon: Icon(Icons.person_outline),
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                /*                    const SizedBox(width: 10),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: _surnameController,
+                          enabled: !_saving,
+                          decoration: const InputDecoration(
+                            labelText: 'Soyad',
+                            prefixIcon: Icon(Icons.person_outline),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  /*                    const SizedBox(width: 10),
                     SizedBox(
                       height: 52,
                      child: FilledButton(
@@ -2297,237 +2397,259 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                         ),
                       ),
                     ),*/
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: IgnorePointer(
-                        ignoring:
-                            _saving, // Kaydetme işlemi sırasında tıklamayı engeller
-                        child: CustomBottomSheetDropdown<String>(
-                          labelText: 'Rolü',
-                          prefixIcon: Icons.manage_accounts_outlined,
-
-                          // Sihirli Kısım: Sadece kullanıcının seçmeye yetkisi olan rolleri listeye gönderiyoruz
-                          items: _roles.where((r) {
-                            final isDisabled =
-                                _isManagerRole(r) && !allowManagerOptions;
-                            return !isDisabled; // Sadece disabled OLMAYANLARI listeye dahil et
-                          }).toList(),
-
-                          value: _role,
-
-                          // Liste zaten String olduğu için direkt kendisini yazdırıyoruz
-                          itemLabelBuilder: (r) => r,
-
-                          onChanged: (String? v) {
-                            if (v != null) {
-                              setState(() => _role = v);
-                            }
-                          },
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: TextField(
-                        controller: _birthDateController,
-                        enabled: !_saving,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [BirthDateInputFormatter()],
-                        decoration: const InputDecoration(
-                          labelText: 'Doğum Tarihi',
-                          prefixIcon: Icon(Icons.cake_outlined),
-                          hintText: 'DD-MM-YYYY',
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: IgnorePointer(
-                        ignoring: _saving, // Kayıt anında formu kilitler
-                        child: CustomBottomSheetDropdown<String>(
-                          labelText: 'Kullandığı Ayak',
-                          prefixIcon: Icons.directions_run_outlined,
-                          // Sadece listeyi veriyoruz, döngülere (map) gerek kalmadı!
-                          items: _feet,
-                          // Değer boşsa null gönder, doluysa kendisini gönder
-                          value: _preferredFoot.trim().isEmpty
-                              ? null
-                              : _preferredFoot,
-                          // Liste elemanları zaten String olduğu için direkt f değerini ekrana basıyoruz
-                          itemLabelBuilder: (f) => f,
-                          onChanged: (String? v) {
-                            // Seçim yapılınca state'i güncelle (eğer null gelirse boş string ata)
-                            setState(() => _preferredFoot = v ?? '');
-                          },
-                        ),
-                      ),
-                    ),
-                    if (!widget.standalone) ...[
-                      const SizedBox(width: 10),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
                       Expanded(
-                        child: TextField(
-                          controller: _numberController,
-                          enabled: !_saving,
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                            LengthLimitingTextInputFormatter(3),
-                          ],
-                          decoration: const InputDecoration(
-                            labelText: 'Forma No',
-                            prefixIcon: Icon(Icons.numbers_outlined),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _heightController,
-                        enabled: !_saving,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                        ],
-                        decoration: const InputDecoration(
-                          labelText: 'Boy (cm)',
-                          prefixIcon: Icon(Icons.height_outlined),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: TextField(
-                        controller: _weightController,
-                        enabled: !_saving,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                        ],
-                        decoration: const InputDecoration(
-                          labelText: 'Kilo (kg)',
-                          prefixIcon: Icon(Icons.monitor_weight_outlined),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: IgnorePointer(
-                        ignoring: _saving,
-                        child: CustomBottomSheetDropdown<String>(
-                          labelText: 'Ana Mevki',
-                          prefixIcon: Icons.sports_soccer_outlined,
-                          // Belirsiz seçeneği ve ana mevkileri birleştirip direkt veriyoruz
-                          items: [_unsetOption, ..._mainPositions],
-                          value: _mainPosition,
-                          itemLabelBuilder: (p) => p,
-                          onChanged: (String? v) {
-                            if (v == null) return;
-                            setState(() {
-                              if (v == _unsetOption) {
-                                _mainPosition = _unsetOption;
-                                _subPosition = _unsetOption;
-                              } else {
-                                _mainPosition = v;
-                                // Yeni mevkiye göre alt mevkilerin ilk elemanını otomatik seç
-                                _subPosition =
-                                    (_subPositionsByMain[v] ?? const <String>[])
-                                        .first;
-                              }
-                            });
-                          },
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Visibility(
-                        visible: _isMainPositionSelected,
-                        maintainSize: true,
-                        maintainAnimation: true,
-                        maintainState: true,
                         child: IgnorePointer(
                           ignoring:
-                              _saving ||
-                              !_isMainPositionSelected, // Ana mevki seçilmeden burası açılmaz!
+                              _saving, // Kaydetme işlemi sırasında tıklamayı engeller
                           child: CustomBottomSheetDropdown<String>(
-                            labelText: 'Alt Mevki',
-                            prefixIcon: Icons.sports_outlined,
-                            // Ana mevkiye bağlı olarak alt mevki listesini getiriyoruz
-                            items:
-                                _subPositionsByMain[_mainPosition] ??
-                                const <String>[],
-                            // Sadece ana mevki seçiliyse değeri göster, yoksa boş (null) bırak
-                            value: _isMainPositionSelected
-                                ? _subPosition
-                                : null,
-                            itemLabelBuilder: (p) => p,
+                            labelText: 'Rolü',
+                            prefixIcon: Icons.manage_accounts_outlined,
+
+                            // Sihirli Kısım: Sadece kullanıcının seçmeye yetkisi olan rolleri listeye gönderiyoruz
+                            items: _roles.where((r) {
+                              final isDisabled =
+                                  _isManagerRole(r) && !allowManagerOptions;
+                              return !isDisabled; // Sadece disabled OLMAYANLARI listeye dahil et
+                            }).toList(),
+
+                            value: _role,
+
+                            // Liste zaten String olduğu için direkt kendisini yazdırıyoruz
+                            itemLabelBuilder: (r) => r,
+
                             onChanged: (String? v) {
                               if (v != null) {
-                                setState(() => _subPosition = v);
+                                setState(() => _role = v);
                               }
                             },
                           ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _phoneController,
-                  enabled: !_saving,
-                  keyboardType: TextInputType.phone,
-                  inputFormatters: [PhoneMaskFormatter()],
-                  decoration: const InputDecoration(
-                    labelText: 'Telefon No',
-                    prefixIcon: Icon(Icons.phone_outlined),
-                    prefixText: '0 ',
-                    hintText: '(5XX) XXX XX XX',
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: IgnorePointer(
+                          ignoring: _saving, // Kayıt anında formu kilitler
+                          child: CustomBottomSheetDropdown<String>(
+                            labelText: 'Kullandığı Ayak',
+                            prefixIcon: Icons.directions_run_outlined,
+                            // Sadece listeyi veriyoruz, döngülere (map) gerek kalmadı!
+                            items: _feet,
+                            // Değer boşsa null gönder, doluysa kendisini gönder
+                            value: _preferredFoot.trim().isEmpty
+                                ? null
+                                : _preferredFoot,
+                            // Liste elemanları zaten String olduğu için direkt f değerini ekrana basıyoruz
+                            itemLabelBuilder: (f) => f,
+                            onChanged: (String? v) {
+                              // Seçim yapılınca state'i güncelle (eğer null gelirse boş string ata)
+                              setState(() => _preferredFoot = v ?? '');
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 10),
-              ],
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _birthDateController,
+                          enabled: !_saving,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [BirthDateInputFormatter()],
+                          decoration: InputDecoration(
+                            labelText: 'Doğum Tarihi',
+                            prefixIcon: const Icon(Icons.cake_outlined),
+                            hintText: 'DD-MM-YYYY',
+                            // Elle yazmak da mümkün; ikon standart tarih
+                            // seçicisini açar.
+                            suffixIcon: IconButton(
+                              icon: const Icon(Icons.calendar_month_outlined),
+                              tooltip: 'Takvimden seç',
+                              onPressed: _saving ? null : _pickBirthDate,
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (!widget.standalone) ...[
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: TextField(
+                            controller: _numberController,
+                            enabled: !_saving,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                              LengthLimitingTextInputFormatter(3),
+                            ],
+                            decoration: const InputDecoration(
+                              labelText: 'Forma No',
+                              prefixIcon: Icon(Icons.numbers_outlined),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _heightController,
+                          enabled: !_saving,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
+                          decoration: const InputDecoration(
+                            labelText: 'Boy (cm)',
+                            prefixIcon: Icon(Icons.height_outlined),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: _weightController,
+                          enabled: !_saving,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
+                          decoration: const InputDecoration(
+                            labelText: 'Kilo (kg)',
+                            prefixIcon: Icon(Icons.monitor_weight_outlined),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: IgnorePointer(
+                          ignoring: _saving,
+                          child: CustomBottomSheetDropdown<String>(
+                            labelText: 'Ana Mevki',
+                            prefixIcon: Icons.sports_soccer_outlined,
+                            // Belirsiz seçeneği ve ana mevkileri birleştirip direkt veriyoruz
+                            items: [_unsetOption, ..._mainPositions],
+                            value: _mainPosition,
+                            itemLabelBuilder: (p) => p,
+                            onChanged: (String? v) {
+                              if (v == null) return;
+                              setState(() {
+                                if (v == _unsetOption) {
+                                  _mainPosition = _unsetOption;
+                                  _subPosition = _unsetOption;
+                                } else {
+                                  _mainPosition = v;
+                                  // Yeni mevkiye göre alt mevkilerin ilk elemanını otomatik seç
+                                  _subPosition =
+                                      (_subPositionsByMain[v] ??
+                                              const <String>[])
+                                          .first;
+                                }
+                              });
+                            },
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Visibility(
+                          visible: _isMainPositionSelected,
+                          maintainSize: true,
+                          maintainAnimation: true,
+                          maintainState: true,
+                          child: IgnorePointer(
+                            ignoring:
+                                _saving ||
+                                !_isMainPositionSelected, // Ana mevki seçilmeden burası açılmaz!
+                            child: CustomBottomSheetDropdown<String>(
+                              labelText: 'Alt Mevki',
+                              prefixIcon: Icons.sports_outlined,
+                              // Ana mevkiye bağlı olarak alt mevki listesini getiriyoruz
+                              items:
+                                  _subPositionsByMain[_mainPosition] ??
+                                  const <String>[],
+                              // Sadece ana mevki seçiliyse değeri göster, yoksa boş (null) bırak
+                              value: _isMainPositionSelected
+                                  ? _subPosition
+                                  : null,
+                              itemLabelBuilder: (p) => p,
+                              onChanged: (String? v) {
+                                if (v != null) {
+                                  setState(() => _subPosition = v);
+                                }
+                              },
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _phoneController,
+                    enabled: !_saving,
+                    keyboardType: TextInputType.phone,
+                    inputFormatters: [PhoneMaskFormatter()],
+                    decoration: const InputDecoration(
+                      labelText: 'Telefon No',
+                      prefixIcon: Icon(Icons.phone_outlined),
+                      prefixText: '0 ',
+                      hintText: '(5XX) XXX XX XX',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+              ),
             ),
-          ),
-        ],
-      ),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
+          ],
+        ),
+        bottomNavigationBar: Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-          child: SizedBox(
-            width: double.infinity,
-            height: 52,
-            child: _saving
-                ? const Center(
-                    child: SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                height: 50,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kAdminAccent,
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: kAdminAccent.withValues(
+                      alpha: 0.5,
                     ),
-                  )
-                : FilledButton(
-                    style: FilledButton.styleFrom(backgroundColor: cs.primary),
-                    onPressed: _save,
-                    child: Text(
-                      editing ? 'GÜNCELLE' : 'KAYDET',
-                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
                   ),
+                  onPressed: _saving ? null : _save,
+                  child: _saving
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Text(
+                          editing ? 'GÜNCELLE' : 'KAYDET',
+                          style: const TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -2916,8 +3038,13 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
   bool _isFootballerRole(String role) {
     final r = role.trim().toLowerCase();
     if (r.isEmpty) return true;
-    return const {'futbolcu', 'her i̇kisi', 'her ikisi', 'player', 'both'}
-        .contains(r);
+    return const {
+      'futbolcu',
+      'her i̇kisi',
+      'her ikisi',
+      'player',
+      'both',
+    }.contains(r);
   }
 
   String _positionsBirthLine(PlayerModel p) {
@@ -2931,10 +3058,9 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
   }
 
   Future<void> _openPlayerForm({PlayerModel? editing}) async {
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => PlayerFormScreen(standalone: true, editing: editing),
-      ),
+    await showPlayerFormPopup(
+      context,
+      PlayerFormScreen(standalone: true, editing: editing),
     );
   }
 
@@ -3171,159 +3297,237 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
     );
   }
 
-  Future<void> _openFabMenu() async {
-    final action = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.person_add_alt_1_rounded),
-              title: const Text('Futbolcu Ekle'),
-              onTap: () => Navigator.pop(context, 'create'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.upload_file_rounded),
-              title: const Text('Toplu Yükle'),
-              onTap: () => Navigator.pop(context, 'bulk'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (!mounted || action == null) return;
-    switch (action) {
-      case 'create':
-        await _openPlayerForm();
-        return;
-      case 'bulk':
-        await _openBulkUploadFlow();
-        return;
-    }
-  }
-
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
   }
 
+  // Arama her harfte yeniden abone olmasın; arka plandan dönünce yenilensin.
+  late final Stream<List<PlayerModel>> _playersStream = resilientStream(
+    () => _teamService.watchAllPlayers(caller: 'FootballerLicenseScreen'),
+  );
+
   @override
   Widget build(BuildContext context) {
     final isAdmin = AppSession.of(context).value.isAdmin;
-    final cs = Theme.of(context).colorScheme;
+    const accent = Color(0xFF10B981);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Futbolcu Lisans Yönetimi'),
-        centerTitle: true,
-      ),
-      floatingActionButton: isAdmin
-          ? FloatingActionButton(
-              onPressed: _openFabMenu,
-              child: const Icon(Icons.add),
-            )
-          : null,
-      body: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-        child: Column(
-          children: [
-            TextField(
-              controller: _searchController,
-              decoration: const InputDecoration(
-                labelText: 'Oyuncu Ara',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
+      backgroundColor: const Color(0xFF0F172A),
+      extendBodyBehindAppBar: true,
+      appBar: MasterClassAppBar(
+        title: 'Futbolcu Lisans Yönetimi',
+        actions: [
+          if (isAdmin)
+            PopupMenuButton<String>(
+              tooltip: 'Futbolcu ekle',
+              icon: const Icon(
+                Icons.person_add_alt_1_rounded,
+                color: Colors.white,
+                size: 26,
               ),
-              onChanged: (v) => setState(() => _q = v),
-            ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: StreamBuilder<List<PlayerModel>>(
-                stream: _teamService.watchAllPlayers(
-                  caller: 'FootballerLicenseScreen',
+              color: const Color(0xFF1E293B),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              onSelected: (v) {
+                if (v == 'create') _openPlayerForm();
+                if (v == 'bulk') _openBulkUploadFlow();
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(
+                  value: 'create',
+                  child: ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      Icons.person_add_alt_1_rounded,
+                      color: accent,
+                    ),
+                    title: Text(
+                      'Futbolcu Ekle',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
                 ),
-                initialData: const <PlayerModel>[],
-                builder: (context, snap) {
-                  if (snap.hasError) {
-                    return Center(child: Text('Hata: ${snap.error}'));
-                  }
-                  final q = _norm(_q);
-                  final list =
-                      (snap.data ?? const <PlayerModel>[])
-                          .where((p) => _isFootballerRole(p.role))
-                          .where((p) => q.isEmpty || _norm(p.name).contains(q))
-                          .toList()
-                        ..sort(
-                          (a, b) => a.name.toLowerCase().compareTo(
-                            b.name.toLowerCase(),
-                          ),
-                        );
-
-                  if (list.isEmpty) {
-                    return const Center(child: Text('Futbolcu bulunamadı.'));
-                  }
-                  return ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(0, 0, 0, 12),
-                    itemCount: list.length,
-                    itemBuilder: (context, i) {
-                      final p = list[i];
-                      final photo = _normalizeUrl((p.photoUrl ?? '').trim());
-                      return Card(
-                        margin: const EdgeInsets.symmetric(vertical: 4),
-                        child: ListTile(
-                          dense: true,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 2,
-                          ),
-                          onTap: () => _openPlayerCard(p),
-                          leading: photo.isNotEmpty
-                              ? WebSafeImage(
-                                  url: photo,
-                                  width: 38,
-                                  height: 38,
-                                  isCircle: true,
-                                  fit: BoxFit.cover,
-                                  fallbackIconSize: 18,
-                                )
-                              : CircleAvatar(
-                                  radius: 19,
-                                  backgroundColor: cs.primary.withValues(
-                                    alpha: 0.12,
-                                  ),
-                                  child: Icon(
-                                    Icons.person,
-                                    size: 18,
-                                    color: cs.primary,
-                                  ),
-                                ),
-                          title: Text(
-                            p.name.trim().isEmpty ? p.id : p.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          subtitle: Text(
-                            _positionsBirthLine(p),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          trailing: IconButton(
-                            tooltip: 'Düzenle',
-                            onPressed: () => _openPlayerForm(editing: p),
-                            icon: const Icon(Icons.edit_outlined),
-                          ),
-                        ),
-                      );
-                    },
-                  );
-                },
+                PopupMenuItem(
+                  value: 'bulk',
+                  child: ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.upload_file_rounded, color: accent),
+                    title: Text(
+                      'Toplu Yükle (Excel)',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: Opacity(
+              opacity: 0.15,
+              child: Image.asset(
+                'assets/images/background_ball.jpg',
+                fit: BoxFit.cover,
               ),
             ),
-          ],
+          ),
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+              child: Column(
+                children: [
+                  TextField(
+                    controller: _searchController,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'Oyuncu ara',
+                      prefixIcon: const Icon(Icons.search, color: accent),
+                      filled: true,
+                      fillColor: Colors.black.withValues(alpha: 0.3),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.1),
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(color: accent),
+                      ),
+                    ),
+                    onChanged: (v) => setState(() => _q = v),
+                  ),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: StreamBuilder<List<PlayerModel>>(
+                      stream: _playersStream,
+                      builder: (context, snap) {
+                        if (!snap.hasData) {
+                          return const Center(
+                            child: CircularProgressIndicator(color: accent),
+                          );
+                        }
+                        final q = _norm(_q);
+                        final list =
+                            snap.data!
+                                .where((p) => _isFootballerRole(p.role))
+                                .where(
+                                  (p) => q.isEmpty || _norm(p.name).contains(q),
+                                )
+                                .toList()
+                              ..sort(
+                                (a, b) => a.name.toLowerCase().compareTo(
+                                  b.name.toLowerCase(),
+                                ),
+                              );
+
+                        if (list.isEmpty) {
+                          return const Center(
+                            child: Text(
+                              'Futbolcu bulunamadı.',
+                              style: TextStyle(color: Colors.white54),
+                            ),
+                          );
+                        }
+                        return ListView.builder(
+                          padding: const EdgeInsets.only(bottom: 24),
+                          itemCount: list.length,
+                          itemBuilder: (context, i) => _licenseCard(list[i]),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _licenseCard(PlayerModel p) {
+    const accent = Color(0xFF10B981);
+    final photo = _normalizeUrl((p.photoUrl ?? '').trim());
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => _openPlayerCard(p),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 42,
+                height: 42,
+                child: photo.isNotEmpty
+                    ? WebSafeImage(
+                        url: photo,
+                        width: 42,
+                        height: 42,
+                        isCircle: true,
+                        fit: BoxFit.cover,
+                        fallbackIconSize: 18,
+                      )
+                    : CircleAvatar(
+                        backgroundColor: accent.withValues(alpha: 0.12),
+                        child: const Icon(
+                          Icons.person,
+                          size: 20,
+                          color: accent,
+                        ),
+                      ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      p.name.trim().isEmpty ? p.id : p.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _positionsBirthLine(p),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF94A3B8),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              _SmallActionButton(
+                icon: Icons.edit_outlined,
+                tooltip: 'Düzenle',
+                color: Colors.white70,
+                onTap: () => _openPlayerForm(editing: p),
+              ),
+            ],
+          ),
         ),
       ),
     );

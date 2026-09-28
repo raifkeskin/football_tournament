@@ -8,6 +8,7 @@ import '../models/league.dart';
 import '../../../core/services/app_session.dart';
 import '../../../core/services/image_upload_service.dart';
 import '../../../core/services/service_locator.dart';
+import '../../../core/widgets/app_date_picker.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import 'season_management_screen.dart';
 
@@ -990,11 +991,11 @@ class _EditLeagueScreenState extends State<EditLeagueScreen> {
     final initial = isStart
         ? (_startDate ?? now)
         : (_endDate ?? _startDate ?? now);
-    final picked = await showDatePicker(
+    final picked = await showAppDatePicker(
       context: context,
       initialDate: initial,
-      firstDate: DateTime(now.year - 5),
-      lastDate: DateTime(now.year + 10),
+      firstYear: now.year - 5,
+      lastYear: now.year + 10,
     );
     if (picked == null) return;
     setState(() {

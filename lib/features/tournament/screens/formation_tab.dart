@@ -52,7 +52,7 @@ String shortPlayerName(String raw) {
   return '${parts.first} ${parts.last.substring(0, 1)}.';
 }
 
-/// Kaptan pazubandı: sarı zemin üzerinde "C".
+/// Kaptan pazubandı: kırmızı zemin üzerinde beyaz "C".
 class CaptainBadge extends StatelessWidget {
   const CaptainBadge({super.key, this.size = 16});
 
@@ -65,14 +65,14 @@ class CaptainBadge extends StatelessWidget {
       height: size,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: const Color(0xFFFACC15),
+        color: const Color(0xFFDC2626),
         borderRadius: BorderRadius.circular(size * 0.25),
-        border: Border.all(color: Colors.black26, width: 0.8),
+        border: Border.all(color: Colors.white70, width: 0.8),
       ),
       child: Text(
         'C',
         style: TextStyle(
-          color: Colors.black,
+          color: Colors.white,
           fontWeight: FontWeight.w900,
           fontSize: size * 0.68,
           height: 1,
@@ -146,7 +146,39 @@ class FormationTab extends StatefulWidget {
   State<FormationTab> createState() => _FormationTabState();
 }
 
-class _FormationTabState extends State<FormationTab> {
+class _FormationTabState extends State<FormationTab>
+    with AutomaticKeepAliveClientMixin {
+  // Sekme değişince durum (seçilen diziliş, yerleşim) kaybolmasın.
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedFormations();
+  }
+
+  /// Kayıtlı dizilişi doğrudan veritabanından okur; ekranın açılışındaki
+  /// maç verisi (widget.match) kayıttan sonra güncel olmayabilir.
+  Future<void> _loadSavedFormations() async {
+    try {
+      final row = await Supabase.instance.client
+          .from('matches')
+          .select('home_formation, away_formation')
+          .eq('id', widget.match.id)
+          .maybeSingle();
+      if (row == null || !mounted) return;
+      final home = (row['home_formation'] ?? '').toString().trim();
+      final away = (row['away_formation'] ?? '').toString().trim();
+      setState(() {
+        if (home.isNotEmpty) _chosen.putIfAbsent(0, () => home);
+        if (away.isNotEmpty) _chosen.putIfAbsent(1, () => away);
+      });
+    } catch (_) {
+      // Kolonlar yoksa otomatik diziliş kullanılır.
+    }
+  }
+
   int _selected = 0; // 0: ev sahibi, 1: deplasman
 
   /// Kullanıcının bu oturumda seçtiği dizilişler (teamIndex -> "4-4-2").
@@ -277,6 +309,7 @@ class _FormationTabState extends State<FormationTab> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final teamColor = _selected == 0 ? _accent : const Color(0xFF3B82F6);
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),

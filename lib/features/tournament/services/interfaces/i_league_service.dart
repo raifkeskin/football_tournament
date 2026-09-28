@@ -40,6 +40,14 @@ abstract class ILeagueService {
     String? location,
   });
 
+  Future<void> updatePitch({
+    required String pitchId,
+    required String name,
+    String? city,
+    String? country,
+    String? location,
+  });
+
   Future<void> deletePitch(String pitchId);
 
   Stream<List<NewsItem>> watchNews({

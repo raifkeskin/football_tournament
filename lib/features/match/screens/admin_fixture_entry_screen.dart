@@ -11,6 +11,8 @@ import '../../tournament/services/interfaces/i_league_service.dart';
 import '../services/interfaces/i_match_service.dart';
 import '../../team/services/interfaces/i_team_service.dart';
 import '../../../core/services/service_locator.dart';
+import '../../../core/widgets/admin_page.dart';
+import '../../../core/widgets/app_date_picker.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -93,17 +95,17 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
   Widget build(BuildContext context) {
     final isAdmin = AppSession.of(context).value.isAdmin;
     if (!isAdmin) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Fikstür Planlama'), centerTitle: true),
-        body: const Center(
+      return const AdminPageScaffold(
+        title: 'Fikstür Planlama',
+        body: Center(
           child: Text(
             'Bu sayfaya erişim yetkiniz yok.',
             textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white70),
           ),
         ),
       );
     }
-    const headerForest = Color(0xFF064E3B);
     final base = Theme.of(context);
     final themed = base.copyWith(
       scaffoldBackgroundColor: const Color(0xFF0F172A),
@@ -120,9 +122,8 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
       ),
     );
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Fikstür Planlama'), centerTitle: true),
-      backgroundColor: const Color(0xFF0F172A),
+    return AdminPageScaffold(
+      title: 'Fikstür Planlama',
       body: Theme(
         data: themed,
         child: _isLoading
@@ -484,7 +485,7 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                   onPressed: _saveFixture,
                   style: ElevatedButton.styleFrom(
                     minimumSize: const Size(double.infinity, 50),
-                    backgroundColor: headerForest,
+                    backgroundColor: kAdminAccent,
                     foregroundColor: Colors.white,
                     textStyle: const TextStyle(fontWeight: FontWeight.bold),
                   ),
@@ -497,11 +498,12 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
   }
 
   Future<void> _pickDate() async {
-    final picked = await showDatePicker(
+    final picked = await showAppDatePicker(
       context: context,
       initialDate: _selectedDate,
-      firstDate: DateTime.now().subtract(const Duration(days: 365)),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
+      firstYear: DateTime.now().year - 1,
+      lastYear: DateTime.now().year + 1,
+      title: 'Maç Tarihi',
     );
     if (picked != null) setState(() => _selectedDate = picked);
   }

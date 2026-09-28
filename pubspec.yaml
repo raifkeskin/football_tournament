@@ -78,10 +78,12 @@ flutter_launcher_icons:
   adaptive_icon_foreground: "assets/app_logo.png" # Sadece logonun olduğu şeffaf görsel
 
 flutter_native_splash:
-  color: "#FFFFFF"
-  background_image: "assets/acilis_2.png"
+  # Uygulama içi açılış ekranıyla aynı koyu zemin (geçişte görsel sıçraması olmasın).
+  color: "#0F172A"
   android: true
   ios: true
+  android_12:
+    color: "#0F172A"
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

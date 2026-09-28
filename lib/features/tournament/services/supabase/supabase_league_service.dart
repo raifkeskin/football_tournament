@@ -486,6 +486,45 @@ class SupabaseLeagueService implements ILeagueService {
       AppConfig.sqlLogResult(table: 'pitches', operation: 'INSERT', count: 1);
     } catch (e) {
       AppConfig.sqlLogResult(table: 'pitches', operation: 'INSERT', error: e);
+      rethrow; // ekran hatayı gösterebilsin
+    }
+  }
+
+  @override
+  Future<void> updatePitch({
+    required String pitchId,
+    required String name,
+    String? city,
+    String? country,
+    String? location,
+  }) async {
+    final id = pitchId.trim();
+    final n = name.trim();
+    if (id.isEmpty || n.isEmpty) return;
+    String? clean(String? v) => (v ?? '').trim().isEmpty ? null : v!.trim();
+    try {
+      AppConfig.sqlLogStart(
+        table: 'pitches',
+        operation: 'UPDATE',
+        filters: 'id=$id',
+      );
+      final updated = await _client
+          .from('pitches')
+          .update({
+            'name': n,
+            'city': clean(city),
+            'country': clean(country),
+            'location': clean(location),
+          })
+          .eq('id', id)
+          .select('id');
+      if (updated.isEmpty) {
+        throw Exception('Saha güncellenemedi (kayıt yok ya da yetki yok).');
+      }
+      AppConfig.sqlLogResult(table: 'pitches', operation: 'UPDATE', count: 1);
+    } catch (e) {
+      AppConfig.sqlLogResult(table: 'pitches', operation: 'UPDATE', error: e);
+      rethrow;
     }
   }
 
@@ -499,6 +538,8 @@ class SupabaseLeagueService implements ILeagueService {
       AppConfig.sqlLogResult(table: 'pitches', operation: 'DELETE');
     } catch (e) {
       AppConfig.sqlLogResult(table: 'pitches', operation: 'DELETE', error: e);
+      // Ör. sahaya bağlı maç varsa silme reddedilir; ekran bunu göstermeli.
+      rethrow;
     }
   }
 

@@ -8,6 +8,7 @@ import '../../tournament/models/league_extras.dart';
 import '../models/match.dart';
 import '../models/match_media.dart';
 import '../../team/models/team.dart';
+import '../../../core/utils/team_name.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../../core/services/app_session.dart';
 import '../../../core/services/image_upload_service.dart';
@@ -41,73 +42,52 @@ class _SecondYellowCardIcon extends StatelessWidget {
   }
 }
 
+/// Maç detayı üst bandı: logo üstte, takım adı altında ortalı (2 satır).
 class _TeamInfo extends StatelessWidget {
   final String name;
   final String logoUrl;
 
-  /// true: logo solda (ev sahibi), false: logo sağda (deplasman).
-  final bool logoFirst;
-
-  const _TeamInfo({
-    required this.name,
-    required this.logoUrl,
-    this.logoFirst = true,
-  });
-
-  String _smartAbbreviate(String val) {
-    if (val.length <= 20) return val;
-    return val
-        .replaceAll(RegExp(r'Masterlar(ı)?', caseSensitive: false), 'M.')
-        .replaceAll(RegExp(r'Master', caseSensitive: false), 'M.')
-        .replaceAll(RegExp(r'Spor Kulübü', caseSensitive: false), 'SK')
-        .replaceAll(RegExp(r'Futbol Kulübü', caseSensitive: false), 'FK')
-        .replaceAll(RegExp(r'Gençlik', caseSensitive: false), 'Gnç.')
-        .trim();
-  }
+  const _TeamInfo({required this.name, required this.logoUrl});
 
   @override
   Widget build(BuildContext context) {
-    final logo = Container(
-      padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white.withValues(alpha: 0.7)),
-        boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 8)],
-      ),
-      child: WebSafeImage(
-        url: logoUrl,
-        width: 40,
-        height: 40,
-        isCircle: true,
-        fallbackIconSize: 20,
-      ),
-    );
-    final text = Flexible(
-      child: Text(
-        _smartAbbreviate(name),
-        textAlign: logoFirst ? TextAlign.left : TextAlign.right,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w900,
-          fontSize: 17,
-          height: 1.15,
-          letterSpacing: 0.2,
-          shadows: [
-            Shadow(color: Colors.black, blurRadius: 10, offset: Offset(0, 2)),
-            Shadow(color: Colors.black87, blurRadius: 3),
-          ],
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(2),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white.withValues(alpha: 0.7)),
+            boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 8)],
+          ),
+          child: WebSafeImage(
+            url: logoUrl,
+            width: 42,
+            height: 42,
+            isCircle: true,
+            fallbackIconSize: 20,
+          ),
         ),
-      ),
-    );
-    return Row(
-      mainAxisAlignment: logoFirst
-          ? MainAxisAlignment.start
-          : MainAxisAlignment.end,
-      children: logoFirst
-          ? [logo, const SizedBox(width: 8), text]
-          : [text, const SizedBox(width: 8), logo],
+        const SizedBox(height: 6),
+        Text(
+          shortTeamName(name),
+          textAlign: TextAlign.center,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w900,
+            fontSize: 15,
+            height: 1.15,
+            letterSpacing: 0.2,
+            shadows: [
+              Shadow(color: Colors.black, blurRadius: 10, offset: Offset(0, 2)),
+              Shadow(color: Colors.black87, blurRadius: 3),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -422,7 +402,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                             children: [
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
-                                crossAxisAlignment: CrossAxisAlignment.center,
+                                // Üstten hizalı: isimler kaç satır olursa olsun
+                                // skor logolarla aynı hizada kalır.
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Expanded(
                                     child: _TeamInfo(
@@ -431,8 +413,11 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                     ),
                                   ),
                                   Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
+                                    padding: const EdgeInsets.fromLTRB(
+                                      10,
+                                      4,
+                                      10,
+                                      0,
                                     ),
                                     child: Column(
                                       children: [
@@ -474,7 +459,6 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                     child: _TeamInfo(
                                       name: awayName,
                                       logoUrl: awayLogo,
-                                      logoFirst: false,
                                     ),
                                   ),
                                 ],
@@ -2016,7 +2000,7 @@ class _RosterEditSheetState extends State<_RosterEditSheet> {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 8, 2),
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
               child: Row(
                 children: [
                   Expanded(
@@ -2042,10 +2026,6 @@ class _RosterEditSheetState extends State<_RosterEditSheet> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white70),
-                    onPressed: () => Navigator.pop(context),
                   ),
                 ],
               ),

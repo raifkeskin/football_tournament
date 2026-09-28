@@ -54,10 +54,12 @@ class SupabaseTeamService implements ITeamService {
     }
   }
 
+  /// Postgres her 8-4-4-4-12 onaltılık değeri uuid kabul eder; sürüm/varyant
+  /// hanesi kontrol edilmez (ör. 66666666-aaaa-0000-0000-000000000001).
   bool _isUuid(String input) {
     final s = input.trim();
     return RegExp(
-      r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
+      r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
     ).hasMatch(s);
   }
 
@@ -1138,14 +1140,26 @@ class SupabaseTeamService implements ITeamService {
           if (_isUuid(id)) 'id.eq.$id',
           if (raw10.isNotEmpty && raw10 != id && _isUuid(raw10)) 'id.eq.$raw10',
         ];
-        await _client.from('players').update(payload).or(clauses.join(','));
+        // Oyuncu bulunamazsa ya da RLS engellerse Supabase hata vermez, 0 satır
+        // günceller; aksi halde form "kaydedildi" deyip fotoğraf vb. kaybolurdu.
+        final updated = await _client
+            .from('players')
+            .update(payload)
+            .or(clauses.join(','))
+            .select('id');
+        if (updated.isEmpty) {
+          throw Exception(
+            'Oyuncu güncellenemedi: kayıt bulunamadı ya da güncelleme yetkisi '
+            'yok ($id).',
+          );
+        }
         AppConfig.sqlLogResult(
           table: 'players',
           operation: 'UPDATE',
           caller: caller,
           service: _serviceName,
           method: 'updatePlayer',
-          count: 1,
+          count: updated.length,
         );
       } catch (e) {
         AppConfig.sqlLogResult(

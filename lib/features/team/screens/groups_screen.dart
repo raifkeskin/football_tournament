@@ -9,6 +9,7 @@ import '../../../core/config/app_config.dart';
 import '../../tournament/services/interfaces/i_league_service.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/services/global_filter.dart';
+import '../../../core/utils/team_name.dart';
 import 'team_squad_screen.dart';
 
 // YENİ OLUŞTURDUĞUMUZ ORTAK BİLEŞENİ IMPORT EDİYORUZ
@@ -1040,14 +1041,6 @@ class _StandingsRow extends StatelessWidget {
   final bool showZones;
   final VoidCallback onTap;
 
-  String _shortenMasters(String s) {
-    return s
-        .replaceAll('Masterlar', 'M.')
-        .replaceAll('Master', 'M.')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
-  }
-
   int _asInt(dynamic v) {
     if (v is num) return v.toInt();
     return int.tryParse('${v ?? ''}') ?? 0;
@@ -1080,7 +1073,7 @@ class _StandingsRow extends StatelessWidget {
       );
     }
 
-    final displayName = _shortenMasters(teamName);
+    final displayName = shortTeamName(teamName);
     final isLeader = index == 0 && _asInt(stats['P']) > 0;
 
     Color zoneColor = Colors.transparent;
@@ -1146,21 +1139,18 @@ class _StandingsRow extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               // Takım
-              // Logo yok: ad her zaman tam görünür; yine de sığmazsa "…" ile
-              // kesilmek yerine yazı hafifçe küçülür.
+              // Sabit yazı boyutu; sığmayan uzun adlar küçülmek yerine
+              // 2 satıra iner (tüm satırlar aynı puntoda görünür).
               Expanded(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    displayName,
-                    maxLines: 1,
-                    softWrap: false,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      color: teamText,
-                      fontSize: 14,
-                    ),
+                child: Text(
+                  displayName,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: teamText,
+                    fontSize: 12,
+                    height: 1.15,
                   ),
                 ),
               ),

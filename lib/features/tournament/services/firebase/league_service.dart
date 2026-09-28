@@ -186,6 +186,32 @@ class FirebaseLeagueService implements ILeagueService {
   }
 
   @override
+  Future<void> updatePitch({
+    required String pitchId,
+    required String name,
+    String? city,
+    String? country,
+    String? location,
+  }) async {
+    final id = pitchId.trim();
+    if (id.isEmpty) return;
+    String? clean(String? v) => (v ?? '').trim().isEmpty ? null : v!.trim();
+    final data = <String, dynamic>{
+      'name': name.trim(),
+      'city': clean(city),
+      'country': clean(country),
+      'location': clean(location),
+    };
+    if (AppConfig.activeDatabase == DatabaseType.supabase) {
+      final c = _supabase;
+      if (c == null) return;
+      await c.from('pitches').update(data).eq('id', id);
+      return;
+    }
+    await _firestore.collection('pitches').doc(id).update(data);
+  }
+
+  @override
   Future<void> deletePitch(String pitchId) async {
     final id = pitchId.trim();
     if (id.isEmpty) return;

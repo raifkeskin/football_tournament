@@ -10,6 +10,7 @@ import '../../team/services/interfaces/i_team_service.dart';
 import '../services/interfaces/i_league_service.dart';
 import '../../tournament/models/league.dart';
 import '../../../core/services/service_locator.dart';
+import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../player/services/penalty_service.dart';
 
@@ -144,28 +145,27 @@ class _AdminPenaltyManagementScreenState
     String? initialPlayerId,
     String? penaltyId,
   }) async {
-    final didSave = await showModalBottomSheet<bool>(
+    final didSave = await showDialog<bool>(
       context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.8,
-      ),
-      showDragHandle: true,
-      clipBehavior: Clip.antiAlias,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (_) => _PenaltyEditorSheet(
-        leagueService: _leagueService,
-        teamService: _teamService,
-        penaltyService: _penaltyService,
-        sb: _sb,
-        initialLeagueId: (initialLeagueId ?? _selectedLeagueId).trim(),
-        initialSeasonId: (initialSeasonId ?? _selectedSeasonId).trim(),
-        initialTeamId: (initialTeamId ?? '').trim(),
-        initialPlayerId: (initialPlayerId ?? '').trim(),
-        penaltyId: (penaltyId ?? '').trim(),
+      builder: (dctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        child: Container(
+          height: MediaQuery.of(dctx).size.height * 0.8,
+          clipBehavior: Clip.antiAlias,
+          decoration: adminDialogDecoration(),
+          child: _PenaltyEditorSheet(
+            leagueService: _leagueService,
+            teamService: _teamService,
+            penaltyService: _penaltyService,
+            sb: _sb,
+            initialLeagueId: (initialLeagueId ?? _selectedLeagueId).trim(),
+            initialSeasonId: (initialSeasonId ?? _selectedSeasonId).trim(),
+            initialTeamId: (initialTeamId ?? '').trim(),
+            initialPlayerId: (initialPlayerId ?? '').trim(),
+            penaltyId: (penaltyId ?? '').trim(),
+          ),
+        ),
       ),
     );
     if (!mounted) return;
@@ -182,28 +182,68 @@ class _AdminPenaltyManagementScreenState
     }
   }
 
+  Future<void> _deletePenalty({
+    required String penaltyId,
+    required String playerId,
+    required String resolvedName,
+  }) async {
+    var displayName = resolvedName.trim();
+    if (displayName.isEmpty || displayName == playerId) {
+      try {
+        final m = await _fetchPlayersByIds([playerId]);
+        final n = (m[playerId]?['name'] ?? '').toString().trim();
+        if (n.isNotEmpty) displayName = n;
+      } catch (_) {}
+    }
+    if (!mounted) return;
+    final ok = await showAdminConfirmDialog(
+      context: context,
+      title: 'Cezayı Sil',
+      message:
+          '${displayName.isEmpty ? playerId : displayName} oyuncusunun ceza '
+          'kaydı silinecek.',
+    );
+    if (!ok) return;
+    try {
+      await _penaltyService.deletePenaltyById(penaltyId);
+      if (!mounted) return;
+      setState(() => _hiddenPenaltyIds.add(penaltyId));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Ceza silindi.')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Hata: $e')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isAdmin = AppSession.of(context).value.isAdmin;
     if (!isAdmin) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Ceza Yönetimi')),
-        body: const Center(
+      return const AdminPageScaffold(
+        title: 'Ceza Yönetimi',
+        body: Center(
           child: Text(
             'Bu sayfaya erişim yetkiniz yok.',
             textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white70),
           ),
         ),
       );
     }
     final cs = Theme.of(context).colorScheme;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Ceza Yönetimi'), centerTitle: true),
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _openPenaltySheet(),
-        child: const Icon(Icons.add),
-      ),
+    return AdminPageScaffold(
+      title: 'Ceza Yönetimi',
+      actions: [
+        AdminBarAction(
+          icon: Icons.gavel_rounded,
+          tooltip: 'Ceza Ekle',
+          onPressed: () => _openPenaltySheet(),
+        ),
+      ],
       body: Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
         child: Column(
@@ -491,8 +531,8 @@ class _AdminPenaltyManagementScreenState
                                             ? pTeamId
                                             : tName;
 
-                                        return Card(
-                                          margin: EdgeInsets.zero,
+                                        return Container(
+                                          decoration: adminCardDecoration(),
                                           child: ListTile(
                                             leading: pPhotoUrl.isEmpty
                                                 ? Container(
@@ -534,6 +574,7 @@ class _AdminPenaltyManagementScreenState
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
                                               style: const TextStyle(
+                                                color: Colors.white,
                                                 fontWeight: FontWeight.w900,
                                                 fontSize: 14,
                                               ),
@@ -593,19 +634,12 @@ class _AdminPenaltyManagementScreenState
                                                   ),
                                                 ),
                                                 const SizedBox(width: 6),
-                                                PopupMenuButton<
-                                                  _PenaltyMenuAction
-                                                >(
-                                                  tooltip: 'İşlemler',
-                                                  icon: Icon(
-                                                    Icons.more_vert,
-                                                    color: cs.onSurfaceVariant,
-                                                  ),
-                                                  onSelected: (action) async {
-                                                    if (action ==
-                                                        _PenaltyMenuAction
-                                                            .edit) {
-                                                      await _openPenaltySheet(
+                                                AdminSmallAction(
+                                                  icon: Icons.edit_outlined,
+                                                  tooltip: 'Düzenle',
+                                                  color: Colors.white70,
+                                                  onTap: () =>
+                                                      _openPenaltySheet(
                                                         initialLeagueId:
                                                             _selectedLeagueId,
                                                         initialSeasonId:
@@ -614,141 +648,19 @@ class _AdminPenaltyManagementScreenState
                                                         initialPlayerId:
                                                             pen.playerId,
                                                         penaltyId: pen.id,
-                                                      );
-                                                      return;
-                                                    }
-                                                    var displayName =
-                                                        resolvedName.trim();
-                                                    if (displayName.isEmpty ||
-                                                        displayName ==
-                                                            pen.playerId) {
-                                                      try {
-                                                        final m =
-                                                            await _fetchPlayersByIds(
-                                                              [pen.playerId],
-                                                            );
-                                                        final row =
-                                                            m[pen.playerId];
-                                                        final n =
-                                                            (row?['name'] ?? '')
-                                                                .toString()
-                                                                .trim();
-                                                        if (n.isNotEmpty) {
-                                                          displayName = n;
-                                                        }
-                                                      } catch (_) {}
-                                                    }
-                                                    final ok = await showDialog<bool>(
-                                                      context: context,
-                                                      builder: (ctx) {
-                                                        final n =
-                                                            displayName.isEmpty
-                                                            ? pen.playerId
-                                                            : displayName;
-                                                        return AlertDialog(
-                                                          title: const Text(
-                                                            'Cezayı sil?',
-                                                          ),
-                                                          content: Text(
-                                                            '$n oyuncusunun ceza kaydı silinecek.',
-                                                          ),
-                                                          actions: [
-                                                            TextButton(
-                                                              onPressed: () =>
-                                                                  Navigator.of(
-                                                                    ctx,
-                                                                  ).pop(false),
-                                                              child: const Text(
-                                                                'Vazgeç',
-                                                              ),
-                                                            ),
-                                                            FilledButton(
-                                                              onPressed: () =>
-                                                                  Navigator.of(
-                                                                    ctx,
-                                                                  ).pop(true),
-                                                              child: const Text(
-                                                                'Sil',
-                                                              ),
-                                                            ),
-                                                          ],
-                                                        );
-                                                      },
-                                                    );
-                                                    if (ok != true) return;
-                                                    try {
-                                                      await _penaltyService
-                                                          .deletePenaltyById(
-                                                            pen.id,
-                                                          );
-                                                      if (!context.mounted) {
-                                                        return;
-                                                      }
-                                                      setState(
-                                                        () => _hiddenPenaltyIds
-                                                            .add(pen.id),
-                                                      );
-                                                      ScaffoldMessenger.of(
-                                                        context,
-                                                      ).showSnackBar(
-                                                        const SnackBar(
-                                                          content: Text(
-                                                            'Ceza silindi.',
-                                                          ),
-                                                        ),
-                                                      );
-                                                    } catch (e) {
-                                                      if (!context.mounted) {
-                                                        return;
-                                                      }
-                                                      ScaffoldMessenger.of(
-                                                        context,
-                                                      ).showSnackBar(
-                                                        SnackBar(
-                                                          content: Text(
-                                                            'Hata: $e',
-                                                          ),
-                                                        ),
-                                                      );
-                                                    }
-                                                  },
-                                                  itemBuilder: (context) => [
-                                                    const PopupMenuItem(
-                                                      value: _PenaltyMenuAction
-                                                          .edit,
-                                                      child: Row(
-                                                        children: [
-                                                          Icon(
-                                                            Icons.edit_outlined,
-                                                            size: 18,
-                                                          ),
-                                                          SizedBox(width: 10),
-                                                          Text('Düzenle'),
-                                                        ],
                                                       ),
-                                                    ),
-                                                    PopupMenuItem(
-                                                      value: _PenaltyMenuAction
-                                                          .delete,
-                                                      child: Row(
-                                                        children: const [
-                                                          Icon(
-                                                            Icons
-                                                                .delete_outline,
-                                                            size: 18,
-                                                            color: Colors.red,
-                                                          ),
-                                                          SizedBox(width: 10),
-                                                          Text(
-                                                            'Sil',
-                                                            style: TextStyle(
-                                                              color: Colors.red,
-                                                            ),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                    ),
-                                                  ],
+                                                ),
+                                                const SizedBox(width: 6),
+                                                AdminSmallAction(
+                                                  icon: Icons
+                                                      .delete_outline_rounded,
+                                                  tooltip: 'Sil',
+                                                  color: kAdminDanger,
+                                                  onTap: () => _deletePenalty(
+                                                    penaltyId: pen.id,
+                                                    playerId: pen.playerId,
+                                                    resolvedName: resolvedName,
+                                                  ),
                                                 ),
                                               ],
                                             ),
@@ -1009,7 +921,7 @@ class _PenaltyEditorSheetState extends State<_PenaltyEditorSheet> {
     final viewInsets = MediaQuery.of(context).viewInsets;
     return Padding(
       padding: EdgeInsets.fromLTRB(16, 8, 16, 16 + viewInsets.bottom),
-child: ListView(
+      child: ListView(
         children: [
           StreamBuilder<List<League>>(
             stream: widget.leagueService.watchLeagues(),
@@ -1036,7 +948,8 @@ child: ListView(
                   value: _leagueId.isEmpty || !byId.containsKey(_leagueId)
                       ? null
                       : leagues.where((l) => l.id == _leagueId).firstOrNull,
-                  itemLabelBuilder: (l) => l.name.trim().isEmpty ? l.id : l.name,
+                  itemLabelBuilder: (l) =>
+                      l.name.trim().isEmpty ? l.id : l.name,
                   onChanged: (League? selectedLeague) {
                     setState(() {
                       _leagueId = selectedLeague?.id ?? '';
@@ -1284,5 +1197,3 @@ child: ListView(
 }
 
 enum _PenaltyFilter { active, passive, all }
-
-enum _PenaltyMenuAction { edit, delete }

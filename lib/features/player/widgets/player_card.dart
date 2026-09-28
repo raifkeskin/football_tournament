@@ -2,11 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../tournament/models/league.dart';
-import '../../../core/services/service_locator.dart';
-import '../../match/services/interfaces/i_match_service.dart';
-import '../models/player_stats.dart';
 import '../../../core/widgets/web_safe_image.dart';
 
+// Uygulamanın ortak renkleri
+const _bgDark = Color(0xFF0F172A);
+const _surface = Color(0xFF1E293B);
+const _forest = Color(0xFF064E3B);
+const _accent = Color(0xFF10B981);
+const _mid = Color(0xFF94A3B8);
+const _purple = Color(0xFFA78BFA);
+const _yellow = Color(0xFFFBBF24);
+const _red = Color(0xFFEF4444);
+
+/// Oyuncu kartı: üstte kimlik, ortada kariyer özeti, altta turnuva/sezon
+/// bazında sıkı bir tablo. İstatistikler maç olaylarından hesaplanır.
 class PlayerCard extends StatefulWidget {
   const PlayerCard({
     super.key,
@@ -38,18 +47,9 @@ class PlayerCard extends StatefulWidget {
 }
 
 class _PlayerCardState extends State<PlayerCard> {
-  final IMatchService _matchService = ServiceLocator.matchService;
-  late String _selectedSeasonId;
-  String _selectedTournamentId = '';
-  late final Future<_PlayerCardData> _future;
+  late final Future<_PlayerCardData> _future = _load();
 
-  @override
-  void initState() {
-    super.initState();
-    final initial = widget.initialSeasonId.trim();
-    _selectedSeasonId = initial;
-    _future = _load();
-  }
+  SupabaseClient get _sb => Supabase.instance.client;
 
   int? _ageFromBirthDate(String? birthDate) {
     final s = (birthDate ?? '').trim();
@@ -69,6 +69,13 @@ class _PlayerCardState extends State<PlayerCard> {
     return age < 0 ? null : age;
   }
 
+  String _birthYear() {
+    final s = widget.birthDate.trim();
+    if (s.isEmpty) return '-';
+    final any = RegExp(r'(\d{4})').firstMatch(s);
+    return any?.group(1) ?? '-';
+  }
+
   String _normalizeUrl(String raw) {
     final url = raw.trim();
     if (url.isEmpty) return '';
@@ -76,39 +83,17 @@ class _PlayerCardState extends State<PlayerCard> {
     return 'https://$url';
   }
 
-  Stream<PlayerStats> _watchSelectedStats() {
-    final seasonId = _selectedSeasonId.trim();
-    if (seasonId.isEmpty) {
-      return Stream<PlayerStats>.value(
-        const PlayerStats(
-          id: '',
-          playerPhone: '',
-          tournamentId: '',
-          teamId: '',
-        ),
-      );
-    }
-    final phone = widget.playerPhone.trim();
-    return _matchService.watchPlayerStats(tournamentId: seasonId).map((all) {
-      for (final s in all) {
-        if (s.playerPhone.trim() == phone) return s;
-      }
-      return PlayerStats(
-        id: PlayerStats.docId(playerPhone: phone, tournamentId: seasonId),
-        playerPhone: phone,
-        tournamentId: seasonId,
-        teamId: '',
-        matchesPlayed: 0,
-        goals: 0,
-        assists: 0,
-        yellowCards: 0,
-        redCards: 0,
-        manOfTheMatch: 0,
-      );
-    });
+  String _initials(String name) {
+    final parts = name
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((e) => e.isNotEmpty)
+        .toList();
+    if (parts.isEmpty) return '?';
+    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
+    return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
+        .toUpperCase();
   }
-
-  SupabaseClient get _sb => Supabase.instance.client;
 
   int _readInt(dynamic v) {
     if (v == null) return 0;
@@ -119,26 +104,151 @@ class _PlayerCardState extends State<PlayerCard> {
         0;
   }
 
-  Future<_PlayerCardData> _load() async {
-    final playerKey = widget.playerPhone.trim();
-    if (playerKey.isEmpty) {
-      return _PlayerCardData.empty();
+  // ---------------------------------------------------------------------------
+  // Veri
+  // ---------------------------------------------------------------------------
+
+  static final _uuidLike = RegExp(
+    r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+  );
+
+  /// Oyuncunun sezon bazında istatistikleri:
+  /// - Gol/asist/kart/maçın adamı: match_events
+  /// - Oynanan maç: esamede (match_rosters) olduğu ya da olayı bulunan bitmiş
+  ///   maçlar
+  /// Olayı olmayan sezonlarda player_season_stats kayıtları kullanılır.
+  Future<Map<String, _StatTotals>> _loadTotalsBySeason(String key) async {
+    // Kart telefon ya da id ile açılabiliyor; id'ye çevir.
+    var pid = key;
+    if (!_uuidLike.hasMatch(key)) {
+      try {
+        final r = await _sb
+            .from('players')
+            .select('id')
+            .eq('phone', key)
+            .limit(1);
+        if (r.isEmpty) return const <String, _StatTotals>{};
+        pid = (r.first['id'] ?? '').toString();
+      } catch (_) {
+        return const <String, _StatTotals>{};
+      }
     }
 
-    final statsRows = <Map<String, dynamic>>[];
+    final events = <Map<String, dynamic>>[];
+    final rosterMatchIds = <String>{};
     try {
       final res = await _sb
-          .from('player_statistics')
-          .select()
-          .or('player_id.eq.$playerKey,player_phone.eq.$playerKey');
-      statsRows.addAll(res.cast<Map<String, dynamic>>());
+          .from('match_events')
+          .select(
+            'match_id, event_type, player_id, assist_player_id, is_own_goal',
+          )
+          .or('player_id.eq.$pid,assist_player_id.eq.$pid');
+      events.addAll(res.cast<Map<String, dynamic>>());
+    } catch (_) {}
+    try {
+      final res = await _sb
+          .from('match_rosters')
+          .select('match_id')
+          .eq('player_id', pid);
+      for (final r in res) {
+        final id = (r['match_id'] ?? '').toString();
+        if (id.isNotEmpty) rosterMatchIds.add(id);
+      }
     } catch (_) {}
 
-    final seasonIds = <String>{};
-    for (final r in statsRows) {
-      final sid = (r['season_id'] ?? r['seasonId'] ?? '').toString().trim();
-      if (sid.isNotEmpty) seasonIds.add(sid);
+    final matchIds = {
+      ...rosterMatchIds,
+      for (final e in events) (e['match_id'] ?? '').toString(),
+    }..remove('');
+
+    final seasonByMatch = <String, String>{};
+    final finished = <String>{};
+    if (matchIds.isNotEmpty) {
+      try {
+        final res = await _sb
+            .from('matches')
+            .select('id, season_id, status')
+            .inFilter('id', matchIds.toList());
+        for (final m in res) {
+          final id = (m['id'] ?? '').toString();
+          final sid = (m['season_id'] ?? '').toString();
+          if (id.isEmpty || sid.isEmpty) continue;
+          seasonByMatch[id] = sid;
+          if ((m['status'] ?? '').toString() == 'finished') finished.add(id);
+        }
+      } catch (_) {}
     }
+
+    final out = <String, _StatTotals>{};
+    void add(String? matchId, _StatTotals t) {
+      final sid = seasonByMatch[matchId ?? ''];
+      if (sid == null) return;
+      out[sid] = (out[sid] ?? const _StatTotals()) + t;
+    }
+
+    // Oynanan maç: esamede olduğu ya da olayı olan bitmiş maçlar (tekil).
+    final played = {
+      ...rosterMatchIds,
+      for (final e in events)
+        if ((e['player_id'] ?? '').toString() == pid)
+          (e['match_id'] ?? '').toString(),
+    }.where(finished.contains);
+    for (final mid in played) {
+      add(mid, const _StatTotals(matches: 1));
+    }
+
+    for (final e in events) {
+      final mid = (e['match_id'] ?? '').toString();
+      final type = (e['event_type'] ?? '').toString();
+      final isScorer = (e['player_id'] ?? '').toString() == pid;
+      final isAssist = (e['assist_player_id'] ?? '').toString() == pid;
+      if (type == 'goal') {
+        if (isScorer && e['is_own_goal'] != true) {
+          add(mid, const _StatTotals(goals: 1));
+        }
+        if (isAssist) add(mid, const _StatTotals(assists: 1));
+      } else if (isScorer) {
+        switch (type) {
+          case 'assist':
+            add(mid, const _StatTotals(assists: 1));
+          case 'yellow_card':
+            add(mid, const _StatTotals(yellow: 1));
+          case 'red_card':
+            add(mid, const _StatTotals(red: 1));
+          case 'man_of_the_match':
+            add(mid, const _StatTotals(motm: 1));
+        }
+      }
+    }
+
+    // Olayı olmayan sezonlar için kayıtlı sezon istatistikleri (ör. mock veri).
+    try {
+      final res = await _sb
+          .from('player_season_stats')
+          .select()
+          .eq('player_id', pid);
+      for (final r in res) {
+        final sid = (r['season_id'] ?? '').toString();
+        if (sid.isEmpty || out.containsKey(sid)) continue;
+        out[sid] = _StatTotals(
+          matches: _readInt(r['matches_played']),
+          goals: _readInt(r['goals']),
+          assists: _readInt(r['assists']),
+          yellow: _readInt(r['yellow_cards']),
+          red: _readInt(r['red_cards']),
+        );
+      }
+    } catch (_) {}
+
+    return out;
+  }
+
+  Future<_PlayerCardData> _load() async {
+    final playerKey = widget.playerPhone.trim();
+    if (playerKey.isEmpty) return _PlayerCardData.empty();
+
+    final totalsBySeason = await _loadTotalsBySeason(playerKey);
+    final seasonIds = totalsBySeason.keys.toList();
 
     final seasonById = <String, Map<String, dynamic>>{};
     final leagueById = <String, Map<String, dynamic>>{};
@@ -146,28 +256,25 @@ class _PlayerCardState extends State<PlayerCard> {
       try {
         final res = await _sb
             .from('seasons')
-            .select('id, name, league_id')
-            .inFilter('id', seasonIds.toList());
-        for (final any in res) {
-          final row = (any as Map).cast<String, dynamic>();
+            .select('id, name, league_id, start_date')
+            .inFilter('id', seasonIds);
+        for (final row in res) {
           final id = (row['id'] ?? '').toString().trim();
           if (id.isNotEmpty) seasonById[id] = row;
         }
       } catch (_) {}
 
-      final leagueIds = <String>{};
-      for (final s in seasonById.values) {
-        final lid = (s['league_id'] ?? '').toString().trim();
-        if (lid.isNotEmpty) leagueIds.add(lid);
-      }
+      final leagueIds = {
+        for (final s in seasonById.values)
+          (s['league_id'] ?? '').toString().trim(),
+      }..remove('');
       if (leagueIds.isNotEmpty) {
         try {
           final res = await _sb
               .from('leagues')
               .select('id, name')
               .inFilter('id', leagueIds.toList());
-          for (final any in res) {
-            final row = (any as Map).cast<String, dynamic>();
+          for (final row in res) {
             final id = (row['id'] ?? '').toString().trim();
             if (id.isNotEmpty) leagueById[id] = row;
           }
@@ -176,754 +283,100 @@ class _PlayerCardState extends State<PlayerCard> {
     }
 
     final byLeague = <String, _TournamentNode>{};
-    _StatTotals overall = const _StatTotals();
-
-    for (final r in statsRows) {
-      final seasonId = (r['season_id'] ?? r['seasonId'] ?? '').toString().trim();
-      if (seasonId.isEmpty) continue;
-
-      final matches = _readInt(r['matches_played'] ?? r['matchesPlayed'] ?? r['matches']);
-      final goals = _readInt(r['goals'] ?? r['goal']);
-      final assists = _readInt(r['assists'] ?? r['assist']);
-      final yellow = _readInt(r['yellow_cards'] ?? r['yellowCards']);
-      final red = _readInt(r['red_cards'] ?? r['redCards']);
-      final totals = _StatTotals(
-        matches: matches,
-        goals: goals,
-        assists: assists,
-        yellow: yellow,
-        red: red,
-      );
-
-      overall = overall + totals;
-
-      final seasonRow = seasonById[seasonId];
-      final leagueId =
-          (seasonRow?['league_id'] ?? r['league_id'] ?? r['tournament_id'] ?? '')
-              .toString()
-              .trim();
-      final leagueName = (leagueById[leagueId]?['name'] ?? '').toString().trim();
-      final seasonName = (seasonRow?['name'] ?? '').toString().trim();
-
-      final tKey = leagueId.isEmpty ? '__UNKNOWN_TOURNAMENT__' : leagueId;
-      final tNode = byLeague.putIfAbsent(
-        tKey,
+    var overall = const _StatTotals();
+    for (final entry in totalsBySeason.entries) {
+      overall = overall + entry.value;
+      final seasonRow = seasonById[entry.key];
+      final leagueId = (seasonRow?['league_id'] ?? '').toString().trim();
+      final leagueName = (leagueById[leagueId]?['name'] ?? '')
+          .toString()
+          .trim();
+      final node = byLeague.putIfAbsent(
+        leagueId.isEmpty ? '__unknown__' : leagueId,
         () => _TournamentNode(
-          tournamentId: tKey,
-          tournamentName: leagueName.isEmpty ? 'Turnuva' : leagueName,
-          seasons: <String, _SeasonNode>{},
+          name: leagueName.isEmpty ? 'Turnuva' : leagueName,
+          seasons: [],
         ),
       );
-      final sNode = tNode.seasons.putIfAbsent(
-        seasonId,
-        () => _SeasonNode(
-          seasonId: seasonId,
-          seasonName: seasonName.isEmpty ? seasonId : seasonName,
-          totals: const _StatTotals(),
+      node.seasons.add(
+        _SeasonNode(
+          name: (seasonRow?['name'] ?? '').toString().trim().isEmpty
+              ? 'Sezon'
+              : seasonRow!['name'].toString().trim(),
+          sortKey: (seasonRow?['start_date'] ?? seasonRow?['name'] ?? '')
+              .toString(),
+          totals: entry.value,
         ),
       );
-      tNode.seasons[seasonId] = sNode.copyWith(totals: sNode.totals + totals);
     }
 
-    final tournaments = byLeague.values.toList()
-      ..sort((a, b) => a.tournamentName.toLowerCase().compareTo(b.tournamentName.toLowerCase()));
+    // En yeni sezon üstte; turnuvalar en yeni sezonlarına göre sıralı.
+    final tournaments = byLeague.values.toList();
     for (final t in tournaments) {
-      final seasonList = t.seasons.values.toList()
-        ..sort((a, b) => a.seasonName.toLowerCase().compareTo(b.seasonName.toLowerCase()));
-      t.sortedSeasons = seasonList;
+      t.seasons.sort((a, b) => b.sortKey.compareTo(a.sortKey));
     }
-
-    return _PlayerCardData(
-      overall: overall,
-      tournaments: tournaments,
+    tournaments.sort(
+      (a, b) => b.seasons.first.sortKey.compareTo(a.seasons.first.sortKey),
     );
+
+    return _PlayerCardData(overall: overall, tournaments: tournaments);
   }
+
+  // ---------------------------------------------------------------------------
+  // Görünüm
+  // ---------------------------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
-    const navy = Color(0xFF0B1B3A);
-    const muted = Color(0xFF64748B);
-    const green = Color(0xFF10B981);
-    const badgeBlue = Color(0xFF0EA5E9);
-    const border = Color(0xFFE2E8F0);
-    const chipBg = Color(0xFFF8FAFC);
-
-    final name = widget.name.trim().isEmpty ? '-' : widget.name.trim();
-    final number = widget.number.trim();
-    final pos = widget.position.trim().isEmpty ? '-' : widget.position.trim();
-    final age = _ageFromBirthDate(widget.birthDate);
-
-    String birthYear() {
-      final s = widget.birthDate.trim();
-      if (s.isEmpty) return '-';
-      final m = RegExp(r'^(\d{2})/(\d{2})/(\d{4})$').firstMatch(s);
-      if (m != null) return m.group(3) ?? '-';
-      final anyYear = RegExp(r'(\d{4})').firstMatch(s);
-      return anyYear?.group(1) ?? '-';
-    }
-
-    Widget infoTile({
-      required String label,
-      required String value,
-      required double labelSize,
-      required double valueSize,
-      required EdgeInsets padding,
-    }) {
-      return Container(
-        padding: padding,
-        decoration: BoxDecoration(
-          color: chipBg,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: border),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 14,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                label.toUpperCase(),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: muted,
-                  fontWeight: FontWeight.w900,
-                  fontSize: labelSize,
-                  letterSpacing: 0.6,
-                ),
-              ),
-            ),
-            const SizedBox(height: 6),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                value,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: navy,
-                  fontWeight: FontWeight.w900,
-                  fontSize: valueSize,
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    final coverUrl = _normalizeUrl(widget.photoUrl);
-
     return Material(
-      color: const Color(0xFFF8FAFC),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final safeTop = MediaQuery.of(context).padding.top;
-          final h = constraints.maxHeight;
-          final heroH = (h * 0.25).clamp(160.0, 240.0);
-          const overlap = 22.0;
-          final isNarrow = constraints.maxWidth < 360;
-          final infoAspect = isNarrow ? 1.25 : 1.35;
-          final statAspect = isNarrow ? 1.75 : 1.95;
-
-          Widget statCard({
-            required String title,
-            required String value,
-            required Widget icon,
-            Color? valueColor,
-          }) {
-            return Container(
-              padding: EdgeInsets.all(isNarrow ? 12 : 14),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: border),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 16,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: muted,
-                            fontWeight: FontWeight.w700,
-                            fontSize: isNarrow ? 11 : 12,
-                          ),
-                        ),
-                        SizedBox(height: isNarrow ? 6 : 8),
-                        Text(
-                          value,
-                          style: TextStyle(
-                            color: valueColor ?? navy,
-                            fontWeight: FontWeight.w900,
-                            fontSize: isNarrow ? 20 : 22,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  icon,
-                ],
-              ),
-            );
-          }
-
-          Widget iconBadge(IconData icon) {
-            return Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: green.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Icon(icon, color: green, size: 20),
-            );
-          }
-
-          return Stack(
+      color: _bgDark,
+      child: FutureBuilder<_PlayerCardData>(
+        future: _future,
+        builder: (context, snap) {
+          final loading = snap.connectionState != ConnectionState.done;
+          final data = snap.data ?? _PlayerCardData.empty();
+          return ListView(
+            padding: EdgeInsets.zero,
             children: [
-              Positioned(
-                left: 0,
-                right: 0,
-                top: 0,
-                height: heroH,
-                child: coverUrl.isEmpty
-                    ? Container(
-                        color: const Color(0xFFE2E8F0),
-                        child: const Center(
-                          child: Icon(
-                            Icons.person,
-                            size: 70,
-                            color: Color(0xFF94A3B8),
-                          ),
+              _hero(context),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _infoRow(),
+                    const SizedBox(height: 20),
+                    const _SectionTitle(
+                      icon: Icons.insights_rounded,
+                      title: 'Kariyer Özeti',
+                    ),
+                    const SizedBox(height: 10),
+                    if (loading)
+                      const Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Center(child: CircularProgressIndicator()),
+                      )
+                    else
+                      _summaryGrid(data.overall),
+                    const SizedBox(height: 22),
+                    const _SectionTitle(
+                      icon: Icons.emoji_events_outlined,
+                      title: 'Turnuva Geçmişi',
+                    ),
+                    const SizedBox(height: 10),
+                    if (!loading && data.tournaments.isEmpty)
+                      Container(
+                        padding: const EdgeInsets.all(18),
+                        decoration: _panel(),
+                        child: const Text(
+                          'Henüz turnuva verisi yok.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: _mid),
                         ),
                       )
-                    : WebSafeImage(
-                        url: coverUrl,
-                        width: double.infinity,
-                        height: heroH,
-                        isCircle: false,
-                        fit: BoxFit.cover,
-                        fallbackIconSize: 70,
-                      ),
-              ),
-              Positioned(
-                top: safeTop + 10,
-                right: 12,
-                child: Material(
-                  color: Colors.black.withValues(alpha: 0.30),
-                  shape: const CircleBorder(),
-                  child: IconButton(
-                    onPressed: () => Navigator.of(context).maybePop(),
-                    icon: const Icon(Icons.close_rounded),
-                    color: Colors.white,
-                    tooltip: 'Kapat',
-                  ),
-                ),
-              ),
-              Positioned(
-                left: 0,
-                right: 0,
-                top: heroH - overlap,
-                bottom: 0,
-                child: ClipRRect(
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(28),
-                  ),
-                  child: Container(
-                    color: Colors.white,
-                    child: FutureBuilder<_PlayerCardData>(
-                      future: _future,
-                      builder: (context, snapshot) {
-                        final data = snapshot.data ?? _PlayerCardData.empty();
-                        final tournaments = data.tournaments;
-
-                        String? findTournamentIdForSeason(String seasonId) {
-                          final sid = seasonId.trim();
-                          if (sid.isEmpty) return null;
-                          for (final t in tournaments) {
-                            for (final s in t.sortedSeasons) {
-                              if (s.seasonId.trim() == sid) return t.tournamentId;
-                            }
-                          }
-                          return null;
-                        }
-
-                        String? ensureTournament() {
-                          final current = _selectedTournamentId.trim();
-                          if (current.isNotEmpty &&
-                              tournaments.any((t) => t.tournamentId == current)) {
-                            return current;
-                          }
-                          final inferred = findTournamentIdForSeason(_selectedSeasonId);
-                          if (inferred != null) return inferred;
-                          if (tournaments.isNotEmpty) return tournaments.first.tournamentId;
-                          return null;
-                        }
-
-                        final effectiveTournamentId = ensureTournament() ?? '';
-
-                        final selectedTournament = tournaments
-                            .where((t) => t.tournamentId == effectiveTournamentId)
-                            .toList(growable: false);
-
-                        final seasonsInTournament = selectedTournament.isEmpty
-                            ? const <_SeasonNode>[]
-                            : selectedTournament.first.sortedSeasons;
-
-                        final effectiveSeasonId = seasonsInTournament.any(
-                          (s) => s.seasonId.trim() == _selectedSeasonId.trim(),
-                        )
-                            ? _selectedSeasonId.trim()
-                            : (seasonsInTournament.isEmpty
-                                ? ''
-                                : seasonsInTournament.first.seasonId.trim());
-
-                        if (effectiveTournamentId != _selectedTournamentId.trim() ||
-                            effectiveSeasonId != _selectedSeasonId.trim()) {
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            if (!mounted) return;
-                            setState(() {
-                              _selectedTournamentId = effectiveTournamentId;
-                              _selectedSeasonId = effectiveSeasonId;
-                            });
-                          });
-                        }
-
-                        Widget numberBadge() {
-                          final text = number.isEmpty ? '-' : number;
-                          return Container(
-                            width: 62,
-                            height: 62,
-                            decoration: BoxDecoration(
-                              color: badgeBlue,
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.10),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 6),
-                                ),
-                              ],
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(8),
-                              child: Center(
-                                child: FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: Text(
-                                    text,
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w900,
-                                      fontSize: 22,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        }
-
-                        return ListView(
-                          padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
-                          children: [
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    name,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: navy,
-                                      fontWeight: FontWeight.w900,
-                                      fontSize: 26,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                numberBadge(),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-                            GridView.count(
-                              padding: EdgeInsets.zero,
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              crossAxisCount: 3,
-                              crossAxisSpacing: 12,
-                              mainAxisSpacing: 12,
-                              childAspectRatio: infoAspect,
-                              children: [
-                                infoTile(
-                                  label: 'Mevki',
-                                  value: pos,
-                                  labelSize: isNarrow ? 10 : 11,
-                                  valueSize: isNarrow ? 14 : 16,
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: isNarrow ? 10 : 12,
-                                    vertical: isNarrow ? 10 : 12,
-                                  ),
-                                ),
-                                infoTile(
-                                  label: 'Yaş',
-                                  value: age == null ? '-' : '$age',
-                                  labelSize: isNarrow ? 10 : 11,
-                                  valueSize: isNarrow ? 14 : 16,
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: isNarrow ? 10 : 12,
-                                    vertical: isNarrow ? 10 : 12,
-                                  ),
-                                ),
-                                infoTile(
-                                  label: 'Boy',
-                                  value: widget.height == null ? '-' : '${widget.height} cm',
-                                  labelSize: isNarrow ? 10 : 11,
-                                  valueSize: isNarrow ? 14 : 16,
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: isNarrow ? 10 : 12,
-                                    vertical: isNarrow ? 10 : 12,
-                                  ),
-                                ),
-                                infoTile(
-                                  label: 'Kilo',
-                                  value: widget.weight == null ? '-' : '${widget.weight} kg',
-                                  labelSize: isNarrow ? 10 : 11,
-                                  valueSize: isNarrow ? 14 : 16,
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: isNarrow ? 10 : 12,
-                                    vertical: isNarrow ? 10 : 12,
-                                  ),
-                                ),
-                                infoTile(
-                                  label: 'Doğum',
-                                  value: birthYear(),
-                                  labelSize: isNarrow ? 10 : 11,
-                                  valueSize: isNarrow ? 14 : 16,
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: isNarrow ? 10 : 12,
-                                    vertical: isNarrow ? 10 : 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 18),
-                            Row(
-                              children: const [
-                                Icon(Icons.insights_outlined, color: green, size: 20),
-                                SizedBox(width: 8),
-                                Text(
-                                  'Genel istatistikler',
-                                  style: TextStyle(
-                                    color: navy,
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            GridView.count(
-                              padding: EdgeInsets.zero,
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              crossAxisCount: 2,
-                              crossAxisSpacing: 12,
-                              mainAxisSpacing: 12,
-                              childAspectRatio: statAspect,
-                              children: [
-                                statCard(
-                                  title: 'Oynanan Maç',
-                                  value: '${data.overall.matches}',
-                                  icon: iconBadge(Icons.sports_soccer_outlined),
-                                ),
-                                statCard(
-                                  title: 'Gol / Asist',
-                                  value: '${data.overall.goals} / ${data.overall.assists}',
-                                  valueColor: green,
-                                  icon: iconBadge(Icons.gps_fixed_rounded),
-                                ),
-                                statCard(
-                                  title: 'Maçın Adamı',
-                                  value: '${data.overall.matches}',
-                                  valueColor: const Color(0xFF7C3AED),
-                                  icon: Container(
-                                    width: 38,
-                                    height: 38,
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF7C3AED).withValues(alpha: 0.12),
-                                      borderRadius: BorderRadius.circular(14),
-                                    ),
-                                    child: const Icon(
-                                      Icons.group_outlined,
-                                      color: Color(0xFF7C3AED),
-                                      size: 20,
-                                    ),
-                                  ),
-                                ),
-                                statCard(
-                                  title: 'Kartlar (S/K)',
-                                  value: '${data.overall.yellow} / ${data.overall.red}',
-                                  icon: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Container(
-                                        width: 10,
-                                        height: 18,
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFFFBBF24),
-                                          borderRadius: BorderRadius.circular(3),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Container(
-                                        width: 10,
-                                        height: 18,
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFFEF4444),
-                                          borderRadius: BorderRadius.circular(3),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 18),
-                            Row(
-                              children: const [
-                                Icon(Icons.bar_chart_outlined, color: green, size: 20),
-                                SizedBox(width: 8),
-                                Text(
-                                  'Turnuva istatistikleri',
-                                  style: TextStyle(
-                                    color: navy,
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            if (tournaments.isEmpty)
-                              const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 18),
-                                child: Center(child: Text('Turnuva verisi bulunamadı.')),
-                              )
-                            else
-                              Theme(
-                                data: Theme.of(context).copyWith(
-                                  dividerColor: Colors.transparent,
-                                  splashColor: Colors.transparent,
-                                  highlightColor: Colors.transparent,
-                                ),
-                                child: Column(
-                                  children: [
-                                    for (final t in tournaments)
-                                      Container(
-                                        margin: const EdgeInsets.only(bottom: 10),
-                                        decoration: BoxDecoration(
-                                          color: chipBg,
-                                          borderRadius: BorderRadius.circular(16),
-                                          border: Border.all(color: border),
-                                        ),
-                                        child: ExpansionTile(
-                                          key: PageStorageKey<String>('t_${t.tournamentId}'),
-                                          initiallyExpanded:
-                                              t.tournamentId.trim() == effectiveTournamentId,
-                                          tilePadding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 4,
-                                          ),
-                                          childrenPadding:
-                                              const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                                          title: Text(
-                                            t.tournamentName.trim().isEmpty
-                                                ? 'Turnuva'
-                                                : t.tournamentName,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              color: navy,
-                                              fontWeight: FontWeight.w900,
-                                            ),
-                                          ),
-                                          children: [
-                                            for (final ss in t.sortedSeasons)
-                                              InkWell(
-                                                borderRadius: BorderRadius.circular(14),
-                                                onTap: () {
-                                                  setState(() {
-                                                    _selectedTournamentId = t.tournamentId;
-                                                    _selectedSeasonId = ss.seasonId;
-                                                  });
-                                                },
-                                                child: Container(
-                                                  padding: const EdgeInsets.symmetric(
-                                                    horizontal: 12,
-                                                    vertical: 10,
-                                                  ),
-                                                  margin: const EdgeInsets.only(top: 8),
-                                                  decoration: BoxDecoration(
-                                                    color: ss.seasonId.trim() == effectiveSeasonId
-                                                        ? Colors.white
-                                                        : Colors.transparent,
-                                                    borderRadius: BorderRadius.circular(14),
-                                                    border: Border.all(
-                                                      color: ss.seasonId.trim() == effectiveSeasonId
-                                                          ? green
-                                                          : border,
-                                                      width: ss.seasonId.trim() == effectiveSeasonId
-                                                          ? 1.4
-                                                          : 1.0,
-                                                    ),
-                                                  ),
-                                                  child: Row(
-                                                    children: [
-                                                      Expanded(
-                                                        child: Text(
-                                                          ss.seasonName.trim().isEmpty
-                                                              ? ss.seasonId
-                                                              : ss.seasonName,
-                                                          maxLines: 1,
-                                                          overflow: TextOverflow.ellipsis,
-                                                          style: TextStyle(
-                                                            color: navy,
-                                                            fontWeight:
-                                                                ss.seasonId.trim() ==
-                                                                        effectiveSeasonId
-                                                                    ? FontWeight.w900
-                                                                    : FontWeight.w800,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                      if (ss.seasonId.trim() == effectiveSeasonId)
-                                                        const Icon(
-                                                          Icons.check_circle_rounded,
-                                                          color: green,
-                                                          size: 20,
-                                                        ),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            const SizedBox(height: 14),
-                            StreamBuilder<PlayerStats>(
-                              stream: _watchSelectedStats(),
-                              builder: (context, snap) {
-                                final s = snap.data ??
-                                    const PlayerStats(
-                                      id: '',
-                                      playerPhone: '',
-                                      tournamentId: '',
-                                      teamId: '',
-                                    );
-                                final cardsValue = '${s.yellowCards} / ${s.redCards}';
-                                return GridView.count(
-                                  padding: EdgeInsets.zero,
-                                  shrinkWrap: true,
-                                  physics: const NeverScrollableScrollPhysics(),
-                                  crossAxisCount: 2,
-                                  crossAxisSpacing: 12,
-                                  mainAxisSpacing: 12,
-                                  childAspectRatio: statAspect,
-                                  children: [
-                                    statCard(
-                                      title: 'Oynanan Maç',
-                                      value: '${s.matchesPlayed}',
-                                      icon: iconBadge(Icons.sports_soccer_outlined),
-                                    ),
-                                    statCard(
-                                      title: 'Gol',
-                                      value: '${s.goals}',
-                                      valueColor: green,
-                                      icon: iconBadge(Icons.gps_fixed_rounded),
-                                    ),
-                                    statCard(
-                                      title: 'Asist',
-                                      value: '${s.assists}',
-                                      valueColor: const Color(0xFF7C3AED),
-                                      icon: Container(
-                                        width: 38,
-                                        height: 38,
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF7C3AED).withValues(alpha: 0.12),
-                                          borderRadius: BorderRadius.circular(14),
-                                        ),
-                                        child: const Icon(
-                                          Icons.group_outlined,
-                                          color: Color(0xFF7C3AED),
-                                          size: 20,
-                                        ),
-                                      ),
-                                    ),
-                                    statCard(
-                                      title: 'Kartlar (S/K)',
-                                      value: cardsValue,
-                                      icon: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Container(
-                                            width: 10,
-                                            height: 18,
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFFFBBF24),
-                                              borderRadius: BorderRadius.circular(3),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 6),
-                                          Container(
-                                            width: 10,
-                                            height: 18,
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFFEF4444),
-                                              borderRadius: BorderRadius.circular(3),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              },
-                            ),
-                          ],
-                        );
-                      },
-                    ),
-                  ),
+                    else if (!loading)
+                      _historyTable(data.tournaments),
+                  ],
                 ),
               ),
             ],
@@ -932,52 +385,535 @@ class _PlayerCardState extends State<PlayerCard> {
       ),
     );
   }
+
+  BoxDecoration _panel() => BoxDecoration(
+    color: Colors.white.withValues(alpha: 0.04),
+    borderRadius: BorderRadius.circular(16),
+    border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+  );
+
+  Widget _hero(BuildContext context) {
+    final photo = _normalizeUrl(widget.photoUrl);
+    final number = widget.number.trim();
+    final pos = widget.position.trim();
+    final name = widget.name.trim().isEmpty ? '-' : widget.name.trim();
+
+    if (photo.isNotEmpty) return _photoHero(context, photo, name, number, pos);
+
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [_surface, _forest],
+        ),
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
+      ),
+      padding: const EdgeInsets.fromLTRB(20, 14, 12, 22),
+      child: Column(
+        children: [
+          Align(
+            alignment: Alignment.topRight,
+            child: IconButton(
+              onPressed: () => Navigator.of(context).maybePop(),
+              icon: const Icon(Icons.close_rounded, color: Colors.white70),
+              tooltip: 'Kapat',
+            ),
+          ),
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                width: 104,
+                height: 104,
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: _accent.withValues(alpha: 0.8),
+                    width: 2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _accent.withValues(alpha: 0.25),
+                      blurRadius: 24,
+                    ),
+                  ],
+                ),
+                child: ClipOval(
+                  child: photo.isEmpty
+                      ? Container(
+                          color: _bgDark,
+                          alignment: Alignment.center,
+                          child: Text(
+                            _initials(name),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 34,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        )
+                      : WebSafeImage(
+                          url: photo,
+                          width: 98,
+                          height: 98,
+                          isCircle: true,
+                          fit: BoxFit.cover,
+                          fallbackIconSize: 40,
+                        ),
+                ),
+              ),
+              if (number.isNotEmpty)
+                Positioned(
+                  right: -4,
+                  bottom: -2,
+                  child: Container(
+                    width: 38,
+                    height: 38,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: _accent,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: _bgDark, width: 3),
+                    ),
+                    child: Text(
+                      number,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text(
+            name,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 24,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0.2,
+            ),
+          ),
+          if (pos.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.25),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white24),
+              ),
+              child: Text(
+                pos,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Fotoğraf varsa: üst bölümü tamamen kaplayan kapak görseli; alt kısmı
+  /// koyu gradientle karta bağlanır, isim/numara/mevki fotoğrafın üzerinde.
+  Widget _photoHero(
+    BuildContext context,
+    String photo,
+    String name,
+    String number,
+    String pos,
+  ) {
+    final height = (MediaQuery.of(context).size.height * 0.30).clamp(
+      220.0,
+      300.0,
+    );
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(bottom: Radius.circular(28)),
+      child: SizedBox(
+        height: height,
+        child: LayoutBuilder(
+          builder: (context, c) => Stack(
+            fit: StackFit.expand,
+            children: [
+              WebSafeImage(
+                url: photo,
+                width: c.maxWidth,
+                height: height,
+                isCircle: false,
+                fit: BoxFit.cover,
+                fallbackIconSize: 48,
+              ),
+              // Üstte kapat butonu, altta yazılar okunsun diye koyulaşma.
+              const DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Color(0x80000000),
+                      Color(0x00000000),
+                      Color(0x990F172A),
+                      _bgDark,
+                    ],
+                    stops: [0.0, 0.3, 0.72, 1.0],
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 8,
+                right: 8,
+                child: IconButton(
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  icon: const Icon(Icons.close_rounded, color: Colors.white),
+                  tooltip: 'Kapat',
+                ),
+              ),
+              Positioned(
+                left: 20,
+                right: 20,
+                bottom: 18,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (pos.isNotEmpty)
+                            Container(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _accent.withValues(alpha: 0.9),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                pos,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          Text(
+                            name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 24,
+                              fontWeight: FontWeight.w900,
+                              height: 1.1,
+                              shadows: [
+                                Shadow(color: Colors.black54, blurRadius: 12),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (number.isNotEmpty) ...[
+                      const SizedBox(width: 12),
+                      Text(
+                        number,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.9),
+                          fontSize: 40,
+                          fontWeight: FontWeight.w900,
+                          height: 1,
+                          shadows: const [
+                            Shadow(color: Colors.black54, blurRadius: 12),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _infoRow() {
+    final age = _ageFromBirthDate(widget.birthDate);
+    Widget tile(String label, String value) => Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: _panel(),
+        child: Column(
+          children: [
+            Text(
+              value,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w900,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: const TextStyle(
+                color: _mid,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    return Row(
+      children: [
+        tile('Yaş', age == null ? '-' : '$age'),
+        const SizedBox(width: 8),
+        tile('Boy', widget.height == null ? '-' : '${widget.height} cm'),
+        const SizedBox(width: 8),
+        tile('Kilo', widget.weight == null ? '-' : '${widget.weight} kg'),
+        const SizedBox(width: 8),
+        tile('Doğum', _birthYear()),
+      ],
+    );
+  }
+
+  Widget _summaryGrid(_StatTotals t) {
+    Widget tile(String label, int value, IconData icon, Color color) {
+      return Container(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withValues(alpha: 0.28)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Icon(icon, color: color, size: 18),
+            Text(
+              '$value',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w900,
+                fontSize: 24,
+                height: 1.1,
+              ),
+            ),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: _mid,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return GridView.count(
+      crossAxisCount: 3,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: EdgeInsets.zero,
+      crossAxisSpacing: 8,
+      mainAxisSpacing: 8,
+      childAspectRatio: 1.15,
+      children: [
+        tile('Maç', t.matches, Icons.sports_soccer_rounded, _mid),
+        tile('Gol', t.goals, Icons.sports_score_rounded, _accent),
+        tile('Asist', t.assists, Icons.assistant_direction_rounded, _purple),
+        tile('Maçın Adamı', t.motm, Icons.star_rounded, _yellow),
+        tile('Sarı Kart', t.yellow, Icons.rectangle_rounded, _yellow),
+        tile('Kırmızı Kart', t.red, Icons.rectangle_rounded, _red),
+      ],
+    );
+  }
+
+  /// Turnuva > sezon satırları; sütunlar: M G A S K.
+  Widget _historyTable(List<_TournamentNode> tournaments) {
+    const colW = 30.0;
+    Widget cell(String v, {Color color = Colors.white, bool bold = false}) =>
+        SizedBox(
+          width: colW,
+          child: Text(
+            v,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: color,
+              fontSize: 13,
+              fontWeight: bold ? FontWeight.w900 : FontWeight.w600,
+            ),
+          ),
+        );
+
+    Widget header() => Padding(
+      padding: const EdgeInsets.fromLTRB(14, 10, 10, 6),
+      child: Row(
+        children: [
+          const Expanded(
+            child: Text(
+              'Sezon',
+              style: TextStyle(
+                color: _mid,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          for (final h in const ['M', 'G', 'A', 'S', 'K'])
+            cell(h, color: _mid, bold: true),
+        ],
+      ),
+    );
+
+    final children = <Widget>[header()];
+    for (final t in tournaments) {
+      children.add(
+        Container(
+          width: double.infinity,
+          color: Colors.white.withValues(alpha: 0.04),
+          padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+          child: Text(
+            t.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: _accent,
+              fontWeight: FontWeight.w800,
+              fontSize: 13,
+            ),
+          ),
+        ),
+      );
+      for (final s in t.seasons) {
+        final x = s.totals;
+        children.add(
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 9, 10, 9),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    s.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                cell('${x.matches}'),
+                cell('${x.goals}', color: _accent, bold: true),
+                cell('${x.assists}', color: _purple, bold: true),
+                cell('${x.yellow}', color: _yellow),
+                cell('${x.red}', color: _red),
+              ],
+            ),
+          ),
+        );
+      }
+    }
+
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: _panel(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ...children,
+          const Padding(
+            padding: EdgeInsets.fromLTRB(14, 6, 14, 10),
+            child: Text(
+              'M: Maç  G: Gol  A: Asist  S: Sarı kart  K: Kırmızı kart',
+              style: TextStyle(color: _mid, fontSize: 10),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle({required this.icon, required this.title});
+
+  final IconData icon;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, color: _accent, size: 18),
+        const SizedBox(width: 8),
+        Text(
+          title,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w900,
+            fontSize: 16,
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 class _PlayerCardData {
-  const _PlayerCardData({
-    required this.overall,
-    required this.tournaments,
-  });
+  const _PlayerCardData({required this.overall, required this.tournaments});
 
   final _StatTotals overall;
   final List<_TournamentNode> tournaments;
 
-  factory _PlayerCardData.empty() =>
-      const _PlayerCardData(overall: _StatTotals(), tournaments: <_TournamentNode>[]);
+  factory _PlayerCardData.empty() => const _PlayerCardData(
+    overall: _StatTotals(),
+    tournaments: <_TournamentNode>[],
+  );
 }
 
 class _TournamentNode {
-  _TournamentNode({
-    required this.tournamentId,
-    required this.tournamentName,
-    required this.seasons,
-  });
+  _TournamentNode({required this.name, required this.seasons});
 
-  final String tournamentId;
-  final String tournamentName;
-  final Map<String, _SeasonNode> seasons;
-  List<_SeasonNode> sortedSeasons = const <_SeasonNode>[];
+  final String name;
+  final List<_SeasonNode> seasons;
 }
 
 class _SeasonNode {
   const _SeasonNode({
-    required this.seasonId,
-    required this.seasonName,
+    required this.name,
+    required this.sortKey,
     required this.totals,
   });
 
-  final String seasonId;
-  final String seasonName;
+  final String name;
+  final String sortKey;
   final _StatTotals totals;
-
-  _SeasonNode copyWith({_StatTotals? totals}) {
-    return _SeasonNode(
-      seasonId: seasonId,
-      seasonName: seasonName,
-      totals: totals ?? this.totals,
-    );
-  }
 }
 
 class _StatTotals {
@@ -987,6 +923,7 @@ class _StatTotals {
     this.assists = 0,
     this.yellow = 0,
     this.red = 0,
+    this.motm = 0,
   });
 
   final int matches;
@@ -994,6 +931,7 @@ class _StatTotals {
   final int assists;
   final int yellow;
   final int red;
+  final int motm;
 
   _StatTotals operator +(_StatTotals other) {
     return _StatTotals(
@@ -1002,6 +940,7 @@ class _StatTotals {
       assists: assists + other.assists,
       yellow: yellow + other.yellow,
       red: red + other.red,
+      motm: motm + other.motm,
     );
   }
 }

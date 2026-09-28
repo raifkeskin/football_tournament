@@ -21,6 +21,7 @@ import 'match_details_screen.dart';
 
 // ORTAK BİLEŞEN IMPORT EDİLDİ
 import '../../../core/widgets/custom_popup_selector.dart';
+import '../../../core/widgets/app_date_picker.dart';
 
 class FixtureScreen extends StatefulWidget {
   const FixtureScreen({super.key});
@@ -202,7 +203,11 @@ class _FixtureScreenState extends State<FixtureScreen> {
                   ),
                   border: Border.all(color: Colors.white.withOpacity(0.12)),
                   boxShadow: const [
-                    BoxShadow(color: Colors.black54, blurRadius: 15, offset: Offset(0, 8)),
+                    BoxShadow(
+                      color: Colors.black54,
+                      blurRadius: 15,
+                      offset: Offset(0, 8),
+                    ),
                   ],
                 ),
                 child: Column(
@@ -213,7 +218,12 @@ class _FixtureScreenState extends State<FixtureScreen> {
                       label: 'Turnuva',
                       selectedValue: _leagueId,
                       items: leagues.map((l) => l.id).toList(),
-                      labelBuilder: (id) => leagues.firstWhere((l) => l.id == id, orElse: () => leagues.first).name,
+                      labelBuilder: (id) => leagues
+                          .firstWhere(
+                            (l) => l.id == id,
+                            orElse: () => leagues.first,
+                          )
+                          .name,
                       onChanged: (val) {
                         setState(() {
                           _leagueId = val;
@@ -232,7 +242,12 @@ class _FixtureScreenState extends State<FixtureScreen> {
                       label: 'Sezon',
                       selectedValue: _seasonId,
                       items: seasons.map((s) => s.id).toList(),
-                      labelBuilder: (id) => seasons.firstWhere((s) => s.id == id, orElse: () => seasons.first).name,
+                      labelBuilder: (id) => seasons
+                          .firstWhere(
+                            (s) => s.id == id,
+                            orElse: () => seasons.first,
+                          )
+                          .name,
                       onChanged: (val) {
                         setState(() {
                           _seasonId = val;
@@ -251,7 +266,9 @@ class _FixtureScreenState extends State<FixtureScreen> {
                         label: 'Grup',
                         selectedValue: _groupId,
                         items: [null, ...groups.map((g) => g.id)],
-                        labelBuilder: (id) => id == null ? 'Tüm Gruplar' : (groupNameById[id] ?? ''),
+                        labelBuilder: (id) => id == null
+                            ? 'Tüm Gruplar'
+                            : (groupNameById[id] ?? ''),
                         onChanged: (val) {
                           setState(() {
                             _groupId = val;
@@ -283,10 +300,18 @@ class _FixtureScreenState extends State<FixtureScreen> {
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF10B981),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                         onPressed: () => Navigator.pop(context),
-                        child: const Text('Filtreleri Uygula', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900)),
+                        child: const Text(
+                          'Filtreleri Uygula',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
                       ),
                     ),
                   ],
@@ -462,7 +487,8 @@ class _FixtureScreenState extends State<FixtureScreen> {
 
                                 // Kullanıcı hafta seçmediyse: oynanmamış ilk
                                 // maçın haftası.
-                                final defaultWeek = weeks.contains(info.nextWeek)
+                                final defaultWeek =
+                                    weeks.contains(info.nextWeek)
                                     ? info.nextWeek
                                     : weeks.first;
                                 final displayWeek = weeks.contains(_week)
@@ -506,54 +532,97 @@ class _FixtureScreenState extends State<FixtureScreen> {
                                         );
                                       });
 
-                                    final currentLeagueName = leagues.firstWhere((l) => l.id == _leagueId, orElse: () => leagues.first).name;
+                                    final currentLeagueName = leagues
+                                        .firstWhere(
+                                          (l) => l.id == _leagueId,
+                                          orElse: () => leagues.first,
+                                        )
+                                        .name;
                                     //final currentSeasonName = seasons.isEmpty ? '' : seasons.firstWhere((s) => s.id == _seasonId, orElse: () => seasons.first).name;
-                                    final currentGroupName = selectedGroupId == null ? 'Tüm Gruplar' : (groupNameById[selectedGroupId] ?? '');
+                                    final currentGroupName =
+                                        selectedGroupId == null
+                                        ? 'Tüm Gruplar'
+                                        : (groupNameById[selectedGroupId] ??
+                                              '');
 
                                     return Column(
                                       children: [
                                         // YENİ FİLTRE KAPSÜLÜ
                                         Padding(
-                                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                                          padding: const EdgeInsets.fromLTRB(
+                                            16,
+                                            8,
+                                            16,
+                                            16,
+                                          ),
                                           child: InkWell(
                                             onTap: () {
                                               _showFilterDialog(
-                                                context, 
-                                                leagues, 
-                                                seasons, 
-                                                groups, 
-                                                groupNameById, 
-                                                weeks, 
+                                                context,
+                                                leagues,
+                                                seasons,
+                                                groups,
+                                                groupNameById,
+                                                weeks,
                                                 displayWeek ?? 1,
                                                 selectedGroupId,
                                               );
                                             },
-                                            borderRadius: BorderRadius.circular(24),
+                                            borderRadius: BorderRadius.circular(
+                                              24,
+                                            ),
                                             child: Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 16,
+                                                    vertical: 12,
+                                                  ),
                                               decoration: BoxDecoration(
-                                                color: Colors.black.withOpacity(0.4),
-                                                borderRadius: BorderRadius.circular(24),
-                                                border: Border.all(color: Colors.white24),
+                                                color: Colors.black.withOpacity(
+                                                  0.4,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(24),
+                                                border: Border.all(
+                                                  color: Colors.white24,
+                                                ),
                                                 boxShadow: const [
-                                                  BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 4)),
+                                                  BoxShadow(
+                                                    color: Colors.black26,
+                                                    blurRadius: 8,
+                                                    offset: Offset(0, 4),
+                                                  ),
                                                 ],
                                               ),
                                               child: Row(
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [
-                                                  const Icon(Icons.tune_rounded, color: Color(0xFF10B981), size: 18),
+                                                  const Icon(
+                                                    Icons.tune_rounded,
+                                                    color: Color(0xFF10B981),
+                                                    size: 18,
+                                                  ),
                                                   const SizedBox(width: 8),
                                                   Flexible(
                                                     child: Text(
                                                       "$currentLeagueName • ${displayWeek ?? 1}. Hafta",
-                                                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                                                      style: const TextStyle(
+                                                        color: Colors.white,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        fontSize: 13,
+                                                      ),
                                                       maxLines: 1,
-                                                      overflow: TextOverflow.ellipsis,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
                                                     ),
                                                   ),
                                                   const SizedBox(width: 8),
-                                                  const Icon(Icons.keyboard_arrow_down, color: Colors.white70, size: 18),
+                                                  const Icon(
+                                                    Icons.keyboard_arrow_down,
+                                                    color: Colors.white70,
+                                                    size: 18,
+                                                  ),
                                                 ],
                                               ),
                                             ),
@@ -714,7 +783,7 @@ class _FixtureList extends StatelessWidget {
     );
   }
 
-List<Widget> _buildGroupedSection(
+  List<Widget> _buildGroupedSection(
     List<MatchModel> matchesInDate,
     String Function(String) groupLabel,
   ) {
@@ -1070,7 +1139,11 @@ class _MatchCard extends StatelessWidget {
                     const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.scoreboard_outlined, color: accent, size: 22),
+                        Icon(
+                          Icons.scoreboard_outlined,
+                          color: accent,
+                          size: 22,
+                        ),
                         SizedBox(width: 8),
                         Text(
                           'Hızlı Skor Girişi',
@@ -1188,6 +1261,7 @@ class _MatchCard extends StatelessWidget {
   }
 
   void _showEditPopup(BuildContext context) async {
+    const accent = Color(0xFF10B981);
     String initialDate = '';
     if (match.matchDate != null && match.matchDate!.contains('-')) {
       final p = match.matchDate!.split('-');
@@ -1212,13 +1286,18 @@ class _MatchCard extends StatelessWidget {
         ? null
         : match.pitchName!.trim();
 
-    final pitches = await _leagueService.watchPitches().first;
+    final pitches = [...await _leagueService.watchPitches().first]
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
     if (pitches.length == 1) {
       selectedPitchId = pitches.first.id;
       selectedPitchName = pitches.first.name.trim().isEmpty
           ? null
           : pitches.first.name.trim();
+    }
+    if (selectedPitchId != null) {
+      final m = pitches.where((p) => p.id == selectedPitchId);
+      if (m.isNotEmpty) selectedPitchName = m.first.name.trim();
     }
 
     dCtrl.addListener(() {
@@ -1229,184 +1308,387 @@ class _MatchCard extends StatelessWidget {
 
     if (!context.mounted) return;
 
-    showDialog(
-      context: context,
-      builder: (c) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: const Color(0xFF1E293B),
-          title: const Text(
-            'Maçı Düzenle',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+    InputDecoration deco(String label, IconData icon, {Widget? suffix}) =>
+        InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(color: Colors.white70),
+          prefixIcon: Icon(icon, color: Colors.white70, size: 20),
+          suffixIcon: suffix,
+          filled: true,
+          fillColor: Colors.black.withValues(alpha: 0.4),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
           ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: dCtrl,
-                  focusNode: dateFocus,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [_DateInputFormatter()],
-                  style: const TextStyle(color: Colors.white),
-                  decoration: const InputDecoration(
-                    labelText: 'Tarih (GG/AA/YYYY)',
-                    labelStyle: TextStyle(color: Colors.white54),
-                    enabledBorder: UnderlineInputBorder(
-                      borderSide: BorderSide(color: Colors.white24),
-                    ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: accent, width: 1.5),
+          ),
+        );
+
+    BoxDecoration dialogBox() => BoxDecoration(
+      borderRadius: BorderRadius.circular(24),
+      gradient: const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [Color(0xFF1E293B), Color(0xFF064E3B)],
+      ),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+      boxShadow: const [
+        BoxShadow(color: Colors.black54, blurRadius: 15, offset: Offset(0, 8)),
+      ],
+    );
+
+    Future<void> pickDateFromCalendar(StateSetter setDialogState) async {
+      final m = RegExp(
+        r'^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$',
+      ).firstMatch(dCtrl.text.trim());
+      final current = m == null
+          ? null
+          : DateTime.tryParse('${m.group(3)}-${m.group(2)}-${m.group(1)}');
+      final picked = await showAppDatePicker(
+        context: context,
+        initialDate: current ?? DateTime.now(),
+        firstYear: DateTime.now().year - 1,
+        lastYear: DateTime.now().year + 2,
+        title: 'Maç Tarihi',
+      );
+      if (picked == null) return;
+      setDialogState(() {
+        dCtrl.text =
+            '${picked.day.toString().padLeft(2, '0')}/'
+            '${picked.month.toString().padLeft(2, '0')}/'
+            '${picked.year}';
+      });
+      timeFocus.requestFocus();
+    }
+
+    /// Stad seçimi: üstte isim filtresi olan ortada açılan popup.
+    /// Sonuç: null → vazgeçildi, '' → "Stad Seçilmedi", aksi halde stad id.
+    Future<String?> pickPitch() {
+      var query = '';
+      String norm(String v) =>
+          v.replaceAll('İ', 'i').replaceAll('I', 'ı').toLowerCase().trim();
+      return showDialog<String>(
+        context: context,
+        builder: (pc) => StatefulBuilder(
+          builder: (pc, setLocal) {
+            final q = norm(query);
+            final list = pitches
+                .where((p) => q.isEmpty || norm(p.name).contains(q))
+                .toList();
+            final h = MediaQuery.of(pc).size.height * 0.7;
+            Widget tile(String id, String title, String sub) {
+              final on = (selectedPitchId ?? '') == id;
+              return ListTile(
+                dense: true,
+                title: Text(
+                  title,
+                  style: TextStyle(
+                    color: on ? accent : Colors.white,
+                    fontWeight: on ? FontWeight.w800 : FontWeight.w600,
                   ),
                 ),
-                const SizedBox(height: 25),
-                TextField(
-                  controller: tCtrl,
-                  focusNode: timeFocus,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [_TimeInputFormatter()],
-                  style: const TextStyle(color: Colors.white),
-                  decoration: const InputDecoration(
-                    labelText: 'Saat (SS:DD)',
-                    labelStyle: TextStyle(color: Colors.white54),
-                    enabledBorder: UnderlineInputBorder(
-                      borderSide: BorderSide(color: Colors.white24),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 30),
-                DropdownButtonFormField<String?>(
-                  initialValue: pitches.any((p) => p.id == selectedPitchId)
-                      ? selectedPitchId
-                      : null,
-                  dropdownColor: const Color(0xFF0F172A),
-                  decoration: const InputDecoration(
-                    labelText: 'Stad Seçin',
-                    labelStyle: TextStyle(color: Colors.white54),
-                    enabledBorder: UnderlineInputBorder(
-                      borderSide: BorderSide(color: Colors.white24),
-                    ),
-                  ),
-                  items: [
-                    const DropdownMenuItem<String?>(
-                      value: null,
-                      child: Text(
-                        'Stad Seçilmedi',
-                        style: TextStyle(color: Colors.white),
-                      ),
-                    ),
-                    for (final p in pitches)
-                      DropdownMenuItem<String?>(
-                        value: p.id,
-                        child: Text(
-                          p.name,
-                          style: const TextStyle(color: Colors.white),
+                subtitle: sub.isEmpty
+                    ? null
+                    : Text(
+                        sub,
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 12,
                         ),
                       ),
+                trailing: on
+                    ? const Icon(Icons.check_rounded, color: accent)
+                    : null,
+                onTap: () => Navigator.pop(pc, id),
+              );
+            }
+
+            return Dialog(
+              backgroundColor: Colors.transparent,
+              insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Container(
+                height: h,
+                padding: const EdgeInsets.all(20),
+                decoration: dialogBox(),
+                child: Column(
+                  children: [
+                    const Text(
+                      'Stad Seç',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      autofocus: true,
+                      style: const TextStyle(color: Colors.white),
+                      onChanged: (v) => setLocal(() => query = v),
+                      decoration: deco('Stad ara', Icons.search_rounded),
+                    ),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: ListView(
+                        children: [
+                          if (q.isEmpty) tile('', 'Stad Seçilmedi', ''),
+                          for (final p in list)
+                            tile(
+                              p.id,
+                              p.name,
+                              [
+                                if (p.city.trim().isNotEmpty) p.city.trim(),
+                                if (p.country.trim().isNotEmpty)
+                                  p.country.trim(),
+                              ].join(' / '),
+                            ),
+                          if (list.isEmpty)
+                            const Padding(
+                              padding: EdgeInsets.all(20),
+                              child: Text(
+                                'Stad bulunamadı.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Colors.white54),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                   ],
-                  onChanged: (val) {
-                    final selected = pitches
-                        .where((e) => e.id == val)
-                        .toList(growable: false);
-                    final name = selected.isEmpty
-                        ? ''
-                        : selected.first.name.trim();
-                    setDialogState(() {
-                      selectedPitchId = val;
-                      selectedPitchName = val == null || name.isEmpty
-                          ? null
-                          : name;
-                    });
-                  },
                 ),
-              ],
+              ),
+            );
+          },
+        ),
+      );
+    }
+
+    await showDialog(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setDialogState) => Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Container(
+            padding: const EdgeInsets.all(22),
+            decoration: dialogBox(),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.edit_calendar_rounded, color: accent),
+                      SizedBox(width: 8),
+                      Text(
+                        'Maçı Düzenle',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  const Divider(color: Colors.white24, height: 1),
+                  const SizedBox(height: 18),
+                  // Elle yazılabilir; buton standart takvimi açar.
+                  TextField(
+                    controller: dCtrl,
+                    focusNode: dateFocus,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [_DateInputFormatter()],
+                    style: const TextStyle(color: Colors.white),
+                    decoration: deco(
+                      'Tarih (GG/AA/YYYY)',
+                      Icons.event_rounded,
+                      suffix: IconButton(
+                        tooltip: 'Takvimden seç',
+                        icon: const Icon(
+                          Icons.calendar_month_outlined,
+                          color: accent,
+                        ),
+                        onPressed: () => pickDateFromCalendar(setDialogState),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: tCtrl,
+                    focusNode: timeFocus,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [_TimeInputFormatter()],
+                    style: const TextStyle(color: Colors.white),
+                    decoration: deco('Saat (SS:DD)', Icons.schedule_rounded),
+                  ),
+                  const SizedBox(height: 12),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () async {
+                      final picked = await pickPitch();
+                      if (picked == null) return;
+                      setDialogState(() {
+                        if (picked.isEmpty) {
+                          selectedPitchId = null;
+                          selectedPitchName = null;
+                        } else {
+                          selectedPitchId = picked;
+                          final name = pitches
+                              .firstWhere((p) => p.id == picked)
+                              .name
+                              .trim();
+                          selectedPitchName = name.isEmpty ? null : name;
+                        }
+                      });
+                    },
+                    child: InputDecorator(
+                      decoration: deco('Stad', Icons.stadium_outlined),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              selectedPitchName ?? 'Stad Seçilmedi',
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: selectedPitchName == null
+                                    ? Colors.white54
+                                    : Colors.white,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          const Icon(
+                            Icons.arrow_drop_down,
+                            color: Colors.white70,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    height: 50,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: accent,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onPressed: () async {
+                        final dateText = dCtrl.text;
+                        final timeText = tCtrl.text;
+
+                        final dateMatch = RegExp(
+                          r'^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$',
+                        ).firstMatch(dateText);
+                        if (dateMatch == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Tarih formatı hatalı! (GG/AA/YYYY)',
+                              ),
+                              backgroundColor: Colors.redAccent,
+                            ),
+                          );
+                          return;
+                        }
+                        final timeMatch = RegExp(
+                          r'^(\d{2}):(\d{2})$',
+                        ).firstMatch(timeText);
+                        if (timeMatch == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Saat formatı hatalı! (SS:DD)'),
+                              backgroundColor: Colors.redAccent,
+                            ),
+                          );
+                          return;
+                        }
+
+                        final dd = dateMatch.group(1)!;
+                        final mm = dateMatch.group(2)!;
+                        final yyyy = dateMatch.group(3)!;
+                        final dbDate = '$yyyy-$mm-$dd';
+
+                        try {
+                          await _matchService.updateMatchSchedule(
+                            matchId: match.id,
+                            matchDateDb: dbDate,
+                            matchTime: timeText,
+                            pitchId: selectedPitchId,
+                            pitchName: selectedPitchName,
+                          );
+                          if (c.mounted) Navigator.pop(c);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Maç güncellendi.'),
+                                backgroundColor: Colors.green,
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          }
+                          onDataChanged();
+                        } catch (e) {
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Güncelleme başarısız: $e'),
+                              backgroundColor: Colors.redAccent,
+                            ),
+                          );
+                        }
+                      },
+                      child: const Text(
+                        'GÜNCELLE',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    height: 50,
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white70,
+                        side: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.2),
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onPressed: () => Navigator.pop(c),
+                      child: const Text(
+                        'VAZGEÇ',
+                        style: TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(c),
-              child: const Text(
-                'İptal',
-                style: TextStyle(color: Colors.white70),
-              ),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blueAccent,
-              ),
-              onPressed: () async {
-                final dateText = dCtrl.text;
-                final timeText = tCtrl.text;
-
-                final dateMatch = RegExp(
-                  r'^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$',
-                ).firstMatch(dateText);
-                if (dateMatch == null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Tarih formatı hatalı! (GG/AA/YYYY)'),
-                      backgroundColor: Colors.redAccent,
-                    ),
-                  );
-                  return;
-                }
-                final timeMatch = RegExp(
-                  r'^(\d{2}):(\d{2})$',
-                ).firstMatch(timeText);
-                if (timeMatch == null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Saat formatı hatalı! (SS:DD)'),
-                      backgroundColor: Colors.redAccent,
-                    ),
-                  );
-                  return;
-                }
-
-                final dd = dateMatch.group(1)!;
-                final mm = dateMatch.group(2)!;
-                final yyyy = dateMatch.group(3)!;
-                final dbDate = '$yyyy-$mm-$dd';
-
-                try {
-                  await _matchService.updateMatchSchedule(
-                    matchId: match.id,
-                    matchDateDb: dbDate,
-                    matchTime: timeText,
-                    pitchId: selectedPitchId,
-                    pitchName: selectedPitchName,
-                  );
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Maç güncellendi.'),
-                        backgroundColor: Colors.green,
-                        duration: Duration(seconds: 2),
-                      ),
-                    );
-                    dateFocus.dispose();
-                    timeFocus.dispose();
-                    dCtrl.dispose();
-                    tCtrl.dispose();
-                    Navigator.pop(c);
-                    onDataChanged();
-                  }
-                } catch (e) {
-                  if (!context.mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Güncelleme başarısız: $e'),
-                      backgroundColor: Colors.redAccent,
-                    ),
-                  );
-                }
-              },
-              child: const Text(
-                'GÜNCELLE',
-                style: TextStyle(color: Colors.white),
-              ),
-            ),
-          ],
         ),
       ),
     );
+
+    // Dialog kapanış animasyonu bitene kadar alanlar bunları kullanır.
+    Future<void>.delayed(const Duration(milliseconds: 600), () {
+      dateFocus.dispose();
+      timeFocus.dispose();
+      dCtrl.dispose();
+      tCtrl.dispose();
+    });
   }
 }
 
