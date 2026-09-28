@@ -80,6 +80,17 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// Tüm gruplar (id, season_id, name): bir sezonda birden fazla grup varsa
+  /// ana sayfada maçlar gruba göre ayrılır.
+  late final Stream<List<Map<String, dynamic>>> _groupsStream =
+      AppConfig.activeDatabase != DatabaseType.supabase
+      ? Stream.value(const <Map<String, dynamic>>[])
+      : resilientStream(
+          () => Supabase.instance.client
+              .from('groups')
+              .stream(primaryKey: ['id']),
+        );
+
   Stream<List<Season>> _watchAllSeasons() {
     if (AppConfig.activeDatabase != DatabaseType.supabase) {
       return Stream.value(const <Season>[]);
@@ -779,9 +790,6 @@ class _HomeScreenState extends State<HomeScreen> {
               });
             }
 
-            final seasonNameById = <String, String>{
-              for (final s in seasons) s.id: s.name.trim(),
-            };
             final seasonLeagueById = <String, String>{
               for (final s in seasons) s.id: s.leagueId,
             };
@@ -832,103 +840,186 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 }
 
-                final Map<String, List<MatchModel>> sectionMap = {};
-                for (var m in matches) {
-                  final sId = m.seasonId ?? 'default';
-                  (sectionMap[sId] ??= []).add(m);
-                }
+                return StreamBuilder<List<Map<String, dynamic>>>(
+                  stream: _groupsStream,
+                  builder: (context, groupsSnap) {
+                    final groupRows =
+                        groupsSnap.data ?? const <Map<String, dynamic>>[];
+                    final groupNameById = <String, String>{};
+                    final groupCountBySeason = <String, int>{};
+                    for (final g in groupRows) {
+                      final gid = (g['id'] ?? '').toString();
+                      final sid = (g['season_id'] ?? '').toString();
+                      groupNameById[gid] = (g['name'] ?? '').toString().trim();
+                      groupCountBySeason[sid] =
+                          (groupCountBySeason[sid] ?? 0) + 1;
+                    }
 
-                final sortedSeasonIds = sectionMap.keys.toList()
-                  ..sort((a, b) {
-                    if (a == 'default') return 1;
-                    if (b == 'default') return -1;
-                    final nameA = seasonNameById[a] ?? a;
-                    final nameB = seasonNameById[b] ?? b;
-                    return nameA.toUpperCase().compareTo(nameB.toUpperCase());
-                  });
+                    // Bölüm: sezon; sezonda birden fazla grup varsa sezon+grup.
+                    String sectionKey(MatchModel m) {
+                      final sid = m.seasonId;
+                      final multi = (groupCountBySeason[sid] ?? 0) > 1;
+                      final gid = (m.groupId ?? '').trim();
+                      return multi && gid.isNotEmpty ? '$sid|$gid' : sid;
+                    }
 
-                return ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
-                  children: sortedSeasonIds.map((sId) {
-                    final seasonName = seasonNameById[sId] ?? '';
-                    // Bölümün turnuvası: tüm turnuvalar gösterilirken
-                    // sezonun bağlı olduğu turnuva.
-                    final sectionLeagueId =
-                        seasonLeagueById[sId] ??
-                        sectionMap[sId]!.first.leagueId;
-                    final leagueName =
-                        _leagueNameById[sectionLeagueId] ?? currentLeague.name;
-                    final titleText = seasonName.isEmpty
-                        ? leagueName
-                        : '$leagueName - $seasonName';
+                    final Map<String, List<MatchModel>> sectionMap = {};
+                    for (final m in matches) {
+                      (sectionMap[sectionKey(m)] ??= []).add(m);
+                    }
 
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        InkWell(
-                          onTap: () {
-                            GlobalFilter.setLeague(sectionLeagueId);
-                            GlobalFilter.setSeason(sId);
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => GroupsScreen(
-                                  initialLeagueId: sectionLeagueId,
-                                  initialSeasonId: sId,
-                                ),
-                              ),
-                            );
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.emoji_events_outlined,
-                                  color: Color(0xFFFBBF24),
-                                  size: 18,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    titleText,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: Color(0xFFFBBF24),
-                                      fontWeight: FontWeight.w900,
-                                      fontSize: 14,
+                    String titleOf(String key) {
+                      final parts = key.split('|');
+                      final m = sectionMap[key]!.first;
+                      final leagueId =
+                          seasonLeagueById[parts.first] ?? m.leagueId;
+                      final leagueName =
+                          _leagueNameById[leagueId] ?? currentLeague.name;
+                      if (parts.length < 2) return leagueName;
+                      final groupName = groupNameById[parts[1]] ?? '';
+                      return groupName.isEmpty
+                          ? leagueName
+                          : '$leagueName - $groupName';
+                    }
+
+                    final sortedKeys = sectionMap.keys.toList()
+                      ..sort(
+                        (a, b) => titleOf(
+                          a,
+                        ).toUpperCase().compareTo(titleOf(b).toUpperCase()),
+                      );
+
+                    return ListView(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
+                      children: sortedKeys.map((key) {
+                        final sId = key.split('|').first;
+                        // Bölümün turnuvası: tüm turnuvalar gösterilirken
+                        // sezonun bağlı olduğu turnuva.
+                        final sectionLeagueId =
+                            seasonLeagueById[sId] ??
+                            sectionMap[key]!.first.leagueId;
+                        final titleText = titleOf(key);
+
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            InkWell(
+                              onTap: () {
+                                GlobalFilter.setLeague(sectionLeagueId);
+                                GlobalFilter.setSeason(sId);
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => GroupsScreen(
+                                      initialLeagueId: sectionLeagueId,
+                                      initialSeasonId: sId,
+                                      initialGroupId: key.contains('|')
+                                          ? key.split('|').last
+                                          : null,
                                     ),
                                   ),
+                                );
+                              },
+                              borderRadius: BorderRadius.circular(12),
+                              // Başlık şeridi: kartlardan koyu zemin ve
+                              // belirgin yeşil tonlu kenarlık.
+                              child: Container(
+                                margin: const EdgeInsets.only(
+                                  top: 14,
+                                  bottom: 8,
                                 ),
-                                const SizedBox(width: 8),
-                                const Icon(
-                                  Icons.chevron_right,
-                                  color: Color(0xFFFBBF24),
-                                  size: 16,
+                                padding: const EdgeInsets.fromLTRB(
+                                  10,
+                                  10,
+                                  8,
+                                  10,
                                 ),
-                              ],
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    begin: Alignment.centerLeft,
+                                    end: Alignment.centerRight,
+                                    colors: [
+                                      Color(0xF2062E24),
+                                      Color(0xF20B1220),
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: const Color(
+                                      0xFF10B981,
+                                    ).withValues(alpha: 0.45),
+                                    width: 1.2,
+                                  ),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      color: Colors.black38,
+                                      blurRadius: 8,
+                                      offset: Offset(0, 3),
+                                    ),
+                                  ],
+                                ),
+                                child: Row(
+                                  children: [
+                                    // Takım adlarından ayrışan başlık:
+                                    // yeşil vurgu çizgisi + beyaz kalın yazı.
+                                    Container(
+                                      width: 4,
+                                      height: 20,
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF10B981),
+                                        borderRadius: BorderRadius.circular(2),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    const Icon(
+                                      Icons.emoji_events_rounded,
+                                      color: Color(0xFF10B981),
+                                      size: 18,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        titleText,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 16,
+                                          letterSpacing: 0.2,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Icon(
+                                      Icons.chevron_right_rounded,
+                                      color: Colors.white54,
+                                      size: 20,
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                        ...sectionMap[sId]!.map(
-                          (m) => _MatchCard(
-                            match: m,
-                            homeLogo: logoMap[m.homeTeamId] ?? '',
-                            awayLogo: logoMap[m.awayTeamId] ?? '',
-                            homeName:
-                                (nameMap[m.homeTeamId] ?? '').trim().isEmpty
-                                ? 'Ev Sahibi'
-                                : (nameMap[m.homeTeamId] ?? '').trim(),
-                            awayName:
-                                (nameMap[m.awayTeamId] ?? '').trim().isEmpty
-                                ? 'Deplasman'
-                                : (nameMap[m.awayTeamId] ?? '').trim(),
-                          ),
-                        ),
-                      ],
+                            ...sectionMap[key]!.map(
+                              (m) => _MatchCard(
+                                match: m,
+                                homeLogo: logoMap[m.homeTeamId] ?? '',
+                                awayLogo: logoMap[m.awayTeamId] ?? '',
+                                homeName:
+                                    (nameMap[m.homeTeamId] ?? '').trim().isEmpty
+                                    ? 'Ev Sahibi'
+                                    : (nameMap[m.homeTeamId] ?? '').trim(),
+                                awayName:
+                                    (nameMap[m.awayTeamId] ?? '').trim().isEmpty
+                                    ? 'Deplasman'
+                                    : (nameMap[m.awayTeamId] ?? '').trim(),
+                              ),
+                            ),
+                          ],
+                        );
+                      }).toList(),
                     );
-                  }).toList(),
+                  },
                 );
               },
             );
