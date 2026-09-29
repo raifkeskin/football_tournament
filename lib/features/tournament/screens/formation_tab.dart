@@ -109,6 +109,150 @@ class _PitchPlayer {
   final bool isCaptain;
 }
 
+List<int> _parseFormation(String f) => f
+    .split('-')
+    .map((e) => int.tryParse(e.trim()) ?? 0)
+    .where((e) => e > 0)
+    .toList();
+
+/// Hattı kenar oyuncular iki uca, merkezdekiler ortaya gelecek şekilde dizer.
+List<_PitchPlayer> _arrangeLine(List<_PitchPlayer> line) {
+  final sorted = [...line]
+    ..sort((a, b) => _jersey(a.number).compareTo(_jersey(b.number)));
+  final wide = sorted.where((e) => e.wide).toList();
+  final center = sorted.where((e) => !e.wide).toList();
+  final half = (wide.length / 2).ceil();
+  return [...wide.take(half), ...center, ...wide.skip(half)];
+}
+
+class _Layout {
+  const _Layout({
+    required this.lines,
+    required this.formation,
+    required this.autoFormation,
+    required this.outfieldCount,
+    required this.ids,
+  });
+
+  /// lines[0]: kaleci, sonrakiler defanstan hücuma hatlar.
+  final List<List<_PitchPlayer>> lines;
+  final String formation;
+  final String autoFormation;
+  final int outfieldCount;
+
+  /// Saha sırasıyla oyuncu id'leri (kaleci → defans → orta saha → forvet).
+  final List<String> ids;
+}
+
+/// İlk 11'in sahadaki yerleşimi. Sıra önceliği: [order] (ekranda yapılan
+/// değişiklik) → kaydedilmiş saha sırası (pos_x) → mevkilere göre otomatik.
+_Layout? _computeLayout(
+  List<MatchRosterModel> starterRosters,
+  Map<String, PlayerModel> players, {
+  String? formation,
+  List<String>? order,
+}) {
+  final starters = starterRosters.map((r) {
+    final p = players[r.playerId];
+    return _PitchPlayer(
+      id: r.playerId,
+      name: (p?.name ?? '').trim().isEmpty ? '-' : p!.name,
+      number: (r.jerseyNumber ?? p?.number ?? '').trim(),
+      line: positionLineOf(p?.mainPosition, p?.position),
+      wide: _isWide(p?.mainPosition, p?.position),
+      isCaptain: r.isCaptain,
+    );
+  }).toList();
+  if (starters.isEmpty) return null;
+
+  // Mevkiye göre doğal hatlar (kaleci birden fazlaysa fazlası defansa).
+  final natural = List.generate(4, (_) => <_PitchPlayer>[]);
+  for (final p in starters) {
+    natural[p.line].add(p);
+  }
+  while (natural[0].length > 1) {
+    natural[1].add(natural[0].removeLast());
+  }
+  if (natural[0].isEmpty) {
+    // Kaleci yoksa en düşük numaralı oyuncu kaleye.
+    final all = [...natural[1], ...natural[2], ...natural[3]]
+      ..sort((a, b) => _jersey(a.number).compareTo(_jersey(b.number)));
+    final gk = all.first;
+    for (final l in natural) {
+      l.remove(gk);
+    }
+    natural[0].add(gk);
+  }
+  final autoFormation = natural
+      .skip(1)
+      .map((l) => l.length)
+      .where((c) => c > 0)
+      .join('-');
+  final outfieldCount = starters.length - 1;
+
+  var f = (formation ?? '').trim().isEmpty ? autoFormation : formation!.trim();
+  var counts = _parseFormation(f);
+  if (counts.fold<int>(0, (a, b) => a + b) != outfieldCount) {
+    f = autoFormation; // kadro değiştiyse kayıtlı diziliş geçersiz
+    counts = _parseFormation(f);
+  }
+
+  // Saha oyuncularını defanstan hücuma dizilişin hatlarına dağıt.
+  final outfield = [
+    for (var li = 1; li < 4; li++) ..._arrangeLine(natural[li]),
+  ];
+  final baseLines = <List<_PitchPlayer>>[natural[0]];
+  var idx = 0;
+  for (final c in counts) {
+    baseLines.add(_arrangeLine(outfield.sublist(idx, idx + c)));
+    idx += c;
+  }
+
+  final baseIds = [for (final l in baseLines) ...l.map((e) => e.id)];
+  bool sameSet(List<String> ids) =>
+      ids.length == baseIds.length && ids.toSet().containsAll(baseIds);
+  final slotted =
+      starterRosters.every((r) => r.slot != null) &&
+          starterRosters.map((r) => r.slot).toSet().length ==
+              starterRosters.length
+      ? ([...starterRosters]..sort((a, b) => a.slot!.compareTo(b.slot!)))
+            .map((r) => r.playerId)
+            .toList()
+      : null;
+  var ids = baseIds;
+  if (order != null && sameSet(order)) {
+    ids = order;
+  } else if (slotted != null && sameSet(slotted)) {
+    ids = slotted;
+  }
+
+  final byId = {for (final p in starters) p.id: p};
+  final lines = <List<_PitchPlayer>>[];
+  var k = 0;
+  for (final l in baseLines) {
+    lines.add([for (var i = 0; i < l.length; i++) byId[ids[k++]]!]);
+  }
+  return _Layout(
+    lines: lines,
+    formation: f,
+    autoFormation: autoFormation,
+    outfieldCount: outfieldCount,
+    ids: ids,
+  );
+}
+
+/// Kadrolar sekmesi için: ilk 11 oyuncu id'lerini diziliş sahasındaki
+/// sırayla döndürür (kaleci → defans → orta saha → forvet). Oyuncunun
+/// kayıtlı mevkisi değil, o maçtaki saha yeri esas alınır.
+List<String> starterIdsInFormationOrder({
+  required List<MatchRosterModel> starters,
+  required Map<String, PlayerModel> players,
+  String? formation,
+}) {
+  return _computeLayout(starters, players, formation: formation)?.ids ??
+      const <String>[];
+}
+
 /// Maç detayı "Diziliş" sekmesi: esamedeki ilk 11 sahaya yerleşir.
 /// Diziliş seçilmemişse oyuncuların mevkilerinden otomatik hesaplanır;
 /// yetkili kullanıcı dizilişi değiştirebilir (matches.home/away_formation).
@@ -187,33 +331,9 @@ class _FormationTabState extends State<FormationTab>
   /// Sürükle-bırak sonrası saha sırası (teamIndex -> slot sırasıyla oyuncu id).
   final Map<int, List<String>> _order = {};
 
-  /// Saha sırasını match_rosters.pos_x'e yazar (null: sırayı sıfırla).
-  Future<void> _persistOrder(List<String>? ids) async {
-    final sb = Supabase.instance.client;
-    try {
-      if (ids == null) {
-        await sb
-            .from('match_rosters')
-            .update({'pos_x': null})
-            .eq('match_id', widget.match.id)
-            .eq('team_id', _teamId);
-        return;
-      }
-      for (var i = 0; i < ids.length; i++) {
-        await sb
-            .from('match_rosters')
-            .update({'pos_x': i})
-            .eq('match_id', widget.match.id)
-            .eq('team_id', _teamId)
-            .eq('player_id', ids[i]);
-      }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Yerleşim kaydedilemedi: $e')));
-    }
-  }
+  /// Kaydedilmemiş değişikliği olan takımlar (teamIndex).
+  final Set<int> _dirty = {};
+  bool _saving = false;
 
   void _swap(List<String> current, String fromId, String toId) {
     if (fromId == toId) return;
@@ -223,8 +343,57 @@ class _FormationTabState extends State<FormationTab>
     if (a < 0 || b < 0) return;
     next[a] = toId;
     next[b] = fromId;
-    setState(() => _order[_selected] = next);
-    _persistOrder(next);
+    setState(() {
+      _order[_selected] = next;
+      _dirty.add(_selected);
+    });
+  }
+
+  /// Dizilişi (matches) ve saha sırasını (match_rosters.pos_x) kaydeder.
+  /// Güncelleme hiçbir satırı etkilemezse (ör. yetki) hata verilir.
+  Future<void> _saveLayout(String formation, List<String> ids) async {
+    final sb = Supabase.instance.client;
+    final team = _selected;
+    setState(() => _saving = true);
+    try {
+      final m = await sb
+          .from('matches')
+          .update({team == 0 ? 'home_formation' : 'away_formation': formation})
+          .eq('id', widget.match.id)
+          .select('id');
+      if (m.isEmpty) throw Exception('Diziliş kaydedilemedi (yetki yok).');
+      for (var i = 0; i < ids.length; i++) {
+        final r = await sb
+            .from('match_rosters')
+            .update({'pos_x': i})
+            .eq('match_id', widget.match.id)
+            .eq('team_id', _teamId)
+            .eq('player_id', ids[i])
+            .select('id');
+        if (r.isEmpty) {
+          throw Exception('Oyuncu yerleşimi kaydedilemedi (yetki yok).');
+        }
+      }
+      if (!mounted) return;
+      setState(() {
+        _chosen[team] = formation;
+        _order[team] = ids;
+        _dirty.remove(team);
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Diziliş kaydedildi.')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Kaydedilemedi: $e'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   String get _teamId =>
@@ -250,12 +419,6 @@ class _FormationTabState extends State<FormationTab>
     '5-4-1',
   ];
 
-  static List<int> _parse(String f) => f
-      .split('-')
-      .map((e) => int.tryParse(e.trim()) ?? 0)
-      .where((e) => e > 0)
-      .toList();
-
   /// Saha oyuncusu sayısına uygun diziliş seçenekleri.
   static List<String> _optionsFor(int outfield, String auto) {
     final out = <String>[];
@@ -272,39 +435,12 @@ class _FormationTabState extends State<FormationTab>
     return out;
   }
 
-  /// Hattı kenar oyuncular iki uca, merkezdekiler ortaya gelecek şekilde dizer.
-  static List<_PitchPlayer> _arrange(List<_PitchPlayer> line) {
-    final sorted = [...line]
-      ..sort((a, b) => _jersey(a.number).compareTo(_jersey(b.number)));
-    final wide = sorted.where((e) => e.wide).toList();
-    final center = sorted.where((e) => !e.wide).toList();
-    final half = (wide.length / 2).ceil();
-    return [...wide.take(half), ...center, ...wide.skip(half)];
-  }
-
-  Future<void> _changeFormation(String value) async {
+  void _changeFormation(String value) {
     setState(() {
       _chosen[_selected] = value;
       _order.remove(_selected); // yeni dizilişte otomatik yerleşim
+      _dirty.add(_selected);
     });
-    _persistOrder(null);
-    try {
-      await ServiceLocator.matchService.updateMatchFormationState(
-        matchId: widget.match.id,
-        homeFormation: _selected == 0 ? value : null,
-        awayFormation: _selected == 1 ? value : null,
-      );
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Diziliş bu ekranda uygulandı ancak kaydedilemedi '
-            '(matches tablosunda home_formation/away_formation kolonu yok).',
-          ),
-        ),
-      );
-    }
   }
 
   @override
@@ -347,18 +483,13 @@ class _FormationTabState extends State<FormationTab>
                 final starterRosters = rosterSnap.data!
                     .where((r) => r.isStarting)
                     .toList();
-                final starters = starterRosters.map((r) {
-                  final p = players[r.playerId];
-                  return _PitchPlayer(
-                    id: r.playerId,
-                    name: (p?.name ?? '').trim().isEmpty ? '-' : p!.name,
-                    number: (r.jerseyNumber ?? p?.number ?? '').trim(),
-                    line: positionLineOf(p?.mainPosition, p?.position),
-                    wide: _isWide(p?.mainPosition, p?.position),
-                    isCaptain: r.isCaptain,
-                  );
-                }).toList();
-                if (starters.isEmpty) {
+                final layout = _computeLayout(
+                  starterRosters,
+                  players,
+                  formation: _chosen[_selected] ?? _savedFormation,
+                  order: _order[_selected],
+                );
+                if (layout == null) {
                   return const Padding(
                     padding: EdgeInsets.all(32),
                     child: Center(
@@ -372,88 +503,14 @@ class _FormationTabState extends State<FormationTab>
                     ),
                   );
                 }
-
-                // Mevkiye göre doğal hatlar (kaleci birden fazlaysa fazlası
-                // defansa).
-                final natural = List.generate(4, (_) => <_PitchPlayer>[]);
-                for (final p in starters) {
-                  natural[p.line].add(p);
-                }
-                while (natural[0].length > 1) {
-                  natural[1].add(natural[0].removeLast());
-                }
-                if (natural[0].isEmpty) {
-                  // Kaleci yoksa en düşük numaralı oyuncu kaleye.
-                  final all = [...natural[1], ...natural[2], ...natural[3]]
-                    ..sort(
-                      (a, b) => _jersey(a.number).compareTo(_jersey(b.number)),
-                    );
-                  final gk = all.first;
-                  for (final l in natural) {
-                    l.remove(gk);
-                  }
-                  natural[0].add(gk);
-                }
-                final autoFormation = natural
-                    .skip(1)
-                    .map((l) => l.length)
-                    .where((c) => c > 0)
-                    .join('-');
-                final outfieldCount = starters.length - 1;
-                final options = _optionsFor(outfieldCount, autoFormation);
-
-                var formation =
-                    _chosen[_selected] ?? _savedFormation ?? autoFormation;
-                var counts = _parse(formation);
-                if (counts.fold<int>(0, (a, b) => a + b) != outfieldCount) {
-                  formation = autoFormation; // kadro değiştiyse geçersiz
-                  counts = _parse(formation);
-                }
-
-                // Saha oyuncularını defanstan hücuma sırayla dizilişin
-                // hatlarına dağıt; her hat kendi içinde kenar/merkez dizilir.
-                final outfield = [
-                  for (var li = 1; li < 4; li++) ..._arrange(natural[li]),
-                ];
-                final baseLines = <List<_PitchPlayer>>[natural[0]];
-                var idx = 0;
-                for (final c in counts) {
-                  baseLines.add(_arrange(outfield.sublist(idx, idx + c)));
-                  idx += c;
-                }
-
-                // Elle yapılmış yerleşim: önce bu oturumdaki, yoksa
-                // kaydedilmiş (pos_x) sıra; oyuncu kümesi aynı değilse yok sayılır.
-                final baseIds = [
-                  for (final l in baseLines) ...l.map((e) => e.id),
-                ];
-                bool sameSet(List<String> ids) =>
-                    ids.length == baseIds.length &&
-                    ids.toSet().containsAll(baseIds);
-                List<String> currentIds = baseIds;
-                final local = _order[_selected];
-                final slotted =
-                    starterRosters.every((r) => r.slot != null) &&
-                        starterRosters.map((r) => r.slot).toSet().length ==
-                            starterRosters.length
-                    ? ([...starterRosters]
-                            ..sort((a, b) => a.slot!.compareTo(b.slot!)))
-                          .map((r) => r.playerId)
-                          .toList()
-                    : null;
-                if (local != null && sameSet(local)) {
-                  currentIds = local;
-                } else if (slotted != null && sameSet(slotted)) {
-                  currentIds = slotted;
-                }
-                final byId = {for (final p in starters) p.id: p};
-                final pitchLines = <List<_PitchPlayer>>[];
-                var k = 0;
-                for (final l in baseLines) {
-                  pitchLines.add([
-                    for (var i = 0; i < l.length; i++) byId[currentIds[k++]]!,
-                  ]);
-                }
+                final formation = layout.formation;
+                final options = _optionsFor(
+                  layout.outfieldCount,
+                  layout.autoFormation,
+                );
+                final pitchLines = layout.lines;
+                final currentIds = layout.ids;
+                final dirty = _dirty.contains(_selected);
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -481,10 +538,12 @@ class _FormationTabState extends State<FormationTab>
                           onChanged: _changeFormation,
                         ),
                         const Spacer(),
-                        Text(
-                          '${starters.length} oyuncu',
-                          style: const TextStyle(color: _midText, fontSize: 12),
-                        ),
+                        if (widget.canEdit)
+                          _SaveLayoutButton(
+                            dirty: dirty,
+                            saving: _saving,
+                            onPressed: () => _saveLayout(formation, currentIds),
+                          ),
                       ],
                     ),
                     const SizedBox(height: 10),
@@ -515,6 +574,59 @@ class _FormationTabState extends State<FormationTab>
           },
         ),
       ],
+    );
+  }
+}
+
+/// "Kaydet" butonu: kaydedilmemiş değişiklik varsa yeşil ve etkin,
+/// yoksa soluk "Kaydedildi" durumu.
+class _SaveLayoutButton extends StatelessWidget {
+  const _SaveLayoutButton({
+    required this.dirty,
+    required this.saving,
+    required this.onPressed,
+  });
+
+  final bool dirty;
+  final bool saving;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!dirty && !saving) {
+      return const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.check_circle_outline, color: _midText, size: 16),
+          SizedBox(width: 4),
+          Text('Kaydedildi', style: TextStyle(color: _midText, fontSize: 12)),
+        ],
+      );
+    }
+    return ElevatedButton.icon(
+      onPressed: saving ? null : onPressed,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: _accent,
+        foregroundColor: Colors.white,
+        disabledBackgroundColor: _accent.withValues(alpha: 0.5),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        minimumSize: const Size(0, 36),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+      icon: saving
+          ? const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            )
+          : const Icon(Icons.save_rounded, size: 18),
+      label: const Text(
+        'Kaydet',
+        style: TextStyle(fontWeight: FontWeight.w800),
+      ),
     );
   }
 }

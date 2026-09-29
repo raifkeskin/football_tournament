@@ -6,6 +6,7 @@ import '../../../../core/config/app_config.dart';
 import '../../models/fixture_import.dart';
 import '../../models/match.dart';
 import '../../models/match_media.dart';
+import '../../../../core/utils/resilient_stream.dart';
 import '../../../player/models/player_stats.dart';
 
 class SupabaseMatchService implements IMatchService {
@@ -642,12 +643,21 @@ class SupabaseMatchService implements IMatchService {
     String matchId,
     String teamId,
   ) {
-    return _client.from('match_rosters').stream(primaryKey: ['id']).map((rows) {
-      final filtered = rows.where(
-        (r) => r['match_id'] == matchId && r['team_id'] == teamId,
-      );
-      return filtered
-          .map((r) => MatchRosterModel.fromMap(r, r['id'] as String))
+    // Realtime akışı yalnızca "değişti" sinyali olarak kullanılır; liste her
+    // seferinde veritabanından taze okunur. Kaydetme eski satırları silip
+    // yenilerini eklediği için, silme olayları akışa ulaşmadığında akışın
+    // kendi listesinde eski satırlar kalıyor ve esame ekranda çiftleniyordu.
+    // Uygulama arka plandan dönünce kopan bağlantı da otomatik yenilenir.
+    return resilientStream(
+      () => _client.from('match_rosters').stream(primaryKey: ['id']),
+    ).asyncMap((_) async {
+      final rows = await _client
+          .from('match_rosters')
+          .select()
+          .eq('match_id', matchId)
+          .eq('team_id', teamId);
+      return rows
+          .map((r) => MatchRosterModel.fromMap(r, (r['id'] ?? '').toString()))
           .toList();
     });
   }

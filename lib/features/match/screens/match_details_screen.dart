@@ -1449,42 +1449,42 @@ class _TeamLineupColumn extends StatelessWidget {
               ).compareTo(_jerseyValue(jerseyOf(b)));
             }
 
-            final starters = rosters.where((r) => r.isStarting).toList()
-              ..sort(order);
+            // İlk 11: oyuncunun kayıtlı mevkisi değil, o maçın diziliş
+            // sahasındaki sırası (kaleci → defans → orta saha → forvet).
+            final starterRosters = rosters.where((r) => r.isStarting).toList();
+            final formationIds = starterIdsInFormationOrder(
+              starters: starterRosters,
+              players: byId,
+              formation: teamId == match.homeTeamId
+                  ? match.homeFormation
+                  : match.awayFormation,
+            );
+            final starterById = {for (final r in starterRosters) r.playerId: r};
+            final starters = [
+              for (final id in formationIds)
+                if (starterById[id] != null) starterById[id]!,
+            ];
+            final gkId = formationIds.isEmpty ? null : formationIds.first;
             final subs = rosters.where((r) => !r.isStarting).toList()
               ..sort(order);
 
-            List<Widget> rows(List<MatchRosterModel> list) {
-              final out = <Widget>[];
-              for (var i = 0; i < list.length; i++) {
-                final r = list[i];
-                final line = lineOf(r);
-                // Mevki değişince ince ayraç.
-                if (i > 0 && lineOf(list[i - 1]) != line) {
-                  out.add(
-                    Divider(
-                      height: 7,
-                      thickness: 1,
-                      color: Colors.white.withValues(alpha: 0.07),
-                    ),
-                  );
-                }
-                out.add(
+            List<Widget> rows(List<MatchRosterModel> list, {bool xi = false}) {
+              return [
+                for (final r in list)
                   _row(
                     jersey: jerseyOf(r),
                     name: byId[r.playerId]?.name ?? '-',
-                    line: line,
+                    // İlk 11'de kaleci: sahadaki kaleci; yedeklerde mevki.
+                    line: xi ? (r.playerId == gkId ? 0 : 1) : lineOf(r),
                     isCaptain: r.isCaptain,
                   ),
-                );
-              }
-              return out;
+              ];
             }
 
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                ...rows(starters),
+                ...rows(starters, xi: true),
                 if (subs.isNotEmpty) ...[
                   const SizedBox(height: 10),
                   _section('Yedekler'),

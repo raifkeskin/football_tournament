@@ -314,6 +314,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // YENİ EKLENEN: Özel Turnuva Seçici (Ortadan Açılan Ortak Dialog Tasarımı)
+  // Turnuva filtresi kapalıyken kullanılmıyor; filtre tekrar açılınca
+  // (bkz. build içindeki TURNUVA FİLTRESİ notu) yeniden kullanılacak.
+  // ignore: unused_element
   void _showLeagueSelectionDialog(
     BuildContext context,
     List<League> leagues,
@@ -533,11 +536,14 @@ class _HomeScreenState extends State<HomeScreen> {
                       };
                 _leagueNameById = {for (final l in allLeagues) l.id: l.name};
 
+                // Tek satırlık üst bant: durum çubuğu + 60px tarih şeridi.
+                final headerHeight = MediaQuery.of(context).padding.top + 80;
+
                 return Stack(
                   children: [
                     // 1. KATMAN: YEŞİL ARKA PLAN
                     Container(
-                      height: 250,
+                      height: headerHeight + 60,
                       decoration: BoxDecoration(
                         color: cs.primaryContainer,
                         image: const DecorationImage(
@@ -560,7 +566,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     // 2. KATMAN: ANA LİSTE
                     Column(
                       children: [
-                        const SizedBox(height: 185),
+                        SizedBox(height: headerHeight),
                         Expanded(
                           child: Container(
                             decoration: BoxDecoration(
@@ -580,170 +586,137 @@ class _HomeScreenState extends State<HomeScreen> {
                       top: 0,
                       left: 0,
                       right: 0,
-                      child: Container(
-                        padding: const EdgeInsets.fromLTRB(16, 44, 16, 20),
-                        child: Column(
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(
+                          4,
+                          MediaQuery.of(context).padding.top + 6,
+                          4,
+                          8,
+                        ),
+                        // Tek satır: menü · ‹ · tarih şeridi · › · takvim
+                        child: Row(
                           children: [
-                            Row(
-                              children: [
-                                // --- YENİ EKLENEN KISIM: Sol Üst Hamburger İkonu ---
-                                Builder(
-                                  builder: (ctx) => IconButton(
-                                    padding: const EdgeInsets.only(right: 12),
-                                    constraints: const BoxConstraints(),
-                                    icon: const Icon(
-                                      Icons.menu,
-                                      color: Colors.white,
-                                      size: 28,
-                                      shadows: [
-                                        Shadow(
-                                          color: Colors.black87,
-                                          blurRadius: 4,
-                                          offset: Offset(0, 2),
-                                        ),
-                                      ],
+                            Builder(
+                              builder: (ctx) => IconButton(
+                                tooltip: 'Menü',
+                                icon: const Icon(
+                                  Icons.menu,
+                                  color: Colors.white,
+                                  size: 26,
+                                  shadows: [
+                                    Shadow(
+                                      color: Colors.black87,
+                                      blurRadius: 4,
+                                      offset: Offset(0, 2),
                                     ),
-                                    onPressed: () {
-                                      ScaffoldState? scaffold =
-                                          Scaffold.maybeOf(ctx);
-                                      if (scaffold != null &&
-                                          !scaffold.hasDrawer) {
-                                        scaffold = scaffold.context
-                                            .findAncestorStateOfType<
-                                              ScaffoldState
-                                            >();
-                                      }
-                                      scaffold?.openDrawer();
-                                    },
-                                  ),
+                                  ],
                                 ),
-
-                                // ----------------------------------------------------
-                                if (!_showLeagueFilter)
-                                  const Expanded(
-                                    child: Text(
-                                      '',
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w900,
-                                        fontSize: 20,
-                                        shadows: [
-                                          Shadow(
-                                            color: Colors.black87,
-                                            blurRadius: 4,
-                                            offset: Offset(0, 2),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  )
-                                else
-                                  Expanded(
-                                    child: InkWell(
-                                      onTap: () => _showLeagueSelectionDialog(
-                                        context,
-                                        allLeagues,
-                                        isAdmin,
-                                      ),
-                                      borderRadius: BorderRadius.circular(8),
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 8.0,
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Flexible(
-                                              child: Text(
-                                                currentLeague.name,
-                                                style: TextStyle(
-                                                  color: cs.onPrimaryContainer,
-                                                  fontWeight: FontWeight.w900,
-                                                  fontSize: 20,
-                                                  shadows: const [
-                                                    Shadow(
-                                                      color: Colors.black87,
-                                                      blurRadius: 4,
-                                                      offset: Offset(0, 2),
-                                                    ),
-                                                  ],
-                                                ),
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 4),
-                                            Icon(
-                                              Icons.keyboard_arrow_down_rounded,
-                                              color: cs.onPrimaryContainer,
-                                              shadows: const [
-                                                Shadow(
-                                                  color: Colors.black87,
-                                                  blurRadius: 4,
-                                                  offset: Offset(0, 2),
-                                                ),
-                                              ],
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                IconButton(
-                                  onPressed: _openModernCalendar,
-                                  icon: Icon(
-                                    Icons.calendar_month_outlined,
-                                    color: cs.onPrimaryContainer,
-                                    shadows: const [
-                                      Shadow(
-                                        color: Colors.black87,
-                                        blurRadius: 4,
-                                        offset: Offset(0, 2),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
+                                onPressed: () {
+                                  ScaffoldState? scaffold = Scaffold.maybeOf(
+                                    ctx,
+                                  );
+                                  if (scaffold != null && !scaffold.hasDrawer) {
+                                    scaffold = scaffold.context
+                                        .findAncestorStateOfType<
+                                          ScaffoldState
+                                        >();
+                                  }
+                                  scaffold?.openDrawer();
+                                },
+                              ),
                             ),
-                            const SizedBox(height: 10),
-                            Row(
-                              children: [
-                                IconButton(
-                                  onPressed: () => _setSelectedDate(
-                                    _selectedDate.subtract(
-                                      const Duration(days: 1),
-                                    ),
+                            IconButton(
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              onPressed: () => _setSelectedDate(
+                                _selectedDate.subtract(const Duration(days: 1)),
+                              ),
+                              icon: Icon(
+                                Icons.chevron_left_rounded,
+                                color: cs.onPrimaryContainer,
+                              ),
+                            ),
+                            Expanded(
+                              child: _TarihSeridi(
+                                tarihler: _tarihler,
+                                seciliIndeks: _seciliIndeks,
+                                bugunMu: _bugunMu,
+                                onSec: _tarihSec,
+                                vurguRenk: cs.primary,
+                                haftaKisa: _haftaKisa,
+                              ),
+                            ),
+                            IconButton(
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              onPressed: () => _setSelectedDate(
+                                _selectedDate.add(const Duration(days: 1)),
+                              ),
+                              icon: Icon(
+                                Icons.chevron_right_rounded,
+                                color: cs.onPrimaryContainer,
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Takvim',
+                              onPressed: _openModernCalendar,
+                              icon: Icon(
+                                Icons.calendar_month_outlined,
+                                color: cs.onPrimaryContainer,
+                                shadows: const [
+                                  Shadow(
+                                    color: Colors.black87,
+                                    blurRadius: 4,
+                                    offset: Offset(0, 2),
                                   ),
-                                  icon: Icon(
-                                    Icons.chevron_left_rounded,
-                                    color: cs.onPrimaryContainer,
-                                  ),
-                                ),
-                                Expanded(
-                                  child: _TarihSeridi(
-                                    tarihler: _tarihler,
-                                    seciliIndeks: _seciliIndeks,
-                                    bugunMu: _bugunMu,
-                                    onSec: _tarihSec,
-                                    vurguRenk: cs.primary,
-                                    haftaKisa: _haftaKisa,
-                                  ),
-                                ),
-                                IconButton(
-                                  onPressed: () => _setSelectedDate(
-                                    _selectedDate.add(const Duration(days: 1)),
-                                  ),
-                                  icon: Icon(
-                                    Icons.chevron_right_rounded,
-                                    color: cs.onPrimaryContainer,
-                                  ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ],
                         ),
                       ),
                     ),
+                    // TURNUVA FİLTRESİ (şimdilik kapalı)
+                    // Ana sayfa şu an tüm turnuvaların maçlarını gösteriyor.
+                    // Tekrar açmak için: dosyanın başındaki
+                    // `_showLeagueFilter` değerini true yapın ve aşağıdaki
+                    // bloğu yorumdan çıkarıp başlık satırındaki menü ikonunun
+                    // yanına (tarih şeridinin yerine veya üstüne) ekleyin.
+                    //
+                    // Expanded(
+                    //   child: InkWell(
+                    //     onTap: () => _showLeagueSelectionDialog(
+                    //       context,
+                    //       allLeagues,
+                    //       isAdmin,
+                    //     ),
+                    //     borderRadius: BorderRadius.circular(8),
+                    //     child: Padding(
+                    //       padding: const EdgeInsets.symmetric(vertical: 8.0),
+                    //       child: Row(
+                    //         mainAxisSize: MainAxisSize.min,
+                    //         children: [
+                    //           Flexible(
+                    //             child: Text(
+                    //               currentLeague.name,
+                    //               style: TextStyle(
+                    //                 color: cs.onPrimaryContainer,
+                    //                 fontWeight: FontWeight.w900,
+                    //                 fontSize: 20,
+                    //               ),
+                    //               overflow: TextOverflow.ellipsis,
+                    //             ),
+                    //           ),
+                    //           const SizedBox(width: 4),
+                    //           Icon(
+                    //             Icons.keyboard_arrow_down_rounded,
+                    //             color: cs.onPrimaryContainer,
+                    //           ),
+                    //         ],
+                    //       ),
+                    //     ),
+                    //   ),
+                    // ),
                   ],
                 );
               },
@@ -754,10 +727,20 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// Takımlar bir kez dinlenir (her rebuild'de yeniden sorgulanmaz).
+  late final Stream<List<Team>> _teamsStream = resilientStream(
+    () => _teamService.watchAllTeams(caller: 'HomeScreen'),
+  );
+
   Widget _buildMatchList(BuildContext context, League currentLeague) {
     return StreamBuilder<List<Team>>(
-      stream: _teamService.watchAllTeams(),
+      stream: _teamsStream,
       builder: (context, teamSnapshot) {
+        // Takım adları gelmeden kartlar çizilmez; aksi halde önce
+        // "Ev Sahibi / Deplasman" görünüp sonra adlar geliyordu.
+        if (!teamSnapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
         final Map<String, String> logoMap = {};
         final Map<String, String> nameMap = {};
         if (teamSnapshot.hasData) {
@@ -1306,7 +1289,8 @@ class _TarihSeridi extends StatelessWidget {
             child: GestureDetector(
               onTap: () => onSec(index),
               child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 4),
+                margin: const EdgeInsets.symmetric(horizontal: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 2),
                 decoration: BoxDecoration(
                   color: secili
                       ? Colors.white.withOpacity(0.15)
@@ -1316,35 +1300,44 @@ class _TarihSeridi extends StatelessWidget {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(
-                      bugunMu(t) ? 'Bugün' : haftaKisa[t.weekday - 1],
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: secili ? Colors.white : Colors.white60,
-                        fontWeight: FontWeight.bold,
-                        shadows: const [
-                          Shadow(
-                            color: Colors.black87,
-                            blurRadius: 4,
-                            offset: Offset(0, 2),
-                          ),
-                        ],
+                    // Dar ekranlarda yazılar bölünmez, gerekirse küçülür.
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        bugunMu(t) ? 'Bugün' : haftaKisa[t.weekday - 1],
+                        maxLines: 1,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: secili ? Colors.white : Colors.white60,
+                          fontWeight: FontWeight.bold,
+                          shadows: const [
+                            Shadow(
+                              color: Colors.black87,
+                              blurRadius: 4,
+                              offset: Offset(0, 2),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      '${t.day}/${t.month}',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Colors.white,
-                        fontWeight: FontWeight.w900,
-                        shadows: [
-                          Shadow(
-                            color: Colors.black87,
-                            blurRadius: 4,
-                            offset: Offset(0, 2),
-                          ),
-                        ],
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        '${t.day}/${t.month}',
+                        maxLines: 1,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          shadows: [
+                            Shadow(
+                              color: Colors.black87,
+                              blurRadius: 4,
+                              offset: Offset(0, 2),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],

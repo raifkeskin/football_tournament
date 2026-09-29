@@ -7,39 +7,53 @@ import 'dart:async';
 /// sonlanır ve bir daha veri göndermez. Bu sarmalayıcı hatayı ekrana iletmek
 /// yerine kısa bir beklemeden sonra akışı [create] ile yeniden kurar; ekran
 /// son veriyi göstermeye devam eder.
+///
+/// Birden fazla dinleyiciyi destekler ve sonradan bağlanan dinleyiciye son
+/// değeri hemen iletir (ekran yeniden kurulsa da yükleniyor'da takılmaz).
 Stream<T> resilientStream<T>(
   Stream<T> Function() create, {
   Duration retryDelay = const Duration(seconds: 2),
 }) {
-  late final StreamController<T> controller;
+  final listeners = <MultiStreamController<T>>{};
   StreamSubscription<T>? sub;
   Timer? retry;
-  var cancelled = false;
+  late T last;
+  var hasLast = false;
 
   void connect() {
-    if (cancelled) return;
+    retry = null;
+    if (listeners.isEmpty) return;
     sub = create().listen(
-      controller.add,
+      (value) {
+        last = value;
+        hasLast = true;
+        for (final l in [...listeners]) {
+          l.add(value);
+        }
+      },
       onError: (Object _, StackTrace _) {
         sub?.cancel();
         sub = null;
-        if (cancelled) return;
+        if (listeners.isEmpty) return;
         retry?.cancel();
         retry = Timer(retryDelay, connect);
       },
     );
   }
 
-  controller = StreamController<T>.broadcast(
-    onListen: () {
-      cancelled = false;
-      connect();
-    },
-    onCancel: () {
-      cancelled = true;
-      retry?.cancel();
-      sub?.cancel();
-    },
-  );
-  return controller.stream;
+  return Stream<T>.multi((controller) {
+    listeners.add(controller);
+    if (hasLast) controller.add(last);
+    if (sub == null && retry == null) connect();
+    controller.onCancel = () {
+      listeners.remove(controller);
+      if (listeners.isEmpty) {
+        retry?.cancel();
+        retry = null;
+        sub?.cancel();
+        sub = null;
+        hasLast = false;
+      }
+    };
+  });
 }

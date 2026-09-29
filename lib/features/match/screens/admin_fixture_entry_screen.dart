@@ -12,6 +12,7 @@ import '../services/interfaces/i_match_service.dart';
 import '../../team/services/interfaces/i_team_service.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/widgets/admin_page.dart';
+import '../../../core/widgets/custom_bottom_sheet_dropdown.dart';
 import '../../../core/widgets/app_date_picker.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -84,10 +85,8 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
         .eq('league_id', id)
         .order('start_date', ascending: false)
         .map(
-          (rows) => rows
-              .cast<Map<String, dynamic>>()
-              .map(Season.fromJson)
-              .toList(),
+          (rows) =>
+              rows.cast<Map<String, dynamic>>().map(Season.fromJson).toList(),
         );
   }
 
@@ -131,368 +130,292 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
             : ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                // 1. Turnuva
-                StreamBuilder<List<League>>(
-                  stream: _leagueService.watchLeagues(),
-                  builder: (context, snapshot) {
-                    if (!snapshot.hasData) return const SizedBox();
-                    final leagues = snapshot.data ?? const <League>[];
-                    final isValid = _selectedLeagueId == null || leagues.any((l) => l.id == _selectedLeagueId);
-                    final safeValue = isValid ? _selectedLeagueId : null;
-                    return DropdownButtonFormField<String>(
-                      initialValue: safeValue,
-                      decoration: const InputDecoration(labelText: 'Turnuva'),
-                      dropdownColor: const Color(0xFF1E293B),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      items: leagues
-                          .map(
-                            (l) => DropdownMenuItem(
-                              value: l.id,
-                              child: Text(
-                                l.name,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: widget.lockLeagueSelection
-                          ? null
-                          : (val) {
-                              setState(() {
-                                _selectedLeagueId = val;
-                                _selectedSeasonId = null;
-                                _selectedGroupId = null;
-                                _homeTeamId = null;
-                                _awayTeamId = null;
-                              });
-                              if (val != null) _prefillWeek(val);
-                            },
-                    );
-                  },
-                ),
-                const SizedBox(height: 16),
-
-                // 2. Sezon
-                if (AppConfig.activeDatabase == DatabaseType.supabase &&
-                    _selectedLeagueId != null)
-                  StreamBuilder<List<Season>>(
-                    stream: _watchSeasonsForLeague(_selectedLeagueId!),
+                  // 1. Turnuva
+                  StreamBuilder<List<League>>(
+                    stream: _leagueService.watchLeagues(),
                     builder: (context, snapshot) {
                       if (!snapshot.hasData) return const SizedBox();
-                      final seasons = snapshot.data ?? const <Season>[];
-                      if (seasons.isNotEmpty) {
-                        final hasSelected = _selectedSeasonId != null &&
-                            seasons.any((s) => s.id == _selectedSeasonId);
-                        if (!hasSelected) {
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            if (!mounted) return;
+                      final leagues = snapshot.data ?? const <League>[];
+                      final isValid =
+                          _selectedLeagueId == null ||
+                          leagues.any((l) => l.id == _selectedLeagueId);
+                      final safeValue = isValid ? _selectedLeagueId : null;
+                      return IgnorePointer(
+                        ignoring: widget.lockLeagueSelection,
+                        child: CustomBottomSheetDropdown<String>(
+                          labelText: 'Turnuva',
+                          prefixIcon: Icons.emoji_events_outlined,
+                          hintText: 'Turnuva seçin',
+                          value: safeValue,
+                          items: leagues.map((l) => l.id).toList(),
+                          itemLabelBuilder: (id) =>
+                              leagues.firstWhere((l) => l.id == id).name,
+                          onChanged: (val) {
                             setState(() {
-                              _selectedSeasonId = seasons.first.id;
+                              _selectedLeagueId = val;
+                              _selectedSeasonId = null;
                               _selectedGroupId = null;
                               _homeTeamId = null;
                               _awayTeamId = null;
                             });
-                          });
+                            if (val != null) _prefillWeek(val);
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 16),
+
+                  // 2. Sezon
+                  if (AppConfig.activeDatabase == DatabaseType.supabase &&
+                      _selectedLeagueId != null)
+                    StreamBuilder<List<Season>>(
+                      stream: _watchSeasonsForLeague(_selectedLeagueId!),
+                      builder: (context, snapshot) {
+                        if (!snapshot.hasData) return const SizedBox();
+                        final seasons = snapshot.data ?? const <Season>[];
+                        if (seasons.isNotEmpty) {
+                          final hasSelected =
+                              _selectedSeasonId != null &&
+                              seasons.any((s) => s.id == _selectedSeasonId);
+                          if (!hasSelected) {
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (!mounted) return;
+                              setState(() {
+                                _selectedSeasonId = seasons.first.id;
+                                _selectedGroupId = null;
+                                _homeTeamId = null;
+                                _awayTeamId = null;
+                              });
+                            });
+                          }
                         }
-                      }
-                      final isValid = _selectedSeasonId == null || seasons.any((s) => s.id == _selectedSeasonId);
-                      final safeValue = isValid ? _selectedSeasonId : null;
-                      return DropdownButtonFormField<String>(
-                        initialValue: safeValue,
-                        decoration: const InputDecoration(labelText: 'Sezon'),
-                        dropdownColor: const Color(0xFF1E293B),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        items: seasons
-                            .map(
-                              (s) => DropdownMenuItem(
-                                value: s.id,
-                                child: Text(
-                                  s.name,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (val) => setState(() {
-                          _selectedSeasonId = val;
-                          _selectedGroupId = null;
-                          _homeTeamId = null;
-                          _awayTeamId = null;
-                        }),
-                        menuMaxHeight: 360,
-                      );
-                    },
-                  ),
-                if (AppConfig.activeDatabase == DatabaseType.supabase &&
-                    _selectedLeagueId != null)
-                  const SizedBox(height: 16),
-
-                // 2. Grup
-                if (AppConfig.activeDatabase == DatabaseType.supabase &&
-                    _selectedSeasonId != null)
-                  StreamBuilder<List<GroupModel>>(
-                    stream: _leagueService.watchGroups(_selectedSeasonId!),
-                    builder: (context, snapshot) {
-                      if (!snapshot.hasData) return const SizedBox();
-                      final groups = [...snapshot.data!]
-                        ..sort(
-                          (a, b) => a.name.toLowerCase().compareTo(
-                            b.name.toLowerCase(),
-                          ),
+                        final isValid =
+                            _selectedSeasonId == null ||
+                            seasons.any((s) => s.id == _selectedSeasonId);
+                        final safeValue = isValid ? _selectedSeasonId : null;
+                        return CustomBottomSheetDropdown<String>(
+                          labelText: 'Sezon',
+                          prefixIcon: Icons.calendar_month_outlined,
+                          hintText: 'Sezon seçin',
+                          value: safeValue,
+                          items: seasons.map((x) => x.id).toList(),
+                          itemLabelBuilder: (id) =>
+                              seasons.firstWhere((x) => x.id == id).name,
+                          onChanged: (val) => setState(() {
+                            _selectedSeasonId = val;
+                            _selectedGroupId = null;
+                            _homeTeamId = null;
+                            _awayTeamId = null;
+                          }),
                         );
-                      final isValid = _selectedGroupId == null || groups.any((g) => g.id == _selectedGroupId);
-                      final safeValue = isValid ? _selectedGroupId : null;
-                      return DropdownButtonFormField<String>(
-                        initialValue: safeValue,
-                        decoration: const InputDecoration(labelText: 'Grup'),
-                        dropdownColor: const Color(0xFF1E293B),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        items: groups
-                            .map(
-                              (g) => DropdownMenuItem(
-                                value: g.id,
-                                child: Text(
-                                  g.name,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (val) => setState(() {
-                          _selectedGroupId = val;
-                          _homeTeamId = null;
-                          _awayTeamId = null;
-                        }),
-                        menuMaxHeight: 360,
-                      );
-                    },
-                  ),
-                if (AppConfig.activeDatabase == DatabaseType.supabase &&
-                    _selectedSeasonId != null)
+                      },
+                    ),
+                  if (AppConfig.activeDatabase == DatabaseType.supabase &&
+                      _selectedLeagueId != null)
+                    const SizedBox(height: 16),
+
+                  // 2. Grup
+                  if (AppConfig.activeDatabase == DatabaseType.supabase &&
+                      _selectedSeasonId != null)
+                    StreamBuilder<List<GroupModel>>(
+                      stream: _leagueService.watchGroups(_selectedSeasonId!),
+                      builder: (context, snapshot) {
+                        if (!snapshot.hasData) return const SizedBox();
+                        final groups = [...snapshot.data!]
+                          ..sort(
+                            (a, b) => a.name.toLowerCase().compareTo(
+                              b.name.toLowerCase(),
+                            ),
+                          );
+                        final isValid =
+                            _selectedGroupId == null ||
+                            groups.any((g) => g.id == _selectedGroupId);
+                        final safeValue = isValid ? _selectedGroupId : null;
+                        return CustomBottomSheetDropdown<String>(
+                          labelText: 'Grup',
+                          prefixIcon: Icons.groups_outlined,
+                          hintText: 'Grup seçin',
+                          value: safeValue,
+                          items: groups.map((g) => g.id).toList(),
+                          itemLabelBuilder: (id) =>
+                              groups.firstWhere((g) => g.id == id).name,
+                          onChanged: (val) => setState(() {
+                            _selectedGroupId = val;
+                            _homeTeamId = null;
+                            _awayTeamId = null;
+                          }),
+                        );
+                      },
+                    ),
+                  if (AppConfig.activeDatabase == DatabaseType.supabase &&
+                      _selectedSeasonId != null)
+                    const SizedBox(height: 16),
+
+                  // 3. Takımlar
+                  if (_selectedGroupId != null)
+                    StreamBuilder<List<Team>>(
+                      stream: _teamService.watchTeamsByGroup(_selectedGroupId!),
+                      builder: (context, snapshot) {
+                        if (!snapshot.hasData) return const SizedBox();
+                        final teams = snapshot.data!;
+                        final isHomeValid =
+                            _homeTeamId == null ||
+                            teams.any((t) => t.id == _homeTeamId);
+                        final safeHome = isHomeValid ? _homeTeamId : null;
+                        final isAwayValid =
+                            _awayTeamId == null ||
+                            teams.any((t) => t.id == _awayTeamId);
+                        final safeAway = isAwayValid ? _awayTeamId : null;
+
+                        return Column(
+                          children: [
+                            CustomBottomSheetDropdown<String>(
+                              labelText: 'Ev Sahibi',
+                              prefixIcon: Icons.home_outlined,
+                              hintText: 'Ev sahibi takımı seçin',
+                              value: safeHome,
+                              items: teams.map((t) => t.id).toList(),
+                              itemLabelBuilder: (id) =>
+                                  teams.firstWhere((t) => t.id == id).name,
+                              onChanged: (val) =>
+                                  setState(() => _homeTeamId = val),
+                            ),
+                            const SizedBox(height: 10),
+                            CustomBottomSheetDropdown<String>(
+                              labelText: 'Deplasman',
+                              prefixIcon: Icons.flight_takeoff_rounded,
+                              hintText: 'Deplasman takımını seçin',
+                              value: safeAway,
+                              items: teams.map((t) => t.id).toList(),
+                              itemLabelBuilder: (id) =>
+                                  teams.firstWhere((t) => t.id == id).name,
+                              onChanged: (val) =>
+                                  setState(() => _awayTeamId = val),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
                   const SizedBox(height: 16),
 
-                // 3. Takımlar
-                if (_selectedGroupId != null)
-                  StreamBuilder<List<Team>>(
-                    stream: _teamService.watchTeamsByGroup(_selectedGroupId!),
-                    builder: (context, snapshot) {
-                      if (!snapshot.hasData) return const SizedBox();
-                      final teams = snapshot.data!;
-                      final isHomeValid = _homeTeamId == null || teams.any((t) => t.id == _homeTeamId);
-                      final safeHome = isHomeValid ? _homeTeamId : null;
-                      final isAwayValid = _awayTeamId == null || teams.any((t) => t.id == _awayTeamId);
-                      final safeAway = isAwayValid ? _awayTeamId : null;
-
-                      return Column(
-                        children: [
-                          DropdownButtonFormField<String>(
-                            initialValue: safeHome,
-                            decoration: const InputDecoration(labelText: 'Ev Sahibi'),
-                            dropdownColor: const Color(0xFF1E293B),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            items: teams
-                                .map(
-                                  (t) => DropdownMenuItem(
-                                    value: t.id,
-                                    child: Text(
-                                      t.name,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (val) =>
-                                setState(() => _homeTeamId = val),
-                          ),
-                          const SizedBox(height: 10),
-                          DropdownButtonFormField<String>(
-                            initialValue: safeAway,
-                            decoration: const InputDecoration(labelText: 'Deplasman'),
-                            dropdownColor: const Color(0xFF1E293B),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            items: teams
-                                .map(
-                                  (t) => DropdownMenuItem(
-                                    value: t.id,
-                                    child: Text(
-                                      t.name,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (val) =>
-                                setState(() => _awayTeamId = val),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                const SizedBox(height: 16),
-
-                TextField(
-                  controller: _weekController,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(3),
-                  ],
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  decoration: const InputDecoration(
-                    labelText: 'Hafta',
-                    prefixIcon: Icon(Icons.format_list_numbered),
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                StreamBuilder<List<Pitch>>(
-                  stream: _leagueService.watchPitches(),
-                  builder: (context, snapshot) {
-                    final pitches = snapshot.data ?? const <Pitch>[];
-                    final isValid = _selectedPitchId == null || pitches.any((p) => p.id == _selectedPitchId);
-                    final safeValue = isValid ? _selectedPitchId : null;
-                    return DropdownButtonFormField<String?>(
-                      key: ValueKey(_selectedPitchId),
-                      initialValue: safeValue,
-                      decoration: const InputDecoration(labelText: 'Saha Seç'),
-                      dropdownColor: const Color(0xFF1E293B),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      items: [
-                        const DropdownMenuItem<String?>(
-                          value: null,
-                          child: Text(
-                            'Saha Seçilmedi',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        for (final p in pitches)
-                          DropdownMenuItem<String?>(
-                            value: p.id,
-                            child: Text(
-                              p.name,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                      ],
-                      onChanged: (v) {
-                        final selected = pitches.where((e) => e.id == v).toList(growable: false);
-                        final name = selected.isEmpty ? '' : selected.first.name.trim();
-                        setState(() {
-                          _selectedPitchId = v;
-                          _selectedPitchName = v == null || name.isEmpty ? null : name;
-                        });
-                      },
-                    );
-                  },
-                ),
-                const SizedBox(height: 10),
-                SwitchListTile.adaptive(
-                  value: _unknownDateTime,
-                  onChanged: (v) => setState(() => _unknownDateTime = v),
-                  title: const Text(
-                    'Tarih ve saat belirlenmedi',
-                    style: TextStyle(
+                  TextField(
+                    controller: _weekController,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(3),
+                    ],
+                    style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
                     ),
+                    decoration: const InputDecoration(
+                      labelText: 'Hafta',
+                      prefixIcon: Icon(Icons.format_list_numbered),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 6),
+                  const SizedBox(height: 16),
 
-                // 4. Tarih & Saat
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _unknownDateTime ? null : _pickDate,
-                        icon: const Icon(Icons.calendar_today),
-                        label: Text(
-                          '${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white,
-                        ),
+                  StreamBuilder<List<Pitch>>(
+                    stream: _leagueService.watchPitches(),
+                    builder: (context, snapshot) {
+                      final pitches = snapshot.data ?? const <Pitch>[];
+                      final isValid =
+                          _selectedPitchId == null ||
+                          pitches.any((p) => p.id == _selectedPitchId);
+                      final safeValue = isValid ? _selectedPitchId : null;
+                      // '' = "Saha Seçilmedi"
+                      return CustomBottomSheetDropdown<String>(
+                        labelText: 'Saha',
+                        prefixIcon: Icons.stadium_outlined,
+                        value: safeValue ?? '',
+                        items: ['', ...pitches.map((p) => p.id)],
+                        itemLabelBuilder: (id) => id.isEmpty
+                            ? 'Saha Seçilmedi'
+                            : pitches.firstWhere((p) => p.id == id).name,
+                        onChanged: (v) {
+                          final id = (v ?? '').isEmpty ? null : v;
+                          final selected = pitches.where((e) => e.id == id);
+                          final name = selected.isEmpty
+                              ? ''
+                              : selected.first.name.trim();
+                          setState(() {
+                            _selectedPitchId = id;
+                            _selectedPitchName = id == null || name.isEmpty
+                                ? null
+                                : name;
+                          });
+                        },
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  SwitchListTile.adaptive(
+                    value: _unknownDateTime,
+                    onChanged: (v) => setState(() => _unknownDateTime = v),
+                    title: const Text(
+                      'Tarih ve saat belirlenmedi',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _unknownDateTime ? null : _pickTime,
-                        icon: const Icon(Icons.access_time),
-                        label: Text(
-                          _selectedTime.format(context),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
+                  ),
+                  const SizedBox(height: 6),
+
+                  // 4. Tarih & Saat
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _unknownDateTime ? null : _pickDate,
+                          icon: const Icon(Icons.calendar_today),
+                          label: Text(
+                            '${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
                           ),
                         ),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _unknownDateTime ? null : _pickTime,
+                          icon: const Icon(Icons.access_time),
+                          label: Text(
+                            _selectedTime.format(context),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 32),
-
-                ElevatedButton(
-                  onPressed: _saveFixture,
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(double.infinity, 50),
-                    backgroundColor: kAdminAccent,
-                    foregroundColor: Colors.white,
-                    textStyle: const TextStyle(fontWeight: FontWeight.bold),
+                    ],
                   ),
-                  child: const Text('MAÇI KAYDET / PLANLA'),
-                ),
-              ],
-            ),
+                  const SizedBox(height: 32),
+
+                  ElevatedButton(
+                    onPressed: _saveFixture,
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 50),
+                      backgroundColor: kAdminAccent,
+                      foregroundColor: Colors.white,
+                      textStyle: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    child: const Text('MAÇI KAYDET / PLANLA'),
+                  ),
+                ],
+              ),
       ),
     );
   }
@@ -559,7 +482,7 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
       if (home == null || away == null) {
         throw Exception('Takım bilgisi alınamadı.');
       }
-      
+
       final match = MatchModel(
         id: '',
         leagueId: _selectedLeagueId!,
