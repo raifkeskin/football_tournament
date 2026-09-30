@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 import '../../tournament/models/league_extras.dart';
 import '../models/match.dart';
 import '../models/match_media.dart';
@@ -571,6 +572,10 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                       ),
                     ],
                   ),
+                  _LiveStreamPanel(
+                    key: ValueKey('live_${m.id}_$_refreshKey'),
+                    matchId: m.id,
+                  ),
                   TabBar(
                     controller: _tabController,
                     labelPadding: const EdgeInsets.symmetric(horizontal: 4),
@@ -1039,13 +1044,31 @@ class _HighlightsTab extends StatelessWidget {
           return const Center(child: Text('Henüz medya eklenmedi.'));
         }
 
-        return ListView.separated(
+        // Yayın linkleri üstte büyük video kartı, diğer medyalar altta liste.
+        final videos = mediaList
+            .where((m) => m.mediaType == 'Maç Yayın Linki')
+            .toList();
+        final others = mediaList
+            .where((m) => m.mediaType != 'Maç Yayın Linki')
+            .toList();
+
+        return ListView(
           padding: const EdgeInsets.symmetric(vertical: 8),
-          itemCount: mediaList.length,
-          separatorBuilder: (c, i) =>
-              const Divider(color: Colors.white10, height: 1, indent: 72),
-          itemBuilder: (context, index) =>
-              _buildCompactMediaItem(context, mediaList[index]),
+          children: [
+            for (final v in videos)
+              _YoutubeMediaCard(
+                key: ValueKey(v.id),
+                media: v,
+                onDelete: isSuperAdmin
+                    ? () => _confirmDelete(context, v)
+                    : null,
+              ),
+            for (var i = 0; i < others.length; i++) ...[
+              if (i > 0)
+                const Divider(color: Colors.white10, height: 1, indent: 72),
+              _buildCompactMediaItem(context, others[i]),
+            ],
+          ],
         );
       },
     );
@@ -1183,6 +1206,341 @@ Future<void> _openFullScreenMedia(
       ),
     ),
   );
+}
+
+/// YouTube linkinden video id'si çıkarır (watch, youtu.be, embed, shorts, live).
+String? _youtubeVideoId(String url) {
+  final u = url.trim();
+  if (RegExp(r'^[_\-a-zA-Z0-9]{11}$').hasMatch(u)) return u;
+  final uri = Uri.tryParse(u);
+  if (uri == null) return null;
+  final host = uri.host.toLowerCase();
+  String? id;
+  if (host.endsWith('youtu.be')) {
+    id = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : null;
+  } else if (host.contains('youtube.com') ||
+      host.contains('youtube-nocookie.com')) {
+    id = uri.queryParameters['v'];
+    final seg = uri.pathSegments;
+    if (id == null &&
+        seg.length >= 2 &&
+        const {'embed', 'shorts', 'live', 'v'}.contains(seg.first)) {
+      id = seg[1];
+    }
+  }
+  if (id == null || !RegExp(r'^[_\-a-zA-Z0-9]{11}$').hasMatch(id)) {
+    return null;
+  }
+  return id;
+}
+
+Future<void> _openYoutubeExternally(BuildContext context, String url) async {
+  final uri = Uri.tryParse(url.trim());
+  final ok =
+      uri != null && await launchUrl(uri, mode: LaunchMode.externalApplication);
+  if (!ok && context.mounted) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Video linki açılamadı.')));
+  }
+}
+
+/// 16:9 YouTube alanı: küçük resim + oynat butonu; dokununca video yerinde
+/// oynar. Link YouTube'a ait değilse dışarıda açılır.
+class _YoutubeVideoView extends StatefulWidget {
+  final String url;
+  const _YoutubeVideoView({super.key, required this.url});
+
+  @override
+  State<_YoutubeVideoView> createState() => _YoutubeVideoViewState();
+}
+
+class _YoutubeVideoViewState extends State<_YoutubeVideoView> {
+  YoutubePlayerController? _controller;
+
+  @override
+  void dispose() {
+    _controller?.close();
+    super.dispose();
+  }
+
+  void _play(String? id) {
+    if (id == null) {
+      _openYoutubeExternally(context, widget.url);
+      return;
+    }
+    setState(() {
+      _controller = YoutubePlayerController.fromVideoId(
+        videoId: id,
+        autoPlay: true,
+        params: const YoutubePlayerParams(
+          showFullscreenButton: true,
+          strictRelatedVideos: true,
+        ),
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final id = _youtubeVideoId(widget.url);
+    return AspectRatio(
+      aspectRatio: 16 / 9,
+      child: _controller != null
+          ? YoutubePlayer(controller: _controller!)
+          : GestureDetector(
+              onTap: () => _play(id),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (id != null)
+                    WebSafeImage(
+                      url: 'https://img.youtube.com/vi/$id/hqdefault.jpg',
+                      fit: BoxFit.cover,
+                      fallbackIconSize: 48,
+                    )
+                  else
+                    Container(color: Colors.black),
+                  // Alt tarafı hafif karart
+                  const DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Colors.transparent, Colors.black54],
+                      ),
+                    ),
+                  ),
+                  Center(
+                    child: Container(
+                      width: 68,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFF0000),
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: const [
+                          BoxShadow(color: Colors.black45, blurRadius: 12),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.play_arrow_rounded,
+                        color: Colors.white,
+                        size: 36,
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: 12,
+                    bottom: 10,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.6),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.smart_display_rounded,
+                            color: Color(0xFFFF0000),
+                            size: 18,
+                          ),
+                          SizedBox(width: 6),
+                          Text(
+                            'İzlemek için dokun',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+    );
+  }
+}
+
+/// Önemli Anlar sekmesindeki maç yayın linki kartı.
+class _YoutubeMediaCard extends StatelessWidget {
+  final MatchMediaModel media;
+  final VoidCallback? onDelete;
+
+  const _YoutubeMediaCard({super.key, required this.media, this.onDelete});
+
+  @override
+  Widget build(BuildContext context) {
+    final desc = (media.description ?? '').trim();
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.live_tv_rounded,
+                  color: Colors.redAccent,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    desc.isEmpty ? 'Maç Yayını' : desc,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: "YouTube'da aç",
+                  onPressed: () => _openYoutubeExternally(context, media.url),
+                  icon: const Icon(
+                    Icons.open_in_new_rounded,
+                    color: Colors.white54,
+                    size: 20,
+                  ),
+                ),
+                if (onDelete != null)
+                  IconButton(
+                    tooltip: 'Sil',
+                    onPressed: onDelete,
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      color: Colors.redAccent,
+                      size: 20,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          _YoutubeVideoView(url: media.url),
+        ],
+      ),
+    );
+  }
+}
+
+/// Sekmelerin üstünde, maça yayın linki eklendiyse görünen açılır/kapanır
+/// "Maç Yayını" paneli. Kapatılınca oynatıcı kaldırılır (video durur).
+class _LiveStreamPanel extends StatefulWidget {
+  final String matchId;
+  const _LiveStreamPanel({super.key, required this.matchId});
+
+  @override
+  State<_LiveStreamPanel> createState() => _LiveStreamPanelState();
+}
+
+class _LiveStreamPanelState extends State<_LiveStreamPanel> {
+  late final Stream<List<MatchMediaModel>> _mediaStream = ServiceLocator
+      .matchService
+      .watchMatchMedia(widget.matchId);
+  bool _expanded = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<MatchMediaModel>>(
+      stream: _mediaStream,
+      builder: (context, snap) {
+        final stream = (snap.data ?? const <MatchMediaModel>[])
+            .where(
+              (m) =>
+                  m.mediaType == 'Maç Yayın Linki' && m.url.trim().isNotEmpty,
+            )
+            .firstOrNull;
+        if (stream == null) return const SizedBox.shrink();
+
+        final desc = (stream.description ?? '').trim();
+        return Container(
+          margin: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.45),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+          ),
+          child: AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeInOut,
+            alignment: Alignment.topCenter,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                InkWell(
+                  onTap: () => setState(() => _expanded = !_expanded),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.live_tv_rounded,
+                          color: Colors.redAccent,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            desc.isEmpty ? 'Maç Yayını' : desc,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: "YouTube'da aç",
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () =>
+                              _openYoutubeExternally(context, stream.url),
+                          icon: const Icon(
+                            Icons.open_in_new_rounded,
+                            color: Colors.white54,
+                            size: 20,
+                          ),
+                        ),
+                        Icon(
+                          _expanded
+                              ? Icons.keyboard_arrow_up_rounded
+                              : Icons.keyboard_arrow_down_rounded,
+                          color: Colors.white,
+                          size: 28,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (_expanded)
+                  _YoutubeVideoView(key: ValueKey(stream.id), url: stream.url),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 }
 
 // -----------------------------------------------------------------------------

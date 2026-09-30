@@ -200,7 +200,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                             }
 
                             return Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                               child: InkWell(
                                 onTap: () {
                                   // Kapsüle tıklanınca alt paneli aç (4 argüman eksiksiz)
@@ -314,6 +314,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                                   groupId: g.id,
                                   groupName: g.name,
                                   fetchGroupId: _selectedGroupId,
+                                  showGroupName: allGroups.length > 1,
                                 );
                               },
                             );
@@ -467,12 +468,16 @@ class _GroupStandingsTable extends StatefulWidget {
   final String groupName;
   final String? fetchGroupId;
 
+  /// Sezonda birden fazla grup varsa başlığın sağında grup adı gösterilir.
+  final bool showGroupName;
+
   const _GroupStandingsTable({
     required this.leagueId,
     required this.seasonId,
     required this.groupId,
     required this.groupName,
     required this.fetchGroupId,
+    this.showGroupName = false,
   });
 
   @override
@@ -804,13 +809,7 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
                   );
                 });
 
-              String groupLabel() {
-                final name = widget.groupName.trim();
-                if (name.isEmpty) return 'Grup';
-                return name.toLowerCase().contains('grup')
-                    ? name
-                    : '$name Grubu';
-              }
+              final groupName = widget.groupName.trim();
 
               // 4'ten az takımda bölge şeritleri anlamsız (hepsi yeşil olur).
               final showZones = sortedTeamIds.length > 4;
@@ -855,6 +854,40 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
                             ),
                           ),
                           const SizedBox(width: 8),
+                          if (widget.showGroupName && groupName.isNotEmpty) ...[
+                            Expanded(
+                              child: Align(
+                                alignment: Alignment.centerRight,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(
+                                      0xFF10B981,
+                                    ).withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: const Color(
+                                        0xFF10B981,
+                                      ).withValues(alpha: 0.35),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    groupName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Color(0xFF34D399),
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
