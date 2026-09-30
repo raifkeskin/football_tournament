@@ -6,7 +6,6 @@ import '../models/match.dart';
 import '../../tournament/models/season.dart';
 import '../../team/models/team.dart';
 import '../../../core/services/app_session.dart';
-import '../../../core/config/app_config.dart';
 import '../../tournament/services/interfaces/i_league_service.dart';
 import '../services/interfaces/i_match_service.dart';
 import '../../team/services/interfaces/i_team_service.dart';
@@ -76,9 +75,6 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
   Stream<List<Season>> _watchSeasonsForLeague(String leagueId) {
     final id = leagueId.trim();
     if (id.isEmpty) return const Stream<List<Season>>.empty();
-    if (AppConfig.activeDatabase != DatabaseType.supabase) {
-      return const Stream<List<Season>>.empty();
-    }
     return Supabase.instance.client
         .from('seasons')
         .stream(primaryKey: ['id'])
@@ -167,8 +163,7 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                   const SizedBox(height: 16),
 
                   // 2. Sezon
-                  if (AppConfig.activeDatabase == DatabaseType.supabase &&
-                      _selectedLeagueId != null)
+                  if (_selectedLeagueId != null)
                     StreamBuilder<List<Season>>(
                       stream: _watchSeasonsForLeague(_selectedLeagueId!),
                       builder: (context, snapshot) {
@@ -211,13 +206,10 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                         );
                       },
                     ),
-                  if (AppConfig.activeDatabase == DatabaseType.supabase &&
-                      _selectedLeagueId != null)
-                    const SizedBox(height: 16),
+                  if (_selectedLeagueId != null) const SizedBox(height: 16),
 
                   // 2. Grup
-                  if (AppConfig.activeDatabase == DatabaseType.supabase &&
-                      _selectedSeasonId != null)
+                  if (_selectedSeasonId != null)
                     StreamBuilder<List<GroupModel>>(
                       stream: _leagueService.watchGroups(_selectedSeasonId!),
                       builder: (context, snapshot) {
@@ -248,9 +240,7 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                         );
                       },
                     ),
-                  if (AppConfig.activeDatabase == DatabaseType.supabase &&
-                      _selectedSeasonId != null)
-                    const SizedBox(height: 16),
+                  if (_selectedSeasonId != null) const SizedBox(height: 16),
 
                   // 3. Takımlar
                   if (_selectedGroupId != null)

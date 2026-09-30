@@ -46,17 +46,37 @@ class _MainNavigatorState extends State<MainNavigator> {
 
     // YENİ MENÜ LİSTESİ: İkon ve Resim yolları eklendi
     final menuItems = [
-      {'label': 'Ana Sayfa', 'icon': Icons.home_outlined, 'image': 'assets/anasayfa.jpg'}, // Mevcut ana sayfa resmin
-      {'label': 'Fikstür', 'icon': Icons.calendar_month_outlined, 'image': 'assets/images/admin_fixture.jpg'},
-      {'label': 'Puan Durumu', 'icon': Icons.groups_outlined, 'image': 'assets/images/admin_team.jpg'},
-      {'label': 'İstatistik', 'icon': Icons.bar_chart_outlined, 'image': 'assets/images/admin_tournament.jpg'},
-      {'label': 'Profil', 'icon': Icons.person_outline, 'image': 'assets/images/admin_license.jpg'},
+      {
+        'label': 'Ana Sayfa',
+        'icon': Icons.home_outlined,
+        'image': 'assets/anasayfa.jpg',
+      }, // Mevcut ana sayfa resmin
+      {
+        'label': 'Fikstür',
+        'icon': Icons.calendar_month_outlined,
+        'image': 'assets/images/admin_fixture.jpg',
+      },
+      {
+        'label': 'Puan Durumu',
+        'icon': Icons.groups_outlined,
+        'image': 'assets/images/admin_team.jpg',
+      },
+      {
+        'label': 'İstatistik',
+        'icon': Icons.bar_chart_outlined,
+        'image': 'assets/images/admin_tournament.jpg',
+      },
+      {
+        'label': 'Profil',
+        'icon': Icons.person_outline,
+        'image': 'assets/images/admin_license.jpg',
+      },
     ];
 
     return Scaffold(
       extendBody: true,
       drawer: Drawer(
-        backgroundColor: Colors.transparent, 
+        backgroundColor: Colors.transparent,
         elevation: 0,
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
@@ -72,7 +92,7 @@ class _MainNavigatorState extends State<MainNavigator> {
               ),
               border: Border(
                 right: BorderSide(
-                  color: Colors.white.withOpacity(0.1),
+                  color: Colors.white.withValues(alpha: 0.1),
                   width: 1,
                 ),
               ),
@@ -83,7 +103,10 @@ class _MainNavigatorState extends State<MainNavigator> {
                 children: [
                   // MENÜ ÜST KISMI
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 32,
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -92,10 +115,17 @@ class _MainNavigatorState extends State<MainNavigator> {
                           height: 64,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: Colors.white.withOpacity(0.1),
-                            border: Border.all(color: Colors.white.withOpacity(0.3), width: 1.5),
+                            color: Colors.white.withValues(alpha: 0.1),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.3),
+                              width: 1.5,
+                            ),
                           ),
-                          child: const Icon(Icons.sports_soccer, size: 36, color: Colors.white),
+                          child: const Icon(
+                            Icons.sports_soccer,
+                            size: 36,
+                            color: Colors.white,
+                          ),
                         ),
                         const SizedBox(height: 16),
                         const Text(
@@ -111,7 +141,7 @@ class _MainNavigatorState extends State<MainNavigator> {
                         Text(
                           'Hoş Geldiniz',
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.7),
+                            color: Colors.white.withValues(alpha: 0.7),
                             fontSize: 14,
                             fontWeight: FontWeight.w500,
                           ),
@@ -120,7 +150,10 @@ class _MainNavigatorState extends State<MainNavigator> {
                     ),
                   ),
 
-                  Divider(color: Colors.white.withOpacity(0.15), height: 1),
+                  Divider(
+                    color: Colors.white.withValues(alpha: 0.15),
+                    height: 1,
+                  ),
                   const SizedBox(height: 16),
 
                   // YENİ RESİMLİ MENÜ KARTLARI
@@ -152,12 +185,19 @@ class _MainNavigatorState extends State<MainNavigator> {
                     child: OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.white70,
-                        side: BorderSide(color: Colors.white.withOpacity(0.3)),
+                        side: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.3),
+                        ),
                         padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                       icon: const Icon(Icons.logout, size: 20),
-                      label: const Text('Çıkış Yap', style: TextStyle(fontWeight: FontWeight.bold)),
+                      label: const Text(
+                        'Çıkış Yap',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
                       onPressed: () {
                         // Çıkış yapma işlemleri
                       },
@@ -197,17 +237,32 @@ class _DrawerImageMenuCard extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: isSelected ? const Color(0xFF10B981) : Colors.white.withOpacity(0.1),
+          color: isSelected
+              ? const Color(0xFF10B981)
+              : Colors.white.withValues(alpha: 0.1),
           width: isSelected ? 1.5 : 1.0,
         ),
         boxShadow: isSelected
-            ? [BoxShadow(color: const Color(0xFF10B981).withOpacity(0.3), blurRadius: 8)]
-            : const [BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))],
+            ? [
+                BoxShadow(
+                  color: const Color(0xFF10B981).withValues(alpha: 0.3),
+                  blurRadius: 8,
+                ),
+              ]
+            : const [
+                BoxShadow(
+                  color: Colors.black26,
+                  blurRadius: 4,
+                  offset: Offset(0, 2),
+                ),
+              ],
         image: DecorationImage(
           image: AssetImage(imagePath),
           fit: BoxFit.cover,
           colorFilter: ColorFilter.mode(
-            Colors.black.withOpacity(isSelected ? 0.6 : 0.8), // Seçili olan biraz daha aydınlık
+            Colors.black.withValues(
+              alpha: isSelected ? 0.6 : 0.8,
+            ), // Seçili olan biraz daha aydınlık
             BlendMode.darken,
           ),
         ),
@@ -224,24 +279,38 @@ class _DrawerImageMenuCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: isSelected ? const Color(0xFF10B981).withOpacity(0.2) : Colors.white.withOpacity(0.1),
+                    color: isSelected
+                        ? const Color(0xFF10B981).withValues(alpha: 0.2)
+                        : Colors.white.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Icon(icon, color: isSelected ? const Color(0xFF10B981) : Colors.white, size: 20),
+                  child: Icon(
+                    icon,
+                    color: isSelected ? const Color(0xFF10B981) : Colors.white,
+                    size: 20,
+                  ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Text(
                     title,
                     style: TextStyle(
-                      color: isSelected ? const Color(0xFF10B981) : Colors.white,
-                      fontWeight: isSelected ? FontWeight.w900 : FontWeight.bold,
+                      color: isSelected
+                          ? const Color(0xFF10B981)
+                          : Colors.white,
+                      fontWeight: isSelected
+                          ? FontWeight.w900
+                          : FontWeight.bold,
                       fontSize: 15,
                     ),
                   ),
                 ),
                 if (isSelected)
-                  const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFF10B981), size: 14),
+                  const Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    color: Color(0xFF10B981),
+                    size: 14,
+                  ),
               ],
             ),
           ),

@@ -54,10 +54,10 @@ class CustomPopupSelector<T> extends StatelessWidget {
           labelText: label,
           labelStyle: const TextStyle(color: Colors.white70, fontSize: 13),
           filled: true,
-          fillColor: Colors.black.withOpacity(0.4),
+          fillColor: Colors.black.withValues(alpha: 0.4),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.white.withOpacity(0.15)),
+            borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
           ),
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 16,
@@ -112,9 +112,7 @@ class CustomPopupSelector<T> extends StatelessWidget {
                   Color(0xFF064E3B), // Alt sağ koyu zümrüt yeşili
                 ],
               ),
-              border: Border.all(
-                color: Colors.white.withOpacity(0.08),
-              ), 
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
               boxShadow: const [
                 BoxShadow(
                   color: Colors.black54,
@@ -146,9 +144,9 @@ class CustomPopupSelector<T> extends StatelessWidget {
                     shrinkWrap: true,
                     itemCount: items.length,
                     separatorBuilder: (context, index) => const Divider(
-                      color: Colors.white12, 
+                      color: Colors.white12,
                       height: 1,
-                      indent: 24, 
+                      indent: 24,
                       endIndent: 24,
                     ),
                     itemBuilder: (context, index) {
@@ -178,7 +176,9 @@ class CustomPopupSelector<T> extends StatelessWidget {
                         onTap: () {
                           Navigator.pop(context); // Tıklandığı an popup kapanır
                           if (!isSelected) {
-                            onChanged(item); // Ve yeni seçim hemen filtreye uygulanır
+                            onChanged(
+                              item,
+                            ); // Ve yeni seçim hemen filtreye uygulanır
                           }
                         },
                       );

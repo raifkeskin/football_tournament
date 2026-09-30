@@ -256,9 +256,11 @@ class _LoginScreenState extends State<LoginScreen> {
                   decoration: BoxDecoration(
                     color: const Color(
                       0xFF1E293B,
-                    ).withOpacity(0.85), // Camımsı şık kart efekti
+                    ).withValues(alpha: 0.85), // Camımsı şık kart efekti
                     borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: Colors.white.withOpacity(0.1)),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.1),
+                    ),
                     boxShadow: const [
                       BoxShadow(
                         color: Colors.black26,
@@ -296,11 +298,11 @@ class _LoginScreenState extends State<LoginScreen> {
                           hintText: '(5XX) XXX XX XX',
                           hintStyle: const TextStyle(color: Colors.white38),
                           filled: true,
-                          fillColor: Colors.black.withOpacity(0.2),
+                          fillColor: Colors.black.withValues(alpha: 0.2),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                             borderSide: BorderSide(
-                              color: Colors.white.withOpacity(0.15),
+                              color: Colors.white.withValues(alpha: 0.15),
                             ),
                           ),
                           focusedBorder: OutlineInputBorder(
@@ -330,11 +332,11 @@ class _LoginScreenState extends State<LoginScreen> {
                             color: Colors.white70,
                           ),
                           filled: true,
-                          fillColor: Colors.black.withOpacity(0.2),
+                          fillColor: Colors.black.withValues(alpha: 0.2),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                             borderSide: BorderSide(
-                              color: Colors.white.withOpacity(0.15),
+                              color: Colors.white.withValues(alpha: 0.15),
                             ),
                           ),
                           focusedBorder: OutlineInputBorder(
@@ -364,7 +366,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   value: _rememberMe,
                                   activeColor: const Color(0xFF10B981),
                                   side: BorderSide(
-                                    color: Colors.white.withOpacity(0.5),
+                                    color: Colors.white.withValues(alpha: 0.5),
                                   ),
                                   onChanged: _loading
                                       ? null
@@ -377,7 +379,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               Text(
                                 'Beni Hatırla',
                                 style: TextStyle(
-                                  color: Colors.white.withOpacity(0.8),
+                                  color: Colors.white.withValues(alpha: 0.8),
                                   fontWeight: FontWeight.w600,
                                   fontSize: 13,
                                 ),

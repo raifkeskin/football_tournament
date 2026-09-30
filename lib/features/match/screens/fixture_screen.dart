@@ -5,7 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:ui';
 
-import '../../../core/config/app_config.dart';
+import '../../../core/utils/resilient_stream.dart';
 import '../../tournament/models/league.dart';
 import '../../tournament/models/season.dart';
 import '../models/match.dart';
@@ -128,9 +128,6 @@ class _FixtureScreenState extends State<FixtureScreen> {
   }
 
   Stream<List<Season>> _watchSeasons(String leagueId) {
-    if (AppConfig.activeDatabase != DatabaseType.supabase) {
-      return Stream.value([]);
-    }
     return Supabase.instance.client
         .from('seasons')
         .stream(primaryKey: ['id'])
@@ -145,6 +142,32 @@ class _FixtureScreenState extends State<FixtureScreen> {
       _seasonsStream = _watchSeasons(leagueId);
     }
     return _seasonsStream!;
+  }
+
+  // Fikstür maç akışı: yalnızca turnuva/sezon/grup/hafta değişince yeniden
+  // kurulur (önceden her yeniden çizimde tekrar sorgulanıyordu).
+  Stream<List<MatchModel>>? _fixtureMatchesStream;
+  String? _fixtureMatchesKey;
+
+  Stream<List<MatchModel>> _fixtureStream(
+    String leagueId,
+    String seasonId,
+    String? groupId,
+    int week,
+  ) {
+    final key = '$leagueId|$seasonId|${groupId ?? ''}|$week';
+    if (_fixtureMatchesStream == null || _fixtureMatchesKey != key) {
+      _fixtureMatchesKey = key;
+      _fixtureMatchesStream = resilientStream(
+        () => _matchService.watchFixtureMatches(
+          leagueId,
+          week,
+          groupId: groupId,
+          seasonId: seasonId,
+        ),
+      );
+    }
+    return _fixtureMatchesStream!;
   }
 
   Stream<List<GroupModel>> _getGroupsStream(String seasonId) {
@@ -201,7 +224,9 @@ class _FixtureScreenState extends State<FixtureScreen> {
                     end: Alignment.bottomRight,
                     colors: [Color(0xFF1E293B), Color(0xFF064E3B)],
                   ),
-                  border: Border.all(color: Colors.white.withOpacity(0.12)),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.12),
+                  ),
                   boxShadow: const [
                     BoxShadow(
                       color: Colors.black54,
@@ -329,8 +354,8 @@ class _FixtureScreenState extends State<FixtureScreen> {
     final bool isAdmin = AppSession.of(context).value.isAdmin;
 
     const bgDark = Color(0xFF0F172A);
-    final cardBg = Colors.black.withOpacity(0.3);
-    final outline = Colors.white.withOpacity(0.08);
+    final cardBg = Colors.black.withValues(alpha: 0.3);
+    final outline = Colors.white.withValues(alpha: 0.08);
 
     return Scaffold(
       backgroundColor: bgDark,
@@ -509,10 +534,11 @@ class _FixtureScreenState extends State<FixtureScreen> {
                                   stream:
                                       displayWeek == null || _seasonId == null
                                       ? Stream.empty()
-                                      : _matchService.watchFixtureMatches(
+                                      : _fixtureStream(
                                           _leagueId!,
+                                          _seasonId!,
+                                          selectedGroupId,
                                           displayWeek,
-                                          groupId: selectedGroupId,
                                         ),
                                   builder: (context, matchesSnap) {
                                     if (matchesSnap.connectionState ==
@@ -578,8 +604,8 @@ class _FixtureScreenState extends State<FixtureScreen> {
                                                     vertical: 12,
                                                   ),
                                               decoration: BoxDecoration(
-                                                color: Colors.black.withOpacity(
-                                                  0.4,
+                                                color: Colors.black.withValues(
+                                                  alpha: 0.4,
                                                 ),
                                                 borderRadius:
                                                     BorderRadius.circular(24),
@@ -804,7 +830,7 @@ class _FixtureList extends StatelessWidget {
             child: Text(
               groupLabel(gId).toUpperCase(),
               style: TextStyle(
-                color: Colors.amberAccent.withOpacity(0.8),
+                color: Colors.amberAccent.withValues(alpha: 0.8),
                 fontWeight: FontWeight.w900,
                 fontSize: 10,
                 letterSpacing: 1.2,
@@ -833,7 +859,10 @@ class _FixtureList extends StatelessWidget {
           items.add(
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Divider(color: Colors.white.withOpacity(0.08), height: 1),
+              child: Divider(
+                color: Colors.white.withValues(alpha: 0.08),
+                height: 1,
+              ),
             ),
           );
         }

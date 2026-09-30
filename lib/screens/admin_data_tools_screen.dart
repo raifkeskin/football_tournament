@@ -307,14 +307,13 @@ class _AdminTeamFixtureBuildScreenState
   }
 
   Future<void> _pickFile() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['xlsx'],
-      withData: false,
     );
     if (!mounted) return;
-    if (result == null || result.files.isEmpty) return;
-    setState(() => _pickedFile = result.files.first);
+    if (result.isEmpty) return;
+    setState(() => _pickedFile = result.first);
   }
 
   void _showSnack(String message, {Color? background}) {

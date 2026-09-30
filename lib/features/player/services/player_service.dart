@@ -1,6 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../../core/config/app_config.dart';
 import '../../match/models/match.dart';
 
 class PlayerService {
@@ -9,9 +8,6 @@ class PlayerService {
   final SupabaseClient _client;
 
   Stream<List<PlayerModel>> watchAllFootballers({String? caller}) {
-    if (AppConfig.activeDatabase != DatabaseType.supabase) {
-      return const Stream<List<PlayerModel>>.empty();
-    }
     try {
       return _client
           .from('players')
@@ -38,9 +34,6 @@ class PlayerService {
     required String fullName,
     required String phoneRaw10,
   }) async {
-    if (AppConfig.activeDatabase != DatabaseType.supabase) {
-      throw Exception('Bu işlem bu veritabanı modunda desteklenmiyor.');
-    }
     final name = fullName.trim().replaceAll(RegExp(r'\s+'), ' ');
     if (name.isEmpty) throw Exception('İsim boş olamaz.');
     final phone = phoneRaw10.replaceAll(RegExp(r'\D'), '');

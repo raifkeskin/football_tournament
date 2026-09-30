@@ -1,7 +1,8 @@
-import 'dart:math';
+import '../../../../core/utils/table_feed.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../interfaces/i_team_service.dart';
 import '../../../../core/config/app_config.dart';
+import '../../../../core/utils/resilient_stream.dart';
 import '../../../tournament/models/league.dart';
 import '../../../match/models/match.dart';
 import '../../models/team.dart';
@@ -117,8 +118,25 @@ class SupabaseTeamService implements ITeamService {
     );
   }
 
+  /// Tüm takımlar için uygulama genelinde tek, paylaşılan akış. Birden fazla
+  /// ekran (ve Puan Durumu'ndaki her grup tablosu) aynı kanalı kullanır;
+  /// son liste önbellekte tutulur, ekran açılınca hemen gösterilir.
+  List<Team>? _allTeamsCache;
+  Stream<List<Team>>? _allTeamsFeed;
+
   @override
   Stream<List<Team>> watchAllTeams({String? caller}) {
+    return _allTeamsFeed ??= resilientStream(() async* {
+      final cached = _allTeamsCache;
+      if (cached != null) yield cached;
+      await for (final list in _watchAllTeamsSource(caller: caller)) {
+        _allTeamsCache = list;
+        yield list;
+      }
+    });
+  }
+
+  Stream<List<Team>> _watchAllTeamsSource({String? caller}) {
     try {
       _sbLog(
         table: 'season_teams',
@@ -438,7 +456,12 @@ class SupabaseTeamService implements ITeamService {
         method: 'watchTeamName',
         filters: 'primaryKey=id | clientFilter=id=$id',
       );
-      return _client.from('teams').stream(primaryKey: ['id']).map((rows) {
+      return watchTableRows(
+        _client,
+        table: 'teams',
+        column: 'id',
+        value: id,
+      ).map((rows) {
         final row = rows.cast<Map<String, dynamic>>().firstWhere(
           (r) => (r['id'] ?? '').toString().trim() == id,
           orElse: () => const <String, dynamic>{},
@@ -523,6 +546,10 @@ class SupabaseTeamService implements ITeamService {
     }
   }
 
+  /// Takım+sezon oyuncu listesi önbelleği ("teamId|seasonId" → liste).
+  /// Ekran açılınca önce buradaki liste gösterilir, taze veri arkadan gelir.
+  final Map<String, List<PlayerModel>> _playersCache = {};
+
   @override
   Stream<List<PlayerModel>> watchPlayers({
     required String teamId,
@@ -533,51 +560,39 @@ class SupabaseTeamService implements ITeamService {
     final tId = (tournamentId ?? '').trim();
     if (team.isEmpty) return const Stream<List<PlayerModel>>.empty();
     if (tId.isEmpty) return const Stream<List<PlayerModel>>.empty();
-    try {
+    final cacheKey = '$team|$tId';
+
+    Future<List<PlayerModel>> fetch() async {
       AppConfig.sqlLogStart(
         table: 'season_team_players',
         operation: 'SELECT',
         caller: caller,
         service: _serviceName,
         method: 'watchPlayers',
-        filters: 'team_id=$team, season_id=$tId | select=player_id',
+        filters:
+            'team_id=$team, season_id=$tId | select=jersey_number,players(*)',
       );
-      final stream = Stream.fromFuture(() async {
+      try {
+        // Tek sorgu: sezon kaydı + oyuncu bilgisi (players FK join).
         final res = await _client
             .from('season_team_players')
-            .select('player_id, jersey_number')
+            .select('jersey_number, players!inner(*)')
             .eq('team_id', team)
             .eq('season_id', tId)
             .eq('is_active', true);
 
-        final rows = res.cast<Map<String, dynamic>>();
-        final ids = <String>{};
-        final jerseyByPlayerId = <String, dynamic>{};
-        for (final r in rows) {
-          final pid = (r['player_id'] ?? '').toString().trim();
-          if (pid.isEmpty) continue;
-          ids.add(pid);
-          final j = r['jersey_number'];
-          if (j != null) jerseyByPlayerId[pid] = j;
-        }
-        if (ids.isEmpty) return const <PlayerModel>[];
-
-        final playersRes = await _client
-            .from('players')
-            .select()
-            .inFilter('id', ids.toList());
-
         final list = <PlayerModel>[];
-        for (final any in playersRes) {
-          final row = _withDisplayName(any.cast<String, dynamic>());
+        for (final r in res.cast<Map<String, dynamic>>()) {
+          final p = r['players'];
+          if (p is! Map) continue;
+          final row = _withDisplayName(Map<String, dynamic>.from(p));
           final pid = (row['id'] ?? '').toString().trim();
           if (pid.isEmpty) continue;
           final merged = <String, dynamic>{
             ...row,
             'season_id': tId,
             'team_id': team,
-            if (jerseyByPlayerId.containsKey(pid))
-              'jersey_number': jerseyByPlayerId[pid],
+            if (r['jersey_number'] != null) 'jersey_number': r['jersey_number'],
           };
           list.add(PlayerModel.fromMap(merged, pid));
         }
@@ -594,20 +609,33 @@ class SupabaseTeamService implements ITeamService {
           if (cmp != 0) return cmp;
           return a.name.toLowerCase().compareTo(b.name.toLowerCase());
         });
+        _playersCache[cacheKey] = list;
         return list;
-      }());
-      return stream.asBroadcastStream();
-    } catch (e) {
-      AppConfig.sqlLogResult(
-        table: 'season_team_players',
-        operation: 'SELECT',
-        caller: caller,
-        service: _serviceName,
-        method: 'watchPlayers',
-        error: e,
-      );
-      return const Stream<List<PlayerModel>>.empty();
+      } catch (e) {
+        AppConfig.sqlLogResult(
+          table: 'season_team_players',
+          operation: 'SELECT',
+          caller: caller,
+          service: _serviceName,
+          method: 'watchPlayers',
+          error: e,
+        );
+        rethrow;
+      }
     }
+
+    Stream<List<PlayerModel>> feed() async* {
+      final cached = _playersCache[cacheKey];
+      if (cached != null) yield cached;
+      try {
+        yield await fetch();
+      } catch (e) {
+        // Önbellekte veri varsa onu göstermeye devam et.
+        if (cached == null) rethrow;
+      }
+    }
+
+    return feed().asBroadcastStream();
   }
 
   Future<List<PlayerModel>> getAvailablePlayersForLeague(
@@ -927,21 +955,19 @@ class SupabaseTeamService implements ITeamService {
         method: 'watchAllPlayers',
         filters: 'primaryKey=id | order=name asc',
       );
-      return _client
-          .from('players')
-          .stream(primaryKey: ['id'])
-          .order('name', ascending: true)
-          .map((rows) {
-            final list = rows.map((r) {
-              final row = _withDisplayName(Map<String, dynamic>.from(r));
-              final id = (row['id'] ?? row['phone'] ?? '').toString();
-              return PlayerModel.fromMap(row, id);
-            }).toList();
-            list.sort(
-              (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-            );
-            return list;
-          });
+      return watchTableRows(_client, table: 'players', orderBy: 'name').map((
+        rows,
+      ) {
+        final list = rows.map((r) {
+          final row = _withDisplayName(Map<String, dynamic>.from(r));
+          final id = (row['id'] ?? row['phone'] ?? '').toString();
+          return PlayerModel.fromMap(row, id);
+        }).toList();
+        list.sort(
+          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+        );
+        return list;
+      });
     } catch (e) {
       AppConfig.sqlLogResult(
         table: 'players',

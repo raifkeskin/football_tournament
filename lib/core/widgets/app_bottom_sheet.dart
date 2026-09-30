@@ -25,11 +25,15 @@ class AppBottomSheet {
                 end: Alignment.bottomCenter,
                 colors: [
                   Color(0xFF1E293B), // Üst lacivert
-                  Color(0xFF1E293B), // Alt lacivert (dilersen yeşile 0xFF064E3B döndürebilirsin)
+                  Color(
+                    0xFF1E293B,
+                  ), // Alt lacivert (dilersen yeşile 0xFF064E3B döndürebilirsin)
                 ],
               ),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-              border: Border.all(color: Colors.white.withOpacity(0.08)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(20),
+              ),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
             ),
             padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
             child: Column(
@@ -42,13 +46,13 @@ class AppBottomSheet {
                     width: 40,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.3),
+                      color: Colors.white.withValues(alpha: 0.3),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
                 ),
                 const SizedBox(height: 20),
-                
+
                 // Opsiyonel Başlık ve İkon
                 if (title.isNotEmpty) ...[
                   Row(
@@ -86,23 +90,43 @@ class AppBottomSheet {
                       Navigator.pop(c); // Kaydet sonrası kapat
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF064E3B), // Masterclass koyu yeşil
+                      backgroundColor: const Color(
+                        0xFF064E3B,
+                      ), // Masterclass koyu yeşil
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
-                    child: Text(saveText, style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                    child: Text(
+                      saveText,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
                   ),
                 const SizedBox(height: 12),
                 OutlinedButton(
                   onPressed: () => Navigator.pop(c),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.white70,
-                    side: BorderSide(color: Colors.white.withOpacity(0.2)),
+                    side: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.2),
+                    ),
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
-                  child: Text(cancelText, style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                  child: Text(
+                    cancelText,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
                 ),
               ],
             ),

@@ -1,7 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../../core/config/app_config.dart';
+import '../../../core/utils/table_feed.dart';
 import '../../tournament/models/league.dart';
 import '../../tournament/models/season.dart';
 import '../../match/models/match.dart';
@@ -61,15 +62,30 @@ class _HomeScreenState extends State<HomeScreen> {
       '${d.month.toString().padLeft(2, '0')}-'
       '${d.day.toString().padLeft(2, '0')}';
 
+  /// Gün bazlı maç akışları ve son listeleri. Akış her yeniden çizimde
+  /// kurulmaz; daha önce açılan bir güne dönünce maçlar hemen görünür.
+  static final Map<String, Stream<List<Map<String, dynamic>>>> _dayFeeds = {};
+  static final Map<String, List<Map<String, dynamic>>> _dayCache = {};
+
   /// Seçilen günün tüm turnuvalardaki maçları.
   Stream<List<MatchModel>> _watchMatchesOnDate(DateTime date) {
     final key = _dateKey(date);
-    return resilientStream(
-      () => Supabase.instance.client
-          .from('matches')
-          .stream(primaryKey: ['id'])
-          .eq('match_date', key),
-    ).map(
+    final feed = _dayFeeds.putIfAbsent(
+      key,
+      () => resilientStream(() async* {
+        final cached = _dayCache[key];
+        if (cached != null) yield cached;
+        await for (final rows
+            in Supabase.instance.client
+                .from('matches')
+                .stream(primaryKey: ['id'])
+                .eq('match_date', key)) {
+          _dayCache[key] = rows;
+          yield rows;
+        }
+      }),
+    );
+    return feed.map(
       (rows) => rows
           .where(
             (r) =>
@@ -80,23 +96,36 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // Build içinde her seferinde yeniden kurulmasınlar diye saklanır.
+  Stream<List<MatchModel>>? _dayMatchesStream;
+  String? _dayMatchesKey;
+  Set<String>? _dayMatchesLeagues;
+
+  Stream<List<MatchModel>> _matchesOnDateStream(DateTime date) {
+    final key = _dateKey(date);
+    if (_dayMatchesStream == null ||
+        _dayMatchesKey != key ||
+        !setEquals(_dayMatchesLeagues, _visibleLeagueIds)) {
+      _dayMatchesKey = key;
+      _dayMatchesLeagues = _visibleLeagueIds;
+      _dayMatchesStream = _watchMatchesOnDate(date);
+    }
+    return _dayMatchesStream!;
+  }
+
+  late final Stream<List<Season>> _allSeasonsStream = _watchAllSeasons();
+
   /// Tüm gruplar (id, season_id, name): bir sezonda birden fazla grup varsa
   /// ana sayfada maçlar gruba göre ayrılır.
-  late final Stream<List<Map<String, dynamic>>> _groupsStream =
-      AppConfig.activeDatabase != DatabaseType.supabase
-      ? Stream.value(const <Map<String, dynamic>>[])
-      : resilientStream(
-          () => Supabase.instance.client
-              .from('groups')
-              .stream(primaryKey: ['id']),
-        );
+  late final Stream<List<Map<String, dynamic>>> _groupsStream = watchTableRows(
+    Supabase.instance.client,
+    table: 'groups',
+  );
 
   Stream<List<Season>> _watchAllSeasons() {
-    if (AppConfig.activeDatabase != DatabaseType.supabase) {
-      return Stream.value(const <Season>[]);
-    }
-    return resilientStream(
-      () => Supabase.instance.client.from('seasons').stream(primaryKey: ['id']),
+    return watchTableRows(
+      Supabase.instance.client,
+      table: 'seasons',
     ).map((rows) => rows.map((r) => Season.fromMap(r)).toList());
   }
 
@@ -150,9 +179,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Stream<List<Season>> _watchSeasons(String leagueId) {
-    if (AppConfig.activeDatabase != DatabaseType.supabase) {
-      return Stream.value([]);
-    }
     return Supabase.instance.client
         .from('seasons')
         .stream(primaryKey: ['id'])
@@ -342,7 +368,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
               border: Border.all(
-                color: Colors.white.withOpacity(0.08),
+                color: Colors.white.withValues(alpha: 0.08),
               ), // Çok hafif çerçeve
               boxShadow: const [
                 BoxShadow(
@@ -463,8 +489,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    const Color(0xFF0F172A).withOpacity(0.6),
-                    const Color(0xFF0F172A).withOpacity(0.95),
+                    const Color(0xFF0F172A).withValues(alpha: 0.6),
+                    const Color(0xFF0F172A).withValues(alpha: 0.95),
                   ],
                 ),
               ),
@@ -556,8 +582,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           begin: Alignment.centerLeft,
                           end: Alignment.centerRight,
                           colors: [
-                            const Color(0xFF064E3B).withOpacity(0.95),
-                            const Color(0xFF064E3B).withOpacity(0.6),
+                            const Color(0xFF064E3B).withValues(alpha: 0.95),
+                            const Color(0xFF064E3B).withValues(alpha: 0.6),
                           ],
                         ),
                       ),
@@ -570,7 +596,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         Expanded(
                           child: Container(
                             decoration: BoxDecoration(
-                              color: const Color(0xFF0F172A).withOpacity(0.30),
+                              color: const Color(
+                                0xFF0F172A,
+                              ).withValues(alpha: 0.30),
                               borderRadius: const BorderRadius.vertical(
                                 top: Radius.circular(24),
                               ),
@@ -755,7 +783,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ? (_activeLeagueId == null
                     ? const Stream<List<Season>>.empty()
                     : _watchSeasons(_activeLeagueId!))
-              : _watchAllSeasons(),
+              : _allSeasonsStream,
           builder: (context, seasonsSnap) {
             final seasons = seasonsSnap.data ?? const <Season>[];
 
@@ -779,7 +807,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
             return StreamBuilder<List<MatchModel>>(
               stream: !_showLeagueFilter
-                  ? _watchMatchesOnDate(_selectedDate)
+                  ? _matchesOnDateStream(_selectedDate)
                   : _activeLeagueId == null
                   ? const Stream<List<MatchModel>>.empty()
                   : _matchService.watchMatchesByDate(
@@ -851,19 +879,22 @@ class _HomeScreenState extends State<HomeScreen> {
                       (sectionMap[sectionKey(m)] ??= []).add(m);
                     }
 
-                    String titleOf(String key) {
-                      final parts = key.split('|');
+                    String leagueNameOf(String key) {
                       final m = sectionMap[key]!.first;
                       final leagueId =
-                          seasonLeagueById[parts.first] ?? m.leagueId;
-                      final leagueName =
-                          _leagueNameById[leagueId] ?? currentLeague.name;
-                      if (parts.length < 2) return leagueName;
-                      final groupName = groupNameById[parts[1]] ?? '';
-                      return groupName.isEmpty
-                          ? leagueName
-                          : '$leagueName - $groupName';
+                          seasonLeagueById[key.split('|').first] ?? m.leagueId;
+                      return _leagueNameById[leagueId] ?? currentLeague.name;
                     }
+
+                    // Sezonda tek grup varsa boş döner.
+                    String groupNameOf(String key) {
+                      final parts = key.split('|');
+                      if (parts.length < 2) return '';
+                      return groupNameById[parts[1]] ?? '';
+                    }
+
+                    String titleOf(String key) =>
+                        '${leagueNameOf(key)} ${groupNameOf(key)}';
 
                     final sortedKeys = sectionMap.keys.toList()
                       ..sort(
@@ -881,7 +912,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         final sectionLeagueId =
                             seasonLeagueById[sId] ??
                             sectionMap[key]!.first.leagueId;
-                        final titleText = titleOf(key);
+                        final leagueText = leagueNameOf(key);
+                        final groupText = groupNameOf(key);
 
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -962,17 +994,35 @@ class _HomeScreenState extends State<HomeScreen> {
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: Text(
-                                        titleText,
+                                        leagueText,
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: const TextStyle(
                                           color: Colors.white,
-                                          fontWeight: FontWeight.w900,
-                                          fontSize: 16,
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 14,
                                           letterSpacing: 0.2,
                                         ),
                                       ),
                                     ),
+                                    // Birden fazla grup varsa grup adı sağda,
+                                    // turnuva adından küçük ve soluk.
+                                    if (groupText.isNotEmpty) ...[
+                                      const SizedBox(width: 8),
+                                      Flexible(
+                                        child: Text(
+                                          groupText,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          textAlign: TextAlign.right,
+                                          style: const TextStyle(
+                                            color: Color(0xFF6EE7B7),
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 11.5,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                     const SizedBox(width: 8),
                                     const Icon(
                                       Icons.chevron_right_rounded,
@@ -1148,7 +1198,7 @@ class _MatchCardState extends State<_MatchCard> {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      color: const Color(0xFF1E293B).withOpacity(0.78),
+      color: const Color(0xFF1E293B).withValues(alpha: 0.78),
       child: InkWell(
         onTap: () async {
           await Navigator.push(
@@ -1207,7 +1257,7 @@ class _MatchCardState extends State<_MatchCard> {
               Container(
                 width: 1,
                 height: 40,
-                color: cs.outlineVariant.withOpacity(0.35),
+                color: cs.outlineVariant.withValues(alpha: 0.35),
               ),
               const SizedBox(width: 12),
 
@@ -1293,7 +1343,7 @@ class _TarihSeridi extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 2),
                 decoration: BoxDecoration(
                   color: secili
-                      ? Colors.white.withOpacity(0.15)
+                      ? Colors.white.withValues(alpha: 0.15)
                       : Colors.transparent,
                   borderRadius: BorderRadius.circular(12),
                 ),

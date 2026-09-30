@@ -1,3 +1,4 @@
+import '../../../../core/utils/table_feed.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:convert';
 
@@ -11,30 +12,35 @@ import '../../../match/models/match.dart';
 class SupabaseLeagueService implements ILeagueService {
   SupabaseLeagueService({
     SupabaseClient? client,
-    Future<List<Map<String, dynamic>>> Function(Map<String, dynamic> payload)? insertLeagueSelectId,
+    Future<List<Map<String, dynamic>>> Function(Map<String, dynamic> payload)?
+    insertLeagueSelectId,
     Future<void> Function(Map<String, dynamic> payload)? upsertLeague,
     Stream<List<Map<String, dynamic>>> Function()? streamLeagues,
     Future<void> Function({
       required String table,
       required String column,
       required String value,
-    })? deleteWhereEq,
-  }) :
-        _client = client ?? Supabase.instance.client,
-        _insertLeagueSelectId = insertLeagueSelectId,
-        _upsertLeague = upsertLeague,
-        _streamLeagues = streamLeagues,
-        _deleteWhereEq = deleteWhereEq;
+    })?
+    deleteWhereEq,
+  }) : _client = client ?? Supabase.instance.client,
+       _insertLeagueSelectId = insertLeagueSelectId,
+       _upsertLeague = upsertLeague,
+       _streamLeagues = streamLeagues,
+       _deleteWhereEq = deleteWhereEq;
 
   final SupabaseClient _client;
-  final Future<List<Map<String, dynamic>>> Function(Map<String, dynamic> payload)? _insertLeagueSelectId;
+  final Future<List<Map<String, dynamic>>> Function(
+    Map<String, dynamic> payload,
+  )?
+  _insertLeagueSelectId;
   final Future<void> Function(Map<String, dynamic> payload)? _upsertLeague;
   final Stream<List<Map<String, dynamic>>> Function()? _streamLeagues;
   final Future<void> Function({
     required String table,
     required String column,
     required String value,
-  })? _deleteWhereEq;
+  })?
+  _deleteWhereEq;
 
   DateTime? _readDate(dynamic v) {
     if (v == null) return null;
@@ -54,7 +60,9 @@ class SupabaseLeagueService implements ILeagueService {
 
     final injected = _streamLeagues;
     if (injected != null) {
-      return injected().map((rows) => rows.map((r) => League.fromMap(r)).toList());
+      return injected().map(
+        (rows) => rows.map((r) => League.fromMap(r)).toList(),
+      );
     }
 
     return _client
@@ -74,16 +82,18 @@ class SupabaseLeagueService implements ILeagueService {
       operation: 'STREAM',
       filters: 'primaryKey=id | clientFilter=id=$id',
     );
-    return _client
-        .from('leagues')
-        .stream(primaryKey: ['id'])
-        .map((rows) {
-          final row = rows.cast<Map<String, dynamic>>().firstWhere(
-            (r) => (r['id'] ?? '').toString().trim() == id,
-            orElse: () => const <String, dynamic>{},
-          );
-          return row.isEmpty ? null : League.fromMap(row);
-        });
+    return watchTableRows(
+      _client,
+      table: 'leagues',
+      column: 'id',
+      value: id,
+    ).map((rows) {
+      final row = rows.cast<Map<String, dynamic>>().firstWhere(
+        (r) => (r['id'] ?? '').toString().trim() == id,
+        orElse: () => const <String, dynamic>{},
+      );
+      return row.isEmpty ? null : League.fromMap(row);
+    });
   }
 
   @override
@@ -132,8 +142,15 @@ class SupabaseLeagueService implements ILeagueService {
       if (injected != null) {
         rows = await injected(payload);
       } else {
-        final res = await _client.from('leagues').insert(payload).select('id').limit(1);
-        rows = (res as List).cast<Map>().map((e) => e.cast<String, dynamic>()).toList();
+        final res = await _client
+            .from('leagues')
+            .insert(payload)
+            .select('id')
+            .limit(1);
+        rows = (res as List)
+            .cast<Map>()
+            .map((e) => e.cast<String, dynamic>())
+            .toList();
       }
 
       if (rows.isNotEmpty) {
@@ -151,7 +168,8 @@ class SupabaseLeagueService implements ILeagueService {
     } catch (e) {
       AppConfig.sqlLogResult(table: 'leagues', operation: 'INSERT', error: e);
       print('[SQL LOG] leagues INSERT hata: $e');
-      final keys = Map<String, dynamic>.from(league.toMap(snakeCase: true))..remove('groups');
+      final keys = Map<String, dynamic>.from(league.toMap(snakeCase: true))
+        ..remove('groups');
       print('[SQL LOG] leagues INSERT alanlar: ${keys.keys.toList()}');
       throw Exception('Supabase leagues INSERT hatası: $e');
     }
@@ -162,7 +180,11 @@ class SupabaseLeagueService implements ILeagueService {
     final id = league.id.trim();
     if (id.isEmpty) return;
     try {
-      AppConfig.sqlLogStart(table: 'leagues', operation: 'UPSERT', filters: 'onConflict=id | id=$id');
+      AppConfig.sqlLogStart(
+        table: 'leagues',
+        operation: 'UPSERT',
+        filters: 'onConflict=id | id=$id',
+      );
       final payload = Map<String, dynamic>.from(league.toMap(snakeCase: true));
 
       String? toNullIfBlank(dynamic v) {
@@ -226,8 +248,10 @@ class SupabaseLeagueService implements ILeagueService {
     Object? firstError;
     final seasonIds = <String>[];
     try {
-      final res =
-          await _client.from('seasons').select('id').eq('league_id', id);
+      final res = await _client
+          .from('seasons')
+          .select('id')
+          .eq('league_id', id);
       final rows = (res as List).cast<Map<String, dynamic>>();
       for (final r in rows) {
         final sid = (r['id'] ?? '').toString().trim();
@@ -237,23 +261,43 @@ class SupabaseLeagueService implements ILeagueService {
       firstError ??= e;
     }
     try {
-      AppConfig.sqlLogStart(table: 'match_events', operation: 'DELETE', filters: 'league_id=$id');
+      AppConfig.sqlLogStart(
+        table: 'match_events',
+        operation: 'DELETE',
+        filters: 'league_id=$id',
+      );
       await _deleteEq(table: 'match_events', column: 'league_id', value: id);
       AppConfig.sqlLogResult(table: 'match_events', operation: 'DELETE');
     } catch (e) {
       firstError ??= e;
-      AppConfig.sqlLogResult(table: 'match_events', operation: 'DELETE', error: e);
+      AppConfig.sqlLogResult(
+        table: 'match_events',
+        operation: 'DELETE',
+        error: e,
+      );
     }
     try {
-      AppConfig.sqlLogStart(table: 'match_lineups', operation: 'DELETE', filters: 'league_id=$id');
+      AppConfig.sqlLogStart(
+        table: 'match_lineups',
+        operation: 'DELETE',
+        filters: 'league_id=$id',
+      );
       await _deleteEq(table: 'match_lineups', column: 'league_id', value: id);
       AppConfig.sqlLogResult(table: 'match_lineups', operation: 'DELETE');
     } catch (e) {
       firstError ??= e;
-      AppConfig.sqlLogResult(table: 'match_lineups', operation: 'DELETE', error: e);
+      AppConfig.sqlLogResult(
+        table: 'match_lineups',
+        operation: 'DELETE',
+        error: e,
+      );
     }
     try {
-      AppConfig.sqlLogStart(table: 'matches', operation: 'DELETE', filters: 'league_id=$id');
+      AppConfig.sqlLogStart(
+        table: 'matches',
+        operation: 'DELETE',
+        filters: 'league_id=$id',
+      );
       await _deleteEq(table: 'matches', column: 'league_id', value: id);
       AppConfig.sqlLogResult(table: 'matches', operation: 'DELETE');
     } catch (e) {
@@ -261,7 +305,11 @@ class SupabaseLeagueService implements ILeagueService {
       AppConfig.sqlLogResult(table: 'matches', operation: 'DELETE', error: e);
     }
     try {
-      AppConfig.sqlLogStart(table: 'rosters', operation: 'DELETE', filters: 'league_id=$id');
+      AppConfig.sqlLogStart(
+        table: 'rosters',
+        operation: 'DELETE',
+        filters: 'league_id=$id',
+      );
       await _deleteEq(table: 'rosters', column: 'league_id', value: id);
       AppConfig.sqlLogResult(table: 'rosters', operation: 'DELETE');
     } catch (e) {
@@ -269,7 +317,11 @@ class SupabaseLeagueService implements ILeagueService {
       AppConfig.sqlLogResult(table: 'rosters', operation: 'DELETE', error: e);
     }
     try {
-      AppConfig.sqlLogStart(table: 'transfers', operation: 'DELETE', filters: 'league_id=$id');
+      AppConfig.sqlLogStart(
+        table: 'transfers',
+        operation: 'DELETE',
+        filters: 'league_id=$id',
+      );
       await _deleteEq(table: 'transfers', column: 'league_id', value: id);
       AppConfig.sqlLogResult(table: 'transfers', operation: 'DELETE');
     } catch (e) {
@@ -305,7 +357,11 @@ class SupabaseLeagueService implements ILeagueService {
       AppConfig.sqlLogResult(table: 'teams', operation: 'DELETE', error: e);
     }
     try {
-      AppConfig.sqlLogStart(table: 'leagues', operation: 'DELETE', filters: 'id=$id');
+      AppConfig.sqlLogStart(
+        table: 'leagues',
+        operation: 'DELETE',
+        filters: 'id=$id',
+      );
       await _deleteEq(table: 'leagues', column: 'id', value: id);
       AppConfig.sqlLogResult(table: 'leagues', operation: 'DELETE');
     } catch (e) {
@@ -322,9 +378,17 @@ class SupabaseLeagueService implements ILeagueService {
     final id = leagueId.trim();
     if (id.isEmpty) return;
     try {
-      AppConfig.sqlLogStart(table: 'leagues', operation: 'UPDATE', filters: 'is_default=false WHERE id<>$id');
+      AppConfig.sqlLogStart(
+        table: 'leagues',
+        operation: 'UPDATE',
+        filters: 'is_default=false WHERE id<>$id',
+      );
       await _client.from('leagues').update({'is_default': false}).neq('id', id);
-      AppConfig.sqlLogStart(table: 'leagues', operation: 'UPDATE', filters: 'is_default=true WHERE id=$id');
+      AppConfig.sqlLogStart(
+        table: 'leagues',
+        operation: 'UPDATE',
+        filters: 'is_default=true WHERE id=$id',
+      );
       await _client.from('leagues').update({'is_default': true}).eq('id', id);
       AppConfig.sqlLogResult(table: 'leagues', operation: 'UPDATE');
     } catch (e) {
@@ -340,8 +404,15 @@ class SupabaseLeagueService implements ILeagueService {
     final id = leagueId.trim();
     if (id.isEmpty) return;
     try {
-      AppConfig.sqlLogStart(table: 'leagues', operation: 'UPDATE', filters: 'id=$id');
-      await _client.from('leagues').update({'is_default': isDefault}).eq('id', id);
+      AppConfig.sqlLogStart(
+        table: 'leagues',
+        operation: 'UPDATE',
+        filters: 'id=$id',
+      );
+      await _client
+          .from('leagues')
+          .update({'is_default': isDefault})
+          .eq('id', id);
       AppConfig.sqlLogResult(table: 'leagues', operation: 'UPDATE', count: 1);
     } catch (e) {
       AppConfig.sqlLogResult(table: 'leagues', operation: 'UPDATE', error: e);
@@ -357,18 +428,20 @@ class SupabaseLeagueService implements ILeagueService {
       operation: 'STREAM',
       filters: 'primaryKey=id | clientFilter=season_id=$id',
     );
-    return _client
-        .from('groups')
-        .stream(primaryKey: ['id'])
-        .order('name', ascending: true)
-        .map((rows) {
-          final filtered = rows.where(
-            (r) => (r['season_id'] ?? '').toString().trim() == id,
-          );
-          return filtered
-              .map((r) => GroupModel.fromMap(r, (r['id'] ?? '').toString()))
-              .toList();
-        });
+    return watchTableRows(
+      _client,
+      table: 'groups',
+      column: 'season_id',
+      value: id,
+      orderBy: 'name',
+    ).map((rows) {
+      final filtered = rows.where(
+        (r) => (r['season_id'] ?? '').toString().trim() == id,
+      );
+      return filtered
+          .map((r) => GroupModel.fromMap(r, (r['id'] ?? '').toString()))
+          .toList();
+    });
   }
 
   @override
@@ -392,24 +465,40 @@ class SupabaseLeagueService implements ILeagueService {
     final id = groupId.trim();
     if (id.isEmpty) return;
     try {
-      AppConfig.sqlLogStart(table: 'matches', operation: 'DELETE', filters: 'group_id=$id');
+      AppConfig.sqlLogStart(
+        table: 'matches',
+        operation: 'DELETE',
+        filters: 'group_id=$id',
+      );
       await _client.from('matches').delete().eq('group_id', id);
       AppConfig.sqlLogResult(table: 'matches', operation: 'DELETE');
     } catch (e) {
       AppConfig.sqlLogResult(table: 'matches', operation: 'DELETE', error: e);
     }
     try {
-      AppConfig.sqlLogStart(table: 'season_teams', operation: 'UPDATE', filters: 'group_id=null WHERE group_id=$id');
+      AppConfig.sqlLogStart(
+        table: 'season_teams',
+        operation: 'UPDATE',
+        filters: 'group_id=null WHERE group_id=$id',
+      );
       await _client
           .from('season_teams')
           .update({'group_id': null, 'group_name': null})
           .eq('group_id', id);
       AppConfig.sqlLogResult(table: 'season_teams', operation: 'UPDATE');
     } catch (e) {
-      AppConfig.sqlLogResult(table: 'season_teams', operation: 'UPDATE', error: e);
+      AppConfig.sqlLogResult(
+        table: 'season_teams',
+        operation: 'UPDATE',
+        error: e,
+      );
     }
     try {
-      AppConfig.sqlLogStart(table: 'groups', operation: 'DELETE', filters: 'id=$id');
+      AppConfig.sqlLogStart(
+        table: 'groups',
+        operation: 'DELETE',
+        filters: 'id=$id',
+      );
       await _client.from('groups').delete().eq('id', id);
       AppConfig.sqlLogResult(table: 'groups', operation: 'DELETE');
     } catch (e) {
@@ -420,9 +509,20 @@ class SupabaseLeagueService implements ILeagueService {
   @override
   Future<List<String>> listPitchesOnce() async {
     try {
-      AppConfig.sqlLogStart(table: 'pitches', operation: 'SELECT', filters: 'columns=name | order=name asc');
-      final res = await _client.from('pitches').select('name').order('name', ascending: true);
-      AppConfig.sqlLogResult(table: 'pitches', operation: 'SELECT', count: res.length);
+      AppConfig.sqlLogStart(
+        table: 'pitches',
+        operation: 'SELECT',
+        filters: 'columns=name | order=name asc',
+      );
+      final res = await _client
+          .from('pitches')
+          .select('name')
+          .order('name', ascending: true);
+      AppConfig.sqlLogResult(
+        table: 'pitches',
+        operation: 'SELECT',
+        count: res.length,
+      );
       return res
           .map((e) => (e as Map)['name']?.toString() ?? '')
           .where((e) => e.trim().isNotEmpty)
@@ -441,22 +541,20 @@ class SupabaseLeagueService implements ILeagueService {
         operation: 'STREAM',
         filters: 'primaryKey=id | order=name asc',
       );
-      return _client
-          .from('pitches')
-          .stream(primaryKey: ['id'])
-          .order('name', ascending: true)
-          .map((rows) {
-            return rows.map((r) {
-              final name = (r['name'] ?? '').toString();
-              return Pitch(
-                id: (r['id'] ?? '').toString(),
-                name: name,
-                city: (r['city'] ?? '').toString(),
-                country: (r['country'] ?? '').toString(),
-                location: (r['location'] ?? '').toString(),
-              );
-            }).toList();
-          });
+      return watchTableRows(_client, table: 'pitches', orderBy: 'name').map((
+        rows,
+      ) {
+        return rows.map((r) {
+          final name = (r['name'] ?? '').toString();
+          return Pitch(
+            id: (r['id'] ?? '').toString(),
+            name: name,
+            city: (r['city'] ?? '').toString(),
+            country: (r['country'] ?? '').toString(),
+            location: (r['location'] ?? '').toString(),
+          );
+        }).toList();
+      });
     } catch (e) {
       AppConfig.sqlLogResult(table: 'pitches', operation: 'STREAM', error: e);
       return const Stream<List<Pitch>>.empty();
@@ -476,7 +574,11 @@ class SupabaseLeagueService implements ILeagueService {
     final co = (country ?? '').trim();
     final loc = (location ?? '').trim();
     try {
-      AppConfig.sqlLogStart(table: 'pitches', operation: 'INSERT', filters: 'name=$n | city=$c | country=$co');
+      AppConfig.sqlLogStart(
+        table: 'pitches',
+        operation: 'INSERT',
+        filters: 'name=$n | city=$c | country=$co',
+      );
       await _client.from('pitches').insert({
         'name': n,
         'city': c.isEmpty ? null : c,
@@ -533,7 +635,11 @@ class SupabaseLeagueService implements ILeagueService {
     final id = pitchId.trim();
     if (id.isEmpty) return;
     try {
-      AppConfig.sqlLogStart(table: 'pitches', operation: 'DELETE', filters: 'id=$id');
+      AppConfig.sqlLogStart(
+        table: 'pitches',
+        operation: 'DELETE',
+        filters: 'id=$id',
+      );
       await _client.from('pitches').delete().eq('id', id);
       AppConfig.sqlLogResult(table: 'pitches', operation: 'DELETE');
     } catch (e) {
@@ -554,30 +660,34 @@ class SupabaseLeagueService implements ILeagueService {
       AppConfig.sqlLogStart(
         table: 'news',
         operation: 'STREAM',
-        filters: 'primaryKey=id | clientFilter=league_id=$id, is_published=${includeUnpublished ? 'any' : 'true'}',
+        filters:
+            'primaryKey=id | clientFilter=league_id=$id, is_published=${includeUnpublished ? 'any' : 'true'}',
       );
-      return _client
-          .from('news')
-          .stream(primaryKey: ['id'])
-          .order('created_at', ascending: false)
-          .map((rows) {
-            return rows
-                .where((r) {
-                  final okLeague = (r['league_id'] ?? '').toString().trim() == id;
-                  if (!okLeague) return false;
-                  return includeUnpublished || (r['is_published'] == true);
-                })
-                .map((r) {
-                  return NewsItem(
-                    id: (r['id'] ?? '').toString(),
-                    tournamentId: (r['league_id'] ?? '').toString(),
-                    content: (r['content'] ?? '').toString(),
-                    isPublished: r['is_published'] == true,
-                    createdAt: _readDate(r['created_at']),
-                  );
-                })
-                .toList();
-          });
+      return watchTableRows(
+        _client,
+        table: 'news',
+        column: 'league_id',
+        value: id,
+        orderBy: 'created_at',
+        ascending: false,
+      ).map((rows) {
+        return rows
+            .where((r) {
+              final okLeague = (r['league_id'] ?? '').toString().trim() == id;
+              if (!okLeague) return false;
+              return includeUnpublished || (r['is_published'] == true);
+            })
+            .map((r) {
+              return NewsItem(
+                id: (r['id'] ?? '').toString(),
+                tournamentId: (r['league_id'] ?? '').toString(),
+                content: (r['content'] ?? '').toString(),
+                isPublished: r['is_published'] == true,
+                createdAt: _readDate(r['created_at']),
+              );
+            })
+            .toList();
+      });
     } catch (e) {
       AppConfig.sqlLogResult(table: 'news', operation: 'STREAM', error: e);
       return const Stream<List<NewsItem>>.empty();
@@ -585,7 +695,10 @@ class SupabaseLeagueService implements ILeagueService {
   }
 
   @override
-  Future<void> addNews({required String tournamentId, required String content}) async {
+  Future<void> addNews({
+    required String tournamentId,
+    required String content,
+  }) async {
     final tId = tournamentId.trim();
     final text = content.trim();
     if (tId.isEmpty) {
@@ -624,9 +737,10 @@ class SupabaseLeagueService implements ILeagueService {
         operation: 'UPDATE',
         filters: 'id=$id | is_published=$isPublished',
       );
-      await _client.from('news').update({
-        'is_published': isPublished,
-      }).eq('id', id);
+      await _client
+          .from('news')
+          .update({'is_published': isPublished})
+          .eq('id', id);
       AppConfig.sqlLogResult(table: 'news', operation: 'UPDATE', count: 1);
     } catch (e) {
       AppConfig.sqlLogResult(table: 'news', operation: 'UPDATE', error: e);
@@ -643,10 +757,12 @@ class SupabaseLeagueService implements ILeagueService {
     if (id.isEmpty) return;
     final text = content.trim();
     try {
-      AppConfig.sqlLogStart(table: 'news', operation: 'UPDATE', filters: 'id=$id');
-      await _client.from('news').update({
-        'content': text,
-      }).eq('id', id);
+      AppConfig.sqlLogStart(
+        table: 'news',
+        operation: 'UPDATE',
+        filters: 'id=$id',
+      );
+      await _client.from('news').update({'content': text}).eq('id', id);
       AppConfig.sqlLogResult(table: 'news', operation: 'UPDATE', count: 1);
     } catch (e) {
       AppConfig.sqlLogResult(table: 'news', operation: 'UPDATE', error: e);
@@ -659,7 +775,11 @@ class SupabaseLeagueService implements ILeagueService {
     final id = newsId.trim();
     if (id.isEmpty) return;
     try {
-      AppConfig.sqlLogStart(table: 'news', operation: 'DELETE', filters: 'id=$id');
+      AppConfig.sqlLogStart(
+        table: 'news',
+        operation: 'DELETE',
+        filters: 'id=$id',
+      );
       await _client.from('news').delete().eq('id', id);
       AppConfig.sqlLogResult(table: 'news', operation: 'DELETE', count: 1);
     } catch (e) {
@@ -678,18 +798,25 @@ class SupabaseLeagueService implements ILeagueService {
         operation: 'STREAM',
         filters: 'primaryKey=id | clientFilter=league_id=$id | order=name asc',
       );
-      return _client
-          .from('awards')
-          .stream(primaryKey: ['id'])
-          .order('name', ascending: true)
-          .map((rows) {
-            return rows
-                .where((r) {
-                  return (r['league_id'] ?? '').toString().trim() == id;
-                })
-                .map((r) => Award.fromMap(Map<String, dynamic>.from(r), (r['id'] ?? '').toString()))
-                .toList();
-          });
+      return watchTableRows(
+        _client,
+        table: 'awards',
+        column: 'league_id',
+        value: id,
+        orderBy: 'name',
+      ).map((rows) {
+        return rows
+            .where((r) {
+              return (r['league_id'] ?? '').toString().trim() == id;
+            })
+            .map(
+              (r) => Award.fromMap(
+                Map<String, dynamic>.from(r),
+                (r['id'] ?? '').toString(),
+              ),
+            )
+            .toList();
+      });
     } catch (e) {
       AppConfig.sqlLogResult(table: 'awards', operation: 'STREAM', error: e);
       return const Stream<List<Award>>.empty();
@@ -715,7 +842,9 @@ class SupabaseLeagueService implements ILeagueService {
       await _client.from('awards').insert({
         'league_id': id,
         'name': trimmed,
-        'description': (description ?? '').trim().isEmpty ? null : description!.trim(),
+        'description': (description ?? '').trim().isEmpty
+            ? null
+            : description!.trim(),
         'created_at': DateTime.now().toIso8601String(),
       });
       AppConfig.sqlLogResult(table: 'awards', operation: 'INSERT', count: 1);
@@ -730,7 +859,11 @@ class SupabaseLeagueService implements ILeagueService {
     final id = awardId.trim();
     if (id.isEmpty) return;
     try {
-      AppConfig.sqlLogStart(table: 'awards', operation: 'DELETE', filters: 'id=$id');
+      AppConfig.sqlLogStart(
+        table: 'awards',
+        operation: 'DELETE',
+        filters: 'id=$id',
+      );
       await _client.from('awards').delete().eq('id', id);
       AppConfig.sqlLogResult(table: 'awards', operation: 'DELETE', count: 1);
     } catch (e) {
@@ -746,7 +879,11 @@ class SupabaseLeagueService implements ILeagueService {
     try {
       AppConfig.sqlLogStart(table: name, operation: 'SELECT');
       final res = await _client.from(name).select();
-      AppConfig.sqlLogResult(table: name, operation: 'SELECT', count: res.length);
+      AppConfig.sqlLogResult(
+        table: name,
+        operation: 'SELECT',
+        count: res.length,
+      );
       return jsonEncode(res);
     } catch (e) {
       AppConfig.sqlLogResult(table: name, operation: 'SELECT', error: e);
@@ -765,7 +902,11 @@ class SupabaseLeagueService implements ILeagueService {
         AppConfig.sqlLogStart(table: c, operation: 'SELECT');
         final res = await _client.from(c).select();
         out[c] = res;
-        AppConfig.sqlLogResult(table: c, operation: 'SELECT', count: out[c] is List ? (out[c] as List).length : 0);
+        AppConfig.sqlLogResult(
+          table: c,
+          operation: 'SELECT',
+          count: out[c] is List ? (out[c] as List).length : 0,
+        );
       } catch (_) {
         out[c] = const [];
       }

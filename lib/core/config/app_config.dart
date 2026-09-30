@@ -1,15 +1,4 @@
-enum DatabaseType { firebase, supabase }
-
 class AppConfig {
-  static const DatabaseType defaultDatabase = DatabaseType.supabase;
-
-  static final DatabaseType _defaultDatabase =
-      String.fromEnvironment('ACTIVE_DB', defaultValue: defaultDatabase == DatabaseType.supabase ? 'supabase' : 'firebase') == 'supabase'
-          ? DatabaseType.supabase
-          : DatabaseType.firebase;
-
-  static DatabaseType activeDatabase = _defaultDatabase;
-
   static bool dbLogEnabled =
       String.fromEnvironment('DB_LOG', defaultValue: '0') == '1';
 

@@ -69,14 +69,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
         uid.isNotEmpty && uid != 'guest' && uid != 'anonymous' && uid != '0';
 
     // Eğer Supabase kullanılıyorsa, "Sahte Giriş" hatasını önlemek için kesin kontrolü oradan yapıyoruz
-    if (AppConfig.activeDatabase == DatabaseType.supabase) {
-      final su = Supabase.instance.client.auth.currentUser;
-      if (su == null || (su.isAnonymous ?? false)) {
-        isRealUser =
-            false; // Supabase oturumu yoksa kesinlikle Login Ekranı çıkmalı
-      } else {
-        isRealUser = true;
-      }
+    final su = Supabase.instance.client.auth.currentUser;
+    if (su == null || (su.isAnonymous ?? false)) {
+      isRealUser =
+          false; // Supabase oturumu yoksa kesinlikle Login Ekranı çıkmalı
+    } else {
+      isRealUser = true;
     }
 
     final isAdminPanelVisible = sessionData.isAdmin;
@@ -201,9 +199,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       children: [
         Container(
           decoration: BoxDecoration(
-            color: const Color(0xFF1E293B).withOpacity(0.85),
+            color: const Color(0xFF1E293B).withValues(alpha: 0.85),
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white.withOpacity(0.1)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
             boxShadow: const [
               BoxShadow(
                 color: Colors.black26,
@@ -257,9 +255,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             onPressed: _isLoading ? null : () => _logout(session),
             style: OutlinedButton.styleFrom(
               foregroundColor: Colors.redAccent,
-              backgroundColor: Colors.redAccent.withOpacity(0.08),
+              backgroundColor: Colors.redAccent.withValues(alpha: 0.08),
               side: BorderSide(
-                color: Colors.redAccent.withOpacity(0.5),
+                color: Colors.redAccent.withValues(alpha: 0.5),
                 width: 1.5,
               ),
               shape: RoundedRectangleBorder(
@@ -287,9 +285,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: const Color(0xFF064E3B).withOpacity(0.6),
+            color: const Color(0xFF064E3B).withValues(alpha: 0.6),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFF10B981).withOpacity(0.3)),
+            border: Border.all(
+              color: const Color(0xFF10B981).withValues(alpha: 0.3),
+            ),
           ),
           child: Icon(icon, size: 24, color: const Color(0xFF10B981)),
         ),

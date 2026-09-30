@@ -1,3 +1,4 @@
+import '../../../../core/utils/table_feed.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -8,7 +9,8 @@ import '../../../../core/config/app_config.dart';
 import '../../models/auth_models.dart';
 
 class SupabaseAuthService implements IAuthService {
-  SupabaseAuthService({SupabaseClient? client}) : _client = client ?? Supabase.instance.client;
+  SupabaseAuthService({SupabaseClient? client})
+    : _client = client ?? Supabase.instance.client;
 
   final SupabaseClient _client;
 
@@ -22,7 +24,9 @@ class SupabaseAuthService implements IAuthService {
 
   static Map<String, String> _traceInfo(StackTrace trace) {
     final lines = trace.toString().split('\n');
-    final line = lines.length > 1 ? lines[1] : (lines.isNotEmpty ? lines.first : '');
+    final line = lines.length > 1
+        ? lines[1]
+        : (lines.isNotEmpty ? lines.first : '');
 
     final method =
         RegExp(r'#\d+\s+(.+?)\s+\(').firstMatch(line)?.group(1)?.trim() ?? '-';
@@ -59,7 +63,9 @@ class SupabaseAuthService implements IAuthService {
   @override
   Future<ConfirmationResult> startPhoneAuthWeb({required String phoneNumber}) {
     if (!kIsWeb) {
-      throw StateError('startPhoneAuthWeb sadece Web platformunda kullanılabilir.');
+      throw StateError(
+        'startPhoneAuthWeb sadece Web platformunda kullanılabilir.',
+      );
     }
     return FirebaseAuth.instance.signInWithPhoneNumber(phoneNumber);
   }
@@ -79,7 +85,12 @@ class SupabaseAuthService implements IAuthService {
         operation: 'STREAM',
         filters: 'primaryKey=id | clientFilter=id=$id',
       );
-      return _client.from('users').stream(primaryKey: ['id']).map((rows) {
+      return watchTableRows(
+        _client,
+        table: 'users',
+        column: 'id',
+        value: id,
+      ).map((rows) {
         final row = rows.cast<Map<String, dynamic>>().firstWhere(
           (r) => (r['id'] ?? '').toString().trim() == id,
           orElse: () => const <String, dynamic>{},
@@ -88,13 +99,19 @@ class SupabaseAuthService implements IAuthService {
         final name = (row['name'] ?? '').toString().trim();
         final surname = (row['surname'] ?? '').toString().trim();
         final fullName = (row['full_name'] ?? '').toString().trim();
-        final displayName = fullName.isNotEmpty ? fullName : (name.isNotEmpty || surname.isNotEmpty ? '$name $surname'.trim() : null);
+        final displayName = fullName.isNotEmpty
+            ? fullName
+            : (name.isNotEmpty || surname.isNotEmpty
+                  ? '$name $surname'.trim()
+                  : null);
         return UserDoc(
           uid: (row['id'] ?? '').toString(),
           role: (row['access_role'] ?? row['role'])?.toString(),
           phone: (row['phone'] ?? '').toString(),
           displayName: displayName,
-          isAdmin: (row['access_role']?.toString() == 'admin' || row['access_role']?.toString() == 'super_admin'),
+          isAdmin:
+              (row['access_role']?.toString() == 'admin' ||
+              row['access_role']?.toString() == 'super_admin'),
         );
       });
     } catch (e) {
@@ -119,13 +136,19 @@ class SupabaseAuthService implements IAuthService {
         operation: 'STREAM',
         filters: 'primaryKey=id | clientFilter=player_phone=$p',
       );
-      return _client.from('rosters').stream(primaryKey: ['id']).map((rows) {
-        final filtered = rows.where((r) => (r['player_phone'] ?? r['playerPhone'] ?? '').toString().trim() == p);
+      return watchTableRows(_client, table: 'rosters').map((rows) {
+        final filtered = rows.where(
+          (r) =>
+              (r['player_phone'] ?? r['playerPhone'] ?? '').toString().trim() ==
+              p,
+        );
         return filtered.map((r) {
           final row = Map<String, dynamic>.from(r);
           return RosterAssignment(
             id: (row['id'] ?? '').toString(),
-            tournamentId: (row['tournament_id'] ?? row['tournamentId'] ?? '').toString().trim(),
+            tournamentId: (row['tournament_id'] ?? row['tournamentId'] ?? '')
+                .toString()
+                .trim(),
             teamId: (row['team_id'] ?? row['teamId'] ?? '').toString().trim(),
             role: (row['role'] ?? '').toString(),
           );
@@ -179,13 +202,15 @@ class SupabaseAuthService implements IAuthService {
     try {
       _sbLog(
         table: 'otp_codes',
-        query: 'SELECT phone_raw10=$raw10, status=pending | order=created_at desc | limit=1',
+        query:
+            'SELECT phone_raw10=$raw10, status=pending | order=created_at desc | limit=1',
         trace: StackTrace.current,
       );
       AppConfig.sqlLogStart(
         table: 'otp_codes',
         operation: 'SELECT',
-        filters: 'phone_raw10=$raw10, status=pending | order=created_at desc | limit=1',
+        filters:
+            'phone_raw10=$raw10, status=pending | order=created_at desc | limit=1',
       );
       final res = await _client
           .from('otp_codes')
@@ -196,7 +221,11 @@ class SupabaseAuthService implements IAuthService {
           .limit(1);
       final rows = (res as List).cast<Map<String, dynamic>>();
       if (rows.isEmpty) {
-        AppConfig.sqlLogResult(table: 'otp_codes', operation: 'SELECT', count: 0);
+        AppConfig.sqlLogResult(
+          table: 'otp_codes',
+          operation: 'SELECT',
+          count: 0,
+        );
         _sbResult(rows: 0);
         return null;
       }
@@ -231,7 +260,10 @@ class SupabaseAuthService implements IAuthService {
       );
       await _client
           .from('otp_codes')
-          .update({'status': 'verified', 'verified_at': DateTime.now().toIso8601String()})
+          .update({
+            'status': 'verified',
+            'verified_at': DateTime.now().toIso8601String(),
+          })
           .eq('phone_raw10', raw10)
           .eq('status', 'pending');
       AppConfig.sqlLogResult(table: 'otp_codes', operation: 'UPDATE');
@@ -247,13 +279,15 @@ class SupabaseAuthService implements IAuthService {
     Future<List<OtpCodeEntry>> fetch() async {
       _sbLog(
         table: 'otp_codes',
-        query: 'SELECT order=created_at desc | limit=200 | includeVerified=$includeVerified',
+        query:
+            'SELECT order=created_at desc | limit=200 | includeVerified=$includeVerified',
         trace: StackTrace.current,
       );
       AppConfig.sqlLogStart(
         table: 'otp_codes',
         operation: 'SELECT',
-        filters: 'order=created_at desc | limit=200 | includeVerified=$includeVerified',
+        filters:
+            'order=created_at desc | limit=200 | includeVerified=$includeVerified',
       );
       final res = await _client
           .from('otp_codes')
@@ -263,15 +297,23 @@ class SupabaseAuthService implements IAuthService {
       final rows = (res as List).cast<Map<String, dynamic>>();
       final filtered = includeVerified
           ? rows
-          : rows.where((r) => (r['status'] ?? '').toString().trim() == 'pending');
-      AppConfig.sqlLogResult(table: 'otp_codes', operation: 'SELECT', count: filtered.length);
+          : rows.where(
+              (r) => (r['status'] ?? '').toString().trim() == 'pending',
+            );
+      AppConfig.sqlLogResult(
+        table: 'otp_codes',
+        operation: 'SELECT',
+        count: filtered.length,
+      );
       _sbResult(rows: filtered.length);
       return filtered.map((row) {
         final id = (row['id'] ?? '').toString();
         final phoneRaw10 = (row['phone_raw10'] ?? '').toString().trim();
         final code = (row['code'] ?? '').toString().trim();
         final status = (row['status'] ?? '').toString().trim();
-        final expiresAt = _readDate(row['expires_at']) ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final expiresAt =
+            _readDate(row['expires_at']) ??
+            DateTime.fromMillisecondsSinceEpoch(0);
         final createdAt = _readDate(row['created_at']);
         return OtpCodeEntry(
           id: id,
@@ -312,7 +354,10 @@ class SupabaseAuthService implements IAuthService {
     }
 
     return Future(() async {
-      Future<List<Map<String, dynamic>>> leaguesBy(String field, String value) async {
+      Future<List<Map<String, dynamic>>> leaguesBy(
+        String field,
+        String value,
+      ) async {
         _sbLog(
           table: 'leagues',
           query: 'SELECT $field=$value | limit=10',
@@ -323,9 +368,17 @@ class SupabaseAuthService implements IAuthService {
           operation: 'SELECT',
           filters: '$field=$value | limit=10',
         );
-        final res = await _client.from('leagues').select().eq(field, value).limit(10);
+        final res = await _client
+            .from('leagues')
+            .select()
+            .eq(field, value)
+            .limit(10);
         final rows = (res as List).cast<Map<String, dynamic>>();
-        AppConfig.sqlLogResult(table: 'leagues', operation: 'SELECT', count: rows.length);
+        AppConfig.sqlLogResult(
+          table: 'leagues',
+          operation: 'SELECT',
+          count: rows.length,
+        );
         _sbResult(rows: rows.length);
         return rows;
       }
@@ -345,7 +398,10 @@ class SupabaseAuthService implements IAuthService {
         );
       }
 
-      Future<Map<String, dynamic>?> firstPlayerBy(String field, String value) async {
+      Future<Map<String, dynamic>?> firstPlayerBy(
+        String field,
+        String value,
+      ) async {
         _sbLog(
           table: 'players',
           query: 'SELECT $field=$value | limit=1',
@@ -356,10 +412,18 @@ class SupabaseAuthService implements IAuthService {
           operation: 'SELECT',
           filters: '$field=$value | limit=1',
         );
-        final res = await _client.from('players').select().eq(field, value).limit(1);
+        final res = await _client
+            .from('players')
+            .select()
+            .eq(field, value)
+            .limit(1);
         final rows = (res as List).cast<Map<String, dynamic>>();
         if (rows.isEmpty) {
-          AppConfig.sqlLogResult(table: 'players', operation: 'SELECT', count: 0);
+          AppConfig.sqlLogResult(
+            table: 'players',
+            operation: 'SELECT',
+            count: 0,
+          );
           _sbResult(rows: 0);
           return null;
         }
@@ -369,7 +433,8 @@ class SupabaseAuthService implements IAuthService {
       }
 
       Map<String, dynamic>? player =
-          await firstPlayerBy('phone_raw10', raw10) ?? await firstPlayerBy('phone', raw10);
+          await firstPlayerBy('phone_raw10', raw10) ??
+          await firstPlayerBy('phone', raw10);
       player ??= await firstPlayerBy('phone', '0$raw10');
       player ??= await firstPlayerBy('phone', '+90$raw10');
       player ??= await firstPlayerBy('phone', '90$raw10');
@@ -380,9 +445,13 @@ class SupabaseAuthService implements IAuthService {
 
       final playerId = (player['id'] ?? '').toString().trim();
       final name = (player['name'] ?? '').toString().trim();
-      final teamId = (player['team_id'] ?? player['teamId'] ?? '').toString().trim();
+      final teamId = (player['team_id'] ?? player['teamId'] ?? '')
+          .toString()
+          .trim();
       final pr = (player['role'] ?? '').toString().trim();
-      final resolvedRole = (pr == 'Takım Sorumlusu' || pr == 'Her İkisi') ? 'manager' : 'player';
+      final resolvedRole = (pr == 'Takım Sorumlusu' || pr == 'Her İkisi')
+          ? 'manager'
+          : 'player';
 
       String? teamName;
       String? tournamentId;
@@ -398,16 +467,30 @@ class SupabaseAuthService implements IAuthService {
             operation: 'SELECT',
             filters: 'id=$teamId | limit=1',
           );
-          final tRes = await _client.from('teams').select().eq('id', teamId).limit(1);
+          final tRes = await _client
+              .from('teams')
+              .select()
+              .eq('id', teamId)
+              .limit(1);
           final rows = (tRes as List).cast<Map<String, dynamic>>();
           if (rows.isNotEmpty) {
-            AppConfig.sqlLogResult(table: 'teams', operation: 'SELECT', count: 1);
+            AppConfig.sqlLogResult(
+              table: 'teams',
+              operation: 'SELECT',
+              count: 1,
+            );
             _sbResult(rows: 1);
             final t = rows.first;
             teamName = (t['name'] ?? '').toString().trim();
-            tournamentId = (t['league_id'] ?? t['tournament_id'] ?? '').toString().trim();
+            tournamentId = (t['league_id'] ?? t['tournament_id'] ?? '')
+                .toString()
+                .trim();
           } else {
-            AppConfig.sqlLogResult(table: 'teams', operation: 'SELECT', count: 0);
+            AppConfig.sqlLogResult(
+              table: 'teams',
+              operation: 'SELECT',
+              count: 0,
+            );
             _sbResult(rows: 0);
           }
         } catch (e) {
@@ -421,7 +504,9 @@ class SupabaseAuthService implements IAuthService {
         playerName: name.isEmpty ? null : name,
         resolvedRole: resolvedRole,
         resolvedTeamId: teamId.isEmpty ? null : teamId,
-        resolvedTournamentId: tournamentId?.isEmpty ?? true ? null : tournamentId,
+        resolvedTournamentId: tournamentId?.isEmpty ?? true
+            ? null
+            : tournamentId,
         resolvedTeamName: teamName?.isEmpty ?? true ? null : teamName,
       );
     }).catchError((_) => const ProfileLookupResult.notFound());
@@ -452,7 +537,9 @@ class SupabaseAuthService implements IAuthService {
       );
     } on FirebaseAuthException catch (e) {
       if (e.code == 'email-already-in-use') {
-        throw Exception('Bu telefon numarası ile zaten kayıt var. Lütfen giriş yapın.');
+        throw Exception(
+          'Bu telefon numarası ile zaten kayıt var. Lütfen giriş yapın.',
+        );
       }
       rethrow;
     }
@@ -484,7 +571,9 @@ class SupabaseAuthService implements IAuthService {
         'tournamentId': (resolvedTournamentId ?? '').trim().isEmpty
             ? null
             : (resolvedTournamentId ?? '').trim(),
-        'teamId': (resolvedTeamId ?? '').trim().isEmpty ? null : (resolvedTeamId ?? '').trim(),
+        'teamId': (resolvedTeamId ?? '').trim().isEmpty
+            ? null
+            : (resolvedTeamId ?? '').trim(),
         'role': roleTr,
       };
     }
@@ -509,8 +598,10 @@ class SupabaseAuthService implements IAuthService {
         if (trimmedName.isNotEmpty) 'name': trimmedName,
         if (trimmedSurname.isNotEmpty) 'surname': trimmedSurname,
         'roles': [roleEntry],
-        if (resolvedRole == 'tournament_admin') 'tournament_ids': matchedTournamentIds,
-        if (resolvedRole == 'tournament_admin') 'active_tournament_id': (selectedTournamentId ?? '').trim(),
+        if (resolvedRole == 'tournament_admin')
+          'tournament_ids': matchedTournamentIds,
+        if (resolvedRole == 'tournament_admin')
+          'active_tournament_id': (selectedTournamentId ?? '').trim(),
         'updated_at': nowIso,
         'created_at': nowIso,
       }, onConflict: 'id');
@@ -536,11 +627,22 @@ class SupabaseAuthService implements IAuthService {
             operation: 'UPDATE',
             filters: 'id=$pid',
           );
-          await _client.from('players').update({'auth_uid': user.uid, 'updated_at': nowIso}).eq('id', pid);
-          AppConfig.sqlLogResult(table: 'players', operation: 'UPDATE', count: 1);
+          await _client
+              .from('players')
+              .update({'auth_uid': user.uid, 'updated_at': nowIso})
+              .eq('id', pid);
+          AppConfig.sqlLogResult(
+            table: 'players',
+            operation: 'UPDATE',
+            count: 1,
+          );
           _sbResult(rows: 1);
         } catch (e) {
-          AppConfig.sqlLogResult(table: 'players', operation: 'UPDATE', error: e);
+          AppConfig.sqlLogResult(
+            table: 'players',
+            operation: 'UPDATE',
+            error: e,
+          );
           _sbResult(rows: 0, error: e);
         }
       }
@@ -577,7 +679,8 @@ class SupabaseAuthService implements IAuthService {
     }
 
     final tid = (selectedTournamentId ?? '').trim();
-    final isTournamentAdmin = resolvedRole == 'tournament_admin' && tid.isNotEmpty;
+    final isTournamentAdmin =
+        resolvedRole == 'tournament_admin' && tid.isNotEmpty;
     return OnlineRegistrationResult(
       uid: user.uid,
       isTournamentAdmin: isTournamentAdmin,

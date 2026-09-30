@@ -292,6 +292,9 @@ class MatchModel {
       status: resolvedStatus,
       minute: readScore(v('minute', 'minute')),
       seasonId:(map['seasonId'] ?? map['season_id'] ?? '').toString(),
+      groupId: (v('groupId', 'group_id') ?? '').toString().trim().isEmpty
+          ? null
+          : (v('groupId', 'group_id') ?? '').toString().trim(),
       score: readScoreObject(),
       createdAt: readDate(v('createdAt', 'created_at')),
       updatedAt: readDate(v('updatedAt', 'updated_at')),

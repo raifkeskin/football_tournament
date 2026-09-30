@@ -59,7 +59,9 @@ class AdminPanelWidget extends StatelessWidget {
         onPressed: () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const AdminPenaltyManagementScreen()),
+            MaterialPageRoute(
+              builder: (_) => const AdminPenaltyManagementScreen(),
+            ),
           );
         },
       ),
@@ -92,7 +94,9 @@ class AdminPanelWidget extends StatelessWidget {
         onPressed: () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const AdminPitchManagementScreen()),
+            MaterialPageRoute(
+              builder: (_) => const AdminPitchManagementScreen(),
+            ),
           );
         },
       ),
@@ -193,7 +197,7 @@ class AdminPanelWidget extends StatelessWidget {
         ),
       ),
       trailing: const Icon(Icons.chevron_right, color: Colors.white24),
-      tileColor: Colors.white.withOpacity(0.05),
+      tileColor: Colors.white.withValues(alpha: 0.05),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     );
   }
@@ -222,7 +226,7 @@ class _ModernImageMenuCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16), // Daha zarif bir kavis
-        border: Border.all(color: Colors.white.withOpacity(0.12)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
         boxShadow: const [
           BoxShadow(color: Colors.black45, blurRadius: 8, offset: Offset(0, 4)),
         ],
@@ -230,8 +234,8 @@ class _ModernImageMenuCard extends StatelessWidget {
           image: AssetImage(data.resimYolu),
           fit: BoxFit.cover,
           colorFilter: ColorFilter.mode(
-            Colors.black.withOpacity(
-              0.75,
+            Colors.black.withValues(
+              alpha: 0.75,
             ), // Resmi biraz daha karartarak yazıyı patlattık
             BlendMode.darken,
           ),
@@ -253,9 +257,11 @@ class _ModernImageMenuCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(10), // Padding ufaldı
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
+                    color: Colors.white.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white.withOpacity(0.2)),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.2),
+                    ),
                   ),
                   child: Icon(
                     data.ikon,
@@ -280,7 +286,7 @@ class _ModernImageMenuCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.05),
+                    color: Colors.white.withValues(alpha: 0.05),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(

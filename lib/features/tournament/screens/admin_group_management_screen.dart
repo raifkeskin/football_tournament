@@ -4,7 +4,6 @@ import '../models/league.dart';
 import '../models/season.dart';
 import '../../match/models/match.dart';
 import '../../team/models/team.dart';
-import '../../../core/config/app_config.dart';
 import '../../../core/services/app_session.dart';
 import '../services/interfaces/i_league_service.dart';
 import '../../team/services/interfaces/i_team_service.dart';
@@ -48,9 +47,6 @@ class _AdminGroupManagementScreenState
   Stream<List<Season>> _watchSeasonsForLeague(String leagueId) {
     final id = leagueId.trim();
     if (id.isEmpty) return const Stream<List<Season>>.empty();
-    if (AppConfig.activeDatabase != DatabaseType.supabase) {
-      return const Stream<List<Season>>.empty();
-    }
     return Supabase.instance.client
         .from('seasons')
         .stream(primaryKey: ['id'])
@@ -182,21 +178,6 @@ class _AdminGroupManagementScreenState
             StreamBuilder<List<Season>>(
               stream: _watchSeasonsForLeague(_selectedLeagueId!),
               builder: (context, snapshot) {
-                if (AppConfig.activeDatabase != DatabaseType.supabase) {
-                  return const Padding(
-                    padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
-                    child: Card(
-                      margin: EdgeInsets.zero,
-                      child: Padding(
-                        padding: EdgeInsets.all(12),
-                        child: Text(
-                          'Sezon seçimi bu veritabanı modunda desteklenmiyor.',
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ),
-                  );
-                }
                 if (!snapshot.hasData) return const SizedBox();
                 final seasons = snapshot.data ?? const <Season>[];
                 if (seasons.isNotEmpty) {
@@ -490,15 +471,6 @@ class _AdminGroupManagementScreenState
   Future<void> _openAddGroupSheet() async {
     final seasonId = (_selectedSeasonId ?? '').trim();
     if (seasonId.isEmpty) return;
-    if (AppConfig.activeDatabase != DatabaseType.supabase) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Bu işlem bu veritabanı modunda desteklenmiyor.'),
-        ),
-      );
-      return;
-    }
 
     final nameController = TextEditingController();
     final selectedTeamIds = <String>{};

@@ -129,6 +129,30 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     _tabController.addListener(() {
       if (mounted) setState(() {});
     });
+    _matchStream = _matchService.watchMatch(widget.match.id);
+    _teamsStream = _teamService.watchAllTeams();
+    _pitchesStream = _leagueService.watchPitches();
+    _prefetchLineups(widget.match);
+  }
+
+  // Akışlar bir kez kurulur; sekme değişimi gibi yeniden çizimlerde
+  // baştan bağlanıp veri beklenmez.
+  late final Stream<MatchModel> _matchStream;
+  late final Stream<List<Team>> _teamsStream;
+  late final Stream<List<Pitch>> _pitchesStream;
+
+  /// Kadrolar sekmesine basılmadan önce oyuncu ve kadro verisini arka planda
+  /// çekip servis önbelleğine alır; sekme açıldığında veri hazır olur.
+  void _prefetchLineups(MatchModel m) {
+    if (m.id.isEmpty || m.seasonId.isEmpty) return;
+    for (final teamId in {m.homeTeamId, m.awayTeamId}) {
+      if (teamId.isEmpty) continue;
+      _teamService
+          .watchPlayers(teamId: teamId, tournamentId: m.seasonId)
+          .last
+          .ignore();
+    }
+    _matchService.watchMatchRosters(m.id, m.homeTeamId).first.ignore();
   }
 
   int _refreshKey = 0;
@@ -290,7 +314,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     final session = AppSession.of(context).value;
 
     return StreamBuilder<MatchModel>(
-      stream: _matchService.watchMatch(widget.match.id),
+      stream: _matchStream,
       initialData: widget.match,
       builder: (context, matchSnap) {
         if (matchSnap.hasError) {
@@ -315,7 +339,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
         final bool isAdminAccess = isSuperAdmin || isTeamManager;
 
         return StreamBuilder<List<Team>>(
-          stream: _teamService.watchAllTeams(),
+          stream: _teamsStream,
           builder: (context, teamsSnap) {
             if (teamsSnap.hasError) {
               return Scaffold(
@@ -351,13 +375,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
 
             return Scaffold(
               extendBodyBehindAppBar: true,
+              backgroundColor: const Color(0xFF0F172A),
               appBar: AppBar(
                 toolbarHeight: 44,
-                title: const Text(
-                  'Maç Detayı',
-                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17),
-                ),
-                centerTitle: true,
                 backgroundColor: Colors.transparent,
                 surfaceTintColor: Colors.transparent,
                 elevation: 0,
@@ -516,7 +536,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                     const SizedBox(width: 4),
                                     Flexible(
                                       child: StreamBuilder<List<Pitch>>(
-                                        stream: _leagueService.watchPitches(),
+                                        stream: _pitchesStream,
                                         builder: (context, pitchSnap) {
                                           final pitchId = (m.pitchId ?? '')
                                               .trim();
@@ -572,60 +592,113 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                       ),
                     ],
                   ),
-                  _LiveStreamPanel(
-                    key: ValueKey('live_${m.id}_$_refreshKey'),
-                    matchId: m.id,
-                  ),
-                  TabBar(
-                    controller: _tabController,
-                    labelPadding: const EdgeInsets.symmetric(horizontal: 4),
-                    labelStyle: const TextStyle(
-                      fontFamily: 'Batangas',
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
-                    unselectedLabelStyle: const TextStyle(
-                      fontFamily: 'Batangas',
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
-                    tabs: const [
-                      Tab(text: 'Detay'),
-                      Tab(text: 'Kadrolar'),
-                      Tab(text: 'Önemli Anlar'),
-                      Tab(text: 'Diziliş'),
-                    ],
-                  ),
                   Expanded(
-                    child: Container(
-                      color: Theme.of(context).scaffoldBackgroundColor,
-                      child: TabBarView(
-                        controller: _tabController,
-                        children: [
-                          _DetailTab(match: m),
+                    child: Stack(
+                      children: [
+                        // Üst bandın altı: diğer ekranlardaki soluk saha zemini
+                        Positioned.fill(
+                          child: Opacity(
+                            opacity: 0.15,
+                            child: Image.asset(
+                              'assets/images/background_ball.jpg',
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        ),
+                        Column(
+                          children: [
+                            _LiveStreamPanel(
+                              key: ValueKey('live_${m.id}_$_refreshKey'),
+                              matchId: m.id,
+                            ),
+                            Container(
+                              height: 42,
+                              margin: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.4),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.1),
+                                ),
+                              ),
+                              child: TabBar(
+                                controller: _tabController,
+                                dividerColor: Colors.transparent,
+                                indicatorSize: TabBarIndicatorSize.tab,
+                                indicator: BoxDecoration(
+                                  color: const Color(0xFF10B981),
+                                  borderRadius: BorderRadius.circular(10),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(
+                                        0xFF10B981,
+                                      ).withValues(alpha: 0.35),
+                                      blurRadius: 8,
+                                    ),
+                                  ],
+                                ),
+                                labelColor: Colors.white,
+                                unselectedLabelColor: Colors.white60,
+                                overlayColor: WidgetStateProperty.all(
+                                  Colors.transparent,
+                                ),
+                                labelPadding: const EdgeInsets.symmetric(
+                                  horizontal: 2,
+                                ),
+                                labelStyle: const TextStyle(
+                                  fontFamily: 'Batangas',
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 12.5,
+                                ),
+                                unselectedLabelStyle: const TextStyle(
+                                  fontFamily: 'Batangas',
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 12.5,
+                                ),
+                                tabs: const [
+                                  Tab(text: 'Detay'),
+                                  Tab(text: 'Kadrolar'),
+                                  Tab(text: 'Önemli Anlar'),
+                                  Tab(text: 'Diziliş'),
+                                ],
+                              ),
+                            ),
+                            Expanded(
+                              child: Container(
+                                color: Colors.transparent,
+                                child: TabBarView(
+                                  controller: _tabController,
+                                  children: [
+                                    _DetailTab(match: m),
 
-                          // İŞTE DEĞİŞİKLİK YAPILAN YER: YENİ _LineupTab BAĞLANTISI
-                          _LineupTab(
-                            match: m,
-                            isAdminAccess: isAdminAccess,
-                            homeName: homeName,
-                            awayName: awayName,
-                          ),
+                                    // İŞTE DEĞİŞİKLİK YAPILAN YER: YENİ _LineupTab BAĞLANTISI
+                                    _LineupTab(
+                                      match: m,
+                                      isAdminAccess: isAdminAccess,
+                                      homeName: homeName,
+                                      awayName: awayName,
+                                    ),
 
-                          _HighlightsTab(
-                            key: ValueKey(_refreshKey),
-                            match: m,
-                            isSuperAdmin: isSuperAdmin,
-                            onDataChanged: _triggerRefresh,
-                          ),
-                          FormationTab.fromMatch(
-                            match: m,
-                            isTeamManager: isAdminAccess,
-                            homeName: homeName,
-                            awayName: awayName,
-                          ),
-                        ],
-                      ),
+                                    _HighlightsTab(
+                                      key: ValueKey(_refreshKey),
+                                      match: m,
+                                      isSuperAdmin: isSuperAdmin,
+                                      onDataChanged: _triggerRefresh,
+                                    ),
+                                    FormationTab.fromMatch(
+                                      match: m,
+                                      isTeamManager: isAdminAccess,
+                                      homeName: homeName,
+                                      awayName: awayName,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -972,7 +1045,7 @@ class _SpeedDialFabState extends State<_SpeedDialFab> {
                                   vertical: 8,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: cs.surface.withOpacity(0.95),
+                                  color: cs.surface.withValues(alpha: 0.95),
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(color: cs.outlineVariant),
                                 ),
@@ -1018,7 +1091,7 @@ class _SpeedDialFabState extends State<_SpeedDialFab> {
 
 // --- TAB İÇERİKLERİ ---
 
-class _HighlightsTab extends StatelessWidget {
+class _HighlightsTab extends StatefulWidget {
   final MatchModel match;
   final bool isSuperAdmin;
   final VoidCallback onDataChanged;
@@ -1030,9 +1103,46 @@ class _HighlightsTab extends StatelessWidget {
   });
 
   @override
+  State<_HighlightsTab> createState() => _HighlightsTabState();
+}
+
+class _HighlightsTabState extends State<_HighlightsTab>
+    with AutomaticKeepAliveClientMixin {
+  late final Stream<List<MatchMediaModel>> _mediaStream = ServiceLocator
+      .matchService
+      .watchMatchMedia(widget.match.id);
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return _HighlightsTabView(
+      match: widget.match,
+      isSuperAdmin: widget.isSuperAdmin,
+      onDataChanged: widget.onDataChanged,
+      mediaStream: _mediaStream,
+    );
+  }
+}
+
+class _HighlightsTabView extends StatelessWidget {
+  final MatchModel match;
+  final bool isSuperAdmin;
+  final VoidCallback onDataChanged;
+  final Stream<List<MatchMediaModel>> mediaStream;
+  const _HighlightsTabView({
+    required this.match,
+    required this.isSuperAdmin,
+    required this.onDataChanged,
+    required this.mediaStream,
+  });
+
+  @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<MatchMediaModel>>(
-      stream: ServiceLocator.matchService.watchMatchMedia(match.id),
+      stream: mediaStream,
       builder: (context, snap) {
         if (snap.hasError) return Center(child: Text('Hata: ${snap.error}'));
         if (!snap.hasData) {
@@ -1083,8 +1193,8 @@ class _HighlightsTab extends StatelessWidget {
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: isVideo
-              ? Colors.red.withOpacity(0.1)
-              : Colors.blue.withOpacity(0.1),
+              ? Colors.red.withValues(alpha: 0.1)
+              : Colors.blue.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Icon(
@@ -1566,12 +1676,18 @@ class _LineupTab extends StatefulWidget {
 
 int _jerseyValue(String? n) => int.tryParse((n ?? '').trim()) ?? 999;
 
-class _LineupTabState extends State<_LineupTab> {
+class _LineupTabState extends State<_LineupTab>
+    with AutomaticKeepAliveClientMixin {
   static const _green = Color(0xFF10B981);
   static const _blue = Color(0xFF3B82F6);
 
+  // Sekmeler arası geçişte kadro yeniden yüklenmesin.
+  @override
+  bool get wantKeepAlive => true;
+
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final m = widget.match;
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
@@ -1736,7 +1852,7 @@ class _LineupTabState extends State<_LineupTab> {
 
 /// Tek takımın esamesi: İlk 11 ve Yedekler, önce mevki sonra forma
 /// numarasına göre sıralı; sıkı satırlarla tüm ilk 11 tek ekrana sığar.
-class _TeamLineupColumn extends StatelessWidget {
+class _TeamLineupColumn extends StatefulWidget {
   const _TeamLineupColumn({
     required this.match,
     required this.teamId,
@@ -1748,21 +1864,56 @@ class _TeamLineupColumn extends StatelessWidget {
   final Color color;
 
   @override
+  State<_TeamLineupColumn> createState() => _TeamLineupColumnState();
+}
+
+class _TeamLineupColumnState extends State<_TeamLineupColumn> {
+  // Akışlar bir kez kurulur; üst widget yeniden çizildiğinde (ör. oyuncular
+  // yüklendiğinde) kadro akışı baştan başlamaz.
+  late Stream<List<PlayerModel>> _playersStream;
+  late Stream<List<MatchRosterModel>> _rostersStream;
+
+  MatchModel get match => widget.match;
+  String get teamId => widget.teamId;
+  Color get color => widget.color;
+
+  @override
+  void initState() {
+    super.initState();
+    _subscribe();
+  }
+
+  @override
+  void didUpdateWidget(covariant _TeamLineupColumn old) {
+    super.didUpdateWidget(old);
+    if (old.match.id != widget.match.id ||
+        old.match.seasonId != widget.match.seasonId ||
+        old.teamId != widget.teamId) {
+      _subscribe();
+    }
+  }
+
+  void _subscribe() {
+    _playersStream = ServiceLocator.teamService.watchPlayers(
+      teamId: widget.teamId,
+      tournamentId: widget.match.seasonId,
+    );
+    _rostersStream = ServiceLocator.matchService.watchMatchRosters(
+      widget.match.id,
+      widget.teamId,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<PlayerModel>>(
-      stream: ServiceLocator.teamService.watchPlayers(
-        teamId: teamId,
-        tournamentId: match.seasonId,
-      ),
+      stream: _playersStream,
       builder: (context, playerSnap) {
         final byId = {
           for (final p in playerSnap.data ?? const <PlayerModel>[]) p.id: p,
         };
         return StreamBuilder<List<MatchRosterModel>>(
-          stream: ServiceLocator.matchService.watchMatchRosters(
-            match.id,
-            teamId,
-          ),
+          stream: _rostersStream,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Padding(
@@ -1979,29 +2130,27 @@ class _RosterEditSheetState extends State<_RosterEditSheet> {
 
   Future<void> _loadData() async {
     try {
-      int sCount = 11;
-      int subCount = 7;
-      if (widget.match.seasonId.isNotEmpty) {
+      // Sezon ayarları, oyuncular ve kadro paralel çekilir.
+      Future<Map<String, dynamic>?> loadSeasonLimits() async {
+        if (widget.match.seasonId.isEmpty) return null;
         try {
-          final sRes = await Supabase.instance.client
+          return await Supabase.instance.client
               .from('seasons')
               .select('starting_player_count, sub_player_count')
               .eq('id', widget.match.seasonId)
               .maybeSingle();
-          if (sRes != null) {
-            sCount = sRes['starting_player_count'] ?? 11;
-            subCount = sRes['sub_player_count'] ?? 7;
-          }
-        } catch (_) {}
+        } catch (_) {
+          return null;
+        }
       }
 
-      final players = await _teamService.getEligiblePlayers(
-        widget.teamId,
-        widget.match.seasonId,
-      );
-      final rosters = await _matchService
-          .watchMatchRosters(widget.match.id, widget.teamId)
-          .first;
+      final (sRes, players, rosters) = await (
+        loadSeasonLimits(),
+        _teamService.getEligiblePlayers(widget.teamId, widget.match.seasonId),
+        _matchService.watchMatchRosters(widget.match.id, widget.teamId).first,
+      ).wait;
+      final int sCount = sRes?['starting_player_count'] ?? 11;
+      final int subCount = sRes?['sub_player_count'] ?? 7;
 
       if (!mounted) return;
       setState(() {
@@ -2518,9 +2667,46 @@ class _RosterEditSheetState extends State<_RosterEditSheet> {
 // DETAY TABI (MAÇ AKIŞI)
 // -----------------------------------------------------------------------------
 
-class _DetailTab extends StatelessWidget {
+class _DetailTab extends StatefulWidget {
   final MatchModel match;
   const _DetailTab({required this.match});
+
+  @override
+  State<_DetailTab> createState() => _DetailTabState();
+}
+
+class _DetailTabState extends State<_DetailTab>
+    with AutomaticKeepAliveClientMixin {
+  late final Stream<List<Map<String, dynamic>>> _eventsStream = ServiceLocator
+      .matchService
+      .watchInlineMatchEvents(widget.match.id);
+  late final Future<int> _periodFuture = _DetailTabView._periodMinutes(
+    widget.match.seasonId,
+  );
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return _DetailTabView(
+      match: widget.match,
+      eventsStream: _eventsStream,
+      periodFuture: _periodFuture,
+    );
+  }
+}
+
+class _DetailTabView extends StatelessWidget {
+  final MatchModel match;
+  final Stream<List<Map<String, dynamic>>> eventsStream;
+  final Future<int> periodFuture;
+  const _DetailTabView({
+    required this.match,
+    required this.eventsStream,
+    required this.periodFuture,
+  });
 
   String _friendlyLoadError(Object? error) {
     final s = (error ?? '').toString();
@@ -2613,7 +2799,7 @@ class _DetailTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<int>(
-      future: _periodMinutes(match.seasonId),
+      future: periodFuture,
       builder: (context, periodSnap) {
         if (!periodSnap.hasData) {
           return const Center(child: CircularProgressIndicator());
@@ -2625,7 +2811,7 @@ class _DetailTab extends StatelessWidget {
 
   Widget _buildFlow(BuildContext context, int period) {
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: ServiceLocator.matchService.watchInlineMatchEvents(match.id),
+      stream: eventsStream,
       builder: (context, snap) {
         if (snap.hasError) {
           return Center(
@@ -2795,15 +2981,15 @@ class _DetailEventTile extends StatelessWidget {
   Widget _systemIcon(String title) {
     final t = title.toLowerCase();
     if (t.contains('başla')) {
-      return const Icon(Icons.play_arrow_rounded, size: 18);
+      return const Icon(Icons.play_arrow_rounded);
     }
     if (t.contains('devre') || t.contains('yarı')) {
-      return const Icon(Icons.timelapse_rounded, size: 18);
+      return const Icon(Icons.timelapse_rounded);
     }
     if (t.contains('bitti') || t.contains('son')) {
-      return const Icon(Icons.flag_rounded, size: 18);
+      return const Icon(Icons.flag_rounded);
     }
-    return const Icon(Icons.info_outline, size: 18);
+    return const Icon(Icons.info_outline);
   }
 
   Widget _titleBlock(CrossAxisAlignment align) {
@@ -2867,36 +3053,66 @@ class _DetailEventTile extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: system
-          ? Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
+          ? Row(
+              children: [
+                Expanded(
+                  child: Divider(
+                    color: Colors.white.withValues(alpha: 0.12),
+                    height: 1,
+                  ),
                 ),
-                decoration: BoxDecoration(
-                  color: Colors.white10,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      min,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.amber,
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.12),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        min,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.amber,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    icon,
-                    const SizedBox(width: 10),
-                    Text(
-                      title.isEmpty ? '-' : title,
-                      style: const TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                  ],
+                      const SizedBox(width: 6),
+                      IconTheme(
+                        data: const IconThemeData(
+                          size: 13,
+                          color: Colors.white60,
+                        ),
+                        child: icon,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        title.isEmpty ? '-' : title,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white70,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+                Expanded(
+                  child: Divider(
+                    color: Colors.white.withValues(alpha: 0.12),
+                    height: 1,
+                  ),
+                ),
+              ],
             )
           : Row(
               mainAxisAlignment: isHome

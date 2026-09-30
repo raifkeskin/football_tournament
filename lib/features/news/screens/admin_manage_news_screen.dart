@@ -34,8 +34,9 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
     setState(() => _busyIds.add(newsId));
     try {
       await _leagueService.setNewsPublished(newsId: newsId, isPublished: next);
-      if (mounted)
+      if (mounted) {
         _snack(next ? 'Haber yayınlandı.' : 'Haber yayından kaldırıldı.');
+      }
     } catch (e) {
       if (mounted) _snack('Hata: $e');
     } finally {

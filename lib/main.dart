@@ -8,7 +8,6 @@ import 'core/config/app_config.dart';
 import 'firebase_options.dart';
 import 'features/home/screens/main_navigator.dart';
 import 'core/services/app_session.dart';
-import 'core/services/database_service.dart';
 import 'core/widgets/web_responsive_frame.dart';
 
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
@@ -21,15 +20,13 @@ void main() async {
     url: AppConfig.supabaseUrl,
     anonKey: AppConfig.supabaseAnonKey,
   );
-  if (AppConfig.activeDatabase == DatabaseType.supabase) {
-    try {
-      final res = await Supabase.instance.client.from('pitches').select('id').limit(1);
-      // ignore: unnecessary_type_check
-      final n = (res is List) ? res.length : 0;
-      debugPrint('Supabase bağlantı kontrolü OK (pitches örnek kayıt: $n)');
-    } catch (e) {
-      debugPrint('Supabase bağlantı kontrolü HATA: $e');
-    }
+  try {
+    final res = await Supabase.instance.client.from('pitches').select('id').limit(1);
+    // ignore: unnecessary_type_check
+    final n = (res is List) ? res.length : 0;
+    debugPrint('Supabase bağlantı kontrolü OK (pitches örnek kayıt: $n)');
+  } catch (e) {
+    debugPrint('Supabase bağlantı kontrolü HATA: $e');
   }
 
   // "Beni Hatırla" işaretlenmediyse önceki oturumu kapat: uygulama giriş
@@ -253,15 +250,6 @@ class _MyAppState extends State<MyApp> {
   static const Color _accent = Color(0xFF10B981);
   static const Color _text = Color(0xFFF8FAFC);
   static const Color _muted = Color(0xFF94A3B8);
-
-  @override
-  void initState() {
-    super.initState();
-    if (AppConfig.activeDatabase == DatabaseType.firebase) {
-      DatabaseService().migratePlayersDefaultRoleAndBirthDate();
-      DatabaseService().migratePlayersPhoneRaw10();
-    }
-  }
 
   @override
   Widget build(BuildContext context) {

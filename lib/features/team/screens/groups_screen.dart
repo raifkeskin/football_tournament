@@ -5,11 +5,12 @@ import '../../tournament/models/league.dart';
 import '../../tournament/models/season.dart';
 import '../../match/models/match.dart';
 import '../models/team.dart';
-import '../../../core/config/app_config.dart';
 import '../../tournament/services/interfaces/i_league_service.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/services/global_filter.dart';
 import '../../../core/utils/team_name.dart';
+import '../../../core/utils/realtime_signal.dart';
+import '../../../core/utils/resilient_stream.dart';
 import 'team_squad_screen.dart';
 
 // YENİ OLUŞTURDUĞUMUZ ORTAK BİLEŞENİ IMPORT EDİYORUZ
@@ -46,9 +47,6 @@ class _GroupsScreenState extends State<GroupsScreen> {
   Stream<List<GroupModel>>? _groupsStream;
 
   Stream<List<Season>> _watchSeasons(String leagueId) {
-    if (AppConfig.activeDatabase != DatabaseType.supabase) {
-      return Stream.value([]);
-    }
     return Supabase.instance.client
         .from('seasons')
         .stream(primaryKey: ['id'])
@@ -218,7 +216,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                                     vertical: 12,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: Colors.black.withOpacity(0.4),
+                                    color: Colors.black.withValues(alpha: 0.4),
                                     borderRadius: BorderRadius.circular(24),
                                     border: Border.all(color: Colors.white24),
                                     boxShadow: const [
@@ -354,7 +352,9 @@ class _GroupsScreenState extends State<GroupsScreen> {
                     end: Alignment.bottomRight,
                     colors: [Color(0xFF1E293B), Color(0xFF064E3B)],
                   ),
-                  border: Border.all(color: Colors.white.withOpacity(0.12)),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.12),
+                  ),
                   boxShadow: const [
                     BoxShadow(
                       color: Colors.black54,
@@ -523,31 +523,56 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
     if (id.isEmpty || sId.isEmpty) {
       return const Stream<List<Map<String, dynamic>>>.empty();
     }
-    if (AppConfig.activeDatabase != DatabaseType.supabase) {
-      final matchService = ServiceLocator.matchService;
-      return matchService
-          .watchMatchesForLeague(id)
-          .map(
-            (matches) => matches.map((m) => m.toMap(snakeCase: true)).toList(),
-          );
+    final feed = _seasonMatchFeeds.putIfAbsent(
+      '$id|$sId',
+      () => resilientStream(() => _seasonMatchesFeed(id, sId)),
+    );
+    if (fetchGroupId == null) return feed;
+    return feed.map(
+      (rows) => rows
+          .where((r) => (r['group_id'] ?? '').toString().trim() == fetchGroupId)
+          .toList(),
+    );
+  }
+
+  /// Sezon maçları: tüm grup tabloları aynı akışı paylaşır ve son liste
+  /// önbellekte tutulur ("leagueId|seasonId" anahtarıyla).
+  static final Map<String, Stream<List<Map<String, dynamic>>>>
+  _seasonMatchFeeds = {};
+  static final Map<String, List<Map<String, dynamic>>> _seasonMatchCache = {};
+
+  /// Önce önbellek, sonra yalnızca bu sezonun maçları; realtime yalnızca
+  /// "değişti" sinyali verir (önceden tüm matches tablosu indiriliyordu).
+  static Stream<List<Map<String, dynamic>>> _seasonMatchesFeed(
+    String leagueId,
+    String seasonId,
+  ) async* {
+    final key = '$leagueId|$seasonId';
+    final client = Supabase.instance.client;
+
+    Future<List<Map<String, dynamic>>> fetch() async {
+      final rows = await client
+          .from('matches')
+          .select()
+          .eq('league_id', leagueId)
+          .eq('season_id', seasonId)
+          .order('match_date', ascending: true);
+      final list = rows.map((e) => Map<String, dynamic>.from(e)).toList();
+      _seasonMatchCache[key] = list;
+      return list;
     }
-    return Supabase.instance.client
-        .from('matches')
-        .stream(primaryKey: ['id'])
-        .order('match_date', ascending: true)
-        .map((rows) {
-          final filtered = rows.where((r) {
-            final matchLeague = (r['league_id'] ?? '').toString().trim() == id;
-            final matchSeason = (r['season_id'] ?? '').toString().trim() == sId;
-            bool ok = matchLeague && matchSeason;
-            if (fetchGroupId != null) {
-              ok =
-                  ok && (r['group_id'] ?? '').toString().trim() == fetchGroupId;
-            }
-            return ok;
-          });
-          return filtered.map((e) => Map<String, dynamic>.from(e)).toList();
-        });
+
+    final cached = _seasonMatchCache[key];
+    if (cached != null) yield cached;
+    yield await fetch();
+    await for (final _ in realtimeChangeSignal(
+      client,
+      table: 'matches',
+      column: 'season_id',
+      value: seasonId,
+    )) {
+      yield await fetch();
+    }
   }
 
   int _asInt(dynamic v) {

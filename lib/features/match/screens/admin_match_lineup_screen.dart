@@ -69,7 +69,10 @@ class _AdminMatchLineupScreenState extends State<AdminMatchLineupScreen>
     super.dispose();
   }
 
-  TextEditingController _controllerForPlayer(String playerId, String? initialNumber) {
+  TextEditingController _controllerForPlayer(
+    String playerId,
+    String? initialNumber,
+  ) {
     return _numberControllers.putIfAbsent(
       playerId,
       () => TextEditingController(text: (initialNumber ?? '').trim()),
@@ -281,8 +284,9 @@ class _AdminMatchLineupScreenState extends State<AdminMatchLineupScreen>
                     final isPenalized = penalizedPlayerIds.contains(pid);
                     final selectedNumber =
                         (selectedNumberById[pid] ?? p.number ?? '').trim();
-                    final numberController =
-                        isSelected ? _syncControllerText(pid, selectedNumber) : null;
+                    final numberController = isSelected
+                        ? _syncControllerText(pid, selectedNumber)
+                        : null;
 
                     return InkWell(
                       onTap: _saving
@@ -314,12 +318,14 @@ class _AdminMatchLineupScreenState extends State<AdminMatchLineupScreen>
                             },
                       borderRadius: BorderRadius.circular(10),
                       child: Padding(
-                        padding:
-                            const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 4,
+                        ),
                         child: Container(
                           decoration: BoxDecoration(
                             color: isSelected && isStartingTab
-                                ? Colors.green.shade900.withOpacity(0.35)
+                                ? Colors.green.shade900.withValues(alpha: 0.35)
                                 : null,
                             borderRadius: BorderRadius.circular(10),
                           ),
@@ -340,12 +346,14 @@ class _AdminMatchLineupScreenState extends State<AdminMatchLineupScreen>
                                       isDense: true,
                                       counterText: '',
                                       filled: true,
-                                      fillColor: Colors.white.withOpacity(0.08),
+                                      fillColor: Colors.white.withValues(
+                                        alpha: 0.08,
+                                      ),
                                       contentPadding:
                                           const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 6,
-                                      ),
+                                            horizontal: 10,
+                                            vertical: 6,
+                                          ),
                                       border: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(10),
                                       ),
@@ -386,22 +394,24 @@ class _AdminMatchLineupScreenState extends State<AdminMatchLineupScreen>
                                     fontWeight: FontWeight.w800,
                                     fontSize: 13,
                                     color: (isPenalized || isOtherSelected)
-                                        ? Theme.of(context)
-                                            .colorScheme
-                                            .onSurfaceVariant
+                                        ? Theme.of(
+                                            context,
+                                          ).colorScheme.onSurfaceVariant
                                         : (isSelected && isStartingTab
-                                            ? Colors.white
-                                            : null),
+                                              ? Colors.white
+                                              : null),
                                   ),
                                 ),
                               ),
                               const SizedBox(width: 10),
                               if (isPenalized || isOtherSelected)
                                 Icon(
-                                  isPenalized ? Icons.lock : Icons.block_rounded,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant,
+                                  isPenalized
+                                      ? Icons.lock
+                                      : Icons.block_rounded,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
                                 )
                               else if (isSelected)
                                 Icon(
@@ -486,7 +496,9 @@ class _AdminMatchLineupScreenState extends State<AdminMatchLineupScreen>
         builder: (context, snapshot) {
           final players = snapshot.data ?? const <PlayerModel>[];
           return StreamBuilder<Set<String>>(
-            stream: _penaltyService.watchActivePenalizedPlayerIds(widget.match.leagueId),
+            stream: _penaltyService.watchActivePenalizedPlayerIds(
+              widget.match.leagueId,
+            ),
             initialData: const <String>{},
             builder: (context, penSnap) {
               final penalizedIds = penSnap.data ?? const <String>{};

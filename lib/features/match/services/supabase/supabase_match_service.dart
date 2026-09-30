@@ -7,6 +7,8 @@ import '../../models/fixture_import.dart';
 import '../../models/match.dart';
 import '../../models/match_media.dart';
 import '../../../../core/utils/resilient_stream.dart';
+import '../../../../core/utils/realtime_signal.dart';
+import '../../../../core/utils/table_feed.dart';
 import '../../../player/models/player_stats.dart';
 
 class SupabaseMatchService implements IMatchService {
@@ -47,23 +49,25 @@ class SupabaseMatchService implements IMatchService {
         filters:
             'primaryKey=id | clientFilter=league_id=$id | order=match_date asc',
       );
-      return _client
-          .from('matches')
-          .stream(primaryKey: ['id'])
-          .order('match_date', ascending: true)
-          .map((rows) {
-            final filtered = rows.where((r) {
-              return (r['league_id'] ?? '').toString().trim() == id;
-            });
-            return filtered
-                .map(
-                  (r) => MatchModel.fromMap(
-                    Map<String, dynamic>.from(r),
-                    (r['id'] ?? '').toString(),
-                  ),
-                )
-                .toList();
-          });
+      return watchTableRows(
+        _client,
+        table: 'matches',
+        column: 'league_id',
+        value: id,
+        orderBy: 'match_date',
+      ).map((rows) {
+        final filtered = rows.where((r) {
+          return (r['league_id'] ?? '').toString().trim() == id;
+        });
+        return filtered
+            .map(
+              (r) => MatchModel.fromMap(
+                Map<String, dynamic>.from(r),
+                (r['id'] ?? '').toString(),
+              ),
+            )
+            .toList();
+      });
     } catch (e) {
       AppConfig.sqlLogResult(table: 'matches', operation: 'STREAM', error: e);
       return const Stream<List<MatchModel>>.empty();
@@ -86,6 +90,9 @@ class SupabaseMatchService implements IMatchService {
     });
   }
 
+  /// Fikstür haftası önbelleği ("league|season|group|week" → maçlar).
+  final Map<String, List<MatchModel>> _fixtureCache = {};
+
   @override
   Stream<List<MatchModel>> watchFixtureMatches(
     String leagueId,
@@ -95,40 +102,45 @@ class SupabaseMatchService implements IMatchService {
   }) {
     final id = leagueId.trim();
     if (id.isEmpty) return const Stream<List<MatchModel>>.empty();
+    final sId = (seasonId ?? '').trim();
+    final gId = (groupId ?? '').trim() == 'Tümü' ? '' : (groupId ?? '').trim();
+    final key = '$id|$sId|$gId|$week';
 
-    try {
-      var query = _client.from('matches').select();
-
-      query = query.eq('league_id', id);
-
-      if (seasonId != null && seasonId.isNotEmpty) {
-        query = query.eq('season_id', seasonId);
-      }
-
-      if (groupId != null && groupId.isNotEmpty && groupId != 'Tümü') {
-        query = query.eq('group_id', groupId);
-      }
-
+    Future<List<MatchModel>> fetch() async {
+      var query = _client.from('matches').select().eq('league_id', id);
+      if (sId.isNotEmpty) query = query.eq('season_id', sId);
+      if (gId.isNotEmpty) query = query.eq('group_id', gId);
       query = query.eq('week', week);
-
-      return query.order('created_at', ascending: false).asStream().map((rows) {
-        return rows
-            .map(
-              (r) => MatchModel.fromMap(
-                Map<String, dynamic>.from(r),
-                (r['id'] ?? '').toString(),
-              ),
-            )
-            .toList();
-      });
-    } catch (e) {
-      AppConfig.sqlLogResult(
-        table: 'matches',
-        operation: 'SELECT_STREAM',
-        error: e,
-      );
-      return const Stream<List<MatchModel>>.empty();
+      final rows = await query.order('created_at', ascending: false);
+      final list = rows
+          .map(
+            (r) => MatchModel.fromMap(
+              Map<String, dynamic>.from(r),
+              (r['id'] ?? '').toString(),
+            ),
+          )
+          .toList();
+      _fixtureCache[key] = list;
+      return list;
     }
+
+    // Önce önbellekteki hafta gösterilir, taze liste arkadan gelir.
+    Stream<List<MatchModel>> feed() async* {
+      final cached = _fixtureCache[key];
+      if (cached != null) yield cached;
+      try {
+        yield await fetch();
+      } catch (e) {
+        AppConfig.sqlLogResult(
+          table: 'matches',
+          operation: 'SELECT_STREAM',
+          error: e,
+        );
+        if (cached == null) rethrow;
+      }
+    }
+
+    return feed();
   }
 
   @override
@@ -166,75 +178,95 @@ class SupabaseMatchService implements IMatchService {
     });
   }
 
+  /// Maç önbelleği (matchId → son bilinen maç).
+  final Map<String, MatchModel> _matchCache = {};
+
   @override
   Stream<MatchModel> watchMatch(String matchId) {
     final id = matchId.trim();
     if (id.isEmpty) return const Stream<MatchModel>.empty();
-    try {
-      AppConfig.sqlLogStart(
-        table: 'matches',
-        operation: 'STREAM',
-        filters: 'primaryKey=id | clientFilter=id=$id',
-      );
-      return _client.from('matches').stream(primaryKey: ['id']).map((rows) {
-        final row = rows.cast<Map<String, dynamic>>().firstWhere(
-          (r) => (r['id'] ?? '').toString().trim() == id,
-          orElse: () => const <String, dynamic>{},
-        );
-        return MatchModel.fromMap(row, id);
-      });
-    } catch (e) {
-      AppConfig.sqlLogResult(table: 'matches', operation: 'STREAM', error: e);
-      return const Stream<MatchModel>.empty();
+    AppConfig.sqlLogStart(
+      table: 'matches',
+      operation: 'STREAM',
+      filters: 'primaryKey=id | filter=id=$id',
+    );
+
+    Stream<MatchModel> feed() async* {
+      final cached = _matchCache[id];
+      if (cached != null) yield cached;
+      // Yalnızca bu maçın satırı dinlenir (önceden tüm tablo indiriliyordu).
+      await for (final rows
+          in _client.from('matches').stream(primaryKey: ['id']).eq('id', id)) {
+        final row = rows.isEmpty
+            ? const <String, dynamic>{}
+            : rows.first.cast<String, dynamic>();
+        final m = MatchModel.fromMap(row, id);
+        if (row.isNotEmpty) _matchCache[id] = m;
+        yield m;
+      }
     }
+
+    return resilientStream(feed);
+  }
+
+  /// Maç olayları önbelleği (matchId → olay listesi, oyuncu adları ekli).
+  final Map<String, List<Map<String, dynamic>>> _eventsCache = {};
+
+  Future<List<Map<String, dynamic>>> _fetchInlineMatchEvents(String id) async {
+    final rows = await _client
+        .from('match_events')
+        .select()
+        .eq('match_id', id)
+        .order('minute', ascending: true);
+    final list = rows.map((r) => Map<String, dynamic>.from(r)).toList();
+    // match_events'te player_name kolonu yok; ekranlar adı player_name
+    // alanından okuduğu için players tablosundan eklenir.
+    final names = await _playerNamesById({
+      for (final e in list) ...[
+        (e['player_id'] ?? '').toString().trim(),
+        (e['assist_player_id'] ?? '').toString().trim(),
+        (e['sub_in_player_id'] ?? '').toString().trim(),
+      ],
+    });
+    for (final e in list) {
+      final pid = (e['player_id'] ?? '').toString().trim();
+      final aid = (e['assist_player_id'] ?? '').toString().trim();
+      final sid = (e['sub_in_player_id'] ?? '').toString().trim();
+      if (names[pid] != null) e['player_name'] = names[pid];
+      if (names[aid] != null) e['assist_player_name'] = names[aid];
+      if (names[sid] != null) e['sub_in_player_name'] = names[sid];
+    }
+    _eventsCache[id] = list;
+    return list;
   }
 
   @override
   Stream<List<Map<String, dynamic>>> watchInlineMatchEvents(String matchId) {
     final id = matchId.trim();
     if (id.isEmpty) return const Stream<List<Map<String, dynamic>>>.empty();
-    try {
-      AppConfig.sqlLogStart(
+    AppConfig.sqlLogStart(
+      table: 'match_events',
+      operation: 'STREAM',
+      filters: 'filter=match_id=$id | order=minute asc',
+    );
+
+    // Önce önbellek, sonra tek filtreli sorgu; realtime yalnızca "değişti"
+    // sinyali verir (önceden tüm match_events tablosu indiriliyordu).
+    Stream<List<Map<String, dynamic>>> feed() async* {
+      final cached = _eventsCache[id];
+      if (cached != null) yield cached;
+      yield await _fetchInlineMatchEvents(id);
+      await for (final _ in realtimeChangeSignal(
+        _client,
         table: 'match_events',
-        operation: 'STREAM',
-        filters: 'primaryKey=id | clientFilter=match_id=$id | order=minute asc',
-      );
-      return _client
-          .from('match_events')
-          .stream(primaryKey: ['id'])
-          .order('minute', ascending: true)
-          .asyncMap((rows) async {
-            final list = rows
-                .where((r) => (r['match_id'] ?? '').toString().trim() == id)
-                .map((r) => Map<String, dynamic>.from(r))
-                .toList();
-            // match_events'te player_name kolonu yok; ekranlar adı
-            // player_name alanından okuduğu için players tablosundan eklenir.
-            final names = await _playerNamesById({
-              for (final e in list) ...[
-                (e['player_id'] ?? '').toString().trim(),
-                (e['assist_player_id'] ?? '').toString().trim(),
-                (e['sub_in_player_id'] ?? '').toString().trim(),
-              ],
-            });
-            for (final e in list) {
-              final pid = (e['player_id'] ?? '').toString().trim();
-              final aid = (e['assist_player_id'] ?? '').toString().trim();
-              final sid = (e['sub_in_player_id'] ?? '').toString().trim();
-              if (names[pid] != null) e['player_name'] = names[pid];
-              if (names[aid] != null) e['assist_player_name'] = names[aid];
-              if (names[sid] != null) e['sub_in_player_name'] = names[sid];
-            }
-            return list;
-          });
-    } catch (e) {
-      AppConfig.sqlLogResult(
-        table: 'match_events',
-        operation: 'STREAM',
-        error: e,
-      );
-      return const Stream<List<Map<String, dynamic>>>.empty();
+        column: 'match_id',
+        value: id,
+      )) {
+        yield await _fetchInlineMatchEvents(id);
+      }
     }
+
+    return resilientStream(feed);
   }
 
   @override
@@ -390,42 +422,56 @@ class SupabaseMatchService implements IMatchService {
     }
   }
 
+  /// Maç medyası önbelleği ve maç başına ortak akış (yayın paneli ile
+  /// Önemli Anlar sekmesi aynı kanalı paylaşır).
+  final Map<String, List<MatchMediaModel>> _mediaCache = {};
+  final Map<String, Stream<List<MatchMediaModel>>> _mediaFeeds = {};
+
+  Future<List<MatchMediaModel>> _fetchMatchMedia(String id) async {
+    final rows = await _client
+        .from('match_media')
+        .select()
+        .eq('match_id', id)
+        .order('created_at', ascending: false);
+    final list = rows
+        .map(
+          (r) => MatchMediaModel.fromMap(
+            Map<String, dynamic>.from(r),
+            (r['id'] ?? '').toString(),
+          ),
+        )
+        .toList();
+    _mediaCache[id] = list;
+    return list;
+  }
+
   @override
   Stream<List<MatchMediaModel>> watchMatchMedia(String matchId) {
     final id = matchId.trim();
     if (id.isEmpty) return Stream.value([]);
-    try {
-      AppConfig.sqlLogStart(
+    AppConfig.sqlLogStart(
+      table: 'match_media',
+      operation: 'STREAM',
+      filters: 'filter=match_id=$id | order=created_at desc',
+    );
+
+    // Önce önbellek, sonra tek filtreli sorgu; realtime yalnızca "değişti"
+    // sinyali verir (önceden tüm match_media tablosu indiriliyordu).
+    Stream<List<MatchMediaModel>> feed() async* {
+      final cached = _mediaCache[id];
+      if (cached != null) yield cached;
+      yield await _fetchMatchMedia(id);
+      await for (final _ in realtimeChangeSignal(
+        _client,
         table: 'match_media',
-        operation: 'STREAM',
-        filters:
-            'primaryKey=id | clientFilter=match_id=$id | order=created_at desc',
-      );
-      return _client
-          .from('match_media')
-          .stream(primaryKey: ['id'])
-          .order('created_at', ascending: false)
-          .map((rows) {
-            final filtered = rows.where(
-              (r) => (r['match_id'] ?? '').toString().trim() == id,
-            );
-            return filtered
-                .map(
-                  (r) => MatchMediaModel.fromMap(
-                    Map<String, dynamic>.from(r),
-                    (r['id'] ?? '').toString(),
-                  ),
-                )
-                .toList();
-          });
-    } catch (e) {
-      AppConfig.sqlLogResult(
-        table: 'match_media',
-        operation: 'STREAM',
-        error: e,
-      );
-      return Stream.value([]);
+        column: 'match_id',
+        value: id,
+      )) {
+        yield await _fetchMatchMedia(id);
+      }
     }
+
+    return _mediaFeeds.putIfAbsent(id, () => resilientStream(feed));
   }
 
   @override
@@ -638,28 +684,54 @@ class SupabaseMatchService implements IMatchService {
     }
   }
 
+  /// Maç kadroları önbelleği (matchId → iki takımın kadrosu).
+  final Map<String, List<MatchRosterModel>> _rosterCache = {};
+
+  /// Maç başına tek ortak akış; iki takımın ekranı da aynı kanalı paylaşır.
+  final Map<String, Stream<List<MatchRosterModel>>> _rosterFeeds = {};
+
+  Future<List<MatchRosterModel>> _fetchMatchRosters(String matchId) async {
+    final rows = await _client
+        .from('match_rosters')
+        .select()
+        .eq('match_id', matchId);
+    final list = rows
+        .map((r) => MatchRosterModel.fromMap(r, (r['id'] ?? '').toString()))
+        .toList();
+    _rosterCache[matchId] = list;
+    return list;
+  }
+
+  /// Önce önbellek, sonra tek filtreli sorgu, en son yalnızca bu maça ait
+  /// realtime kanalı. Realtime olayları yalnızca "değişti" sinyali olarak
+  /// kullanılır; liste her seferinde veritabanından taze okunur (kaydetme
+  /// eski satırları silip yenilerini eklediği için silme olayları akışa
+  /// ulaşmadığında esame çiftleniyordu).
+  Stream<List<MatchRosterModel>> _matchRosterChanges(String matchId) async* {
+    final cached = _rosterCache[matchId];
+    if (cached != null) yield cached;
+    yield await _fetchMatchRosters(matchId);
+    await for (final _ in realtimeChangeSignal(
+      _client,
+      table: 'match_rosters',
+      column: 'match_id',
+      value: matchId,
+    )) {
+      yield await _fetchMatchRosters(matchId);
+    }
+  }
+
   @override
   Stream<List<MatchRosterModel>> watchMatchRosters(
     String matchId,
     String teamId,
   ) {
-    // Realtime akışı yalnızca "değişti" sinyali olarak kullanılır; liste her
-    // seferinde veritabanından taze okunur. Kaydetme eski satırları silip
-    // yenilerini eklediği için, silme olayları akışa ulaşmadığında akışın
-    // kendi listesinde eski satırlar kalıyor ve esame ekranda çiftleniyordu.
-    // Uygulama arka plandan dönünce kopan bağlantı da otomatik yenilenir.
-    return resilientStream(
-      () => _client.from('match_rosters').stream(primaryKey: ['id']),
-    ).asyncMap((_) async {
-      final rows = await _client
-          .from('match_rosters')
-          .select()
-          .eq('match_id', matchId)
-          .eq('team_id', teamId);
-      return rows
-          .map((r) => MatchRosterModel.fromMap(r, (r['id'] ?? '').toString()))
-          .toList();
-    });
+    // Uygulama arka plandan dönünce kopan bağlantı otomatik yenilenir.
+    final feed = _rosterFeeds.putIfAbsent(
+      matchId,
+      () => resilientStream(() => _matchRosterChanges(matchId)),
+    );
+    return feed.map((all) => all.where((r) => r.teamId == teamId).toList());
   }
 
   @override
@@ -701,16 +773,12 @@ class SupabaseMatchService implements IMatchService {
     }
 
     try {
-      await _client
-          .from('match_rosters')
-          .insert(rows(withCaptain: hasCaptain));
+      await _client.from('match_rosters').insert(rows(withCaptain: hasCaptain));
     } on PostgrestException catch (e) {
       // Eski kayıtlar yukarıda silindi; kaptan kolonu yoksa kadroyu kaptansız
       // yine de kaydet ki kadro kaybolmasın, sonra kullanıcıyı bilgilendir.
       if (hasCaptain && e.code == 'PGRST204') {
-        await _client
-            .from('match_rosters')
-            .insert(rows(withCaptain: false));
+        await _client.from('match_rosters').insert(rows(withCaptain: false));
         throw Exception(
           'Kadro kaydedildi ancak kaptan kaydedilemedi: match_rosters '
           'tablosunda is_captain kolonu yok.',
@@ -721,27 +789,36 @@ class SupabaseMatchService implements IMatchService {
   }
 
   /// id → "Ad Soyad" eşlemesi (players tablosundan).
+  /// Oyuncu adı önbelleği; olay listesi her yenilendiğinde yalnızca
+  /// bilinmeyen oyuncular sorgulanır.
+  final Map<String, String> _playerNameCache = {};
+
   Future<Map<String, String>> _playerNamesById(Set<String> ids) async {
-    final clean = ids.where((e) => e.isNotEmpty).toList();
+    final clean = ids.where((e) => e.isNotEmpty).toSet();
     if (clean.isEmpty) return const <String, String>{};
-    try {
-      final res = await _client
-          .from('players')
-          .select('id, name, surname')
-          .inFilter('id', clean);
-      final out = <String, String>{};
-      for (final any in res) {
-        final r = (any as Map).cast<String, dynamic>();
-        final full = [
-          (r['name'] ?? '').toString().trim(),
-          (r['surname'] ?? '').toString().trim(),
-        ].where((e) => e.isNotEmpty).join(' ');
-        if (full.isNotEmpty) out[(r['id'] ?? '').toString()] = full;
-      }
-      return out;
-    } catch (_) {
-      return const <String, String>{};
+    final missing = clean.where((e) => !_playerNameCache.containsKey(e));
+    if (missing.isNotEmpty) {
+      try {
+        final res = await _client
+            .from('players')
+            .select('id, name, surname')
+            .inFilter('id', missing.toList());
+        for (final any in res) {
+          final r = (any as Map).cast<String, dynamic>();
+          final full = [
+            (r['name'] ?? '').toString().trim(),
+            (r['surname'] ?? '').toString().trim(),
+          ].where((e) => e.isNotEmpty).join(' ');
+          if (full.isNotEmpty) {
+            _playerNameCache[(r['id'] ?? '').toString()] = full;
+          }
+        }
+      } catch (_) {}
     }
+    return {
+      for (final id in clean)
+        if (_playerNameCache[id] != null) id: _playerNameCache[id]!,
+    };
   }
 
   /// Sezon istatistikleri doğrudan `match_events` üzerinden hesaplanır.
@@ -754,43 +831,61 @@ class SupabaseMatchService implements IMatchService {
   Stream<List<PlayerStats>> watchPlayerStats({required String tournamentId}) {
     final seasonId = tournamentId.trim();
     if (seasonId.isEmpty) return const Stream<List<PlayerStats>>.empty();
-    try {
-      AppConfig.sqlLogStart(
+    AppConfig.sqlLogStart(
+      table: 'match_events',
+      operation: 'STREAM',
+      filters: 'season_id=$seasonId (aggregate player stats)',
+    );
+
+    // Önce önbellek, sonra yalnızca bu sezonun olayları (önceden tüm
+    // match_events tablosu indiriliyordu). Olay değişince yeniden hesaplanır.
+    Stream<List<PlayerStats>> feed() async* {
+      final cached = _statsCache[seasonId];
+      if (cached != null) yield cached;
+      yield await _loadSeasonStats(seasonId);
+      await for (final _ in realtimeChangeSignal(
+        _client,
         table: 'match_events',
-        operation: 'STREAM',
-        filters: 'season_id=$seasonId (aggregate player stats)',
-      );
-      return _client
-          .from('match_events')
-          .stream(primaryKey: ['id'])
-          .asyncMap((rows) => _aggregateSeasonStats(seasonId, rows));
-    } catch (e) {
-      AppConfig.sqlLogResult(
-        table: 'match_events',
-        operation: 'STREAM',
-        error: e,
-      );
-      return const Stream<List<PlayerStats>>.empty();
+      )) {
+        yield await _loadSeasonStats(seasonId);
+      }
     }
+
+    return _statsFeeds.putIfAbsent(seasonId, () => resilientStream(feed));
   }
 
-  Future<List<PlayerStats>> _aggregateSeasonStats(
-    String seasonId,
-    List<Map<String, dynamic>> allEvents,
-  ) async {
+  /// Sezon istatistikleri önbelleği ve sezon başına ortak akış.
+  final Map<String, List<PlayerStats>> _statsCache = {};
+  final Map<String, Stream<List<PlayerStats>>> _statsFeeds = {};
+
+  Future<List<PlayerStats>> _loadSeasonStats(String seasonId) async {
     final matchesRes = await _client
         .from('matches')
         .select('id')
         .eq('season_id', seasonId);
-    final matchIds = {
+    final matchIds = [
       for (final any in matchesRes)
         ((any as Map)['id'] ?? '').toString().trim(),
-    }..remove('');
+    ]..removeWhere((e) => e.isEmpty);
 
-    final events = allEvents
-        .where((e) => matchIds.contains((e['match_id'] ?? '').toString()))
-        .toList();
+    final events = matchIds.isEmpty
+        ? const <Map<String, dynamic>>[]
+        : (await _client
+                  .from('match_events')
+                  .select()
+                  .inFilter('match_id', matchIds))
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
+    final stats = await _aggregateSeasonStats(seasonId, events);
+    _statsCache[seasonId] = stats;
+    return stats;
+  }
 
+  /// [events] yalnızca bu sezonun maç olaylarıdır.
+  Future<List<PlayerStats>> _aggregateSeasonStats(
+    String seasonId,
+    List<Map<String, dynamic>> events,
+  ) async {
     // key: player_id
     final goals = <String, int>{};
     final assists = <String, int>{};

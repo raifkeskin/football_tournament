@@ -11,7 +11,6 @@ import 'package:football_tournament/features/admin/services/approval_service.dar
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import '../../../core/config/app_config.dart';
 import '../../tournament/models/league.dart';
 import '../../tournament/services/interfaces/i_league_service.dart';
 import '../../match/models/match.dart';
@@ -164,17 +163,16 @@ Future<void> showSquadBulkUploadDialog({
           skippedShort = 0;
           skippedNoName = 0;
           try {
-            final picked = await FilePicker.platform.pickFiles(
+            final picked = await FilePicker.pickFiles(
               type: FileType.custom,
               allowedExtensions: const ['xlsx', 'xls', 'csv', 'numbers'],
-              withData: true,
             );
-            if (picked == null || picked.files.isEmpty) return;
-            final f = picked.files.first;
+            if (picked.isEmpty) return;
+            final f = picked.first;
             pickedFileName = f.name;
 
-            final bytes = f.bytes;
-            if (bytes == null || bytes.isEmpty) {
+            final bytes = await f.readAsBytes();
+            if (bytes.isEmpty) {
               throw Exception('Dosya okunamadı.');
             }
 
@@ -3265,15 +3263,6 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
   }
 
   Future<void> _openBulkUploadFlow() async {
-    if (AppConfig.activeDatabase != DatabaseType.supabase) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Bu işlem bu veritabanı modunda desteklenmiyor.'),
-        ),
-      );
-      return;
-    }
 
     final picked = await _pickLeagueTeamForBulkUpload();
     if (!mounted || picked == null) return;

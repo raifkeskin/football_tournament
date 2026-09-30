@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../../core/config/app_config.dart';
 import '../../../core/constants/app_constants.dart';
 import '../models/season.dart';
 import '../services/interfaces/i_league_service.dart';
@@ -740,7 +739,7 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
   /// Realtime'a güvenilmez; her kayıttan sonra çağrılır.
   Future<void> _refreshTeamCounts() async {
     final sid = widget.seasonId.trim();
-    if (sid.isEmpty || AppConfig.activeDatabase != DatabaseType.supabase) {
+    if (sid.isEmpty) {
       return;
     }
     try {
@@ -774,16 +773,6 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
     cleaned = cleaned.replaceAll(RegExp(r'\s+'), ' ').trim();
     if (cleaned.isEmpty) return '';
     return '$cleaned Grubu';
-  }
-
-  bool _ensureSupabase() {
-    if (AppConfig.activeDatabase == DatabaseType.supabase) return true;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Bu işlem bu veritabanı modunda desteklenmiyor.'),
-      ),
-    );
-    return false;
   }
 
   /// Seçici için TÜM takımları getirir. Önceden yalnızca `season_teams`
@@ -985,8 +974,6 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
   }
 
   Future<void> _openAddGroupSheet() async {
-    if (!_ensureSupabase()) return;
-
     final messenger = ScaffoldMessenger.of(context);
     final nameController = TextEditingController();
     final selectedTeamIds = <String>{};
@@ -1086,8 +1073,6 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
   }
 
   Future<void> _openEditGroupSheet(GroupModel g) async {
-    if (!_ensureSupabase()) return;
-
     final messenger = ScaffoldMessenger.of(context);
     final controller = TextEditingController(text: g.name.trim());
     var saving = false;
@@ -1153,7 +1138,6 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
   }
 
   Future<void> _openTeamAssignSheet(GroupModel group) async {
-    if (!_ensureSupabase()) return;
     final messenger = ScaffoldMessenger.of(context);
 
     final options = await _loadTeamOptions();
