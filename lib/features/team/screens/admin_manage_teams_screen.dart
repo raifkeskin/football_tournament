@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:ui' as ui;
 import 'package:archive/archive.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +9,7 @@ import '../../../core/services/app_session.dart';
 import '../../../core/services/image_upload_service.dart';
 import '../services/interfaces/i_team_service.dart';
 import '../../../core/services/service_locator.dart';
+import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/web_safe_image.dart';
 
@@ -30,6 +30,7 @@ class AdminManageTeamsScreen extends StatefulWidget {
 class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
   final ITeamService _teamService = ServiceLocator.teamService;
   String _searchQuery = '';
+  final _searchController = TextEditingController();
   final _picker = ImagePicker();
   final _imageUploadService = ImgBBUploadService();
   Future<List<Map<String, dynamic>>>? _teamsFuture;
@@ -40,25 +41,94 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
     _teamsFuture = _fetchTeamsOnce();
   }
 
+  /// Takımlar + sorumlu adları + kaç sezonda yer aldıkları (liste kartları
+  /// için; toplam 3 sorgu).
   Future<List<Map<String, dynamic>>> _fetchTeamsOnce() async {
-    final res = await Supabase.instance.client
-        .from('teams')
-        .select()
-        .order('name', ascending: true);
-    return res.map((e) => Map<String, dynamic>.from((e as Map))).toList();
+    final client = Supabase.instance.client;
+    final res = await client.from('teams').select();
+    final teams = res.map((e) => Map<String, dynamic>.from((e as Map))).toList()
+      ..sort(
+        (a, b) => _trCompare(
+          (a['name'] ?? '').toString(),
+          (b['name'] ?? '').toString(),
+        ),
+      );
+
+    final managerIds = <String>{
+      for (final t in teams)
+        if ((t['manager_id'] ?? '').toString().trim().isNotEmpty)
+          t['manager_id'].toString().trim(),
+    };
+    final managerNames = <String, String>{};
+    final seasonCounts = <String, int>{};
+    await Future.wait([
+      if (managerIds.isNotEmpty)
+        client
+            .from('players')
+            .select('id, name, surname')
+            .inFilter('id', managerIds.toList())
+            .then((rows) {
+              for (final r in rows) {
+                managerNames[(r['id'] ?? '').toString()] = _fullName(r);
+              }
+            }),
+      client.from('season_teams').select('team_id').then((rows) {
+        for (final r in rows) {
+          final tid = (r['team_id'] ?? '').toString();
+          seasonCounts[tid] = (seasonCounts[tid] ?? 0) + 1;
+        }
+      }),
+    ]);
+
+    for (final t in teams) {
+      final id = (t['id'] ?? '').toString();
+      t['manager_name'] =
+          managerNames[(t['manager_id'] ?? '').toString().trim()] ?? '';
+      t['season_count'] = seasonCounts[id] ?? 0;
+    }
+    return teams;
   }
 
-  /// Türkçe karakter duyarlı küçük harfe çevirme (Arama için)
+  static String _fullName(Map<String, dynamic> row) => [
+    (row['name'] ?? '').toString().trim(),
+    (row['surname'] ?? '').toString().trim(),
+  ].where((e) => e.isNotEmpty).join(' ');
+
+  /// Arama için küçük harf; i / ı / İ / I eşdeğer sayılır.
   String _toTurkishLow(String input) {
-    return input.replaceAll('İ', 'i').replaceAll('I', 'ı').toLowerCase();
+    return input.replaceAll('İ', 'i').toLowerCase().replaceAll('ı', 'i');
+  }
+
+  static String _trUpper(String s) =>
+      s.replaceAll('i', 'İ').replaceAll('ı', 'I').toUpperCase();
+
+  static const _trAlphabet = 'abcçdefgğhıijklmnoöprsştuüvyz';
+
+  /// Türk alfabesine göre sıralama (Ç, Ğ, İ, Ö, Ş, Ü doğru yerde).
+  static int _trCompare(String a, String b) {
+    String low(String s) =>
+        s.replaceAll('İ', 'i').replaceAll('I', 'ı').toLowerCase().trim();
+    final x = low(a);
+    final y = low(b);
+    final n = x.length < y.length ? x.length : y.length;
+    for (var i = 0; i < n; i++) {
+      if (x[i] == y[i]) continue;
+      final ix = _trAlphabet.indexOf(x[i]);
+      final iy = _trAlphabet.indexOf(y[i]);
+      if (ix >= 0 && iy >= 0) return ix.compareTo(iy);
+      if (ix >= 0) return 1; // rakam / sembol önce
+      if (iy >= 0) return -1;
+      return x[i].compareTo(y[i]);
+    }
+    return x.length.compareTo(y.length);
   }
 
   bool _matchesTeamSearch(Map<String, dynamic> data) {
     final q = _searchQuery.trim();
     if (q.isEmpty) return true;
     String read(dynamic v) => (v ?? '').toString();
-    final name = read(data['name']);
-    return _toTurkishLow(name).contains(q);
+    return _toTurkishLow(read(data['name'])).contains(q) ||
+        _toTurkishLow(read(data['manager_name'])).contains(q);
   }
 
   String _friendlyLoadError(Object? error) {
@@ -71,6 +141,197 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
       return 'Bağlantı hatası. İnternet bağlantısını kontrol edin.\n\n$s';
     }
     return s;
+  }
+
+  /// Takım sorumlusu seçimi (Takım Sorumlusu / Her İkisi rolündekiler).
+  Future<Map<String, String>?> _pickManager() async {
+    // Controller ve sorgu builder dışında bir kez oluşturulur; klavye
+    // açılıp popup yeniden build edildiğinde sıfırlanmaz / tekrar çekilmez.
+    final searchController = TextEditingController();
+    final future = Supabase.instance.client
+        .from('players')
+        .select('id, name, surname, role, photo_url')
+        .inFilter('role', const ['Takım Sorumlusu', 'Her İkisi'])
+        .order('name', ascending: true);
+    final picked = await showAdminPopup<Map<String, String>>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setPickerState) {
+            final h = MediaQuery.of(context).size.height * 0.75;
+            final q = _toTurkishLow(searchController.text.trim());
+            return SizedBox(
+              height: h,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const AdminDialogHeader(
+                      icon: Icons.badge_outlined,
+                      title: 'Takım Sorumlusu Seç',
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: searchController,
+                      style: const TextStyle(color: Colors.white),
+                      cursorColor: kAdminAccent,
+                      decoration: adminInputDecoration(
+                        hint: 'İsimle ara',
+                        icon: Icons.search_rounded,
+                      ),
+                      onChanged: (_) => setPickerState(() {}),
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: FutureBuilder(
+                        future: future,
+                        builder: (context, snap) {
+                          if (snap.connectionState == ConnectionState.waiting) {
+                            return const Center(
+                              child: CircularProgressIndicator(
+                                color: kAdminAccent,
+                              ),
+                            );
+                          }
+                          if (snap.hasError) {
+                            return Center(
+                              child: Text(
+                                'Hata: ${snap.error}',
+                                style: const TextStyle(color: Colors.white70),
+                              ),
+                            );
+                          }
+                          final rows =
+                              (snap.data as List?)
+                                  ?.cast<Map<String, dynamic>>() ??
+                              const <Map<String, dynamic>>[];
+                          final filtered = q.isEmpty
+                              ? rows
+                              : rows
+                                    .where(
+                                      (r) => _toTurkishLow(
+                                        _fullName(r),
+                                      ).contains(q),
+                                    )
+                                    .toList();
+                          if (filtered.isEmpty) {
+                            return const Center(
+                              child: Text(
+                                'Takım sorumlusu bulunamadı.',
+                                style: TextStyle(color: Colors.white54),
+                              ),
+                            );
+                          }
+                          return ListView.separated(
+                            itemCount: filtered.length,
+                            separatorBuilder: (_, _) =>
+                                const SizedBox(height: 8),
+                            itemBuilder: (context, index) {
+                              final r = filtered[index];
+                              final id = (r['id'] ?? '').toString().trim();
+                              final n = _fullName(r);
+                              final role = (r['role'] ?? '').toString().trim();
+                              final photo = (r['photo_url'] ?? '')
+                                  .toString()
+                                  .trim();
+                              return Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(14),
+                                  onTap: () => Navigator.of(
+                                    context,
+                                  ).pop({'id': id, 'name': n}),
+                                  child: Ink(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 10,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withValues(
+                                        alpha: 0.25,
+                                      ),
+                                      borderRadius: BorderRadius.circular(14),
+                                      border: Border.all(
+                                        color: Colors.white.withValues(
+                                          alpha: 0.08,
+                                        ),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        ClipOval(
+                                          child: Container(
+                                            width: 40,
+                                            height: 40,
+                                            color: Colors.white.withValues(
+                                              alpha: 0.08,
+                                            ),
+                                            child: photo.isEmpty
+                                                ? const Icon(
+                                                    Icons.person_rounded,
+                                                    color: Colors.white54,
+                                                  )
+                                                : WebSafeImage(
+                                                    url: photo,
+                                                    width: 40,
+                                                    height: 40,
+                                                    isCircle: true,
+                                                    fit: BoxFit.cover,
+                                                    fallbackIconSize: 20,
+                                                  ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                n.isEmpty ? id : n,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.w800,
+                                                ),
+                                              ),
+                                              if (role.isNotEmpty)
+                                                Text(
+                                                  role,
+                                                  style: const TextStyle(
+                                                    color: kAdminMuted,
+                                                    fontSize: 12,
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                        ),
+                                        const Icon(
+                                          Icons.chevron_right_rounded,
+                                          color: Colors.white38,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+    _disposeControllersLater([searchController]);
+    return picked;
   }
 
   Future<void> _openTeamFormSheet({
@@ -86,183 +347,16 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
           .toString()
           .trim(),
     );
-    final managerController = TextEditingController();
     final existingLogoUrl =
         (existing?['logo_url'] ?? existing?['logoUrl'] ?? '').toString().trim();
-    String? selectedManagerId =
+    String selectedManagerId =
         (existing?['manager_id'] ?? existing?['managerId'] ?? '')
             .toString()
             .trim();
+    String managerName = (existing?['manager_name'] ?? '').toString().trim();
     XFile? selectedLogo;
+    var removeLogo = false;
     var saving = false;
-
-    Future<void> hydrateManagerName() async {
-      final mid = (selectedManagerId ?? '').trim();
-      if (mid.isEmpty) return;
-      try {
-        final res = await Supabase.instance.client
-            .from('players')
-            .select('name')
-            .eq('id', mid)
-            .limit(1);
-        if (res.isNotEmpty) {
-          final row = (res.first as Map).cast<String, dynamic>();
-          final n = (row['name'] ?? '').toString().trim();
-          if (n.isNotEmpty) managerController.text = n;
-        }
-      } catch (_) {}
-    }
-
-    await hydrateManagerName();
-
-    Future<Map<String, dynamic>?> pickManager() async {
-      // Controller ve sorgu builder dışında bir kez oluşturulur; klavye
-      // açılıp sheet yeniden build edildiğinde sıfırlanmaz / tekrar çekilmez.
-      final searchController = TextEditingController();
-      final future = Supabase.instance.client
-          .from('players')
-          .select('id, name, role, photo_url')
-          .inFilter('role', const ['Takım Sorumlusu', 'Her İkisi'])
-          .order('name', ascending: true);
-      final picked = await showAdminPopup<Map<String, dynamic>>(
-        context: context,
-        builder: (context) {
-          return StatefulBuilder(
-            builder: (context, setPickerState) {
-              final viewInsets = MediaQuery.of(context).viewInsets;
-              final h = MediaQuery.of(context).size.height * 0.8;
-              final q = _toTurkishLow(searchController.text.trim());
-              return SizedBox(
-                height: h,
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    16,
-                    8,
-                    16,
-                    16 + viewInsets.bottom,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      TextField(
-                        controller: searchController,
-                        decoration: const InputDecoration(
-                          labelText: 'Oyuncu Ara',
-                          prefixIcon: Icon(Icons.search),
-                          border: OutlineInputBorder(),
-                        ),
-                        onChanged: (_) => setPickerState(() {}),
-                      ),
-                      const SizedBox(height: 12),
-                      Expanded(
-                        child: FutureBuilder(
-                          future: future,
-                          builder: (context, snap) {
-                            if (snap.connectionState ==
-                                ConnectionState.waiting) {
-                              return const Center(
-                                child: CircularProgressIndicator(),
-                              );
-                            }
-                            if (snap.hasError) {
-                              return Center(child: Text('Hata: ${snap.error}'));
-                            }
-                            final rows =
-                                (snap.data as List?)
-                                    ?.cast<Map<String, dynamic>>() ??
-                                const <Map<String, dynamic>>[];
-                            final filtered = q.isEmpty
-                                ? rows
-                                : rows.where((r) {
-                                    final name = _toTurkishLow(
-                                      (r['name'] ?? '').toString(),
-                                    );
-                                    return name.contains(q);
-                                  }).toList();
-                            if (filtered.isEmpty) {
-                              return const Center(
-                                child: Text('Oyuncu bulunamadı.'),
-                              );
-                            }
-                            return ListView.builder(
-                              itemCount: filtered.length,
-                              itemBuilder: (context, index) {
-                                final r = filtered[index];
-                                final id = (r['id'] ?? '').toString().trim();
-                                final n = (r['name'] ?? '').toString().trim();
-                                final role = (r['role'] ?? '')
-                                    .toString()
-                                    .trim();
-                                final photo = (r['photo_url'] ?? '')
-                                    .toString()
-                                    .trim();
-                                return Card(
-                                  margin: const EdgeInsets.symmetric(
-                                    vertical: 4,
-                                  ),
-                                  child: ListTile(
-                                    leading: SizedBox(
-                                      width: 36,
-                                      height: 36,
-                                      child: ClipOval(
-                                        child: photo.isEmpty
-                                            ? Container(
-                                                color: Theme.of(context)
-                                                    .colorScheme
-                                                    .surfaceContainerHighest,
-                                                child: const Icon(
-                                                  Icons.person_outline,
-                                                  size: 18,
-                                                ),
-                                              )
-                                            : WebSafeImage(
-                                                url: photo,
-                                                width: 36,
-                                                height: 36,
-                                                isCircle: true,
-                                                fit: BoxFit.cover,
-                                                fallbackIconSize: 18,
-                                              ),
-                                      ),
-                                    ),
-                                    title: Text(
-                                      n.isEmpty ? id : n,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    subtitle: role.isEmpty ? null : Text(role),
-                                    onTap: () => Navigator.of(
-                                      context,
-                                    ).pop({'id': id, 'name': n}),
-                                  ),
-                                );
-                              },
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          child: const Text(
-                            'VAZGEÇ',
-                            style: TextStyle(fontWeight: FontWeight.w900),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          );
-        },
-      );
-      _disposeControllersLater([searchController]);
-      return picked;
-    }
 
     Future<void> pickLogo(void Function(void Function()) setSheetState) async {
       final picked = await _picker.pickImage(
@@ -270,7 +364,10 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
         imageQuality: 85,
       );
       if (picked == null) return;
-      setSheetState(() => selectedLogo = picked);
+      setSheetState(() {
+        selectedLogo = picked;
+        removeLogo = false;
+      });
     }
 
     Future<void> submit(
@@ -287,7 +384,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
 
       setSheetState(() => saving = true);
       try {
-        var logoUrl = existingLogoUrl;
+        var logoUrl = removeLogo ? '' : existingLogoUrl;
         if (selectedLogo != null) {
           final uploaded = await _imageUploadService.uploadImage(
             File(selectedLogo!.path),
@@ -304,9 +401,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
         final payload = <String, dynamic>{
           'name': teamName,
           'logo_url': logoUrl.trim(),
-          'manager_id': (selectedManagerId ?? '').trim().isEmpty
-              ? null
-              : selectedManagerId!.trim(),
+          'manager_id': selectedManagerId.isEmpty ? null : selectedManagerId,
           'founded_year': ?foundedYear,
         };
 
@@ -336,7 +431,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
           }
         }
 
-        // Başarılı kayıtta sheet kapanır; kapanmış sheet'e setState yapılmaz.
+        // Başarılı kayıtta popup kapanır; kapanmış popup'a setState yapılmaz.
         if (sheetContext.mounted) Navigator.of(sheetContext).pop();
         if (!mounted) return;
         setState(() {
@@ -359,242 +454,192 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
       builder: (sheetContext) {
         return StatefulBuilder(
           builder: (context, setSheetState) {
-            final viewInsets = MediaQuery.of(context).viewInsets;
-            final h = MediaQuery.of(context).size.height * 0.8;
-            final showLogoUrl = selectedLogo == null ? existingLogoUrl : '';
+            final showLogoUrl = selectedLogo == null && !removeLogo
+                ? existingLogoUrl
+                : '';
+            final hasLogo = selectedLogo != null || showLogoUrl.isNotEmpty;
 
             Future<void> openManagerPicker() async {
-              final picked = await pickManager();
+              final picked = await _pickManager();
               if (picked == null) return;
               setSheetState(() {
-                selectedManagerId = (picked['id'] ?? '').toString().trim();
-                managerController.text = (picked['name'] ?? '')
-                    .toString()
-                    .trim();
+                selectedManagerId = (picked['id'] ?? '').trim();
+                managerName = (picked['name'] ?? '').trim();
               });
             }
 
-            return SizedBox(
-              height: h,
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(16, 8, 16, 16 + viewInsets.bottom),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Container(
-                      clipBehavior: Clip.antiAlias,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(18),
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.surfaceContainerHighest,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.14),
-                            blurRadius: 18,
-                            offset: const Offset(0, 10),
+            final Widget logo;
+            if (selectedLogo != null) {
+              logo = Image.file(File(selectedLogo!.path), fit: BoxFit.cover);
+            } else if (showLogoUrl.isNotEmpty) {
+              logo = WebSafeImage(
+                url: showLogoUrl,
+                width: 112,
+                height: 112,
+                fit: BoxFit.cover,
+                fallbackIconSize: 44,
+              );
+            } else {
+              logo = const Icon(
+                Icons.shield_outlined,
+                size: 48,
+                color: Color(0xFF6EE7B7),
+              );
+            }
+
+            return SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 6, 16, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  AdminDialogHeader(
+                    icon: isEdit ? Icons.edit_outlined : Icons.group_add_rounded,
+                    title: isEdit ? 'Takımı Düzenle' : 'Takım Ekle',
+                  ),
+                  const SizedBox(height: 20),
+                  Center(
+                    child: GestureDetector(
+                      onTap: saving ? null : () => pickLogo(setSheetState),
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Container(
+                            width: 112,
+                            height: 112,
+                            clipBehavior: Clip.antiAlias,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF064E3B),
+                              borderRadius: BorderRadius.circular(28),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.12),
+                              ),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Colors.black38,
+                                  blurRadius: 14,
+                                  offset: Offset(0, 6),
+                                ),
+                              ],
+                            ),
+                            child: SizedBox.expand(child: logo),
+                          ),
+                          Positioned(
+                            right: -6,
+                            bottom: -6,
+                            child: Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: kAdminAccent,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: const Color(0xFF1E293B),
+                                  width: 3,
+                                ),
+                              ),
+                              child: const Icon(
+                                Icons.photo_camera_outlined,
+                                size: 17,
+                                color: Colors.white,
+                              ),
+                            ),
                           ),
                         ],
                       ),
-                      child: SizedBox(
-                        width: double.infinity,
-                        height: 220,
-                        child: Stack(
-                          children: [
-                            Positioned.fill(
-                              child: selectedLogo != null
-                                  ? Stack(
-                                      children: [
-                                        Positioned.fill(
-                                          child: ImageFiltered(
-                                            imageFilter: ui.ImageFilter.blur(
-                                              sigmaX: 18,
-                                              sigmaY: 18,
-                                            ),
-                                            child: Image.file(
-                                              File(selectedLogo!.path),
-                                              fit: BoxFit.cover,
-                                            ),
-                                          ),
-                                        ),
-                                        Positioned.fill(
-                                          child: Container(
-                                            color: Colors.black.withValues(
-                                              alpha: 0.10,
-                                            ),
-                                          ),
-                                        ),
-                                        Center(
-                                          child: Image.file(
-                                            File(selectedLogo!.path),
-                                            fit: BoxFit.contain,
-                                          ),
-                                        ),
-                                      ],
-                                    )
-                                  : (showLogoUrl.isNotEmpty
-                                        ? Stack(
-                                            children: [
-                                              Positioned.fill(
-                                                child: ImageFiltered(
-                                                  imageFilter:
-                                                      ui.ImageFilter.blur(
-                                                        sigmaX: 18,
-                                                        sigmaY: 18,
-                                                      ),
-                                                  child: WebSafeImage(
-                                                    url: showLogoUrl,
-                                                    width: double.infinity,
-                                                    height: 220,
-                                                    isCircle: false,
-                                                    fit: BoxFit.cover,
-                                                    fallbackIconSize: 64,
-                                                  ),
-                                                ),
-                                              ),
-                                              Positioned.fill(
-                                                child: Container(
-                                                  color: Colors.black
-                                                      .withValues(alpha: 0.10),
-                                                ),
-                                              ),
-                                              Center(
-                                                child: WebSafeImage(
-                                                  url: showLogoUrl,
-                                                  width: double.infinity,
-                                                  height: 220,
-                                                  isCircle: false,
-                                                  fit: BoxFit.contain,
-                                                  fallbackIconSize: 64,
-                                                ),
-                                              ),
-                                            ],
-                                          )
-                                        : Container(
-                                            child: Icon(
-                                              Icons.shield_outlined,
-                                              size: 64,
-                                              color: Theme.of(
-                                                context,
-                                              ).colorScheme.onSurfaceVariant,
-                                            ),
-                                          )),
-                            ),
-                            Positioned(
-                              right: 10,
-                              bottom: 10,
-                              child: Row(
-                                children: [
-                                  IconButton.filledTonal(
-                                    onPressed: saving
-                                        ? null
-                                        : () => pickLogo(setSheetState),
-                                    icon: const Icon(
-                                      Icons.photo_camera_outlined,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  IconButton.filledTonal(
-                                    onPressed: saving
-                                        ? null
-                                        : () => setSheetState(() {
-                                            selectedLogo = null;
-                                          }),
-                                    icon: const Icon(Icons.delete_outline),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      TextButton(
+                        onPressed: saving
+                            ? null
+                            : () => pickLogo(setSheetState),
+                        style: TextButton.styleFrom(
+                          foregroundColor: kAdminAccent,
                         ),
+                        child: Text(hasLogo ? 'Logoyu değiştir' : 'Logo seç'),
                       ),
-                    ),
-                    const SizedBox(height: 14),
-                    TextField(
-                      controller: nameController,
-                      enabled: !saving,
-                      maxLength: 30,
-                      decoration: const InputDecoration(
-                        labelText: 'Takım Adı',
-                        border: OutlineInputBorder(),
-                        counterText: '',
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: foundedController,
-                      enabled: !saving,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(4),
-                      ],
-                      decoration: const InputDecoration(
-                        labelText: 'Kuruluş Tarihi',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: managerController,
-                            enabled: !saving,
-                            readOnly: true,
-                            onTap: saving ? null : openManagerPicker,
-                            decoration: const InputDecoration(
-                              labelText: 'Takım Sorumlusu',
-                              border: OutlineInputBorder(),
-                            ),
+                      if (hasLogo)
+                        TextButton(
+                          onPressed: saving
+                              ? null
+                              : () => setSheetState(() {
+                                  selectedLogo = null;
+                                  removeLogo = true;
+                                }),
+                          style: TextButton.styleFrom(
+                            foregroundColor: kAdminDanger,
                           ),
+                          child: const Text('Kaldır'),
                         ),
-                        const SizedBox(width: 10),
-                        IconButton.filledTonal(
-                          onPressed: saving ? null : openManagerPicker,
-                          icon: const Icon(Icons.search_rounded),
-                          tooltip: 'Seç',
-                        ),
-                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: nameController,
+                    enabled: !saving,
+                    maxLength: 30,
+                    textCapitalization: TextCapitalization.words,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
                     ),
-                    const Spacer(),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton(
-                        onPressed: saving
-                            ? null
-                            : () => submit(sheetContext, setSheetState),
-                        child: saving
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : Text(
-                                isEdit ? 'GÜNCELLE' : 'KAYDET',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w900,
-                                ),
-                              ),
+                    cursorColor: kAdminAccent,
+                    decoration: adminInputDecoration(
+                      label: 'Takım Adı',
+                      icon: Icons.shield_outlined,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: foundedController,
+                    enabled: !saving,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(4),
+                    ],
+                    style: const TextStyle(color: Colors.white),
+                    cursorColor: kAdminAccent,
+                    decoration: adminInputDecoration(
+                      label: 'Kuruluş Yılı',
+                      hint: 'Örn. 1966',
+                      icon: Icons.event_outlined,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  AdminFieldGroup(
+                    children: [
+                      AdminSelectRow(
+                        icon: Icons.badge_outlined,
+                        label: 'Takım Sorumlusu',
+                        value: managerName,
+                        placeholder: 'Sorumlu seçin',
+                        onTap: saving ? null : openManagerPicker,
+                        onClear: () => setSheetState(() {
+                          selectedManagerId = '';
+                          managerName = '';
+                        }),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton(
-                        onPressed: saving
-                            ? null
-                            : () => Navigator.of(context).pop(),
-                        child: const Text(
-                          'VAZGEÇ',
-                          style: TextStyle(fontWeight: FontWeight.w900),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  AdminPrimaryButton(
+                    label: isEdit ? 'GÜNCELLE' : 'KAYDET',
+                    busy: saving,
+                    onPressed: () => submit(sheetContext, setSheetState),
+                  ),
+                  const SizedBox(height: 10),
+                  AdminSecondaryButton(
+                    onPressed: saving
+                        ? null
+                        : () => Navigator.of(context).pop(),
+                  ),
+                ],
               ),
             );
           },
@@ -602,14 +647,10 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
       },
     );
 
-    _disposeControllersLater([
-      nameController,
-      foundedController,
-      managerController,
-    ]);
+    _disposeControllersLater([nameController, foundedController]);
   }
 
-  /// Sheet kapanış animasyonu sürerken TextField'lar controller'ı kullanmaya
+  /// Popup kapanış animasyonu sürerken TextField'lar controller'ı kullanmaya
   /// devam eder; hemen dispose etmek "_dependents.isEmpty" /
   /// "used after being disposed" hatalarına yol açar.
   void _disposeControllersLater(List<TextEditingController> controllers) {
@@ -649,8 +690,181 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
     }
   }
 
+  Widget _teamRow(Map<String, dynamic> data, {required bool first}) {
+    final teamId = (data['id'] ?? '').toString();
+    final teamName = (data['name'] ?? '').toString().trim();
+    final logoUrl = (data['logo_url'] ?? '').toString().trim();
+    final manager = (data['manager_name'] ?? '').toString().trim();
+    final founded = (data['founded_year'] ?? '').toString().trim();
+    final seasonCount = (data['season_count'] as int?) ?? 0;
+    final sub = [
+      manager.isEmpty ? 'Sorumlu atanmadı' : manager,
+      if (founded.isNotEmpty) 'Kuruluş $founded',
+    ].join(' · ');
+
+    Future<void> openEdit() =>
+        _openTeamFormSheet(teamId: teamId, existing: data);
+
+    return InkWell(
+      onTap: openEdit,
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 68),
+        padding: const EdgeInsets.fromLTRB(14, 10, 4, 10),
+        decoration: BoxDecoration(
+          border: first
+              ? null
+              : Border(
+                  top: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
+                ),
+        ),
+        child: Row(
+          children: [
+            _TeamLogo(name: teamName, logoUrl: logoUrl),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    teamName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      Icon(
+                        manager.isEmpty
+                            ? Icons.person_off_outlined
+                            : Icons.badge_outlined,
+                        size: 13,
+                        color: manager.isEmpty ? kAdminAmber : kAdminMuted,
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          sub,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: kAdminMuted,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            _Pill(
+              seasonCount == 0 ? 'Sezon yok' : '$seasonCount sezon',
+              seasonCount == 0 ? kAdminAmber : kAdminAccent,
+            ),
+            PopupMenuButton<String>(
+              tooltip: 'İşlemler',
+              color: const Color(0xFF1E293B),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+                side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+              ),
+              icon: const Icon(Icons.more_vert_rounded, color: Colors.white54),
+              onSelected: (v) {
+                if (v == 'edit') openEdit();
+                if (v == 'delete') _takimSil(teamId);
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(
+                  value: 'edit',
+                  child: Row(
+                    children: [
+                      Icon(Icons.edit_outlined, color: Colors.white70, size: 20),
+                      SizedBox(width: 10),
+                      Text('Düzenle', style: TextStyle(color: Colors.white)),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'delete',
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.delete_outline_rounded,
+                        color: kAdminDanger,
+                        size: 20,
+                      ),
+                      SizedBox(width: 10),
+                      Text('Sil', style: TextStyle(color: kAdminDanger)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _letterSection(String letter, List<Map<String, dynamic>> teams) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    letter,
+                    style: const TextStyle(
+                      color: kAdminAccent,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ),
+                Text(
+                  '${teams.length} takım',
+                  style: const TextStyle(color: kAdminMuted, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E293B).withValues(alpha: 0.94),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            ),
+            child: Material(
+              type: MaterialType.transparency,
+              child: Column(
+                children: [
+                  for (var i = 0; i < teams.length; i++)
+                    _teamRow(teams[i], first: i == 0),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -678,164 +892,249 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
           onPressed: () => _openTeamFormSheet(),
         ),
       ],
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
-            child: TextField(
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: 'Takım ara',
-                prefixIcon: const Icon(Icons.search, color: kAdminAccent),
-                filled: true,
-                fillColor: Colors.black.withValues(alpha: 0.3),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide(
-                    color: Colors.white.withValues(alpha: 0.1),
-                  ),
+      body: FutureBuilder<List<Map<String, dynamic>>>(
+        future: _teamsFuture,
+        builder: (context, snapshot) {
+          Future<void> refresh() async {
+            setState(() {
+              _teamsFuture = _fetchTeamsOnce();
+            });
+            await _teamsFuture;
+          }
+
+          Widget buildMessage(String text) {
+            return ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(16),
+              children: [
+                const SizedBox(height: 120),
+                Text(
+                  text,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white54),
                 ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: const BorderSide(color: kAdminAccent),
+              ],
+            );
+          }
+
+          final all = (snapshot.data ?? const <Map<String, dynamic>>[])
+              .where((d) => (d['id'] ?? '').toString() != 'free_agent_pool')
+              .toList();
+          final teams = all.where(_matchesTeamSearch).toList();
+          final noManager = all
+              .where((d) => (d['manager_name'] ?? '').toString().isEmpty)
+              .length;
+
+          final Widget content;
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            content = const Center(
+              child: CircularProgressIndicator(color: kAdminAccent),
+            );
+          } else if (snapshot.hasError) {
+            content = RefreshIndicator(
+              onRefresh: refresh,
+              child: buildMessage(
+                'Takımlar yüklenemedi.\n\n${_friendlyLoadError(snapshot.error)}',
+              ),
+            );
+          } else if (teams.isEmpty) {
+            content = RefreshIndicator(
+              onRefresh: refresh,
+              child: buildMessage(
+                all.isEmpty ? 'Henüz takım yok.' : 'Aramayla eşleşen takım yok.',
+              ),
+            );
+          } else {
+            // Baş harfe göre bölümler.
+            final sections = <String, List<Map<String, dynamic>>>{};
+            for (final t in teams) {
+              final name = (t['name'] ?? '').toString().trim();
+              final letter = name.isEmpty
+                  ? '#'
+                  : _trUpper(name.characters.first);
+              sections.putIfAbsent(letter, () => []).add(t);
+            }
+            content = RefreshIndicator(
+              onRefresh: refresh,
+              color: kAdminAccent,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                children: [
+                  for (final e in sections.entries)
+                    _letterSection(e.key, e.value),
+                ],
+              ),
+            );
+          }
+
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                child: TextField(
+                  controller: _searchController,
+                  style: const TextStyle(color: Colors.white),
+                  cursorColor: kAdminAccent,
+                  decoration: adminInputDecoration(
+                    hint: 'Takım veya sorumlu ara',
+                    icon: Icons.search_rounded,
+                  ).copyWith(
+                    suffixIcon: _searchQuery.isEmpty
+                        ? null
+                        : IconButton(
+                            icon: const Icon(
+                              Icons.clear_rounded,
+                              color: Colors.white54,
+                            ),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _searchQuery = '');
+                            },
+                          ),
+                  ),
+                  onChanged: (val) =>
+                      setState(() => _searchQuery = _toTurkishLow(val)),
                 ),
               ),
-              onChanged: (val) =>
-                  setState(() => _searchQuery = _toTurkishLow(val)),
-            ),
-          ),
-          Expanded(
-            child: FutureBuilder<List<Map<String, dynamic>>>(
-              future: _teamsFuture,
-              builder: (context, snapshot) {
-                Future<void> refresh() async {
-                  setState(() {
-                    _teamsFuture = _fetchTeamsOnce();
-                  });
-                  await _teamsFuture;
-                }
-
-                Widget buildMessage(String text) {
-                  return ListView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.all(16),
+              if (snapshot.hasData)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  child: Row(
                     children: [
-                      const SizedBox(height: 120),
-                      Text(
-                        text,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: Colors.white54),
+                      Expanded(
+                        child: _SummaryBox(
+                          value: '${all.length}',
+                          label: 'Toplam takım',
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _SummaryBox(
+                          value: '${all.length - noManager}',
+                          label: 'Sorumlusu olan',
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _SummaryBox(
+                          value: '$noManager',
+                          label: 'Sorumlu yok',
+                          color: noManager == 0 ? null : kAdminAmber,
+                        ),
                       ),
                     ],
-                  );
-                }
-
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return RefreshIndicator(
-                    onRefresh: refresh,
-                    child: buildMessage('Takımlar yükleniyor...'),
-                  );
-                }
-                if (snapshot.hasError) {
-                  return RefreshIndicator(
-                    onRefresh: refresh,
-                    child: buildMessage(
-                      'Takımlar yüklenemedi.\n\n${_friendlyLoadError(snapshot.error)}',
-                    ),
-                  );
-                }
-
-                final teams = (snapshot.data ?? const <Map<String, dynamic>>[])
-                    .where((data) {
-                      final id = (data['id'] ?? '').toString().trim();
-                      if (id == 'free_agent_pool') return false;
-                      return _matchesTeamSearch(data);
-                    })
-                    .toList();
-
-                if (teams.isEmpty) {
-                  return RefreshIndicator(
-                    onRefresh: refresh,
-                    child: buildMessage('Takım bulunamadı.'),
-                  );
-                }
-
-                return RefreshIndicator(
-                  onRefresh: refresh,
-                  child: ListView.builder(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
-                    itemCount: teams.length,
-                    itemBuilder: (context, index) {
-                      final data = teams[index];
-                      final teamId = (data['id'] ?? '').toString();
-                      final teamName = (data['name'] ?? '').toString();
-                      final logoUrl = (data['logo_url'] ?? '').toString();
-
-                      Future<void> openEditDialog() async {
-                        await _openTeamFormSheet(
-                          teamId: teamId,
-                          existing: data,
-                        );
-                      }
-
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        decoration: adminCardDecoration(),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.fromLTRB(
-                            12,
-                            4,
-                            10,
-                            4,
-                          ),
-                          leading: SizedBox(
-                            width: 36,
-                            height: 36,
-                            child: WebSafeImage(
-                              url: logoUrl,
-                              width: 36,
-                              height: 36,
-                              borderRadius: BorderRadius.circular(8),
-                              fallbackIconSize: 18,
-                            ),
-                          ),
-                          title: Text(
-                            teamName,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            softWrap: true,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              AdminSmallAction(
-                                icon: Icons.edit_outlined,
-                                tooltip: 'Düzenle',
-                                color: Colors.white70,
-                                onTap: openEditDialog,
-                              ),
-                              const SizedBox(width: 6),
-                              AdminSmallAction(
-                                icon: Icons.delete_outline_rounded,
-                                tooltip: 'Sil',
-                                color: kAdminDanger,
-                                onTap: () => _takimSil(teamId),
-                              ),
-                            ],
-                          ),
-                          onTap: openEditDialog,
-                        ),
-                      );
-                    },
                   ),
-                );
-              },
+                ),
+              Expanded(child: content),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Takım logosu; yoksa baş harfler (Sezon / Grup listeleriyle aynı).
+class _TeamLogo extends StatelessWidget {
+  const _TeamLogo({required this.name, required this.logoUrl});
+
+  final String name;
+  final String logoUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final initials = name
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .take(2)
+        .map((w) => w.characters.first)
+        .join()
+        .toUpperCase();
+    return Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        color: const Color(0xFF064E3B),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      clipBehavior: Clip.antiAlias,
+      alignment: Alignment.center,
+      child: logoUrl.isNotEmpty
+          ? WebSafeImage(url: logoUrl, width: 44, height: 44)
+          : Text(
+              initials,
+              style: const TextStyle(
+                color: Color(0xFF6EE7B7),
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+              ),
             ),
+    );
+  }
+}
+
+class _Pill extends StatelessWidget {
+  const _Pill(this.text, this.color);
+
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+}
+
+/// Liste üstündeki küçük sayı kutusu.
+class _SummaryBox extends StatelessWidget {
+  const _SummaryBox({required this.value, required this.label, this.color});
+
+  final String value;
+  final String label;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B).withValues(alpha: 0.94),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            value,
+            style: TextStyle(
+              color: color ?? Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: kAdminMuted, fontSize: 11),
           ),
         ],
       ),

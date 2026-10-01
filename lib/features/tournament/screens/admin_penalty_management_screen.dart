@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:football_tournament/core/widgets/custom_bottom_sheet_dropdown.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../match/models/match.dart';
 import '../../../core/services/app_session.dart';
-import '../../team/models/team.dart';
 import '../../team/services/interfaces/i_team_service.dart';
 import '../services/interfaces/i_league_service.dart';
 import '../../tournament/models/league.dart';
 import '../../../core/services/service_locator.dart';
+import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/custom_popup_selector.dart';
 import '../../../core/widgets/web_safe_image.dart';
@@ -721,41 +719,196 @@ class _PenaltyEditorSheetState extends State<_PenaltyEditorSheet> {
   final TextEditingController _matchCountController = TextEditingController();
   final TextEditingController _descController = TextEditingController();
 
+  late final Stream<List<League>> _leaguesStream = widget.leagueService
+      .watchLeagues();
+  List<AdminOption> _leagues = const [];
+  List<AdminOption> _seasons = const [];
+  List<AdminOption> _teams = const [];
+  List<AdminOption> _players = const [];
+  bool _loadingSeasons = false;
+  bool _loadingTeams = false;
+  bool _loadingPlayers = false;
+
   bool _saving = false;
   bool _loadingExisting = false;
 
   bool get _isEdit => _penaltyId.trim().isNotEmpty;
 
-  InputDecoration _deco(String label) {
-    final cs = Theme.of(context).colorScheme;
-    return InputDecoration(
-      labelText: label,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(18)),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(18),
-        borderSide: BorderSide(
-          color: cs.outlineVariant.withValues(alpha: 0.55),
-        ),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(18),
-        borderSide: BorderSide(color: cs.primary, width: 1.6),
-      ),
-      filled: true,
-      fillColor: cs.surface,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-    );
+  // Turnuva → Sezon → Takım → Futbolcu listeleri. Sezon tekse ya da varsayılan
+  // işaretliyse otomatik seçilir.
+
+  Future<void> _loadSeasons({bool autoPick = true}) async {
+    final lid = _leagueId.trim();
+    if (lid.isEmpty) return;
+    setState(() => _loadingSeasons = true);
+    try {
+      final res = await widget.sb
+          .from('seasons')
+          .select('id, name, is_default')
+          .eq('league_id', lid)
+          .order('start_date', ascending: false);
+      if (!mounted || _leagueId != lid) return;
+      final seasons = [
+        for (final r in res)
+          (
+            id: (r['id'] ?? '').toString().trim(),
+            name: (r['name'] ?? '').toString().trim(),
+            isDefault: r['is_default'] == true,
+          ),
+      ];
+      setState(() {
+        _seasons = seasons;
+        _loadingSeasons = false;
+      });
+      if (autoPick && _seasonId.isEmpty) {
+        final auto = autoPickOption(seasons);
+        if (auto != null) _selectSeason(auto);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadingSeasons = false);
+    }
   }
 
-  Future<List<Map<String, dynamic>>> _fetchSeasons(String leagueId) async {
-    final lid = leagueId.trim();
-    if (lid.isEmpty) return const <Map<String, dynamic>>[];
-    final res = await widget.sb
-        .from('seasons')
-        .select('id, name')
-        .eq('league_id', lid)
-        .order('name', ascending: true);
-    return res.cast<Map<String, dynamic>>();
+  Future<void> _loadTeams() async {
+    final sid = _seasonId.trim();
+    if (sid.isEmpty) return;
+    setState(() => _loadingTeams = true);
+    try {
+      final teams = await widget.teamService.getTeamsCached(
+        sid,
+        caller: 'AdminPenalty',
+      );
+      if (!mounted || _seasonId != sid) return;
+      final byId = <String, AdminOption>{};
+      for (final t in teams) {
+        final id = t.id.trim();
+        if (id.isEmpty) continue;
+        // Sezona bağlı ama hiçbir gruba atanmamış takımlar sezonda oynamaz.
+        if ((t.groupId ?? '').trim().isEmpty) continue;
+        byId.putIfAbsent(
+          id,
+          () => (
+            id: id,
+            name: t.name.trim().isEmpty ? id : t.name.trim(),
+            isDefault: false,
+          ),
+        );
+      }
+      setState(() {
+        _teams = byId.values.toList()
+          ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+        _loadingTeams = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingTeams = false);
+    }
+  }
+
+  Future<void> _loadPlayers() async {
+    final tid = _teamId.trim();
+    final sid = _seasonId.trim();
+    if (tid.isEmpty || sid.isEmpty) return;
+    setState(() => _loadingPlayers = true);
+    try {
+      final players = await widget.teamService
+          .watchPlayers(teamId: tid, tournamentId: sid)
+          .first;
+      if (!mounted || _teamId != tid) return;
+      final byId = <String, AdminOption>{};
+      for (final p in players) {
+        final id = p.id.trim();
+        if (id.isEmpty) continue;
+        if (p.role != 'Futbolcu' && p.role != 'Her İkisi') continue;
+        byId.putIfAbsent(
+          id,
+          () => (
+            id: id,
+            name: p.name.trim().isEmpty ? id : p.name.trim(),
+            isDefault: false,
+          ),
+        );
+      }
+      setState(() {
+        _players = byId.values.toList()
+          ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+        _loadingPlayers = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingPlayers = false);
+    }
+  }
+
+  void _clearForm() {
+    if (_isEdit) return;
+    _matchCountController.text = '';
+    _descController.text = '';
+  }
+
+  void _selectLeague(String id) {
+    setState(() {
+      _leagueId = id;
+      _seasonId = '';
+      _teamId = '';
+      _playerId = '';
+      _seasons = const [];
+      _teams = const [];
+      _players = const [];
+      _clearForm();
+    });
+    _loadSeasons();
+  }
+
+  void _selectSeason(String id) {
+    setState(() {
+      _seasonId = id;
+      _teamId = '';
+      _playerId = '';
+      _teams = const [];
+      _players = const [];
+      _clearForm();
+    });
+    _loadTeams();
+  }
+
+  void _selectTeam(String id) {
+    setState(() {
+      _teamId = id;
+      _playerId = '';
+      _players = const [];
+      _clearForm();
+    });
+    _loadPlayers();
+  }
+
+  Future<void> _selectPlayer(String id) async {
+    setState(() {
+      _playerId = id;
+      _clearForm();
+    });
+    if (!_isEdit) await _loadExistingForPlayerSeason();
+  }
+
+  static String? _nameOf(List<AdminOption> options, String id) {
+    for (final o in options) {
+      if (o.id == id) return o.name;
+    }
+    return null;
+  }
+
+  Future<void> _pick({
+    required String title,
+    required List<AdminOption> options,
+    required String selected,
+    required void Function(String id) onPicked,
+  }) async {
+    final picked = await showAdminOptionPicker<String>(
+      context: context,
+      title: title,
+      items: options.map((o) => o.id).toList(),
+      labelBuilder: (id) => _nameOf(options, id) ?? id,
+      selected: selected.isEmpty ? null : selected,
+    );
+    if (picked != null && picked != selected) onPicked(picked);
   }
 
   Future<void> _loadExistingFromPenaltyId() async {
@@ -808,6 +961,10 @@ class _PenaltyEditorSheetState extends State<_PenaltyEditorSheet> {
           }
         } catch (_) {}
       }
+      // Kilitli alanlarda adların görünmesi için listeleri yükle.
+      _loadSeasons(autoPick: false);
+      _loadTeams();
+      _loadPlayers();
     } finally {
       if (mounted) setState(() => _loadingExisting = false);
     }
@@ -842,15 +999,19 @@ class _PenaltyEditorSheetState extends State<_PenaltyEditorSheet> {
     _playerId = widget.initialPlayerId.trim();
     _penaltyId = widget.penaltyId.trim();
 
-    if (_penaltyId.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _loadExistingFromPenaltyId(),
-      );
-    } else if (_playerId.isNotEmpty && _seasonId.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _loadExistingForPlayerSeason(),
-      );
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_penaltyId.isNotEmpty) {
+        _loadExistingFromPenaltyId();
+        return;
+      }
+      _loadSeasons();
+      _loadTeams();
+      _loadPlayers();
+      if (_playerId.isNotEmpty && _seasonId.isNotEmpty) {
+        _loadExistingForPlayerSeason();
+      }
+    });
   }
 
   @override
@@ -908,277 +1069,191 @@ class _PenaltyEditorSheetState extends State<_PenaltyEditorSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final viewInsets = MediaQuery.of(context).viewInsets;
+    final locked = _saving || _isEdit;
+    final formEnabled =
+        !_saving &&
+        _playerId.trim().isNotEmpty &&
+        _seasonId.trim().isNotEmpty &&
+        !_loadingExisting;
+
     return Padding(
-      padding: EdgeInsets.fromLTRB(16, 8, 16, 16 + viewInsets.bottom),
-      child: ListView(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          StreamBuilder<List<League>>(
-            stream: widget.leagueService.watchLeagues(),
-            builder: (context, snap) {
-              final byId = <String, League>{};
-              for (final l in (snap.data ?? const <League>[])) {
-                final id = l.id.trim();
-                if (id.isEmpty) continue;
-                byId.putIfAbsent(id, () => l);
-              }
-              final leagues = byId.values.toList()
-                ..sort(
-                  (a, b) =>
-                      a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-                );
-
-              // YENİ DİNAMİK YAPI BURADAN BAŞLIYOR (return kelimesine dikkat)
-              return IgnorePointer(
-                ignoring: _saving || _isEdit,
-                child: CustomBottomSheetDropdown<League>(
-                  labelText: 'Turnuva',
-                  items: leagues,
-                  // Eğer ID boşsa veya listede yoksa null, varsa objenin kendisini ver
-                  value: _leagueId.isEmpty || !byId.containsKey(_leagueId)
-                      ? null
-                      : leagues.where((l) => l.id == _leagueId).firstOrNull,
-                  itemLabelBuilder: (l) =>
-                      l.name.trim().isEmpty ? l.id : l.name,
-                  onChanged: (League? selectedLeague) {
-                    setState(() {
-                      _leagueId = selectedLeague?.id ?? '';
-                      _seasonId = '';
-                      _teamId = '';
-                      _playerId = '';
-                      if (!_isEdit) {
-                        _matchCountController.text = '';
-                        _descController.text = '';
+          AdminDialogHeader(
+            icon: Icons.gavel_rounded,
+            title: _isEdit ? 'Cezayı Düzenle' : 'Ceza Ekle',
+            subtitle: _isEdit
+                ? 'Futbolcu bilgileri değiştirilemez'
+                : 'Önce turnuva, sezon ve futbolcuyu seçin',
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: ListView(
+              children: [
+                AdminFormSection(
+                  title: 'Turnuva',
+                  child: StreamBuilder<List<League>>(
+                    stream: _leaguesStream,
+                    builder: (context, snap) {
+                      if (snap.hasData) {
+                        final byId = <String, AdminOption>{};
+                        for (final l in snap.data!) {
+                          final id = l.id.trim();
+                          if (id.isEmpty) continue;
+                          byId.putIfAbsent(
+                            id,
+                            () => (
+                              id: id,
+                              name: l.name.trim().isEmpty ? id : l.name.trim(),
+                              isDefault: false,
+                            ),
+                          );
+                        }
+                        _leagues = byId.values.toList()
+                          ..sort(
+                            (a, b) => a.name.toLowerCase().compareTo(
+                              b.name.toLowerCase(),
+                            ),
+                          );
                       }
-                    });
-                  },
+                      final leagueChosen = _leagueId.isNotEmpty;
+                      return AdminFieldGroup(
+                        children: [
+                          AdminSelectRow(
+                            icon: Icons.emoji_events_outlined,
+                            label: 'Turnuva',
+                            value: _nameOf(_leagues, _leagueId),
+                            placeholder: 'Turnuva seçin',
+                            locked: _isEdit,
+                            loading: !snap.hasData,
+                            onTap: locked
+                                ? null
+                                : () => _pick(
+                                    title: 'Turnuva Seçin',
+                                    options: _leagues,
+                                    selected: _leagueId,
+                                    onPicked: _selectLeague,
+                                  ),
+                          ),
+                          AdminSelectRow(
+                            icon: Icons.calendar_month_outlined,
+                            label: 'Sezon',
+                            value: _nameOf(_seasons, _seasonId),
+                            placeholder: leagueChosen
+                                ? 'Sezon seçin'
+                                : 'Önce turnuva seçin',
+                            locked: _isEdit,
+                            loading: _loadingSeasons,
+                            onTap: locked || !leagueChosen
+                                ? null
+                                : () => _pick(
+                                    title: 'Sezon Seçin',
+                                    options: _seasons,
+                                    selected: _seasonId,
+                                    onPicked: _selectSeason,
+                                  ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
                 ),
-              );
-              // YENİ DİNAMİK YAPI BURADA BİTİYOR
-            },
-          ),
-          const SizedBox(height: 12),
-          FutureBuilder<List<Map<String, dynamic>>>(
-            future: _fetchSeasons(_leagueId),
-            builder: (context, snap) {
-              final byId = <String, Map<String, dynamic>>{};
-              for (final s in (snap.data ?? const <Map<String, dynamic>>[])) {
-                final id = (s['id'] ?? '').toString().trim();
-                if (id.isEmpty) continue;
-                byId.putIfAbsent(id, () => s);
-              }
-              final seasons = byId.values.toList()
-                ..sort((a, b) {
-                  final an = (a['name'] ?? '').toString().toLowerCase();
-                  final bn = (b['name'] ?? '').toString().toLowerCase();
-                  return an.compareTo(bn);
-                });
-
-              return DropdownButtonFormField<String>(
-                initialValue: _seasonId.isEmpty || !byId.containsKey(_seasonId)
-                    ? null
-                    : _seasonId,
-                isExpanded: true,
-                decoration: _deco('Sezon'),
-                items: [
-                  for (final s in seasons)
-                    DropdownMenuItem<String>(
-                      value: (s['id'] ?? '').toString().trim(),
-                      child: Text(
-                        (s['name'] ?? '').toString().trim().isEmpty
-                            ? (s['id'] ?? '').toString()
-                            : (s['name'] ?? '').toString(),
+                AdminFormSection(
+                  title: 'Futbolcu',
+                  child: AdminFieldGroup(
+                    children: [
+                      AdminSelectRow(
+                        icon: Icons.shield_outlined,
+                        label: 'Takım',
+                        value: _nameOf(_teams, _teamId),
+                        placeholder: _seasonId.isEmpty
+                            ? 'Önce sezon seçin'
+                            : 'Takım seçin',
+                        locked: _isEdit,
+                        loading: _loadingTeams,
+                        onTap: locked || _seasonId.isEmpty
+                            ? null
+                            : () => _pick(
+                                title: 'Takım Seçin',
+                                options: _teams,
+                                selected: _teamId,
+                                onPicked: _selectTeam,
+                              ),
                       ),
-                    ),
-                ],
-                onChanged: _saving || _isEdit
-                    ? null
-                    : (v) {
-                        setState(() {
-                          _seasonId = (v ?? '').trim();
-                          _teamId = '';
-                          _playerId = '';
-                          if (!_isEdit) {
-                            _matchCountController.text = '';
-                            _descController.text = '';
-                          }
-                        });
-                      },
-              );
-            },
-          ),
-          const SizedBox(height: 12),
-          FutureBuilder<List<Team>>(
-            future: () async {
-              final sid = _seasonId.trim();
-              if (sid.isEmpty) return const <Team>[];
-              try {
-                return await widget.teamService.getTeamsCached(
-                  sid,
-                  caller: 'AdminPenalty',
-                );
-              } catch (_) {
-                return const <Team>[];
-              }
-            }(),
-            builder: (context, snap) {
-              final byId = <String, Team>{};
-              for (final t in (snap.data ?? const <Team>[])) {
-                final id = t.id.trim();
-                if (id.isEmpty) continue;
-                byId.putIfAbsent(id, () => t);
-              }
-              final teams = byId.values.toList()
-                ..sort(
-                  (a, b) =>
-                      a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-                );
-
-              return DropdownButtonFormField<String>(
-                initialValue: _teamId.isEmpty || !byId.containsKey(_teamId)
-                    ? null
-                    : _teamId,
-                isExpanded: true,
-                decoration: _deco('Takım'),
-                items: [
-                  for (final t in teams)
-                    DropdownMenuItem<String>(
-                      value: t.id,
-                      child: Text(t.name.trim().isEmpty ? t.id : t.name),
-                    ),
-                ],
-                onChanged: _saving || _isEdit || _seasonId.trim().isEmpty
-                    ? null
-                    : (v) {
-                        setState(() {
-                          _teamId = (v ?? '').trim();
-                          _playerId = '';
-                          if (!_isEdit) {
-                            _matchCountController.text = '';
-                            _descController.text = '';
-                          }
-                        });
-                      },
-              );
-            },
-          ),
-          const SizedBox(height: 12),
-          StreamBuilder<List<PlayerModel>>(
-            stream: () {
-              final tid = _teamId.trim();
-              final sid = _seasonId.trim();
-              if (tid.isEmpty || sid.isEmpty) {
-                return Stream.value(const <PlayerModel>[]);
-              }
-              return widget.teamService.watchPlayers(
-                teamId: tid,
-                tournamentId: sid,
-              );
-            }(),
-            builder: (context, snap) {
-              final byId = <String, PlayerModel>{};
-              for (final p in (snap.data ?? const <PlayerModel>[])) {
-                final id = p.id.trim();
-                if (id.isEmpty) continue;
-                byId.putIfAbsent(id, () => p);
-              }
-              final players =
-                  byId.values
-                      .where(
-                        (p) => p.role == 'Futbolcu' || p.role == 'Her İkisi',
-                      )
-                      .toList()
-                    ..sort(
-                      (a, b) =>
-                          a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-                    );
-
-              return DropdownButtonFormField<String>(
-                initialValue: _playerId.isEmpty || !byId.containsKey(_playerId)
-                    ? null
-                    : _playerId,
-                isExpanded: true,
-                decoration: _deco('Futbolcu'),
-                items: [
-                  for (final p in players)
-                    DropdownMenuItem<String>(
-                      value: p.id,
-                      child: Text(p.name.trim().isEmpty ? p.id : p.name),
-                    ),
-                ],
-                onChanged: _saving || _isEdit || _teamId.trim().isEmpty
-                    ? null
-                    : (v) async {
-                        setState(() {
-                          _playerId = (v ?? '').trim();
-                          if (!_isEdit) {
-                            _matchCountController.text = '';
-                            _descController.text = '';
-                          }
-                        });
-                        if (!_isEdit) await _loadExistingForPlayerSeason();
-                      },
-              );
-            },
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _matchCountController,
-            enabled:
-                !_saving &&
-                _playerId.trim().isNotEmpty &&
-                _seasonId.trim().isNotEmpty &&
-                !_loadingExisting,
-            keyboardType: TextInputType.number,
-            inputFormatters: [
-              FilteringTextInputFormatter.digitsOnly,
-              LengthLimitingTextInputFormatter(2),
-            ],
-            decoration: _deco('Ceza Maç Sayısı'),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _descController,
-            enabled:
-                !_saving &&
-                _playerId.trim().isNotEmpty &&
-                _seasonId.trim().isNotEmpty &&
-                !_loadingExisting,
-            maxLines: 4,
-            decoration: _deco('Açıklama'),
-          ),
-          const SizedBox(height: 14),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              style: FilledButton.styleFrom(
-                minimumSize: const Size.fromHeight(54),
-              ),
-              onPressed: _saving || _loadingExisting ? null : _submit,
-              child: _saving
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Text(
-                      _isEdit ? 'GÜNCELLE' : 'KAYDET',
-                      style: const TextStyle(fontWeight: FontWeight.w900),
-                    ),
+                      AdminSelectRow(
+                        icon: Icons.person_outline_rounded,
+                        label: 'Futbolcu',
+                        value: _nameOf(_players, _playerId),
+                        placeholder: _teamId.isEmpty
+                            ? 'Önce takım seçin'
+                            : 'Futbolcu seçin',
+                        locked: _isEdit,
+                        loading: _loadingPlayers,
+                        onTap: locked || _teamId.isEmpty
+                            ? null
+                            : () => _pick(
+                                title: 'Futbolcu Seçin',
+                                options: _players,
+                                selected: _playerId,
+                                onPicked: _selectPlayer,
+                              ),
+                      ),
+                    ],
+                  ),
+                ),
+                AdminFormSection(
+                  title: 'Ceza',
+                  child: Column(
+                    children: [
+                      TextField(
+                        controller: _matchCountController,
+                        enabled: formEnabled,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(2),
+                        ],
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        cursorColor: kAdminAccent,
+                        decoration: adminInputDecoration(
+                          label: 'Ceza Maç Sayısı',
+                          icon: Icons.block_rounded,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _descController,
+                        enabled: formEnabled,
+                        minLines: 3,
+                        maxLines: 4,
+                        style: const TextStyle(color: Colors.white),
+                        cursorColor: kAdminAccent,
+                        decoration: adminInputDecoration(
+                          label: 'Açıklama',
+                          hint: 'Cezanın nedeni (isteğe bağlı)',
+                          alignLabelWithHint: true,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
+          ),
+          const SizedBox(height: 12),
+          AdminPrimaryButton(
+            label: _isEdit ? 'GÜNCELLE' : 'KAYDET',
+            busy: _saving,
+            onPressed: _loadingExisting ? null : _submit,
           ),
           const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              onPressed: _saving
-                  ? null
-                  : () => Navigator.of(context).pop(false),
-              child: const Text(
-                'VAZGEÇ',
-                style: TextStyle(fontWeight: FontWeight.w900),
-              ),
-            ),
+          AdminSecondaryButton(
+            onPressed: _saving ? null : () => Navigator.of(context).pop(false),
           ),
         ],
       ),

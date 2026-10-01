@@ -671,6 +671,83 @@ class SupabaseTeamService implements ITeamService {
     return list;
   }
 
+  /// Kadroya eklemek için futbolcu arar. Sezonda bir takıma kayıtlı olanlar
+  /// listede kalır ama `teamId`/`teamName` ile döner; ekran bunları seçilemez
+  /// gösterir.
+  Future<List<({PlayerModel player, String? teamId, String? teamName})>>
+  searchPlayersForSeason(String seasonId, String query) async {
+    final sid = seasonId.trim();
+    final words = query
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .toList();
+    if (sid.isEmpty || words.isEmpty) return const [];
+
+    // PostgREST `or` filtresini bozabilecek karakterleri at.
+    final cleaned = words.first.replaceAll(RegExp(r'[,()%*_\\]'), '');
+    if (cleaned.isEmpty) return const [];
+    // i / ı / İ / I tek karakter joker: "icardi" ve "ıcardı" aynı sonucu verir;
+    // kesin eşleşmeyi aşağıdaki istemci filtresi yapar.
+    final first = cleaned.replaceAll(RegExp('[iıİI]'), '_');
+    final playersRes = await _client
+        .from('players')
+        .select()
+        .or('name.ilike.%$first%,surname.ilike.%$first%')
+        .order('name', ascending: true)
+        .limit(60);
+
+    final lowerWords = words.map(_lowerTr).toList();
+    final players = <PlayerModel>[];
+    for (final any in playersRes) {
+      final row = _withDisplayName(any.cast<String, dynamic>());
+      final id = (row['id'] ?? '').toString().trim();
+      if (id.isEmpty) continue;
+      final display = _lowerTr((row['name'] ?? '').toString());
+      if (!lowerWords.every(display.contains)) continue;
+      players.add(PlayerModel.fromMap(row, id));
+    }
+    if (players.isEmpty) return const [];
+
+    final linked = await _client
+        .from('season_team_players')
+        .select('player_id, team_id')
+        .eq('season_id', sid)
+        .eq('is_active', true)
+        .inFilter('player_id', players.map((p) => p.id).toList());
+    final teamByPlayer = <String, String>{};
+    for (final any in linked) {
+      final pid = (any['player_id'] ?? '').toString().trim();
+      final tid = (any['team_id'] ?? '').toString().trim();
+      if (pid.isNotEmpty && tid.isNotEmpty) teamByPlayer[pid] = tid;
+    }
+
+    final teamNames = <String, String>{};
+    if (teamByPlayer.isNotEmpty) {
+      final teamsRes = await _client
+          .from('teams')
+          .select('id, name')
+          .inFilter('id', teamByPlayer.values.toSet().toList());
+      for (final any in teamsRes) {
+        final id = (any['id'] ?? '').toString();
+        teamNames[id] = (any['name'] ?? '').toString().trim();
+      }
+    }
+
+    return [
+      for (final p in players)
+        (
+          player: p,
+          teamId: teamByPlayer[p.id],
+          teamName: teamNames[teamByPlayer[p.id]],
+        ),
+    ];
+  }
+
+  /// Aramada i / ı / İ / I eşdeğer sayılır (Türkçe ve yabancı isimler).
+  static String _lowerTr(String s) =>
+      s.replaceAll('İ', 'i').toLowerCase().replaceAll('ı', 'i');
+
   Future<void> addMultiplePlayersToTeam(
     List<String> playerIds,
     String teamId,

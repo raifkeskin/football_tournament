@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'admin_page.dart';
+import 'admin_form.dart';
 
 /// Seçim alanı: dokununca seçenekler ortada açılan temalı popup'ta listelenir.
 /// Alan görünümü uygulamadaki diğer metin alanlarıyla aynıdır (tema).
@@ -25,87 +25,15 @@ class CustomBottomSheetDropdown<T> extends StatelessWidget {
     this.prefixIcon,
   });
 
-  void _showPicker(BuildContext context) {
-    showDialog<void>(
+  Future<void> _showPicker(BuildContext context) async {
+    final picked = await showAdminOptionPicker<T>(
       context: context,
-      builder: (ctx) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-        child: Container(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(ctx).size.height * 0.7,
-          ),
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          decoration: adminDialogDecoration(),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
-                child: Text(
-                  '$labelText Seçin',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 18,
-                  ),
-                ),
-              ),
-              const Divider(color: Colors.white24, height: 1),
-              Flexible(
-                child: items.isEmpty
-                    ? const Padding(
-                        padding: EdgeInsets.all(24),
-                        child: Text(
-                          'Kayıt bulunamadı.',
-                          style: TextStyle(color: Colors.white54),
-                        ),
-                      )
-                    : ListView.separated(
-                        shrinkWrap: true,
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        itemCount: items.length,
-                        separatorBuilder: (_, _) => const Divider(
-                          color: Colors.white12,
-                          height: 1,
-                          indent: 20,
-                          endIndent: 20,
-                        ),
-                        itemBuilder: (context, index) {
-                          final item = items[index];
-                          final isSelected = item == value;
-                          return ListTile(
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 24,
-                            ),
-                            title: Text(
-                              itemLabelBuilder(item),
-                              style: TextStyle(
-                                color: isSelected ? kAdminAccent : Colors.white,
-                                fontWeight: isSelected
-                                    ? FontWeight.w900
-                                    : FontWeight.w600,
-                              ),
-                            ),
-                            trailing: isSelected
-                                ? const Icon(
-                                    Icons.check_rounded,
-                                    color: kAdminAccent,
-                                  )
-                                : null,
-                            onTap: () {
-                              Navigator.pop(ctx);
-                              onChanged(item);
-                            },
-                          );
-                        },
-                      ),
-              ),
-            ],
-          ),
-        ),
-      ),
+      title: '$labelText Seçin',
+      items: items,
+      labelBuilder: itemLabelBuilder,
+      selected: value,
     );
+    if (picked != null) onChanged(picked);
   }
 
   @override

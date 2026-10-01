@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -576,252 +577,20 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     final tid = teamId.trim();
     if (lid.isEmpty || tid.isEmpty) return;
 
-    await showModalBottomSheet<void>(
+    final added = await showAdminPopup<bool>(
       context: context,
-      isScrollControlled: true,
-      builder: (context) {
-        final selected = <String>{};
-        final searchController = TextEditingController();
-        var query = '';
-        var busy = false;
-        final future = svc.getAvailablePlayersForLeague(lid);
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            Future<void> addSelected(List<PlayerModel> items) async {
-              if (busy) return;
-              setSheetState(() => busy = true);
-              try {
-                await svc.addMultiplePlayersToTeam(selected.toList(), tid, lid);
-                if (context.mounted) Navigator.pop(context);
-                if (!mounted) return;
-                _refreshPlayersStreamForTournament(lid);
-                if (!this.context.mounted) return;
-                ScaffoldMessenger.of(this.context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Seçilen futbolcular kadroya eklendi.'),
-                  ),
-                );
-              } catch (e) {
-                if (!this.context.mounted) return;
-                final msg = e.toString().replaceFirst('Exception: ', '').trim();
-                ScaffoldMessenger.of(
-                  this.context,
-                ).showSnackBar(SnackBar(content: Text('Eklenemedi: $msg')));
-              } finally {
-                if (context.mounted) setSheetState(() => busy = false);
-              }
-            }
-
-            return SafeArea(
-              child: Padding(
-                padding: EdgeInsets.only(
-                  left: 12,
-                  right: 12,
-                  top: max(50, 12 + MediaQuery.of(context).padding.top),
-                  bottom: 12 + MediaQuery.of(context).viewInsets.bottom,
-                ),
-                child: SizedBox(
-                  height: MediaQuery.of(context).size.height * 0.95,
-                  child: FutureBuilder<List<PlayerModel>>(
-                    future: future,
-                    builder: (context, snapshot) {
-                      final cs = Theme.of(context).colorScheme;
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
-                      if (snapshot.hasError) {
-                        return Center(child: Text('Hata: ${snapshot.error}'));
-                      }
-
-                      final items = snapshot.data ?? const <PlayerModel>[];
-                      if (items.isEmpty) {
-                        return const Center(
-                          child: Text(
-                            'Bu turnuvada seçilebilecek boşta futbolcu yok.',
-                          ),
-                        );
-                      }
-                      final q = query.trim().toLowerCase();
-                      final filtered = q.isEmpty
-                          ? items
-                          : items
-                                .where((p) => p.name.toLowerCase().contains(q))
-                                .toList();
-
-                      return Column(
-                        children: [
-                          Row(
-                            children: [
-                              const Expanded(
-                                child: Text(
-                                  'Futbolcu Seç',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w900,
-                                  ),
-                                ),
-                              ),
-                              TextButton(
-                                onPressed: busy
-                                    ? null
-                                    : () => Navigator.pop(context),
-                                child: const Text('Kapat'),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          TextField(
-                            controller: searchController,
-                            enabled: !busy,
-                            onChanged: (v) => setSheetState(() => query = v),
-                            decoration: InputDecoration(
-                              prefixIcon: const Icon(Icons.search),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              isDense: true,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Expanded(
-                            child: ListView.builder(
-                              itemCount: filtered.length,
-                              itemBuilder: (context, i) {
-                                final p = filtered[i];
-                                final checked = selected.contains(p.id);
-                                final mainPos = (p.mainPosition ?? '').trim();
-                                final pos = _displayPosition(p).trim();
-                                final birth = (p.birthDate ?? '').trim();
-                                final posText = mainPos.isEmpty
-                                    ? 'Belirtilmedi'
-                                    : (pos.isEmpty ? 'Belirtilmedi' : pos);
-                                final birthText = birth.isEmpty ? '-' : birth;
-                                final subtitle = '$posText - $birthText';
-                                final photo = (p.photoUrl ?? '').trim();
-
-                                void toggle(bool v) {
-                                  setSheetState(() {
-                                    if (v) {
-                                      selected.add(p.id);
-                                    } else {
-                                      selected.remove(p.id);
-                                    }
-                                  });
-                                }
-
-                                return InkWell(
-                                  onTap: busy ? null : () => toggle(!checked),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 2,
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Checkbox(
-                                          value: checked,
-                                          onChanged: busy
-                                              ? null
-                                              : (v) => toggle(v ?? false),
-                                          activeColor: cs.primary,
-                                          visualDensity: VisualDensity.compact,
-                                        ),
-                                        ClipRRect(
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                          child: Container(
-                                            width: 34,
-                                            height: 34,
-                                            color: cs.primary.withValues(
-                                              alpha: 0.10,
-                                            ),
-                                            child: photo.isEmpty
-                                                ? Icon(
-                                                    Icons.person_rounded,
-                                                    size: 18,
-                                                    color: cs.primary
-                                                        .withValues(
-                                                          alpha: 0.75,
-                                                        ),
-                                                  )
-                                                : WebSafeImage(
-                                                    url: _normalizeUrl(photo),
-                                                    width: 34,
-                                                    height: 34,
-                                                    fit: BoxFit.cover,
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          8,
-                                                        ),
-                                                    isCircle: false,
-                                                    fallbackIconSize: 18,
-                                                  ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 10),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                p.name.toUpperCase(),
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(
-                                                  fontWeight: FontWeight.w900,
-                                                  fontSize: 13,
-                                                  height: 1.1,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 1),
-                                              Text(
-                                                subtitle,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(
-                                                  fontSize: 12,
-                                                  height: 1.1,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          SizedBox(
-                            width: double.infinity,
-                            child: FilledButton(
-                              onPressed: busy || selected.isEmpty
-                                  ? null
-                                  : () => addSelected(filtered),
-                              child: busy
-                                  ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : Text('EKLE (${selected.length})'),
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                ),
-              ),
-            );
-          },
-        );
-      },
+      builder: (_) => _SeasonPlayerPicker(
+        service: svc,
+        seasonId: lid,
+        teamId: tid,
+        displayPosition: _displayPosition,
+        normalizeUrl: _normalizeUrl,
+      ),
+    );
+    if (added != true || !mounted) return;
+    _refreshPlayersStreamForTournament(lid);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Seçilen futbolcular kadroya eklendi.')),
     );
   }
 
@@ -3886,6 +3655,497 @@ class _MenuRow extends StatelessWidget {
         const SizedBox(width: 12),
         Text(text, style: TextStyle(color: color)),
       ],
+    );
+  }
+}
+
+/// Kadroya mevcut futbolcu ekleme popup'ı. En az 3 harf yazılınca arar;
+/// sezonda başka bir takıma kayıtlı futbolcular kilitli gösterilir.
+class _SeasonPlayerPicker extends StatefulWidget {
+  const _SeasonPlayerPicker({
+    required this.service,
+    required this.seasonId,
+    required this.teamId,
+    required this.displayPosition,
+    required this.normalizeUrl,
+  });
+
+  final SupabaseTeamService service;
+  final String seasonId;
+  final String teamId;
+  final String Function(PlayerModel) displayPosition;
+  final String Function(String) normalizeUrl;
+
+  @override
+  State<_SeasonPlayerPicker> createState() => _SeasonPlayerPickerState();
+}
+
+class _SeasonPlayerPickerState extends State<_SeasonPlayerPicker> {
+  static const _minChars = 3;
+
+  final _searchController = TextEditingController();
+  final _selected = <String, PlayerModel>{};
+  Timer? _debounce;
+  int _requestSeq = 0;
+  bool _loading = false;
+  bool _busy = false;
+  String? _error;
+  List<({PlayerModel player, String? teamId, String? teamName})> _results =
+      const [];
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onQueryChanged(String value) {
+    _debounce?.cancel();
+    final q = value.trim();
+    if (q.length < _minChars) {
+      _requestSeq++;
+      setState(() {
+        _loading = false;
+        _error = null;
+        _results = const [];
+      });
+      return;
+    }
+    setState(() => _loading = true);
+    _debounce = Timer(const Duration(milliseconds: 350), () => _search(q));
+  }
+
+  Future<void> _search(String q) async {
+    final seq = ++_requestSeq;
+    try {
+      final res = await widget.service.searchPlayersForSeason(
+        widget.seasonId,
+        q,
+      );
+      if (!mounted || seq != _requestSeq) return;
+      setState(() {
+        _results = res;
+        _error = null;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted || seq != _requestSeq) return;
+      setState(() {
+        _error = e.toString().replaceFirst('Exception: ', '').trim();
+        _loading = false;
+      });
+    }
+  }
+
+  void _toggle(PlayerModel p) {
+    setState(() {
+      if (_selected.remove(p.id) == null) _selected[p.id] = p;
+    });
+  }
+
+  Future<void> _addSelected() async {
+    if (_busy || _selected.isEmpty) return;
+    setState(() => _busy = true);
+    try {
+      await widget.service.addMultiplePlayersToTeam(
+        _selected.keys.toList(),
+        widget.teamId,
+        widget.seasonId,
+      );
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      if (!mounted) return;
+      final msg = e.toString().replaceFirst('Exception: ', '').trim();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Eklenemedi: $msg')));
+      setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final height = MediaQuery.of(context).size.height * 0.8;
+    return SizedBox(
+      height: height,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 6, 20, 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: kAdminAccent.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.person_search_rounded,
+                    color: kAdminAccent,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Futbolcu Seç',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'Başka takımdaki futbolcular seçilemez',
+                        style: TextStyle(color: Colors.white54, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Kapat',
+                  onPressed: _busy ? null : () => Navigator.pop(context),
+                  icon: const Icon(Icons.close_rounded, color: Colors.white70),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _searchController,
+              enabled: !_busy,
+              autofocus: true,
+              textCapitalization: TextCapitalization.words,
+              onChanged: _onQueryChanged,
+              style: const TextStyle(color: Colors.white),
+              cursorColor: kAdminAccent,
+              decoration: InputDecoration(
+                hintText: 'Futbolcu adı (en az 3 harf)',
+                hintStyle: const TextStyle(color: Colors.white38),
+                prefixIcon: const Icon(
+                  Icons.search_rounded,
+                  color: kAdminAccent,
+                ),
+                suffixIcon: _searchController.text.isEmpty
+                    ? null
+                    : IconButton(
+                        icon: const Icon(
+                          Icons.clear_rounded,
+                          color: Colors.white54,
+                        ),
+                        onPressed: () {
+                          _searchController.clear();
+                          _onQueryChanged('');
+                        },
+                      ),
+                filled: true,
+                fillColor: Colors.black.withValues(alpha: 0.3),
+                contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide(
+                    color: Colors.white.withValues(alpha: 0.12),
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: const BorderSide(color: kAdminAccent),
+                ),
+                disabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide(
+                    color: Colors.white.withValues(alpha: 0.06),
+                  ),
+                ),
+              ),
+            ),
+            if (_selected.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 34,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _selected.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: 8),
+                  itemBuilder: (context, i) {
+                    final p = _selected.values.elementAt(i);
+                    return InputChip(
+                      label: Text(p.name),
+                      labelStyle: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      backgroundColor: kAdminAccent.withValues(alpha: 0.2),
+                      side: BorderSide(
+                        color: kAdminAccent.withValues(alpha: 0.5),
+                      ),
+                      shape: const StadiumBorder(),
+                      visualDensity: VisualDensity.compact,
+                      deleteIconColor: Colors.white70,
+                      onDeleted: _busy ? null : () => _toggle(p),
+                    );
+                  },
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            Expanded(child: _buildResults()),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 50,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: kAdminAccent,
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: Colors.white.withValues(alpha: 0.08),
+                  disabledForegroundColor: Colors.white38,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onPressed: _busy || _selected.isEmpty ? null : _addSelected,
+                child: _busy
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(
+                        _selected.isEmpty
+                            ? 'KADROYA EKLE'
+                            : 'KADROYA EKLE (${_selected.length})',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResults() {
+    final q = _searchController.text.trim();
+    if (q.length < _minChars) {
+      final left = _minChars - q.length;
+      return _PickerHint(
+        icon: Icons.manage_search_rounded,
+        text: q.isEmpty
+            ? 'Aramak için futbolcu adını yazın'
+            : '$left harf daha yazın',
+      );
+    }
+    if (_loading) {
+      return const Center(
+        child: CircularProgressIndicator(color: kAdminAccent),
+      );
+    }
+    if (_error != null) {
+      return _PickerHint(
+        icon: Icons.error_outline_rounded,
+        text: 'Arama yapılamadı: $_error',
+      );
+    }
+    if (_results.isEmpty) {
+      return const _PickerHint(
+        icon: Icons.person_off_outlined,
+        text: 'Eşleşen futbolcu bulunamadı',
+      );
+    }
+    return ListView.separated(
+      itemCount: _results.length,
+      separatorBuilder: (_, _) => const SizedBox(height: 8),
+      itemBuilder: (context, i) => _buildRow(_results[i]),
+    );
+  }
+
+  Widget _buildRow(({PlayerModel player, String? teamId, String? teamName}) r) {
+    final p = r.player;
+    final inThisTeam = r.teamId == widget.teamId;
+    final locked = r.teamId != null;
+    final checked = _selected.containsKey(p.id);
+    final pos = widget.displayPosition(p).trim();
+    final birth = (p.birthDate ?? '').trim();
+    final subtitle = [
+      if (pos.isNotEmpty && pos != '-') pos,
+      if (birth.isNotEmpty) birth,
+    ].join(' · ');
+    final photo = (p.photoUrl ?? '').trim();
+
+    final Widget trailing;
+    if (locked) {
+      trailing = Container(
+        constraints: const BoxConstraints(maxWidth: 120),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              inThisTeam ? Icons.check_rounded : Icons.lock_outline_rounded,
+              size: 13,
+              color: Colors.white60,
+            ),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                inThisTeam
+                    ? 'Kadroda'
+                    : ((r.teamName ?? '').isEmpty ? 'Başka takım' : r.teamName!),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white60,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    } else {
+      trailing = AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        width: 26,
+        height: 26,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: checked ? kAdminAccent : Colors.transparent,
+          border: Border.all(
+            color: checked ? kAdminAccent : Colors.white38,
+            width: 2,
+          ),
+        ),
+        child: checked
+            ? const Icon(Icons.check_rounded, size: 16, color: Colors.white)
+            : null,
+      );
+    }
+
+    return Opacity(
+      opacity: locked ? 0.5 : 1,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: locked || _busy ? null : () => _toggle(p),
+          borderRadius: BorderRadius.circular(14),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: checked
+                  ? kAdminAccent.withValues(alpha: 0.12)
+                  : Colors.black.withValues(alpha: 0.25),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: checked
+                    ? kAdminAccent.withValues(alpha: 0.7)
+                    : Colors.white.withValues(alpha: 0.08),
+              ),
+            ),
+            child: Row(
+              children: [
+                ClipOval(
+                  child: Container(
+                    width: 42,
+                    height: 42,
+                    color: Colors.white.withValues(alpha: 0.08),
+                    child: photo.isEmpty
+                        ? const Icon(
+                            Icons.person_rounded,
+                            color: Colors.white54,
+                            size: 24,
+                          )
+                        : WebSafeImage(
+                            url: widget.normalizeUrl(photo),
+                            width: 42,
+                            height: 42,
+                            fit: BoxFit.cover,
+                            isCircle: true,
+                            fallbackIconSize: 22,
+                          ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        p.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                        ),
+                      ),
+                      if (subtitle.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white60,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                trailing,
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PickerHint extends StatelessWidget {
+  const _PickerHint({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 48, color: Colors.white24),
+          const SizedBox(height: 12),
+          Text(
+            text,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white54, fontSize: 13),
+          ),
+        ],
+      ),
     );
   }
 }
