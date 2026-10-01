@@ -237,6 +237,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 'Rol',
                 state.isAdmin
                     ? 'Sistem Yöneticisi'
+                    : state.role == 'owner'
+                    ? 'Turnuva Sahibi'
                     : (state.role == 'manager'
                           ? 'Takım Sorumlusu'
                           : 'Futbolcu'),

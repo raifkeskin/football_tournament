@@ -1,5 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 class PlayerStats {
   const PlayerStats({
     required this.id,
@@ -45,7 +43,6 @@ class PlayerStats {
     }
 
     DateTime? readDate(dynamic v) {
-      if (v is Timestamp) return v.toDate();
       if (v is DateTime) return v;
       if (v is int) return DateTime.fromMillisecondsSinceEpoch(v);
       if (v is String) return DateTime.tryParse(v);

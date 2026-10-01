@@ -1,251 +1,198 @@
-import 'dart:math';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
+/// Onay taleplerinin durumları (`pending_actions.status`).
+enum PendingActionStatus { pending, approved, rejected, cancelled }
 
-/// Bekleyen yönetim işlemlerinin durumları.
-enum PendingActionStatus { pending, approved, rejected }
-
-/// Firestore `pending_actions` koleksiyonu için veri modeli.
+/// Talep türleri (`pending_actions.action_type`).
 ///
-/// Örnek belge alanları:
-/// - actionId: benzersiz istek kimliği
-/// - actionType: team_update, squad_upload, transfer_edit vb.
-/// - leagueId: ilgili lig
-/// - teamId: ilgili takım (opsiyonel)
-/// - submittedBy: işlemi başlatan kullanıcı uid
-/// - payload: değişiklik verisi
-/// - status: pending, approved, rejected
-/// - submittedAt: istek zamanı
-/// - reviewedBy: admin uid (onay/red anında)
-/// - reviewedAt: inceleme zamanı
-/// - reviewNote: admin notu
+/// payload biçimleri:
+/// - rosterAdd    : {"player_id": uuid, "jersey_number": int?}
+///                  veya yeni oyuncu için {"player": {...}, "jersey_number": int?}
+/// - rosterRemove : {"player_id": uuid}
+/// - jerseyChange : {"player_id": uuid, "jersey_number": int | null}
+enum PendingActionType {
+  rosterAdd('roster_add', 'Kadroya ekleme'),
+  rosterRemove('roster_remove', 'Kadrodan çıkarma'),
+  jerseyChange('jersey_change', 'Forma numarası değişikliği');
+
+  const PendingActionType(this.code, this.label);
+
+  final String code;
+  final String label;
+
+  static PendingActionType? fromCode(String code) {
+    for (final t in values) {
+      if (t.code == code) return t;
+    }
+    return null;
+  }
+}
+
+/// Supabase `pending_actions` tablosundaki bir talep.
 class PendingAction {
   const PendingAction({
-    required this.actionId,
+    required this.id,
     required this.actionType,
+    required this.status,
     required this.leagueId,
-    this.teamId,
+    required this.seasonId,
+    required this.teamId,
     required this.submittedBy,
     required this.payload,
-    this.status = PendingActionStatus.pending,
-    this.submittedAt,
+    this.reviewNote,
     this.reviewedBy,
     this.reviewedAt,
-    this.reviewNote,
+    this.createdAt,
   });
 
-  final String actionId;
+  final String id;
   final String actionType;
+  final PendingActionStatus status;
   final String leagueId;
-  final String? teamId;
+  final String seasonId;
+  final String teamId;
   final String submittedBy;
   final Map<String, dynamic> payload;
-  final PendingActionStatus status;
-  final DateTime? submittedAt;
+  final String? reviewNote;
   final String? reviewedBy;
   final DateTime? reviewedAt;
-  final String? reviewNote;
+  final DateTime? createdAt;
 
-  factory PendingAction.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
-    final map = doc.data() ?? const <String, dynamic>{};
-    final statusStr =
-        (map['status'] as String?) ?? PendingActionStatus.pending.name;
-    final submittedAt = map['submittedAt'];
-    final reviewedAt = map['reviewedAt'];
+  PendingActionType? get type => PendingActionType.fromCode(actionType);
+
+  String get typeLabel => type?.label ?? actionType;
+
+  String? get playerId {
+    final v = (payload['player_id'] ?? '').toString().trim();
+    return v.isEmpty ? null : v;
+  }
+
+  /// Yeni oyuncu talebinde girilen ad soyad.
+  String? get newPlayerName {
+    final p = payload['player'];
+    if (p is! Map) return null;
+    final full = [
+      (p['name'] ?? '').toString().trim(),
+      (p['surname'] ?? '').toString().trim(),
+    ].where((e) => e.isNotEmpty).join(' ');
+    return full.isEmpty ? null : full;
+  }
+
+  int? get jerseyNumber {
+    final v = payload['jersey_number'];
+    if (v is int) return v;
+    return int.tryParse((v ?? '').toString());
+  }
+
+  factory PendingAction.fromMap(Map<String, dynamic> map) {
+    final statusStr = (map['status'] ?? '').toString();
+    final payload = map['payload'];
     return PendingAction(
-      actionId: (map['actionId'] as String?) ?? doc.id,
-      actionType: (map['actionType'] as String?) ?? '',
-      leagueId: (map['leagueId'] as String?) ?? '',
-      teamId: map['teamId'] as String?,
-      submittedBy: (map['submittedBy'] as String?) ?? '',
-      payload:
-          (map['payload'] as Map<String, dynamic>?) ??
-          const <String, dynamic>{},
+      id: (map['id'] ?? '').toString(),
+      actionType: (map['action_type'] ?? '').toString(),
       status: PendingActionStatus.values.firstWhere(
         (e) => e.name == statusStr,
         orElse: () => PendingActionStatus.pending,
       ),
-      submittedAt: submittedAt is Timestamp ? submittedAt.toDate() : null,
-      reviewedBy: map['reviewedBy'] as String?,
-      reviewedAt: reviewedAt is Timestamp ? reviewedAt.toDate() : null,
-      reviewNote: map['reviewNote'] as String?,
+      leagueId: (map['league_id'] ?? '').toString(),
+      seasonId: (map['season_id'] ?? '').toString(),
+      teamId: (map['team_id'] ?? '').toString(),
+      submittedBy: (map['submitted_by'] ?? '').toString(),
+      payload: payload is Map
+          ? Map<String, dynamic>.from(payload)
+          : const <String, dynamic>{},
+      reviewNote: map['review_note']?.toString(),
+      reviewedBy: map['reviewed_by']?.toString(),
+      reviewedAt: DateTime.tryParse((map['reviewed_at'] ?? '').toString()),
+      createdAt: DateTime.tryParse((map['created_at'] ?? '').toString()),
     );
-  }
-
-  Map<String, dynamic> toMap() {
-    return {
-      'actionId': actionId,
-      'actionType': actionType,
-      'leagueId': leagueId,
-      'teamId': teamId,
-      'submittedBy': submittedBy,
-      'payload': payload,
-      'status': status.name,
-      'submittedAt': submittedAt == null
-          ? FieldValue.serverTimestamp()
-          : Timestamp.fromDate(submittedAt!),
-      'reviewedBy': reviewedBy,
-      'reviewedAt': reviewedAt == null ? null : Timestamp.fromDate(reviewedAt!),
-      'reviewNote': reviewNote,
-    };
   }
 }
 
-/// TeamManager değişikliklerini Admin onayına düşüren servis iskeleti.
+/// Takım sorumlusu taleplerini açan ve sonuçlandıran servis.
 ///
-/// Not: Bu sınıf Firestore bağlantı kodunu bilinçli olarak içermez.
-/// Projede `cloud_firestore` eklendiğinde metot içleri bağlanmalıdır.
+/// Yetki veritabanında: talebi sadece o takımın sorumlusu (veya turnuva
+/// sahibi/admin) açabilir; listeler RLS ile süzülür (admin hepsini, turnuva
+/// sahibi kendi turnuvalarını, sorumlu kendi taleplerini görür). Onay/red
+/// `review_pending_action` fonksiyonuyla sunucuda ve tek adımda yapılır.
 class ApprovalService {
-  ApprovalService({FirebaseFirestore? firestore})
-    : _db = firestore ?? FirebaseFirestore.instance;
+  ApprovalService({SupabaseClient? client})
+    : _client = client ?? Supabase.instance.client;
 
-  final FirebaseFirestore _db;
+  final SupabaseClient _client;
 
-  /// Koleksiyon adı sabit tutulur.
-  static const String pendingActionsCollection = 'pending_actions';
+  static const String _table = 'pending_actions';
 
-  /// TeamManager tarafından gelen bir işlemi bekleyen onaya yollar.
-  Future<void> submitPendingAction(PendingAction action) async {
-    await _db
-        .collection(pendingActionsCollection)
-        .doc(action.actionId)
-        .set(action.toMap());
+  /// Yeni talep açar. Gönderen, turnuva ve durum sunucuda belirlenir.
+  Future<PendingAction> submit({
+    required PendingActionType type,
+    required String seasonId,
+    required String teamId,
+    required Map<String, dynamic> payload,
+  }) async {
+    final row = await _client
+        .from(_table)
+        .insert({
+          'action_type': type.code,
+          'season_id': seasonId,
+          'team_id': teamId,
+          'payload': payload,
+        })
+        .select()
+        .single();
+    return PendingAction.fromMap(row);
   }
 
-  /// Admin panelinde listelenecek bekleyen işlemleri çeker.
+  /// Onay bekleyen talepler (en yeni önce).
   Future<List<PendingAction>> fetchPendingActions({String? leagueId}) async {
-    Query<Map<String, dynamic>> q = _db
-        .collection(pendingActionsCollection)
-        .where('status', isEqualTo: PendingActionStatus.pending.name);
-    if (leagueId != null) {
-      q = q.where('leagueId', isEqualTo: leagueId);
-    }
-    final snap = await q.get();
-    final list = snap.docs.map((d) => PendingAction.fromDoc(d)).toList();
-    list.sort((a, b) {
-      final aa = a.submittedAt?.millisecondsSinceEpoch;
-      final bb = b.submittedAt?.millisecondsSinceEpoch;
-      if (aa == null && bb == null) return 0;
-      if (aa == null) return 1;
-      if (bb == null) return -1;
-      return bb.compareTo(aa);
-    });
-    return list;
+    var query = _client
+        .from(_table)
+        .select()
+        .eq('status', PendingActionStatus.pending.name);
+    if (leagueId != null) query = query.eq('league_id', leagueId);
+    final rows = await query.order('created_at', ascending: false);
+    return rows.map(PendingAction.fromMap).toList();
   }
 
-  /// Admin onayı.
-  Future<void> approveAction({
-    required String actionId,
-    required String adminUserId,
-    String? reviewNote,
-  }) async {
-    final ref = _db.collection(pendingActionsCollection).doc(actionId);
-    final snap = await ref.get();
-    if (!snap.exists) return;
-    final action = PendingAction.fromDoc(snap);
-
-    if (action.actionType == 'squad_upload') {
-      final payloadPlayers = action.payload['players'];
-      if (payloadPlayers is List) {
-        await _applySquadUpload(teamId: action.teamId, players: payloadPlayers);
-      }
-    }
-
-    await ref.update({
-      'status': PendingActionStatus.approved.name,
-      'reviewedBy': adminUserId,
-      'reviewedAt': FieldValue.serverTimestamp(),
-      'reviewNote': reviewNote,
-    });
+  /// Kullanıcının kendi açtığı talepler (en yeni önce).
+  Future<List<PendingAction>> fetchMyActions() async {
+    final uid = _client.auth.currentUser?.id;
+    if (uid == null) return const [];
+    final rows = await _client
+        .from(_table)
+        .select()
+        .eq('submitted_by', uid)
+        .order('created_at', ascending: false);
+    return rows.map(PendingAction.fromMap).toList();
   }
 
-  /// Admin reddi.
-  Future<void> rejectAction({
-    required String actionId,
-    required String adminUserId,
-    String? reviewNote,
+  Future<void> approveAction({required String actionId, String? reviewNote}) =>
+      _review(actionId, approve: true, note: reviewNote);
+
+  Future<void> rejectAction({required String actionId, String? reviewNote}) =>
+      _review(actionId, approve: false, note: reviewNote);
+
+  Future<void> _review(
+    String actionId, {
+    required bool approve,
+    String? note,
   }) async {
-    await _db.collection(pendingActionsCollection).doc(actionId).update({
-      'status': PendingActionStatus.rejected.name,
-      'reviewedBy': adminUserId,
-      'reviewedAt': FieldValue.serverTimestamp(),
-      'reviewNote': reviewNote,
-    });
+    final n = (note ?? '').trim();
+    await _client.rpc(
+      'review_pending_action',
+      params: {
+        'p_action_id': actionId,
+        'p_approve': approve,
+        'p_note': n.isEmpty ? null : n,
+      },
+    );
   }
 
-  Future<void> _applySquadUpload({
-    required String? teamId,
-    required List players,
-  }) async {
-    if (teamId == null || teamId.isEmpty) return;
-
-    var start = 0;
-    while (start < players.length) {
-      final end = min(start + 400, players.length);
-      final chunk = players.sublist(start, end);
-      final batch = _db.batch();
-      for (final row in chunk) {
-        if (row is! Map) continue;
-        final name = (row['name'] ?? '').toString().trim();
-        if (name.isEmpty) continue;
-        String? normalizeBirthDate(dynamic v) {
-          if (v == null) return null;
-          if (v is DateTime) {
-            final dd = v.day.toString().padLeft(2, '0');
-            final mm = v.month.toString().padLeft(2, '0');
-            final yyyy = v.year.toString().padLeft(4, '0');
-            return '$dd/$mm/$yyyy';
-          }
-          final s = v.toString().replaceAll('\u0000', '').trim();
-          if (s.isEmpty) return null;
-          final m = RegExp(r'^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$')
-              .firstMatch(s);
-          if (m != null) {
-            final dd = m.group(1)!.padLeft(2, '0');
-            final mm = m.group(2)!.padLeft(2, '0');
-            final yyyy = m.group(3)!.padLeft(4, '0');
-            return '$dd/$mm/$yyyy';
-          }
-          final year = int.tryParse(s);
-          if (year != null && year >= 1900 && year <= 2100) {
-            return '01/01/${year.toString().padLeft(4, '0')}';
-          }
-          return null;
-        }
-
-        int? yearFromBirthDate(String? birthDate) {
-          if (birthDate == null) return null;
-          final m = RegExp(r'(\d{4})$').firstMatch(birthDate);
-          return m == null ? null : int.tryParse(m.group(1)!);
-        }
-
-        final birthDate =
-            normalizeBirthDate(row['birthDate']) ?? normalizeBirthDate(row['birthYear']);
-        final birthYear = yearFromBirthDate(birthDate);
-        final docRef = _db.collection('players').doc();
-        batch.set(docRef, {
-          'teamId': teamId,
-          'name': name,
-          'position': row['position'],
-          'preferredFoot': row['preferredFoot'],
-          'number': row['number'],
-          'birthDate': birthDate,
-          'birthYear': birthYear,
-          'photoUrl': row['photoUrl'],
-          'role': (row['role'] ?? '').toString().trim().isEmpty
-              ? 'Futbolcu'
-              : row['role'],
-          'phone': row['phone'],
-          'goals': 0,
-          'assists': 0,
-          'yellowCards': 0,
-          'redCards': 0,
-          'matchesPlayed': 0,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-      }
-      await batch.commit();
-      start = end;
-    }
+  /// Gönderen, sonuçlanmamış talebini geri çeker.
+  Future<void> cancelAction(String actionId) async {
+    await _client
+        .from(_table)
+        .update({'status': PendingActionStatus.cancelled.name})
+        .eq('id', actionId);
   }
 }

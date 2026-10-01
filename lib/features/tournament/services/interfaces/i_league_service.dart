@@ -55,16 +55,29 @@ abstract class ILeagueService {
     bool includeUnpublished = false,
   });
 
-  Future<void> addNews({required String tournamentId, required String content});
+  /// Haberler akışı: yayındaki haberler, en yeni önce; [leagueId] boşsa tümü.
+  /// Giriş yapılmışsa her haberde [NewsItem.likedByMe] dolu gelir.
+  Stream<List<NewsItem>> watchNewsFeed({String? leagueId});
+
+  Future<void> setNewsLike({required String newsId, required bool liked});
+
+  Future<void> addNews({
+    required String tournamentId,
+    required String content,
+    String? imageUrl,
+    bool isPublished = true,
+  });
 
   Future<void> setNewsPublished({
     required String newsId,
     required bool isPublished,
   });
 
-  Future<void> updateNewsContent({
+  /// [imageUrl] null ise haberin fotoğrafı kaldırılır.
+  Future<void> updateNews({
     required String newsId,
     required String content,
+    String? imageUrl,
   });
 
   Future<void> deleteNews({required String newsId});

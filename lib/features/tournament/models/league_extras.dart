@@ -21,6 +21,12 @@ class NewsItem {
     required this.content,
     required this.isPublished,
     required this.createdAt,
+    this.imageUrl,
+    this.likeCount = 0,
+    this.leagueName = '',
+    this.leagueLogoUrl,
+    this.leagueIsPrivate = false,
+    this.likedByMe = false,
   });
 
   final String id;
@@ -28,4 +34,15 @@ class NewsItem {
   final String content;
   final bool isPublished;
   final DateTime? createdAt;
+  final String? imageUrl;
+  final int likeCount;
+
+  /// Akış kartının başlığı için (`leagues` ile birlikte okunduğunda dolu).
+  final String leagueName;
+  final String? leagueLogoUrl;
+  final bool leagueIsPrivate;
+
+  /// Giriş yapmış kullanıcı bu haberi beğenmiş mi (akışla aynı sorguda okunur,
+  /// böylece [likeCount] ile tutarlıdır).
+  final bool likedByMe;
 }

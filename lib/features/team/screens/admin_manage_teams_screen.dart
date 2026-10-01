@@ -307,7 +307,6 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
           'manager_id': (selectedManagerId ?? '').trim().isEmpty
               ? null
               : selectedManagerId!.trim(),
-          'updated_at': DateTime.now().toIso8601String(),
           'founded_year': ?foundedYear,
         };
 

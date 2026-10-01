@@ -1,12 +1,18 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../tournament/models/league.dart';
 import '../../tournament/models/league_extras.dart';
 import '../../../core/services/app_session.dart';
 import '../../tournament/services/interfaces/i_league_service.dart';
+import '../../../core/services/image_upload_service.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/custom_popup_selector.dart';
+import '../../../core/widgets/web_safe_image.dart';
 
 class AdminManageNewsScreen extends StatefulWidget {
   const AdminManageNewsScreen({super.key});
@@ -44,11 +50,30 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
     }
   }
 
-  /// Haber ekleme / düzenleme için ortak popup ([newsId] null ise ekleme).
-  Future<void> _openNewsForm({String? newsId, String initialText = ''}) async {
-    final isEdit = newsId != null;
-    final controller = TextEditingController(text: initialText);
+  /// Haber ekleme / düzenleme için ortak popup ([item] null ise ekleme).
+  Future<void> _openNewsForm({NewsItem? item}) async {
+    final isEdit = item != null;
+    final controller = TextEditingController(text: item?.content ?? '');
+    final existingUrl = (item?.imageUrl ?? '').trim();
+    XFile? picked;
+    var removeImage = false;
+    var publishNow = true;
     var saving = false;
+
+    Future<void> pickPhoto(StateSetter setLocal) async {
+      // Yüklemeden önce küçültülür: depolama ve mobil veri dostu.
+      final file = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1600,
+        maxHeight: 1600,
+        imageQuality: 82,
+      );
+      if (file == null) return;
+      setLocal(() {
+        picked = file;
+        removeImage = false;
+      });
+    }
 
     Future<void> save(BuildContext ctx, StateSetter setLocal) async {
       final text = controller.text.trim();
@@ -62,12 +87,31 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
         return;
       }
       setLocal(() => saving = true);
-      if (isEdit) setState(() => _busyIds.add(newsId));
+      if (isEdit) setState(() => _busyIds.add(item.id));
       try {
+        String? imageUrl = removeImage || existingUrl.isEmpty
+            ? null
+            : existingUrl;
+        final file = picked;
+        if (file != null) {
+          imageUrl = await ImgBBUploadService().uploadImage(File(file.path));
+          if (imageUrl == null) {
+            throw Exception('Fotoğraf yüklenemedi, tekrar deneyin.');
+          }
+        }
         if (isEdit) {
-          await _leagueService.updateNewsContent(newsId: newsId, content: text);
+          await _leagueService.updateNews(
+            newsId: item.id,
+            content: text,
+            imageUrl: imageUrl,
+          );
         } else {
-          await _leagueService.addNews(tournamentId: tId, content: text);
+          await _leagueService.addNews(
+            tournamentId: tId,
+            content: text,
+            imageUrl: imageUrl,
+            isPublished: publishNow,
+          );
         }
         if (ctx.mounted) Navigator.pop(ctx);
         if (mounted) _snack(isEdit ? 'Haber güncellendi.' : 'Haber eklendi.');
@@ -75,8 +119,88 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
         if (mounted) _snack('Hata: $e');
         if (ctx.mounted) setLocal(() => saving = false);
       } finally {
-        if (isEdit && mounted) setState(() => _busyIds.remove(newsId));
+        if (isEdit && mounted) setState(() => _busyIds.remove(item.id));
       }
+    }
+
+    Widget photoField(StateSetter setLocal) {
+      final file = picked;
+      final showExisting = file == null && !removeImage && existingUrl.isNotEmpty;
+      final hasPhoto = file != null || showExisting;
+
+      if (!hasPhoto) {
+        return InkWell(
+          onTap: saving ? null : () => pickPhoto(setLocal),
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            height: 120,
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+            ),
+            child: const Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.add_photo_alternate_outlined,
+                    color: kAdminAccent, size: 32),
+                SizedBox(height: 8),
+                Text(
+                  'Fotoğraf ekle',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+
+      final preview = file != null
+          ? (kIsWeb
+                ? Image.network(file.path, fit: BoxFit.cover)
+                : Image.file(File(file.path), fit: BoxFit.cover))
+          : WebSafeImage(url: existingUrl, fit: BoxFit.cover);
+
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: AspectRatio(
+          aspectRatio: 16 / 10,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              preview,
+              Positioned(
+                right: 8,
+                bottom: 8,
+                child: Row(
+                  children: [
+                    _PhotoButton(
+                      icon: Icons.image_outlined,
+                      label: 'Değiştir',
+                      onTap: saving ? null : () => pickPhoto(setLocal),
+                    ),
+                    const SizedBox(width: 8),
+                    _PhotoButton(
+                      icon: Icons.delete_outline_rounded,
+                      color: kAdminDanger,
+                      tooltip: 'Fotoğrafı kaldır',
+                      onTap: saving
+                          ? null
+                          : () => setLocal(() {
+                              picked = null;
+                              removeImage = true;
+                            }),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
     await showDialog<void>(
@@ -114,6 +238,33 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
                   const SizedBox(height: 14),
                   const Divider(color: Colors.white24, height: 1),
                   const SizedBox(height: 16),
+                  const Text.rich(
+                    TextSpan(
+                      text: 'Fotoğraf ',
+                      style: TextStyle(
+                        color: Color(0xFFCBD5E1),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      children: [
+                        TextSpan(
+                          text: '(isteğe bağlı)',
+                          style: TextStyle(
+                            color: Color(0xFF94A3B8),
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  photoField(setLocal),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Tek fotoğraf · yüklenirken otomatik küçültülür',
+                    style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                  ),
+                  const SizedBox(height: 16),
                   TextField(
                     controller: controller,
                     enabled: !saving,
@@ -137,7 +288,30 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 22),
+                  if (!isEdit) ...[
+                    const SizedBox(height: 8),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: publishNow,
+                      activeThumbColor: Colors.white,
+                      activeTrackColor: kAdminAccent,
+                      onChanged: saving
+                          ? null
+                          : (v) => setLocal(() => publishNow = v),
+                      title: const Text(
+                        'Hemen yayınla',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      subtitle: const Text(
+                        'Kapalıysa taslak olarak kaydedilir',
+                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
                   SizedBox(
                     height: 50,
                     child: ElevatedButton(
@@ -212,6 +386,8 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
     final isPublished = doc.isPublished;
     final createdAtText = _tarihYaz(doc.createdAt);
     final busy = _busyIds.contains(doc.id);
+    final image = (doc.imageUrl ?? '').trim();
+    final likes = doc.likeCount > 0 ? ' · ${doc.likeCount} beğeni' : '';
     const published = kAdminAccent;
     const draft = Color(0xFFF59E0B);
 
@@ -222,15 +398,32 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            doc.content,
-            maxLines: 4,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 14,
-              height: 1.35,
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (image.isNotEmpty) ...[
+                WebSafeImage(
+                  url: image,
+                  width: 64,
+                  height: 64,
+                  fit: BoxFit.cover,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                const SizedBox(width: 12),
+              ],
+              Expanded(
+                child: Text(
+                  doc.content,
+                  maxLines: image.isEmpty ? 4 : 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    height: 1.35,
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 10),
           Row(
@@ -252,10 +445,10 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
                   ),
                 ),
               ),
-              if (createdAtText.isNotEmpty) ...[
+              if (createdAtText.isNotEmpty || likes.isNotEmpty) ...[
                 const SizedBox(width: 8),
                 Text(
-                  createdAtText,
+                  '$createdAtText$likes',
                   style: const TextStyle(
                     color: Color(0xFF94A3B8),
                     fontSize: 12,
@@ -290,7 +483,7 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
                   tooltip: 'Düzenle',
                   color: Colors.white70,
                   onTap: () =>
-                      _openNewsForm(newsId: doc.id, initialText: doc.content),
+                      _openNewsForm(item: doc),
                 ),
                 const SizedBox(width: 6),
                 AdminSmallAction(
@@ -309,8 +502,8 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isAdmin = AppSession.of(context).value.isAdmin;
-    if (!isAdmin) {
+    final session = AppSession.of(context).value;
+    if (!session.isAdmin && !session.isLeagueOwner) {
       return const AdminPageScaffold(
         title: 'Haber Yönetimi',
         body: Center(
@@ -339,7 +532,10 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
               child: CircularProgressIndicator(color: kAdminAccent),
             );
           }
-          final tournaments = tSnap.data ?? const <League>[];
+          // Admin her turnuvayı, turnuva sahibi sadece kendisininkileri görür.
+          final tournaments = (tSnap.data ?? const <League>[])
+              .where((l) => session.canManageLeague(l.id))
+              .toList();
           if (tournaments.isEmpty) {
             return const Center(
               child: Text(
@@ -348,7 +544,9 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
               ),
             );
           }
-          _selectedTournamentId ??= tournaments.first.id;
+          if (tournaments.every((l) => l.id != _selectedTournamentId)) {
+            _selectedTournamentId = tournaments.first.id;
+          }
           final tId = (_selectedTournamentId ?? '').trim();
 
           return Column(
@@ -406,5 +604,59 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
         },
       ),
     );
+  }
+}
+
+/// Fotoğraf önizlemesinin üzerindeki küçük koyu buton (Değiştir / Kaldır).
+class _PhotoButton extends StatelessWidget {
+  const _PhotoButton({
+    required this.icon,
+    required this.onTap,
+    this.label,
+    this.tooltip,
+    this.color = Colors.white,
+  });
+
+  final IconData icon;
+  final String? label;
+  final String? tooltip;
+  final Color color;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final child = Material(
+      color: const Color(0xFF0F172A).withValues(alpha: 0.85),
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          height: 40,
+          constraints: const BoxConstraints(minWidth: 40),
+          padding: EdgeInsets.symmetric(horizontal: label == null ? 0 : 12),
+          alignment: Alignment.center,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 18, color: color),
+              if (label != null) ...[
+                const SizedBox(width: 6),
+                Text(
+                  label!,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+    final tip = tooltip;
+    return tip == null ? child : Tooltip(message: tip, child: child);
   }
 }

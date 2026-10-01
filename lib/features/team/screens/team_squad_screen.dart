@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:football_tournament/core/widgets/custom_bottom_sheet_dropdown.dart';
-import 'package:football_tournament/features/admin/services/approval_service.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -47,7 +46,6 @@ class TeamSquadScreen extends StatefulWidget {
 
 Future<void> showSquadBulkUploadDialog({
   required BuildContext context,
-  required ApprovalService approvalService,
   required String leagueId,
   required String teamId,
   required String teamName,
@@ -380,57 +378,18 @@ Future<void> showSquadBulkUploadDialog({
           }
         }
 
+        // Toplu yükleme sezon ve telefon bilgisiyle yeniden kurgulanacak;
+        // o zamana kadar kayıtlar gönderilmez (eski akış Firestore'a
+        // yazıyordu ve onaylanan oyuncular uygulamada görünmüyordu).
         Future<void> submitForApproval() async {
-          if (parsed.isEmpty) {
-            ScaffoldMessenger.of(dialogContext).showSnackBar(
-              const SnackBar(content: Text('Yüklenecek kayıt bulunamadı.')),
-            );
-            return;
-          }
-          setDialogState(() => busy = true);
-          var shouldClose = false;
-          try {
-            final actionId =
-                'squad_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(10000)}';
-            await approvalService.submitPendingAction(
-              PendingAction(
-                actionId: actionId,
-                actionType: 'squad_upload',
-                leagueId: lid,
-                teamId: tid,
-                submittedBy: 'admin',
-                payload: {
-                  'teamName': teamName,
-                  'tournamentId': lid,
-                  'fileName': pickedFileName,
-                  'players': parsed,
-                },
+          ScaffoldMessenger.of(dialogContext).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Toplu kadro yükleme yeniden düzenleniyor. '
+                'Şimdilik oyuncuları tek tek ekleyin.',
               ),
-            );
-            shouldClose = true;
-            if (!dialogContext.mounted) return;
-            Navigator.pop(dialogContext);
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (!context.mounted) return;
-              final skipped = skippedEmpty + skippedShort + skippedNoName;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'Onaya gönderildi: ${parsed.length} oyuncu • Atlanan satır: $skipped',
-                  ),
-                ),
-              );
-            });
-          } catch (e) {
-            if (!dialogContext.mounted) return;
-            ScaffoldMessenger.of(
-              dialogContext,
-            ).showSnackBar(SnackBar(content: Text('Hata: $e')));
-          } finally {
-            if (!shouldClose && dialogContext.mounted) {
-              setDialogState(() => busy = false);
-            }
-          }
+            ),
+          );
         }
 
         return AlertDialog(
@@ -979,11 +938,21 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
   int? _ageFromBirthDate(String? birthDate) {
     final s = (birthDate ?? '').trim();
     if (s.isEmpty) return null;
-    final m = RegExp(r'^(\d{2})/(\d{2})/(\d{4})$').firstMatch(s);
-    if (m == null) return null;
-    final dd = int.tryParse(m.group(1)!) ?? 0;
-    final mm = int.tryParse(m.group(2)!) ?? 0;
-    final yyyy = int.tryParse(m.group(3)!) ?? 0;
+    // GG/AA/YYYY, GG-AA-YYYY, GG.AA.YYYY veya veritabanındaki YYYY-AA-GG.
+    int dd, mm, yyyy;
+    final dmy = RegExp(r'^(\d{2})[./-](\d{2})[./-](\d{4})$').firstMatch(s);
+    final ymd = RegExp(r'^(\d{4})-(\d{2})-(\d{2})').firstMatch(s);
+    if (dmy != null) {
+      dd = int.parse(dmy.group(1)!);
+      mm = int.parse(dmy.group(2)!);
+      yyyy = int.parse(dmy.group(3)!);
+    } else if (ymd != null) {
+      yyyy = int.parse(ymd.group(1)!);
+      mm = int.parse(ymd.group(2)!);
+      dd = int.parse(ymd.group(3)!);
+    } else {
+      return null;
+    }
     if (dd < 1 || dd > 31 || mm < 1 || mm > 12 || yyyy < 1900 || yyyy > 2100) {
       return null;
     }
@@ -1405,35 +1374,6 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
               children: [
                 if (_isLoadingTournaments)
                   const LinearProgressIndicator(minHeight: 2),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 10),
-                      TextField(
-                        controller: _rosterSearchController,
-                        onChanged: (v) => setState(
-                          () => _rosterQuery = v.trim().toLowerCase(),
-                        ),
-                        decoration: InputDecoration(
-                          hintText: 'Futbolcu Ara',
-                          prefixIcon: Icon(Icons.search, color: cs.primary),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide(
-                              color: cs.primary.withValues(alpha: 0.35),
-                            ),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide(color: cs.primary, width: 2),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
                 Expanded(
                   child: effectiveTournamentId == null
                       ? Center(
@@ -1463,6 +1403,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                                 child: Text('Henüz kadro girişi yapılmamış.'),
                               );
                             }
+                            _prefetchPlayerPhotos(allPlayers);
                             final q = _rosterQuery;
                             final players = q.isEmpty
                                 ? allPlayers
@@ -1471,120 +1412,89 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                                         (p) => p.name.toLowerCase().contains(q),
                                       )
                                       .toList();
-                            if (players.isEmpty) {
-                              return const Center(
-                                child: Text(
-                                  'Aramanıza uygun futbolcu bulunamadı.',
-                                ),
-                              );
-                            }
 
-                            _prefetchPlayerPhotos(players);
-
-                            return ListView.builder(
-                              padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
-                              itemCount: players.length,
-                              itemBuilder: (context, index) {
-                                final p = players[index];
-                                final photo = (p.photoUrl ?? '').trim();
-                                final phone = (p.phone ?? '').trim();
-                                final cached = phone.isEmpty
-                                    ? ''
-                                    : (_playerPhotoUrlByPhone[phone] ?? '');
-                                final resolvedPhoto = photo.isNotEmpty
-                                    ? photo
-                                    : cached;
-                                final num = (p.number ?? '').trim();
-                                return Card(
-                                  margin: const EdgeInsets.symmetric(
-                                    vertical: 4,
+                            return ListView(
+                              padding: const EdgeInsets.fromLTRB(
+                                16,
+                                12,
+                                16,
+                                24,
+                              ),
+                              children: [
+                                _SquadSummaryCard(
+                                  teamName: titleTeam,
+                                  logoUrl: widget.teamLogoUrl,
+                                  subtitle: _tournamentNameById(
+                                    effectiveTournamentId,
                                   ),
-                                  child: ListTile(
-                                    dense: true,
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 2,
+                                  players: allPlayers,
+                                  ageOf: (p) => _ageFromBirthDate(p.birthDate),
+                                ),
+                                const SizedBox(height: 12),
+                                TextField(
+                                  controller: _rosterSearchController,
+                                  style: const TextStyle(color: Colors.white),
+                                  onChanged: (v) => setState(
+                                    () => _rosterQuery = v.trim().toLowerCase(),
+                                  ),
+                                  decoration: InputDecoration(
+                                    hintText: 'Futbolcu ara',
+                                    prefixIcon: const Icon(
+                                      Icons.search,
+                                      color: _squadMuted,
                                     ),
-                                    onTap: () => _openPlayerCard(p),
-                                    leading: resolvedPhoto.isNotEmpty
-                                        ? WebSafeImage(
-                                            url: _normalizeUrl(resolvedPhoto),
-                                            width: 36,
-                                            height: 36,
-                                            isCircle: true,
-                                            fallbackIconSize: 18,
-                                          )
-                                        : CircleAvatar(
-                                            radius: 18,
-                                            backgroundColor: cs.primary
-                                                .withValues(alpha: 0.12),
-                                            child: Icon(
-                                              Icons.person,
-                                              size: 18,
-                                              color: cs.primary,
-                                            ),
-                                          ),
-                                    title: Text(
-                                      p.name,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
+                                    filled: true,
+                                    fillColor: const Color(
+                                      0xFF1E293B,
+                                    ).withValues(alpha: 0.9),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                      borderSide: BorderSide(
+                                        color: Colors.white.withValues(
+                                          alpha: 0.12,
+                                        ),
+                                      ),
                                     ),
-                                    trailing: Row(
-                                      mainAxisSize: MainAxisSize.min,
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                      borderSide: const BorderSide(
+                                        color: _squadAccent,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                if (players.isEmpty)
+                                  const Padding(
+                                    padding: EdgeInsets.only(top: 32),
+                                    child: Text(
+                                      'Aramanıza uygun futbolcu bulunamadı.',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(color: _squadMuted),
+                                    ),
+                                  )
+                                else
+                                  for (final section in _positionSections(
+                                    players,
+                                  ))
+                                    _SquadSection(
+                                      title: section.key,
+                                      count: section.value.length,
                                       children: [
-                                        InkWell(
-                                          onTap: canAdd
-                                              ? () => _promptJerseyNumberEdit(
-                                                  player: p,
-                                                  leagueId:
-                                                      effectiveTournamentId,
-                                                  teamId: widget.teamId,
-                                                )
-                                              : null,
-                                          borderRadius: BorderRadius.circular(
-                                            10,
+                                        for (
+                                          var i = 0;
+                                          i < section.value.length;
+                                          i++
+                                        )
+                                          _squadRow(
+                                            section.value[i],
+                                            first: i == 0,
+                                            canAdd: canAdd,
+                                            tournamentId: effectiveTournamentId,
                                           ),
-                                          child: Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 10,
-                                              vertical: 8,
-                                            ),
-                                            child: Text(
-                                              num.isEmpty ? '?' : num,
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.w900,
-                                                color: num.isEmpty
-                                                    ? cs.onSurfaceVariant
-                                                          .withValues(
-                                                            alpha: 0.45,
-                                                          )
-                                                    : cs.onSurfaceVariant,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        _SmallActionButton(
-                                          icon: Icons.edit_outlined,
-                                          tooltip: 'Düzenle',
-                                          color: cs.onSurfaceVariant,
-                                          onTap: () =>
-                                              _openPlayerForm(editing: p),
-                                        ),
-                                        const SizedBox(width: 4),
-                                        _SmallActionButton(
-                                          icon: Icons.delete_outline_rounded,
-                                          tooltip: 'Kadrodan çıkar',
-                                          color: const Color(0xFFF87171),
-                                          onTap: () => _confirmAndRemovePlayer(
-                                            p,
-                                            effectiveTournamentId,
-                                          ),
-                                        ),
                                       ],
                                     ),
-                                  ),
-                                );
-                              },
+                              ],
                             );
                           },
                         ),
@@ -1593,6 +1503,112 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _squadRow(
+    PlayerModel p, {
+    required bool first,
+    required bool canAdd,
+    required String tournamentId,
+  }) {
+    final number = (p.number ?? '').trim();
+    final age = _ageFromBirthDate(p.birthDate);
+    final position = (p.mainPosition ?? p.position ?? '').trim();
+    final sub = [
+      if (position.isNotEmpty) position,
+      if (age != null) '$age yaş',
+      if (number.isEmpty) 'forma no yok',
+    ].join(' · ');
+    void editJersey() => _promptJerseyNumberEdit(
+      player: p,
+      leagueId: tournamentId,
+      teamId: widget.teamId,
+    );
+
+    return InkWell(
+      onTap: () => _openPlayerCard(p),
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 64),
+        padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+        decoration: BoxDecoration(
+          border: first
+              ? null
+              : Border(
+                  top: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
+                ),
+        ),
+        child: Row(
+          children: [
+            _JerseyBadge(number: number, onTap: canAdd ? editJersey : null),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    p.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (sub.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      sub,
+                      style: const TextStyle(color: _squadMuted, fontSize: 12),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            PopupMenuButton<String>(
+              tooltip: 'Diğer işlemler',
+              icon: const Icon(Icons.more_vert_rounded, color: _squadMuted),
+              color: const Color(0xFF1E293B),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              onSelected: (v) {
+                switch (v) {
+                  case 'edit':
+                    _openPlayerForm(editing: p);
+                  case 'jersey':
+                    editJersey();
+                  case 'remove':
+                    _confirmAndRemovePlayer(p, tournamentId);
+                }
+              },
+              itemBuilder: (_) => [
+                const PopupMenuItem(
+                  value: 'edit',
+                  child: _MenuRow(icon: Icons.edit_outlined, text: 'Düzenle'),
+                ),
+                if (canAdd)
+                  const PopupMenuItem(
+                    value: 'jersey',
+                    child: _MenuRow(
+                      icon: Icons.tag_rounded,
+                      text: 'Forma no değiştir',
+                    ),
+                  ),
+                const PopupMenuItem(
+                  value: 'remove',
+                  child: _MenuRow(
+                    icon: Icons.person_remove_outlined,
+                    text: 'Kadrodan çıkar',
+                    color: Color(0xFFF87171),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -3263,7 +3279,6 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
   }
 
   Future<void> _openBulkUploadFlow() async {
-
     final picked = await _pickLeagueTeamForBulkUpload();
     if (!mounted || picked == null) return;
 
@@ -3279,7 +3294,6 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
 
     await showSquadBulkUploadDialog(
       context: context,
-      approvalService: ApprovalService(),
       leagueId: leagueId,
       teamId: teamId,
       teamName: teamName.isEmpty ? teamId : teamName,
@@ -3519,6 +3533,359 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Kadro listesi: özet kartı, mevki bölümleri, forma no rozeti
+// ---------------------------------------------------------------------------
+
+const _squadAccent = Color(0xFF10B981);
+const _squadMuted = Color(0xFF94A3B8);
+const _squadAmber = Color(0xFFFBBF24);
+const _squadCard = Color(0xFF1E293B);
+
+const _positionOrder = [
+  'Kaleci',
+  'Defans',
+  'Orta Saha',
+  'Forvet',
+  'Mevkisi belirtilmemiş',
+];
+
+String _positionGroup(PlayerModel p) {
+  final s = (p.mainPosition ?? p.position ?? '').toLowerCase();
+  if (s.contains('kaleci')) return 'Kaleci';
+  if (s.contains('defans') || s.contains('stoper') || s.contains('bek')) {
+    return 'Defans';
+  }
+  if (s.contains('forvet') ||
+      s.contains('santrafor') ||
+      s.contains('santrfor')) {
+    return 'Forvet';
+  }
+  if (s.contains('orta') || s.contains('kanat') || s.contains('numara')) {
+    return 'Orta Saha';
+  }
+  return 'Mevkisi belirtilmemiş';
+}
+
+/// Mevkiye göre bölümler; bölüm içinde forma numarası olanlar önce.
+List<MapEntry<String, List<PlayerModel>>> _positionSections(
+  List<PlayerModel> players,
+) {
+  final byGroup = <String, List<PlayerModel>>{};
+  for (final p in players) {
+    byGroup.putIfAbsent(_positionGroup(p), () => []).add(p);
+  }
+  int numberOf(PlayerModel p) => int.tryParse((p.number ?? '').trim()) ?? 1000;
+  return [
+    for (final g in _positionOrder)
+      if (byGroup[g] != null)
+        MapEntry(
+          g,
+          byGroup[g]!..sort((a, b) {
+            final c = numberOf(a).compareTo(numberOf(b));
+            return c != 0
+                ? c
+                : a.name.toLowerCase().compareTo(b.name.toLowerCase());
+          }),
+        ),
+  ];
+}
+
+class _SquadSection extends StatelessWidget {
+  const _SquadSection({
+    required this.title,
+    required this.count,
+    required this.children,
+  });
+
+  final String title;
+  final int count;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    title
+                        .replaceAll('i', 'İ')
+                        .replaceAll('ı', 'I')
+                        .toUpperCase(),
+                    style: const TextStyle(
+                      color: _squadAccent,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ),
+                Text(
+                  '$count oyuncu',
+                  style: const TextStyle(color: _squadMuted, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: _squadCard.withValues(alpha: 0.94),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            ),
+            child: Material(
+              type: MaterialType.transparency,
+              child: Column(children: children),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SquadSummaryCard extends StatelessWidget {
+  const _SquadSummaryCard({
+    required this.teamName,
+    required this.logoUrl,
+    required this.subtitle,
+    required this.players,
+    required this.ageOf,
+  });
+
+  final String teamName;
+  final String logoUrl;
+  final String subtitle;
+  final List<PlayerModel> players;
+  final int? Function(PlayerModel) ageOf;
+
+  Widget _stat(String value, String label, {Color color = Colors.white}) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0F172A).withValues(alpha: 0.6),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              value,
+              style: TextStyle(
+                color: color,
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: const TextStyle(color: _squadMuted, fontSize: 12),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ages = players.map(ageOf).whereType<int>().toList();
+    final avgAge = ages.isEmpty
+        ? '–'
+        : (ages.reduce((a, b) => a + b) / ages.length).round().toString();
+    final missingNumbers = players
+        .where((p) => (p.number ?? '').trim().isEmpty)
+        .length;
+    final counts = <String, int>{};
+    for (final p in players) {
+      final g = _positionGroup(p);
+      counts[g] = (counts[g] ?? 0) + 1;
+    }
+    final words = teamName.trim().split(RegExp(r'\s+'));
+    final initials = words
+        .where((w) => w.isNotEmpty)
+        .take(2)
+        .map((w) => w.characters.first)
+        .join()
+        .toUpperCase();
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _squadCard.withValues(alpha: 0.94),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                alignment: Alignment.center,
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF064E3B),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: logoUrl.trim().isNotEmpty
+                    ? WebSafeImage(url: logoUrl, width: 48, height: 48)
+                    : Text(
+                        initials,
+                        style: const TextStyle(
+                          color: Color(0xFF6EE7B7),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      teamName,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: _squadMuted, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _stat('${players.length}', 'Oyuncu'),
+              const SizedBox(width: 8),
+              _stat(avgAge, 'Ort. yaş'),
+              const SizedBox(width: 8),
+              _stat(
+                '$missingNumbers',
+                'Forma no eksik',
+                color: missingNumbers > 0 ? _squadAmber : Colors.white,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final g in _positionOrder)
+                if ((counts[g] ?? 0) > 0)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      '${counts[g]} $g',
+                      style: const TextStyle(
+                        color: Color(0xFFCBD5E1),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Forma numarası rozeti; numara yoksa kesik çizgili boş rozet.
+class _JerseyBadge extends StatelessWidget {
+  const _JerseyBadge({required this.number, this.onTap});
+
+  final String number;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final has = number.isNotEmpty;
+    final badge = InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: 44,
+        height: 44,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: has ? _squadAccent.withValues(alpha: 0.16) : null,
+          borderRadius: BorderRadius.circular(12),
+          border: has
+              ? null
+              : Border.all(color: _squadMuted.withValues(alpha: 0.45)),
+        ),
+        child: Text(
+          has ? number : '—',
+          style: TextStyle(
+            color: has ? _squadAccent : _squadMuted,
+            fontSize: 16,
+            fontWeight: has ? FontWeight.w900 : FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+    return onTap == null
+        ? badge
+        : Tooltip(message: 'Forma no değiştir', child: badge);
+  }
+}
+
+class _MenuRow extends StatelessWidget {
+  const _MenuRow({
+    required this.icon,
+    required this.text,
+    this.color = Colors.white,
+  });
+
+  final IconData icon;
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: color),
+        const SizedBox(width: 12),
+        Text(text, style: TextStyle(color: color)),
+      ],
     );
   }
 }

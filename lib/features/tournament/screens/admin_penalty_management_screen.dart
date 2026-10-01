@@ -11,6 +11,7 @@ import '../services/interfaces/i_league_service.dart';
 import '../../tournament/models/league.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/widgets/admin_page.dart';
+import '../../../core/widgets/custom_popup_selector.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../player/services/penalty_service.dart';
 
@@ -33,6 +34,122 @@ class _AdminPenaltyManagementScreenState
   String _selectedSeasonId = '';
   _PenaltyFilter _penaltyFilter = _PenaltyFilter.active;
   final Set<String> _hiddenPenaltyIds = <String>{};
+
+  late final Stream<List<League>> _leaguesStream = _leagueService
+      .watchLeagues();
+  List<League> _leagues = const <League>[];
+  final Map<String, List<Map<String, dynamic>>> _seasonsByLeague = {};
+  final Set<String> _loadingSeasons = <String>{};
+
+  /// Turnuvanın sezonlarını bir kez okur; sezon seçili değilse ilkini seçer.
+  Future<void> _ensureSeasons(String leagueId, {VoidCallback? onLoaded}) async {
+    final lid = leagueId.trim();
+    if (lid.isEmpty ||
+        _seasonsByLeague.containsKey(lid) ||
+        _loadingSeasons.contains(lid)) {
+      return;
+    }
+    _loadingSeasons.add(lid);
+    try {
+      final rows = await _fetchSeasons(lid);
+      if (!mounted) return;
+      setState(() {
+        _seasonsByLeague[lid] = rows;
+        if (_selectedLeagueId == lid &&
+            _selectedSeasonId.isEmpty &&
+            rows.isNotEmpty) {
+          _selectedSeasonId = (rows.first['id'] ?? '').toString().trim();
+        }
+      });
+      onLoaded?.call();
+    } catch (_) {
+      // Sezonlar okunamazsa filtre "Seçiniz" gösterir; liste boş kalır.
+    } finally {
+      _loadingSeasons.remove(lid);
+    }
+  }
+
+  String _seasonName(String seasonId) {
+    final id = seasonId.trim();
+    if (id.isEmpty) return '';
+    for (final s in _seasonsByLeague[_selectedLeagueId] ?? const []) {
+      if ((s['id'] ?? '').toString().trim() == id) {
+        final name = (s['name'] ?? '').toString().trim();
+        return name.isEmpty ? id : name;
+      }
+    }
+    return '';
+  }
+
+  String _filterLabel(_PenaltyFilter filter) => switch (filter) {
+    _PenaltyFilter.all => 'Tümü',
+    _PenaltyFilter.active => 'Aktif',
+    _PenaltyFilter.passive => 'Pasif',
+  };
+
+  Future<void> _openFilters() {
+    return showAdminFilterDialog(
+      context: context,
+      fieldsBuilder: (ctx, refresh) {
+        final seasons =
+            _seasonsByLeague[_selectedLeagueId] ??
+            const <Map<String, dynamic>>[];
+        return [
+          CustomPopupSelector<String>(
+            label: 'Turnuva',
+            selectedValue: _selectedLeagueId.isEmpty ? null : _selectedLeagueId,
+            items: _leagues.map((l) => l.id).toList(),
+            labelBuilder: (id) {
+              for (final l in _leagues) {
+                if (l.id == id) return l.name.trim().isEmpty ? l.id : l.name;
+              }
+              return '';
+            },
+            onChanged: (v) {
+              final lid = (v ?? '').trim();
+              if (lid == _selectedLeagueId) return;
+              final cached = _seasonsByLeague[lid];
+              setState(() {
+                _selectedLeagueId = lid;
+                _selectedSeasonId = cached == null || cached.isEmpty
+                    ? ''
+                    : (cached.first['id'] ?? '').toString().trim();
+                _hiddenPenaltyIds.clear();
+              });
+              _ensureSeasons(lid, onLoaded: refresh);
+              refresh();
+            },
+          ),
+          CustomPopupSelector<String>(
+            label: 'Sezon',
+            selectedValue: _selectedSeasonId.isEmpty ? null : _selectedSeasonId,
+            items: [
+              for (final s in seasons) (s['id'] ?? '').toString().trim(),
+            ],
+            labelBuilder: (id) => _seasonName(id ?? ''),
+            onChanged: (v) {
+              setState(() {
+                _selectedSeasonId = (v ?? '').trim();
+                _hiddenPenaltyIds.clear();
+              });
+              refresh();
+            },
+          ),
+          CustomPopupSelector<_PenaltyFilter>(
+            label: 'Filtre',
+            selectedValue: _penaltyFilter,
+            items: _PenaltyFilter.values,
+            labelBuilder: (f) => _filterLabel(f ?? _PenaltyFilter.active),
+            onChanged: (v) {
+              if (v == null) return;
+              setState(() => _penaltyFilter = v);
+              refresh();
+            },
+          ),
+        ];
+      },
+    );
+  }
 
   Future<List<Map<String, dynamic>>> _fetchSeasons(String leagueId) async {
     final lid = leagueId.trim();
@@ -249,7 +366,7 @@ class _AdminPenaltyManagementScreenState
         child: Column(
           children: [
             StreamBuilder<List<League>>(
-              stream: _leagueService.watchLeagues(),
+              stream: _leaguesStream,
               builder: (context, snap) {
                 final byId = <String, League>{};
                 for (final l in (snap.data ?? const <League>[])) {
@@ -257,161 +374,34 @@ class _AdminPenaltyManagementScreenState
                   if (id.isEmpty) continue;
                   byId.putIfAbsent(id, () => l);
                 }
-                final leagues = byId.values.toList()
+                _leagues = byId.values.toList()
                   ..sort(
                     (a, b) =>
                         a.name.toLowerCase().compareTo(b.name.toLowerCase()),
                   );
 
-                if (_selectedLeagueId.isEmpty && leagues.isNotEmpty) {
+                if (_selectedLeagueId.isEmpty && _leagues.isNotEmpty) {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     if (!mounted) return;
-                    setState(() => _selectedLeagueId = leagues.first.id);
+                    setState(() => _selectedLeagueId = _leagues.first.id);
+                    _ensureSeasons(_selectedLeagueId);
                   });
+                } else if (_selectedLeagueId.isNotEmpty) {
+                  _ensureSeasons(_selectedLeagueId);
                 }
 
-                return DropdownButtonFormField<String>(
-                  initialValue:
-                      _selectedLeagueId.isEmpty ||
-                          !byId.containsKey(_selectedLeagueId)
-                      ? null
-                      : _selectedLeagueId,
-                  isExpanded: true,
-                  decoration: InputDecoration(
-                    labelText: 'Turnuva',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(18),
-                      borderSide: BorderSide(
-                        color: cs.outlineVariant.withValues(alpha: 0.55),
-                      ),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(18),
-                      borderSide: BorderSide(color: cs.primary, width: 1.6),
-                    ),
-                    filled: true,
-                    fillColor: cs.surface,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 14,
-                    ),
-                  ),
-                  items: [
-                    for (final l in leagues)
-                      DropdownMenuItem<String>(
-                        value: l.id,
-                        child: Text(l.name.trim().isEmpty ? l.id : l.name),
-                      ),
-                  ],
-                  onChanged: (v) {
-                    setState(() {
-                      _selectedLeagueId = (v ?? '').trim();
-                      _selectedSeasonId = '';
-                      _hiddenPenaltyIds.clear();
-                    });
-                  },
+                final parts = [
+                  byId[_selectedLeagueId]?.name ?? 'Turnuva seçin',
+                  _seasonName(_selectedSeasonId),
+                  _filterLabel(_penaltyFilter),
+                ].where((s) => s.trim().isNotEmpty);
+                return AdminFilterBar(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  summary: parts.join(' • '),
+                  onTap: _openFilters,
                 );
               },
             ),
-            const SizedBox(height: 12),
-            FutureBuilder<List<Map<String, dynamic>>>(
-              future: _fetchSeasons(_selectedLeagueId),
-              builder: (context, snap) {
-                final byId = <String, Map<String, dynamic>>{};
-                for (final s in (snap.data ?? const <Map<String, dynamic>>[])) {
-                  final id = (s['id'] ?? '').toString().trim();
-                  if (id.isEmpty) continue;
-                  byId.putIfAbsent(id, () => s);
-                }
-                final seasons = byId.values.toList()
-                  ..sort((a, b) {
-                    final an = (a['name'] ?? '').toString().toLowerCase();
-                    final bn = (b['name'] ?? '').toString().toLowerCase();
-                    return an.compareTo(bn);
-                  });
-
-                if (_selectedSeasonId.isEmpty && seasons.isNotEmpty) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (!mounted) return;
-                    setState(
-                      () => _selectedSeasonId = (seasons.first['id'] ?? '')
-                          .toString()
-                          .trim(),
-                    );
-                  });
-                }
-
-                return DropdownButtonFormField<String>(
-                  initialValue:
-                      _selectedSeasonId.isEmpty ||
-                          !byId.containsKey(_selectedSeasonId)
-                      ? null
-                      : _selectedSeasonId,
-                  isExpanded: true,
-                  decoration: InputDecoration(
-                    labelText: 'Sezon',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(18),
-                      borderSide: BorderSide(
-                        color: cs.outlineVariant.withValues(alpha: 0.55),
-                      ),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(18),
-                      borderSide: BorderSide(color: cs.primary, width: 1.6),
-                    ),
-                    filled: true,
-                    fillColor: cs.surface,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 14,
-                    ),
-                  ),
-                  items: [
-                    for (final s in seasons)
-                      DropdownMenuItem<String>(
-                        value: (s['id'] ?? '').toString().trim(),
-                        child: Text(
-                          (s['name'] ?? '').toString().trim().isEmpty
-                              ? (s['id'] ?? '').toString()
-                              : (s['name'] ?? '').toString(),
-                        ),
-                      ),
-                  ],
-                  onChanged: (v) {
-                    setState(() {
-                      _selectedSeasonId = (v ?? '').trim();
-                      _hiddenPenaltyIds.clear();
-                    });
-                  },
-                );
-              },
-            ),
-            const SizedBox(height: 12),
-            CustomBottomSheetDropdown<_PenaltyFilter>(
-              labelText: 'Filtre',
-              value: _penaltyFilter,
-              items: const [
-                _PenaltyFilter.active,
-                _PenaltyFilter.passive,
-                _PenaltyFilter.all,
-              ],
-              itemLabelBuilder: (filter) => switch (filter) {
-                _PenaltyFilter.all => 'Tümü',
-                _PenaltyFilter.active => 'Aktif',
-                _PenaltyFilter.passive => 'Pasif',
-              },
-              onChanged: (v) {
-                if (v != null) setState(() => _penaltyFilter = v);
-              },
-            ),
-            const SizedBox(height: 12),
             Expanded(
               child: _selectedSeasonId.trim().isEmpty
                   ? Center(

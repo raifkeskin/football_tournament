@@ -8,6 +8,9 @@ import '../../../core/services/app_session.dart';
 import '../services/interfaces/i_league_service.dart';
 import '../../team/services/interfaces/i_team_service.dart';
 import '../../../core/services/service_locator.dart';
+import '../../../core/utils/resilient_stream.dart';
+import '../../../core/widgets/admin_page.dart';
+import '../../../core/widgets/custom_popup_selector.dart';
 import '../../../core/widgets/web_safe_image.dart';
 
 class AdminGroupManagementScreen extends StatefulWidget {
@@ -29,11 +32,22 @@ class _AdminGroupManagementScreenState
     extends State<AdminGroupManagementScreen> {
   final ILeagueService _leagueService = ServiceLocator.leagueService;
   final ITeamService _teamService = ServiceLocator.teamService;
+  late final Stream<List<League>> _leaguesStream = _leagueService
+      .watchLeagues();
+  late final Stream<List<Team>> _teamsStream = _teamService.watchAllTeams();
+  final Map<String, Stream<List<Season>>> _seasonStreams = {};
+
   String? _selectedLeagueId;
   String? _selectedSeasonId;
   String? _selectedGroupId;
   String? _selectedGroupName;
   final List<String> _selectedTeamIds = [];
+
+  // Filtre penceresi açıkken listeler güncellenince pencereyi yeniler.
+  List<League> _leagues = const [];
+  List<Season> _seasons = const [];
+  List<GroupModel> _groups = const [];
+  VoidCallback? _filterRefresh;
 
   @override
   void initState() {
@@ -47,17 +61,39 @@ class _AdminGroupManagementScreenState
   Stream<List<Season>> _watchSeasonsForLeague(String leagueId) {
     final id = leagueId.trim();
     if (id.isEmpty) return const Stream<List<Season>>.empty();
-    return Supabase.instance.client
-        .from('seasons')
-        .stream(primaryKey: ['id'])
-        .eq('league_id', id)
-        .order('start_date', ascending: false)
-        .map(
-          (rows) => rows
-              .cast<Map<String, dynamic>>()
-              .map(Season.fromJson)
-              .toList(),
-        );
+    // Aynı turnuva için tek akış: her build'de yeniden bağlanmaz.
+    // Son listeyi sonradan bağlanan dinleyiciye de hemen verir.
+    return _seasonStreams.putIfAbsent(
+      id,
+      () => resilientStream(
+        () => Supabase.instance.client
+            .from('seasons')
+            .stream(primaryKey: ['id'])
+            .eq('league_id', id)
+            .order('start_date', ascending: false)
+            .map(
+              (rows) => rows
+                  .cast<Map<String, dynamic>>()
+                  .map(Season.fromJson)
+                  .toList(),
+            ),
+      ),
+    );
+  }
+
+  void _refreshFilterDialog() {
+    final refresh = _filterRefresh;
+    if (refresh == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) => refresh());
+  }
+
+  void _snack(String text, {bool error = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(text),
+        backgroundColor: error ? Colors.redAccent : null,
+      ),
+    );
   }
 
   Future<void> _syncSelectedTeamsForGroup() async {
@@ -78,195 +114,179 @@ class _AdminGroupManagementScreenState
     });
   }
 
+  String _filterSummary() {
+    String nameOf<T>(List<T> items, String? id, String Function(T) idOf,
+        String Function(T) nameOf) {
+      for (final i in items) {
+        if (idOf(i) == id) return nameOf(i);
+      }
+      return '';
+    }
+
+    final parts = [
+      nameOf<League>(_leagues, _selectedLeagueId, (l) => l.id, (l) => l.name),
+      nameOf<Season>(_seasons, _selectedSeasonId, (s) => s.id, (s) => s.name),
+      (_selectedGroupName ?? '').trim(),
+    ].where((s) => s.isNotEmpty).toList();
+    return parts.isEmpty ? 'Turnuva seçin' : parts.join(' • ');
+  }
+
+  Future<void> _openFilters() async {
+    await showAdminFilterDialog(
+      context: context,
+      fieldsBuilder: (ctx, refresh) {
+        _filterRefresh = refresh;
+        return [
+          IgnorePointer(
+            ignoring: widget.lockLeagueSelection,
+            child: Opacity(
+              opacity: widget.lockLeagueSelection ? 0.6 : 1,
+              child: CustomPopupSelector<String>(
+                label: 'Turnuva',
+                selectedValue: _selectedLeagueId,
+                items: _leagues.map((l) => l.id).toList(),
+                labelBuilder: (id) => _leagues
+                    .firstWhere(
+                      (l) => l.id == id,
+                      orElse: () => _leagues.first,
+                    )
+                    .name,
+                onChanged: (val) {
+                  if (val == _selectedLeagueId) return;
+                  setState(() {
+                    _selectedLeagueId = val;
+                    _selectedSeasonId = null;
+                    _selectedGroupId = null;
+                    _selectedGroupName = null;
+                    _seasons = const [];
+                    _groups = const [];
+                    _selectedTeamIds.clear();
+                  });
+                  refresh();
+                },
+              ),
+            ),
+          ),
+          CustomPopupSelector<String>(
+            label: 'Sezon',
+            selectedValue: _selectedSeasonId,
+            items: _seasons.map((s) => s.id).toList(),
+            labelBuilder: (id) => _seasons
+                .firstWhere((s) => s.id == id, orElse: () => _seasons.first)
+                .name,
+            onChanged: (val) {
+              if (val == _selectedSeasonId) return;
+              setState(() {
+                _selectedSeasonId = val;
+                _selectedGroupId = null;
+                _selectedGroupName = null;
+                _groups = const [];
+                _selectedTeamIds.clear();
+              });
+              refresh();
+            },
+          ),
+          CustomPopupSelector<String>(
+            label: 'Grup',
+            selectedValue: _selectedGroupId,
+            items: _groups.map((g) => g.id).toList(),
+            labelBuilder: (id) => _groups
+                .firstWhere((g) => g.id == id, orElse: () => _groups.first)
+                .name,
+            onChanged: (val) {
+              final selected = _groups.where((g) => g.id == val).toList();
+              setState(() {
+                _selectedGroupId = val;
+                _selectedGroupName = selected.isEmpty
+                    ? null
+                    : selected.first.name;
+                _selectedTeamIds.clear();
+              });
+              _syncSelectedTeamsForGroup();
+              refresh();
+            },
+          ),
+        ];
+      },
+    );
+    _filterRefresh = null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final isAdmin = AppSession.of(context).value.isAdmin;
-    return Scaffold(
-      appBar: AppBar(
-        centerTitle: true,
-        title: const Text('Grup ve Takım Atama'),
-        actions: [
-          if (isAdmin && (_selectedSeasonId ?? '').trim().isNotEmpty)
-            IconButton(
-              onPressed: _openAddGroupSheet,
-              icon: const Icon(Icons.add),
-              tooltip: 'Grup Ekle',
-            ),
-        ],
-      ),
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: Column(
-        children: [
-          // 1. Turnuva Seçimi
-          StreamBuilder<List<League>>(
-            stream: _leagueService.watchLeagues(),
-            builder: (context, snapshot) {
-              if (!snapshot.hasData) return const SizedBox();
-              final leagues = snapshot.data ?? const <League>[];
-              if (leagues.isNotEmpty) {
-                final hasSelected =
-                    _selectedLeagueId != null &&
-                    leagues.any((l) => l.id == _selectedLeagueId);
-                if (!hasSelected) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (!mounted) return;
-                    setState(() {
-                      _selectedLeagueId = leagues.first.id;
-                      _selectedGroupId = null;
-                      _selectedTeamIds.clear();
-                    });
-                  });
-                }
-              }
-              return Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-                child: Card(
-                  margin: EdgeInsets.zero,
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _selectedLeagueId,
-                      dropdownColor: const Color(0xFF1E293B),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      decoration: const InputDecoration(
-                        labelText: 'Turnuva Seçin',
-                        labelStyle: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        border: OutlineInputBorder(),
-                      ),
-                      items: leagues
-                          .map(
-                            (l) => DropdownMenuItem(
-                              value: l.id,
-                              child: Center(
-                                child: Text(
-                                  l.name,
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: widget.lockLeagueSelection
-                          ? null
-                          : (val) {
-                              setState(() {
-                                _selectedLeagueId = val;
-                                _selectedSeasonId = null;
-                                _selectedGroupId = null;
-                                _selectedTeamIds.clear();
-                              });
-                            },
-                    ),
-                  ),
-                ),
-              );
-            },
+    final hasSeason = (_selectedSeasonId ?? '').trim().isNotEmpty;
+    return AdminPageScaffold(
+      title: 'Grup ve Takım Atama',
+      actions: [
+        if (isAdmin && _selectedGroupId != null)
+          AdminBarAction(
+            icon: Icons.delete_outline_rounded,
+            tooltip: 'Grubu Sil',
+            onPressed: _deleteSelectedGroup,
           ),
-
-          // 2. Sezon Seçimi
-          if ((_selectedLeagueId ?? '').trim().isNotEmpty)
-            StreamBuilder<List<Season>>(
-              stream: _watchSeasonsForLeague(_selectedLeagueId!),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) return const SizedBox();
-                final seasons = snapshot.data ?? const <Season>[];
-                if (seasons.isNotEmpty) {
-                  final hasSelected = _selectedSeasonId != null &&
-                      seasons.any((s) => s.id == _selectedSeasonId);
-                  if (!hasSelected) {
+        if (isAdmin && hasSeason)
+          AdminBarAction(
+            icon: Icons.add_rounded,
+            tooltip: 'Grup Ekle',
+            onPressed: _openAddGroupDialog,
+          ),
+      ],
+      body: StreamBuilder<List<League>>(
+        stream: _leaguesStream,
+        builder: (context, leagueSnap) {
+          if (!leagueSnap.hasData) {
+            return const Center(
+              child: CircularProgressIndicator(color: kAdminAccent),
+            );
+          }
+          _leagues = leagueSnap.data ?? const <League>[];
+          if (_leagues.isNotEmpty &&
+              !_leagues.any((l) => l.id == _selectedLeagueId)) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              setState(() {
+                _selectedLeagueId = _leagues.first.id;
+                _selectedSeasonId = null;
+                _selectedGroupId = null;
+                _selectedGroupName = null;
+                _selectedTeamIds.clear();
+              });
+            });
+          }
+          final leagueId = (_selectedLeagueId ?? '').trim();
+          return StreamBuilder<List<Season>>(
+            stream: _watchSeasonsForLeague(leagueId),
+            builder: (context, seasonSnap) {
+              _seasons = seasonSnap.data ?? const <Season>[];
+              if (_seasons.isNotEmpty &&
+                  !_seasons.any((s) => s.id == _selectedSeasonId)) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted) return;
+                  setState(() {
+                    _selectedSeasonId = _seasons.first.id;
+                    _selectedGroupId = null;
+                    _selectedGroupName = null;
+                    _selectedTeamIds.clear();
+                  });
+                });
+              }
+              final seasonId = (_selectedSeasonId ?? '').trim();
+              return StreamBuilder<List<GroupModel>>(
+                stream: seasonId.isEmpty
+                    ? const Stream<List<GroupModel>>.empty()
+                    : _leagueService.watchGroups(seasonId),
+                builder: (context, groupSnap) {
+                  _groups = [...(groupSnap.data ?? const <GroupModel>[])]
+                    ..sort(
+                      (a, b) =>
+                          a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+                    );
+                  if (_groups.isNotEmpty &&
+                      !_groups.any((g) => g.id == _selectedGroupId)) {
                     WidgetsBinding.instance.addPostFrameCallback((_) {
                       if (!mounted) return;
-                      setState(() {
-                        _selectedSeasonId = seasons.first.id;
-                        _selectedGroupId = null;
-                        _selectedTeamIds.clear();
-                      });
-                    });
-                  }
-                }
-                return Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                  child: Card(
-                    margin: EdgeInsets.zero,
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: DropdownButtonFormField<String>(
-                        initialValue: _selectedSeasonId,
-                        dropdownColor: const Color(0xFF1E293B),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        decoration: const InputDecoration(
-                          labelText: 'Sezon Seçin',
-                          labelStyle: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          border: OutlineInputBorder(),
-                        ),
-                        items: seasons
-                            .map(
-                              (s) => DropdownMenuItem(
-                                value: s.id,
-                                child: Center(
-                                  child: Text(
-                                    s.name,
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (val) {
-                          setState(() {
-                            _selectedSeasonId = val;
-                            _selectedGroupId = null;
-                            _selectedGroupName = null;
-                            _selectedTeamIds.clear();
-                          });
-                        },
-                        menuMaxHeight: 360,
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-
-          // 2. Grup Seçimi (Turnuva seçildiyse)
-          if ((_selectedSeasonId ?? '').trim().isNotEmpty)
-            StreamBuilder<List<GroupModel>>(
-              stream: _leagueService.watchGroups(_selectedSeasonId!),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) return const SizedBox();
-                final groups = [...snapshot.data!]
-                  ..sort(
-                    (a, b) =>
-                        a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-                  );
-                if (groups.isNotEmpty) {
-                  final hasSelected =
-                      _selectedGroupId != null &&
-                      groups.any((g) => g.id == _selectedGroupId);
-                  if (!hasSelected) {
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (!mounted) return;
-                      final first = groups.first;
+                      final first = _groups.first;
                       setState(() {
                         _selectedGroupId = first.id;
                         _selectedGroupName = first.name;
@@ -275,200 +295,204 @@ class _AdminGroupManagementScreenState
                       _syncSelectedTeamsForGroup();
                     });
                   }
-                }
-                GroupModel? selectedGroup;
-                final selectedGroupId = _selectedGroupId;
-                if (selectedGroupId != null) {
-                  for (final g in groups) {
-                    if (g.id == selectedGroupId) {
-                      selectedGroup = g;
-                      break;
-                    }
-                  }
-                }
-
-                return Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                      child: Card(
-                        margin: EdgeInsets.zero,
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: DropdownButtonFormField<String>(
-                                  initialValue: _selectedGroupId,
-                                  dropdownColor: const Color(0xFF1E293B),
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                  decoration: const InputDecoration(
-                                    labelText: 'Grup Seçin',
-                                    labelStyle: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                    border: OutlineInputBorder(),
-                                  ),
-                                  items: groups
-                                      .map(
-                                        (g) => DropdownMenuItem(
-                                          value: g.id,
-                                          child: Center(
-                                            child: Text(
-                                              g.name,
-                                              textAlign: TextAlign.center,
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      )
-                                      .toList(),
-                                  onChanged: (val) {
-                                    final selected = groups.where((g) => g.id == val).toList();
-                                    setState(() {
-                                      _selectedGroupId = val;
-                                      _selectedGroupName = selected.isEmpty ? null : selected.first.name;
-                                      _selectedTeamIds.clear();
-                                    });
-                                    _syncSelectedTeamsForGroup();
-                                  },
-                                  menuMaxHeight: 360,
-                                ),
-                              ),
-                              if (isAdmin && selectedGroup != null) ...[
-                                const SizedBox(width: 8),
-                                IconButton(
-                                  onPressed: () async {
-                                    await showModalBottomSheet<void>(
-                                      context: context,
-                                      showDragHandle: true,
-                                      builder: (context) => SafeArea(
-                                        child: Column(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            ListTile(
-                                              leading: const Icon(
-                                                Icons.delete_outline,
-                                              ),
-                                              title: const Text('Grubu Sil'),
-                                              onTap: () {
-                                                Navigator.pop(context);
-                                                _deleteSelectedGroup();
-                                              },
-                                            ),
-                                            const SizedBox(height: 10),
-                                          ],
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                  icon: const Icon(Icons.more_vert_rounded),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
-
-          // 3. Takım Listesi (Checkbox)
-          if (_selectedGroupId != null)
-            Expanded(
-              child: StreamBuilder<List<Team>>(
-                stream: _teamService.watchAllTeams(),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  final allTeams =
-                      (snapshot.data ?? const <Team>[])
-                          .where((t) => t.id != 'free_agent_pool')
-                          .toList();
-
-                  final seasonId = (_selectedSeasonId ?? '').trim();
-                  final groupId = (_selectedGroupId ?? '').trim();
-                  final availableTeams = allTeams
-                      .where((t) => (t.seasonId ?? '').trim() == seasonId)
-                      .where(
-                        (t) =>
-                            (t.groupId ?? '').trim().isEmpty ||
-                            (t.groupId ?? '').trim() == groupId,
-                      )
-                      .toList()
-                    ..sort(
-                      (a, b) =>
-                          a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-                    );
+                  _refreshFilterDialog();
 
                   return Column(
                     children: [
-                      Expanded(
-                        child: ListView.builder(
-                          itemCount: availableTeams.length,
-                          itemBuilder: (context, index) {
-                            final team = availableTeams[index];
-                            return Card(
-                              margin: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 4,
-                              ),
-                              child: CheckboxListTile(
-                                title: Text(team.name),
-                                secondary: SizedBox(
-                                  width: 30,
-                                  height: 30,
-                                  child: WebSafeImage(
-                                    url: team.logoUrl,
-                                    width: 30,
-                                    height: 30,
-                                    borderRadius: BorderRadius.circular(6),
-                                    fallbackIconSize: 16,
-                                  ),
-                                ),
-                                value: _selectedTeamIds.contains(team.id),
-                                onChanged: (val) {
-                                  setState(() {
-                                    if (val == true) {
-                                      _selectedTeamIds.add(team.id);
-                                    } else {
-                                      _selectedTeamIds.remove(team.id);
-                                    }
-                                  });
-                                },
-                              ),
-                            );
-                          },
-                        ),
+                      AdminFilterBar(
+                        summary: _filterSummary(),
+                        onTap: _openFilters,
                       ),
-                      Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: FilledButton(
-                          onPressed: _saveGroupTeams,
-                          child: const Text('KAYDET'),
-                        ),
-                      ),
+                      Expanded(child: _teamChecklist()),
                     ],
                   );
                 },
-              ),
-            ),
-        ],
+              );
+            },
+          );
+        },
       ),
     );
   }
 
-  Future<void> _openAddGroupSheet() async {
+  Widget _teamChecklist() {
+    if (_selectedGroupId == null) {
+      return Center(
+        child: Text(
+          (_selectedSeasonId ?? '').isEmpty
+              ? 'Sezon bulunamadı.'
+              : 'Bu sezonda grup yok. Sağ üstten grup ekleyebilirsiniz.',
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: Colors.white54),
+        ),
+      );
+    }
+    return StreamBuilder<List<Team>>(
+      stream: _teamsStream,
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(
+            child: CircularProgressIndicator(color: kAdminAccent),
+          );
+        }
+        final seasonId = (_selectedSeasonId ?? '').trim();
+        final groupId = (_selectedGroupId ?? '').trim();
+        final availableTeams =
+            (snapshot.data ?? const <Team>[])
+                .where((t) => t.id != 'free_agent_pool')
+                .where((t) => (t.seasonId ?? '').trim() == seasonId)
+                .where(
+                  (t) =>
+                      (t.groupId ?? '').trim().isEmpty ||
+                      (t.groupId ?? '').trim() == groupId,
+                )
+                .toList()
+              ..sort(
+                (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+              );
+
+        if (availableTeams.isEmpty) {
+          return const Center(
+            child: Text(
+              'Bu sezonda gruba eklenebilecek takım yok.',
+              style: TextStyle(color: Colors.white54),
+            ),
+          );
+        }
+        return Column(
+          children: [
+            Expanded(
+              child: ListView.separated(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                itemCount: availableTeams.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 8),
+                itemBuilder: (context, index) {
+                  final team = availableTeams[index];
+                  return _TeamCheckTile(
+                    team: team,
+                    checked: _selectedTeamIds.contains(team.id),
+                    onChanged: (val) => setState(() {
+                      if (val) {
+                        _selectedTeamIds.add(team.id);
+                      } else {
+                        _selectedTeamIds.remove(team.id);
+                      }
+                    }),
+                  );
+                },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kAdminAccent,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: _saveGroupTeams,
+                  child: const Text(
+                    'KAYDET',
+                    style: TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Sezondaki takımlardan seçim (ortada açılan popup).
+  Future<Set<String>?> _pickTeams(String seasonId, Set<String> initial) {
+    final working = <String>{...initial};
+    return showAdminPopup<Set<String>>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setPickerState) => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 4, 20, 12),
+              child: Text(
+                'Takım Ekle/Çıkar',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+            Flexible(
+              child: StreamBuilder<List<Team>>(
+                stream: _teamsStream,
+                builder: (context, snap) {
+                  final teams =
+                      (snap.data ?? const <Team>[])
+                          .where((t) => t.id != 'free_agent_pool')
+                          .where((t) => (t.seasonId ?? '').trim() == seasonId)
+                          .toList()
+                        ..sort(
+                          (a, b) => a.name.toLowerCase().compareTo(
+                            b.name.toLowerCase(),
+                          ),
+                        );
+                  if (teams.isEmpty) {
+                    return const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Text(
+                        'Takım bulunamadı.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white54),
+                      ),
+                    );
+                  }
+                  return ListView.separated(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: teams.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) {
+                      final t = teams[index];
+                      return _TeamCheckTile(
+                        team: t,
+                        checked: working.contains(t.id),
+                        onChanged: (val) => setPickerState(() {
+                          if (val) {
+                            working.add(t.id);
+                          } else {
+                            working.remove(t.id);
+                          }
+                        }),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+              child: _DialogButtons(
+                primaryLabel: 'TAMAM',
+                onPrimary: () => Navigator.pop(ctx, working),
+                onCancel: () => Navigator.pop(ctx),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openAddGroupDialog() async {
     final seasonId = (_selectedSeasonId ?? '').trim();
     if (seasonId.isEmpty) return;
 
@@ -476,159 +500,13 @@ class _AdminGroupManagementScreenState
     final selectedTeamIds = <String>{};
     var saving = false;
 
-    Future<void> openTeamPicker(void Function(void Function()) setSheetState) async {
-      final picked = await showModalBottomSheet<Set<String>>(
-        context: context,
-        isScrollControlled: true,
-        useSafeArea: true,
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.8,
-        ),
-        showDragHandle: true,
-        clipBehavior: Clip.antiAlias,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        builder: (context) {
-          final viewInsets = MediaQuery.of(context).viewInsets;
-          final h = MediaQuery.of(context).size.height * 0.8;
-          final working = <String>{...selectedTeamIds};
-          return StatefulBuilder(
-            builder: (context, setPickerState) {
-              return SizedBox(
-                height: h,
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    16,
-                    8,
-                    16,
-                    16 + viewInsets.bottom,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Center(
-                        child: SizedBox(
-                          width: 148,
-                          height: 148,
-                          child: ClipOval(
-                            child: Container(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .surfaceContainerHighest,
-                              child: Icon(
-                                Icons.shield_outlined,
-                                size: 44,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Takım Ekle/Çıkar',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontWeight: FontWeight.w900),
-                      ),
-                      const SizedBox(height: 12),
-                      Expanded(
-                        child: StreamBuilder<List<Team>>(
-                          stream: _teamService.watchAllTeams(),
-                          builder: (context, snap) {
-                            final teams = (snap.data ?? const <Team>[])
-                                .where((t) => t.id != 'free_agent_pool')
-                                .where((t) => (t.seasonId ?? '').trim() == seasonId)
-                                .toList()
-                              ..sort(
-                                (a, b) => a.name
-                                    .toLowerCase()
-                                    .compareTo(b.name.toLowerCase()),
-                              );
-                            if (teams.isEmpty) {
-                              return const Center(child: Text('Takım bulunamadı.'));
-                            }
-                            return ListView.builder(
-                              itemCount: teams.length,
-                              itemBuilder: (context, index) {
-                                final t = teams[index];
-                                final checked = working.contains(t.id);
-                                return Card(
-                                  margin: const EdgeInsets.symmetric(vertical: 4),
-                                  child: CheckboxListTile(
-                                    value: checked,
-                                    onChanged: (val) {
-                                      setPickerState(() {
-                                        if (val == true) {
-                                          working.add(t.id);
-                                        } else {
-                                          working.remove(t.id);
-                                        }
-                                      });
-                                    },
-                                    title: Text(t.name),
-                                    secondary: SizedBox(
-                                      width: 30,
-                                      height: 30,
-                                      child: WebSafeImage(
-                                        url: t.logoUrl,
-                                        width: 30,
-                                        height: 30,
-                                        borderRadius: BorderRadius.circular(6),
-                                        fallbackIconSize: 16,
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              },
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton(
-                          onPressed: () => Navigator.of(context).pop(working),
-                          child: const Text(
-                            'KAYDET',
-                            style: TextStyle(fontWeight: FontWeight.w900),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          child: const Text(
-                            'VAZGEÇ',
-                            style: TextStyle(fontWeight: FontWeight.w900),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          );
-        },
-      );
-      if (picked == null) return;
-      setSheetState(() {
-        selectedTeamIds
-          ..clear()
-          ..addAll(picked);
-      });
-    }
-
-    Future<void> submit(void Function(void Function()) setSheetState) async {
+    Future<void> submit(BuildContext ctx, StateSetter setLocal) async {
       final name = nameController.text.trim();
-      if (name.isEmpty) return;
-      setSheetState(() => saving = true);
+      if (name.isEmpty) {
+        _snack('Grup adı boş olamaz.', error: true);
+        return;
+      }
+      setLocal(() => saving = true);
       try {
         final res = await Supabase.instance.client
             .from('groups')
@@ -640,12 +518,15 @@ class _AdminGroupManagementScreenState
           throw Exception('Grup oluşturulamadı.');
         }
 
-        final ids = selectedTeamIds.map((e) => e.trim()).where((e) => e.isNotEmpty).toSet();
+        final ids = selectedTeamIds
+            .map((e) => e.trim())
+            .where((e) => e.isNotEmpty)
+            .toSet();
         for (final id in ids) {
-          await _teamService.updateTeam(
-            id,
-            {'groupId': groupId, 'groupName': name},
-          );
+          await _teamService.updateTeam(id, {
+            'groupId': groupId,
+            'groupName': name,
+          });
         }
 
         if (!mounted) return;
@@ -656,132 +537,119 @@ class _AdminGroupManagementScreenState
             ..clear()
             ..addAll(ids);
         });
-        Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Grup eklendi.')),
-        );
+        if (ctx.mounted) Navigator.pop(ctx);
+        _snack('Grup eklendi.');
       } catch (e) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Hata: $e')),
-        );
-      } finally {
-        if (mounted) setSheetState(() => saving = false);
+        _snack('Hata: $e', error: true);
+        if (ctx.mounted) setLocal(() => saving = false);
       }
     }
 
-    await showModalBottomSheet<void>(
+    await showDialog<void>(
       context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.8,
-      ),
-      showDragHandle: true,
-      clipBehavior: Clip.antiAlias,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) {
-        final viewInsets = MediaQuery.of(context).viewInsets;
-        final h = MediaQuery.of(context).size.height * 0.8;
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            final disabled = saving;
-            return SizedBox(
-              height: h,
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(
-                  16,
-                  8,
-                  16,
-                  16 + viewInsets.bottom,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Center(
-                      child: SizedBox(
-                        width: 148,
-                        height: 148,
-                        child: ClipOval(
-                          child: Container(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .surfaceContainerHighest,
-                            child: Icon(
-                              Icons.groups_outlined,
-                              size: 44,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant,
-                            ),
-                          ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Container(
+            padding: const EdgeInsets.all(22),
+            decoration: adminDialogDecoration(),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.groups_outlined, color: kAdminAccent),
+                      SizedBox(width: 8),
+                      Text(
+                        'Grup Ekle',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: nameController,
-                      enabled: !disabled,
-                      maxLength: 10,
-                      decoration: const InputDecoration(
-                        labelText: 'Grup Adı',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    FilledButton.tonalIcon(
-                      onPressed: disabled
-                          ? null
-                          : () => openTeamPicker(setSheetState),
-                      icon: const Icon(Icons.playlist_add_check_outlined),
-                      label: Text(
-                        'Takım Ekle/Çıkar'
-                        '${selectedTeamIds.isEmpty ? '' : ' (${selectedTeamIds.length})'}',
-                        style: const TextStyle(fontWeight: FontWeight.w900),
-                      ),
-                    ),
-                    const Spacer(),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton(
-                        onPressed: disabled ? null : () => submit(setSheetState),
-                        child: disabled
-                            ? const SizedBox(
-                                height: 22,
-                                width: 22,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Text(
-                                'KAYDET',
-                                style: TextStyle(fontWeight: FontWeight.w900),
-                              ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton(
-                        onPressed: disabled
-                            ? null
-                            : () => Navigator.of(context).pop(),
-                        child: const Text(
-                          'VAZGEÇ',
-                          style: TextStyle(fontWeight: FontWeight.w900),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  const Divider(color: Colors.white24, height: 1),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: nameController,
+                    enabled: !saving,
+                    maxLength: 10,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      labelText: 'Grup Adı',
+                      filled: true,
+                      fillColor: Colors.black.withValues(alpha: 0.3),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.15),
                         ),
                       ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: kAdminAccent),
+                      ),
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 4),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(50),
+                      foregroundColor: kAdminAccent,
+                      side: const BorderSide(color: kAdminAccent),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onPressed: saving
+                        ? null
+                        : () async {
+                            final picked = await _pickTeams(
+                              seasonId,
+                              selectedTeamIds,
+                            );
+                            if (picked == null) return;
+                            setLocal(() {
+                              selectedTeamIds
+                                ..clear()
+                                ..addAll(picked);
+                            });
+                          },
+                    icon: const Icon(Icons.playlist_add_check_outlined),
+                    label: Text(
+                      'Takım Ekle/Çıkar'
+                      '${selectedTeamIds.isEmpty ? '' : ' (${selectedTeamIds.length})'}',
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                  const SizedBox(height: 22),
+                  _DialogButtons(
+                    primaryLabel: 'KAYDET',
+                    busy: saving,
+                    onPrimary: saving ? null : () => submit(ctx, setLocal),
+                    onCancel: saving ? null : () => Navigator.pop(ctx),
+                  ),
+                ],
               ),
-            );
-          },
-        );
-      },
+            ),
+          ),
+        ),
+      ),
     );
 
-    nameController.dispose();
+    // Dialog kapanış animasyonu bitene kadar alan controller'ı kullanır.
+    Future<void>.delayed(
+      const Duration(milliseconds: 600),
+      nameController.dispose,
+    );
   }
 
   Future<void> _saveGroupTeams() async {
@@ -793,10 +661,18 @@ class _AdminGroupManagementScreenState
       final groupName = (_selectedGroupName ?? '').trim();
 
       final teams = await _teamService.getTeamsCached(seasonId);
-      final currentGroupTeams = teams.where((t) => (t.groupId ?? '').trim() == groupId).toList();
+      final currentGroupTeams = teams
+          .where((t) => (t.groupId ?? '').trim() == groupId)
+          .toList();
 
-      final nextIds = _selectedTeamIds.map((e) => e.trim()).where((e) => e.isNotEmpty).toSet();
-      final currentIds = currentGroupTeams.map((t) => t.id.trim()).where((e) => e.isNotEmpty).toSet();
+      final nextIds = _selectedTeamIds
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toSet();
+      final currentIds = currentGroupTeams
+          .map((t) => t.id.trim())
+          .where((e) => e.isNotEmpty)
+          .toSet();
 
       final toRemove = currentIds.difference(nextIds);
       final toAdd = nextIds.difference(currentIds);
@@ -805,22 +681,16 @@ class _AdminGroupManagementScreenState
         await _teamService.updateTeam(id, {'groupId': null, 'groupName': null});
       }
       for (final id in toAdd) {
-        await _teamService.updateTeam(
-          id,
-          {'groupId': groupId, 'groupName': groupName.isEmpty ? null : groupName},
-        );
+        await _teamService.updateTeam(id, {
+          'groupId': groupId,
+          'groupName': groupName.isEmpty ? null : groupName,
+        });
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Grup takımları başarıyla güncellendi.'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      _snack('Grup takımları güncellendi.');
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red),
-      );
+      if (!mounted) return;
+      _snack('Hata: $e', error: true);
     }
   }
 
@@ -828,45 +698,134 @@ class _AdminGroupManagementScreenState
     final groupId = _selectedGroupId;
     if (groupId == null) return;
 
-    final ok = await showDialog<bool>(
+    final ok = await showAdminConfirmDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Grup Sil'),
-        content: const Text(
-          'Bu grup ve altındaki tüm takımlar/bağlantılar silinecektir. Devam etmek istiyor musunuz?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Hayır'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Evet'),
-          ),
-        ],
-      ),
+      title: 'Grubu Sil',
+      message:
+          'Bu grup ve altındaki tüm takım bağlantıları silinecektir. '
+          'Devam etmek istiyor musunuz?',
     );
-    if (ok != true) return;
+    if (!ok) return;
 
     try {
       await _leagueService.deleteGroupCascade(groupId);
       if (!mounted) return;
       setState(() {
         _selectedGroupId = null;
+        _selectedGroupName = null;
         _selectedTeamIds.clear();
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Grup silindi.'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      _snack('Grup silindi.');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red),
-      );
+      _snack('Hata: $e', error: true);
     }
+  }
+}
+
+/// Takım seçimi satırı (ortak koyu kart + onay kutusu).
+class _TeamCheckTile extends StatelessWidget {
+  const _TeamCheckTile({
+    required this.team,
+    required this.checked,
+    required this.onChanged,
+  });
+
+  final Team team;
+  final bool checked;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: adminCardDecoration(),
+      child: CheckboxListTile(
+        value: checked,
+        onChanged: (v) => onChanged(v == true),
+        activeColor: kAdminAccent,
+        checkColor: Colors.white,
+        side: const BorderSide(color: Colors.white54),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          team.name,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        secondary: SizedBox(
+          width: 32,
+          height: 32,
+          child: WebSafeImage(
+            url: team.logoUrl,
+            width: 32,
+            height: 32,
+            borderRadius: BorderRadius.circular(8),
+            fallbackIconSize: 16,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Popup altındaki standart buton çifti (yeşil ana buton + VAZGEÇ).
+class _DialogButtons extends StatelessWidget {
+  const _DialogButtons({
+    required this.primaryLabel,
+    required this.onPrimary,
+    required this.onCancel,
+    this.busy = false,
+  });
+
+  final String primaryLabel;
+  final VoidCallback? onPrimary;
+  final VoidCallback? onCancel;
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          height: 50,
+          child: ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: kAdminAccent,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            onPressed: onPrimary,
+            child: busy
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : Text(
+                    primaryLabel,
+                    style: const TextStyle(fontWeight: FontWeight.w900),
+                  ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 50,
+          child: OutlinedButton(
+            onPressed: onCancel,
+            child: const Text(
+              'VAZGEÇ',
+              style: TextStyle(fontWeight: FontWeight.w900),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }

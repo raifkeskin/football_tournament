@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 enum MatchStatus { notStarted, live, finished, postponed, cancelled, halftime }
 
@@ -161,11 +160,7 @@ class MatchModel {
     final rawMatchDate = v('matchDate', 'match_date') ?? v('dateString', 'date_string');
     DateTime? legacyTs;
     String? matchDateStr;
-    if (rawMatchDate is Timestamp) {
-      legacyTs = rawMatchDate.toDate();
-      matchDateStr =
-          "${legacyTs.year}-${legacyTs.month.toString().padLeft(2, '0')}-${legacyTs.day.toString().padLeft(2, '0')}";
-    } else if (rawMatchDate is DateTime) {
+    if (rawMatchDate is DateTime) {
       legacyTs = rawMatchDate;
       matchDateStr =
           "${legacyTs.year}-${legacyTs.month.toString().padLeft(2, '0')}-${legacyTs.day.toString().padLeft(2, '0')}";
@@ -259,7 +254,6 @@ class MatchModel {
     );
 
     DateTime? readDate(dynamic value) {
-      if (value is Timestamp) return value.toDate();
       if (value is DateTime) return value;
       if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
       if (value is String) return DateTime.tryParse(value);
@@ -522,7 +516,6 @@ class PlayerModel {
 
     String? normalizeBirthDate(dynamic value) {
       if (value == null) return null;
-      if (value is Timestamp) value = value.toDate();
       if (value is DateTime) {
         final dd = value.day.toString().padLeft(2, '0');
         final mm = value.month.toString().padLeft(2, '0');

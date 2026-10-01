@@ -185,92 +185,58 @@ class SupabaseAuthService implements IAuthService {
         'phone_raw10': raw10,
         'code': c,
         'status': 'pending',
-        'expires_at': expiresAt.toIso8601String(),
+        'expires_at': expiresAt.toUtc().toIso8601String(),
       });
       AppConfig.sqlLogResult(table: 'otp_codes', operation: 'INSERT', count: 1);
       _sbResult(rows: 1);
     } catch (e) {
       AppConfig.sqlLogResult(table: 'otp_codes', operation: 'INSERT', error: e);
       _sbResult(rows: 0, error: e);
+      rethrow; // kod kaydedilmediyse ekran "gönderildi" dememeli
     }
   }
 
   @override
-  Future<OtpRequest?> getOtpRequest(String phoneRaw10) async {
+  Future<void> verifyOtpCode({
+    required String phoneRaw10,
+    required String code,
+    bool consume = true,
+  }) async {
     final raw10 = phoneRaw10.trim();
-    if (raw10.isEmpty) return null;
-    try {
-      _sbLog(
-        table: 'otp_codes',
-        query:
-            'SELECT phone_raw10=$raw10, status=pending | order=created_at desc | limit=1',
-        trace: StackTrace.current,
-      );
-      AppConfig.sqlLogStart(
-        table: 'otp_codes',
-        operation: 'SELECT',
-        filters:
-            'phone_raw10=$raw10, status=pending | order=created_at desc | limit=1',
-      );
-      final res = await _client
-          .from('otp_codes')
-          .select('phone_raw10, code, expires_at, status, created_at')
-          .eq('phone_raw10', raw10)
-          .eq('status', 'pending')
-          .order('created_at', ascending: false)
-          .limit(1);
-      final rows = (res as List).cast<Map<String, dynamic>>();
-      if (rows.isEmpty) {
-        AppConfig.sqlLogResult(
-          table: 'otp_codes',
-          operation: 'SELECT',
-          count: 0,
-        );
-        _sbResult(rows: 0);
-        return null;
-      }
-      AppConfig.sqlLogResult(table: 'otp_codes', operation: 'SELECT', count: 1);
-      _sbResult(rows: 1);
-      final row = rows.first;
-      final code = (row['code'] ?? '').toString().trim();
-      final expiresAt = _readDate(row['expires_at']);
-      if (code.isEmpty || expiresAt == null) return null;
-      return OtpRequest(phoneRaw10: raw10, code: code, expiresAt: expiresAt);
-    } catch (e) {
-      AppConfig.sqlLogResult(table: 'otp_codes', operation: 'SELECT', error: e);
-      _sbResult(rows: 0, error: e);
-      return null;
+    final c = code.trim();
+    if (raw10.isEmpty || c.isEmpty) {
+      throw Exception('Doğrulama kodu hatalı.');
     }
-  }
-
-  @override
-  Future<void> deleteOtpRequest(String phoneRaw10) async {
-    final raw10 = phoneRaw10.trim();
-    if (raw10.isEmpty) return;
+    // Kodlar istemciye okunmaz (RLS); kontrol sunucudaki fonksiyonda yapılır.
+    _sbLog(
+      table: 'otp_codes',
+      query: 'RPC verify_otp_code phone_raw10=$raw10 | consume=$consume',
+      trace: StackTrace.current,
+    );
+    final String result;
     try {
-      _sbLog(
-        table: 'otp_codes',
-        query: 'UPDATE phone_raw10=$raw10, status=pending',
-        trace: StackTrace.current,
-      );
-      AppConfig.sqlLogStart(
-        table: 'otp_codes',
-        operation: 'UPDATE',
-        filters: 'phone_raw10=$raw10, status=pending',
-      );
-      await _client
-          .from('otp_codes')
-          .update({
-            'status': 'verified',
-            'verified_at': DateTime.now().toIso8601String(),
-          })
-          .eq('phone_raw10', raw10)
-          .eq('status', 'pending');
-      AppConfig.sqlLogResult(table: 'otp_codes', operation: 'UPDATE');
+      result =
+          (await _client.rpc(
+                'verify_otp_code',
+                params: {'p_phone': raw10, 'p_code': c, 'p_consume': consume},
+              ))
+              .toString();
       _sbResult(rows: 1);
     } catch (e) {
-      AppConfig.sqlLogResult(table: 'otp_codes', operation: 'UPDATE', error: e);
       _sbResult(rows: 0, error: e);
+      rethrow;
+    }
+    switch (result) {
+      case 'ok':
+        return;
+      case 'not_found':
+        throw Exception('Doğrulama kodu bulunamadı.');
+      case 'expired':
+        throw Exception('Doğrulama kodunun süresi doldu.');
+      case 'locked':
+        throw Exception('Çok fazla hatalı deneme. Yeni kod isteyin.');
+      default:
+        throw Exception('Doğrulama kodu hatalı.');
     }
   }
 
@@ -629,7 +595,7 @@ class SupabaseAuthService implements IAuthService {
           );
           await _client
               .from('players')
-              .update({'auth_uid': user.uid, 'updated_at': nowIso})
+              .update({'auth_uid': user.uid})
               .eq('id', pid);
           AppConfig.sqlLogResult(
             table: 'players',
@@ -667,8 +633,6 @@ class SupabaseAuthService implements IAuthService {
           'phone': raw10,
           'phone_raw10': raw10,
           'auth_uid': user.uid,
-          'created_at': nowIso,
-          'updated_at': nowIso,
         });
         AppConfig.sqlLogResult(table: 'players', operation: 'INSERT', count: 1);
         _sbResult(rows: 1);

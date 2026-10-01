@@ -249,3 +249,138 @@ Future<T?> showAdminPopup<T>({
     },
   );
 }
+
+/// Fikstür ekranındaki filtre kapsülü: seçili filtrelerin özeti. Birden fazla
+/// filtresi olan yönetim ekranlarında tek filtre girişi olarak kullanılır;
+/// dokununca [showAdminFilterDialog] açılmalı.
+class AdminFilterBar extends StatelessWidget {
+  const AdminFilterBar({
+    super.key,
+    required this.summary,
+    required this.onTap,
+    this.padding = const EdgeInsets.fromLTRB(16, 8, 16, 12),
+  });
+
+  final String summary;
+  final VoidCallback onTap;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: padding,
+      child: Center(
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(24),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.4),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: Colors.white24),
+              boxShadow: const [
+                BoxShadow(
+                  color: Colors.black26,
+                  blurRadius: 8,
+                  offset: Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.tune_rounded, color: kAdminAccent, size: 18),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    summary,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Icon(
+                  Icons.keyboard_arrow_down,
+                  color: Colors.white70,
+                  size: 18,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Ortada açılan filtre penceresi (Fikstür ile aynı görünüm).
+///
+/// [fieldsBuilder] seçicileri üretir ve her yenilemede yeniden çağrılır;
+/// seçiciler değişikliği ekrana hemen uygular, sonra `refresh` ile pencereyi
+/// yeniler (ör. turnuva değişince sezon listesi). "Filtreleri Uygula" yalnızca
+/// pencereyi kapatır.
+Future<void> showAdminFilterDialog({
+  required BuildContext context,
+  required List<Widget> Function(BuildContext context, VoidCallback refresh)
+  fieldsBuilder,
+}) {
+  return showDialog<void>(
+    context: context,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (ctx, setDialogState) {
+        void refresh() {
+          if (ctx.mounted) setDialogState(() {});
+        }
+
+        final fields = fieldsBuilder(ctx, refresh);
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: adminDialogDecoration(),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (var i = 0; i < fields.length; i++) ...[
+                    if (i > 0) const SizedBox(height: 12),
+                    fields[i],
+                  ],
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: kAdminAccent,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text(
+                        'Filtreleri Uygula',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    ),
+  );
+}

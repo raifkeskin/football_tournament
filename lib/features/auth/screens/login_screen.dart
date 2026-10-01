@@ -132,7 +132,7 @@ class _LoginScreenState extends State<LoginScreen> {
       Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
         MaterialPageRoute<void>(
           builder: (_) => const MainNavigator(
-            initialTabIndex: 4,
+            initialTabIndex: MainNavigator.profileTab,
           ), // Direkt Profil sekmesine yönlendiriyoruz
         ),
         (Route<dynamic> route) => false,
@@ -167,7 +167,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
         MaterialPageRoute<void>(
-          builder: (_) => const MainNavigator(initialTabIndex: 4),
+          builder: (_) => const MainNavigator(initialTabIndex: MainNavigator.profileTab),
         ),
         (Route<dynamic> route) => false,
       );

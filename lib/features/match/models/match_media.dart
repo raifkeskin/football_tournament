@@ -1,5 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 class MatchMediaModel {
   final String id;
   final String matchId;
@@ -23,7 +21,6 @@ class MatchMediaModel {
     dynamic v(String camel, String snake) => map[camel] ?? map[snake];
 
     DateTime? readDate(dynamic value) {
-      if (value is Timestamp) return value.toDate();
       if (value is DateTime) return value;
       if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
       if (value is String) return DateTime.tryParse(value);

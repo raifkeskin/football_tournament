@@ -493,7 +493,6 @@ class SupabaseMatchService implements IMatchService {
           'pitch_name': (pitchName ?? '').trim().isEmpty
               ? null
               : pitchName!.trim(),
-          'updated_at': DateTime.now().toIso8601String(),
         };
         AppConfig.sqlLogStart(
           table: 'matches',
@@ -522,7 +521,6 @@ class SupabaseMatchService implements IMatchService {
                 : matchDateDb.trim(),
             'match_time': _normalizeMatchTimeForDb(matchTime),
             'pitch_id': (pitchId ?? '').trim().isEmpty ? null : pitchId!.trim(),
-            'updated_at': DateTime.now().toIso8601String(),
           };
           AppConfig.sqlLogStart(
             table: 'matches',
@@ -637,7 +635,6 @@ class SupabaseMatchService implements IMatchService {
     final id = matchId.trim();
     if (id.isEmpty) return;
 
-    final createdAt = DateTime.now().toIso8601String();
     try {
       AppConfig.sqlLogStart(
         table: 'match_events',
@@ -653,21 +650,18 @@ class SupabaseMatchService implements IMatchService {
           'event_type': 'status',
           'minute': 0,
           'player_name': 'Maç Başladı',
-          'created_at': createdAt,
         },
         {
           'match_id': id,
           'event_type': 'status',
           'minute': halfTime,
           'player_name': 'İlk Yarı',
-          'created_at': createdAt,
         },
         {
           'match_id': id,
           'event_type': 'status',
           'minute': duration,
           'player_name': 'Maç Sonucu',
-          'created_at': createdAt,
         },
       ]);
       AppConfig.sqlLogResult(

@@ -87,16 +87,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
     setState(() => _busy = true);
     try {
-      final req = await _authService.getOtpRequest(raw10);
-      if (req == null) {
-        throw Exception('Doğrulama kodu bulunamadı.');
-      }
-      if (DateTime.now().isAfter(req.expiresAt)) {
-        throw Exception('Doğrulama kodunun süresi doldu.');
-      }
-      if (req.code != code) {
-        throw Exception('Doğrulama kodu hatalı.');
-      }
+      // Kod tüketilmez: şifre sıfırlama adımı aynı kodu tekrar gönderiyor.
+      await _authService.verifyOtpCode(
+        phoneRaw10: raw10,
+        code: code,
+        consume: false,
+      );
 
       if (!mounted) return;
       Navigator.of(context).pushReplacement(

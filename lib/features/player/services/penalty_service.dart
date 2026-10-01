@@ -192,12 +192,10 @@ class PenaltyService {
     if (id.isEmpty) throw Exception('Ceza id boş olamaz.');
     if (matchCount < 0) throw Exception('Maç sayısı geçerli olmalı.');
 
-    final nowIso = DateTime.now().toIso8601String();
     final desc = description.trim();
     final payload = <String, dynamic>{
       'match_count': matchCount,
       'is_active': matchCount > 0,
-      'updated_at': nowIso,
       'description': desc.isEmpty ? null : desc,
     };
 
@@ -208,7 +206,6 @@ class PenaltyService {
       final payload2 = <String, dynamic>{
         'match_count': matchCount,
         'is_active': matchCount > 0,
-        'updated_at': nowIso,
         'penalty_reason': desc.isEmpty ? null : desc,
       };
       try {
@@ -220,7 +217,6 @@ class PenaltyService {
             .update({
               'match_count': matchCount,
               'is_active': matchCount > 0,
-              'updated_at': nowIso,
             })
             .eq('id', id);
       }
@@ -244,7 +240,6 @@ class PenaltyService {
     if (pid.isEmpty || sid.isEmpty) throw Exception('Ceza alanları eksik.');
     if (matchCount < 0) throw Exception('Maç sayısı geçerli olmalı.');
 
-    final nowIso = DateTime.now().toIso8601String();
     final desc = description.trim();
 
     final existing = await _client
@@ -261,7 +256,7 @@ class PenaltyService {
       if (existingId.isEmpty) return;
       await _client
           .from('player_penalties')
-          .update({'is_active': false, 'match_count': 0, 'updated_at': nowIso})
+          .update({'is_active': false, 'match_count': 0})
           .eq('id', existingId);
       return;
     }
@@ -282,8 +277,6 @@ class PenaltyService {
       'season_id': sid,
       'is_active': true,
       'match_count': matchCount,
-      'updated_at': nowIso,
-      if (existingId.isEmpty) 'created_at': nowIso,
     };
 
     try {

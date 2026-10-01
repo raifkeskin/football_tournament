@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'admin_group_management_screen.dart';
 import 'package:football_tournament/features/tournament/screens/admin_manage_leagues_screen.dart';
+import '../../news/screens/admin_manage_news_screen.dart';
 import '../../team/screens/admin_manage_teams_screen.dart';
 import '../../team/screens/team_squad_screen.dart';
 import '../services/interfaces/i_league_service.dart';
@@ -143,6 +144,18 @@ class TournamentAdminDashboardScreen extends StatelessWidget {
                             initialLeagueId: tournamentId,
                             lockLeagueSelection: true,
                           ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildModernMenuTile(
+                      context,
+                      title: 'Haber Yönetimi',
+                      subtitle: 'Haber ve fotoğraf paylaşımı',
+                      icon: Icons.newspaper_outlined,
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const AdminManageNewsScreen(),
                         ),
                       ),
                     ),

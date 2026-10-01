@@ -1,5 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 class League {
   const League({
     required this.id,
@@ -198,7 +196,6 @@ class League {
   }
 
   static DateTime? _readDate(dynamic value) {
-    if (value is Timestamp) return value.toDate();
     if (value is DateTime) return value;
     if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
     if (value is String) return DateTime.tryParse(value);

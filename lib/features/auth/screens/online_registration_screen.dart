@@ -168,17 +168,7 @@ class _OnlineRegistrationScreenState extends State<OnlineRegistrationScreen> {
     try {
       final raw10 = _raw10;
       if (raw10.length != 10) return;
-      final req = await _authService.getOtpRequest(raw10);
-      if (req == null) {
-        throw Exception('Doğrulama kodu bulunamadı.');
-      }
-      if (DateTime.now().isAfter(req.expiresAt)) {
-        throw Exception('Doğrulama kodunun süresi doldu.');
-      }
-      if (req.code != code) {
-        throw Exception('Doğrulama kodu hatalı.');
-      }
-      await _authService.deleteOtpRequest(raw10);
+      await _authService.verifyOtpCode(phoneRaw10: raw10, code: code);
       _otpVerified = true;
       await _loadProfileAfterOtp();
     } catch (e) {

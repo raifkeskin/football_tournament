@@ -11,6 +11,7 @@ import '../../../core/services/service_locator.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/app_date_picker.dart';
 import '../../../core/widgets/web_safe_image.dart';
+import '../../player/screens/admin_awards_screen.dart';
 import 'season_management_screen.dart';
 
 class AdminManageLeaguesScreen extends StatefulWidget {
@@ -448,6 +449,13 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
     return AdminPageScaffold(
       title: 'Turnuva Yönetimi',
       actions: [
+        AdminBarAction(
+          icon: Icons.emoji_events_outlined,
+          tooltip: 'Ödüller',
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const AdminAwardsScreen()),
+          ),
+        ),
         AdminBarAction(
           icon: Icons.add_rounded,
           tooltip: 'Yeni Turnuva',

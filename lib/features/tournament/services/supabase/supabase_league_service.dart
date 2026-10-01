@@ -1,4 +1,6 @@
 import '../../../../core/utils/table_feed.dart';
+import '../../../../core/utils/realtime_signal.dart';
+import '../../../../core/utils/resilient_stream.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:convert';
 
@@ -649,6 +651,30 @@ class SupabaseLeagueService implements ILeagueService {
     }
   }
 
+  static const _newsColumns =
+      'id, league_id, content, is_published, image_url, like_count, created_at';
+
+  NewsItem _newsFromRow(Map<String, dynamic> r) {
+    final league = r['leagues'];
+    final l = league is Map ? league : const <String, dynamic>{};
+    final img = (r['image_url'] ?? '').toString().trim();
+    final logo = (l['logo_url'] ?? '').toString().trim();
+    return NewsItem(
+      id: (r['id'] ?? '').toString(),
+      tournamentId: (r['league_id'] ?? '').toString(),
+      content: (r['content'] ?? '').toString(),
+      isPublished: r['is_published'] == true,
+      createdAt: _readDate(r['created_at']),
+      imageUrl: img.isEmpty ? null : img,
+      likeCount: (r['like_count'] as num?)?.toInt() ?? 0,
+      leagueName: (l['name'] ?? '').toString().trim(),
+      leagueLogoUrl: logo.isEmpty ? null : logo,
+      leagueIsPrivate: l['is_private'] == true,
+      // RLS yalnızca kullanıcının kendi beğenisini döndürür.
+      likedByMe: r['news_likes'] is List && (r['news_likes'] as List).isNotEmpty,
+    );
+  }
+
   @override
   Stream<List<NewsItem>> watchNews({
     required String tournamentId,
@@ -677,15 +703,7 @@ class SupabaseLeagueService implements ILeagueService {
               if (!okLeague) return false;
               return includeUnpublished || (r['is_published'] == true);
             })
-            .map((r) {
-              return NewsItem(
-                id: (r['id'] ?? '').toString(),
-                tournamentId: (r['league_id'] ?? '').toString(),
-                content: (r['content'] ?? '').toString(),
-                isPublished: r['is_published'] == true,
-                createdAt: _readDate(r['created_at']),
-              );
-            })
+            .map(_newsFromRow)
             .toList();
       });
     } catch (e) {
@@ -694,10 +712,107 @@ class SupabaseLeagueService implements ILeagueService {
     }
   }
 
+  final Map<String, Stream<List<NewsItem>>> _newsFeeds = {};
+
+  @override
+  Stream<List<NewsItem>> watchNewsFeed({String? leagueId}) {
+    final id = (leagueId ?? '').trim();
+    final uid = _client.auth.currentUser?.id;
+    // Aynı kullanıcı + filtre için tek akış: build içinde çağrılsa da yeniden
+    // bağlanmaz; giriş/çıkışta "beğendim mi" bilgisi doğru kullanıcıya ait olur.
+    return _newsFeeds.putIfAbsent('${uid ?? '-'}|$id', () {
+      // Misafirin news_likes yetkisi yok; beğeni bilgisi sadece girişte okunur.
+      final select = uid == null
+          ? '$_newsColumns, leagues(name, logo_url, is_private)'
+          : '$_newsColumns, leagues(name, logo_url, is_private), '
+                'news_likes(user_id)';
+      Future<List<NewsItem>> fetch() async {
+        AppConfig.sqlLogStart(
+          table: 'news',
+          operation: 'SELECT',
+          filters: 'is_published=true${id.isEmpty ? '' : ' | league_id=$id'}',
+        );
+        var query = _client
+            .from('news')
+            .select(select)
+            .eq('is_published', true);
+        if (id.isNotEmpty) query = query.eq('league_id', id);
+        final rows = await query
+            .order('created_at', ascending: false)
+            .limit(50);
+        AppConfig.sqlLogResult(
+          table: 'news',
+          operation: 'SELECT',
+          count: rows.length,
+        );
+        return rows
+            .map((r) => _newsFromRow(Map<String, dynamic>.from(r)))
+            .toList();
+      }
+
+      // Realtime yalnızca "değişti" sinyali verir (beğeni sayısı dahil);
+      // liste her seferinde yeniden okunur.
+      return resilientStream(() async* {
+        yield await fetch();
+        await for (final _ in realtimeChangeSignal(_client, table: 'news')) {
+          yield await fetch();
+        }
+      });
+    });
+  }
+
+  @override
+  Future<void> setNewsLike({
+    required String newsId,
+    required bool liked,
+  }) async {
+    final uid = _client.auth.currentUser?.id;
+    if (uid == null) throw Exception('Beğenmek için giriş yapın.');
+    final id = newsId.trim();
+    if (id.isEmpty) return;
+    try {
+      AppConfig.sqlLogStart(
+        table: 'news_likes',
+        operation: liked ? 'INSERT' : 'DELETE',
+        filters: 'news_id=$id',
+      );
+      if (liked) {
+        // like_count sunucuda trigger ile güncellenir.
+        await _client
+            .from('news_likes')
+            .upsert(
+              {'news_id': id, 'user_id': uid},
+              onConflict: 'news_id,user_id',
+              ignoreDuplicates: true,
+            );
+      } else {
+        await _client
+            .from('news_likes')
+            .delete()
+            .eq('news_id', id)
+            .eq('user_id', uid);
+      }
+      AppConfig.sqlLogResult(
+        table: 'news_likes',
+        operation: liked ? 'INSERT' : 'DELETE',
+        count: 1,
+      );
+    } catch (e) {
+      AppConfig.sqlLogResult(
+        table: 'news_likes',
+        operation: liked ? 'INSERT' : 'DELETE',
+        error: e,
+      );
+      rethrow;
+    }
+  }
+
   @override
   Future<void> addNews({
     required String tournamentId,
     required String content,
+    String? imageUrl,
+    bool isPublished = true,
   }) async {
     final tId = tournamentId.trim();
     final text = content.trim();
@@ -705,6 +820,7 @@ class SupabaseLeagueService implements ILeagueService {
       throw Exception('Turnuva seçilmeden haber eklenemez.');
     }
     if (text.isEmpty) return;
+    final img = (imageUrl ?? '').trim();
     try {
       AppConfig.sqlLogStart(
         table: 'news',
@@ -714,8 +830,8 @@ class SupabaseLeagueService implements ILeagueService {
       await _client.from('news').insert({
         'league_id': tId,
         'content': text,
-        'is_published': true,
-        'created_at': DateTime.now().toIso8601String(),
+        'is_published': isPublished,
+        'image_url': img.isEmpty ? null : img,
       });
       AppConfig.sqlLogResult(table: 'news', operation: 'INSERT', count: 1);
     } catch (e) {
@@ -749,20 +865,25 @@ class SupabaseLeagueService implements ILeagueService {
   }
 
   @override
-  Future<void> updateNewsContent({
+  Future<void> updateNews({
     required String newsId,
     required String content,
+    String? imageUrl,
   }) async {
     final id = newsId.trim();
     if (id.isEmpty) return;
     final text = content.trim();
+    final img = (imageUrl ?? '').trim();
     try {
       AppConfig.sqlLogStart(
         table: 'news',
         operation: 'UPDATE',
         filters: 'id=$id',
       );
-      await _client.from('news').update({'content': text}).eq('id', id);
+      await _client
+          .from('news')
+          .update({'content': text, 'image_url': img.isEmpty ? null : img})
+          .eq('id', id);
       AppConfig.sqlLogResult(table: 'news', operation: 'UPDATE', count: 1);
     } catch (e) {
       AppConfig.sqlLogResult(table: 'news', operation: 'UPDATE', error: e);
@@ -845,7 +966,6 @@ class SupabaseLeagueService implements ILeagueService {
         'description': (description ?? '').trim().isEmpty
             ? null
             : description!.trim(),
-        'created_at': DateTime.now().toIso8601String(),
       });
       AppConfig.sqlLogResult(table: 'awards', operation: 'INSERT', count: 1);
     } catch (e) {

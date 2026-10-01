@@ -17,9 +17,13 @@ abstract class IAuthService {
     required DateTime expiresAt,
   });
 
-  Future<OtpRequest?> getOtpRequest(String phoneRaw10);
-
-  Future<void> deleteOtpRequest(String phoneRaw10);
+  /// Kodu sunucuda doğrular; hatalıysa açıklamalı Exception fırlatır.
+  /// [consume] true ise kod tek kullanımlıktır ve doğrulanınca kapanır.
+  Future<void> verifyOtpCode({
+    required String phoneRaw10,
+    required String code,
+    bool consume = true,
+  });
 
   Stream<List<OtpCodeEntry>> watchOtpCodes({bool includeVerified = false});
 

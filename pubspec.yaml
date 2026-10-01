@@ -37,7 +37,6 @@ dependencies:
   image_picker: ^1.1.2
   firebase_core: ^4.6.0
   firebase_auth: ^6.0.0
-  cloud_firestore: ^6.2.0
   cloud_functions: ^6.0.0
   marquee: ^2.2.3
   http: ^1.2.1
@@ -63,7 +62,6 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  fake_cloud_firestore: ^4.0.1
   flutter_launcher_icons: ^0.14.4
   flutter_native_splash: ^2.4.4
   flutter_lints: ^6.0.0

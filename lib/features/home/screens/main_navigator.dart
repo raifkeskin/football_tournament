@@ -2,14 +2,18 @@ import 'package:flutter/material.dart';
 import 'dart:ui'; // Cam efekti (BackdropFilter) için eklendi
 
 import '../../match/screens/fixture_screen.dart';
+import '../../news/screens/news_feed_screen.dart';
 import '../../team/screens/groups_screen.dart';
 import 'home_screen.dart';
 import '../../player/screens/profile_screen.dart';
 import '../../player/screens/stats_screen.dart';
 
-/// Sol yan menü (Drawer) ile dört ana ekran arasında geçiş.
+/// Sol yan menü (Drawer) ile ana ekranlar arasında geçiş.
 class MainNavigator extends StatefulWidget {
   const MainNavigator({super.key, this.initialTabIndex = 0});
+
+  /// Profil sekmesinin sırası (girişten sonra doğrudan açılır).
+  static const int profileTab = 5;
 
   final int initialTabIndex;
 
@@ -32,6 +36,7 @@ class _MainNavigatorState extends State<MainNavigator> {
   Widget build(BuildContext context) {
     final ekranlar = <Widget>[
       const HomeScreen(),
+      const NewsFeedScreen(),
       const FixtureScreen(),
       const GroupsScreen(),
       const StatsScreen(),
@@ -51,6 +56,11 @@ class _MainNavigatorState extends State<MainNavigator> {
         'icon': Icons.home_outlined,
         'image': 'assets/anasayfa.jpg',
       }, // Mevcut ana sayfa resmin
+      {
+        'label': 'Haberler',
+        'icon': Icons.newspaper_outlined,
+        'image': 'assets/acilis_arka_plan.jpg',
+      },
       {
         'label': 'Fikstür',
         'icon': Icons.calendar_month_outlined,

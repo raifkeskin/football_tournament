@@ -5,6 +5,15 @@ import 'package:supabase_flutter/supabase_flutter.dart' as sb; // Supabase çak�
 
 const _kRememberMeKey = 'auth_remember_me';
 
+/// Kullanıcının sorumlu olduğu takım (sezon bazında, `team_managers`).
+@immutable
+class ManagedTeam {
+  const ManagedTeam({required this.seasonId, required this.teamId});
+
+  final String seasonId;
+  final String teamId;
+}
+
 @immutable
 class AppSessionState {
   const AppSessionState({
@@ -15,6 +24,9 @@ class AppSessionState {
     required this.phone,
     required this.isLoading,
     this.displayName,
+    this.playerId,
+    this.ownedLeagueIds = const <String>{},
+    this.managedTeams = const <ManagedTeam>[],
   });
 
   static const _unset = Object();
@@ -22,13 +34,34 @@ class AppSessionState {
   // Artık Supabase'in User objesini taşıyoruz
   final sb.User? user; 
   final bool isAdmin;
-  final String role; // admin, manager, player, user
+  final String role; // admin, owner, manager, player, user
   final String? teamId;
   final String phone;
   final bool isLoading;
   final String? displayName;
 
+  /// Kullanıcıya bağlı oyuncu kaydı (`players.auth_uid`).
+  final String? playerId;
+
+  /// Sahibi olduğu turnuvalar (`league_owners`).
+  final Set<String> ownedLeagueIds;
+
+  /// Sorumlu olduğu takımlar (`team_managers`).
+  final List<ManagedTeam> managedTeams;
+
   bool get isManager => role == 'manager';
+  bool get isLeagueOwner => ownedLeagueIds.isNotEmpty;
+
+  /// Onay ekranını görebilir mi? (Talepler RLS ile zaten süzülür.)
+  bool get canReviewApprovals => isAdmin || isLeagueOwner;
+
+  /// Turnuvayı yönetebilir mi? Admin her turnuvayı, sahibi kendisininkini.
+  bool canManageLeague(String? leagueId) =>
+      isAdmin || (leagueId != null && ownedLeagueIds.contains(leagueId));
+
+  bool managesTeam(String? seasonId, String? teamId) => managedTeams.any(
+    (t) => t.seasonId == seasonId && t.teamId == teamId,
+  );
 
   AppSessionState copyWith({
     Object? user = _unset,
@@ -38,6 +71,9 @@ class AppSessionState {
     String? phone,
     bool? isLoading,
     Object? displayName = _unset,
+    Object? playerId = _unset,
+    Set<String>? ownedLeagueIds,
+    List<ManagedTeam>? managedTeams,
   }) {
     return AppSessionState(
       user: identical(user, _unset) ? this.user : user as sb.User?,
@@ -49,6 +85,11 @@ class AppSessionState {
       displayName: identical(displayName, _unset)
           ? this.displayName
           : displayName as String?,
+      playerId: identical(playerId, _unset)
+          ? this.playerId
+          : playerId as String?,
+      ownedLeagueIds: ownedLeagueIds ?? this.ownedLeagueIds,
+      managedTeams: managedTeams ?? this.managedTeams,
     );
   }
 }
@@ -195,36 +236,64 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
         phone: '',
         isLoading: false,
         displayName: null,
+        playerId: null,
+        ownedLeagueIds: const <String>{},
+        managedTeams: const <ManagedTeam>[],
       );
       return;
     }
 
-    // Admin kontrolünü hala Firestore üzerinden yapıyoruz (Kodlar silinmedi)
     final isAdmin = await _checkAdmin(user);
-    
-    // Master Class Lig profil verilerini yükle
     _loadProfile(user, isAdmin);
   }
 
+  /// Yetkinin tek kaynağı veritabanı: `admins.user_id`. Veritabanı kuralları
+  /// (RLS) da aynı tabloya baktığı için arayüz ile yetki birbirini tutar.
   Future<bool> _checkAdmin(sb.User user) async {
-    final emailAddress = user.email?.trim() ?? '';
-    if (emailAddress == 'admin@masterclass.com' || emailAddress == 'masterclass@masterclass.com') {
-      return true;
-    }
-
     try {
-      final res = await _supabase.from('admins').select().eq('id', user.id).limit(1);
-      if (res.isNotEmpty) return true;
-    } catch (_) {}
-
-    if (emailAddress.isNotEmpty) {
-      try {
-        final res = await _supabase.from('admins').select().eq('email', emailAddress).limit(1);
-        if (res.isNotEmpty) return true;
-      } catch (_) {}
+      final res = await _supabase
+          .from('admins')
+          .select('id')
+          .eq('user_id', user.id)
+          .limit(1);
+      return res.isNotEmpty;
+    } catch (_) {
+      return false;
     }
+  }
 
-    return false;
+  Future<Set<String>> _loadOwnedLeagues(String uid) async {
+    try {
+      final res = await _supabase
+          .from('league_owners')
+          .select('league_id')
+          .eq('user_id', uid);
+      return res
+          .map((r) => (r['league_id'] ?? '').toString())
+          .where((id) => id.isNotEmpty)
+          .toSet();
+    } catch (_) {
+      return const <String>{};
+    }
+  }
+
+  Future<List<ManagedTeam>> _loadManagedTeams(String uid) async {
+    try {
+      final res = await _supabase
+          .from('team_managers')
+          .select('season_id, team_id')
+          .eq('user_id', uid);
+      return res
+          .map(
+            (r) => ManagedTeam(
+              seasonId: (r['season_id'] ?? '').toString(),
+              teamId: (r['team_id'] ?? '').toString(),
+            ),
+          )
+          .toList();
+    } catch (_) {
+      return const <ManagedTeam>[];
+    }
   }
 
   static String _raw10(String input) {
@@ -248,55 +317,62 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
     }
 
     String? name;
-    String? role;
     String? teamId;
+    String? playerId;
+
+    final ownedLeagueIds = await _loadOwnedLeagues(user.id);
+    final managedTeams = await _loadManagedTeams(user.id);
 
     try {
       final res = await _supabase
           .from('app_users')
-          .select('name, role, phone, team_id')
+          .select('name, phone, team_id')
           .eq('auth_uid', user.id)
           .limit(1);
       if (res.isNotEmpty) {
         final r = res.first;
         name = (r['name'] ?? '').toString().trim();
-        role = (r['role'] ?? '').toString().trim();
         teamId = r['team_id']?.toString();
         final p = _raw10((r['phone'] ?? '').toString());
         if (phone.isEmpty) phone = p;
       }
     } catch (_) {}
 
-    if (phone.isNotEmpty) {
-      try {
-        final res = await _supabase
+    // Oyuncu kaydı: önce eşleşmiş kayıt (auth_uid), yoksa telefonla.
+    try {
+      var res = await _supabase
+          .from('players')
+          .select('id, name, surname, role')
+          .eq('auth_uid', user.id)
+          .limit(1);
+      if (res.isEmpty && phone.isNotEmpty) {
+        res = await _supabase
             .from('players')
-            .select('name, surname, role')
+            .select('id, name, surname, role')
             .eq('phone', phone)
             .limit(1);
-        if (res.isNotEmpty) {
-          final r = res.first;
-          final full = [
-            (r['name'] ?? '').toString().trim(),
-            (r['surname'] ?? '').toString().trim(),
-          ].where((e) => e.isNotEmpty).join(' ');
-          if ((name ?? '').isEmpty && full.isNotEmpty) name = full;
-          final pr = (r['role'] ?? '').toString().trim().toLowerCase();
-          if ((role ?? '').isEmpty && pr.isNotEmpty) {
-            role = (pr.contains('sorumlu') || pr.contains('her') ||
-                    pr == 'manager' || pr == 'both')
-                ? 'manager'
-                : 'player';
-          }
-        }
-      } catch (_) {}
-    }
+      }
+      if (res.isNotEmpty) {
+        final r = res.first;
+        playerId = (r['id'] ?? '').toString();
+        final full = [
+          (r['name'] ?? '').toString().trim(),
+          (r['surname'] ?? '').toString().trim(),
+        ].where((e) => e.isNotEmpty).join(' ');
+        if ((name ?? '').isEmpty && full.isNotEmpty) name = full;
+      }
+    } catch (_) {}
 
-    // Uygulama içinde rol kodları: admin, manager, player.
-    final r = (role ?? '').toLowerCase();
+    // Uygulama içinde rol kodları: admin, owner, manager, player.
+    // Sorumluluk artık `team_managers`tan gelir; players.role metni
+    // (Takım Sorumlusu / Her İkisi) yetki için kullanılmaz.
     final resolvedRole = isAdmin
         ? 'admin'
-        : (r.contains('sorumlu') || r == 'manager' ? 'manager' : 'player');
+        : ownedLeagueIds.isNotEmpty
+        ? 'owner'
+        : managedTeams.isNotEmpty
+        ? 'manager'
+        : 'player';
 
     if (_supabase.auth.currentUser?.id != user.id) return; // bu arada çıkış
     value = value.copyWith(
@@ -306,6 +382,9 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
       teamId: teamId,
       phone: phone,
       displayName: (name ?? '').isEmpty ? null : name,
+      playerId: (playerId ?? '').isEmpty ? null : playerId,
+      ownedLeagueIds: ownedLeagueIds,
+      managedTeams: managedTeams,
       isLoading: false,
     );
   }

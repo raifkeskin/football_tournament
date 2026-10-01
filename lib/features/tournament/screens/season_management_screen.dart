@@ -8,7 +8,6 @@ import '../models/season.dart';
 import '../services/interfaces/i_league_service.dart';
 import '../../match/models/match.dart';
 import '../../team/models/team.dart';
-import '../../team/services/interfaces/i_team_service.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/utils/resilient_stream.dart';
 import '../../../core/widgets/app_date_picker.dart';
@@ -46,11 +45,6 @@ class SeasonManagementScreen extends StatelessWidget {
     ).map(
       (rows) => rows.cast<Map<String, dynamic>>().map(Season.fromJson).toList(),
     );
-  }
-
-  static String _fmt(DateTime? date) {
-    if (date == null) return '-';
-    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
   }
 
   static String _tarihYaz(DateTime date) {
@@ -616,31 +610,18 @@ class SeasonManagementScreen extends StatelessWidget {
 
           return ListView.builder(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-            itemCount: seasons.length,
+            itemCount: seasons.length + 1,
             itemBuilder: (_, index) {
+              if (index == seasons.length) {
+                return _AddDashedButton(
+                  label: 'Yeni Sezon Ekle',
+                  onTap: () => _openSeasonSheet(context),
+                );
+              }
               final s = seasons[index];
-              final dateRange = '${_fmt(s.startDate)} - ${_fmt(s.endDate)}';
-              final location = [
-                if ((s.city ?? '').trim().isNotEmpty) s.city!.trim(),
-                s.country.trim(),
-              ].where((e) => e.isNotEmpty).join(' • ');
-              return _AdminListCard(
-                icon: Icons.calendar_month_outlined,
-                title: s.name,
-                subtitle: location.isEmpty
-                    ? dateRange
-                    : '$dateRange\n$location',
-                badge: s.isDefault ? 'Varsayılan' : null,
-                trailing: [
-                  IconButton(
-                    icon: const Icon(
-                      Icons.edit_outlined,
-                      color: Colors.white54,
-                    ),
-                    tooltip: 'Düzenle',
-                    onPressed: () => _openSeasonSheet(context, season: s),
-                  ),
-                ],
+              return _SeasonCard(
+                season: s,
+                onEdit: () => _openSeasonSheet(context, season: s),
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute<void>(
@@ -703,6 +684,7 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
   List<GroupModel>? _groups;
   Object? _groupsError;
   Map<String, int> _teamCountByGroupId = const <String, int>{};
+  _SeasonOverview? _overview;
   bool _busy = false;
 
   @override
@@ -755,6 +737,10 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
       }
       if (!mounted) return;
       setState(() => _teamCountByGroupId = counts);
+      // Kart özetleri (maçlar, lider, avatarlar); hata olursa kartlar sade kalır.
+      _loadSeasonOverview(sid).then((o) {
+        if (mounted) setState(() => _overview = o);
+      }, onError: (_) {});
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -1170,6 +1156,19 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
     await _refreshTeamCounts();
   }
 
+  Future<void> _openTeams({String? initialGroupName}) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => TeamListScreen(
+          seasonId: widget.seasonId,
+          seasonName: widget.seasonName,
+          initialGroupName: initialGroupName,
+        ),
+      ),
+    );
+    await _refreshTeamCounts();
+  }
+
   Widget _buildBody() {
     if (_groupsError != null) {
       return _EmptyText('Hata: $_groupsError');
@@ -1196,38 +1195,16 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
         children: [
           for (final g in groups)
-            _AdminListCard(
-              icon: Icons.groups_outlined,
-              title: g.name.trim().isEmpty ? g.id : g.name,
-              subtitle: '${teamCountByGroupId[g.id] ?? 0} takım',
-              trailing: [
-                IconButton(
-                  icon: const Icon(Icons.edit_outlined, color: Colors.white54),
-                  tooltip: 'Düzenle',
-                  onPressed: _busy ? null : () => _openEditGroupSheet(g),
-                ),
-                IconButton(
-                  icon: const Icon(
-                    Icons.playlist_add_check_outlined,
-                    color: _accent,
-                  ),
-                  tooltip: 'Takım Ekle/Çıkar',
-                  onPressed: _busy ? null : () => _openTeamAssignSheet(g),
-                ),
-              ],
-              onTap: () async {
-                await Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => TeamListScreen(
-                      seasonId: widget.seasonId,
-                      seasonName: widget.seasonName,
-                      initialGroupName: _formatGroupName(g.name),
-                    ),
-                  ),
-                );
-                await _refreshTeamCounts();
-              },
+            _GroupCard(
+              name: g.name.trim().isEmpty ? g.id : g.name,
+              teamCount: teamCountByGroupId[g.id] ?? 0,
+              overview: _overview?.group(g.id),
+              onEdit: _busy ? null : () => _openEditGroupSheet(g),
+              onAssignTeams: _busy ? null : () => _openTeamAssignSheet(g),
+              onTap: () =>
+                  _openTeams(initialGroupName: _formatGroupName(g.name)),
             ),
+          _AllTeamsLink(count: _overview?.teamCount, onTap: () => _openTeams()),
         ],
       ),
     );
@@ -1276,11 +1253,9 @@ class TeamListScreen extends StatefulWidget {
 }
 
 class _TeamListScreenState extends State<TeamListScreen> {
-  final ITeamService _teamService = ServiceLocator.teamService;
-  final _teamNameQueryController = TextEditingController();
-  late final Stream<List<Team>> _teamsStream = _watchTeams();
-  String _teamNameQuery = '';
-  String _selectedGroup = '__ALL__';
+  final _queryController = TextEditingController();
+  late Future<_SeasonOverview> _overview = _loadSeasonOverview(widget.seasonId);
+  String _query = '';
 
   String _formatGroupName(String? input) {
     final raw = (input ?? '').trim();
@@ -1294,180 +1269,259 @@ class _TeamListScreenState extends State<TeamListScreen> {
     return '$cleaned Grubu';
   }
 
-  Stream<List<Team>> _watchTeams() {
-    final sid = widget.seasonId.trim();
-    if (sid.isEmpty) return Stream.value(const <Team>[]);
-    // Uygulama arka plandan dönünce kopan bağlantı otomatik yenilenir.
-    return resilientStream(
-      () => _teamService.watchAllTeams(caller: 'TeamListScreen'),
-    ).map((all) {
-      // Yalnızca bu sezonda bir gruba atanmış takımlar; gruba atanmamış
-      // (ör. gruptan çıkarılmış) takımlar "Tümü"de görünmez.
-      final filtered = all
-          .where(
-            (t) =>
-                (t.seasonId ?? '').trim() == sid &&
-                (t.groupName ?? '').trim().isNotEmpty,
-          )
-          .toList();
-      filtered.sort(
-        (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-      );
-      return filtered;
-    });
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    final g = (widget.initialGroupName ?? '').trim();
-    if (g.isNotEmpty) _selectedGroup = g;
+  Future<void> _reload() async {
+    final next = _loadSeasonOverview(widget.seasonId);
+    setState(() => _overview = next);
+    await next;
   }
 
   @override
   void dispose() {
-    _teamNameQueryController.dispose();
+    _queryController.dispose();
     super.dispose();
+  }
+
+  Future<void> _openSquad(_TeamStanding t) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => TeamSquadScreen(
+          teamId: t.id,
+          tournamentId: widget.seasonId,
+          teamName: t.name,
+          teamLogoUrl: t.logoUrl,
+        ),
+      ),
+    );
+    // Kadro değişmiş olabilir.
+    if (mounted) _reload();
+  }
+
+  Widget _teamRow(
+    _TeamStanding t, {
+    required bool first,
+    required bool ranked,
+  }) {
+    final av = t.goalDiff > 0 ? '+${t.goalDiff}' : '${t.goalDiff}';
+    final sub = ranked
+        ? '${t.points} P · ${t.played} maç · AV $av'
+        : '${t.played} maç';
+    return InkWell(
+      onTap: () => _openSquad(t),
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 64),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          border: first
+              ? null
+              : Border(
+                  top: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
+                ),
+        ),
+        child: Row(
+          children: [
+            if (ranked) ...[
+              SizedBox(
+                width: 22,
+                child: Text(
+                  '${t.rank}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: _muted,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+            ],
+            _TeamAvatar(name: t.name, logoUrl: t.logoUrl),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    t.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    sub,
+                    style: const TextStyle(color: _muted, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            t.rosterCount == 0
+                ? const _Pill('Kadro yok', _amber)
+                : _Pill('${t.rosterCount} oyuncu', _accent),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _section(
+    String title,
+    List<_TeamStanding> teams, {
+    required bool ranked,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _trUpper(title),
+                    style: const TextStyle(
+                      color: _accent,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ),
+                Text(
+                  '${teams.length} takım',
+                  style: const TextStyle(color: _muted, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            clipBehavior: Clip.antiAlias,
+            decoration: _listCardDecoration(),
+            child: Material(
+              type: MaterialType.transparency,
+              child: Column(
+                children: [
+                  for (var i = 0; i < teams.length; i++)
+                    _teamRow(teams[i], first: i == 0, ranked: ranked),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final onlyGroup = (widget.initialGroupName ?? '').trim();
     return _AdminPageScaffold(
       title: widget.seasonName.trim().isEmpty ? 'Takımlar' : widget.seasonName,
-      body: StreamBuilder<List<Team>>(
-        stream: _teamsStream,
-        initialData: const <Team>[],
-        builder: (context, snapshot) {
-          final teams = snapshot.data ?? const <Team>[];
-          final qName = _norm(_teamNameQuery);
-          final groupOptions =
-              teams
-                  .map((t) => _formatGroupName(t.groupName))
-                  .where((g) => g.isNotEmpty)
-                  .toSet()
-                  .toList()
-                ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+      body: FutureBuilder<_SeasonOverview>(
+        future: _overview,
+        builder: (context, snap) {
+          if (snap.hasError) {
+            return _EmptyText('Takımlar yüklenemedi: ${snap.error}');
+          }
+          final o = snap.data;
+          if (o == null) {
+            return const Center(
+              child: CircularProgressIndicator(color: _accent),
+            );
+          }
+          final q = _norm(_query);
+          bool match(_TeamStanding t) => q.isEmpty || _norm(t.name).contains(q);
 
-          // Tek grup varsa filtre gizlenir ve o grup kendiliğinden seçilir.
-          final singleGroup = groupOptions.length <= 1;
-          final effectiveGroup = singleGroup
-              ? '__ALL__'
-              : (_selectedGroup == '__ALL__' ||
-                        groupOptions.contains(_selectedGroup)
-                    ? _selectedGroup
-                    : '__ALL__');
-          if (!singleGroup &&
-              effectiveGroup != _selectedGroup &&
-              teams.isNotEmpty) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (!mounted) return;
-              setState(() => _selectedGroup = '__ALL__');
-            });
+          final sections = <Widget>[];
+          var visibleCount = 0;
+          var missing = 0;
+          for (final g in o.groups) {
+            if (onlyGroup.isNotEmpty && _formatGroupName(g.name) != onlyGroup) {
+              continue;
+            }
+            final teams = g.teams.where(match).toList();
+            if (teams.isEmpty) continue;
+            visibleCount += teams.length;
+            missing += teams.where((t) => t.rosterCount == 0).length;
+            sections.add(_section(g.name, teams, ranked: true));
           }
 
-          final filtered = teams.where((t) {
-            final groupName = _formatGroupName(t.groupName);
-            final teamName = _norm(t.name);
-            final okGroup =
-                effectiveGroup == '__ALL__' || groupName == effectiveGroup;
-            final okName = qName.isEmpty || teamName.contains(qName);
-            return okGroup && okName;
-          }).toList();
-
-          return Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
-                child: Row(
-                  children: [
-                    if (!singleGroup) ...[
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          key: ValueKey(effectiveGroup),
-                          initialValue: effectiveGroup,
-                          dropdownColor: _sheetBg,
-                          isExpanded: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Grup',
-                            prefixIcon: Icon(Icons.groups_outlined),
-                          ),
-                          items: <DropdownMenuItem<String>>[
-                            const DropdownMenuItem(
-                              value: '__ALL__',
-                              child: Text('Tümü'),
-                            ),
-                            for (final g in groupOptions)
-                              DropdownMenuItem(
-                                value: g,
-                                child: Text(
-                                  g,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                          ],
-                          onChanged: (v) {
-                            if (v == null) return;
-                            setState(() => _selectedGroup = v);
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                    ],
-                    Expanded(
-                      child: TextField(
-                        controller: _teamNameQueryController,
-                        decoration: const InputDecoration(
-                          labelText: 'Takım Adı',
-                          prefixIcon: Icon(Icons.search),
-                        ),
-                        onChanged: (v) => setState(() => _teamNameQuery = v),
+          return RefreshIndicator(
+            color: _accent,
+            onRefresh: _reload,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              children: [
+                TextField(
+                  controller: _queryController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: 'Takım ara',
+                    prefixIcon: const Icon(Icons.search, color: _muted),
+                    filled: true,
+                    fillColor: _sheetBg.withValues(alpha: 0.9),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.12),
                       ),
                     ),
-                  ],
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: _accent),
+                    ),
+                  ),
+                  onChanged: (v) => setState(() => _query = v),
                 ),
-              ),
-              Expanded(
-                child: filtered.isEmpty
-                    ? const _EmptyText('Takım bulunamadı.')
-                    : ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
-                        itemCount: filtered.length,
-                        itemBuilder: (context, index) {
-                          final t = filtered[index];
-                          final groupLabel = _formatGroupName(t.groupName);
-                          return _AdminListCard(
-                            leading: t.logoUrl.trim().isNotEmpty
-                                ? WebSafeImage(
-                                    url: t.logoUrl,
-                                    width: 28,
-                                    height: 28,
-                                    borderRadius: BorderRadius.circular(8),
-                                    fallbackIconSize: 16,
-                                  )
-                                : null,
-                            icon: Icons.shield_outlined,
-                            title: t.name.trim().isEmpty ? t.id : t.name,
-                            subtitle: groupLabel.isEmpty ? null : groupLabel,
-                            onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute<void>(
-                                  builder: (_) => TeamSquadScreen(
-                                    teamId: t.id,
-                                    tournamentId: widget.seasonId,
-                                    teamName: t.name.trim().isEmpty
-                                        ? t.id
-                                        : t.name,
-                                    teamLogoUrl: t.logoUrl,
-                                  ),
-                                ),
-                              );
-                            },
-                          );
-                        },
-                      ),
-              ),
-            ],
+                const SizedBox(height: 12),
+                if (missing > 0)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _amber.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: _amber.withValues(alpha: 0.35)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.warning_amber_rounded,
+                          color: _amber,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            '$missing takımın kadrosu henüz girilmedi.',
+                            style: const TextStyle(
+                              color: Color(0xFFFDE68A),
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (visibleCount == 0)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 48),
+                    child: _EmptyText('Takım bulunamadı.'),
+                  )
+                else
+                  ...sections,
+              ],
+            ),
           );
         },
       ),
@@ -1578,105 +1632,6 @@ class _AdminPageScaffold extends StatelessWidget {
           ),
           SafeArea(child: body),
         ],
-      ),
-    );
-  }
-}
-
-class _AdminListCard extends StatelessWidget {
-  const _AdminListCard({
-    required this.icon,
-    required this.title,
-    this.leading,
-    this.subtitle,
-    this.badge,
-    this.trailing = const <Widget>[],
-    this.onTap,
-  });
-
-  final IconData icon;
-  final Widget? leading;
-  final String title;
-  final String? subtitle;
-  final String? badge;
-  final List<Widget> trailing;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.3),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      child: ListTile(
-        onTap: onTap,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        contentPadding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
-        leading: Container(
-          width: 44,
-          height: 44,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: _accent.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: leading ?? Icon(icon, color: _accent, size: 22),
-        ),
-        title: Row(
-          children: [
-            Flexible(
-              child: Text(
-                title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 15,
-                ),
-              ),
-            ),
-            if (badge != null) ...[
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: _accent.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  badge!,
-                  style: const TextStyle(
-                    color: _accent,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-        subtitle: subtitle == null
-            ? null
-            : Text(
-                subtitle!,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
-              ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ...trailing,
-            const Padding(
-              padding: EdgeInsets.only(right: 4),
-              child: Icon(Icons.chevron_right_rounded, color: Colors.white24),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -1809,3 +1764,818 @@ class _EmptyText extends StatelessWidget {
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// Liste özetleri: sezon / grup / takım kartlarındaki sayılar ve puan durumu.
+// Sezon başına tek seferde 4 sorgu; ekran açılınca ve yenilemede okunur.
+// ---------------------------------------------------------------------------
+
+class _TeamStanding {
+  _TeamStanding({
+    required this.id,
+    required this.name,
+    required this.logoUrl,
+    required this.groupId,
+  });
+
+  final String id;
+  final String name;
+  final String logoUrl;
+  final String? groupId;
+  int played = 0;
+  int points = 0;
+  int goalsFor = 0;
+  int goalsAgainst = 0;
+  int rank = 0;
+  int rosterCount = 0;
+
+  int get goalDiff => goalsFor - goalsAgainst;
+}
+
+class _GroupOverview {
+  _GroupOverview({required this.id, required this.name});
+
+  final String id;
+  final String name;
+  final List<_TeamStanding> teams = [];
+  int matchesTotal = 0;
+  int matchesPlayed = 0;
+
+  _TeamStanding? get leader =>
+      teams.isEmpty || teams.first.played == 0 ? null : teams.first;
+}
+
+class _SeasonOverview {
+  const _SeasonOverview({
+    required this.groups,
+    required this.ungrouped,
+    required this.matchesTotal,
+    required this.matchesPlayed,
+  });
+
+  /// Ada göre sıralı gruplar; takımlar puan durumuna göre sıralı.
+  final List<_GroupOverview> groups;
+  final List<_TeamStanding> ungrouped;
+  final int matchesTotal;
+  final int matchesPlayed;
+
+  /// Gruba atanmış takımlar (gruptan çıkarılanlar sayılmaz).
+  int get teamCount => groups.fold<int>(0, (n, g) => n + g.teams.length);
+
+  _GroupOverview? group(String id) {
+    for (final g in groups) {
+      if (g.id == id) return g;
+    }
+    return null;
+  }
+}
+
+Future<_SeasonOverview> _loadSeasonOverview(String seasonId) async {
+  final sid = seasonId.trim();
+  final sb = Supabase.instance.client;
+  final results = await Future.wait<List<dynamic>>([
+    sb.from('groups').select('id, name').eq('season_id', sid),
+    sb
+        .from('season_teams')
+        .select('team_id, group_id, teams(name, logo_url)')
+        .eq('season_id', sid),
+    sb
+        .from('matches')
+        .select(
+          'group_id, home_team_id, away_team_id, home_score, away_score, status',
+        )
+        .eq('season_id', sid),
+    sb
+        .from('season_team_players')
+        .select('team_id, is_active')
+        .eq('season_id', sid),
+  ]);
+  String s(dynamic v) => (v ?? '').toString().trim();
+
+  final groupsById = <String, _GroupOverview>{};
+  for (final any in results[0]) {
+    final r = any as Map;
+    final id = s(r['id']);
+    if (id.isNotEmpty)
+      groupsById[id] = _GroupOverview(id: id, name: s(r['name']));
+  }
+
+  final teamsById = <String, _TeamStanding>{};
+  for (final any in results[1]) {
+    final r = any as Map;
+    final id = s(r['team_id']);
+    if (id.isEmpty) continue;
+    final t = r['teams'] is Map ? r['teams'] as Map : const {};
+    final gid = s(r['group_id']);
+    teamsById[id] = _TeamStanding(
+      id: id,
+      name: s(t['name']).isEmpty ? id : s(t['name']),
+      logoUrl: s(t['logo_url']),
+      groupId: gid.isEmpty || !groupsById.containsKey(gid) ? null : gid,
+    );
+  }
+
+  var total = 0;
+  var played = 0;
+  for (final any in results[2]) {
+    final r = any as Map;
+    total++;
+    final g = groupsById[s(r['group_id'])];
+    if (g != null) g.matchesTotal++;
+    if (s(r['status']) != 'finished') continue;
+    played++;
+    if (g != null) g.matchesPlayed++;
+    final hs = (r['home_score'] as num?)?.toInt() ?? 0;
+    final as = (r['away_score'] as num?)?.toInt() ?? 0;
+    void apply(String teamId, int gf, int ga) {
+      final t = teamsById[teamId];
+      if (t == null) return;
+      t.played++;
+      t.goalsFor += gf;
+      t.goalsAgainst += ga;
+      t.points += gf > ga ? 3 : (gf == ga ? 1 : 0);
+    }
+
+    apply(s(r['home_team_id']), hs, as);
+    apply(s(r['away_team_id']), as, hs);
+  }
+
+  for (final any in results[3]) {
+    final r = any as Map;
+    if (r['is_active'] == false) continue;
+    teamsById[s(r['team_id'])]?.rosterCount++;
+  }
+
+  int byStanding(_TeamStanding a, _TeamStanding b) {
+    final c = b.points.compareTo(a.points);
+    if (c != 0) return c;
+    final d = b.goalDiff.compareTo(a.goalDiff);
+    if (d != 0) return d;
+    final f = b.goalsFor.compareTo(a.goalsFor);
+    if (f != 0) return f;
+    return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+  }
+
+  final ungrouped = <_TeamStanding>[];
+  for (final t in teamsById.values) {
+    final g = t.groupId == null ? null : groupsById[t.groupId];
+    (g?.teams ?? ungrouped).add(t);
+  }
+  for (final g in groupsById.values) {
+    g.teams.sort(byStanding);
+    for (var i = 0; i < g.teams.length; i++) {
+      g.teams[i].rank = i + 1;
+    }
+  }
+  ungrouped.sort(
+    (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+  );
+
+  final groups = groupsById.values.toList()
+    ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+  return _SeasonOverview(
+    groups: groups,
+    ungrouped: ungrouped,
+    matchesTotal: total,
+    matchesPlayed: played,
+  );
+}
+
+const _amber = Color(0xFFFBBF24);
+const _muted = Color(0xFF94A3B8);
+
+BoxDecoration _listCardDecoration({bool highlight = false}) => BoxDecoration(
+  color: _sheetBg.withValues(alpha: 0.94),
+  borderRadius: BorderRadius.circular(18),
+  border: Border.all(
+    color: highlight
+        ? _accent.withValues(alpha: 0.35)
+        : Colors.white.withValues(alpha: 0.08),
+  ),
+);
+
+class _Pill extends StatelessWidget {
+  const _Pill(this.text, this.color);
+
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+}
+
+class _StatBox extends StatelessWidget {
+  const _StatBox({required this.value, required this.label, this.suffix});
+
+  final String value;
+  final String label;
+  final String? suffix;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: _bgDark.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text.rich(
+            TextSpan(
+              text: value,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+              ),
+              children: [
+                if (suffix != null)
+                  TextSpan(
+                    text: suffix,
+                    style: const TextStyle(
+                      color: _muted,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(label, style: const TextStyle(color: _muted, fontSize: 12)),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProgressRow extends StatelessWidget {
+  const _ProgressRow({
+    required this.label,
+    required this.value,
+    required this.fraction,
+  });
+
+  final String label;
+  final String value;
+  final double fraction;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(color: _muted, fontSize: 12),
+              ),
+            ),
+            Text(
+              value,
+              style: const TextStyle(
+                color: Color(0xFFCBD5E1),
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(999),
+          child: LinearProgressIndicator(
+            value: fraction.clamp(0.0, 1.0),
+            minHeight: 6,
+            color: _accent,
+            backgroundColor: Colors.white.withValues(alpha: 0.08),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+String _initials(String name) {
+  final words = name.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty);
+  return words.take(2).map((w) => w.characters.first).join().toUpperCase();
+}
+
+/// Takım logosu; yoksa baş harfler.
+class _TeamAvatar extends StatelessWidget {
+  const _TeamAvatar({
+    required this.name,
+    required this.logoUrl,
+    this.size = 40,
+    this.circle = false,
+  });
+
+  final String name;
+  final String logoUrl;
+  final double size;
+  final bool circle;
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = circle ? size / 2 : 12.0;
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: _forest,
+        borderRadius: BorderRadius.circular(radius),
+        border: circle ? Border.all(color: _sheetBg, width: 2) : null,
+      ),
+      clipBehavior: Clip.antiAlias,
+      alignment: Alignment.center,
+      child: logoUrl.trim().isNotEmpty
+          ? WebSafeImage(url: logoUrl, width: size, height: size)
+          : Text(
+              _initials(name),
+              style: TextStyle(
+                color: const Color(0xFF6EE7B7),
+                fontSize: size * 0.33,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+    );
+  }
+}
+
+/// Sezon kartı: durum, ilerleme, grup / takım / maç sayıları.
+class _SeasonCard extends StatefulWidget {
+  const _SeasonCard({
+    required this.season,
+    required this.onTap,
+    required this.onEdit,
+  });
+
+  final Season season;
+  final VoidCallback onTap;
+  final VoidCallback onEdit;
+
+  @override
+  State<_SeasonCard> createState() => _SeasonCardState();
+}
+
+class _SeasonCardState extends State<_SeasonCard> {
+  late Future<_SeasonOverview> _overview = _loadSeasonOverview(
+    widget.season.id,
+  );
+
+  @override
+  void didUpdateWidget(covariant _SeasonCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.season.id != widget.season.id) {
+      _overview = _loadSeasonOverview(widget.season.id);
+    }
+  }
+
+  String _fmt(DateTime? d) {
+    if (d == null) return '-';
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${two(d.day)}.${two(d.month)}.${d.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.season;
+    final now = DateTime.now();
+    final start = s.startDate;
+    final end = s.endDate;
+    double? progress;
+    if (start != null && end != null && end.isAfter(start)) {
+      progress =
+          now.difference(start).inMinutes / end.difference(start).inMinutes;
+      progress = progress.clamp(0.0, 1.0);
+    }
+    final (statusText, statusColor) = !s.isActive
+        ? ('Pasif', _muted)
+        : (start != null && now.isBefore(start))
+        ? ('Başlamadı', _amber)
+        : (end != null && now.isAfter(end))
+        ? ('Tamamlandı', _muted)
+        : ('Devam ediyor', const Color(0xFF93C5FD));
+    final place = (s.city ?? '').trim();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: widget.onTap,
+          borderRadius: BorderRadius.circular(18),
+          child: Ink(
+            padding: const EdgeInsets.all(16),
+            decoration: _listCardDecoration(highlight: s.isDefault),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: _accent.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Icon(
+                        Icons.calendar_month_outlined,
+                        color: _accent,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            s.name,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              if (s.isDefault)
+                                const _Pill('Varsayılan', _accent),
+                              _Pill(statusText, statusColor),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Düzenle',
+                      onPressed: widget.onEdit,
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.white.withValues(alpha: 0.06),
+                      ),
+                      icon: const Icon(
+                        Icons.edit_outlined,
+                        color: Colors.white70,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                _ProgressRow(
+                  label:
+                      '${_fmt(start)} – ${_fmt(end)}${place.isEmpty ? '' : ' · $place'}',
+                  value: progress == null ? '' : '%${(progress * 100).round()}',
+                  fraction: progress ?? 0,
+                ),
+                const SizedBox(height: 14),
+                FutureBuilder<_SeasonOverview>(
+                  future: _overview,
+                  builder: (context, snap) {
+                    final o = snap.data;
+                    String v(int? n) => n == null ? '–' : '$n';
+                    return Row(
+                      children: [
+                        Expanded(
+                          child: _StatBox(
+                            value: v(o?.groups.length),
+                            label: 'Grup',
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _StatBox(
+                            value: v(o?.teamCount),
+                            label: 'Takım',
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _StatBox(
+                            value: v(o?.matchesPlayed),
+                            suffix: o == null ? null : ' / ${o.matchesTotal}',
+                            label: 'Maç oynandı',
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
+                Divider(color: Colors.white.withValues(alpha: 0.08), height: 1),
+                const SizedBox(height: 10),
+                const Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Grupları ve takımları yönet',
+                        style: TextStyle(
+                          color: _accent,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    Icon(Icons.chevron_right_rounded, color: _accent),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Grup kartı: takım avatarları, oynanan maç oranı ve lider.
+class _GroupCard extends StatelessWidget {
+  const _GroupCard({
+    required this.name,
+    required this.teamCount,
+    required this.overview,
+    required this.onTap,
+    required this.onEdit,
+    required this.onAssignTeams,
+  });
+
+  final String name;
+  final int teamCount;
+  final _GroupOverview? overview;
+  final VoidCallback onTap;
+  final VoidCallback? onEdit;
+  final VoidCallback? onAssignTeams;
+
+  @override
+  Widget build(BuildContext context) {
+    final o = overview;
+    final teams = o?.teams ?? const <_TeamStanding>[];
+    final leader = o?.leader;
+    const shown = 5;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(18),
+          child: Ink(
+            padding: const EdgeInsets.all(16),
+            decoration: _listCardDecoration(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            name,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '$teamCount takım',
+                            style: const TextStyle(color: _muted, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Düzenle',
+                      onPressed: onEdit,
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.white.withValues(alpha: 0.06),
+                      ),
+                      icon: const Icon(
+                        Icons.edit_outlined,
+                        color: Colors.white70,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    IconButton(
+                      tooltip: 'Takım Ekle/Çıkar',
+                      onPressed: onAssignTeams,
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.white.withValues(alpha: 0.06),
+                      ),
+                      icon: const Icon(
+                        Icons.group_add_outlined,
+                        color: _accent,
+                      ),
+                    ),
+                  ],
+                ),
+                if (teams.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      SizedBox(
+                        height: 30,
+                        width: 30 + 22.0 * (teams.take(shown).length - 1),
+                        child: Stack(
+                          children: [
+                            for (var i = 0; i < teams.take(shown).length; i++)
+                              Positioned(
+                                left: 22.0 * i,
+                                child: _TeamAvatar(
+                                  name: teams[i].name,
+                                  logoUrl: teams[i].logoUrl,
+                                  size: 30,
+                                  circle: true,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      if (teams.length > shown) ...[
+                        const SizedBox(width: 8),
+                        Text(
+                          '+${teams.length - shown}',
+                          style: const TextStyle(
+                            color: _muted,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+                if (o != null && o.matchesTotal > 0) ...[
+                  const SizedBox(height: 14),
+                  _ProgressRow(
+                    label: 'Maçlar',
+                    value: '${o.matchesPlayed} / ${o.matchesTotal} oynandı',
+                    fraction: o.matchesPlayed / o.matchesTotal,
+                  ),
+                ],
+                if (leader != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _bgDark.withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.emoji_events_outlined,
+                          color: _amber,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text.rich(
+                            TextSpan(
+                              text: 'Lider: ',
+                              style: const TextStyle(
+                                color: Color(0xFFCBD5E1),
+                                fontSize: 13,
+                              ),
+                              children: [
+                                TextSpan(
+                                  text: leader.name,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Text(
+                          '${leader.points} P',
+                          style: const TextStyle(
+                            color: _amber,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Listenin sonundaki kesik çizgili "ekle" butonu.
+class _AddDashedButton extends StatelessWidget {
+  const _AddDashedButton({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size.fromHeight(60),
+        foregroundColor: const Color(0xFFCBD5E1),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.22)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      ),
+      onPressed: onTap,
+      icon: const Icon(Icons.add_rounded),
+      label: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+    );
+  }
+}
+
+/// Grup listesinin altındaki "Sezondaki tüm takımlar" girişi.
+class _AllTeamsLink extends StatelessWidget {
+  const _AllTeamsLink({required this.count, required this.onTap});
+
+  final int? count;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        height: 56,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text.rich(
+                TextSpan(
+                  text: 'Sezondaki tüm takımlar',
+                  style: const TextStyle(
+                    color: Color(0xFFCBD5E1),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  children: [
+                    if (count != null)
+                      TextSpan(
+                        text: ' ($count)',
+                        style: const TextStyle(
+                          color: _muted,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: Color(0xFFCBD5E1)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Türkçe büyük harf (Dart'ın toUpperCase'i i → I yapar, İ değil).
+String _trUpper(String s) =>
+    s.replaceAll('i', 'İ').replaceAll('ı', 'I').toUpperCase();

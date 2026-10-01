@@ -993,9 +993,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                     ),
                                     const SizedBox(width: 8),
                                     Expanded(
+                                      // Sığmazsa kesilmez, ikinci satıra iner.
                                       child: Text(
                                         leagueText,
-                                        maxLines: 1,
+                                        maxLines: 2,
                                         overflow: TextOverflow.ellipsis,
                                         style: const TextStyle(
                                           color: Colors.white,
@@ -1009,10 +1010,15 @@ class _HomeScreenState extends State<HomeScreen> {
                                     // turnuva adından küçük ve soluk.
                                     if (groupText.isNotEmpty) ...[
                                       const SizedBox(width: 8),
-                                      Flexible(
+                                      // Genişliği sınırlı: uzun grup adı
+                                      // turnuva adını ezmesin.
+                                      ConstrainedBox(
+                                        constraints: const BoxConstraints(
+                                          maxWidth: 110,
+                                        ),
                                         child: Text(
                                           groupText,
-                                          maxLines: 1,
+                                          maxLines: 2,
                                           overflow: TextOverflow.ellipsis,
                                           textAlign: TextAlign.right,
                                           style: const TextStyle(

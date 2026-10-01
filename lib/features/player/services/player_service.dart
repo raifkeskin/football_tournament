@@ -39,15 +39,12 @@ class PlayerService {
     final phone = phoneRaw10.replaceAll(RegExp(r'\D'), '');
     if (phone.isEmpty) throw Exception('Telefon boş olamaz.');
 
-    final nowIso = DateTime.now().toIso8601String();
     final payload = <String, dynamic>{
       'name': name,
       'role': 'Futbolcu',
       'phone': phone,
       'phone_raw10': phone,
       'team_id': 'free_agent_pool',
-      'created_at': nowIso,
-      'updated_at': nowIso,
     };
 
     Future<void> doInsert(Map<String, dynamic> p) async {
