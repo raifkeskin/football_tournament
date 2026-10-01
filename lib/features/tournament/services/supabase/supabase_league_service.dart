@@ -714,6 +714,26 @@ class SupabaseLeagueService implements ILeagueService {
     }
   }
 
+  @override
+  Stream<List<NewsItem>> watchNewsForLeagues(Set<String> leagueIds) {
+    if (leagueIds.isEmpty) return Stream.value(const <NewsItem>[]);
+    // RLS: taslak/süresi dolmuş satırlar yalnızca sahip olunan turnuvalarda
+    // döner; başka turnuvaların yayındaki haberleri burada elenir.
+    return watchTableRows(
+      _client,
+      table: 'news',
+      orderBy: 'created_at',
+      ascending: false,
+    ).map(
+      (rows) => rows
+          .where(
+            (r) => leagueIds.contains((r['league_id'] ?? '').toString()),
+          )
+          .map(_newsFromRow)
+          .toList(),
+    );
+  }
+
   final Map<String, Stream<List<NewsItem>>> _newsFeeds = {};
 
   @override

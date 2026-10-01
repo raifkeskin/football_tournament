@@ -34,6 +34,9 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
   String? _selectedTournamentId;
   _NewsStatus _status = _NewsStatus.all;
 
+  /// Filtrede "Tümü" (bütün yönetilebilen turnuvalar).
+  static const _allTournaments = '';
+
   String _tournamentName(String? id) {
     for (final l in _tournaments) {
       if (l.id == id) return l.name;
@@ -54,8 +57,9 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
         CustomPopupSelector<String>(
           label: 'Turnuva',
           selectedValue: _selectedTournamentId,
-          items: _tournaments.map((l) => l.id).toList(),
-          labelBuilder: (id) => _tournamentName(id),
+          items: [_allTournaments, ..._tournaments.map((l) => l.id)],
+          labelBuilder: (id) =>
+              id == _allTournaments ? 'Tümü' : _tournamentName(id),
           onChanged: (v) {
             setState(() => _selectedTournamentId = v);
             refresh();
@@ -504,7 +508,7 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
     }
   }
 
-  Widget _newsCard(NewsItem doc) {
+  Widget _newsCard(NewsItem doc, {bool showTournament = false}) {
     final isPublished = doc.isPublished;
     final expired = isPublished && doc.isExpired;
     final createdAtText = [
@@ -525,6 +529,31 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (showTournament) ...[
+            Row(
+              children: [
+                const Icon(
+                  Icons.emoji_events_outlined,
+                  size: 14,
+                  color: kAdminAccent,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    _tournamentName(doc.tournamentId),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: kAdminAccent,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+          ],
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -674,24 +703,31 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
               ),
             );
           }
-          if (_tournaments.every((l) => l.id != _selectedTournamentId)) {
-            _selectedTournamentId = _tournaments.first.id;
+          if (_selectedTournamentId != _allTournaments &&
+              _tournaments.every((l) => l.id != _selectedTournamentId)) {
+            _selectedTournamentId = _allTournaments;
           }
           final tId = (_selectedTournamentId ?? '').trim();
+          final showAll = tId == _allTournaments;
 
           return Column(
             children: [
               AdminFilterBar(
                 summary:
-                    '${_tournamentName(tId)} • ${_statusLabel(_status)}',
+                    '${showAll ? 'Tüm turnuvalar' : _tournamentName(tId)} • '
+                    '${_statusLabel(_status)}',
                 onTap: _openFilters,
               ),
               Expanded(
                 child: StreamBuilder<List<NewsItem>>(
-                  stream: _leagueService.watchNews(
-                    tournamentId: tId,
-                    includeUnpublished: true,
-                  ),
+                  stream: showAll
+                      ? _leagueService.watchNewsForLeagues(
+                          _tournaments.map((l) => l.id).toSet(),
+                        )
+                      : _leagueService.watchNews(
+                          tournamentId: tId,
+                          includeUnpublished: true,
+                        ),
                   builder: (context, snapshot) {
                     if (!snapshot.hasData) {
                       return const Center(
@@ -722,7 +758,10 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
                     }
                     return ListView(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                      children: docs.map(_newsCard).toList(),
+                      children: [
+                        for (final d in docs)
+                          _newsCard(d, showTournament: showAll),
+                      ],
                     );
                   },
                 ),

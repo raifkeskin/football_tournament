@@ -59,6 +59,10 @@ abstract class ILeagueService {
   /// Giriş yapılmışsa her haberde [NewsItem.likedByMe] dolu gelir.
   Stream<List<NewsItem>> watchNewsFeed({String? leagueId});
 
+  /// Yönetim listesi "Tümü": verilen turnuvaların tüm haberleri (taslak ve
+  /// süresi dolmuşlar dahil), en yeni üstte.
+  Stream<List<NewsItem>> watchNewsForLeagues(Set<String> leagueIds);
+
   Future<void> setNewsLike({required String newsId, required bool liked});
 
   Future<void> addNews({
