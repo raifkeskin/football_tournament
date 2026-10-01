@@ -21,7 +21,10 @@ void main() async {
     anonKey: AppConfig.supabaseAnonKey,
   );
   try {
-    final res = await Supabase.instance.client.from('pitches').select('id').limit(1);
+    final res = await Supabase.instance.client
+        .from('pitches')
+        .select('id')
+        .limit(1);
     // ignore: unnecessary_type_check
     final n = (res is List) ? res.length : 0;
     debugPrint('Supabase bağlantı kontrolü OK (pitches örnek kayıt: $n)');
@@ -189,7 +192,7 @@ class _SplashScreenState extends State<SplashScreen>
                   _reveal(
                     start: 0.4,
                     child: Text(
-                      'Master Lig Dünyasına Hoş Geldiniz',
+                      'Dünyasına Hoş Geldiniz',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.8),
