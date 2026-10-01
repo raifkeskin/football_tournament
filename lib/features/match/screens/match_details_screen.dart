@@ -1983,6 +1983,7 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
               return [
                 for (final r in list)
                   _row(
+                    playerId: r.playerId,
                     jersey: jerseyOf(r),
                     name: byId[r.playerId]?.name ?? '-',
                     // İlk 11'de kaleci: sahadaki kaleci; yedeklerde mevki.
@@ -2026,6 +2027,7 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
   }
 
   Widget _row({
+    required String playerId,
     required String jersey,
     required String name,
     required int line,
@@ -2033,6 +2035,19 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
   }) {
     final isGk = line == 0;
     final badge = isGk ? const Color(0xFFF59E0B) : color;
+    // İsme dokununca oyuncu kartı açılır.
+    return Builder(
+      builder: (context) => InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: playerId.trim().isEmpty
+            ? null
+            : () => showPlayerCard(context, playerKey: playerId, number: jersey),
+        child: _rowBody(jersey, name, badge, isCaptain),
+      ),
+    );
+  }
+
+  Widget _rowBody(String jersey, String name, Color badge, bool isCaptain) {
     return SizedBox(
       height: 32,
       child: Row(

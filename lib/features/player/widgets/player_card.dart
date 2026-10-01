@@ -528,15 +528,15 @@ class _PlayerCardState extends State<PlayerCard> {
     final pos = widget.position.trim();
     final name = widget.name.trim().isEmpty ? '-' : widget.name.trim();
     final age = _ageFromBirthDate(widget.birthDate);
-    final photoHeight = (MediaQuery.of(context).size.height * 0.34).clamp(
-      230.0,
-      320.0,
+    final photoHeight = (MediaQuery.of(context).size.height * 0.26).clamp(
+      212.0,
+      244.0,
     );
 
     Widget info(IconData icon, String label, String value) => Expanded(
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
           color: Colors.black.withValues(alpha: 0.22),
           borderRadius: BorderRadius.circular(14),
@@ -569,7 +569,7 @@ class _PlayerCardState extends State<PlayerCard> {
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w900,
-                  fontSize: 18,
+                  fontSize: 17,
                 ),
               ),
             ),
@@ -578,7 +578,7 @@ class _PlayerCardState extends State<PlayerCard> {
       ),
     );
 
-    return Container(
+    final hero = Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -587,18 +587,10 @@ class _PlayerCardState extends State<PlayerCard> {
         ),
         borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
       ),
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 18),
+      padding: const EdgeInsets.fromLTRB(16, 44, 16, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Align(
-            alignment: Alignment.centerRight,
-            child: IconButton(
-              onPressed: () => Navigator.of(context).maybePop(),
-              icon: const Icon(Icons.close_rounded, color: Colors.white70),
-              tooltip: 'Kapat',
-            ),
-          ),
           SizedBox(
             height: photoHeight,
             child: Row(
@@ -626,7 +618,8 @@ class _PlayerCardState extends State<PlayerCard> {
                           ],
                         ),
                         child: photo.isEmpty
-                            ? Center(
+                            ? Align(
+                                alignment: const Alignment(0, -0.25),
                                 child: Text(
                                   _initials(name),
                                   style: const TextStyle(
@@ -641,6 +634,69 @@ class _PlayerCardState extends State<PlayerCard> {
                                 fit: BoxFit.cover,
                                 fallbackIconSize: 48,
                               ),
+                      ),
+                      // İsim ve mevki görselin altında, okunsun diye koyulaşma.
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        child: Container(
+                          padding: const EdgeInsets.fromLTRB(12, 28, 12, 10),
+                          decoration: const BoxDecoration(
+                            borderRadius: BorderRadius.vertical(
+                              bottom: Radius.circular(20),
+                            ),
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [Color(0x000F172A), Color(0xE60F172A)],
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                name,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 19,
+                                  fontWeight: FontWeight.w900,
+                                  height: 1.1,
+                                  shadows: [
+                                    Shadow(
+                                      color: Colors.black54,
+                                      blurRadius: 10,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (pos.isNotEmpty && pos != '-') ...[
+                                const SizedBox(height: 5),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 9,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: _accent.withValues(alpha: 0.9),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(
+                                    pos,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
                       ),
                       if (number.isNotEmpty)
                         Positioned(
@@ -698,44 +754,22 @@ class _PlayerCardState extends State<PlayerCard> {
               ],
             ),
           ),
-          const SizedBox(height: 14),
-          Text(
-            name,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.w900,
-              height: 1.1,
-            ),
-          ),
-          if (pos.isNotEmpty && pos != '-') ...[
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: _accent.withValues(alpha: 0.9),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  pos,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-            ),
-          ],
         ],
       ),
+    );
+    return Stack(
+      children: [
+        hero,
+        Positioned(
+          top: 0,
+          right: 0,
+          child: IconButton(
+            onPressed: () => Navigator.of(context).maybePop(),
+            icon: const Icon(Icons.close_rounded, color: Colors.white70),
+            tooltip: 'Kapat',
+          ),
+        ),
+      ],
     );
   }
 
@@ -819,7 +853,7 @@ class _PlayerCardState extends State<PlayerCard> {
         children: [
           const Expanded(
             child: Text(
-              'Turnuva – Sezon',
+              'Turnuva / Sezon',
               style: TextStyle(
                 color: _mid,
                 fontSize: 11,
@@ -833,77 +867,131 @@ class _PlayerCardState extends State<PlayerCard> {
       ),
     );
 
+    // Ağaç: turnuva başlık satırı, altında girintili sezonlar (takım adıyla).
     final children = <Widget>[header()];
-    var first = true;
     for (final t in tournaments) {
-      for (final sn in t.seasons) {
+      children.add(
+        Container(
+          width: double.infinity,
+          color: Colors.white.withValues(alpha: 0.04),
+          padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+          child: Row(
+            children: [
+              const Icon(Icons.emoji_events_outlined, size: 15, color: _accent),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  t.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: _accent,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+      for (var i = 0; i < t.seasons.length; i++) {
+        final sn = t.seasons[i];
+        final last = i == t.seasons.length - 1;
         final x = sn.totals;
         children.add(
-          Container(
-            padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
-            decoration: BoxDecoration(
-              border: first
-                  ? null
-                  : Border(
-                      top: BorderSide(
-                        color: Colors.white.withValues(alpha: 0.06),
-                      ),
-                    ),
-            ),
+          IntrinsicHeight(
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                // Ağaç çizgisi: son sezonda yarıda biter (└), diğerlerinde ├.
+                SizedBox(
+                  width: 34,
+                  child: Stack(
                     children: [
-                      Text(
-                        '${t.name} – ${sn.name}',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
+                      Positioned(
+                        left: 21,
+                        top: 0,
+                        bottom: last ? null : 0,
+                        height: last ? 22 : null,
+                        child: Container(
+                          width: 1.5,
+                          color: Colors.white.withValues(alpha: 0.18),
                         ),
                       ),
-                      if (sn.teams.isNotEmpty) ...[
-                        const SizedBox(height: 3),
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.shield_outlined,
-                              size: 12,
-                              color: _accent,
-                            ),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              child: Text(
-                                sn.teams.join(', '),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: _accent,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
+                      Positioned(
+                        left: 21,
+                        top: 21,
+                        child: Container(
+                          width: 9,
+                          height: 1.5,
+                          color: Colors.white.withValues(alpha: 0.18),
                         ),
-                      ],
+                      ),
                     ],
                   ),
                 ),
-                cell('${x.matches}'),
-                cell('${x.goals}', color: _accent, bold: true),
-                cell('${x.assists}', color: _purple, bold: true),
-                cell('${x.yellow}', color: _yellow),
-                cell('${x.red}', color: _red),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(0, 10, 10, 10),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                sn.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              if (sn.teams.isNotEmpty) ...[
+                                const SizedBox(height: 2),
+                                Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.shield_outlined,
+                                      size: 11,
+                                      color: _mid,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Expanded(
+                                      child: Text(
+                                        sn.teams.join(', '),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: _mid,
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        cell('${x.matches}'),
+                        cell('${x.goals}', color: _accent, bold: true),
+                        cell('${x.assists}', color: _purple, bold: true),
+                        cell('${x.yellow}', color: _yellow),
+                        cell('${x.red}', color: _red),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
         );
-        first = false;
       }
     }
 
