@@ -26,6 +26,8 @@ import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/app_date_picker.dart';
 import '../../../core/widgets/master_class_app_bar.dart';
 import '../../../core/widgets/web_safe_image.dart';
+import 'package:football_tournament/core/widgets/picked_image.dart';
+import 'package:football_tournament/core/widgets/admin_form.dart';
 
 class TeamSquadScreen extends StatefulWidget {
   final String teamId;
@@ -1697,12 +1699,12 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
     setState(() => _managerExists = exists);
   }
 
+  // Sıkıştırma yükleme servisinde yapılır; burada yalnızca seçilir. Dosya
+  // sistemi kullanılmaz (web'de çalışmıyordu).
   Future<void> _pickPhoto() async {
     final picked = await _picker.pickImage(source: ImageSource.gallery);
     if (picked == null) return;
-    final originalFile = File(picked.path);
-    final bytes = await originalFile.length();
-    if (bytes > 10 * 1024 * 1024) {
+    if (await picked.length() > 10 * 1024 * 1024) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -1714,39 +1716,9 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
       );
       return;
     }
-    final tmp = await getTemporaryDirectory();
-
-    const maxUploadedBytes = 800 * 1024;
-    const targetWidth = 1024;
-    const targetHeight = 1024;
-    const qualities = [85, 75, 65, 55];
-
-    XFile? best;
-    for (final q in qualities) {
-      final targetPath =
-          '${tmp.path}/player_${DateTime.now().millisecondsSinceEpoch}_q$q.jpg';
-      final out = await FlutterImageCompress.compressAndGetFile(
-        originalFile.absolute.path,
-        targetPath,
-        quality: q,
-        minWidth: targetWidth,
-        minHeight: targetHeight,
-      );
-      if (out == null) continue;
-      best = out;
-      final size = await File(out.path).length();
-      if (size <= maxUploadedBytes) break;
-    }
-
-    if (best == null) {
-      setState(() {
-        _pickedPhoto = picked;
-        _removePhoto = false;
-      });
-      return;
-    }
+    if (!mounted) return;
     setState(() {
-      _pickedPhoto = best;
+      _pickedPhoto = picked;
       _removePhoto = false;
     });
   }
@@ -1856,7 +1828,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
       String? uploadedPhotoUrl;
       if (_pickedPhoto != null) {
         uploadedPhotoUrl = await _imageUploadService.uploadImage(
-          File(_pickedPhoto!.path),
+          _pickedPhoto!,
           folder: MediaFolder.players,
         );
         if ((uploadedPhotoUrl ?? '').trim().isEmpty) {
@@ -1986,458 +1958,380 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
     }
   }
 
+  Future<void> _pickOption({
+    required String title,
+    required List<String> items,
+    required String? selected,
+    required ValueChanged<String> onPicked,
+  }) async {
+    if (_saving) return;
+    final v = await showAdminOptionPicker<String>(
+      context: context,
+      title: title,
+      items: items,
+      labelBuilder: (s) => s,
+      selected: selected,
+    );
+    if (v != null && mounted) setState(() => onPicked(v));
+  }
+
+  Widget _textRow({
+    required IconData icon,
+    required String label,
+    required TextEditingController controller,
+    TextInputType? keyboardType,
+    List<TextInputFormatter>? inputFormatters,
+    String? hint,
+    String? prefixText,
+    Widget? trailing,
+    TextCapitalization capitalization = TextCapitalization.none,
+  }) {
+    return AdminFieldRow(
+      icon: icon,
+      label: label,
+      trailing: trailing,
+      child: TextField(
+        controller: controller,
+        enabled: !_saving,
+        keyboardType: keyboardType,
+        inputFormatters: inputFormatters,
+        textCapitalization: capitalization,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 15,
+          fontWeight: FontWeight.w700,
+        ),
+        decoration: InputDecoration(
+          isDense: true,
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.only(top: 2),
+          hintText: hint,
+          prefixText: prefixText,
+          prefixStyle: const TextStyle(
+            color: Colors.white70,
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+          ),
+          hintStyle: const TextStyle(color: Colors.white38),
+        ),
+      ),
+    );
+  }
+
+  /// Dikdörtgen (3:4) fotoğraf önizlemesi; köşedeki düğme fotoğraf seçer.
+  Widget _photoCard() {
+    final editingUrl = (_existingPhotoUrl ?? '').trim();
+    final hasPicked = _pickedPhoto != null;
+    final hasPhoto = hasPicked || editingUrl.isNotEmpty;
+    const w = 132.0, h = 176.0;
+
+    final Widget image = hasPicked
+        ? Image(image: pickedImageProvider(_pickedPhoto!), fit: BoxFit.cover)
+        : editingUrl.isNotEmpty
+        ? WebSafeImage(
+            url: widget.normalizeUrl(editingUrl),
+            width: w,
+            height: h,
+            fit: BoxFit.cover,
+            fallbackIconSize: 40,
+          )
+        : Icon(
+            Icons.person_rounded,
+            size: 64,
+            color: kAdminAccent.withValues(alpha: 0.6),
+          );
+
+    return Column(
+      children: [
+        GestureDetector(
+          onTap: _saving ? null : _pickPhoto,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                width: w,
+                height: h,
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(22),
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF0F172A), Color(0xFF064E3B)],
+                  ),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.12),
+                  ),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black45,
+                      blurRadius: 18,
+                      offset: Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: SizedBox.expand(child: Center(child: image)),
+              ),
+              Positioned(
+                right: -8,
+                bottom: -8,
+                child: Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: kAdminAccent,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: const Color(0xFF1E293B),
+                      width: 3,
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.photo_camera_outlined,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        if (hasPhoto)
+          TextButton.icon(
+            onPressed: _saving
+                ? null
+                : () => setState(() {
+                    _pickedPhoto = null;
+                    _existingPhotoUrl = null;
+                    _removePhoto = true;
+                  }),
+            icon: const Icon(Icons.delete_outline_rounded, size: 18),
+            label: const Text('Fotoğrafı Kaldır'),
+            style: TextButton.styleFrom(foregroundColor: kAdminDanger),
+          )
+        else
+          const Text(
+            'Fotoğraf eklemek için dokunun',
+            style: TextStyle(color: kAdminMuted, fontSize: 12),
+          ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final editing = widget.editing != null;
     final allowManagerOptions = !_managerExists || _isManagerRole(_role);
-
-    final hasPicked = _pickedPhoto != null;
-    final editingUrl = (_existingPhotoUrl ?? '').trim();
-    final hasEditingUrl = editingUrl.isNotEmpty;
-    final hasPhoto = hasPicked || hasEditingUrl;
-
-    Widget photoButton({
-      required IconData icon,
-      required String tooltip,
-      required Color color,
-      required VoidCallback? onPressed,
-    }) {
-      return Material(
-        color: onPressed == null ? color.withValues(alpha: 0.35) : color,
-        shape: const CircleBorder(),
-        child: IconButton(
-          tooltip: tooltip,
-          onPressed: onPressed,
-          icon: Icon(icon, color: Colors.white, size: 20),
-          constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-        ),
-      );
-    }
+    final roles = _roles
+        .where((r) => !(_isManagerRole(r) && !allowManagerOptions))
+        .toList();
+    String? valueOrNull(String v) =>
+        v.trim().isEmpty || v == _unsetOption ? null : v;
 
     // Popup içinde kendi ScaffoldMessenger'ı: uyarılar popup'ın içinde görünür.
     return ScaffoldMessenger(
       child: Scaffold(
         backgroundColor: Colors.transparent,
         body: ListView(
-          padding: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
           children: [
-            // Başlık
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        editing
-                            ? Icons.manage_accounts_rounded
-                            : Icons.person_add_alt_1_rounded,
-                        color: kAdminAccent,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        editing ? 'Futbolcu Güncelle' : 'Futbolcu Ekle',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  const Divider(color: Colors.white24, height: 1),
-                ],
-              ),
+            AdminDialogHeader(
+              icon: editing
+                  ? Icons.manage_accounts_rounded
+                  : Icons.person_add_alt_1_rounded,
+              title: editing ? 'Futbolcu Güncelle' : 'Futbolcu Ekle',
             ),
-            // Fotoğraf: yuvarlak önizleme + ekle/kaldır butonları
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+            const SizedBox(height: 22),
+            Center(child: _photoCard()),
+            const SizedBox(height: 16),
+            AdminFormSection(
+              title: 'Kimlik',
+              child: AdminFieldGroup(
                 children: [
-                  Container(
-                    width: 96,
-                    height: 96,
-                    padding: const EdgeInsets.all(3),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: kAdminAccent.withValues(alpha: 0.7),
-                        width: 2,
-                      ),
-                    ),
-                    child: ClipOval(
-                      child: hasPicked
-                          ? Image.file(
-                              File(_pickedPhoto!.path),
-                              fit: BoxFit.cover,
-                            )
-                          : hasEditingUrl
-                          ? WebSafeImage(
-                              url: widget.normalizeUrl(editingUrl),
-                              width: 90,
-                              height: 90,
-                              isCircle: true,
-                              fallbackIconSize: 40,
-                              fit: BoxFit.cover,
-                            )
-                          : Container(
-                              color: Colors.black.withValues(alpha: 0.3),
-                              child: Icon(
-                                Icons.person,
-                                size: 48,
-                                color: kAdminAccent.withValues(alpha: 0.7),
-                              ),
-                            ),
-                    ),
+                  _textRow(
+                    icon: Icons.person_outline_rounded,
+                    label: 'Ad',
+                    controller: _nameController,
+                    hint: 'Ad',
+                    capitalization: TextCapitalization.words,
                   ),
-                  const SizedBox(width: 18),
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      photoButton(
-                        icon: Icons.photo_camera_outlined,
-                        tooltip: 'Fotoğraf Seç',
-                        color: kAdminAccent,
-                        onPressed: _saving ? null : _pickPhoto,
-                      ),
-                      const SizedBox(height: 10),
-                      photoButton(
-                        icon: Icons.delete_outline,
-                        tooltip: 'Fotoğrafı Kaldır',
-                        color: const Color(0xFFDC2626),
-                        onPressed: (_saving || !hasPhoto)
-                            ? null
-                            : () {
-                                setState(() {
-                                  _pickedPhoto = null;
-                                  _existingPhotoUrl = null;
-                                  _removePhoto = true;
-                                });
-                              },
-                      ),
-                    ],
+                  _textRow(
+                    icon: Icons.person_outline_rounded,
+                    label: 'Soyad',
+                    controller: _surnameController,
+                    hint: 'Soyad',
+                    capitalization: TextCapitalization.words,
                   ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
-              child: Column(
-                children: [
-                  TextField(
+                  _textRow(
+                    icon: Icons.badge_outlined,
+                    label: 'Kimlik No',
                     controller: _identityNoController,
-                    enabled: !_saving,
                     keyboardType: TextInputType.number,
                     inputFormatters: [
                       FilteringTextInputFormatter.digitsOnly,
                       LengthLimitingTextInputFormatter(11),
                     ],
-                    decoration: const InputDecoration(
-                      labelText: 'Kimlik No',
-                      prefixIcon: Icon(Icons.badge_outlined),
+                    hint: '11 haneli',
+                  ),
+                  _textRow(
+                    icon: Icons.cake_outlined,
+                    label: 'Doğum Tarihi',
+                    controller: _birthDateController,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [BirthDateInputFormatter()],
+                    hint: 'GG-AA-YYYY',
+                    trailing: IconButton(
+                      icon: const Icon(
+                        Icons.calendar_month_outlined,
+                        color: Colors.white54,
+                      ),
+                      tooltip: 'Takvimden seç',
+                      onPressed: _saving ? null : _pickBirthDate,
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _nameController,
-                          enabled: !_saving,
-                          decoration: const InputDecoration(
-                            labelText: 'Ad',
-                            prefixIcon: Icon(Icons.person_outline),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: TextField(
-                          controller: _surnameController,
-                          enabled: !_saving,
-                          decoration: const InputDecoration(
-                            labelText: 'Soyad',
-                            prefixIcon: Icon(Icons.person_outline),
-                          ),
-                        ),
-                      ),
-                    ],
+                  _textRow(
+                    icon: Icons.phone_outlined,
+                    label: 'Telefon',
+                    controller: _phoneController,
+                    keyboardType: TextInputType.phone,
+                    inputFormatters: [PhoneMaskFormatter()],
+                    prefixText: '0 ',
+                    hint: '(5XX) XXX XX XX',
                   ),
-                  /*                    const SizedBox(width: 10),
-                    SizedBox(
-                      height: 52,
-                     child: FilledButton(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: cs.primary,
-                        ),
-                        onPressed: _saving
-                            ? null
-                            : () async {
-                                final selected = await _selectExistingPlayer();
-                                if (selected == null) return;
-                                setState(() => _applySelectedPlayer(selected));
-                                await _loadManagerState();
-                              },
-                        child: const Text(
-                          'SEÇ',
-                          style: TextStyle(fontWeight: FontWeight.w900),
-                        ),
-                      ),
-                    ),*/
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: IgnorePointer(
-                          ignoring:
-                              _saving, // Kaydetme işlemi sırasında tıklamayı engeller
-                          child: CustomBottomSheetDropdown<String>(
-                            labelText: 'Rolü',
-                            prefixIcon: Icons.manage_accounts_outlined,
-
-                            // Sihirli Kısım: Sadece kullanıcının seçmeye yetkisi olan rolleri listeye gönderiyoruz
-                            items: _roles.where((r) {
-                              final isDisabled =
-                                  _isManagerRole(r) && !allowManagerOptions;
-                              return !isDisabled; // Sadece disabled OLMAYANLARI listeye dahil et
-                            }).toList(),
-
-                            value: _role,
-
-                            // Liste zaten String olduğu için direkt kendisini yazdırıyoruz
-                            itemLabelBuilder: (r) => r,
-
-                            onChanged: (String? v) {
-                              if (v != null) {
-                                setState(() => _role = v);
-                              }
-                            },
+                ],
+              ),
+            ),
+            AdminFormSection(
+              title: 'Takım',
+              child: AdminFieldGroup(
+                children: [
+                  AdminSelectRow(
+                    icon: Icons.manage_accounts_outlined,
+                    label: 'Rolü',
+                    value: _role,
+                    placeholder: 'Seçin',
+                    onTap: _saving
+                        ? null
+                        : () => _pickOption(
+                            title: 'Rolü',
+                            items: roles,
+                            selected: _role,
+                            onPicked: (v) => _role = v,
                           ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: IgnorePointer(
-                          ignoring: _saving, // Kayıt anında formu kilitler
-                          child: CustomBottomSheetDropdown<String>(
-                            labelText: 'Kullandığı Ayak',
-                            prefixIcon: Icons.directions_run_outlined,
-                            // Sadece listeyi veriyoruz, döngülere (map) gerek kalmadı!
-                            items: _feet,
-                            // Değer boşsa null gönder, doluysa kendisini gönder
-                            value: _preferredFoot.trim().isEmpty
-                                ? null
-                                : _preferredFoot,
-                            // Liste elemanları zaten String olduğu için direkt f değerini ekrana basıyoruz
-                            itemLabelBuilder: (f) => f,
-                            onChanged: (String? v) {
-                              // Seçim yapılınca state'i güncelle (eğer null gelirse boş string ata)
-                              setState(() => _preferredFoot = v ?? '');
-                            },
-                          ),
-                        ),
-                      ),
-                    ],
                   ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _birthDateController,
-                          enabled: !_saving,
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [BirthDateInputFormatter()],
-                          decoration: InputDecoration(
-                            labelText: 'Doğum Tarihi',
-                            prefixIcon: const Icon(Icons.cake_outlined),
-                            hintText: 'DD-MM-YYYY',
-                            // Elle yazmak da mümkün; ikon standart tarih
-                            // seçicisini açar.
-                            suffixIcon: IconButton(
-                              icon: const Icon(Icons.calendar_month_outlined),
-                              tooltip: 'Takvimden seç',
-                              onPressed: _saving ? null : _pickBirthDate,
-                            ),
-                          ),
-                        ),
-                      ),
-                      if (!widget.standalone) ...[
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: TextField(
-                            controller: _numberController,
-                            enabled: !_saving,
-                            keyboardType: TextInputType.number,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly,
-                              LengthLimitingTextInputFormatter(3),
-                            ],
-                            decoration: const InputDecoration(
-                              labelText: 'Forma No',
-                              prefixIcon: Icon(Icons.numbers_outlined),
-                            ),
-                          ),
-                        ),
+                  if (!widget.standalone)
+                    _textRow(
+                      icon: Icons.numbers_rounded,
+                      label: 'Forma No',
+                      controller: _numberController,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(3),
                       ],
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _heightController,
-                          enabled: !_saving,
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                          ],
-                          decoration: const InputDecoration(
-                            labelText: 'Boy (cm)',
-                            prefixIcon: Icon(Icons.height_outlined),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: TextField(
-                          controller: _weightController,
-                          enabled: !_saving,
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                          ],
-                          decoration: const InputDecoration(
-                            labelText: 'Kilo (kg)',
-                            prefixIcon: Icon(Icons.monitor_weight_outlined),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: IgnorePointer(
-                          ignoring: _saving,
-                          child: CustomBottomSheetDropdown<String>(
-                            labelText: 'Ana Mevki',
-                            prefixIcon: Icons.sports_soccer_outlined,
-                            // Belirsiz seçeneği ve ana mevkileri birleştirip direkt veriyoruz
-                            items: [_unsetOption, ..._mainPositions],
-                            value: _mainPosition,
-                            itemLabelBuilder: (p) => p,
-                            onChanged: (String? v) {
-                              if (v == null) return;
-                              setState(() {
-                                if (v == _unsetOption) {
-                                  _mainPosition = _unsetOption;
-                                  _subPosition = _unsetOption;
-                                } else {
-                                  _mainPosition = v;
-                                  // Yeni mevkiye göre alt mevkilerin ilk elemanını otomatik seç
-                                  _subPosition =
-                                      (_subPositionsByMain[v] ??
-                                              const <String>[])
-                                          .first;
-                                }
-                              });
+                      hint: 'Örn. 10',
+                    ),
+                ],
+              ),
+            ),
+            AdminFormSection(
+              title: 'Oyun',
+              child: AdminFieldGroup(
+                children: [
+                  AdminSelectRow(
+                    icon: Icons.sports_soccer_outlined,
+                    label: 'Ana Mevki',
+                    value: valueOrNull(_mainPosition),
+                    placeholder: 'Seçilmedi',
+                    onClear: () => setState(() {
+                      _mainPosition = _unsetOption;
+                      _subPosition = _unsetOption;
+                    }),
+                    onTap: _saving
+                        ? null
+                        : () => _pickOption(
+                            title: 'Ana Mevki',
+                            items: _mainPositions,
+                            selected: valueOrNull(_mainPosition),
+                            onPicked: (v) {
+                              _mainPosition = v;
+                              // Yeni mevkinin ilk alt mevkisi otomatik seçilir.
+                              _subPosition =
+                                  (_subPositionsByMain[v] ?? const <String>[])
+                                      .first;
                             },
                           ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Visibility(
-                          visible: _isMainPositionSelected,
-                          maintainSize: true,
-                          maintainAnimation: true,
-                          maintainState: true,
-                          child: IgnorePointer(
-                            ignoring:
-                                _saving ||
-                                !_isMainPositionSelected, // Ana mevki seçilmeden burası açılmaz!
-                            child: CustomBottomSheetDropdown<String>(
-                              labelText: 'Alt Mevki',
-                              prefixIcon: Icons.sports_outlined,
-                              // Ana mevkiye bağlı olarak alt mevki listesini getiriyoruz
+                  ),
+                  if (_isMainPositionSelected)
+                    AdminSelectRow(
+                      icon: Icons.sports_outlined,
+                      label: 'Alt Mevki',
+                      value: valueOrNull(_subPosition),
+                      placeholder: 'Seçin',
+                      onTap: _saving
+                          ? null
+                          : () => _pickOption(
+                              title: 'Alt Mevki',
                               items:
                                   _subPositionsByMain[_mainPosition] ??
                                   const <String>[],
-                              // Sadece ana mevki seçiliyse değeri göster, yoksa boş (null) bırak
-                              value: _isMainPositionSelected
-                                  ? _subPosition
-                                  : null,
-                              itemLabelBuilder: (p) => p,
-                              onChanged: (String? v) {
-                                if (v != null) {
-                                  setState(() => _subPosition = v);
-                                }
-                              },
+                              selected: valueOrNull(_subPosition),
+                              onPicked: (v) => _subPosition = v,
                             ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: _phoneController,
-                    enabled: !_saving,
-                    keyboardType: TextInputType.phone,
-                    inputFormatters: [PhoneMaskFormatter()],
-                    decoration: const InputDecoration(
-                      labelText: 'Telefon No',
-                      prefixIcon: Icon(Icons.phone_outlined),
-                      prefixText: '0 ',
-                      hintText: '(5XX) XXX XX XX',
                     ),
+                  AdminSelectRow(
+                    icon: Icons.directions_run_outlined,
+                    label: 'Kullandığı Ayak',
+                    value: valueOrNull(_preferredFoot),
+                    placeholder: 'Seçilmedi',
+                    onClear: () => setState(() => _preferredFoot = ''),
+                    onTap: _saving
+                        ? null
+                        : () => _pickOption(
+                            title: 'Kullandığı Ayak',
+                            items: _feet,
+                            selected: valueOrNull(_preferredFoot),
+                            onPicked: (v) => _preferredFoot = v,
+                          ),
                   ),
-                  const SizedBox(height: 10),
+                  _textRow(
+                    icon: Icons.height_rounded,
+                    label: 'Boy (cm)',
+                    controller: _heightController,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    hint: 'Örn. 178',
+                  ),
+                  _textRow(
+                    icon: Icons.monitor_weight_outlined,
+                    label: 'Kilo (kg)',
+                    controller: _weightController,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    hint: 'Örn. 80',
+                  ),
                 ],
               ),
             ),
           ],
         ),
         bottomNavigationBar: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SizedBox(
-                height: 50,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: kAdminAccent,
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor: kAdminAccent.withValues(
-                      alpha: 0.5,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  onPressed: _saving ? null : _save,
-                  child: _saving
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : Text(
-                          editing ? 'GÜNCELLE' : 'KAYDET',
-                          style: const TextStyle(fontWeight: FontWeight.w900),
-                        ),
-                ),
+              AdminPrimaryButton(
+                label: editing ? 'GÜNCELLE' : 'KAYDET',
+                busy: _saving,
+                onPressed: _save,
+              ),
+              const SizedBox(height: 10),
+              AdminSecondaryButton(
+                onPressed: _saving
+                    ? null
+                    : () => Navigator.of(context).pop(false),
               ),
             ],
           ),

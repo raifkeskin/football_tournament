@@ -14,7 +14,8 @@ import '../../../core/utils/resilient_stream.dart';
 import 'team_squad_screen.dart';
 
 // YENİ OLUŞTURDUĞUMUZ ORTAK BİLEŞENİ IMPORT EDİYORUZ
-import '../../../core/widgets/custom_popup_selector.dart';
+import '../../../core/widgets/tournament_filter_dialog.dart';
+import '../../../core/widgets/league_logo.dart';
 
 class GroupsScreen extends StatefulWidget {
   const GroupsScreen({
@@ -39,6 +40,9 @@ class _GroupsScreenState extends State<GroupsScreen> {
   String? _selectedGroupId;
 
   Stream<List<League>>? _leaguesStream;
+
+  /// Puan tablosu başlığındaki turnuva logosu için (lig akışından doldurulur).
+  Map<String, String> _leagueLogoById = const {};
 
   String? _lastLeagueIdForSeason;
   Stream<List<Season>>? _seasonsStream;
@@ -83,6 +87,9 @@ class _GroupsScreenState extends State<GroupsScreen> {
     GlobalFilter.seasonId.removeListener(_onGlobalFilterChanged);
     super.dispose();
   }
+
+  static bool _sameMap(Map<String, String> a, Map<String, String> b) =>
+      a.length == b.length && a.entries.every((e) => b[e.key] == e.value);
 
   Stream<List<Season>> _getSeasonsStream(String leagueId) {
     if (_lastLeagueIdForSeason != leagueId || _seasonsStream == null) {
@@ -131,6 +138,13 @@ class _GroupsScreenState extends State<GroupsScreen> {
                     final leagues = snapshot.data ?? const <League>[];
                     if (leagues.isEmpty) return const SizedBox();
 
+                    final logos = {for (final l in leagues) l.id: l.logoUrl};
+                    if (!_sameMap(logos, _leagueLogoById)) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) setState(() => _leagueLogoById = logos);
+                      });
+                    }
+
                     final leagueIds = leagues.map((l) => l.id).toSet();
                     if (_selectedLeagueId == null ||
                         !leagueIds.contains(_selectedLeagueId)) {
@@ -157,7 +171,13 @@ class _GroupsScreenState extends State<GroupsScreen> {
                           ? Stream.value([])
                           : _getSeasonsStream(_selectedLeagueId!),
                       builder: (context, seasonSnap) {
-                        final seasons = seasonSnap.data ?? [];
+                        // Turnuva değişince yeni sezonlar gelene kadar eski
+                        // turnuvanınkiler tutulur; onlarla seçim yapılmasın.
+                        final seasons =
+                            seasonSnap.connectionState ==
+                                ConnectionState.waiting
+                            ? const <Season>[]
+                            : (seasonSnap.data ?? const <Season>[]);
 
                         if (_selectedLeagueId != null && seasons.isNotEmpty) {
                           if (_selectedSeasonId == null ||
@@ -312,6 +332,8 @@ class _GroupsScreenState extends State<GroupsScreen> {
                                   groupId: g.id,
                                   groupName: g.name,
                                   fetchGroupId: _selectedGroupId,
+                                  leagueLogoUrl:
+                                      _leagueLogoById[_selectedLeagueId] ?? '',
                                   showGroupName: allGroups.length > 1,
                                 );
                               },
@@ -327,25 +349,22 @@ class _GroupsScreenState extends State<GroupsScreen> {
     );
   }
 
-  // Kapsüle tıklandığında ORTADA açılacak Filtre Paneli. Seçimler panel
-  // içinde taslak olarak tutulur; ekrana yalnızca "Filtreleri Uygula" ile
-  // yansır.
+  // Kapsüle tıklandığında ORTADA açılacak Filtre Paneli; seçimler yalnızca
+  // "Filtreleri Uygula" ile ekrana yansır.
   Future<void> _showFilterDialog(
     BuildContext context,
     List<League> leagues,
   ) async {
-    final result = await showDialog<_StandingsFilter>(
+    final result = await showTournamentFilterDialog(
       context: context,
-      builder: (_) => _StandingsFilterDialog(
-        leagues: leagues,
-        initial: _StandingsFilter(
-          leagueId: _selectedLeagueId,
-          seasonId: _selectedSeasonId,
-          groupId: _selectedGroupId,
-        ),
-        watchSeasons: _watchSeasons,
-        watchGroups: _leagueService.watchGroups,
+      leagues: leagues,
+      initial: TournamentFilter(
+        leagueId: _selectedLeagueId,
+        seasonId: _selectedSeasonId,
+        groupId: _selectedGroupId,
       ),
+      watchSeasons: _watchSeasons,
+      watchGroups: _leagueService.watchGroups,
     );
     if (result == null || !mounted) return;
     GlobalFilter.setLeague(result.leagueId);
@@ -358,246 +377,15 @@ class _GroupsScreenState extends State<GroupsScreen> {
   }
 }
 
-class _StandingsFilter {
-  const _StandingsFilter({this.leagueId, this.seasonId, this.groupId});
-
-  final String? leagueId;
-  final String? seasonId;
-  final String? groupId;
-}
-
-class _StandingsFilterDialog extends StatefulWidget {
-  const _StandingsFilterDialog({
-    required this.leagues,
-    required this.initial,
-    required this.watchSeasons,
-    required this.watchGroups,
-  });
-
-  final List<League> leagues;
-  final _StandingsFilter initial;
-  final Stream<List<Season>> Function(String leagueId) watchSeasons;
-  final Stream<List<GroupModel>> Function(String seasonId) watchGroups;
-
-  @override
-  State<_StandingsFilterDialog> createState() => _StandingsFilterDialogState();
-}
-
-class _StandingsFilterDialogState extends State<_StandingsFilterDialog> {
-  String? _leagueId;
-  String? _seasonId;
-  String? _groupId;
-
-  String? _seasonsFor;
-  Stream<List<Season>>? _seasonsStream;
-  String? _groupsFor;
-  Stream<List<GroupModel>>? _groupsStream;
-
-  @override
-  void initState() {
-    super.initState();
-    _leagueId = widget.initial.leagueId;
-    _seasonId = widget.initial.seasonId;
-    _groupId = widget.initial.groupId;
-  }
-
-  Stream<List<Season>> _seasons(String leagueId) {
-    if (_seasonsFor != leagueId || _seasonsStream == null) {
-      _seasonsFor = leagueId;
-      _seasonsStream = widget.watchSeasons(leagueId);
-    }
-    return _seasonsStream!;
-  }
-
-  Stream<List<GroupModel>> _groups(String seasonId) {
-    if (_groupsFor != seasonId || _groupsStream == null) {
-      _groupsFor = seasonId;
-      _groupsStream = widget.watchGroups(seasonId);
-    }
-    return _groupsStream!;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final leagues = widget.leagues;
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(24),
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF1E293B), Color(0xFF064E3B)],
-          ),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-          boxShadow: const [
-            BoxShadow(
-              color: Colors.black54,
-              blurRadius: 15,
-              offset: Offset(0, 8),
-            ),
-          ],
-        ),
-        child: StreamBuilder<List<Season>>(
-          stream: _leagueId == null
-              ? Stream.value(const <Season>[])
-              : _seasons(_leagueId!),
-          builder: (context, seasonSnap) {
-            // Akış değişince StreamBuilder yeni veri gelene kadar eski
-            // turnuvanın sezonlarını tutar; beklerken boş kabul et.
-            final seasonsLoading =
-                seasonSnap.connectionState == ConnectionState.waiting;
-            final seasons = seasonsLoading
-                ? const <Season>[]
-                : (seasonSnap.data ?? const <Season>[]);
-            // Turnuva değişince sezon listesi yenilenir; geçersiz kalan
-            // sezon seçimi ilk sezona çekilir.
-            final seasonValid = seasons.any((s) => s.id == _seasonId);
-            final seasonId = seasonValid
-                ? _seasonId
-                : (seasons.isNotEmpty ? seasons.first.id : null);
-            if (!seasonsLoading && seasonId != _seasonId) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (!mounted) return;
-                setState(() {
-                  _seasonId = seasonId;
-                  _groupId = null;
-                });
-              });
-            }
-
-            return StreamBuilder<List<GroupModel>>(
-              stream: seasonId == null
-                  ? Stream.value(const <GroupModel>[])
-                  : _groups(seasonId),
-              builder: (context, groupSnap) {
-                // Akış henüz bu sezona ait veriyi getirmediyse eski sezonun
-                // gruplarını gösterme.
-                final groups =
-                    groupSnap.connectionState == ConnectionState.waiting
-                    ? const <GroupModel>[]
-                    : (groupSnap.data ?? const <GroupModel>[]);
-                final groupId = groups.any((g) => g.id == _groupId)
-                    ? _groupId
-                    : null;
-
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // 1. Turnuva Seçici
-                    CustomPopupSelector<String>(
-                      label: 'Turnuva',
-                      selectedValue: _leagueId,
-                      items: leagues.map((l) => l.id).toList(),
-                      labelBuilder: (id) => leagues
-                          .firstWhere(
-                            (l) => l.id == id,
-                            orElse: () => leagues.first,
-                          )
-                          .name,
-                      onChanged: (val) {
-                        if (val == _leagueId) return;
-                        setState(() {
-                          _leagueId = val;
-                          _seasonId = null;
-                          _groupId = null;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 12),
-
-                    // 2. Sezon Seçici
-                    if (seasons.isNotEmpty) ...[
-                      CustomPopupSelector<String>(
-                        label: 'Sezon',
-                        selectedValue: seasonId,
-                        items: seasons.map((s) => s.id).toList(),
-                        labelBuilder: (id) => seasons
-                            .firstWhere(
-                              (s) => s.id == id,
-                              orElse: () => seasons.first,
-                            )
-                            .name,
-                        onChanged: (val) {
-                          if (val == _seasonId) return;
-                          setState(() {
-                            _seasonId = val;
-                            _groupId = null;
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-
-                    // 3. Grup Seçici
-                    if (groups.length > 1) ...[
-                      CustomPopupSelector<String?>(
-                        label: 'Grup',
-                        selectedValue: groupId,
-                        items: [null, ...groups.map((g) => g.id)],
-                        labelBuilder: (id) {
-                          if (id == null) return 'Tüm Gruplar';
-                          final g = groups.firstWhere((grp) => grp.id == id);
-                          return g.name.isEmpty ? 'Grup' : g.name;
-                        },
-                        onChanged: (val) => setState(() => _groupId = val),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                    const SizedBox(height: 8),
-
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF10B981),
-                          disabledBackgroundColor: const Color(
-                            0xFF10B981,
-                          ).withValues(alpha: 0.4),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        onPressed: seasonId == null
-                            ? null
-                            : () => Navigator.pop(
-                                context,
-                                _StandingsFilter(
-                                  leagueId: _leagueId,
-                                  seasonId: seasonId,
-                                  groupId: groupId,
-                                ),
-                              ),
-                        child: const Text(
-                          'Filtreleri Uygula',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                );
-              },
-            );
-          },
-        ),
-      ),
-    );
-  }
-}
-
 class _GroupStandingsTable extends StatefulWidget {
   final String leagueId;
   final String seasonId;
   final String groupId;
   final String groupName;
   final String? fetchGroupId;
+
+  /// Turnuva logosu; boşsa başlıkta kupa ikonu gösterilir.
+  final String leagueLogoUrl;
 
   /// Sezonda birden fazla grup varsa başlığın sağında grup adı gösterilir.
   final bool showGroupName;
@@ -608,6 +396,7 @@ class _GroupStandingsTable extends StatefulWidget {
     required this.groupId,
     required this.groupName,
     required this.fetchGroupId,
+    this.leagueLogoUrl = '',
     this.showGroupName = false,
   });
 
@@ -987,19 +776,22 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
                       padding: const EdgeInsets.fromLTRB(16, 14, 14, 12),
                       child: Row(
                         children: [
-                          Container(
-                            width: 32,
-                            height: 32,
-                            decoration: BoxDecoration(
-                              color: trophy.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(10),
+                          if (widget.leagueLogoUrl.trim().isNotEmpty)
+                            LeagueLogo(url: widget.leagueLogoUrl, size: 32)
+                          else
+                            Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: trophy.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(
+                                Icons.emoji_events_rounded,
+                                color: trophy,
+                                size: 18,
+                              ),
                             ),
-                            child: const Icon(
-                              Icons.emoji_events_rounded,
-                              color: trophy,
-                              size: 18,
-                            ),
-                          ),
                           const SizedBox(width: 10),
                           const Text(
                             'Puan Durumu',

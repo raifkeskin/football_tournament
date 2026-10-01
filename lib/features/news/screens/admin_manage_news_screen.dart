@@ -1,4 +1,3 @@
-import 'dart:io';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -15,6 +14,7 @@ import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/app_date_picker.dart';
 import '../../../core/widgets/custom_popup_selector.dart';
 import '../../../core/widgets/web_safe_image.dart';
+import 'package:football_tournament/core/widgets/picked_image.dart';
 
 class AdminManageNewsScreen extends StatefulWidget {
   const AdminManageNewsScreen({super.key});
@@ -184,7 +184,7 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
         final file = picked;
         if (file != null) {
           imageUrl = await SupabaseImageUploadService().uploadImage(
-            File(file.path),
+            file,
             folder: MediaFolder.news,
           );
           if (imageUrl == null) {
@@ -258,7 +258,7 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
       final preview = file != null
           ? (kIsWeb
                 ? Image.network(file.path, fit: BoxFit.cover)
-                : Image.file(File(file.path), fit: BoxFit.cover))
+                : Image(image: pickedImageProvider(file), fit: BoxFit.cover))
           : WebSafeImage(url: existingUrl, fit: BoxFit.cover);
 
       return ClipRRect(

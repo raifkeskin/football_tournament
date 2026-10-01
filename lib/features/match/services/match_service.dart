@@ -157,7 +157,7 @@ class SupabaseMatchService implements IMatchService {
         .select('league_id')
         .eq('id', matchId)
         .limit(1);
-        
+
     int period = 25;
     if (matchData.isNotEmpty) {
       final leagueId = matchData.first['league_id']?.toString() ?? '';
@@ -216,6 +216,37 @@ class SupabaseMatchService implements IMatchService {
   @override
   Future<void> addMatchEvent(MatchEvent event) async {
     await _supabase.from('match_events').insert(event.toMap(snakeCase: true));
+  }
+
+  @override
+  Future<void> advanceMatchPhase({
+    required String matchId,
+    required String action,
+  }) async {
+    await _supabase.rpc(
+      'advance_match_phase',
+      params: {'p_match_id': matchId, 'p_action': action},
+    );
+  }
+
+  @override
+  Future<void> setMatchObserver({
+    required String matchId,
+    required String? userId,
+  }) async {
+    await _supabase
+        .from('matches')
+        .update({'observer_id': userId})
+        .eq('id', matchId);
+  }
+
+  @override
+  Future<List<({String userId, String label})>> listObserverCandidates() async {
+    final rows = await _supabase.rpc('list_observer_candidates') as List;
+    return [
+      for (final r in rows)
+        (userId: r['user_id'].toString(), label: (r['label'] ?? '').toString()),
+    ];
   }
 
   @override
@@ -317,14 +348,20 @@ class SupabaseMatchService implements IMatchService {
   }
 
   @override
-  Stream<List<MatchRosterModel>> watchMatchRosters(String matchId, String teamId) {
-    return _supabase
-        .from('match_rosters')
-        .stream(primaryKey: ['id'])
-        .map((rows) {
-          final filtered = rows.where((r) => r['match_id'] == matchId && r['team_id'] == teamId);
-          return filtered.map((r) => MatchRosterModel.fromMap(r, r['id'] as String)).toList();
-        });
+  Stream<List<MatchRosterModel>> watchMatchRosters(
+    String matchId,
+    String teamId,
+  ) {
+    return _supabase.from('match_rosters').stream(primaryKey: ['id']).map((
+      rows,
+    ) {
+      final filtered = rows.where(
+        (r) => r['match_id'] == matchId && r['team_id'] == teamId,
+      );
+      return filtered
+          .map((r) => MatchRosterModel.fromMap(r, r['id'] as String))
+          .toList();
+    });
   }
 
   @override

@@ -1,4 +1,3 @@
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,6 +8,7 @@ import '../../../core/services/app_session.dart';
 import '../../../core/services/image_upload_service.dart';
 import '../services/interfaces/i_league_service.dart';
 import '../../../core/services/service_locator.dart';
+import 'package:football_tournament/core/widgets/picked_image.dart';
 
 /// Admin için turnuva ekleme formu.
 class AdminAddLeagueScreen extends StatefulWidget {
@@ -295,7 +295,7 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
       String logoUrl = '';
       if (_leagueLogo != null) {
         final uploadedUrl = await _imageUploadService.uploadImage(
-          File(_leagueLogo!.path),
+          _leagueLogo!,
           folder: MediaFolder.leagues,
         );
         if (uploadedUrl != null) {
@@ -515,8 +515,8 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
                   padding: const EdgeInsets.only(bottom: 16.0),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12),
-                    child: Image.file(
-                      File(_leagueLogo!.path),
+                    child: Image(
+                      image: pickedImageProvider(_leagueLogo!),
                       height: 150,
                       width: double.infinity,
                       fit: BoxFit.cover,

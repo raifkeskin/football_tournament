@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:archive/archive.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -12,6 +11,7 @@ import '../../../core/services/service_locator.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/web_safe_image.dart';
+import 'package:football_tournament/core/widgets/picked_image.dart';
 
 class AdminManageTeamsScreen extends StatefulWidget {
   const AdminManageTeamsScreen({
@@ -387,7 +387,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
         var logoUrl = removeLogo ? '' : existingLogoUrl;
         if (selectedLogo != null) {
           final uploaded = await _imageUploadService.uploadImage(
-            File(selectedLogo!.path),
+            selectedLogo!,
             folder: MediaFolder.teams,
           );
           if ((uploaded ?? '').trim().isEmpty) {
@@ -475,7 +475,10 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
 
             final Widget logo;
             if (selectedLogo != null) {
-              logo = Image.file(File(selectedLogo!.path), fit: BoxFit.cover);
+              logo = Image(
+                image: pickedImageProvider(selectedLogo!),
+                fit: BoxFit.cover,
+              );
             } else if (showLogoUrl.isNotEmpty) {
               logo = WebSafeImage(
                 url: showLogoUrl,
@@ -1226,7 +1229,7 @@ class _EditTeamScreenState extends State<EditTeamScreen> {
               .toString();
       if (_newLogo != null) {
         final uploaded = await SupabaseImageUploadService().uploadImage(
-          File(_newLogo!.path),
+          _newLogo!,
           folder: MediaFolder.teams,
         );
         if (uploaded != null) {
@@ -1294,9 +1297,7 @@ class _EditTeamScreenState extends State<EditTeamScreen> {
                                   backgroundColor: cs.primary.withValues(
                                     alpha: 0.10,
                                   ),
-                                  backgroundImage: FileImage(
-                                    File(_newLogo!.path),
-                                  ),
+                                  backgroundImage: pickedImageProvider(_newLogo!),
                                 )
                               else if (currentLogoUrl.isNotEmpty)
                                 SizedBox(

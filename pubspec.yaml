@@ -60,6 +60,7 @@ dependencies:
   universal_html: ^2.3.0
   supabase_flutter: ^2.0.0
   cached_network_image: ^4.0.4
+  image: ^4.3.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

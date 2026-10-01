@@ -12,12 +12,13 @@ import '../../tournament/services/interfaces/i_league_service.dart';
 import '../../match/services/interfaces/i_match_service.dart';
 import '../../team/services/interfaces/i_team_service.dart';
 import '../../../core/services/service_locator.dart';
-import '../../../core/widgets/web_safe_image.dart';
 import '../../../core/services/global_filter.dart';
 import '../../../core/utils/resilient_stream.dart';
 import '../../../core/widgets/app_date_picker.dart';
 import '../../team/screens/groups_screen.dart';
 import '../../match/screens/match_details_screen.dart';
+import '../../match/widgets/match_score_line.dart';
+import '../../../core/widgets/league_logo.dart';
 
 /// Ana sayfa — günün maçları, tarih şeridi ve maç kartları.
 class HomeScreen extends StatefulWidget {
@@ -56,6 +57,7 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Ana sayfada gösterilecek turnuvalar (seçici gizliyken hepsi).
   Set<String> _visibleLeagueIds = const <String>{};
   Map<String, String> _leagueNameById = const <String, String>{};
+  Map<String, String> _leagueLogoById = const <String, String>{};
 
   static String _dateKey(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-'
@@ -421,12 +423,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                 color: Colors.white54,
                                 size: 22,
                               )
-                            : Icon(
-                                Icons.emoji_events_rounded,
-                                color: isSelected
+                            : LeagueLogo(
+                                url: l.logoUrl,
+                                size: 26,
+                                fallbackColor: isSelected
                                     ? const Color(0xFF10B981)
                                     : Colors.white70,
-                                size: 22,
                               ),
                         title: Text(
                           l.name,
@@ -566,6 +568,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           if (isAdmin || (l.isActive && !l.isPrivate)) l.id,
                       };
                 _leagueNameById = {for (final l in allLeagues) l.id: l.name};
+                _leagueLogoById = {for (final l in allLeagues) l.id: l.logoUrl};
 
                 // Tek satırlık üst bant: durum çubuğu + 60px tarih şeridi.
                 final headerHeight = MediaQuery.of(context).padding.top + 80;
@@ -991,10 +994,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                       ),
                                     ),
                                     const SizedBox(width: 10),
-                                    const Icon(
-                                      Icons.emoji_events_rounded,
-                                      color: Color(0xFF10B981),
-                                      size: 18,
+                                    LeagueLogo(
+                                      url: _leagueLogoById[sectionLeagueId],
+                                      size: 22,
                                     ),
                                     const SizedBox(width: 8),
                                     Expanded(
@@ -1121,96 +1123,14 @@ class _MatchCardState extends State<_MatchCard> {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final isAdmin = AppSession.of(context).value.isAdmin;
-    final hs = widget.match.homeScore;
-    final as = widget.match.awayScore;
-    final timeText = (widget.match.matchTime ?? '').trim();
-
-    final showScore =
-        widget.match.status == MatchStatus.finished ||
-        widget.match.status == MatchStatus.live ||
-        hs != 0 ||
-        as != 0;
-
-    Widget scoreBox(int score) {
-      return Container(
-        width: 30,
-        height: 30,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: cs.primaryContainer,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(
-          showScore ? '$score' : '-',
-          style: TextStyle(
-            color: cs.onPrimaryContainer,
-            fontWeight: FontWeight.w900,
-            fontSize: 14,
-          ),
-        ),
-      );
-    }
-
-    Widget? statusUnderTime() {
-      switch (widget.match.status) {
-        case MatchStatus.notStarted:
-          return null;
-        case MatchStatus.finished:
-          return const Text(
-            'MS',
-            style: TextStyle(
-              color: Color(0xFF10B981),
-              fontWeight: FontWeight.w900,
-              fontSize: 10,
-            ),
-          );
-        case MatchStatus.halftime:
-          return const Text(
-            'İY',
-            style: TextStyle(
-              color: Colors.redAccent,
-              fontWeight: FontWeight.w900,
-              fontSize: 10,
-            ),
-          );
-        case MatchStatus.live:
-          final m = widget.match.minute;
-          return Text(
-            m == null ? "CANLI" : "$m'",
-            style: const TextStyle(
-              color: Colors.redAccent,
-              fontWeight: FontWeight.w900,
-              fontSize: 10,
-            ),
-          );
-        case MatchStatus.cancelled:
-          return const Text(
-            'IPT',
-            style: TextStyle(
-              color: Colors.white70,
-              fontWeight: FontWeight.w900,
-              fontSize: 10,
-            ),
-          );
-        case MatchStatus.postponed:
-          return const Text(
-            'ERT',
-            style: TextStyle(
-              color: Colors.white70,
-              fontWeight: FontWeight.w900,
-              fontSize: 10,
-            ),
-          );
-      }
-    }
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 10),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       color: const Color(0xFF1E293B).withValues(alpha: 0.78),
       child: InkWell(
+        borderRadius: BorderRadius.circular(16),
         onTap: () async {
           await Navigator.push(
             context,
@@ -1222,103 +1142,35 @@ class _MatchCardState extends State<_MatchCard> {
           _checkBroadcast(); // Geri dönüldüğünde ikonu güncelle
         },
         child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 50,
-                child: Column(
-                  children: [
-                    if (_broadcastUrl != null)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 4.0),
-                        child: InkWell(
-                          onTap: () async {
-                            final uri = Uri.tryParse(_broadcastUrl!);
-                            if (uri != null && await canLaunchUrl(uri)) {
-                              await launchUrl(
-                                uri,
-                                mode: LaunchMode.externalApplication,
-                              );
-                            }
-                          },
-                          child: const Icon(
-                            Icons.play_circle_fill,
-                            color: Colors.redAccent,
-                            size: 22,
-                          ),
-                        ),
-                      ),
-                    Text(
-                      widget.match.status == MatchStatus.notStarted &&
-                              timeText.isEmpty
-                          ? ''
-                          : (timeText.isEmpty ? '--:--' : timeText),
-                      style: TextStyle(
-                        color: cs.onSurfaceVariant,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 12,
-                      ),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+          child: MatchScoreLine(
+            match: widget.match,
+            homeName: widget.homeName,
+            awayName: widget.awayName,
+            homeLogo: widget.homeLogo,
+            awayLogo: widget.awayLogo,
+            showLogos: false,
+            leading: _broadcastUrl == null
+                ? null
+                : InkWell(
+                    onTap: () async {
+                      final uri = Uri.tryParse(_broadcastUrl!);
+                      if (uri != null && await canLaunchUrl(uri)) {
+                        await launchUrl(
+                          uri,
+                          mode: LaunchMode.externalApplication,
+                        );
+                      }
+                    },
+                    child: const Icon(
+                      Icons.play_circle_fill,
+                      color: Colors.redAccent,
+                      size: 20,
                     ),
-                    if (statusUnderTime() != null) statusUnderTime()!,
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                width: 1,
-                height: 40,
-                color: cs.outlineVariant.withValues(alpha: 0.35),
-              ),
-              const SizedBox(width: 12),
-
-              Expanded(
-                child: Column(
-                  children: [
-                    _row(widget.homeName, widget.homeLogo, scoreBox(hs)),
-                    const SizedBox(height: 12),
-                    _row(widget.awayName, widget.awayLogo, scoreBox(as)),
-                  ],
-                ),
-              ),
-            ],
+                  ),
           ),
         ),
       ),
-    );
-  }
-
-  Widget _row(String name, String logo, Widget scoreWidget) {
-    return Row(
-      children: [
-        _KucukLogo(logoUrl: logo, size: 20),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
-          ),
-        ),
-        scoreWidget,
-      ],
-    );
-  }
-}
-
-class _KucukLogo extends StatelessWidget {
-  final String logoUrl;
-  final double size;
-  const _KucukLogo({required this.logoUrl, required this.size});
-  @override
-  Widget build(BuildContext context) {
-    return WebSafeImage(
-      url: logoUrl,
-      width: size,
-      height: size,
-      isCircle: true,
-      fallbackIconSize: size * 0.7,
     );
   }
 }

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../player/widgets/player_card.dart';
 import 'package:flutter/services.dart';
-import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:image_picker/image_picker.dart';
@@ -20,6 +19,10 @@ import '../../team/services/interfaces/i_team_service.dart';
 import '../../../core/services/service_locator.dart';
 import 'admin_match_event_screen.dart';
 import '../../tournament/screens/formation_tab.dart';
+import 'package:football_tournament/core/widgets/picked_image.dart';
+import '../utils/match_clock.dart';
+import 'package:football_tournament/core/widgets/admin_page.dart';
+import 'package:football_tournament/core/widgets/admin_form.dart';
 
 // --- YARDIMCI WIDGETLAR ---
 
@@ -56,20 +59,13 @@ class _TeamInfo extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          padding: const EdgeInsets.all(2),
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white.withValues(alpha: 0.7)),
-            boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 8)],
-          ),
-          child: WebSafeImage(
-            url: logoUrl,
-            width: 42,
-            height: 42,
-            isCircle: true,
-            fallbackIconSize: 20,
-          ),
+        // Şeffaf logolar kırpılmadan, çerçevesiz gösterilir.
+        WebSafeImage(
+          url: logoUrl,
+          width: 46,
+          height: 46,
+          fit: BoxFit.contain,
+          fallbackIconSize: 20,
         ),
         const SizedBox(height: 6),
         Text(
@@ -90,6 +86,178 @@ class _TeamInfo extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Skorun altında: canlı dakika, İY veya MS.
+class _MatchPhaseLabel extends StatelessWidget {
+  const _MatchPhaseLabel({required this.match});
+
+  final MatchModel match;
+
+  @override
+  Widget build(BuildContext context) {
+    return MatchClockBuilder(
+      match: match,
+      builder: (context, liveMinute) {
+        final (String? text, Color color) = switch (match.status) {
+          MatchStatus.live => (liveMinute ?? 'CANLI', const Color(0xFFF87171)),
+          MatchStatus.halftime => ('İY', const Color(0xFFFBBF24)),
+          MatchStatus.finished => ('MS', const Color(0xFF10B981)),
+          MatchStatus.postponed => ('ERTELENDİ', Colors.white70),
+          MatchStatus.cancelled => ('İPTAL', Colors.white70),
+          MatchStatus.notStarted => (null, Colors.transparent),
+        };
+        if (text == null) return const SizedBox.shrink();
+        return Text(
+          text,
+          style: TextStyle(
+            color: color,
+            fontWeight: FontWeight.w900,
+            fontSize: 13,
+            shadows: const [
+              Shadow(color: Colors.black, blurRadius: 10, offset: Offset(0, 2)),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Yetkililere görünen maç akışı düğmesi (başlama düdüğü → İY → 2. yarı →
+/// maç sonu). [canUndo] ise son adım geri alınabilir.
+class _MatchFlowBar extends StatefulWidget {
+  const _MatchFlowBar({
+    required this.match,
+    required this.canUndo,
+    required this.onAction,
+  });
+
+  final MatchModel match;
+  final bool canUndo;
+  final Future<void> Function(String action) onAction;
+
+  @override
+  State<_MatchFlowBar> createState() => _MatchFlowBarState();
+}
+
+class _MatchFlowBarState extends State<_MatchFlowBar> {
+  bool _busy = false;
+
+  Future<void> _run(String action) async {
+    setState(() => _busy = true);
+    try {
+      await widget.onAction(action);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final m = widget.match;
+    final ({String action, String label, IconData icon, Color color})? next =
+        switch (m.status) {
+          MatchStatus.notStarted => (
+            action: 'start',
+            label: 'Başlama Düdüğü',
+            icon: Icons.sports_rounded,
+            color: const Color(0xFF10B981),
+          ),
+          MatchStatus.live when m.secondHalfAt == null => (
+            action: 'end_first_half',
+            label: 'İlk Yarıyı Bitir',
+            icon: Icons.pause_circle_outline_rounded,
+            color: const Color(0xFFF59E0B),
+          ),
+          MatchStatus.halftime => (
+            action: 'start_second_half',
+            label: '2. Yarıyı Başlat',
+            icon: Icons.play_circle_outline_rounded,
+            color: const Color(0xFF10B981),
+          ),
+          MatchStatus.live => (
+            action: 'finish',
+            label: 'Maçı Bitir',
+            icon: Icons.sports_score_rounded,
+            color: const Color(0xFFEF4444),
+          ),
+          _ => null,
+        };
+    final showUndo =
+        widget.canUndo &&
+        m.status != MatchStatus.notStarted &&
+        m.status != MatchStatus.postponed &&
+        m.status != MatchStatus.cancelled;
+    if (next == null && !showUndo) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+      child: Row(
+        children: [
+          if (next != null)
+            Expanded(
+              child: SizedBox(
+                height: 44,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: next.color,
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: next.color.withValues(alpha: 0.4),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  onPressed: _busy ? null : () => _run(next.action),
+                  icon: _busy
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Icon(next.icon, size: 22),
+                  label: Text(
+                    next.label,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ),
+              ),
+            )
+          else
+            const Spacer(),
+          if (showUndo) ...[
+            const SizedBox(width: 8),
+            SizedBox(
+              height: 44,
+              width: 44,
+              child: OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  foregroundColor: Colors.white70,
+                  side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                onPressed: _busy ? null : () => _run('undo'),
+                child: const Tooltip(
+                  message: 'Son adımı geri al',
+                  child: Icon(Icons.undo_rounded, size: 20),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -268,7 +436,11 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     }
   }
 
-  Widget? _buildTabFab({required MatchModel match, required int tabIndex}) {
+  Widget? _buildTabFab({
+    required MatchModel match,
+    required int tabIndex,
+    bool canAssignObserver = false,
+  }) {
     if (tabIndex == 1 || tabIndex == 3) return null;
 
     if (tabIndex == 0) {
@@ -278,11 +450,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
           _SpeedDialAction(
             label: 'Maç Detayı Gir',
             icon: Icons.edit_note_rounded,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => AdminMatchEventScreen(match: match),
-              ),
+            onTap: () => showDialog<void>(
+              context: context,
+              builder: (_) => AdminMatchEventScreen(match: match),
             ),
           ),
           _SpeedDialAction(
@@ -290,6 +460,12 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
             icon: Icons.location_on,
             onTap: () => _openPitchEditor(match),
           ),
+          if (canAssignObserver)
+            _SpeedDialAction(
+              label: 'Gözlemci Ata',
+              icon: Icons.visibility_outlined,
+              onTap: () => _openObserverPicker(match),
+            ),
         ],
       );
     }
@@ -334,7 +510,11 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
         }
         final m = matchSnap.data ?? widget.match;
 
-        final bool isSuperAdmin = session.isAdmin;
+        // Maç detayındaki yetkiler: admin, turnuva sahibi ve maçın gözlemcisi.
+        final bool canManageLeague = session.canManageLeague(m.leagueId);
+        final bool isSuperAdmin =
+            canManageLeague ||
+            (m.observerId != null && m.observerId == session.user?.id);
         final bool isTeamManager =
             session.teamId == m.homeTeamId || session.teamId == m.awayTeamId;
         final bool isAdminAccess = isSuperAdmin || isTeamManager;
@@ -385,7 +565,11 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
               ),
               floatingActionButton: !isSuperAdmin
                   ? null
-                  : _buildTabFab(match: m, tabIndex: _tabController.index),
+                  : _buildTabFab(
+                      match: m,
+                      tabIndex: _tabController.index,
+                      canAssignObserver: canManageLeague,
+                    ),
               body: Column(
                 children: [
                   Stack(
@@ -416,7 +600,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                       ),
                       Padding(
                         padding: EdgeInsets.only(
-                          top: MediaQuery.of(context).padding.top + 44,
+                          // Takım bloğu geri okunun hizasına çıkar; tarih/saat
+                          // satırına daha çok yer kalır.
+                          top: MediaQuery.of(context).padding.top + 22,
                         ),
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
@@ -458,22 +644,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                             ],
                                           ),
                                         ),
-                                        if (m.status == MatchStatus.live)
-                                          const Text(
-                                            "CANLI",
-                                            style: TextStyle(
-                                              color: Colors.amber,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 11,
-                                              shadows: [
-                                                Shadow(
-                                                  color: Colors.black,
-                                                  blurRadius: 10,
-                                                  offset: Offset(0, 2),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
+                                        _MatchPhaseLabel(match: m),
                                       ],
                                     ),
                                   ),
@@ -485,7 +656,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 6),
+                              const SizedBox(height: 18),
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 mainAxisSize: MainAxisSize.min,
@@ -608,6 +779,13 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                         ),
                         Column(
                           children: [
+                            if (isSuperAdmin)
+                              _MatchFlowBar(
+                                match: m,
+                                canUndo: canManageLeague,
+                                onAction: (action) =>
+                                    _runPhaseAction(m, action),
+                              ),
                             _LiveStreamPanel(
                               key: ValueKey('live_${m.id}_$_refreshKey'),
                               matchId: m.id,
@@ -660,7 +838,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                 tabs: const [
                                   Tab(text: 'Detay'),
                                   Tab(text: 'Kadrolar'),
-                                  Tab(text: 'Önemli Anlar'),
+                                  Tab(text: 'Medya'),
                                   Tab(text: 'Diziliş'),
                                 ],
                               ),
@@ -711,36 +889,149 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     );
   }
 
+  /// Akış adımını uygular; maç sonu için skor onayı ister.
+  Future<void> _runPhaseAction(MatchModel m, String action) async {
+    if (action == 'finish' || action == 'undo') {
+      final ok = await showAdminConfirmDialog(
+        context: context,
+        title: action == 'finish' ? 'Maçı Bitir' : 'Son Adımı Geri Al',
+        message: action == 'finish'
+            ? 'Skor ${m.homeScore} - ${m.awayScore} olarak kaydedilecek ve '
+                  'maç puan durumuna yansıyacak. Onaylıyor musunuz?'
+            : 'Maç bir önceki aşamaya döner.',
+        confirmLabel: action == 'finish' ? 'BİTİR' : 'GERİ AL',
+        destructive: action == 'undo',
+        icon: action == 'finish'
+            ? Icons.sports_score_rounded
+            : Icons.undo_rounded,
+      );
+      if (!ok) return;
+    }
+    try {
+      await _matchService.advanceMatchPhase(matchId: m.id, action: action);
+    } catch (e) {
+      if (!mounted) return;
+      final msg = e is PostgrestException ? e.message : '$e';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    }
+  }
+
+  Future<void> _openObserverPicker(MatchModel m) async {
+    final List<({String userId, String label})> users;
+    try {
+      users = await _matchService.listObserverCandidates();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Kullanıcılar okunamadı: $e')));
+      return;
+    }
+    if (!mounted) return;
+    const none = (userId: '', label: 'Gözlemci yok');
+    final picked = await showAdminOptionPicker<({String userId, String label})>(
+      context: context,
+      title: 'Gözlemci Ata',
+      items: [none, ...users],
+      labelBuilder: (u) => u.label,
+      selected: [
+        none,
+        ...users,
+      ].where((u) => u.userId == (m.observerId ?? '')).firstOrNull,
+      emptyText: 'Kayıtlı kullanıcı yok.',
+    );
+    if (picked == null || !mounted) return;
+    try {
+      await _matchService.setMatchObserver(
+        matchId: m.id,
+        userId: picked.userId.isEmpty ? null : picked.userId,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Gözlemci atanamadı: $e')));
+    }
+  }
+
   void _openPitchEditor(MatchModel m) async {
     final list = await _leagueService.listPitchesOnce();
     String? sel = m.pitchName;
     if (!mounted) return;
+    var saving = false;
     showDialog(
       context: context,
       builder: (c) => StatefulBuilder(
         builder: (context, setS) {
-          return AlertDialog(
-            title: const Text('Saha Seçimi'),
-            content: DropdownButton<String>(
-              value: list.contains(sel) ? sel : null,
-              isExpanded: true,
-              items: list
-                  .map((p) => DropdownMenuItem(value: p, child: Text(p)))
-                  .toList(),
-              onChanged: (v) => setS(() => sel = v),
-            ),
-            actions: [
-              ElevatedButton(
-                onPressed: () async {
-                  await _matchService.updateMatchPitchName(
-                    matchId: m.id,
-                    pitchName: sel,
-                  );
-                  Navigator.pop(c);
-                },
-                child: const Text('KAYDET'),
+          Future<void> pick() async {
+            final v = await showAdminOptionPicker<String>(
+              context: context,
+              title: 'Saha',
+              items: list,
+              labelBuilder: (p) => p,
+              selected: sel,
+              emptyText: 'Kayıtlı saha yok.',
+            );
+            if (v != null) setS(() => sel = v);
+          }
+
+          Future<void> save() async {
+            setS(() => saving = true);
+            try {
+              await _matchService.updateMatchPitchName(
+                matchId: m.id,
+                pitchName: sel,
+              );
+              if (c.mounted) Navigator.pop(c);
+            } catch (e) {
+              setS(() => saving = false);
+              if (c.mounted) {
+                ScaffoldMessenger.of(c).showSnackBar(
+                  SnackBar(content: Text('Saha kaydedilemedi: $e')),
+                );
+              }
+            }
+          }
+
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Container(
+              padding: const EdgeInsets.all(22),
+              decoration: adminDialogDecoration(),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const AdminDialogHeader(
+                    icon: Icons.stadium_outlined,
+                    title: 'Saha Seçimi',
+                  ),
+                  const SizedBox(height: 18),
+                  AdminFieldGroup(
+                    children: [
+                      AdminSelectRow(
+                        icon: Icons.location_on_outlined,
+                        label: 'Saha',
+                        value: sel,
+                        placeholder: 'Saha seçin',
+                        onTap: saving ? null : pick,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 22),
+                  AdminPrimaryButton(
+                    label: 'KAYDET',
+                    busy: saving,
+                    onPressed: save,
+                  ),
+                  const SizedBox(height: 10),
+                  AdminSecondaryButton(
+                    onPressed: saving ? null : () => Navigator.pop(c),
+                  ),
+                ],
               ),
-            ],
+            ),
           );
         },
       ),
@@ -774,7 +1065,7 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
   final _urlCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   bool _isHomeTeam = true;
-  File? _pickedFile;
+  XFile? _pickedFile;
   bool _isUploading = false;
 
   final List<String> _types = [
@@ -817,7 +1108,11 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
               )
             else ...[
               if (_pickedFile != null)
-                Image.file(_pickedFile!, height: 100, fit: BoxFit.cover),
+                Image(
+                  image: pickedImageProvider(_pickedFile!),
+                  height: 100,
+                  fit: BoxFit.cover,
+                ),
               ElevatedButton.icon(
                 onPressed: () async {
                   final picked = await ImagePicker().pickImage(
@@ -825,7 +1120,7 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
                     imageQuality: 85,
                   );
                   if (picked != null) {
-                    setState(() => _pickedFile = File(picked.path));
+                    setState(() => _pickedFile = picked);
                   }
                 },
                 icon: const Icon(Icons.image),
@@ -1567,7 +1862,8 @@ class _LiveStreamPanelState extends State<_LiveStreamPanel> {
   late final Stream<List<MatchMediaModel>> _mediaStream = ServiceLocator
       .matchService
       .watchMatchMedia(widget.matchId);
-  bool _expanded = true;
+  // Kapalı başlar; izlemek isteyen başlığa dokunup açar.
+  bool _expanded = false;
 
   @override
   Widget build(BuildContext context) {
@@ -2041,7 +2337,8 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
         borderRadius: BorderRadius.circular(8),
         onTap: playerId.trim().isEmpty
             ? null
-            : () => showPlayerCard(context, playerKey: playerId, number: jersey),
+            : () =>
+                  showPlayerCard(context, playerKey: playerId, number: jersey),
         child: _rowBody(jersey, name, badge, isCaptain),
       ),
     );
@@ -2798,6 +3095,9 @@ class _DetailTabView extends StatelessWidget {
       case MatchStatus.live:
         return <Map<String, dynamic>>[
           {'minute': 0, 'type': 'status', 'title': 'Maç Başladı'},
+          // 2. yarı oynanıyorsa ilk yarı bitmiştir.
+          if (match.secondHalfAt != null)
+            {'minute': period, 'type': 'status', 'title': 'İlk Yarı Bitti'},
         ];
       case MatchStatus.halftime:
         return <Map<String, dynamic>>[
@@ -2866,6 +3166,8 @@ class _DetailTabView extends StatelessWidget {
           if (b.isNotEmpty) return b;
           final c = _readString(e['title']);
           if (c.isNotEmpty) return c;
+          final d = _readString(e['event_name']);
+          if (d.isNotEmpty) return d;
           return _readString(e['eventType']).isNotEmpty
               ? _readString(e['eventType'])
               : _readString(e['event_type']);

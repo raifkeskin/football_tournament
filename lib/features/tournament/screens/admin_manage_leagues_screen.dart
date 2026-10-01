@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -15,6 +14,7 @@ import '../../../core/widgets/app_date_picker.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../player/screens/admin_awards_screen.dart';
 import 'season_management_screen.dart';
+import 'package:football_tournament/core/widgets/picked_image.dart';
 
 class AdminManageLeaguesScreen extends StatefulWidget {
   const AdminManageLeaguesScreen({super.key});
@@ -32,7 +32,7 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
 
   Future<String> _uploadLeagueLogo({required XFile file}) async {
     final uploaded = await SupabaseImageUploadService().uploadImage(
-      File(file.path),
+      file,
       folder: MediaFolder.leagues,
     );
     final url = (uploaded ?? '').trim();
@@ -166,7 +166,10 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
 
             final Widget logo;
             if (selectedLogo != null) {
-              logo = Image.file(File(selectedLogo!.path), fit: BoxFit.contain);
+              logo = Image(
+                image: pickedImageProvider(selectedLogo!),
+                fit: BoxFit.contain,
+              );
             } else if (showUrl.isNotEmpty) {
               logo = WebSafeImage(
                 url: showUrl,
@@ -784,7 +787,7 @@ class _EditLeagueScreenState extends State<EditLeagueScreen> {
       String logoUrl = widget.league.logoUrl;
       if (_newLogo != null) {
         final uploaded = await SupabaseImageUploadService().uploadImage(
-          File(_newLogo!.path),
+          _newLogo!,
           folder: MediaFolder.leagues,
         );
         if (uploaded != null) {
@@ -870,7 +873,7 @@ class _EditLeagueScreenState extends State<EditLeagueScreen> {
                       if (_newLogo != null)
                         CircleAvatar(
                           radius: 60,
-                          backgroundImage: FileImage(File(_newLogo!.path)),
+                          backgroundImage: pickedImageProvider(_newLogo!),
                         )
                       else if (widget.league.logoUrl.isNotEmpty)
                         SizedBox(

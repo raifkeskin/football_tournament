@@ -487,9 +487,9 @@ class _Caption extends StatelessWidget {
                   child: Text(
                     expanded ? 'daha az' : 'devamını gör',
                     style: const TextStyle(
-                      color: _muted,
+                      color: _accent,
                       fontSize: 14,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
@@ -569,7 +569,9 @@ class _NewsPhotoState extends State<_NewsPhoto> {
 
   @override
   Widget build(BuildContext context) {
-    final ratio = (_ratio ?? 4 / 3).clamp(0.8, 1.91);
+    // Dikey fotoğraflar kare alana kırpılır (ekranı kaplamasın); yatay olanlar
+    // 1.91:1'e kadar kendi oranında gösterilir. Tamamı dokununca açılır.
+    final ratio = (_ratio ?? 4 / 3).clamp(1.0, 1.91);
     return AspectRatio(
       aspectRatio: ratio,
       child: WebSafeImage(url: widget.url, fit: BoxFit.cover),

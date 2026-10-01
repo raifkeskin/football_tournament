@@ -6,6 +6,9 @@ import '../../../core/services/app_session.dart';
 import '../services/interfaces/i_match_service.dart';
 import '../../team/services/interfaces/i_team_service.dart';
 import '../../../core/services/service_locator.dart';
+import '../../../core/utils/team_name.dart';
+import '../../../core/widgets/admin_form.dart';
+import '../../../core/widgets/admin_page.dart';
 
 class AdminMatchEventScreen extends StatefulWidget {
   final MatchModel match;
@@ -67,155 +70,39 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
     return '$number - ${p.name}';
   }
 
-  Future<T?> _pickFromSheet<T>({
+  Future<T?> _pick<T>({
     required String title,
     required List<_PickerOption<T>> options,
     T? selected,
-  }) {
-    return showModalBottomSheet<T>(
+  }) async {
+    final picked = await showAdminOptionPicker<_PickerOption<T>>(
       context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 16,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Flexible(
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: options.length,
-                    separatorBuilder: (context, index) =>
-                        const SizedBox(height: 6),
-                    itemBuilder: (context, index) {
-                      final opt = options[index];
-                      final isSelected = selected != null && opt.value == selected;
-                      return Material(
-                        color: Theme.of(context).colorScheme.surfaceContainerLow,
-                        borderRadius: BorderRadius.circular(16),
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(16),
-                          onTap: () => Navigator.pop(context, opt.value),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 12,
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    opt.label,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ),
-                                if (isSelected)
-                                  const Icon(
-                                    Icons.check_circle_rounded,
-                                    color: Color(0xFF2E7D32),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(height: 8),
-              ],
-            ),
-          ),
-        );
-      },
+      title: title,
+      items: options,
+      labelBuilder: (o) => o.label,
+      selected: options.where((o) => o.value == selected).firstOrNull,
+      emptyText: 'Seçenek yok.',
     );
+    return picked?.value;
   }
 
-  Widget _selectorTile({
-    required String label,
-    required String valueText,
-    required VoidCallback? onTap,
-    String? helperText,
-  }) {
-    final cs = Theme.of(context).colorScheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            color: cs.onSurfaceVariant,
-            fontWeight: FontWeight.w800,
-            fontSize: 12,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Material(
-          color: cs.surfaceContainerLow,
-          elevation: 0.5,
-          borderRadius: BorderRadius.circular(16),
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(16),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      valueText,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        color:
-                            onTap == null ? cs.onSurfaceVariant : cs.onSurface,
-                      ),
-                    ),
-                  ),
-                  Icon(
-                    Icons.expand_more_rounded,
-                    color: onTap == null ? cs.onSurfaceVariant : cs.onSurface,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        if (helperText != null) ...[
-          const SizedBox(height: 6),
-          Text(
-            helperText,
-            style: TextStyle(
-              color: cs.onSurfaceVariant,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
+  static const _eventTypes = [
+    _PickerOption('goal', 'Gol'),
+    _PickerOption('assist', 'Asist'),
+    _PickerOption('yellow_card', 'Sarı Kart'),
+    _PickerOption('red_card', 'Kırmızı Kart'),
+    _PickerOption('man_of_the_match', 'Maçın Adamı'),
+    _PickerOption('substitution', 'Oyuncu Değişikliği'),
+  ];
+
+  static IconData _eventIcon(String type) => switch (type) {
+    'goal' => Icons.sports_soccer_rounded,
+    'assist' => Icons.handshake_outlined,
+    'yellow_card' || 'red_card' => Icons.style_outlined,
+    'man_of_the_match' => Icons.star_outline_rounded,
+    'substitution' => Icons.swap_horiz_rounded,
+    _ => Icons.flag_outlined,
+  };
 
   Future<void> _addEvent() async {
     final player = _selectedPlayer;
@@ -246,8 +133,12 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
         eventType: _eventType,
         minute: minute,
         eventName: player.name.trim(),
-        playerId: player.playerId.trim().isEmpty ? null : player.playerId.trim(),
-        assistPlayerId: _eventType == 'goal' && !_isOwnGoal ? _selectedAssist?.playerId.trim().toString() : null,
+        playerId: player.playerId.trim().isEmpty
+            ? null
+            : player.playerId.trim(),
+        assistPlayerId: _eventType == 'goal' && !_isOwnGoal
+            ? _selectedAssist?.playerId.trim().toString()
+            : null,
         subInPlayerId: _eventType == 'substitution'
             ? (_selectedSubIn?.playerId.trim().isEmpty ?? true
                   ? null
@@ -258,8 +149,9 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
 
       await _matchService.addMatchEvent(event);
       if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         const SnackBar(
           content: Text('Olay başarıyla kaydedildi.'),
           backgroundColor: Colors.green,
@@ -277,16 +169,31 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isAdmin = AppSession.of(context).value.isAdmin;
-    if (!isAdmin) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Maç Olayları')),
-        body: const Center(
-          child: Text(
-            'Bu sayfaya erişim yetkiniz yok.',
-            textAlign: TextAlign.center,
+    final session = AppSession.of(context).value;
+    // Admin, turnuva sahibi ve maçın gözlemcisi olay girebilir.
+    final canManage =
+        session.canManageLeague(widget.match.leagueId) ||
+        (widget.match.observerId != null &&
+            widget.match.observerId == session.user?.id);
+    if (!canManage) {
+      return _frame(
+        children: [
+          const AdminDialogHeader(
+            icon: Icons.lock_outline_rounded,
+            title: 'Maç Olayları',
           ),
-        ),
+          const SizedBox(height: 18),
+          const Text(
+            'Bu işlem için yetkiniz yok.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white70),
+          ),
+          const SizedBox(height: 18),
+          AdminSecondaryButton(
+            label: 'KAPAT',
+            onPressed: () => Navigator.pop(context),
+          ),
+        ],
       );
     }
     return StreamBuilder<List<Team>>(
@@ -298,10 +205,12 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
             nameById[t.id] = t.name;
           }
         }
-        final homeName = (nameById[widget.match.homeTeamId] ?? '').trim().isEmpty
+        final homeName =
+            (nameById[widget.match.homeTeamId] ?? '').trim().isEmpty
             ? 'Ev Sahibi'
             : (nameById[widget.match.homeTeamId] ?? '').trim();
-        final awayName = (nameById[widget.match.awayTeamId] ?? '').trim().isEmpty
+        final awayName =
+            (nameById[widget.match.awayTeamId] ?? '').trim().isEmpty
             ? 'Deplasman'
             : (nameById[widget.match.awayTeamId] ?? '').trim();
 
@@ -312,8 +221,14 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
           builder: (context, rosterSnap) {
             final rosters = rosterSnap.data ?? [];
             final rosterPlayerIds = rosters.map((r) => r.playerId).toSet();
-            final startingIds = rosters.where((r) => r.isStarting).map((r) => r.playerId).toSet();
-            final subIds = rosters.where((r) => !r.isStarting).map((r) => r.playerId).toSet();
+            final startingIds = rosters
+                .where((r) => r.isStarting)
+                .map((r) => r.playerId)
+                .toSet();
+            final subIds = rosters
+                .where((r) => !r.isStarting)
+                .map((r) => r.playerId)
+                .toSet();
 
             return StreamBuilder<List<PlayerModel>>(
               stream: (_teamId ?? '').trim().isEmpty
@@ -324,64 +239,87 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                     ),
               builder: (context, playersSnap) {
                 final allPlayers = playersSnap.data ?? const <PlayerModel>[];
-                
-                final filteredPlayers = allPlayers.where((p) => rosterPlayerIds.contains(p.id)).toList();
-                final filteredStarting = allPlayers.where((p) => startingIds.contains(p.id)).toList();
-                final filteredSubs = allPlayers.where((p) => subIds.contains(p.id)).toList();
-
-                final players = _toLineupPlayers(filteredPlayers);
-                final startingPlayers = _toLineupPlayers(filteredStarting);
-                final subsPlayers = _toLineupPlayers(filteredSubs);
+                final players = _toLineupPlayers(
+                  allPlayers
+                      .where((p) => rosterPlayerIds.contains(p.id))
+                      .toList(),
+                );
+                final startingPlayers = _toLineupPlayers(
+                  allPlayers.where((p) => startingIds.contains(p.id)).toList(),
+                );
+                final subsPlayers = _toLineupPlayers(
+                  allPlayers.where((p) => subIds.contains(p.id)).toList(),
+                );
                 final enabled = players.isNotEmpty && !_isLoading;
 
-                if (enabled && _selectedPlayer != null) {
-                  final exists =
-                      players.any((p) => p.playerId == _selectedPlayer!.playerId);
-                  if (!exists) {
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (!mounted) return;
-                      setState(() => _selectedPlayer = null);
-                    });
-                  }
-                }
-                if (_eventType != 'goal' && _selectedAssist != null) {
+                if (enabled &&
+                    _selectedPlayer != null &&
+                    !players.any(
+                      (p) => p.playerId == _selectedPlayer!.playerId,
+                    )) {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (!mounted) return;
-                    setState(() => _selectedAssist = null);
-                  });
-                }
-                if (_eventType != 'goal' && _isOwnGoal) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (!mounted) return;
-                    setState(() => _isOwnGoal = false);
-                  });
-                }
-                if (_eventType != 'substitution' && _selectedSubIn != null) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (!mounted) return;
-                    setState(() => _selectedSubIn = null);
+                    if (mounted) setState(() => _selectedPlayer = null);
                   });
                 }
 
-                return Scaffold(
-                  appBar: AppBar(title: const Text('Maç Olayı Ekle')),
-                  backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-                  body: _isLoading
-                      ? const Center(child: CircularProgressIndicator())
-                      : ListView(
-                          padding: const EdgeInsets.all(16),
-                          children: [
-                            _selectorTile(
-                          label: 'Takım Seçimi',
-                          valueText: _teamId == widget.match.homeTeamId
-                              ? homeName
-                              : awayName,
+                final isGoal = _eventType == 'goal';
+                final isSub = _eventType == 'substitution';
+                final eventLabel = _eventTypes
+                    .firstWhere(
+                      (o) => o.value == _eventType,
+                      orElse: () => _eventTypes.first,
+                    )
+                    .label;
+
+                return _frame(
+                  children: [
+                    AdminDialogHeader(
+                      icon: Icons.sports_soccer_rounded,
+                      title: 'Maç Olayı Ekle',
+                      subtitle:
+                          '${shortTeamName(homeName)} - ${shortTeamName(awayName)}',
+                    ),
+                    const SizedBox(height: 18),
+                    AdminFieldGroup(
+                      children: [
+                        AdminSelectRow(
+                          icon: _eventIcon(_eventType),
+                          label: 'Olay Türü',
+                          value: eventLabel,
+                          placeholder: 'Seçiniz',
                           onTap: _isLoading
                               ? null
                               : () async {
-                                  final picked =
-                                      await _pickFromSheet<String>(
-                                    title: 'Takım Seçimi',
+                                  final picked = await _pick<String>(
+                                    title: 'Olay Türü',
+                                    selected: _eventType,
+                                    options: _eventTypes,
+                                  );
+                                  if (picked == null || !mounted) return;
+                                  setState(() {
+                                    _eventType = picked;
+                                    if (picked != 'goal') {
+                                      _selectedAssist = null;
+                                      _isOwnGoal = false;
+                                    }
+                                    if (picked != 'substitution') {
+                                      _selectedSubIn = null;
+                                    }
+                                  });
+                                },
+                        ),
+                        AdminSelectRow(
+                          icon: Icons.shield_outlined,
+                          label: 'Takım',
+                          value: _teamId == widget.match.homeTeamId
+                              ? homeName
+                              : awayName,
+                          placeholder: 'Seçiniz',
+                          onTap: _isLoading
+                              ? null
+                              : () async {
+                                  final picked = await _pick<String>(
+                                    title: 'Takım',
                                     selected: _teamId,
                                     options: [
                                       _PickerOption(
@@ -404,176 +342,178 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                                   });
                                 },
                         ),
-                const SizedBox(height: 12),
-                _selectorTile(
-                  label: _eventType == 'substitution'
-                      ? 'Çıkan Oyuncu'
-                      : 'Futbolcu Seçimi',
-                  valueText: _selectedPlayer == null
-                      ? (players.isEmpty ? 'Önce oyuncu ekleyin' : 'Seçiniz')
-                      : _labelFor(_selectedPlayer!),
-                  onTap: enabled
-                      ? () async {
-                          final picked = await _pickFromSheet<LineupPlayer>(
-                            title: 'Futbolcu Seçimi',
-                            selected: _selectedPlayer,
-                            options: [
-                              for (final p in (_eventType == 'substitution'
-                                  ? startingPlayers
-                                  : players))
-                                _PickerOption(p, _labelFor(p)),
+                        AdminSelectRow(
+                          icon: Icons.person_outline_rounded,
+                          label: isSub ? 'Çıkan Oyuncu' : 'Futbolcu',
+                          value: _selectedPlayer == null
+                              ? null
+                              : _labelFor(_selectedPlayer!),
+                          placeholder: players.isEmpty
+                              ? 'Kadroda oyuncu yok'
+                              : 'Seçiniz',
+                          onTap: enabled
+                              ? () async {
+                                  final picked = await _pick<LineupPlayer>(
+                                    title: isSub ? 'Çıkan Oyuncu' : 'Futbolcu',
+                                    selected: _selectedPlayer,
+                                    options: [
+                                      for (final p
+                                          in isSub ? startingPlayers : players)
+                                        _PickerOption(p, _labelFor(p)),
+                                    ],
+                                  );
+                                  if (picked == null || !mounted) return;
+                                  setState(() => _selectedPlayer = picked);
+                                }
+                              : null,
+                        ),
+                        if (isSub)
+                          AdminSelectRow(
+                            icon: Icons.login_rounded,
+                            label: 'Giren Oyuncu',
+                            value: _selectedSubIn == null
+                                ? null
+                                : _labelFor(_selectedSubIn!),
+                            placeholder: subsPlayers.isEmpty
+                                ? 'Yedek yok'
+                                : 'Seçiniz',
+                            onTap: (subsPlayers.isNotEmpty && !_isLoading)
+                                ? () async {
+                                    final picked = await _pick<LineupPlayer>(
+                                      title: 'Giren Oyuncu',
+                                      selected: _selectedSubIn,
+                                      options: [
+                                        for (final p in subsPlayers)
+                                          _PickerOption(p, _labelFor(p)),
+                                      ],
+                                    );
+                                    if (picked == null || !mounted) return;
+                                    setState(() => _selectedSubIn = picked);
+                                  }
+                                : null,
+                          ),
+                        AdminFieldRow(
+                          icon: Icons.timer_outlined,
+                          label: 'Dakika',
+                          child: TextField(
+                            controller: _minuteController,
+                            enabled: !_isLoading,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                              LengthLimitingTextInputFormatter(3),
                             ],
-                          );
-                          if (picked == null || !mounted) return;
-                          setState(() => _selectedPlayer = picked);
-                        }
-                      : null,
-                ),
-                const SizedBox(height: 12),
-                Visibility(
-                  visible: _eventType == 'substitution',
-                  child: _selectorTile(
-                    label: 'Giren Oyuncu',
-                    valueText: _selectedSubIn == null
-                        ? (subsPlayers.isEmpty ? 'Yedek yok' : 'Seçiniz')
-                        : _labelFor(_selectedSubIn!),
-                    onTap: (subsPlayers.isNotEmpty && !_isLoading)
-                        ? () async {
-                            final picked = await _pickFromSheet<LineupPlayer>(
-                              title: 'Giren Oyuncu',
-                              selected: _selectedSubIn,
-                              options: [
-                                for (final p in subsPlayers)
-                                  _PickerOption(p, _labelFor(p)),
-                              ],
-                            );
-                            if (picked == null || !mounted) return;
-                            setState(() => _selectedSubIn = picked);
-                          }
-                        : null,
-                  ),
-                ),
-                if (_eventType == 'substitution') const SizedBox(height: 12),
-                _ModernInput(
-                  label: 'Dakika',
-                  controller: _minuteController,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(3),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                _selectorTile(
-                  label: 'Olay Türü',
-                  valueText: _eventType == 'goal'
-                      ? 'Gol'
-                      : _eventType == 'assist'
-                      ? 'Asist'
-                      : _eventType == 'yellow_card'
-                      ? 'Sarı Kart'
-                      : _eventType == 'man_of_the_match'
-                      ? 'Maçın Adamı'
-                      : _eventType == 'substitution'
-                      ? 'Oyuncu Değişikliği'
-                      : 'Kırmızı Kart',
-                  onTap: _isLoading
-                      ? null
-                      : () async {
-                          final picked = await _pickFromSheet<String>(
-                            title: 'Olay Türü',
-                            selected: _eventType,
-                            options: const [
-                              _PickerOption('goal', 'Gol'),
-                              _PickerOption('assist', 'Asist'),
-                              _PickerOption('yellow_card', 'Sarı Kart'),
-                              _PickerOption('red_card', 'Kırmızı Kart'),
-                              _PickerOption('man_of_the_match', 'Maçın Adamı'),
-                              _PickerOption('substitution', 'Oyuncu Değişikliği'),
-                            ],
-                          );
-                          if (picked == null || !mounted) return;
-                          setState(() {
-                            _eventType = picked;
-                            if (_eventType != 'goal') _selectedAssist = null;
-                            if (_eventType != 'goal') _isOwnGoal = false;
-                            if (_eventType != 'substitution') _selectedSubIn = null;
-                          });
-                        },
-                ),
-                const SizedBox(height: 12),
-                Visibility(
-                  visible: _eventType == 'goal',
-                  child: Material(
-                    color: Theme.of(context).colorScheme.surfaceContainerLow,
-                    borderRadius: BorderRadius.circular(16),
-                    child: CheckboxListTile(
-                      title: const Text('Kendi Kalesine'),
-                      value: _isOwnGoal,
-                      onChanged: _isLoading
-                          ? null
-                          : (v) {
-                              setState(() {
-                                _isOwnGoal = v ?? false;
-                                if (_isOwnGoal) _selectedAssist = null;
-                              });
-                            },
-                    ),
-                  ),
-                ),
-                Visibility(
-                  visible: _eventType == 'goal' && !_isOwnGoal,
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 12),
-                    child: _selectorTile(
-                      label: 'Asist Yapan (İsteğe Bağlı)',
-                      valueText: _selectedAssist == null
-                          ? 'Yok'
-                          : _labelFor(_selectedAssist!),
-                      onTap: enabled
-                          ? () async {
-                              final picked = await _pickFromSheet<LineupPlayer>(
-                                title: 'Asist Yapan',
-                                selected: _selectedAssist,
-                                options: [
-                                  for (final p in players)
-                                    if (_selectedPlayer == null ||
-                                        p.playerId != _selectedPlayer!.playerId)
-                                      _PickerOption(p, _labelFor(p)),
-                                ],
-                              );
-                              if (picked == null || !mounted) return;
-                              setState(() => _selectedAssist = picked);
-                            }
-                          : null,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  height: 54,
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: _isLoading ? null : _addEvent,
-                    child: _isLoading
-                        ? const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
                             ),
-                          )
-                        : const Text('Kaydet'),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      );
-    },
-  );
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.only(top: 2),
+                              hintText: 'Örn. 23',
+                              hintStyle: TextStyle(color: Colors.white38),
+                            ),
+                          ),
+                        ),
+                        if (isGoal)
+                          AdminFieldRow(
+                            icon: Icons.u_turn_left_rounded,
+                            label: 'Kendi Kalesine',
+                            onTap: _isLoading
+                                ? null
+                                : () => setState(() {
+                                    _isOwnGoal = !_isOwnGoal;
+                                    if (_isOwnGoal) _selectedAssist = null;
+                                  }),
+                            trailing: Switch(
+                              value: _isOwnGoal,
+                              activeThumbColor: kAdminAccent,
+                              onChanged: _isLoading
+                                  ? null
+                                  : (v) => setState(() {
+                                      _isOwnGoal = v;
+                                      if (v) _selectedAssist = null;
+                                    }),
+                            ),
+                            child: Text(
+                              _isOwnGoal ? 'Evet' : 'Hayır',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        if (isGoal && !_isOwnGoal)
+                          AdminSelectRow(
+                            icon: Icons.handshake_outlined,
+                            label: 'Asist (İsteğe Bağlı)',
+                            value: _selectedAssist == null
+                                ? null
+                                : _labelFor(_selectedAssist!),
+                            placeholder: 'Yok',
+                            onClear: () =>
+                                setState(() => _selectedAssist = null),
+                            onTap: enabled
+                                ? () async {
+                                    final picked = await _pick<LineupPlayer>(
+                                      title: 'Asist Yapan',
+                                      selected: _selectedAssist,
+                                      options: [
+                                        for (final p in players)
+                                          if (_selectedPlayer == null ||
+                                              p.playerId !=
+                                                  _selectedPlayer!.playerId)
+                                            _PickerOption(p, _labelFor(p)),
+                                      ],
+                                    );
+                                    if (picked == null || !mounted) return;
+                                    setState(() => _selectedAssist = picked);
+                                  }
+                                : null,
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 22),
+                    AdminPrimaryButton(
+                      label: 'KAYDET',
+                      busy: _isLoading,
+                      onPressed: _addEvent,
+                    ),
+                    const SizedBox(height: 10),
+                    AdminSecondaryButton(
+                      onPressed: _isLoading
+                          ? null
+                          : () => Navigator.pop(context),
+                    ),
+                  ],
+                );
+              },
+            );
+          },
+        );
       },
+    );
+  }
+
+  /// Ortak popup çerçevesi; klavye açılınca içerik kaydırılabilir.
+  Widget _frame({required List<Widget> children}) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      child: Container(
+        decoration: adminDialogDecoration(),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: children,
+          ),
+        ),
+      ),
     );
   }
 }
@@ -582,55 +522,4 @@ class _PickerOption<T> {
   const _PickerOption(this.value, this.label);
   final T value;
   final String label;
-}
-
-class _ModernInput extends StatelessWidget {
-  const _ModernInput({
-    required this.label,
-    required this.controller,
-    required this.keyboardType,
-    required this.inputFormatters,
-  });
-
-  final String label;
-  final TextEditingController controller;
-  final TextInputType keyboardType;
-  final List<TextInputFormatter> inputFormatters;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            color: cs.onSurfaceVariant,
-            fontWeight: FontWeight.w800,
-            fontSize: 12,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Material(
-          color: cs.surfaceContainerLow,
-          elevation: 0.5,
-          borderRadius: BorderRadius.circular(16),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-            child: TextField(
-              controller: controller,
-              keyboardType: keyboardType,
-              inputFormatters: inputFormatters,
-              decoration: const InputDecoration(
-                border: InputBorder.none,
-                isDense: true,
-              ),
-              style: const TextStyle(fontWeight: FontWeight.w800),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
 }

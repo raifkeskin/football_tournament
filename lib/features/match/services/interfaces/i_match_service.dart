@@ -28,6 +28,22 @@ abstract class IMatchService {
 
   Future<void> addMatchEvent(MatchEvent event);
 
+  /// Maç akışını ilerletir: start | end_first_half | start_second_half |
+  /// finish | undo. Saat sunucuda tutulur (advance_match_phase).
+  Future<void> advanceMatchPhase({
+    required String matchId,
+    required String action,
+  });
+
+  /// Maçın gözlemcisini atar; null ise kaldırır (admin / turnuva sahibi).
+  Future<void> setMatchObserver({
+    required String matchId,
+    required String? userId,
+  });
+
+  /// Gözlemci olarak atanabilecek kayıtlı kullanıcılar.
+  Future<List<({String userId, String label})>> listObserverCandidates();
+
   Future<void> updateMatchPitchName({
     required String matchId,
     required String? pitchName,
@@ -67,7 +83,10 @@ abstract class IMatchService {
 
   Future<void> insertDefaultMatchEvents(String matchId, int duration);
 
-  Stream<List<MatchRosterModel>> watchMatchRosters(String matchId, String teamId);
+  Stream<List<MatchRosterModel>> watchMatchRosters(
+    String matchId,
+    String teamId,
+  );
 
   Future<void> updateMatchRoster({
     required String matchId,

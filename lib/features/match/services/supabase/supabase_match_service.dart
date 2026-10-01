@@ -394,13 +394,75 @@ class SupabaseMatchService implements IMatchService {
   }
 
   @override
+  Future<void> advanceMatchPhase({
+    required String matchId,
+    required String action,
+  }) async {
+    AppConfig.sqlLogStart(
+      table: 'matches',
+      operation: 'RPC',
+      filters: 'advance_match_phase | id=$matchId | $action',
+    );
+    await _client.rpc(
+      'advance_match_phase',
+      params: {'p_match_id': matchId, 'p_action': action},
+    );
+    AppConfig.sqlLogResult(table: 'matches', operation: 'RPC', count: 1);
+  }
+
+  @override
+  Future<void> setMatchObserver({
+    required String matchId,
+    required String? userId,
+  }) async {
+    await _client
+        .from('matches')
+        .update({'observer_id': userId})
+        .eq('id', matchId);
+  }
+
+  @override
+  Future<List<({String userId, String label})>> listObserverCandidates() async {
+    final rows = await _client.rpc('list_observer_candidates') as List;
+    return [
+      for (final r in rows)
+        (userId: r['user_id'].toString(), label: (r['label'] ?? '').toString()),
+    ];
+  }
+
+  @override
   Future<void> updateMatchPitchName({
     required String matchId,
     required String? pitchName,
   }) {
     final id = matchId.trim();
     if (id.isEmpty) return Future.value();
-    return Future.value();
+    return _updateMatchPitch(id, (pitchName ?? '').trim());
+  }
+
+  /// matches tablosunda saha adı değil `pitch_id` tutulur; ad ile bulunur.
+  Future<void> _updateMatchPitch(String matchId, String pitchName) async {
+    String? pitchId;
+    if (pitchName.isNotEmpty) {
+      final row = await _client
+          .from('pitches')
+          .select('id')
+          .eq('name', pitchName)
+          .limit(1)
+          .maybeSingle();
+      pitchId = row?['id']?.toString();
+      if (pitchId == null) throw Exception('Saha bulunamadı: $pitchName');
+    }
+    AppConfig.sqlLogStart(
+      table: 'matches',
+      operation: 'UPDATE',
+      filters: 'id=$matchId | pitch_id',
+    );
+    await _client
+        .from('matches')
+        .update({'pitch_id': pitchId})
+        .eq('id', matchId);
+    AppConfig.sqlLogResult(table: 'matches', operation: 'UPDATE', count: 1);
   }
 
   @override

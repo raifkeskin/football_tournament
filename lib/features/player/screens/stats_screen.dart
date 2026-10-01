@@ -15,7 +15,7 @@ import '../../../core/widgets/web_safe_image.dart';
 import '../../../core/services/global_filter.dart';
 
 // ORTAK BİLEŞEN
-import '../../../core/widgets/custom_popup_selector.dart';
+import '../../../core/widgets/tournament_filter_dialog.dart';
 
 class StatsScreen extends StatefulWidget {
   const StatsScreen({super.key});
@@ -130,114 +130,28 @@ class _StatsScreenState extends State<StatsScreen> {
     super.dispose();
   }
 
-  // İSTATİSTİK EKRANI İÇİN ORTADAN AÇILAN FİLTRE DİALOGU
-  void _showFilterDialog(
+  // İSTATİSTİK EKRANI İÇİN ORTADAN AÇILAN FİLTRE DİALOGU; seçimler yalnızca
+  // "Filtreleri Uygula" ile ekrana yansır.
+  Future<void> _showFilterDialog(
     BuildContext context,
     List<League> leagues,
-    List<Season> seasons,
-  ) {
-    showDialog(
+  ) async {
+    final result = await showTournamentFilterDialog(
       context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return Dialog(
-              backgroundColor: Colors.transparent,
-              insetPadding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(24),
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color(0xFF1E293B), Color(0xFF064E3B)],
-                  ),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.12),
-                  ),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Colors.black54,
-                      blurRadius: 15,
-                      offset: Offset(0, 8),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min, // Kapsülü ortada tutar
-                  children: [
-                    CustomPopupSelector<String>(
-                      label: 'Turnuva',
-                      selectedValue: _selectedLeagueId,
-                      items: leagues.map((l) => l.id).toList(),
-                      labelBuilder: (id) => leagues
-                          .firstWhere(
-                            (l) => l.id == id,
-                            orElse: () => leagues.first,
-                          )
-                          .name,
-                      onChanged: (String? val) {
-                        if (val != null) {
-                          setState(() {
-                            _selectedLeagueId = val;
-                            _selectedSeasonId = null;
-                          });
-                          setDialogState(() {});
-                          GlobalFilter.setLeague(val);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 12),
-
-                    CustomPopupSelector<String>(
-                      label: 'Sezon',
-                      selectedValue: _selectedSeasonId,
-                      items: seasons.map((s) => s.id).toList(),
-                      labelBuilder: (id) => seasons
-                          .firstWhere(
-                            (s) => s.id == id,
-                            orElse: () => seasons.first,
-                          )
-                          .name,
-                      onChanged: (String? val) {
-                        if (val != null) {
-                          setState(() => _selectedSeasonId = val);
-                          setDialogState(() {});
-                          GlobalFilter.setSeason(val);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 24),
-
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF10B981),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text(
-                          'Filtreleri Uygula',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
+      leagues: leagues,
+      initial: TournamentFilter(
+        leagueId: _selectedLeagueId,
+        seasonId: _selectedSeasonId,
+      ),
+      watchSeasons: _watchSeasons,
     );
+    if (result == null || !mounted) return;
+    GlobalFilter.setLeague(result.leagueId);
+    GlobalFilter.setSeason(result.seasonId);
+    setState(() {
+      _selectedLeagueId = result.leagueId;
+      _selectedSeasonId = result.seasonId;
+    });
   }
 
   @override
@@ -294,7 +208,13 @@ class _StatsScreenState extends State<StatsScreen> {
                           ? Stream.value([])
                           : _getSeasonsStream(_selectedLeagueId!),
                       builder: (context, seasonSnap) {
-                        final seasons = seasonSnap.data ?? const <Season>[];
+                        // Turnuva değişince yeni sezonlar gelene kadar eski
+                        // turnuvanınkiler tutulur; onlarla seçim yapılmasın.
+                        final seasons =
+                            seasonSnap.connectionState ==
+                                ConnectionState.waiting
+                            ? const <Season>[]
+                            : (seasonSnap.data ?? const <Season>[]);
 
                         if (seasons.isNotEmpty &&
                             _selectedSeasonId == null &&
@@ -328,8 +248,7 @@ class _StatsScreenState extends State<StatsScreen> {
                         return Padding(
                           padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                           child: InkWell(
-                            onTap: () =>
-                                _showFilterDialog(context, leagues, seasons),
+                            onTap: () => _showFilterDialog(context, leagues),
                             borderRadius: BorderRadius.circular(24),
                             child: Container(
                               padding: const EdgeInsets.symmetric(
@@ -497,22 +416,13 @@ class _MiniTeamLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final url = _normalizeUrl(logoUrl);
-    return Container(
+    return WebSafeImage(
+      url: url,
       width: 16,
       height: 16,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: cs.primary.withValues(alpha: 0.16),
-      ),
-      child: WebSafeImage(
-        url: url,
-        width: 16,
-        height: 16,
-        isCircle: true,
-        fallbackIconSize: 12,
-      ),
+      fit: BoxFit.contain,
+      fallbackIconSize: 12,
     );
   }
 }

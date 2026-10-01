@@ -1,10 +1,10 @@
-import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../utils/logo_background.dart';
 
 /// Resimlerin hangi klasöre yükleneceği (storage kuralları klasöre göre
 /// yetki verir).
@@ -14,7 +14,10 @@ enum MediaFolder { leagues, teams, players, news, matches }
 abstract class ImageUploadService {
   /// Yükler ve herkese açık linki döner. Hata olursa nedenini içeren bir
   /// Exception fırlatır (ör. dosya çok büyük).
-  Future<String?> uploadImage(File image, {required MediaFolder folder});
+  ///
+  /// Görsel seçiciden gelen [XFile] baytları okunur; mobilde ve web'de aynı
+  /// şekilde çalışır (dosya sistemi kullanılmaz).
+  Future<String?> uploadImage(XFile image, {required MediaFolder folder});
 
   /// Eski resmi siler. Sadece bizim depomuzdaki linkler silinir; eski
   /// ImgBB linkleri ve boş değerler sessizce atlanır.
@@ -39,57 +42,74 @@ class SupabaseImageUploadService implements ImageUploadService {
   /// Kenarı en fazla [_maxSide] piksel olacak şekilde küçültür ve sıkıştırır.
   /// PNG'ler şeffaflık kaybolmasın diye PNG kalır, diğerleri JPEG olur.
   /// Telefon kamerasından gelen 5-10 MB'lık resimler ~200-500 KB'a iner.
+  /// Web'de sıkıştırma eklentisi yok; resim olduğu gibi yüklenir.
   static const _maxSide = 1600;
   static const _maxPngBytes = 1536 * 1024;
 
-  Future<(File, String)> _shrink(File image) async {
-    final dot = image.path.lastIndexOf('.');
-    final srcExt = dot < 0 ? '' : image.path.substring(dot + 1).toLowerCase();
+  static String _extOf(String name) {
+    final dot = name.lastIndexOf('.');
+    final ext = dot < 0 ? '' : name.substring(dot + 1).toLowerCase();
+    if (ext == 'jpeg') return 'jpg';
+    return const ['jpg', 'png', 'webp', 'gif'].contains(ext) ? ext : 'jpg';
+  }
+
+  Future<(Uint8List, String)> _shrink(Uint8List bytes, String srcExt) async {
+    if (kIsWeb) return (bytes, srcExt);
     try {
-      final tmp = await getTemporaryDirectory();
-      Future<File?> compress(String ext, CompressFormat format) async {
-        final out = await FlutterImageCompress.compressAndGetFile(
-          image.absolute.path,
-          '${tmp.path}/up_${DateTime.now().microsecondsSinceEpoch}.$ext',
-          minWidth: _maxSide,
-          minHeight: _maxSide,
-          quality: 82,
-          format: format,
-        );
-        return out == null ? null : File(out.path);
-      }
+      Future<Uint8List> compress(CompressFormat format) =>
+          FlutterImageCompress.compressWithList(
+            bytes,
+            minWidth: _maxSide,
+            minHeight: _maxSide,
+            quality: 82,
+            format: format,
+          );
 
       if (srcExt == 'png') {
         // Fotoğraf içerikli PNG küçültülse de MB'larca kalır; o zaman JPEG.
-        final png = await compress('png', CompressFormat.png);
-        if (png != null && await png.length() <= _maxPngBytes) {
-          return (png, 'png');
-        }
+        final png = await compress(CompressFormat.png);
+        if (png.length <= _maxPngBytes) return (png, 'png');
       }
-      final jpg = await compress('jpg', CompressFormat.jpeg);
-      if (jpg != null) return (jpg, 'jpg');
+      return (await compress(CompressFormat.jpeg), 'jpg');
     } catch (e) {
       debugPrint('Resim sıkıştırılamadı, orijinal yükleniyor: $e');
+      return (bytes, srcExt);
     }
-    final fallbackExt = const ['jpg', 'jpeg', 'png', 'webp', 'gif']
-            .contains(srcExt)
-        ? (srcExt == 'jpeg' ? 'jpg' : srcExt)
-        : 'jpg';
-    return (image, fallbackExt);
+  }
+
+  /// Takım/turnuva logolarının beyaz arka planı şeffaf yapılır. Silinecek
+  /// arka plan yoksa ya da işlem başarısızsa `null` döner.
+  Future<Uint8List?> _logoWithoutBackground(Uint8List bytes) async {
+    try {
+      return await compute(removeLogoBackground, bytes);
+    } catch (e) {
+      debugPrint('Logo arka planı kaldırılamadı, orijinal yükleniyor: $e');
+      return null;
+    }
   }
 
   @override
-  Future<String?> uploadImage(File image, {required MediaFolder folder}) async {
-    final (file, ext) = await _shrink(image);
-    final rand = Random().nextInt(1 << 32).toRadixString(16);
+  Future<String?> uploadImage(
+    XFile image, {
+    required MediaFolder folder,
+  }) async {
+    final original = await image.readAsBytes();
+    final isLogo = folder == MediaFolder.teams || folder == MediaFolder.leagues;
+    final logoPng = isLogo ? await _logoWithoutBackground(original) : null;
+    final (bytes, ext) = logoPng != null
+        ? (logoPng, 'png')
+        : await _shrink(original, _extOf(image.name));
+
+    // Web'de (JS) `1 << 32` sıfır olur ve nextInt hata verir; 31 bit yeterli.
+    final rand = Random().nextInt(0x7fffffff).toRadixString(16);
     final path =
         '${folder.name}/${DateTime.now().millisecondsSinceEpoch}_$rand.$ext';
     try {
       await _client.storage
           .from(bucket)
-          .upload(
+          .uploadBinary(
             path,
-            file,
+            bytes,
             fileOptions: FileOptions(
               contentType: _contentType(ext),
               cacheControl: '31536000', // dosya adı benzersiz; 1 yıl önbellek
