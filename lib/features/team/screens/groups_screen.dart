@@ -203,13 +203,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                               child: InkWell(
                                 onTap: () {
-                                  // Kapsüle tıklanınca alt paneli aç (4 argüman eksiksiz)
-                                  _showFilterDialog(
-                                    context,
-                                    leagues,
-                                    seasons,
-                                    groups,
-                                  );
+                                  _showFilterDialog(context, leagues);
                                 },
                                 borderRadius: BorderRadius.circular(24),
                                 child: Container(
@@ -280,7 +274,11 @@ class _GroupsScreenState extends State<GroupsScreen> {
                       : StreamBuilder<List<GroupModel>>(
                           stream: _getGroupsStream(_selectedSeasonId!),
                           builder: (context, snapshot) {
-                            if (!snapshot.hasData) {
+                            // Sezon değişince eski sezonun grupları
+                            // gösterilmesin.
+                            if (!snapshot.hasData ||
+                                snapshot.connectionState ==
+                                    ConnectionState.waiting) {
                               return const Center(
                                 child: CircularProgressIndicator(),
                               );
@@ -329,50 +327,170 @@ class _GroupsScreenState extends State<GroupsScreen> {
     );
   }
 
-  // Kapsüle tıklandığında açılacak Filtre Paneli (4 Argümanlı tam hali)
-  // Kapsüle tıklandığında ORTADA açılacak Filtre Paneli
-  void _showFilterDialog(
+  // Kapsüle tıklandığında ORTADA açılacak Filtre Paneli. Seçimler panel
+  // içinde taslak olarak tutulur; ekrana yalnızca "Filtreleri Uygula" ile
+  // yansır.
+  Future<void> _showFilterDialog(
     BuildContext context,
     List<League> leagues,
-    List<Season> seasons,
-    List<GroupModel> groups,
-  ) {
-    showDialog(
+  ) async {
+    final result = await showDialog<_StandingsFilter>(
       context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return Dialog(
-              backgroundColor: Colors.transparent,
-              insetPadding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(24),
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color(0xFF1E293B), Color(0xFF064E3B)],
-                  ),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.12),
-                  ),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Colors.black54,
-                      blurRadius: 15,
-                      offset: Offset(0, 8),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize
-                      .min, // KİLİT NOKTA: İçeriği ortada sıkıştırır
+      builder: (_) => _StandingsFilterDialog(
+        leagues: leagues,
+        initial: _StandingsFilter(
+          leagueId: _selectedLeagueId,
+          seasonId: _selectedSeasonId,
+          groupId: _selectedGroupId,
+        ),
+        watchSeasons: _watchSeasons,
+        watchGroups: _leagueService.watchGroups,
+      ),
+    );
+    if (result == null || !mounted) return;
+    GlobalFilter.setLeague(result.leagueId);
+    GlobalFilter.setSeason(result.seasonId);
+    setState(() {
+      _selectedLeagueId = result.leagueId;
+      _selectedSeasonId = result.seasonId;
+      _selectedGroupId = result.groupId;
+    });
+  }
+}
+
+class _StandingsFilter {
+  const _StandingsFilter({this.leagueId, this.seasonId, this.groupId});
+
+  final String? leagueId;
+  final String? seasonId;
+  final String? groupId;
+}
+
+class _StandingsFilterDialog extends StatefulWidget {
+  const _StandingsFilterDialog({
+    required this.leagues,
+    required this.initial,
+    required this.watchSeasons,
+    required this.watchGroups,
+  });
+
+  final List<League> leagues;
+  final _StandingsFilter initial;
+  final Stream<List<Season>> Function(String leagueId) watchSeasons;
+  final Stream<List<GroupModel>> Function(String seasonId) watchGroups;
+
+  @override
+  State<_StandingsFilterDialog> createState() => _StandingsFilterDialogState();
+}
+
+class _StandingsFilterDialogState extends State<_StandingsFilterDialog> {
+  String? _leagueId;
+  String? _seasonId;
+  String? _groupId;
+
+  String? _seasonsFor;
+  Stream<List<Season>>? _seasonsStream;
+  String? _groupsFor;
+  Stream<List<GroupModel>>? _groupsStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _leagueId = widget.initial.leagueId;
+    _seasonId = widget.initial.seasonId;
+    _groupId = widget.initial.groupId;
+  }
+
+  Stream<List<Season>> _seasons(String leagueId) {
+    if (_seasonsFor != leagueId || _seasonsStream == null) {
+      _seasonsFor = leagueId;
+      _seasonsStream = widget.watchSeasons(leagueId);
+    }
+    return _seasonsStream!;
+  }
+
+  Stream<List<GroupModel>> _groups(String seasonId) {
+    if (_groupsFor != seasonId || _groupsStream == null) {
+      _groupsFor = seasonId;
+      _groupsStream = widget.watchGroups(seasonId);
+    }
+    return _groupsStream!;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final leagues = widget.leagues;
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(24),
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF1E293B), Color(0xFF064E3B)],
+          ),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.black54,
+              blurRadius: 15,
+              offset: Offset(0, 8),
+            ),
+          ],
+        ),
+        child: StreamBuilder<List<Season>>(
+          stream: _leagueId == null
+              ? Stream.value(const <Season>[])
+              : _seasons(_leagueId!),
+          builder: (context, seasonSnap) {
+            // Akış değişince StreamBuilder yeni veri gelene kadar eski
+            // turnuvanın sezonlarını tutar; beklerken boş kabul et.
+            final seasonsLoading =
+                seasonSnap.connectionState == ConnectionState.waiting;
+            final seasons = seasonsLoading
+                ? const <Season>[]
+                : (seasonSnap.data ?? const <Season>[]);
+            // Turnuva değişince sezon listesi yenilenir; geçersiz kalan
+            // sezon seçimi ilk sezona çekilir.
+            final seasonValid = seasons.any((s) => s.id == _seasonId);
+            final seasonId = seasonValid
+                ? _seasonId
+                : (seasons.isNotEmpty ? seasons.first.id : null);
+            if (!seasonsLoading && seasonId != _seasonId) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) return;
+                setState(() {
+                  _seasonId = seasonId;
+                  _groupId = null;
+                });
+              });
+            }
+
+            return StreamBuilder<List<GroupModel>>(
+              stream: seasonId == null
+                  ? Stream.value(const <GroupModel>[])
+                  : _groups(seasonId),
+              builder: (context, groupSnap) {
+                // Akış henüz bu sezona ait veriyi getirmediyse eski sezonun
+                // gruplarını gösterme.
+                final groups =
+                    groupSnap.connectionState == ConnectionState.waiting
+                    ? const <GroupModel>[]
+                    : (groupSnap.data ?? const <GroupModel>[]);
+                final groupId = groups.any((g) => g.id == _groupId)
+                    ? _groupId
+                    : null;
+
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     // 1. Turnuva Seçici
                     CustomPopupSelector<String>(
                       label: 'Turnuva',
-                      selectedValue: _selectedLeagueId,
+                      selectedValue: _leagueId,
                       items: leagues.map((l) => l.id).toList(),
                       labelBuilder: (id) => leagues
                           .firstWhere(
@@ -381,56 +499,55 @@ class _GroupsScreenState extends State<GroupsScreen> {
                           )
                           .name,
                       onChanged: (val) {
+                        if (val == _leagueId) return;
                         setState(() {
-                          _selectedLeagueId = val;
-                          _selectedSeasonId = null;
-                          _selectedGroupId = null;
+                          _leagueId = val;
+                          _seasonId = null;
+                          _groupId = null;
                         });
-                        setDialogState(() {});
-                        GlobalFilter.setLeague(val);
                       },
                     ),
                     const SizedBox(height: 12),
 
                     // 2. Sezon Seçici
-                    CustomPopupSelector<String>(
-                      label: 'Sezon',
-                      selectedValue: _selectedSeasonId,
-                      items: seasons.map((s) => s.id).toList(),
-                      labelBuilder: (id) => seasons
-                          .firstWhere(
-                            (s) => s.id == id,
-                            orElse: () => seasons.first,
-                          )
-                          .name,
-                      onChanged: (val) {
-                        setState(() {
-                          _selectedSeasonId = val;
-                          _selectedGroupId = null;
-                        });
-                        setDialogState(() {});
-                        GlobalFilter.setSeason(val);
-                      },
-                    ),
-                    const SizedBox(height: 12),
+                    if (seasons.isNotEmpty) ...[
+                      CustomPopupSelector<String>(
+                        label: 'Sezon',
+                        selectedValue: seasonId,
+                        items: seasons.map((s) => s.id).toList(),
+                        labelBuilder: (id) => seasons
+                            .firstWhere(
+                              (s) => s.id == id,
+                              orElse: () => seasons.first,
+                            )
+                            .name,
+                        onChanged: (val) {
+                          if (val == _seasonId) return;
+                          setState(() {
+                            _seasonId = val;
+                            _groupId = null;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                    ],
 
                     // 3. Grup Seçici
-                    if (groups.length > 1)
+                    if (groups.length > 1) ...[
                       CustomPopupSelector<String?>(
                         label: 'Grup',
-                        selectedValue: _selectedGroupId,
+                        selectedValue: groupId,
                         items: [null, ...groups.map((g) => g.id)],
                         labelBuilder: (id) {
                           if (id == null) return 'Tüm Gruplar';
                           final g = groups.firstWhere((grp) => grp.id == id);
                           return g.name.isEmpty ? 'Grup' : g.name;
                         },
-                        onChanged: (val) {
-                          setState(() => _selectedGroupId = val);
-                          setDialogState(() {});
-                        },
+                        onChanged: (val) => setState(() => _groupId = val),
                       ),
-                    if (groups.length > 1) const SizedBox(height: 20),
+                      const SizedBox(height: 12),
+                    ],
+                    const SizedBox(height: 8),
 
                     SizedBox(
                       width: double.infinity,
@@ -438,11 +555,23 @@ class _GroupsScreenState extends State<GroupsScreen> {
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF10B981),
+                          disabledBackgroundColor: const Color(
+                            0xFF10B981,
+                          ).withValues(alpha: 0.4),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        onPressed: () => Navigator.pop(context),
+                        onPressed: seasonId == null
+                            ? null
+                            : () => Navigator.pop(
+                                context,
+                                _StandingsFilter(
+                                  leagueId: _leagueId,
+                                  seasonId: seasonId,
+                                  groupId: groupId,
+                                ),
+                              ),
                         child: const Text(
                           'Filtreleri Uygula',
                           style: TextStyle(
@@ -453,12 +582,12 @@ class _GroupsScreenState extends State<GroupsScreen> {
                       ),
                     ),
                   ],
-                ),
-              ),
+                );
+              },
             );
           },
-        );
-      },
+        ),
+      ),
     );
   }
 }
@@ -994,17 +1123,52 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
 }
 
 // Sütun genişlikleri başlık ve satırlarda ortak kullanılır.
-const double _kRankW = 26;
-const double _kStatW = 22;
-const double _kGoalsW = 42;
-const double _kAvW = 30;
-const double _kPtsW = 36;
 const _kMidText = Color(0xFF94A3B8);
 const _kAccent = Color(0xFF10B981);
 
-/// Dar ekranlarda (ör. 360dp) takım adına yer kalsın diye G/B/M gizlenir.
-bool _isCompactStandings(BuildContext context) =>
-    MediaQuery.sizeOf(context).width < 390;
+/// Sütun genişlikleri başlık ve satırlarda ortak kullanılır. Dar ekranlarda
+/// (ör. 360dp) G/B/M de görünsün diye sütunlar sıkıştırılır.
+class _StandingsCols {
+  const _StandingsCols({
+    required this.rank,
+    required this.stat,
+    required this.goals,
+    required this.av,
+    required this.pts,
+    required this.gap,
+    required this.fontSize,
+  });
+
+  final double rank;
+  final double stat;
+  final double goals;
+  final double av;
+  final double pts;
+  final double gap;
+  final double fontSize;
+
+  static const wide = _StandingsCols(
+    rank: 26,
+    stat: 22,
+    goals: 42,
+    av: 30,
+    pts: 36,
+    gap: 10,
+    fontSize: 13,
+  );
+  static const compact = _StandingsCols(
+    rank: 22,
+    stat: 17,
+    goals: 32,
+    av: 24,
+    pts: 30,
+    gap: 6,
+    fontSize: 12,
+  );
+
+  static _StandingsCols of(BuildContext context) =>
+      MediaQuery.sizeOf(context).width < 390 ? compact : wide;
+}
 
 const _tabular = [FontFeature.tabularFigures()];
 
@@ -1013,6 +1177,7 @@ class _StandingsHeaderRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = _StandingsCols.of(context);
     Widget h(String t, double w, {bool highlight = false}) => SizedBox(
       width: w,
       child: Text(
@@ -1029,8 +1194,8 @@ class _StandingsHeaderRow extends StatelessWidget {
 
     return Row(
       children: [
-        h('#', _kRankW),
-        const SizedBox(width: 10),
+        h('#', c.rank),
+        SizedBox(width: c.gap),
         const Expanded(
           child: Text(
             'Takım',
@@ -1042,16 +1207,14 @@ class _StandingsHeaderRow extends StatelessWidget {
             ),
           ),
         ),
-        h('O', _kStatW),
-        if (!_isCompactStandings(context)) ...[
-          h('G', _kStatW),
-          h('B', _kStatW),
-          h('M', _kStatW),
-        ],
-        h('A:Y', _kGoalsW),
-        h('AV', _kAvW),
+        h('O', c.stat),
+        h('G', c.stat),
+        h('B', c.stat),
+        h('M', c.stat),
+        h('A:Y', c.goals),
+        h('AV', c.av),
         const SizedBox(width: 4),
-        h('P', _kPtsW, highlight: true),
+        h('P', c.pts, highlight: true),
       ],
     );
   }
@@ -1111,6 +1274,7 @@ class _StandingsRow extends StatelessWidget {
     const teamText = Color(0xFFF8FAFC);
     const classOrange = Color(0xFFF59E0B);
     const negative = Color(0xFFF87171);
+    final c = _StandingsCols.of(context);
 
     Widget stat(String text, double width, {Color? color, FontWeight? w}) {
       return SizedBox(
@@ -1123,7 +1287,7 @@ class _StandingsRow extends StatelessWidget {
             softWrap: false,
             textAlign: TextAlign.center,
             style: TextStyle(
-              fontSize: 13,
+              fontSize: c.fontSize,
               fontWeight: w ?? FontWeight.w600,
               color: color ?? const Color(0xFFCBD5E1),
               fontFeatures: _tabular,
@@ -1173,7 +1337,7 @@ class _StandingsRow extends StatelessWidget {
               const SizedBox(width: 9),
               // Sıra
               SizedBox(
-                width: _kRankW,
+                width: c.rank,
                 child: Center(
                   child: Container(
                     width: 24,
@@ -1197,7 +1361,7 @@ class _StandingsRow extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(width: 10),
+              SizedBox(width: c.gap),
               // Takım
               // Sabit yazı boyutu; sığmayan uzun adlar küçülmek yerine
               // 2 satıra iner (tüm satırlar aynı puntoda görünür).
@@ -1215,18 +1379,16 @@ class _StandingsRow extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 4),
-              stat('${stats['P']}', _kStatW),
-              if (!_isCompactStandings(context)) ...[
-                stat('${stats['G']}', _kStatW),
-                stat('${stats['B']}', _kStatW),
-                stat('${stats['M']}', _kStatW),
-              ],
-              stat('${stats['AG']}:${stats['YG']}', _kGoalsW),
-              stat(avText, _kAvW, color: avColor, w: FontWeight.w700),
+              stat('${stats['P']}', c.stat),
+              stat('${stats['G']}', c.stat),
+              stat('${stats['B']}', c.stat),
+              stat('${stats['M']}', c.stat),
+              stat('${stats['AG']}:${stats['YG']}', c.goals),
+              stat(avText, c.av, color: avColor, w: FontWeight.w700),
               const SizedBox(width: 4),
               // Puan
               SizedBox(
-                width: _kPtsW,
+                width: c.pts,
                 child: Center(
                   child: Container(
                     padding: const EdgeInsets.symmetric(
