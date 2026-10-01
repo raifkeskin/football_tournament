@@ -103,32 +103,27 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
 
       setPopupState(() => saving = true);
       try {
+        // Önce resim yüklenir: yükleme başarısız olursa kayıt hiç değişmez.
+        final newLogoUrl = selectedLogo == null
+            ? null
+            : await _uploadLeagueLogo(file: selectedLogo!);
         final payload = <String, dynamic>{
           'name': name,
           'is_private': isPrivate,
           'access_code': isPrivate ? access : null,
+          if (newLogoUrl != null) 'logo_url': newLogoUrl,
+          if (newLogoUrl == null && removedLogo) 'logo_url': null,
         };
-        String leagueId;
         if (isEdit) {
-          leagueId = league.id;
-          if (removedLogo) payload['logo_url'] = null;
-          await _sb.from('leagues').update(payload).eq('id', leagueId);
+          await _sb.from('leagues').update(payload).eq('id', league.id);
+          if (newLogoUrl != null || removedLogo) {
+            await SupabaseImageUploadService().deleteImageByUrl(
+              existingLogoUrl,
+            );
+          }
         } else {
           payload['is_active'] = true;
-          final inserted = await _sb
-              .from('leagues')
-              .insert(payload)
-              .select('id')
-              .single();
-          leagueId = (inserted['id'] as String?) ?? '';
-        }
-
-        if (selectedLogo != null && leagueId.trim().isNotEmpty) {
-          final url = await _uploadLeagueLogo(file: selectedLogo!);
-          await _sb
-              .from('leagues')
-              .update({'logo_url': url})
-              .eq('id', leagueId);
+          await _sb.from('leagues').insert(payload);
         }
 
         if (!mounted) return;
