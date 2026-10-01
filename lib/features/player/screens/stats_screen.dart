@@ -4,7 +4,6 @@ import 'package:football_tournament/core/widgets/master_class_app_bar.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../tournament/models/league.dart';
 import '../../tournament/models/season.dart';
-import '../../match/models/match.dart';
 import '../models/player_stats.dart';
 import '../../team/models/team.dart';
 import '../../tournament/services/interfaces/i_league_service.dart';
@@ -54,6 +53,34 @@ class _StatsScreenState extends State<StatsScreen> {
       _seasonsStream = _watchSeasons(leagueId);
     }
     return _seasonsStream!;
+  }
+
+  // İstatistikteki oyuncuların ad + fotoğrafı tek sorguda okunur (önceden
+  // her satır ayrı sorgu atıyordu). Aynı oyuncu kümesi için tekrar okunmaz.
+  String? _playersKey;
+  Future<Map<String, _PlayerLite>>? _playersFuture;
+
+  Future<Map<String, _PlayerLite>> _playersFor(Set<String> ids) {
+    final key = (ids.toList()..sort()).join(',');
+    if (key == _playersKey && _playersFuture != null) return _playersFuture!;
+    _playersKey = key;
+    return _playersFuture = () async {
+      if (ids.isEmpty) return const <String, _PlayerLite>{};
+      final rows = await Supabase.instance.client
+          .from('players')
+          .select('id, name, surname, photo_url')
+          .inFilter('id', ids.toList());
+      return {
+        for (final r in rows)
+          (r['id'] ?? '').toString(): _PlayerLite(
+            name: [
+              (r['name'] ?? '').toString().trim(),
+              (r['surname'] ?? '').toString().trim(),
+            ].where((e) => e.isNotEmpty).join(' '),
+            photoUrl: (r['photo_url'] ?? '').toString().trim(),
+          ),
+      };
+    }();
   }
 
   @override
@@ -402,373 +429,21 @@ class _StatsScreenState extends State<StatsScreen> {
                                         );
                                       }
 
-                                      List<PlayerStats> topBy(
-                                        int Function(PlayerStats s) getValue,
-                                      ) {
-                                        final list = [...stats];
-                                        list.sort((a, b) {
-                                          final cmp = getValue(
-                                            b,
-                                          ).compareTo(getValue(a));
-                                          if (cmp != 0) return cmp;
-                                          return a.playerPhone.compareTo(
-                                            b.playerPhone,
-                                          );
-                                        });
-                                        return list
-                                            .where((s) => getValue(s) > 0)
-                                            .take(10)
-                                            .toList();
-                                      }
-
-                                      final topGoals = topBy((s) => s.goals);
-                                      final topAssists = topBy(
-                                        (s) => s.assists,
-                                      );
-
-                                      Widget table({
-                                        required String valueHeader,
-                                        required List<PlayerStats> rows,
-                                        required int Function(PlayerStats)
-                                        getValue,
-                                      }) {
-                                        return ListView(
-                                          padding: const EdgeInsets.fromLTRB(
-                                            16,
-                                            12,
-                                            16,
-                                            24,
-                                          ),
-                                          children: [
-                                            Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 12,
-                                                    vertical: 10,
-                                                  ),
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFF064E3B),
-                                                borderRadius:
-                                                    BorderRadius.circular(14),
-                                              ),
-                                              child: Row(
-                                                children: [
-                                                  const SizedBox(
-                                                    width: 28,
-                                                    child: Center(
-                                                      child: Text(
-                                                        '#',
-                                                        style: TextStyle(
-                                                          color: Colors.white,
-                                                          fontWeight:
-                                                              FontWeight.w900,
-                                                          fontSize: 12,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  const Expanded(
-                                                    flex: 6,
-                                                    child: Text(
-                                                      'Oyuncu',
-                                                      style: TextStyle(
-                                                        color: Colors.white,
-                                                        fontWeight:
-                                                            FontWeight.w900,
-                                                        fontSize: 12,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  const Expanded(
-                                                    flex: 2,
-                                                    child: Text(
-                                                      'Maç',
-                                                      textAlign:
-                                                          TextAlign.center,
-                                                      style: TextStyle(
-                                                        color: Colors.white,
-                                                        fontWeight:
-                                                            FontWeight.w900,
-                                                        fontSize: 12,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  Expanded(
-                                                    flex: 2,
-                                                    child: Text(
-                                                      valueHeader,
-                                                      textAlign:
-                                                          TextAlign.center,
-                                                      style: const TextStyle(
-                                                        color: Colors.white,
-                                                        fontWeight:
-                                                            FontWeight.w900,
-                                                        fontSize: 12,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
+                                      final ids = stats
+                                          .map((s) => s.playerPhone)
+                                          .toSet();
+                                      return FutureBuilder<
+                                        Map<String, _PlayerLite>
+                                      >(
+                                        future: _playersFor(ids),
+                                        builder: (context, pSnap) =>
+                                            _StatsTabs(
+                                              stats: stats,
+                                              teamById: teamById,
+                                              players:
+                                                  pSnap.data ??
+                                                  const <String, _PlayerLite>{},
                                             ),
-                                            const SizedBox(height: 10),
-                                            if (rows.isEmpty)
-                                              Padding(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      vertical: 12,
-                                                    ),
-                                                child: Text(
-                                                  'Veri yok.',
-                                                  textAlign: TextAlign.center,
-                                                  style: TextStyle(
-                                                    color: cs.onSurfaceVariant,
-                                                    fontWeight: FontWeight.w700,
-                                                  ),
-                                                ),
-                                              )
-                                            else
-                                              for (
-                                                var i = 0;
-                                                i < rows.length;
-                                                i++
-                                              )
-                                                Card(
-                                                  margin: const EdgeInsets.only(
-                                                    bottom: 10,
-                                                  ),
-                                                  color: const Color(
-                                                    0xFF1E293B,
-                                                  ).withValues(alpha: 0.9),
-                                                  shape: RoundedRectangleBorder(
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          12,
-                                                        ),
-                                                  ),
-                                                  child: Padding(
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 12,
-                                                          vertical: 10,
-                                                        ),
-                                                    child: Row(
-                                                      children: [
-                                                        SizedBox(
-                                                          width: 28,
-                                                          child: Center(
-                                                            child: Text(
-                                                              '${i + 1}.',
-                                                              style: const TextStyle(
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w900,
-                                                                color: Colors
-                                                                    .white70,
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        ),
-                                                        Expanded(
-                                                          flex: 6,
-                                                          child: Builder(
-                                                            builder: (context) {
-                                                              final s = rows[i];
-                                                              final team =
-                                                                  teamById[s
-                                                                      .teamId];
-                                                              final teamName =
-                                                                  team?.name ??
-                                                                  '';
-                                                              final teamLogo =
-                                                                  team?.logoUrl ??
-                                                                  '';
-                                                              final fallback =
-                                                                  teamName
-                                                                      .isNotEmpty
-                                                                  ? teamName[0]
-                                                                        .toUpperCase()
-                                                                  : '?';
-                                                              return Column(
-                                                                crossAxisAlignment:
-                                                                    CrossAxisAlignment
-                                                                        .start,
-                                                                children: [
-                                                                  FutureBuilder<
-                                                                    PlayerModel?
-                                                                  >(
-                                                                    future: _teamService
-                                                                        .getPlayerByPhoneOnce(
-                                                                          s.playerPhone,
-                                                                        ),
-                                                                    builder:
-                                                                        (
-                                                                          context,
-                                                                          pSnap,
-                                                                        ) {
-                                                                          final name =
-                                                                              (pSnap.data?.name ??
-                                                                                      '')
-                                                                                  .trim()
-                                                                                  .isNotEmpty
-                                                                              ? pSnap.data!.name.trim()
-                                                                              : s.playerPhone;
-                                                                          return Text(
-                                                                            name,
-                                                                            maxLines:
-                                                                                1,
-                                                                            overflow:
-                                                                                TextOverflow.ellipsis,
-                                                                            style: const TextStyle(
-                                                                              fontWeight: FontWeight.w900,
-                                                                              color: Colors.white,
-                                                                            ),
-                                                                          );
-                                                                        },
-                                                                  ),
-                                                                  const SizedBox(
-                                                                    height: 3,
-                                                                  ),
-                                                                  Row(
-                                                                    children: [
-                                                                      _MiniTeamLogo(
-                                                                        logoUrl:
-                                                                            teamLogo,
-                                                                        fallbackText:
-                                                                            fallback,
-                                                                      ),
-                                                                      const SizedBox(
-                                                                        width:
-                                                                            6,
-                                                                      ),
-                                                                      Expanded(
-                                                                        child: Text(
-                                                                          teamName,
-                                                                          maxLines:
-                                                                              1,
-                                                                          overflow:
-                                                                              TextOverflow.ellipsis,
-                                                                          style: const TextStyle(
-                                                                            color:
-                                                                                Colors.white54,
-                                                                            fontWeight:
-                                                                                FontWeight.w600,
-                                                                            fontSize:
-                                                                                11,
-                                                                          ),
-                                                                        ),
-                                                                      ),
-                                                                    ],
-                                                                  ),
-                                                                ],
-                                                              );
-                                                            },
-                                                          ),
-                                                        ),
-                                                        Expanded(
-                                                          flex: 2,
-                                                          child: Text(
-                                                            '${rows[i].matchesPlayed}',
-                                                            textAlign: TextAlign
-                                                                .center,
-                                                            style:
-                                                                const TextStyle(
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w900,
-                                                                  color: Colors
-                                                                      .white70,
-                                                                ),
-                                                          ),
-                                                        ),
-                                                        Expanded(
-                                                          flex: 2,
-                                                          child: Text(
-                                                            '${getValue(rows[i])}',
-                                                            textAlign: TextAlign
-                                                                .center,
-                                                            style:
-                                                                const TextStyle(
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w900,
-                                                                  color: Color(
-                                                                    0xFF10B981,
-                                                                  ),
-                                                                ),
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                ),
-                                          ],
-                                        );
-                                      }
-
-                                      return DefaultTabController(
-                                        length: 2,
-                                        child: Stack(
-                                          clipBehavior: Clip.none,
-                                          children: [
-                                            Positioned(
-                                              top: -12,
-                                              left: 16,
-                                              right: 16,
-                                              child: Container(
-                                                padding: const EdgeInsets.all(
-                                                  6,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: const Color(
-                                                    0xFF1E293B,
-                                                  ),
-                                                  borderRadius:
-                                                      BorderRadius.circular(14),
-                                                ),
-                                                child: const TabBar(
-                                                  labelColor: Colors.white,
-                                                  unselectedLabelColor:
-                                                      Colors.white70,
-                                                  indicatorColor: Colors.white,
-                                                  indicatorSize:
-                                                      TabBarIndicatorSize.tab,
-                                                  labelStyle: TextStyle(
-                                                    fontFamily: 'Batangas',
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 14,
-                                                  ),
-                                                  tabs: [
-                                                    Tab(text: 'Gol Krallığı'),
-                                                    Tab(text: 'Asist Krallığı'),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                            Positioned.fill(
-                                              top: 44,
-                                              child: Padding(
-                                                padding: const EdgeInsets.only(
-                                                  bottom: 120,
-                                                ),
-                                                child: TabBarView(
-                                                  children: [
-                                                    table(
-                                                      valueHeader: 'Gol',
-                                                      rows: topGoals,
-                                                      getValue: (s) => s.goals,
-                                                    ),
-                                                    table(
-                                                      valueHeader: 'Asist',
-                                                      rows: topAssists,
-                                                      getValue: (s) =>
-                                                          s.assists,
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
                                       );
                                     },
                                   );
@@ -820,3 +495,594 @@ class _MiniTeamLogo extends StatelessWidget {
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// Krallık sekmeleri: kürsü (ilk 3) + sıralama listesi.
+// ---------------------------------------------------------------------------
+
+const _accent = Color(0xFF10B981);
+const _card = Color(0xFF1E293B);
+const _muted = Color(0xFF94A3B8);
+const _gold = Color(0xFFFBBF24);
+const _silver = Color(0xFFCBD5E1);
+const _bronze = Color(0xFFD97706);
+
+class _PlayerLite {
+  const _PlayerLite({required this.name, required this.photoUrl});
+  final String name;
+  final String photoUrl;
+}
+
+/// Sıralanmış satır: eşit değerdekiler aynı sırayı paylaşır (1, 2, 2, 4).
+class _Ranked {
+  const _Ranked(this.rank, this.stats, this.value);
+  final int rank;
+  final PlayerStats stats;
+  final int value;
+}
+
+List<_Ranked> _rank(List<PlayerStats> all, int Function(PlayerStats) value) {
+  final list = all.where((s) => value(s) > 0).toList()
+    ..sort((a, b) {
+      final c = value(b).compareTo(value(a));
+      if (c != 0) return c;
+      // Eşitlikte daha az maçta yapan önde.
+      return a.matchesPlayed.compareTo(b.matchesPlayed);
+    });
+  final out = <_Ranked>[];
+  for (var i = 0; i < list.length && i < 10; i++) {
+    final v = value(list[i]);
+    final rank = i > 0 && value(list[i - 1]) == v ? out[i - 1].rank : i + 1;
+    out.add(_Ranked(rank, list[i], v));
+  }
+  return out;
+}
+
+class _StatsTabs extends StatefulWidget {
+  const _StatsTabs({
+    required this.stats,
+    required this.teamById,
+    required this.players,
+  });
+
+  final List<PlayerStats> stats;
+  final Map<String, Team> teamById;
+  final Map<String, _PlayerLite> players;
+
+  @override
+  State<_StatsTabs> createState() => _StatsTabsState();
+}
+
+class _StatsTabsState extends State<_StatsTabs>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabs = TabController(length: 2, vsync: this)
+    ..addListener(() {
+      if (mounted) setState(() {});
+    });
+
+  @override
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
+  }
+
+  Widget _tabButton(int index, IconData icon, String label) {
+    final selected = _tabs.index == index;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => _tabs.animateTo(index),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 11),
+          decoration: BoxDecoration(
+            color: selected ? _accent : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: _accent.withValues(alpha: 0.35),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 18,
+                color: selected ? Colors.white : Colors.white60,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  color: selected ? Colors.white : Colors.white60,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+          child: Container(
+            padding: const EdgeInsets.all(5),
+            decoration: BoxDecoration(
+              color: _card.withValues(alpha: 0.94),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            ),
+            child: Row(
+              children: [
+                _tabButton(0, Icons.sports_soccer_rounded, 'Gol Krallığı'),
+                const SizedBox(width: 6),
+                _tabButton(1, Icons.assistant_rounded, 'Asist Krallığı'),
+              ],
+            ),
+          ),
+        ),
+        Expanded(
+          child: TabBarView(
+            controller: _tabs,
+            children: [
+              _Board(
+                rows: _rank(widget.stats, (s) => s.goals),
+                unit: 'gol',
+                icon: Icons.sports_soccer_rounded,
+                teamById: widget.teamById,
+                players: widget.players,
+              ),
+              _Board(
+                rows: _rank(widget.stats, (s) => s.assists),
+                unit: 'asist',
+                icon: Icons.assistant_rounded,
+                teamById: widget.teamById,
+                players: widget.players,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _Board extends StatelessWidget {
+  const _Board({
+    required this.rows,
+    required this.unit,
+    required this.icon,
+    required this.teamById,
+    required this.players,
+  });
+
+  final List<_Ranked> rows;
+  final String unit;
+  final IconData icon;
+  final Map<String, Team> teamById;
+  final Map<String, _PlayerLite> players;
+
+  @override
+  Widget build(BuildContext context) {
+    if (rows.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 48, color: Colors.white24),
+            const SizedBox(height: 10),
+            Text(
+              'Henüz $unit kaydı yok.',
+              style: const TextStyle(color: Colors.white54),
+            ),
+          ],
+        ),
+      );
+    }
+    final podium = rows.take(3).toList();
+    final rest = rows.skip(3).toList();
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 120),
+      children: [
+        _Podium(
+          rows: podium,
+          unit: unit,
+          teamById: teamById,
+          players: players,
+        ),
+        if (rest.isNotEmpty) ...[
+          const SizedBox(height: 18),
+          Container(
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: _card.withValues(alpha: 0.94),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            ),
+            child: Column(
+              children: [
+                for (var i = 0; i < rest.length; i++)
+                  _RankRow(
+                    row: rest[i],
+                    unit: unit,
+                    first: i == 0,
+                    team: teamById[rest[i].stats.teamId],
+                    player: players[rest[i].stats.playerPhone],
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+Color _medal(int rank) => switch (rank) {
+  1 => _gold,
+  2 => _silver,
+  _ => _bronze,
+};
+
+/// İlk üç: 2. solda, 1. ortada (yüksek), 3. sağda.
+class _Podium extends StatelessWidget {
+  const _Podium({
+    required this.rows,
+    required this.unit,
+    required this.teamById,
+    required this.players,
+  });
+
+  final List<_Ranked> rows;
+  final String unit;
+  final Map<String, Team> teamById;
+  final Map<String, _PlayerLite> players;
+
+  Widget _slot(_Ranked? r, {required double height, required double avatar}) {
+    if (r == null) return const Expanded(child: SizedBox());
+    final color = _medal(r.rank);
+    final player = players[r.stats.playerPhone];
+    final team = teamById[r.stats.teamId];
+    final name = (player?.name ?? '').isEmpty ? 'Oyuncu' : player!.name;
+    return Expanded(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (r.rank == 1)
+            const Icon(
+              Icons.workspace_premium_rounded,
+              color: _gold,
+              size: 28,
+            ),
+          Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.bottomCenter,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [color, color.withValues(alpha: 0.45)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: color.withValues(alpha: 0.35),
+                      blurRadius: 14,
+                    ),
+                  ],
+                ),
+                child: _PlayerAvatar(
+                  name: name,
+                  photoUrl: player?.photoUrl ?? '',
+                  size: avatar,
+                ),
+              ),
+              Positioned(
+                bottom: -10,
+                child: Container(
+                  width: 24,
+                  height: 24,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: const Color(0xFF0F172A), width: 2),
+                  ),
+                  child: Text(
+                    '${r.rank}',
+                    style: const TextStyle(
+                      color: Color(0xFF0F172A),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            name,
+            maxLines: 2,
+            textAlign: TextAlign.center,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              fontSize: 13,
+              height: 1.15,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _MiniTeamLogo(
+                logoUrl: team?.logoUrl ?? '',
+                fallbackText: '',
+              ),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  team?.name ?? '',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: _muted, fontSize: 11),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // Kürsü basamağı
+          Container(
+            height: height,
+            width: double.infinity,
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+            decoration: BoxDecoration(
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(14),
+              ),
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  color.withValues(alpha: 0.30),
+                  color.withValues(alpha: 0.05),
+                ],
+              ),
+              border: Border(
+                top: BorderSide(color: color.withValues(alpha: 0.7), width: 2),
+              ),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  '${r.value}',
+                  style: TextStyle(
+                    color: color,
+                    fontSize: r.rank == 1 ? 30 : 24,
+                    fontWeight: FontWeight.w900,
+                    height: 1,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '$unit · ${r.stats.matchesPlayed} maç',
+                  style: const TextStyle(color: Colors.white70, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _Ranked? at(int i) => i < rows.length ? rows[i] : null;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(8, 14, 8, 0),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            _card.withValues(alpha: 0.94),
+            const Color(0xFF064E3B).withValues(alpha: 0.85),
+          ],
+        ),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          _slot(at(1), height: 78, avatar: 62),
+          _slot(at(0), height: 104, avatar: 78),
+          _slot(at(2), height: 62, avatar: 62),
+        ],
+      ),
+    );
+  }
+}
+
+class _RankRow extends StatelessWidget {
+  const _RankRow({
+    required this.row,
+    required this.unit,
+    required this.first,
+    required this.team,
+    required this.player,
+  });
+
+  final _Ranked row;
+  final String unit;
+  final bool first;
+  final Team? team;
+  final _PlayerLite? player;
+
+  @override
+  Widget build(BuildContext context) {
+    final name = (player?.name ?? '').isEmpty ? 'Oyuncu' : player!.name;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        border: first
+            ? null
+            : Border(
+                top: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
+              ),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 26,
+            child: Text(
+              '${row.rank}',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: _muted,
+                fontSize: 14,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          _PlayerAvatar(name: name, photoUrl: player?.photoUrl ?? '', size: 42),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Row(
+                  children: [
+                    _MiniTeamLogo(
+                      logoUrl: team?.logoUrl ?? '',
+                      fallbackText: '',
+                    ),
+                    const SizedBox(width: 5),
+                    Expanded(
+                      child: Text(
+                        '${team?.name ?? ''} · ${row.stats.matchesPlayed} maç',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: _muted, fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: _accent.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text.rich(
+              TextSpan(
+                text: '${row.value}',
+                style: const TextStyle(
+                  color: _accent,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                ),
+                children: [
+                  TextSpan(
+                    text: ' $unit',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Oyuncu fotoğrafı; yoksa baş harfler.
+class _PlayerAvatar extends StatelessWidget {
+  const _PlayerAvatar({
+    required this.name,
+    required this.photoUrl,
+    required this.size,
+  });
+
+  final String name;
+  final String photoUrl;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final initials = name
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .take(2)
+        .map((w) => w.characters.first)
+        .join()
+        .toUpperCase();
+    return Container(
+      width: size,
+      height: size,
+      clipBehavior: Clip.antiAlias,
+      alignment: Alignment.center,
+      decoration: const BoxDecoration(
+        shape: BoxShape.circle,
+        color: Color(0xFF064E3B),
+      ),
+      child: photoUrl.isNotEmpty
+          ? WebSafeImage(
+              url: photoUrl,
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+              isCircle: true,
+              fallbackIconSize: size * 0.4,
+            )
+          : Text(
+              initials,
+              style: TextStyle(
+                color: const Color(0xFF6EE7B7),
+                fontSize: size * 0.34,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+    );
+  }
+}
+
