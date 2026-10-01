@@ -14,6 +14,90 @@ const _purple = Color(0xFFA78BFA);
 const _yellow = Color(0xFFFBBF24);
 const _red = Color(0xFFEF4444);
 
+String _positionLabel(String main, String sub) {
+  switch (sub) {
+    case 'GK':
+      return 'Kaleci';
+    case 'DEF':
+      return 'Defans';
+    case 'ORT':
+      return 'Orta Saha';
+    case 'FOR':
+      return 'Forvet';
+  }
+  if (sub.isNotEmpty) return sub;
+  return main;
+}
+
+/// Oyuncu kartını popup olarak açar. [playerKey] oyuncu id'si ya da telefonu
+/// (istatistik ekranları telefonla tanımlar). Diğer bilgiler buradan okunur.
+Future<void> showPlayerCard(
+  BuildContext context, {
+  required String playerKey,
+  String number = '',
+}) {
+  final key = playerKey.trim();
+  final isId = RegExp(
+    r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+  ).hasMatch(key);
+  final future = Supabase.instance.client
+      .from('players')
+      .select(
+        'id, name, surname, photo_url, birth_date, height, weight, '
+        'main_position, sub_position',
+      )
+      .eq(isId ? 'id' : 'phone', key)
+      .limit(1);
+  return showDialog<void>(
+    context: context,
+    builder: (ctx) => Dialog(
+      insetPadding: const EdgeInsets.all(16),
+      backgroundColor: Colors.transparent,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+      child: FutureBuilder<List<Map<String, dynamic>>>(
+        future: future,
+        builder: (ctx, snap) {
+          if (snap.connectionState != ConnectionState.done) {
+            return const SizedBox(
+              height: 240,
+              child: Center(child: CircularProgressIndicator(color: _accent)),
+            );
+          }
+          final rows = snap.data ?? const [];
+          if (rows.isEmpty) {
+            return Container(
+              color: _bgDark,
+              padding: const EdgeInsets.all(24),
+              child: const Text(
+                'Oyuncu bulunamadı.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white70),
+              ),
+            );
+          }
+          final r = rows.first;
+          String str(String k) => (r[k] ?? '').toString().trim();
+          return PlayerCard(
+            playerPhone: key,
+            name: [str('name'), str('surname')]
+                .where((e) => e.isNotEmpty)
+                .join(' '),
+            number: number,
+            photoUrl: str('photo_url'),
+            position: _positionLabel(str('main_position'), str('sub_position')),
+            birthDate: str('birth_date'),
+            height: (r['height'] as num?)?.toInt(),
+            weight: (r['weight'] as num?)?.toInt(),
+            seasons: const [],
+            initialSeasonId: '',
+          );
+        },
+      ),
+    ),
+  );
+}
+
 /// Oyuncu kartı: üstte kimlik, ortada kariyer özeti, altta turnuva/sezon
 /// bazında sıkı bir tablo. İstatistikler maç olaylarından hesaplanır.
 class PlayerCard extends StatefulWidget {
@@ -51,14 +135,29 @@ class _PlayerCardState extends State<PlayerCard> {
 
   SupabaseClient get _sb => Supabase.instance.client;
 
+  /// GG/AA/YYYY, GG.AA.YYYY, veritabanındaki YYYY-AA-GG ya da sadece yıl.
   int? _ageFromBirthDate(String? birthDate) {
     final s = (birthDate ?? '').trim();
     if (s.isEmpty) return null;
-    final m = RegExp(r'^(\d{2})/(\d{2})/(\d{4})$').firstMatch(s);
-    if (m == null) return null;
-    final dd = int.tryParse(m.group(1)!) ?? 0;
-    final mm = int.tryParse(m.group(2)!) ?? 0;
-    final yyyy = int.tryParse(m.group(3)!) ?? 0;
+    int dd, mm, yyyy;
+    final dmy = RegExp(r'^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$').firstMatch(s);
+    final ymd = RegExp(r'^(\d{4})-(\d{1,2})-(\d{1,2})').firstMatch(s);
+    final y = RegExp(r'^(\d{4})$').firstMatch(s);
+    if (dmy != null) {
+      dd = int.parse(dmy.group(1)!);
+      mm = int.parse(dmy.group(2)!);
+      yyyy = int.parse(dmy.group(3)!);
+    } else if (ymd != null) {
+      yyyy = int.parse(ymd.group(1)!);
+      mm = int.parse(ymd.group(2)!);
+      dd = int.parse(ymd.group(3)!);
+    } else if (y != null) {
+      yyyy = int.parse(y.group(1)!);
+      mm = 1;
+      dd = 1;
+    } else {
+      return null;
+    }
     if (dd < 1 || dd > 31 || mm < 1 || mm > 12 || yyyy < 1900 || yyyy > 2100) {
       return null;
     }
@@ -117,22 +216,18 @@ class _PlayerCardState extends State<PlayerCard> {
   /// - Oynanan maç: esamede (match_rosters) olduğu ya da olayı bulunan bitmiş
   ///   maçlar
   /// Olayı olmayan sezonlarda player_season_stats kayıtları kullanılır.
-  Future<Map<String, _StatTotals>> _loadTotalsBySeason(String key) async {
-    // Kart telefon ya da id ile açılabiliyor; id'ye çevir.
-    var pid = key;
-    if (!_uuidLike.hasMatch(key)) {
-      try {
-        final r = await _sb
-            .from('players')
-            .select('id')
-            .eq('phone', key)
-            .limit(1);
-        if (r.isEmpty) return const <String, _StatTotals>{};
-        pid = (r.first['id'] ?? '').toString();
-      } catch (_) {
-        return const <String, _StatTotals>{};
-      }
+  /// Kart telefon ya da id ile açılabiliyor; id'ye çevirir.
+  Future<String?> _resolvePlayerId(String key) async {
+    if (_uuidLike.hasMatch(key)) return key;
+    try {
+      final r = await _sb.from('players').select('id').eq('phone', key).limit(1);
+      return r.isEmpty ? null : (r.first['id'] ?? '').toString();
+    } catch (_) {
+      return null;
     }
+  }
+
+  Future<Map<String, _StatTotals>> _loadTotalsBySeason(String pid) async {
 
     final events = <Map<String, dynamic>>[];
     final rosterMatchIds = <String>{};
@@ -247,7 +342,41 @@ class _PlayerCardState extends State<PlayerCard> {
     final playerKey = widget.playerPhone.trim();
     if (playerKey.isEmpty) return _PlayerCardData.empty();
 
-    final totalsBySeason = await _loadTotalsBySeason(playerKey);
+    final pid = await _resolvePlayerId(playerKey);
+    if (pid == null || pid.isEmpty) return _PlayerCardData.empty();
+    final totalsBySeason = await _loadTotalsBySeason(pid);
+
+    // Sezon başına oynadığı takım(lar).
+    final teamsBySeason = <String, List<String>>{};
+    try {
+      final links = await _sb
+          .from('season_team_players')
+          .select('season_id, team_id')
+          .eq('player_id', pid);
+      final teamIds = {
+        for (final l in links) (l['team_id'] ?? '').toString(),
+      }..remove('');
+      final teamName = <String, String>{};
+      if (teamIds.isNotEmpty) {
+        final res = await _sb
+            .from('teams')
+            .select('id, name')
+            .inFilter('id', teamIds.toList());
+        for (final t in res) {
+          teamName[(t['id'] ?? '').toString()] = (t['name'] ?? '')
+              .toString()
+              .trim();
+        }
+      }
+      for (final l in links) {
+        final sid = (l['season_id'] ?? '').toString();
+        final n = teamName[(l['team_id'] ?? '').toString()] ?? '';
+        if (sid.isEmpty || n.isEmpty) continue;
+        final list = teamsBySeason.putIfAbsent(sid, () => []);
+        if (!list.contains(n)) list.add(n);
+      }
+    } catch (_) {}
+
     final seasonIds = totalsBySeason.keys.toList();
 
     final seasonById = <String, Map<String, dynamic>>{};
@@ -306,6 +435,7 @@ class _PlayerCardState extends State<PlayerCard> {
           sortKey: (seasonRow?['start_date'] ?? seasonRow?['name'] ?? '')
               .toString(),
           totals: entry.value,
+          teams: teamsBySeason[entry.key] ?? const [],
         ),
       );
     }
@@ -344,8 +474,6 @@ class _PlayerCardState extends State<PlayerCard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _infoRow(),
-                    const SizedBox(height: 20),
                     const _SectionTitle(
                       icon: Icons.insights_rounded,
                       title: 'Kariyer Özeti',
@@ -392,13 +520,63 @@ class _PlayerCardState extends State<PlayerCard> {
     border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
   );
 
+  /// Üst bölüm: solda büyük oyuncu görseli (~%62), sağda yaş / boy / kilo /
+  /// doğum alt alta; altında isim ve mevki.
   Widget _hero(BuildContext context) {
     final photo = _normalizeUrl(widget.photoUrl);
     final number = widget.number.trim();
     final pos = widget.position.trim();
     final name = widget.name.trim().isEmpty ? '-' : widget.name.trim();
+    final age = _ageFromBirthDate(widget.birthDate);
+    final photoHeight = (MediaQuery.of(context).size.height * 0.34).clamp(
+      230.0,
+      320.0,
+    );
 
-    if (photo.isNotEmpty) return _photoHero(context, photo, name, number, pos);
+    Widget info(IconData icon, String label, String value) => Expanded(
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.22),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 13, color: _accent),
+                const SizedBox(width: 5),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: _mid,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                value,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 18,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
 
     return Container(
       decoration: const BoxDecoration(
@@ -409,290 +587,155 @@ class _PlayerCardState extends State<PlayerCard> {
         ),
         borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
       ),
-      padding: const EdgeInsets.fromLTRB(20, 14, 12, 22),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 18),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Align(
-            alignment: Alignment.topRight,
+            alignment: Alignment.centerRight,
             child: IconButton(
               onPressed: () => Navigator.of(context).maybePop(),
               icon: const Icon(Icons.close_rounded, color: Colors.white70),
               tooltip: 'Kapat',
             ),
           ),
-          Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Container(
-                width: 104,
-                height: 104,
-                padding: const EdgeInsets.all(3),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: _accent.withValues(alpha: 0.8),
-                    width: 2,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: _accent.withValues(alpha: 0.25),
-                      blurRadius: 24,
-                    ),
-                  ],
-                ),
-                child: ClipOval(
-                  child: photo.isEmpty
-                      ? Container(
+          SizedBox(
+            height: photoHeight,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  flex: 62,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Container(
+                        clipBehavior: Clip.antiAlias,
+                        decoration: BoxDecoration(
                           color: _bgDark,
-                          alignment: Alignment.center,
-                          child: Text(
-                            _initials(name),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 34,
-                              fontWeight: FontWeight.w900,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: _accent.withValues(alpha: 0.6),
+                            width: 1.5,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: _accent.withValues(alpha: 0.18),
+                              blurRadius: 20,
+                            ),
+                          ],
+                        ),
+                        child: photo.isEmpty
+                            ? Center(
+                                child: Text(
+                                  _initials(name),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 56,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              )
+                            : WebSafeImage(
+                                url: photo,
+                                fit: BoxFit.cover,
+                                fallbackIconSize: 48,
+                              ),
+                      ),
+                      if (number.isNotEmpty)
+                        Positioned(
+                          top: 10,
+                          left: 10,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _accent,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '#$number',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w900,
+                                fontSize: 15,
+                              ),
                             ),
                           ),
-                        )
-                      : WebSafeImage(
-                          url: photo,
-                          width: 98,
-                          height: 98,
-                          isCircle: true,
-                          fit: BoxFit.cover,
-                          fallbackIconSize: 40,
                         ),
-                ),
-              ),
-              if (number.isNotEmpty)
-                Positioned(
-                  right: -4,
-                  bottom: -2,
-                  child: Container(
-                    width: 38,
-                    height: 38,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: _accent,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: _bgDark, width: 3),
-                    ),
-                    child: Text(
-                      number,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 14,
-                      ),
-                    ),
+                    ],
                   ),
                 ),
-            ],
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 38,
+                  child: Column(
+                    children: [
+                      info(
+                        Icons.cake_outlined,
+                        'Yaş',
+                        age == null ? '-' : '$age',
+                      ),
+                      const SizedBox(height: 8),
+                      info(
+                        Icons.height_rounded,
+                        'Boy',
+                        widget.height == null ? '-' : '${widget.height} cm',
+                      ),
+                      const SizedBox(height: 8),
+                      info(
+                        Icons.monitor_weight_outlined,
+                        'Kilo',
+                        widget.weight == null ? '-' : '${widget.weight} kg',
+                      ),
+                      const SizedBox(height: 8),
+                      info(Icons.event_outlined, 'Doğum', _birthYear()),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 14),
           Text(
             name,
-            textAlign: TextAlign.center,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: Colors.white,
               fontSize: 24,
               fontWeight: FontWeight.w900,
-              letterSpacing: 0.2,
+              height: 1.1,
             ),
           ),
-          if (pos.isNotEmpty) ...[
+          if (pos.isNotEmpty && pos != '-') ...[
             const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.25),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white24),
-              ),
-              child: Text(
-                pos,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 12,
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: _accent.withValues(alpha: 0.9),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  pos,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                  ),
                 ),
               ),
             ),
           ],
         ],
       ),
-    );
-  }
-
-  /// Fotoğraf varsa: üst bölümü tamamen kaplayan kapak görseli; alt kısmı
-  /// koyu gradientle karta bağlanır, isim/numara/mevki fotoğrafın üzerinde.
-  Widget _photoHero(
-    BuildContext context,
-    String photo,
-    String name,
-    String number,
-    String pos,
-  ) {
-    final height = (MediaQuery.of(context).size.height * 0.30).clamp(
-      220.0,
-      300.0,
-    );
-    return ClipRRect(
-      borderRadius: const BorderRadius.vertical(bottom: Radius.circular(28)),
-      child: SizedBox(
-        height: height,
-        child: LayoutBuilder(
-          builder: (context, c) => Stack(
-            fit: StackFit.expand,
-            children: [
-              WebSafeImage(
-                url: photo,
-                width: c.maxWidth,
-                height: height,
-                isCircle: false,
-                fit: BoxFit.cover,
-                fallbackIconSize: 48,
-              ),
-              // Üstte kapat butonu, altta yazılar okunsun diye koyulaşma.
-              const DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Color(0x80000000),
-                      Color(0x00000000),
-                      Color(0x990F172A),
-                      _bgDark,
-                    ],
-                    stops: [0.0, 0.3, 0.72, 1.0],
-                  ),
-                ),
-              ),
-              Positioned(
-                top: 8,
-                right: 8,
-                child: IconButton(
-                  onPressed: () => Navigator.of(context).maybePop(),
-                  icon: const Icon(Icons.close_rounded, color: Colors.white),
-                  tooltip: 'Kapat',
-                ),
-              ),
-              Positioned(
-                left: 20,
-                right: 20,
-                bottom: 18,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (pos.isNotEmpty)
-                            Container(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                color: _accent.withValues(alpha: 0.9),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                pos,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                          Text(
-                            name,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 24,
-                              fontWeight: FontWeight.w900,
-                              height: 1.1,
-                              shadows: [
-                                Shadow(color: Colors.black54, blurRadius: 12),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (number.isNotEmpty) ...[
-                      const SizedBox(width: 12),
-                      Text(
-                        number,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.9),
-                          fontSize: 40,
-                          fontWeight: FontWeight.w900,
-                          height: 1,
-                          shadows: const [
-                            Shadow(color: Colors.black54, blurRadius: 12),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _infoRow() {
-    final age = _ageFromBirthDate(widget.birthDate);
-    Widget tile(String label, String value) => Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: _panel(),
-        child: Column(
-          children: [
-            Text(
-              value,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w900,
-                fontSize: 16,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: const TextStyle(
-                color: _mid,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-    return Row(
-      children: [
-        tile('Yaş', age == null ? '-' : '$age'),
-        const SizedBox(width: 8),
-        tile('Boy', widget.height == null ? '-' : '${widget.height} cm'),
-        const SizedBox(width: 8),
-        tile('Kilo', widget.weight == null ? '-' : '${widget.weight} kg'),
-        const SizedBox(width: 8),
-        tile('Doğum', _birthYear()),
-      ],
     );
   }
 
@@ -776,7 +819,7 @@ class _PlayerCardState extends State<PlayerCard> {
         children: [
           const Expanded(
             child: Text(
-              'Sezon',
+              'Turnuva – Sezon',
               style: TextStyle(
                 color: _mid,
                 fontSize: 11,
@@ -791,41 +834,64 @@ class _PlayerCardState extends State<PlayerCard> {
     );
 
     final children = <Widget>[header()];
+    var first = true;
     for (final t in tournaments) {
-      children.add(
-        Container(
-          width: double.infinity,
-          color: Colors.white.withValues(alpha: 0.04),
-          padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
-          child: Text(
-            t.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: _accent,
-              fontWeight: FontWeight.w800,
-              fontSize: 13,
-            ),
-          ),
-        ),
-      );
-      for (final s in t.seasons) {
-        final x = s.totals;
+      for (final sn in t.seasons) {
+        final x = sn.totals;
         children.add(
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 9, 10, 9),
+          Container(
+            padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+            decoration: BoxDecoration(
+              border: first
+                  ? null
+                  : Border(
+                      top: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.06),
+                      ),
+                    ),
+            ),
             child: Row(
               children: [
                 Expanded(
-                  child: Text(
-                    s.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${t.name} – ${sn.name}',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      if (sn.teams.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.shield_outlined,
+                              size: 12,
+                              color: _accent,
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                sn.teams.join(', '),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: _accent,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
                   ),
                 ),
                 cell('${x.matches}'),
@@ -837,6 +903,7 @@ class _PlayerCardState extends State<PlayerCard> {
             ),
           ),
         );
+        first = false;
       }
     }
 
@@ -909,11 +976,13 @@ class _SeasonNode {
     required this.name,
     required this.sortKey,
     required this.totals,
+    this.teams = const [],
   });
 
   final String name;
   final String sortKey;
   final _StatTotals totals;
+  final List<String> teams;
 }
 
 class _StatTotals {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../player/widgets/player_card.dart';
 import 'package:flutter/services.dart';
 import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -2953,6 +2954,9 @@ class _DetailTabView extends StatelessWidget {
               teamId: teamId,
               homeTeamId: match.homeTeamId,
               system: system,
+              playerId: _readString(e['player_id']).isNotEmpty
+                  ? _readString(e['player_id'])
+                  : _readString(e['playerId']),
             );
           },
         );
@@ -2969,6 +2973,9 @@ class _DetailEventTile extends StatelessWidget {
   final String teamId;
   final String homeTeamId;
   final bool system;
+
+  /// Dolu ise satıra dokununca oyuncu kartı açılır.
+  final String playerId;
   const _DetailEventTile({
     required this.minute,
     required this.type,
@@ -2977,6 +2984,7 @@ class _DetailEventTile extends StatelessWidget {
     required this.teamId,
     required this.homeTeamId,
     required this.system,
+    this.playerId = '',
   });
 
   Widget _systemIcon(String title) {
@@ -3051,7 +3059,7 @@ class _DetailEventTile extends StatelessWidget {
       }
     }
 
-    return Padding(
+    final tile = Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: system
           ? Row(
@@ -3147,6 +3155,12 @@ class _DetailEventTile extends StatelessWidget {
                       ),
                     ],
             ),
+    );
+    if (playerId.isEmpty) return tile;
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () => showPlayerCard(context, playerKey: playerId),
+      child: tile,
     );
   }
 }
