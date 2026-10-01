@@ -179,12 +179,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Stream<List<Season>> _watchSeasons(String leagueId) {
-    return Supabase.instance.client
-        .from('seasons')
-        .stream(primaryKey: ['id'])
-        .eq('league_id', leagueId)
-        .order('start_date', ascending: false)
-        .map((rows) => rows.map((r) => Season.fromMap(r)).toList());
+    return resilientStream(
+      () => Supabase.instance.client
+          .from('seasons')
+          .stream(primaryKey: ['id'])
+          .eq('league_id', leagueId)
+          .order('start_date', ascending: false)
+          .map((rows) => rows.map((r) => Season.fromMap(r)).toList()),
+    );
   }
 
   bool _bugunMu(DateTime t) {
@@ -543,8 +545,11 @@ class _HomeScreenState extends State<HomeScreen> {
                             )
                             .id;
                   _activeLeagueId = def;
-                  GlobalFilter.setLeague(def);
                   _didAutoSelectDefaultLeague = true;
+                  // Dinleyiciler setState çağırır; build bittikten sonra yay.
+                  WidgetsBinding.instance.addPostFrameCallback(
+                    (_) => GlobalFilter.setLeague(def),
+                  );
                 }
 
                 final currentLeague = allLeagues.firstWhere(

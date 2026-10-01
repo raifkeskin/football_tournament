@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:ui'; // Cam efekti (BackdropFilter) için eklendi
 
+import '../../../core/services/app_session.dart';
 import '../../match/screens/fixture_screen.dart';
 import '../../news/screens/news_feed_screen.dart';
 import '../../team/screens/groups_screen.dart';
@@ -32,8 +33,21 @@ class _MainNavigatorState extends State<MainNavigator> {
     Navigator.of(context).pop();
   }
 
+  Future<void> _cikisYap(AppSessionController session) async {
+    Navigator.of(context).pop(); // çekmeceyi kapat
+    await session.signOut();
+    if (!mounted) return;
+    setState(() => _aktifSekme = 0);
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Çıkış yapıldı.')));
+  }
+
   @override
   Widget build(BuildContext context) {
+    final session = AppSession.of(context);
+    final user = session.value.user;
+    final loggedIn = user != null && !user.isAnonymous;
     final ekranlar = <Widget>[
       const HomeScreen(),
       const NewsFeedScreen(),
@@ -189,29 +203,46 @@ class _MainNavigatorState extends State<MainNavigator> {
                     ),
                   ),
 
-                  // ÇIKIŞ YAP BUTONU
+                  // GİRİŞ / ÇIKIŞ BUTONU: misafirde profil (giriş) ekranına
+                  // götürür, giriş yapmışta oturumu kapatır.
                   Padding(
                     padding: const EdgeInsets.all(24.0),
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white70,
-                        side: BorderSide(
-                          color: Colors.white.withValues(alpha: 0.3),
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      icon: const Icon(Icons.logout, size: 20),
-                      label: const Text(
-                        'Çıkış Yap',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      onPressed: () {
-                        // Çıkış yapma işlemleri
-                      },
-                    ),
+                    child: loggedIn
+                        ? OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.white70,
+                              side: BorderSide(
+                                color: Colors.white.withValues(alpha: 0.3),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            icon: const Icon(Icons.logout, size: 20),
+                            label: const Text(
+                              'Çıkış Yap',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            onPressed: () => _cikisYap(session),
+                          )
+                        : FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF10B981),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            icon: const Icon(Icons.login, size: 20),
+                            label: const Text(
+                              'Giriş Yap',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            onPressed: () =>
+                                _sekmeDegistir(MainNavigator.profileTab),
+                          ),
                   ),
                 ],
               ),

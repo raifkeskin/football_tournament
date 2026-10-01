@@ -67,12 +67,14 @@ class SupabaseLeagueService implements ILeagueService {
       );
     }
 
-    return _client
-        .from('leagues')
-        .stream(primaryKey: ['id'])
-        .eq('is_active', true)
-        .order('name', ascending: true)
-        .map((rows) => rows.map((r) => League.fromMap(r)).toList());
+    return resilientStream(
+      () => _client
+          .from('leagues')
+          .stream(primaryKey: ['id'])
+          .eq('is_active', true)
+          .order('name', ascending: true)
+          .map((rows) => rows.map((r) => League.fromMap(r)).toList()),
+    );
   }
 
   @override
@@ -671,7 +673,8 @@ class SupabaseLeagueService implements ILeagueService {
       leagueLogoUrl: logo.isEmpty ? null : logo,
       leagueIsPrivate: l['is_private'] == true,
       // RLS yalnızca kullanıcının kendi beğenisini döndürür.
-      likedByMe: r['news_likes'] is List && (r['news_likes'] as List).isNotEmpty,
+      likedByMe:
+          r['news_likes'] is List && (r['news_likes'] as List).isNotEmpty,
     );
   }
 

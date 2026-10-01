@@ -47,12 +47,14 @@ class _GroupsScreenState extends State<GroupsScreen> {
   Stream<List<GroupModel>>? _groupsStream;
 
   Stream<List<Season>> _watchSeasons(String leagueId) {
-    return Supabase.instance.client
-        .from('seasons')
-        .stream(primaryKey: ['id'])
-        .eq('league_id', leagueId)
-        .order('start_date', ascending: false)
-        .map((rows) => rows.map((r) => Season.fromMap(r)).toList());
+    return resilientStream(
+      () => Supabase.instance.client
+          .from('seasons')
+          .stream(primaryKey: ['id'])
+          .eq('league_id', leagueId)
+          .order('start_date', ascending: false)
+          .map((rows) => rows.map((r) => Season.fromMap(r)).toList()),
+    );
   }
 
   @override

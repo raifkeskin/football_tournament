@@ -524,8 +524,8 @@ class _AdminGroupManagementScreenState
             .toSet();
         for (final id in ids) {
           await _teamService.updateTeam(id, {
+            'seasonId': seasonId,
             'groupId': groupId,
-            'groupName': name,
           });
         }
 
@@ -658,7 +658,6 @@ class _AdminGroupManagementScreenState
       if (groupId == null) return;
       final seasonId = (_selectedSeasonId ?? '').trim();
       if (seasonId.isEmpty) return;
-      final groupName = (_selectedGroupName ?? '').trim();
 
       final teams = await _teamService.getTeamsCached(seasonId);
       final currentGroupTeams = teams
@@ -678,12 +677,15 @@ class _AdminGroupManagementScreenState
       final toAdd = nextIds.difference(currentIds);
 
       for (final id in toRemove) {
-        await _teamService.updateTeam(id, {'groupId': null, 'groupName': null});
+        await _teamService.updateTeam(id, {
+          'seasonId': seasonId,
+          'groupId': null,
+        });
       }
       for (final id in toAdd) {
         await _teamService.updateTeam(id, {
+          'seasonId': seasonId,
           'groupId': groupId,
-          'groupName': groupName.isEmpty ? null : groupName,
         });
       }
       if (!mounted) return;

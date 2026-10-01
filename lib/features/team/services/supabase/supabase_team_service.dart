@@ -151,7 +151,8 @@ class SupabaseTeamService implements ITeamService {
         method: 'watchAllTeams',
         filters: 'order=team_id asc',
       );
-      return _client
+      return resilientStream(
+      () => _client
           .from('season_teams')
           .stream(primaryKey: ['id'])
           .order('team_id', ascending: true)
@@ -217,7 +218,8 @@ class SupabaseTeamService implements ITeamService {
               (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
             );
             return list;
-          });
+          }),
+    );
     } catch (e) {
       AppConfig.sqlLogResult(
         table: 'season_teams',
@@ -248,7 +250,8 @@ class SupabaseTeamService implements ITeamService {
         method: 'watchAllTeamsRaw',
         filters: 'order=team_id asc',
       );
-      return _client
+      return resilientStream(
+      () => _client
           .from('season_teams')
           .stream(primaryKey: ['id'])
           .order('team_id', ascending: true)
@@ -310,7 +313,8 @@ class SupabaseTeamService implements ITeamService {
               });
             }
             return out;
-          });
+          }),
+    );
     } catch (e) {
       AppConfig.sqlLogResult(
         table: 'season_teams',
@@ -497,7 +501,8 @@ class SupabaseTeamService implements ITeamService {
         filters:
             'primaryKey=id | clientFilter=group_id=$gid | order=team_id asc',
       );
-      return _client
+      return resilientStream(
+      () => _client
           .from('season_teams')
           .stream(primaryKey: ['id'])
           .eq('group_id', gid)
@@ -532,7 +537,8 @@ class SupabaseTeamService implements ITeamService {
               (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
             );
             return list;
-          });
+          }),
+    );
     } catch (e) {
       AppConfig.sqlLogResult(
         table: 'season_teams',
@@ -2090,6 +2096,8 @@ class SupabaseTeamService implements ITeamService {
           switch (k) {
             case 'logoUrl':
               return 'logo_url';
+            case 'foundedYear':
+              return 'founded_year';
             default:
               return k;
           }
@@ -2109,9 +2117,6 @@ class SupabaseTeamService implements ITeamService {
               data['tournament_id'],
         );
         final groupIdFromData = readStr(data['groupId'] ?? data['group_id']);
-        final groupNameFromData = readStr(
-          data['groupName'] ?? data['group_name'],
-        );
 
         final wantsLinkUpdate =
             data.containsKey('groupId') ||
@@ -2137,7 +2142,9 @@ class SupabaseTeamService implements ITeamService {
               k == 'leagueId' ||
               k == 'league_id' ||
               k == 'tournamentId' ||
-              k == 'tournament_id') {
+              k == 'tournament_id' ||
+              k == 'managerName') {
+            // managerName: teams'te kolon yok (sorumlu manager_id ile tutulur).
             continue;
           }
           teamPayload[mapTeamKey(k)] = e.value;
@@ -2183,12 +2190,10 @@ class SupabaseTeamService implements ITeamService {
           }
 
           if (seasonId.isNotEmpty) {
+            // season_teams'te grup adı tutulmaz; sadece group_id.
             final linkPayload = <String, dynamic>{
               if (data.containsKey('groupId') || data.containsKey('group_id'))
                 'group_id': groupIdFromData,
-              if (data.containsKey('groupName') ||
-                  data.containsKey('group_name'))
-                'group_name': groupNameFromData,
             };
 
             if (linkPayload.isNotEmpty) {
@@ -2209,8 +2214,6 @@ class SupabaseTeamService implements ITeamService {
                   'team_id': id,
                   if (linkPayload.containsKey('group_id'))
                     'group_id': linkPayload['group_id'],
-                  if (linkPayload.containsKey('group_name'))
-                    'group_name': linkPayload['group_name'],
                 });
               }
             }
@@ -2226,6 +2229,7 @@ class SupabaseTeamService implements ITeamService {
           error: e,
         );
         _sbResult(rows: 0, error: e);
+        rethrow; // ekran "güncellendi" dememeli
       }
     });
   }
@@ -2671,9 +2675,6 @@ class SupabaseTeamService implements ITeamService {
           'season_id': l,
           'team_id': teamId,
           'group_id': groupId?.trim().isEmpty ?? true ? null : groupId!.trim(),
-          'group_name': groupName?.trim().isEmpty ?? true
-              ? null
-              : groupName!.trim(),
         };
         final updated = await _client
             .from('season_teams')
