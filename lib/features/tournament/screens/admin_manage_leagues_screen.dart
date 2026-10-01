@@ -9,6 +9,7 @@ import '../../../core/services/app_session.dart';
 import '../../../core/services/image_upload_service.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/utils/resilient_stream.dart';
+import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/app_date_picker.dart';
 import '../../../core/widgets/web_safe_image.dart';
@@ -163,220 +164,248 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
               });
             }
 
+            final Widget logo;
+            if (selectedLogo != null) {
+              logo = Image.file(File(selectedLogo!.path), fit: BoxFit.contain);
+            } else if (showUrl.isNotEmpty) {
+              logo = WebSafeImage(
+                url: showUrl,
+                width: 168,
+                height: 168,
+                fit: BoxFit.contain,
+                fallbackIconSize: 56,
+              );
+            } else {
+              logo = const Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.emoji_events_outlined,
+                    size: 56,
+                    color: Color(0xFFF59E0B),
+                  ),
+                  SizedBox(height: 6),
+                  Text(
+                    'Logo ekle',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              );
+            }
+
             return SingleChildScrollView(
               padding: EdgeInsets.fromLTRB(20, 8, 20, 20 + viewInsets.bottom),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        isEdit
-                            ? Icons.edit_outlined
-                            : Icons.emoji_events_outlined,
-                        color: kAdminAccent,
-                        size: 22,
-                      ),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: Text(
-                          isEdit ? 'Turnuvayı Düzenle' : 'Yeni Turnuva',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                      ),
-                    ],
+                  AdminDialogHeader(
+                    icon: isEdit
+                        ? Icons.edit_outlined
+                        : Icons.emoji_events_outlined,
+                    title: isEdit ? 'Turnuvayı Düzenle' : 'Yeni Turnuva',
                   ),
-                  const SizedBox(height: 14),
-                  const Divider(color: Colors.white24, height: 1),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 22),
+                  // Büyük logo; eylem butonları resmin üstünde değil altında.
                   Center(
-                    child: SizedBox(
-                      width: 120,
-                      height: 120,
+                    child: GestureDetector(
+                      onTap: saving ? null : pickLogo,
                       child: Stack(
                         clipBehavior: Clip.none,
                         children: [
-                          Positioned.fill(
-                            child: InkWell(
-                              onTap: saving ? null : pickLogo,
-                              customBorder: const CircleBorder(),
-                              child: Container(
-                                clipBehavior: Clip.antiAlias,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: Colors.black.withValues(alpha: 0.3),
-                                  border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.15),
-                                  ),
-                                ),
-                                child: selectedLogo != null
-                                    ? Image.file(
-                                        File(selectedLogo!.path),
-                                        fit: BoxFit.cover,
-                                      )
-                                    : (showUrl.isNotEmpty
-                                          ? WebSafeImage(
-                                              url: showUrl,
-                                              width: 120,
-                                              height: 120,
-                                              fit: BoxFit.cover,
-                                            )
-                                          : const Icon(
-                                              Icons.add_photo_alternate_outlined,
-                                              size: 40,
-                                              color: Colors.white38,
-                                            )),
+                          Container(
+                            width: 168,
+                            height: 168,
+                            padding: const EdgeInsets.all(10),
+                            clipBehavior: Clip.antiAlias,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(32),
+                              gradient: const LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [Color(0xFF0F172A), Color(0xFF064E3B)],
                               ),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.12),
+                              ),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Colors.black45,
+                                  blurRadius: 18,
+                                  offset: Offset(0, 8),
+                                ),
+                              ],
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(22),
+                              child: SizedBox.expand(child: logo),
                             ),
                           ),
                           Positioned(
-                            right: -6,
-                            bottom: -2,
-                            child: Row(
-                              children: [
-                                AdminSmallAction(
-                                  icon: Icons.photo_library_outlined,
-                                  tooltip: 'Logo Seç',
-                                  color: kAdminAccent,
-                                  onTap: saving ? null : pickLogo,
+                            right: -8,
+                            bottom: -8,
+                            child: Container(
+                              width: 42,
+                              height: 42,
+                              decoration: BoxDecoration(
+                                color: kAdminAccent,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: const Color(0xFF1E293B),
+                                  width: 3,
                                 ),
-                                if (hasLogo) ...[
-                                  const SizedBox(width: 6),
-                                  AdminSmallAction(
-                                    icon: Icons.delete_outline_rounded,
-                                    tooltip: 'Logoyu Kaldır',
-                                    color: kAdminDanger,
-                                    onTap: saving
-                                        ? null
-                                        : () => setPopupState(() {
-                                            selectedLogo = null;
-                                            removedLogo = true;
-                                          }),
-                                  ),
-                                ],
-                              ],
+                              ),
+                              child: const Icon(
+                                Icons.photo_camera_outlined,
+                                size: 20,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
                         ],
                       ),
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      TextButton.icon(
+                        onPressed: saving ? null : pickLogo,
+                        style: TextButton.styleFrom(
+                          foregroundColor: kAdminAccent,
+                        ),
+                        icon: const Icon(Icons.photo_library_outlined, size: 18),
+                        label: Text(hasLogo ? 'Logoyu değiştir' : 'Logo seç'),
+                      ),
+                      if (hasLogo)
+                        TextButton.icon(
+                          onPressed: saving
+                              ? null
+                              : () => setPopupState(() {
+                                  selectedLogo = null;
+                                  removedLogo = true;
+                                }),
+                          style: TextButton.styleFrom(
+                            foregroundColor: kAdminDanger,
+                          ),
+                          icon: const Icon(
+                            Icons.delete_outline_rounded,
+                            size: 18,
+                          ),
+                          label: const Text('Kaldır'),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
                   TextField(
                     controller: nameController,
                     enabled: !saving,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: const InputDecoration(
-                      labelText: 'Turnuva Adı',
-                      border: OutlineInputBorder(),
+                    textCapitalization: TextCapitalization.words,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    cursorColor: kAdminAccent,
+                    decoration: adminInputDecoration(
+                      label: 'Turnuva Adı',
+                      icon: Icons.emoji_events_outlined,
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  Ink(
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.1),
-                      ),
-                    ),
-                    child: SwitchListTile(
-                      dense: true,
-                      activeThumbColor: kAdminAccent,
-                      secondary: const Icon(
-                        Icons.lock_outline_rounded,
-                        color: Colors.white54,
-                      ),
-                      title: const Text(
-                        'Gizli Turnuva',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
+                  const SizedBox(height: 12),
+                  AdminFieldGroup(
+                    children: [
+                      AdminFieldRow(
+                        icon: isPrivate
+                            ? Icons.lock_outline_rounded
+                            : Icons.public_rounded,
+                        label: 'Görünürlük',
+                        onTap: saving
+                            ? null
+                            : () => setPopupState(() {
+                                isPrivate = !isPrivate;
+                                if (isPrivate &&
+                                    accessCodeController.text.trim().isEmpty) {
+                                  accessCodeController.text = _newAccessCode();
+                                }
+                                if (!isPrivate) accessCodeController.clear();
+                              }),
+                        trailing: Switch.adaptive(
+                          value: isPrivate,
+                          activeTrackColor: kAdminAccent,
+                          onChanged: saving
+                              ? null
+                              : (v) => setPopupState(() {
+                                  isPrivate = v;
+                                  if (isPrivate &&
+                                      accessCodeController.text
+                                          .trim()
+                                          .isEmpty) {
+                                    accessCodeController.text =
+                                        _newAccessCode();
+                                  }
+                                  if (!isPrivate) accessCodeController.clear();
+                                }),
+                        ),
+                        child: Text(
+                          isPrivate
+                              ? 'Gizli · sadece kodla görülür'
+                              : 'Herkese açık',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
-                      value: isPrivate,
-                      onChanged: saving
-                          ? null
-                          : (v) => setPopupState(() {
-                              isPrivate = v;
-                              if (isPrivate &&
-                                  accessCodeController.text.trim().isEmpty) {
-                                accessCodeController.text = _newAccessCode();
-                              }
-                              if (!isPrivate) accessCodeController.clear();
-                            }),
-                    ),
+                    ],
                   ),
                   if (isPrivate) ...[
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 12),
                     TextField(
                       controller: accessCodeController,
                       enabled: !saving,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: const InputDecoration(
-                        labelText: 'Erişim Kodu',
-                        border: OutlineInputBorder(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 2,
                       ),
+                      cursorColor: kAdminAccent,
+                      decoration:
+                          adminInputDecoration(
+                            label: 'Erişim Kodu',
+                            icon: Icons.key_rounded,
+                          ).copyWith(
+                            suffixIcon: IconButton(
+                              tooltip: 'Yeni kod üret',
+                              icon: const Icon(
+                                Icons.refresh_rounded,
+                                color: Colors.white54,
+                              ),
+                              onPressed: saving
+                                  ? null
+                                  : () => setPopupState(
+                                      () => accessCodeController.text =
+                                          _newAccessCode(),
+                                    ),
+                            ),
+                          ),
                     ),
                   ],
-                  const SizedBox(height: 22),
-                  SizedBox(
-                    height: 48,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: kAdminAccent,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onPressed: saving
-                          ? null
-                          : () => submit(popupContext, setPopupState),
-                      child: saving
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : Text(
-                              isEdit ? 'GÜNCELLE' : 'KAYDET',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                    ),
+                  const SizedBox(height: 24),
+                  AdminPrimaryButton(
+                    label: isEdit ? 'GÜNCELLE' : 'KAYDET',
+                    busy: saving,
+                    onPressed: () => submit(popupContext, setPopupState),
                   ),
                   const SizedBox(height: 10),
-                  SizedBox(
-                    height: 48,
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white70,
-                        side: BorderSide(
-                          color: Colors.white.withValues(alpha: 0.2),
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onPressed: saving
-                          ? null
-                          : () => Navigator.of(popupContext).pop(),
-                      child: const Text(
-                        'VAZGEÇ',
-                        style: TextStyle(fontWeight: FontWeight.w900),
-                      ),
-                    ),
+                  AdminSecondaryButton(
+                    onPressed: saving
+                        ? null
+                        : () => Navigator.of(popupContext).pop(),
                   ),
                 ],
               ),
