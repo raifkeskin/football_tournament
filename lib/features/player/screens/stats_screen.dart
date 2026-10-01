@@ -66,20 +66,41 @@ class _StatsScreenState extends State<StatsScreen> {
     _playersKey = key;
     return _playersFuture = () async {
       if (ids.isEmpty) return const <String, _PlayerLite>{};
-      final rows = await Supabase.instance.client
-          .from('players')
-          .select('id, name, surname, photo_url')
-          .inFilter('id', ids.toList());
-      return {
-        for (final r in rows)
-          (r['id'] ?? '').toString(): _PlayerLite(
-            name: [
-              (r['name'] ?? '').toString().trim(),
-              (r['surname'] ?? '').toString().trim(),
-            ].where((e) => e.isNotEmpty).join(' '),
-            photoUrl: (r['photo_url'] ?? '').toString().trim(),
-          ),
-      };
+      // İstatistik anahtarı oyuncunun telefonu, telefonu yoksa id'si.
+      final uuid = RegExp(
+        r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+        caseSensitive: false,
+      );
+      final byId = ids.where(uuid.hasMatch).toList();
+      final byPhone = ids.where((k) => !uuid.hasMatch(k)).toList();
+      final client = Supabase.instance.client;
+      final rows = [
+        if (byId.isNotEmpty)
+          ...await client
+              .from('players')
+              .select('id, phone, name, surname, photo_url')
+              .inFilter('id', byId),
+        if (byPhone.isNotEmpty)
+          ...await client
+              .from('players')
+              .select('id, phone, name, surname, photo_url')
+              .inFilter('phone', byPhone),
+      ];
+      final out = <String, _PlayerLite>{};
+      for (final r in rows) {
+        final p = _PlayerLite(
+          name: [
+            (r['name'] ?? '').toString().trim(),
+            (r['surname'] ?? '').toString().trim(),
+          ].where((e) => e.isNotEmpty).join(' '),
+          photoUrl: (r['photo_url'] ?? '').toString().trim(),
+        );
+        for (final k in [r['id'], r['phone']]) {
+          final key = (k ?? '').toString().trim();
+          if (key.isNotEmpty) out[key] = p;
+        }
+      }
+      return out;
     }();
   }
 
@@ -872,18 +893,29 @@ class _Podium extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  '${r.value}',
-                  style: TextStyle(
-                    color: color,
-                    fontSize: r.rank == 1 ? 30 : 24,
-                    fontWeight: FontWeight.w900,
-                    height: 1,
+                Text.rich(
+                  TextSpan(
+                    text: '${r.value}',
+                    style: TextStyle(
+                      fontSize: r.rank == 1 ? 30 : 24,
+                      fontWeight: FontWeight.w900,
+                      height: 1,
+                    ),
+                    children: [
+                      TextSpan(
+                        text: ' $unit',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
                   ),
+                  style: TextStyle(color: color),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '$unit · ${r.stats.matchesPlayed} maç',
+                  '${r.stats.matchesPlayed} maç',
                   style: const TextStyle(color: Colors.white70, fontSize: 11),
                 ),
               ],
