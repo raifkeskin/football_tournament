@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 Widget buildWebSafeImage(
@@ -25,12 +26,15 @@ Widget buildWebSafeImage(
     );
   }
 
-  final img = Image.network(
-    trimmed,
+  // Diskte önbelleklenir: logolar her açılışta yeniden indirilmez
+  // (storage indirme kotasını korur).
+  final img = CachedNetworkImage(
+    imageUrl: trimmed,
     width: width,
     height: height,
     fit: fit,
-    errorBuilder: (_, _, _) => SizedBox(
+    fadeInDuration: const Duration(milliseconds: 150),
+    errorWidget: (_, _, _) => SizedBox(
       width: width,
       height: height,
       child: Center(child: fallback),

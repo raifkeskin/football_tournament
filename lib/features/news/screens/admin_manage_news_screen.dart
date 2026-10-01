@@ -94,7 +94,10 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
             : existingUrl;
         final file = picked;
         if (file != null) {
-          imageUrl = await ImgBBUploadService().uploadImage(File(file.path));
+          imageUrl = await SupabaseImageUploadService().uploadImage(
+            File(file.path),
+            folder: MediaFolder.news,
+          );
           if (imageUrl == null) {
             throw Exception('Fotoğraf yüklenemedi, tekrar deneyin.');
           }
@@ -112,6 +115,9 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
             imageUrl: imageUrl,
             isPublished: publishNow,
           );
+        }
+        if (isEdit && existingUrl.isNotEmpty && existingUrl != imageUrl) {
+          await SupabaseImageUploadService().deleteImageByUrl(existingUrl);
         }
         if (ctx.mounted) Navigator.pop(ctx);
         if (mounted) _snack(isEdit ? 'Haber güncellendi.' : 'Haber eklendi.');
@@ -363,7 +369,7 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
     Future<void>.delayed(const Duration(milliseconds: 600), controller.dispose);
   }
 
-  Future<void> _deleteNews(String newsId) async {
+  Future<void> _deleteNews(String newsId, {String? imageUrl}) async {
     final ok = await showAdminConfirmDialog(
       context: context,
       title: 'Haberi Sil',
@@ -374,6 +380,7 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
     setState(() => _busyIds.add(newsId));
     try {
       await _leagueService.deleteNews(newsId: newsId);
+      await SupabaseImageUploadService().deleteImageByUrl(imageUrl);
       if (mounted) _snack('Haber silindi.');
     } catch (e) {
       if (mounted) _snack('Hata: $e');
@@ -490,7 +497,7 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
                   icon: Icons.delete_outline_rounded,
                   tooltip: 'Sil',
                   color: kAdminDanger,
-                  onTap: () => _deleteNews(doc.id),
+                  onTap: () => _deleteNews(doc.id, imageUrl: doc.imageUrl),
                 ),
               ],
             ],

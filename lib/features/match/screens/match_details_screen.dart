@@ -911,8 +911,9 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
       }
       setState(() => _isUploading = true);
       try {
-        final uploadedUrl = await ImgBBUploadService().uploadImage(
+        final uploadedUrl = await SupabaseImageUploadService().uploadImage(
           _pickedFile!,
+          folder: MediaFolder.matches,
         );
         if (uploadedUrl == null) {
           throw Exception('Görsel yüklenemedi.');

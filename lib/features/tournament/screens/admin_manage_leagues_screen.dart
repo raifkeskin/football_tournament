@@ -29,7 +29,10 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
   SupabaseClient get _sb => Supabase.instance.client;
 
   Future<String> _uploadLeagueLogo({required XFile file}) async {
-    final uploaded = await ImgBBUploadService().uploadImage(File(file.path));
+    final uploaded = await SupabaseImageUploadService().uploadImage(
+      File(file.path),
+      folder: MediaFolder.leagues,
+    );
     final url = (uploaded ?? '').trim();
     if (url.isEmpty) {
       throw Exception('Logo yüklenemedi, lütfen tekrar deneyin.');
@@ -749,8 +752,9 @@ class _EditLeagueScreenState extends State<EditLeagueScreen> {
 
       String logoUrl = widget.league.logoUrl;
       if (_newLogo != null) {
-        final uploaded = await ImgBBUploadService().uploadImage(
+        final uploaded = await SupabaseImageUploadService().uploadImage(
           File(_newLogo!.path),
+          folder: MediaFolder.leagues,
         );
         if (uploaded != null) {
           logoUrl = uploaded;
@@ -789,6 +793,11 @@ class _EditLeagueScreenState extends State<EditLeagueScreen> {
       );
 
       await ServiceLocator.leagueService.updateLeague(updatedLeague);
+      if (logoUrl != widget.league.logoUrl) {
+        await SupabaseImageUploadService().deleteImageByUrl(
+          widget.league.logoUrl,
+        );
+      }
       
       if (!mounted) return;
       messenger.showSnackBar(

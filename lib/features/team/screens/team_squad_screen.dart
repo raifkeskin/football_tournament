@@ -1502,7 +1502,7 @@ class PlayerFormScreen extends StatefulWidget {
 class _PlayerFormScreenState extends State<PlayerFormScreen> {
   final ITeamService _teamService = ServiceLocator.teamService;
   final _picker = ImagePicker();
-  final _imageUploadService = ImgBBUploadService();
+  final _imageUploadService = SupabaseImageUploadService();
 
   final _nameController = TextEditingController();
   final _surnameController = TextEditingController();
@@ -1857,6 +1857,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
       if (_pickedPhoto != null) {
         uploadedPhotoUrl = await _imageUploadService.uploadImage(
           File(_pickedPhoto!.path),
+          folder: MediaFolder.players,
         );
         if ((uploadedPhotoUrl ?? '').trim().isEmpty) {
           throw Exception('Fotoğraf yüklenemedi, lütfen tekrar deneyin.');
@@ -1963,6 +1964,12 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
             }
           }
         }
+      }
+
+      // Fotoğraf değiştiyse ya da kaldırıldıysa eski dosyayı sil.
+      final oldPhoto = (_existingPhotoUrl ?? '').trim();
+      if (isEditing && oldPhoto.isNotEmpty && oldPhoto != finalPhotoUrl) {
+        await _imageUploadService.deleteImageByUrl(oldPhoto);
       }
 
       if (!mounted) return;

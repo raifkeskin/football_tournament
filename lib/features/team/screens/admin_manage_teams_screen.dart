@@ -32,7 +32,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
   String _searchQuery = '';
   final _searchController = TextEditingController();
   final _picker = ImagePicker();
-  final _imageUploadService = ImgBBUploadService();
+  final _imageUploadService = SupabaseImageUploadService();
   Future<List<Map<String, dynamic>>>? _teamsFuture;
 
   @override
@@ -388,6 +388,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
         if (selectedLogo != null) {
           final uploaded = await _imageUploadService.uploadImage(
             File(selectedLogo!.path),
+            folder: MediaFolder.teams,
           );
           if ((uploaded ?? '').trim().isEmpty) {
             throw Exception('Logo yüklenemedi.');
@@ -429,6 +430,10 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
           } else {
             rethrow;
           }
+        }
+
+        if (isEdit && existingLogoUrl.isNotEmpty && logoUrl != existingLogoUrl) {
+          await _imageUploadService.deleteImageByUrl(existingLogoUrl);
         }
 
         // Başarılı kayıtta popup kapanır; kapanmış popup'a setState yapılmaz.
@@ -661,7 +666,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
     });
   }
 
-  Future<void> _takimSil(String teamId) async {
+  Future<void> _takimSil(String teamId, {String? logoUrl}) async {
     final ok = await showAdminConfirmDialog(
       context: context,
       title: 'Takımı Sil',
@@ -675,6 +680,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
         teamId,
         caller: 'AdminManageTeamsScreen',
       );
+      await _imageUploadService.deleteImageByUrl(logoUrl);
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -777,7 +783,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
               icon: const Icon(Icons.more_vert_rounded, color: Colors.white54),
               onSelected: (v) {
                 if (v == 'edit') openEdit();
-                if (v == 'delete') _takimSil(teamId);
+                if (v == 'delete') _takimSil(teamId, logoUrl: logoUrl);
               },
               itemBuilder: (_) => const [
                 PopupMenuItem(
@@ -1219,8 +1225,9 @@ class _EditTeamScreenState extends State<EditTeamScreen> {
                   '')
               .toString();
       if (_newLogo != null) {
-        final uploaded = await ImgBBUploadService().uploadImage(
+        final uploaded = await SupabaseImageUploadService().uploadImage(
           File(_newLogo!.path),
+          folder: MediaFolder.teams,
         );
         if (uploaded != null) {
           logoUrl = uploaded;

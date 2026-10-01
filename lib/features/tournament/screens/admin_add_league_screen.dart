@@ -33,7 +33,7 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
   final _youtubeController = TextEditingController();
   final _instagramController = TextEditingController();
   final _picker = ImagePicker();
-  final _imageUploadService = ImgBBUploadService();
+  final _imageUploadService = SupabaseImageUploadService();
   final ILeagueService _leagueService = ServiceLocator.leagueService;
 
   XFile? _leagueLogo;
@@ -296,6 +296,7 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
       if (_leagueLogo != null) {
         final uploadedUrl = await _imageUploadService.uploadImage(
           File(_leagueLogo!.path),
+          folder: MediaFolder.leagues,
         );
         if (uploadedUrl != null) {
           logoUrl = uploadedUrl;
