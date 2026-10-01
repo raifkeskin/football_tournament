@@ -27,6 +27,7 @@ class NewsItem {
     this.leagueLogoUrl,
     this.leagueIsPrivate = false,
     this.likedByMe = false,
+    this.publishUntil,
   });
 
   final String id;
@@ -45,4 +46,13 @@ class NewsItem {
   /// Giriş yapmış kullanıcı bu haberi beğenmiş mi (akışla aynı sorguda okunur,
   /// böylece [likeCount] ile tutarlıdır).
   final bool likedByMe;
+
+  /// Yayın bitiş zamanı; geçince haber herkese kapanır (null: süresiz).
+  final DateTime? publishUntil;
+
+  bool get isExpired =>
+      publishUntil != null && !publishUntil!.isAfter(DateTime.now());
+
+  /// Akışta görünüyor mu: yayında ve süresi dolmamış.
+  bool get isLive => isPublished && !isExpired;
 }

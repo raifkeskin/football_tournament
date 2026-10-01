@@ -654,7 +654,8 @@ class SupabaseLeagueService implements ILeagueService {
   }
 
   static const _newsColumns =
-      'id, league_id, content, is_published, image_url, like_count, created_at';
+      'id, league_id, content, is_published, image_url, like_count, created_at, '
+      'publish_until';
 
   NewsItem _newsFromRow(Map<String, dynamic> r) {
     final league = r['leagues'];
@@ -675,6 +676,7 @@ class SupabaseLeagueService implements ILeagueService {
       // RLS yalnızca kullanıcının kendi beğenisini döndürür.
       likedByMe:
           r['news_likes'] is List && (r['news_likes'] as List).isNotEmpty,
+      publishUntil: _readDate(r['publish_until']),
     );
   }
 
@@ -701,12 +703,9 @@ class SupabaseLeagueService implements ILeagueService {
         ascending: false,
       ).map((rows) {
         return rows
-            .where((r) {
-              final okLeague = (r['league_id'] ?? '').toString().trim() == id;
-              if (!okLeague) return false;
-              return includeUnpublished || (r['is_published'] == true);
-            })
+            .where((r) => (r['league_id'] ?? '').toString().trim() == id)
             .map(_newsFromRow)
+            .where((n) => includeUnpublished || n.isLive)
             .toList();
       });
     } catch (e) {
@@ -740,6 +739,12 @@ class SupabaseLeagueService implements ILeagueService {
             .select(select)
             .eq('is_published', true);
         if (id.isNotEmpty) query = query.eq('league_id', id);
+        // Süresi dolan haber akışta yok (RLS misafiri zaten süzer; turnuva
+        // sahibi/admin de akışta görmesin).
+        query = query.or(
+          'publish_until.is.null,'
+          'publish_until.gt.${DateTime.now().toUtc().toIso8601String()}',
+        );
         final rows = await query
             .order('created_at', ascending: false)
             .limit(50);
@@ -816,6 +821,7 @@ class SupabaseLeagueService implements ILeagueService {
     required String content,
     String? imageUrl,
     bool isPublished = true,
+    DateTime? publishUntil,
   }) async {
     final tId = tournamentId.trim();
     final text = content.trim();
@@ -835,6 +841,7 @@ class SupabaseLeagueService implements ILeagueService {
         'content': text,
         'is_published': isPublished,
         'image_url': img.isEmpty ? null : img,
+        'publish_until': publishUntil?.toUtc().toIso8601String(),
       });
       AppConfig.sqlLogResult(table: 'news', operation: 'INSERT', count: 1);
     } catch (e) {
@@ -872,6 +879,7 @@ class SupabaseLeagueService implements ILeagueService {
     required String newsId,
     required String content,
     String? imageUrl,
+    DateTime? publishUntil,
   }) async {
     final id = newsId.trim();
     if (id.isEmpty) return;
@@ -885,7 +893,11 @@ class SupabaseLeagueService implements ILeagueService {
       );
       await _client
           .from('news')
-          .update({'content': text, 'image_url': img.isEmpty ? null : img})
+          .update({
+            'content': text,
+            'image_url': img.isEmpty ? null : img,
+            'publish_until': publishUntil?.toUtc().toIso8601String(),
+          })
           .eq('id', id);
       AppConfig.sqlLogResult(table: 'news', operation: 'UPDATE', count: 1);
     } catch (e) {

@@ -10,7 +10,9 @@ import '../../../core/services/app_session.dart';
 import '../../tournament/services/interfaces/i_league_service.dart';
 import '../../../core/services/image_upload_service.dart';
 import '../../../core/services/service_locator.dart';
+import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
+import '../../../core/widgets/app_date_picker.dart';
 import '../../../core/widgets/custom_popup_selector.dart';
 import '../../../core/widgets/web_safe_image.dart';
 
@@ -24,7 +26,55 @@ class AdminManageNewsScreen extends StatefulWidget {
 class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
   final ILeagueService _leagueService = ServiceLocator.leagueService;
   final Set<String> _busyIds = {};
+  late final Stream<List<League>> _leaguesStream = _leagueService
+      .watchLeagues();
+
+  /// Kullanıcının yönetebildiği turnuvalar (admin: hepsi, sahibi: kendi).
+  List<League> _tournaments = const [];
   String? _selectedTournamentId;
+  _NewsStatus _status = _NewsStatus.all;
+
+  String _tournamentName(String? id) {
+    for (final l in _tournaments) {
+      if (l.id == id) return l.name;
+    }
+    return '';
+  }
+
+  String _statusLabel(_NewsStatus s) => switch (s) {
+    _NewsStatus.all => 'Tümü',
+    _NewsStatus.live => 'Yayında',
+    _NewsStatus.passive => 'Pasif',
+  };
+
+  Future<void> _openFilters() {
+    return showAdminFilterDialog(
+      context: context,
+      fieldsBuilder: (ctx, refresh) => [
+        CustomPopupSelector<String>(
+          label: 'Turnuva',
+          selectedValue: _selectedTournamentId,
+          items: _tournaments.map((l) => l.id).toList(),
+          labelBuilder: (id) => _tournamentName(id),
+          onChanged: (v) {
+            setState(() => _selectedTournamentId = v);
+            refresh();
+          },
+        ),
+        CustomPopupSelector<_NewsStatus>(
+          label: 'Durum',
+          selectedValue: _status,
+          items: _NewsStatus.values,
+          labelBuilder: (v) => _statusLabel(v ?? _NewsStatus.all),
+          onChanged: (v) {
+            if (v == null) return;
+            setState(() => _status = v);
+            refresh();
+          },
+        ),
+      ],
+    );
+  }
 
   String _tarihYaz(DateTime? createdAt) {
     final d = createdAt;
@@ -59,6 +109,41 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
     var removeImage = false;
     var publishNow = true;
     var saving = false;
+    // Ekleme: filtredeki turnuva önerilir ama popup'ta değiştirilebilir.
+    var formTournamentId = isEdit
+        ? item.tournamentId
+        : (_selectedTournamentId ?? '').trim();
+    DateTime? publishUntil = item?.publishUntil;
+
+    Future<void> pickTournament(StateSetter setLocal) async {
+      final picked = await showAdminOptionPicker<String>(
+        context: context,
+        title: 'Turnuva Seçin',
+        items: _tournaments.map((l) => l.id).toList(),
+        labelBuilder: _tournamentName,
+        selected: formTournamentId.isEmpty ? null : formTournamentId,
+      );
+      if (picked != null) setLocal(() => formTournamentId = picked);
+    }
+
+    Future<void> pickUntil(StateSetter setLocal) async {
+      final now = DateTime.now();
+      final d = await showAppDatePicker(
+        context: context,
+        initialDate: publishUntil ?? now.add(const Duration(days: 7)),
+        firstYear: now.year,
+        lastYear: now.year + 2,
+        title: 'Yayın Bitiş Tarihi',
+      );
+      if (d == null) return;
+      // Seçilen günün sonuna kadar yayında kalır.
+      final end = DateTime(d.year, d.month, d.day, 23, 59, 59);
+      if (!end.isAfter(now)) {
+        _snack('Bitiş tarihi bugünden önce olamaz.');
+        return;
+      }
+      setLocal(() => publishUntil = end);
+    }
 
     Future<void> pickPhoto(StateSetter setLocal) async {
       // Yüklemeden önce küçültülür: depolama ve mobil veri dostu.
@@ -81,9 +166,9 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
         _snack('Lütfen bir haber metni girin.');
         return;
       }
-      final tId = (_selectedTournamentId ?? '').trim();
+      final tId = formTournamentId.trim();
       if (!isEdit && tId.isEmpty) {
-        _snack('Lütfen önce turnuva seçin.');
+        _snack('Lütfen turnuva seçin.');
         return;
       }
       setLocal(() => saving = true);
@@ -107,6 +192,7 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
             newsId: item.id,
             content: text,
             imageUrl: imageUrl,
+            publishUntil: publishUntil,
           );
         } else {
           await _leagueService.addNews(
@@ -114,6 +200,7 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
             content: text,
             imageUrl: imageUrl,
             isPublished: publishNow,
+            publishUntil: publishUntil,
           );
         }
         if (isEdit && existingUrl.isNotEmpty && existingUrl != imageUrl) {
@@ -244,6 +331,19 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
                   const SizedBox(height: 14),
                   const Divider(color: Colors.white24, height: 1),
                   const SizedBox(height: 16),
+                  AdminFieldGroup(
+                    children: [
+                      AdminSelectRow(
+                        icon: Icons.emoji_events_outlined,
+                        label: 'Turnuva',
+                        value: _tournamentName(formTournamentId),
+                        placeholder: 'Turnuva seçin',
+                        locked: isEdit,
+                        onTap: saving ? null : () => pickTournament(setLocal),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
                   const Text.rich(
                     TextSpan(
                       text: 'Fotoğraf ',
@@ -293,6 +393,21 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
                         borderSide: const BorderSide(color: kAdminAccent),
                       ),
                     ),
+                  ),
+                  const SizedBox(height: 16),
+                  AdminFieldGroup(
+                    children: [
+                      AdminSelectRow(
+                        icon: Icons.event_available_outlined,
+                        label: 'Yayın bitiş tarihi (isteğe bağlı)',
+                        value: publishUntil == null
+                            ? null
+                            : '${_tarihYaz(publishUntil)} gün sonuna kadar',
+                        placeholder: 'Süresiz yayında kalır',
+                        onTap: saving ? null : () => pickUntil(setLocal),
+                        onClear: () => setLocal(() => publishUntil = null),
+                      ),
+                    ],
                   ),
                   if (!isEdit) ...[
                     const SizedBox(height: 8),
@@ -391,7 +506,12 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
 
   Widget _newsCard(NewsItem doc) {
     final isPublished = doc.isPublished;
-    final createdAtText = _tarihYaz(doc.createdAt);
+    final expired = isPublished && doc.isExpired;
+    final createdAtText = [
+      _tarihYaz(doc.createdAt),
+      if (doc.publishUntil != null && !expired)
+        '${_tarihYaz(doc.publishUntil)}\'e kadar',
+    ].join(' → ');
     final busy = _busyIds.contains(doc.id);
     final image = (doc.imageUrl ?? '').trim();
     final likes = doc.likeCount > 0 ? ' · ${doc.likeCount} beğeni' : '';
@@ -438,31 +558,34 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: (isPublished ? published : draft).withValues(
+                  color: (doc.isLive ? published : draft).withValues(
                     alpha: 0.15,
                   ),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  isPublished ? 'Yayında' : 'Kapalı',
+                  expired
+                      ? 'Süresi doldu'
+                      : (isPublished ? 'Yayında' : 'Taslak'),
                   style: TextStyle(
-                    color: isPublished ? published : draft,
+                    color: doc.isLive ? published : draft,
                     fontSize: 11,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
               ),
-              if (createdAtText.isNotEmpty || likes.isNotEmpty) ...[
-                const SizedBox(width: 8),
-                Text(
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
                   '$createdAtText$likes',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Color(0xFF94A3B8),
                     fontSize: 12,
                   ),
                 ),
-              ],
-              const Spacer(),
+              ),
               if (busy)
                 const Padding(
                   padding: EdgeInsets.all(8),
@@ -532,7 +655,7 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
         ),
       ],
       body: StreamBuilder<List<League>>(
-        stream: _leagueService.watchLeagues(),
+        stream: _leaguesStream,
         builder: (context, tSnap) {
           if (!tSnap.hasData) {
             return const Center(
@@ -540,10 +663,10 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
             );
           }
           // Admin her turnuvayı, turnuva sahibi sadece kendisininkileri görür.
-          final tournaments = (tSnap.data ?? const <League>[])
+          _tournaments = (tSnap.data ?? const <League>[])
               .where((l) => session.canManageLeague(l.id))
               .toList();
-          if (tournaments.isEmpty) {
+          if (_tournaments.isEmpty) {
             return const Center(
               child: Text(
                 'Turnuva bulunamadı.',
@@ -551,51 +674,49 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
               ),
             );
           }
-          if (tournaments.every((l) => l.id != _selectedTournamentId)) {
-            _selectedTournamentId = tournaments.first.id;
+          if (_tournaments.every((l) => l.id != _selectedTournamentId)) {
+            _selectedTournamentId = _tournaments.first.id;
           }
           final tId = (_selectedTournamentId ?? '').trim();
 
           return Column(
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: CustomPopupSelector<String>(
-                  label: 'Turnuva',
-                  selectedValue: tId.isEmpty ? tournaments.first.id : tId,
-                  items: tournaments.map((l) => l.id).toList(),
-                  labelBuilder: (id) => tournaments
-                      .firstWhere(
-                        (l) => l.id == id,
-                        orElse: () => tournaments.first,
-                      )
-                      .name,
-                  onChanged: (v) => setState(() => _selectedTournamentId = v),
-                ),
+              AdminFilterBar(
+                summary:
+                    '${_tournamentName(tId)} • ${_statusLabel(_status)}',
+                onTap: _openFilters,
               ),
-              const SizedBox(height: 12),
               Expanded(
                 child: StreamBuilder<List<NewsItem>>(
-                  stream: tId.isEmpty
-                      ? const Stream.empty()
-                      : _leagueService.watchNews(
-                          tournamentId: tId,
-                          includeUnpublished: true,
-                        ),
+                  stream: _leagueService.watchNews(
+                    tournamentId: tId,
+                    includeUnpublished: true,
+                  ),
                   builder: (context, snapshot) {
                     if (!snapshot.hasData) {
                       return const Center(
                         child: CircularProgressIndicator(color: kAdminAccent),
                       );
                     }
-                    final docs = snapshot.data ?? const <NewsItem>[];
+                    // Sunucu created_at'e göre azalan sırada döner (en yeni üstte).
+                    final docs = (snapshot.data ?? const <NewsItem>[])
+                        .where(
+                          (n) => switch (_status) {
+                            _NewsStatus.all => true,
+                            _NewsStatus.live => n.isLive,
+                            _NewsStatus.passive => !n.isLive,
+                          },
+                        )
+                        .toList();
                     if (docs.isEmpty) {
-                      return const Center(
+                      return Center(
                         child: Text(
-                          'Kayıtlı haber bulunamadı.\n'
-                          'Sağ üstteki butondan haber ekleyebilirsiniz.',
+                          _status == _NewsStatus.all
+                              ? 'Kayıtlı haber bulunamadı.\n'
+                                    'Sağ üstteki butondan haber ekleyebilirsiniz.'
+                              : '${_statusLabel(_status)} haber yok.',
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.white54),
+                          style: const TextStyle(color: Colors.white54),
                         ),
                       );
                     }
@@ -613,6 +734,10 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
     );
   }
 }
+
+/// Liste filtresi: yayında = yayınlanmış ve süresi dolmamış; pasif = taslak
+/// ya da süresi dolmuş.
+enum _NewsStatus { all, live, passive }
 
 /// Fotoğraf önizlemesinin üzerindeki küçük koyu buton (Değiştir / Kaldır).
 class _PhotoButton extends StatelessWidget {
