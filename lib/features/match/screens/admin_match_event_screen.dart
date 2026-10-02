@@ -408,12 +408,8 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                               fontSize: 15,
                               fontWeight: FontWeight.w700,
                             ),
-                            decoration: const InputDecoration(
-                              isDense: true,
-                              border: InputBorder.none,
-                              contentPadding: EdgeInsets.only(top: 2),
-                              hintText: 'Örn. 23',
-                              hintStyle: TextStyle(color: Colors.white38),
+                            decoration: adminInlineInputDecoration(
+                              hint: 'Örn. 23',
                             ),
                           ),
                         ),

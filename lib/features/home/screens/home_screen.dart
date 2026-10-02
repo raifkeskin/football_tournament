@@ -19,6 +19,7 @@ import '../../team/screens/groups_screen.dart';
 import '../../match/screens/match_details_screen.dart';
 import '../../match/widgets/match_score_line.dart';
 import '../../../core/widgets/league_logo.dart';
+import '../../../core/widgets/admin_form.dart';
 
 /// Ana sayfa — günün maçları, tarih şeridi ve maç kartları.
 class HomeScreen extends StatefulWidget {
@@ -232,115 +233,30 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // YENİ EKLENEN: Erişim Kodu Soran Dialog
-  void _showAccessCodeDialog(BuildContext parentContext, League league) {
-    final TextEditingController codeCtrl = TextEditingController();
-    String? errorMsg;
-
-    showDialog(
+  Future<void> _showAccessCodeDialog(
+    BuildContext parentContext,
+    League league,
+  ) async {
+    final actualCode = (league.accessCode ?? '').trim().toLowerCase();
+    final code = await showAdminTextInputDialog(
       context: parentContext,
-      builder: (c) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          return AlertDialog(
-            backgroundColor: const Color(0xFF0F172A),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            title: Row(
-              children: [
-                const Icon(Icons.lock, color: Colors.white, size: 24),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    league.name,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Bu turnuva gizlidir. Görüntüleyebilmek için lütfen erişim kodunu girin.',
-                  style: TextStyle(color: Colors.white70, fontSize: 13),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: codeCtrl,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: 'Erişim Kodu',
-                    hintStyle: const TextStyle(color: Colors.white38),
-                    filled: true,
-                    fillColor: Colors.white10,
-                    errorText: errorMsg,
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Colors.white24),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Color(0xFF10B981)),
-                    ),
-                    errorBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Colors.redAccent),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(c),
-                child: const Text(
-                  'İptal',
-                  style: TextStyle(color: Colors.white54),
-                ),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF10B981),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                onPressed: () {
-                  final enteredCode = codeCtrl.text.trim().toLowerCase();
-                  // League modelindeki accessCode değişkeninin adından emin olunuz (accessCode veya access_code olabilir)
-                  final actualCode = (league.accessCode ?? '')
-                      .trim()
-                      .toLowerCase();
-
-                  if (enteredCode.isNotEmpty && enteredCode == actualCode) {
-                    setState(() => _activeLeagueId = league.id);
-                    GlobalFilter.setLeague(league.id);
-                    Navigator.pop(c); // Dialogu kapat
-                    Navigator.pop(parentContext); // Alttaki menüyü kapat
-                  } else {
-                    setDialogState(() => errorMsg = 'Hatalı kod girdiniz.');
-                  }
-                },
-                child: const Text(
-                  'Onayla',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
+      title: league.name,
+      icon: Icons.lock_outline_rounded,
+      subtitle: 'Bu turnuva gizlidir. Görüntülemek için erişim kodunu girin.',
+      label: 'Erişim Kodu',
+      fieldIcon: Icons.key_rounded,
+      confirmLabel: 'GİRİŞ',
+      validator: (v) {
+        final entered = v.trim().toLowerCase();
+        return entered.isNotEmpty && entered == actualCode
+            ? null
+            : 'Hatalı kod girdiniz.';
+      },
     );
+    if (code == null || !mounted) return;
+    setState(() => _activeLeagueId = league.id);
+    GlobalFilter.setLeague(league.id);
+    if (parentContext.mounted) Navigator.pop(parentContext); // menüyü kapat
   }
 
   // YENİ EKLENEN: Özel Turnuva Seçici (Ortadan Açılan Ortak Dialog Tasarımı)
@@ -922,6 +838,14 @@ class _HomeScreenState extends State<HomeScreen> {
                             sectionMap[key]!.first.leagueId;
                         final leagueText = leagueNameOf(key);
                         final groupText = groupNameOf(key);
+                        // Bölümdeki maçlar aynı haftadansa "3. Hafta".
+                        final weeks = sectionMap[key]!
+                            .map((m) => m.week)
+                            .whereType<int>()
+                            .toSet();
+                        final weekText = weeks.length == 1
+                            ? '${weeks.first}. Hafta'
+                            : '';
 
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -946,104 +870,13 @@ class _HomeScreenState extends State<HomeScreen> {
                               borderRadius: BorderRadius.circular(12),
                               // Başlık şeridi: kartlardan koyu zemin ve
                               // belirgin yeşil tonlu kenarlık.
-                              child: Container(
-                                margin: const EdgeInsets.only(
-                                  top: 14,
-                                  bottom: 8,
-                                ),
-                                padding: const EdgeInsets.fromLTRB(
-                                  10,
-                                  10,
-                                  8,
-                                  10,
-                                ),
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    begin: Alignment.centerLeft,
-                                    end: Alignment.centerRight,
-                                    colors: [
-                                      Color(0xF2062E24),
-                                      Color(0xF20B1220),
-                                    ],
-                                  ),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: const Color(
-                                      0xFF10B981,
-                                    ).withValues(alpha: 0.45),
-                                    width: 1.2,
-                                  ),
-                                  boxShadow: const [
-                                    BoxShadow(
-                                      color: Colors.black38,
-                                      blurRadius: 8,
-                                      offset: Offset(0, 3),
-                                    ),
-                                  ],
-                                ),
-                                child: Row(
-                                  children: [
-                                    // Takım adlarından ayrışan başlık:
-                                    // yeşil vurgu çizgisi + beyaz kalın yazı.
-                                    Container(
-                                      width: 4,
-                                      height: 20,
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF10B981),
-                                        borderRadius: BorderRadius.circular(2),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    LeagueLogo(
-                                      url: _leagueLogoById[sectionLeagueId],
-                                      size: 22,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      // Sığmazsa kesilmez, ikinci satıra iner.
-                                      child: Text(
-                                        leagueText,
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 14,
-                                          letterSpacing: 0.2,
-                                        ),
-                                      ),
-                                    ),
-                                    // Birden fazla grup varsa grup adı sağda,
-                                    // turnuva adından küçük ve soluk.
-                                    if (groupText.isNotEmpty) ...[
-                                      const SizedBox(width: 8),
-                                      // Genişliği sınırlı: uzun grup adı
-                                      // turnuva adını ezmesin.
-                                      ConstrainedBox(
-                                        constraints: const BoxConstraints(
-                                          maxWidth: 110,
-                                        ),
-                                        child: Text(
-                                          groupText,
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                          textAlign: TextAlign.right,
-                                          style: const TextStyle(
-                                            color: Color(0xFF6EE7B7),
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 11.5,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                    const SizedBox(width: 8),
-                                    const Icon(
-                                      Icons.chevron_right_rounded,
-                                      color: Colors.white54,
-                                      size: 20,
-                                    ),
-                                  ],
-                                ),
+                              child: _LeagueSectionHeader(
+                                logoUrl: _leagueLogoById[sectionLeagueId],
+                                title: leagueText,
+                                subtitle: [
+                                  if (groupText.isNotEmpty) groupText,
+                                  if (weekText.isNotEmpty) weekText,
+                                ].join(' · '),
                               ),
                             ),
                             ...sectionMap[key]!.map(
@@ -1259,6 +1092,127 @@ class _TarihSeridi extends StatelessWidget {
             ),
           );
         }),
+      ),
+    );
+  }
+}
+
+/// Ana sayfadaki turnuva başlığı: kartın kenarından taşan büyük logo rozeti,
+/// turnuva adı ve altında grup / hafta bilgisi.
+class _LeagueSectionHeader extends StatelessWidget {
+  const _LeagueSectionHeader({
+    required this.logoUrl,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final String? logoUrl;
+  final String title;
+  final String subtitle;
+
+  static const _gold = Color(0xFFE2B845);
+  static const _badge = 58.0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      // Rozet kartın solundan taşar; ona yer açılır.
+      padding: const EdgeInsets.only(top: 16, bottom: 10, left: 12),
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.centerLeft,
+        children: [
+          Container(
+            constraints: const BoxConstraints(minHeight: 58),
+            padding: const EdgeInsets.fromLTRB(_badge - 4, 10, 8, 10),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+                colors: [Color(0xF21B2A6B), Color(0xF20B1220)],
+                stops: [0, 0.7],
+              ),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: _gold.withValues(alpha: 0.55),
+                width: 1.2,
+              ),
+              boxShadow: const [
+                BoxShadow(
+                  color: Colors.black38,
+                  blurRadius: 8,
+                  offset: Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                          height: 1.2,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                      if (subtitle.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: _gold,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 11.5,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 6),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: Colors.white54,
+                  size: 20,
+                ),
+              ],
+            ),
+          ),
+          // Altın ışımalı rozet.
+          Positioned(
+            left: -14,
+            child: Container(
+              width: _badge + 8,
+              height: _badge + 8,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    _gold.withValues(alpha: 0.38),
+                    _gold.withValues(alpha: 0),
+                  ],
+                ),
+              ),
+              child: LeagueLogo(
+                url: logoUrl,
+                size: _badge - 6,
+                fallbackColor: _gold,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

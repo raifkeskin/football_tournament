@@ -18,10 +18,14 @@ import '../../../core/services/service_locator.dart';
 import '../../../core/services/global_filter.dart';
 import 'match_details_screen.dart';
 import '../widgets/match_score_line.dart';
+import '../../share/fixture_poster.dart';
+import '../../share/poster_share.dart';
+import '../../../core/utils/team_name.dart';
 
 // ORTAK BİLEŞEN IMPORT EDİLDİ
 import '../../../core/widgets/tournament_filter_dialog.dart';
 import '../../../core/widgets/app_date_picker.dart';
+import '../../../core/utils/string_utils.dart';
 
 class FixtureScreen extends StatefulWidget {
   const FixtureScreen({super.key});
@@ -196,6 +200,80 @@ class _FixtureScreenState extends State<FixtureScreen> {
     final dt = _parseYyyyMmDd(s);
     if (dt == null) return s;
     return DateFormat('dd.MM.yyyy EEEE', 'tr_TR').format(dt);
+  }
+
+  /// Seçili turnuva / grup / haftanın maçlarıyla fikstür afişi hazırlar.
+  Future<void> _shareFixturePoster({
+    required League league,
+    required String groupName,
+    required int week,
+    required List<MatchModel> matches,
+    required Map<String, String> teamNameById,
+    required Map<String, String> teamLogoById,
+  }) async {
+    final pitchNameById = <String, String>{};
+    try {
+      for (final p in await _leagueService.watchPitches().first) {
+        pitchNameById[p.id] = p.name.trim();
+      }
+    } catch (_) {
+      // Saha adları gelmezse afiş sahasız hazırlanır.
+    }
+    if (!mounted) return;
+
+    String dateText(String? ymd) {
+      final d = DateTime.tryParse((ymd ?? '').trim());
+      return d == null
+          ? 'Tarih belirsiz'
+          : DateFormat('dd.MM.yyyy EEEE', 'tr_TR').format(d);
+    }
+
+    // Gün + saha bazında gruplanır (sıralı maç listesi korunur).
+    final days = <String, List<MatchModel>>{};
+    for (final m in matches) {
+      (days['${m.matchDate ?? ''}|${m.pitchId ?? ''}'] ??= []).add(m);
+    }
+    PosterMatch toPoster(MatchModel m) {
+      final t = (m.matchTime ?? '').trim();
+      final played = m.status == MatchStatus.finished;
+      return PosterMatch(
+        homeName: shortTeamName(teamNameById[m.homeTeamId] ?? 'Ev Sahibi'),
+        awayName: shortTeamName(teamNameById[m.awayTeamId] ?? 'Deplasman'),
+        homeLogo: (teamLogoById[m.homeTeamId] ?? '').trim(),
+        awayLogo: (teamLogoById[m.awayTeamId] ?? '').trim(),
+        time: t.isEmpty
+            ? '--.--'
+            : (t.length >= 5 ? t.substring(0, 5) : t).replaceAll(':', '.'),
+        score: played ? '${m.homeScore} - ${m.awayScore}' : null,
+      );
+    }
+
+    final posterDays = [
+      for (final e in days.entries)
+        PosterDay(
+          dateText: dateText(e.value.first.matchDate),
+          pitchText: pitchNameById[e.value.first.pitchId ?? ''] ?? '',
+          matches: [for (final m in e.value) toPoster(m)],
+        ),
+    ];
+    final logos = <String>{
+      league.logoUrl,
+      for (final d in posterDays)
+        for (final m in d.matches) ...[m.homeLogo, m.awayLogo],
+    }.where((u) => u.isNotEmpty).toList();
+
+    await showPosterPreview(
+      context: context,
+      fileName: 'fikstur_${week}_hafta',
+      imageUrls: logos,
+      poster: FixturePoster(
+        leagueName: league.name,
+        leagueLogo: league.logoUrl,
+        subtitle: groupName.isEmpty ? 'Fikstür' : '$groupName Fikstür',
+        weekText: '$week. Hafta',
+        days: posterDays,
+      ),
+    );
   }
 
   // ORTADA AÇILAN FİKSTÜR FİLTRE DİALOGU; seçimler yalnızca "Filtreleri
@@ -480,73 +558,140 @@ class _FixtureScreenState extends State<FixtureScreen> {
                                             16,
                                             16,
                                           ),
-                                          child: InkWell(
-                                            onTap: () {
-                                              _showFilterDialog(
-                                                context,
-                                                leagues,
-                                                displayWeek ?? 1,
-                                                selectedGroupId,
-                                              );
-                                            },
-                                            borderRadius: BorderRadius.circular(
-                                              24,
-                                            ),
-                                            child: Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 16,
-                                                    vertical: 12,
-                                                  ),
-                                              decoration: BoxDecoration(
-                                                color: Colors.black.withValues(
-                                                  alpha: 0.4,
-                                                ),
-                                                borderRadius:
-                                                    BorderRadius.circular(24),
-                                                border: Border.all(
-                                                  color: Colors.white24,
-                                                ),
-                                                boxShadow: const [
-                                                  BoxShadow(
-                                                    color: Colors.black26,
-                                                    blurRadius: 8,
-                                                    offset: Offset(0, 4),
-                                                  ),
-                                                ],
-                                              ),
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  const Icon(
-                                                    Icons.tune_rounded,
-                                                    color: Color(0xFF10B981),
-                                                    size: 18,
-                                                  ),
-                                                  const SizedBox(width: 8),
-                                                  Flexible(
-                                                    child: Text(
-                                                      "$currentLeagueName • ${displayWeek ?? 1}. Hafta",
-                                                      style: const TextStyle(
-                                                        color: Colors.white,
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                        fontSize: 13,
+                                          child: Row(
+                                            children: [
+                                              Expanded(
+                                                child: InkWell(
+                                                  onTap: () {
+                                                    _showFilterDialog(
+                                                      context,
+                                                      leagues,
+                                                      displayWeek ?? 1,
+                                                      selectedGroupId,
+                                                    );
+                                                  },
+                                                  borderRadius:
+                                                      BorderRadius.circular(24),
+                                                  child: Container(
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                          horizontal: 16,
+                                                          vertical: 12,
+                                                        ),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.black
+                                                          .withValues(
+                                                            alpha: 0.4,
+                                                          ),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            24,
+                                                          ),
+                                                      border: Border.all(
+                                                        color: Colors.white24,
                                                       ),
-                                                      maxLines: 1,
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
+                                                      boxShadow: const [
+                                                        BoxShadow(
+                                                          color: Colors.black26,
+                                                          blurRadius: 8,
+                                                          offset: Offset(0, 4),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                    child: Row(
+                                                      mainAxisSize:
+                                                          MainAxisSize.min,
+                                                      children: [
+                                                        const Icon(
+                                                          Icons.tune_rounded,
+                                                          color: Color(
+                                                            0xFF10B981,
+                                                          ),
+                                                          size: 18,
+                                                        ),
+                                                        const SizedBox(
+                                                          width: 8,
+                                                        ),
+                                                        Flexible(
+                                                          child: Text(
+                                                            "$currentLeagueName • ${displayWeek ?? 1}. Hafta",
+                                                            style:
+                                                                const TextStyle(
+                                                                  color: Colors
+                                                                      .white,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .bold,
+                                                                  fontSize: 13,
+                                                                ),
+                                                            maxLines: 1,
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
+                                                          ),
+                                                        ),
+                                                        const SizedBox(
+                                                          width: 8,
+                                                        ),
+                                                        const Icon(
+                                                          Icons
+                                                              .keyboard_arrow_down,
+                                                          color: Colors.white70,
+                                                          size: 18,
+                                                        ),
+                                                      ],
                                                     ),
                                                   ),
-                                                  const SizedBox(width: 8),
-                                                  const Icon(
-                                                    Icons.keyboard_arrow_down,
-                                                    color: Colors.white70,
-                                                    size: 18,
-                                                  ),
-                                                ],
+                                                ),
                                               ),
-                                            ),
+                                              // Paylaş şimdilik yalnızca admin
+                                              // ve turnuva sahibine açık.
+                                              if (matches.isNotEmpty &&
+                                                  AppSession.of(
+                                                    context,
+                                                  ).value.canManageLeague(
+                                                    _leagueId,
+                                                  )) ...[
+                                                const SizedBox(width: 10),
+                                                Material(
+                                                  color: const Color(
+                                                    0xFF10B981,
+                                                  ),
+                                                  shape: const CircleBorder(),
+                                                  child: IconButton(
+                                                    tooltip: 'Afişi paylaş',
+                                                    icon: const Icon(
+                                                      Icons.ios_share_rounded,
+                                                      color: Colors.white,
+                                                    ),
+                                                    onPressed: () =>
+                                                        _shareFixturePoster(
+                                                          league: leagues
+                                                              .firstWhere(
+                                                                (l) =>
+                                                                    l.id ==
+                                                                    _leagueId,
+                                                                orElse: () =>
+                                                                    leagues
+                                                                        .first,
+                                                              ),
+                                                          groupName:
+                                                              selectedGroupId ==
+                                                                  null
+                                                              ? ''
+                                                              : currentGroupName,
+                                                          week:
+                                                              displayWeek ?? 1,
+                                                          matches: matches,
+                                                          teamNameById:
+                                                              teamNameById,
+                                                          teamLogoById:
+                                                              teamLogoById,
+                                                        ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ],
                                           ),
                                         ),
 
@@ -723,7 +868,7 @@ class _FixtureList extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: 8, bottom: 8),
             child: Text(
-              groupLabel(gId).toUpperCase(),
+              groupLabel(gId).trUpper,
               style: TextStyle(
                 color: Colors.amberAccent.withValues(alpha: 0.8),
                 fontWeight: FontWeight.w900,

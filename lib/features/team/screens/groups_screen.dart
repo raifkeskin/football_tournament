@@ -16,6 +16,7 @@ import 'team_squad_screen.dart';
 // YENİ OLUŞTURDUĞUMUZ ORTAK BİLEŞENİ IMPORT EDİYORUZ
 import '../../../core/widgets/tournament_filter_dialog.dart';
 import '../../../core/widgets/league_logo.dart';
+import '../../../core/utils/string_utils.dart';
 
 class GroupsScreen extends StatefulWidget {
   const GroupsScreen({
@@ -43,6 +44,8 @@ class _GroupsScreenState extends State<GroupsScreen> {
 
   /// Puan tablosu başlığındaki turnuva logosu için (lig akışından doldurulur).
   Map<String, String> _leagueLogoById = const {};
+  Map<String, String> _leagueNameById = const {};
+  Map<String, String> _seasonNameById = const {};
 
   String? _lastLeagueIdForSeason;
   Stream<List<Season>>? _seasonsStream;
@@ -139,9 +142,16 @@ class _GroupsScreenState extends State<GroupsScreen> {
                     if (leagues.isEmpty) return const SizedBox();
 
                     final logos = {for (final l in leagues) l.id: l.logoUrl};
-                    if (!_sameMap(logos, _leagueLogoById)) {
+                    final names = {for (final l in leagues) l.id: l.name};
+                    if (!_sameMap(logos, _leagueLogoById) ||
+                        !_sameMap(names, _leagueNameById)) {
                       WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (mounted) setState(() => _leagueLogoById = logos);
+                        if (mounted) {
+                          setState(() {
+                            _leagueLogoById = logos;
+                            _leagueNameById = names;
+                          });
+                        }
                       });
                     }
 
@@ -191,6 +201,18 @@ class _GroupsScreenState extends State<GroupsScreen> {
                               GlobalFilter.setSeason(seasons.first.id);
                             });
                           }
+                        }
+
+                        final seasonNames = {
+                          for (final s in seasons) s.id: s.name,
+                        };
+                        if (seasons.isNotEmpty &&
+                            !_sameMap(seasonNames, _seasonNameById)) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (mounted) {
+                              setState(() => _seasonNameById = seasonNames);
+                            }
+                          });
                         }
 
                         final currentSeasonName = seasons.isEmpty
@@ -334,6 +356,10 @@ class _GroupsScreenState extends State<GroupsScreen> {
                                   fetchGroupId: _selectedGroupId,
                                   leagueLogoUrl:
                                       _leagueLogoById[_selectedLeagueId] ?? '',
+                                  leagueName:
+                                      _leagueNameById[_selectedLeagueId] ?? '',
+                                  seasonName:
+                                      _seasonNameById[_selectedSeasonId] ?? '',
                                   showGroupName: allGroups.length > 1,
                                 );
                               },
@@ -387,6 +413,10 @@ class _GroupStandingsTable extends StatefulWidget {
   /// Turnuva logosu; boşsa başlıkta kupa ikonu gösterilir.
   final String leagueLogoUrl;
 
+  /// Logolu banner başlık için turnuva ve sezon adı.
+  final String leagueName;
+  final String seasonName;
+
   /// Sezonda birden fazla grup varsa başlığın sağında grup adı gösterilir.
   final bool showGroupName;
 
@@ -397,6 +427,8 @@ class _GroupStandingsTable extends StatefulWidget {
     required this.groupName,
     required this.fetchGroupId,
     this.leagueLogoUrl = '',
+    this.leagueName = '',
+    this.seasonName = '',
     this.showGroupName = false,
   });
 
@@ -771,14 +803,24 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Başlık
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 14, 14, 12),
-                      child: Row(
-                        children: [
-                          if (widget.leagueLogoUrl.trim().isNotEmpty)
-                            LeagueLogo(url: widget.leagueLogoUrl, size: 32)
-                          else
+                    // Başlık: turnuvanın logosu varsa logolu banner.
+                    if (widget.leagueLogoUrl.trim().isNotEmpty &&
+                        widget.leagueName.trim().isNotEmpty)
+                      _LeagueBanner(
+                        logoUrl: widget.leagueLogoUrl,
+                        leagueName: widget.leagueName,
+                        subtitle: [
+                          if (widget.seasonName.trim().isNotEmpty)
+                            widget.seasonName.trim(),
+                          if (widget.showGroupName && groupName.isNotEmpty)
+                            groupName,
+                        ].join(' · '),
+                      )
+                    else
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 14, 14, 12),
+                        child: Row(
+                          children: [
                             Container(
                               width: 32,
                               height: 32,
@@ -792,53 +834,54 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
                                 size: 18,
                               ),
                             ),
-                          const SizedBox(width: 10),
-                          const Text(
-                            'Puan Durumu',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w900,
-                              color: Colors.white,
-                              fontSize: 16,
+                            const SizedBox(width: 10),
+                            const Text(
+                              'Puan Durumu',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white,
+                                fontSize: 16,
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          if (widget.showGroupName && groupName.isNotEmpty) ...[
-                            Expanded(
-                              child: Align(
-                                alignment: Alignment.centerRight,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 5,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: const Color(
-                                      0xFF10B981,
-                                    ).withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(
+                            const SizedBox(width: 8),
+                            if (widget.showGroupName &&
+                                groupName.isNotEmpty) ...[
+                              Expanded(
+                                child: Align(
+                                  alignment: Alignment.centerRight,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 5,
+                                    ),
+                                    decoration: BoxDecoration(
                                       color: const Color(
                                         0xFF10B981,
-                                      ).withValues(alpha: 0.35),
+                                      ).withValues(alpha: 0.12),
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(
+                                        color: const Color(
+                                          0xFF10B981,
+                                        ).withValues(alpha: 0.35),
+                                      ),
                                     ),
-                                  ),
-                                  child: Text(
-                                    groupName,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: Color(0xFF34D399),
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 12,
+                                    child: Text(
+                                      groupName,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: Color(0xFF34D399),
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 12,
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
-                            ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
-                    ),
                     // Sütun başlıkları
                     Container(
                       color: Colors.white.withValues(alpha: 0.04),
@@ -917,6 +960,81 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
 // Sütun genişlikleri başlık ve satırlarda ortak kullanılır.
 const _kMidText = Color(0xFF94A3B8);
 const _kAccent = Color(0xFF10B981);
+
+/// Puan tablosunun logolu başlığı: büyük logo, turnuva adı, sezon / grup.
+/// Arka plan, Bosphorus logosunun lacivert-altın tonlarındadır.
+class _LeagueBanner extends StatelessWidget {
+  const _LeagueBanner({
+    required this.logoUrl,
+    required this.leagueName,
+    required this.subtitle,
+  });
+
+  final String logoUrl;
+  final String leagueName;
+  final String subtitle;
+
+  static const _gold = Color(0xFFE2B845);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 16, 14, 16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFF1B2A6B).withValues(alpha: 0.95),
+            const Color(0xFF0F172A).withValues(alpha: 0.6),
+          ],
+          stops: const [0, 0.75],
+        ),
+        border: Border(
+          bottom: BorderSide(color: _gold.withValues(alpha: 0.35)),
+        ),
+      ),
+      child: Row(
+        children: [
+          LeagueLogo(url: logoUrl, size: 60, fallbackColor: _gold),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  leagueName.trUpper,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 17,
+                    height: 1.1,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+                if (subtitle.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: _gold,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 /// Sütun genişlikleri başlık ve satırlarda ortak kullanılır. Dar ekranlarda
 /// (ör. 360dp) G/B/M de görünsün diye sütunlar sıkıştırılır.

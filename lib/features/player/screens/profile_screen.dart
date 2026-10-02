@@ -6,6 +6,7 @@ import 'package:football_tournament/screens/admin_panel_screen.dart';
 import '../../home/screens/main_navigator.dart';
 import '../../../core/services/app_session.dart';
 import '../../auth/screens/login_screen.dart';
+import '../../../core/widgets/admin_page.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, required this.onRequestHomeTab});
@@ -20,33 +21,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isLoading = false;
 
   Future<void> _logout(dynamic session) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAdminConfirmDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
-        title: const Text('Çıkış Yap', style: TextStyle(color: Colors.white)),
-        content: const Text(
-          'Oturumunuzu kapatmak istediğinize emin misiniz?',
-          style: TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('İptal', style: TextStyle(color: Colors.white54)),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text(
-              'Çıkış Yap',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ],
-      ),
+      title: 'Çıkış Yap',
+      message: 'Oturumunuzu kapatmak istediğinize emin misiniz?',
+      confirmLabel: 'ÇIKIŞ YAP',
+      icon: Icons.logout_rounded,
     );
 
     if (confirmed == true) {

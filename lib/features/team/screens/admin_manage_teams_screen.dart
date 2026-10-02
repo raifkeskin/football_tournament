@@ -12,6 +12,7 @@ import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import 'package:football_tournament/core/widgets/picked_image.dart';
+import '../../../core/utils/string_utils.dart';
 
 class AdminManageTeamsScreen extends StatefulWidget {
   const AdminManageTeamsScreen({
@@ -354,6 +355,10 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
             .toString()
             .trim();
     String managerName = (existing?['manager_name'] ?? '').toString().trim();
+    String? firstColor = (existing?['first_color'] ?? '').toString().trim();
+    String? secondColor = (existing?['second_color'] ?? '').toString().trim();
+    if (firstColor.isEmpty) firstColor = null;
+    if (secondColor.isEmpty) secondColor = null;
     XFile? selectedLogo;
     var removeLogo = false;
     var saving = false;
@@ -404,6 +409,8 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
           'logo_url': logoUrl.trim(),
           'manager_id': selectedManagerId.isEmpty ? null : selectedManagerId,
           'founded_year': ?foundedYear,
+          'first_color': firstColor,
+          'second_color': secondColor,
         };
 
         Future<void> doUpdateInsert({required bool includeFounded}) async {
@@ -587,53 +594,107 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  TextField(
-                    controller: nameController,
-                    enabled: !saving,
-                    maxLength: 30,
-                    textCapitalization: TextCapitalization.words,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                    ),
-                    cursorColor: kAdminAccent,
-                    decoration: adminInputDecoration(
-                      label: 'Takım Adı',
-                      icon: Icons.shield_outlined,
+                  AdminFormSection(
+                    title: 'Takım',
+                    child: AdminFieldGroup(
+                      children: [
+                        AdminFieldRow(
+                          icon: Icons.shield_outlined,
+                          label: 'Takım Adı',
+                          child: TextField(
+                            controller: nameController,
+                            enabled: !saving,
+                            maxLength: 30,
+                            textCapitalization: TextCapitalization.words,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            cursorColor: kAdminAccent,
+                            decoration: adminInlineInputDecoration(
+                              hint: 'Örn. Yeşil FK',
+                            ).copyWith(counterText: ''),
+                          ),
+                        ),
+                        AdminFieldRow(
+                          icon: Icons.event_outlined,
+                          label: 'Kuruluş Yılı',
+                          child: TextField(
+                            controller: foundedController,
+                            enabled: !saving,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                              LengthLimitingTextInputFormatter(4),
+                            ],
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            cursorColor: kAdminAccent,
+                            decoration: adminInlineInputDecoration(
+                              hint: 'Örn. 1966',
+                            ),
+                          ),
+                        ),
+                        AdminSelectRow(
+                          icon: Icons.badge_outlined,
+                          label: 'Takım Sorumlusu',
+                          value: managerName,
+                          placeholder: 'Sorumlu seçin',
+                          onTap: saving ? null : openManagerPicker,
+                          onClear: () => setSheetState(() {
+                            selectedManagerId = '';
+                            managerName = '';
+                          }),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: foundedController,
-                    enabled: !saving,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(4),
-                    ],
-                    style: const TextStyle(color: Colors.white),
-                    cursorColor: kAdminAccent,
-                    decoration: adminInputDecoration(
-                      label: 'Kuruluş Yılı',
-                      hint: 'Örn. 1966',
-                      icon: Icons.event_outlined,
+                  AdminFormSection(
+                    title: 'Renkler',
+                    child: AdminFieldGroup(
+                      children: [
+                        AdminColorRow(
+                          label: 'Ana Renk',
+                          hex: firstColor,
+                          onTap: saving
+                              ? null
+                              : () async {
+                                  final c = await showAdminColorPicker(
+                                    context: context,
+                                    title: 'Ana Renk',
+                                    initial: firstColor,
+                                  );
+                                  if (c != null) {
+                                    setSheetState(() => firstColor = c);
+                                  }
+                                },
+                          onClear: () => setSheetState(() => firstColor = null),
+                        ),
+                        AdminColorRow(
+                          label: 'İkinci Renk',
+                          icon: Icons.palette_rounded,
+                          hex: secondColor,
+                          onTap: saving
+                              ? null
+                              : () async {
+                                  final c = await showAdminColorPicker(
+                                    context: context,
+                                    title: 'İkinci Renk',
+                                    initial: secondColor,
+                                  );
+                                  if (c != null) {
+                                    setSheetState(() => secondColor = c);
+                                  }
+                                },
+                          onClear: () =>
+                              setSheetState(() => secondColor = null),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  AdminFieldGroup(
-                    children: [
-                      AdminSelectRow(
-                        icon: Icons.badge_outlined,
-                        label: 'Takım Sorumlusu',
-                        value: managerName,
-                        placeholder: 'Sorumlu seçin',
-                        onTap: saving ? null : openManagerPicker,
-                        onClear: () => setSheetState(() {
-                          selectedManagerId = '';
-                          managerName = '';
-                        }),
-                      ),
-                    ],
                   ),
                   const SizedBox(height: 24),
                   AdminPrimaryButton(
@@ -1060,7 +1121,7 @@ class _TeamLogo extends StatelessWidget {
         .take(2)
         .map((w) => w.characters.first)
         .join()
-        .toUpperCase();
+        .trUpper;
     return Container(
       width: 44,
       height: 44,

@@ -7,6 +7,7 @@ import '../../../core/services/app_session.dart';
 import 'forgot_password_screen.dart';
 import '../../home/screens/main_navigator.dart';
 import 'online_registration_screen.dart';
+import '../../../core/widgets/admin_form.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -32,74 +33,15 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<String?> _showBackdoorPasswordDialog() async {
-    var password = '';
-    final result = await showDialog<String>(
+    final result = await showAdminTextInputDialog(
       context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
-        title: const Text(
-          'Sistem Girişi',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'Kullanıcı: masterclass',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white70,
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              obscureText: true,
-              autofocus: true,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                labelText: 'Şifre',
-                labelStyle: const TextStyle(color: Colors.white54),
-                enabledBorder: OutlineInputBorder(
-                  borderSide: const BorderSide(color: Colors.white24),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderSide: const BorderSide(color: Color(0xFF10B981)),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              onChanged: (v) => password = v,
-              onSubmitted: (_) => Navigator.pop(context, password),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text(
-              'Vazgeç',
-              style: TextStyle(color: Colors.white70),
-            ),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF10B981),
-            ),
-            onPressed: () => Navigator.pop(context, password),
-            child: const Text(
-              'Giriş',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ],
-      ),
+      title: 'Sistem Girişi',
+      icon: Icons.admin_panel_settings_outlined,
+      subtitle: 'Kullanıcı: masterclass',
+      label: 'Şifre',
+      fieldIcon: Icons.lock_outline_rounded,
+      obscureText: true,
+      confirmLabel: 'GİRİŞ',
     );
     final pwd = (result ?? '').trim();
     return pwd.isEmpty ? null : pwd;

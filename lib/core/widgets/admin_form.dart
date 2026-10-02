@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'admin_page.dart';
+import '../utils/team_colors.dart';
 
 // Yönetim formlarının ortak parçaları (Fikstür Planlama, Ceza, Takım popup'ı).
 // Görünüm Sezon / Grup listelerindeki kartlarla aynı dili kullanır.
@@ -23,6 +25,32 @@ String? autoPickOption(List<AdminOption> options) {
 
 String _trUpper(String s) =>
     s.replaceAll('i', 'İ').replaceAll('ı', 'I').toUpperCase();
+
+/// [AdminFieldRow] içindeki metin alanları için: çerçeve ve dolgu yok, satır
+/// kartın parçası gibi görünür. Temanın etkin/odaklı/pasif çerçeve ve dolgu
+/// ayarları da kapatılır (yalnızca `border: InputBorder.none` yetmiyor).
+InputDecoration adminInlineInputDecoration({
+  String? hint,
+  String? prefixText,
+}) => InputDecoration(
+  isDense: true,
+  filled: false,
+  border: InputBorder.none,
+  enabledBorder: InputBorder.none,
+  focusedBorder: InputBorder.none,
+  disabledBorder: InputBorder.none,
+  errorBorder: InputBorder.none,
+  focusedErrorBorder: InputBorder.none,
+  contentPadding: const EdgeInsets.only(top: 2),
+  hintText: hint,
+  hintStyle: const TextStyle(color: Colors.white38),
+  prefixText: prefixText,
+  prefixStyle: const TextStyle(
+    color: Colors.white70,
+    fontSize: 15,
+    fontWeight: FontWeight.w700,
+  ),
+);
 
 /// Form metin alanları için ortak görünüm.
 InputDecoration adminInputDecoration({
@@ -305,10 +333,7 @@ class AdminSelectRow extends StatelessWidget {
         icon: const Icon(Icons.close_rounded, color: Colors.white54, size: 20),
       );
     } else {
-      trailing = const Icon(
-        Icons.chevron_right_rounded,
-        color: Colors.white54,
-      );
+      trailing = const Icon(Icons.chevron_right_rounded, color: Colors.white54);
     }
     return AdminFieldRow(
       icon: icon,
@@ -514,4 +539,356 @@ class AdminSecondaryButton extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Tek alanlı giriş popup'ı (ör. forma no). Kaydedilirse girilen metni,
+/// vazgeçilirse null döner.
+Future<String?> showAdminTextInputDialog({
+  required BuildContext context,
+  required String title,
+  required IconData icon,
+  required String label,
+  required IconData fieldIcon,
+  String initialValue = '',
+  String? hint,
+  String? subtitle,
+  TextInputType? keyboardType,
+  List<TextInputFormatter>? inputFormatters,
+  String confirmLabel = 'KAYDET',
+  bool obscureText = false,
+
+  /// Hata mesajı dönerse popup kapanmaz, mesaj alanın altında görünür.
+  String? Function(String value)? validator,
+}) async {
+  final controller = TextEditingController(text: initialValue);
+  String? error;
+  final result = await showDialog<String>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setState) {
+        void submit() {
+          final e = validator?.call(controller.text);
+          if (e != null) {
+            setState(() => error = e);
+            return;
+          }
+          Navigator.pop(ctx, controller.text);
+        }
+
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Container(
+            padding: const EdgeInsets.all(22),
+            decoration: adminDialogDecoration(),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                AdminDialogHeader(icon: icon, title: title, subtitle: subtitle),
+                const SizedBox(height: 18),
+                AdminFieldGroup(
+                  children: [
+                    AdminFieldRow(
+                      icon: fieldIcon,
+                      label: label,
+                      child: TextField(
+                        controller: controller,
+                        autofocus: true,
+                        obscureText: obscureText,
+                        keyboardType: keyboardType,
+                        inputFormatters: inputFormatters,
+                        textInputAction: TextInputAction.done,
+                        onSubmitted: (_) => submit(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        decoration: adminInlineInputDecoration(hint: hint),
+                      ),
+                    ),
+                  ],
+                ),
+                if (error != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    error!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: kAdminDanger,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 22),
+                AdminPrimaryButton(label: confirmLabel, onPressed: submit),
+                const SizedBox(height: 10),
+                AdminSecondaryButton(onPressed: () => Navigator.pop(ctx)),
+              ],
+            ),
+          ),
+        );
+      },
+    ),
+  );
+  // Kapanış animasyonu bitene kadar alan controller'ı kullanır.
+  Future<void>.delayed(const Duration(milliseconds: 600), controller.dispose);
+  return result;
+}
+
+/// Tek düğmeli bilgi / hata popup'ı.
+Future<void> showAdminInfoDialog({
+  required BuildContext context,
+  required String title,
+  required String message,
+  IconData icon = Icons.error_outline_rounded,
+  Color iconColor = kAdminDanger,
+}) {
+  return showDialog<void>(
+    context: context,
+    builder: (ctx) => Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Container(
+        padding: const EdgeInsets.all(22),
+        decoration: adminDialogDecoration(),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, color: iconColor, size: 22),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            const Divider(color: Colors.white24, height: 1),
+            const SizedBox(height: 16),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white70, fontSize: 14),
+            ),
+            const SizedBox(height: 22),
+            AdminPrimaryButton(
+              label: 'TAMAM',
+              onPressed: () => Navigator.pop(ctx),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// Formlardaki renk satırı: renk kutusu + hex kodu; dokununca renk seçici.
+class AdminColorRow extends StatelessWidget {
+  const AdminColorRow({
+    super.key,
+    required this.label,
+    required this.hex,
+    required this.onTap,
+    this.onClear,
+    this.icon = Icons.palette_outlined,
+  });
+
+  final String label;
+  final String? hex;
+  final VoidCallback? onTap;
+  final VoidCallback? onClear;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = parseHexColor(hex);
+    return AdminFieldRow(
+      icon: icon,
+      label: label,
+      onTap: onTap,
+      trailing: color != null && onClear != null && onTap != null
+          ? IconButton(
+              tooltip: 'Temizle',
+              visualDensity: VisualDensity.compact,
+              onPressed: onClear,
+              icon: const Icon(
+                Icons.close_rounded,
+                color: Colors.white54,
+                size: 20,
+              ),
+            )
+          : const Icon(Icons.chevron_right_rounded, color: Colors.white54),
+      child: Row(
+        children: [
+          Container(
+            width: 22,
+            height: 22,
+            decoration: BoxDecoration(
+              color: color ?? Colors.transparent,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            color == null ? 'Renk seçin' : colorToHex(color),
+            style: TextStyle(
+              color: color == null ? Colors.white38 : Colors.white,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+const _kColorPresets = <String>[
+  '#FFFFFF',
+  '#111827',
+  '#6B7280',
+  '#C8102E',
+  '#8B0000',
+  '#E85D1F',
+  '#FFD200',
+  '#F6C700',
+  '#00843D',
+  '#0B5D1E',
+  '#6CC24A',
+  '#00A3E0',
+  '#003DA5',
+  '#0B1F4D',
+  '#6A1B9A',
+  '#A51C30',
+  '#FDB913',
+  '#00B5AD',
+  '#F472B6',
+  '#7C2D12',
+];
+
+/// Ortada açılan renk seçici: hazır renkler + hex kodu. Seçilen "#RRGGBB"
+/// döner; vazgeçilirse null.
+Future<String?> showAdminColorPicker({
+  required BuildContext context,
+  required String title,
+  String? initial,
+}) async {
+  final hexCtrl = TextEditingController(
+    text: parseHexColor(initial) == null
+        ? ''
+        : colorToHex(parseHexColor(initial)!),
+  );
+  final result = await showDialog<String>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setState) {
+        final current = parseHexColor(hexCtrl.text);
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Container(
+            padding: const EdgeInsets.all(22),
+            decoration: adminDialogDecoration(),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                AdminDialogHeader(icon: Icons.palette_outlined, title: title),
+                const SizedBox(height: 18),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  alignment: WrapAlignment.center,
+                  children: [
+                    for (final h in _kColorPresets)
+                      GestureDetector(
+                        onTap: () => setState(() => hexCtrl.text = h),
+                        child: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: parseHexColor(h),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: current != null && colorToHex(current) == h
+                                  ? kAdminAccent
+                                  : Colors.white.withValues(alpha: 0.25),
+                              width: current != null && colorToHex(current) == h
+                                  ? 3
+                                  : 1,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                AdminFieldGroup(
+                  children: [
+                    AdminFieldRow(
+                      icon: Icons.tag_rounded,
+                      label: 'Renk Kodu',
+                      trailing: Container(
+                        width: 26,
+                        height: 26,
+                        margin: const EdgeInsets.only(right: 6),
+                        decoration: BoxDecoration(
+                          color: current ?? Colors.transparent,
+                          borderRadius: BorderRadius.circular(7),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.35),
+                          ),
+                        ),
+                      ),
+                      child: TextField(
+                        controller: hexCtrl,
+                        onChanged: (_) => setState(() {}),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(
+                            RegExp(r'[#0-9a-fA-F]'),
+                          ),
+                          LengthLimitingTextInputFormatter(7),
+                        ],
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        decoration: adminInlineInputDecoration(hint: '#RRGGBB'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 22),
+                AdminPrimaryButton(
+                  label: 'SEÇ',
+                  onPressed: current == null
+                      ? null
+                      : () => Navigator.pop(ctx, colorToHex(current)),
+                ),
+                const SizedBox(height: 10),
+                AdminSecondaryButton(onPressed: () => Navigator.pop(ctx)),
+              ],
+            ),
+          ),
+        );
+      },
+    ),
+  );
+  Future<void>.delayed(const Duration(milliseconds: 600), hexCtrl.dispose);
+  return result;
 }

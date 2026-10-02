@@ -8,6 +8,8 @@ class Team {
     this.groupId,
     this.groupName,
     this.colors,
+    this.firstColor,
+    this.secondColor,
     this.createdAt,
     this.updatedAt,
   }) : seasonId = seasonId ?? leagueId;
@@ -20,6 +22,10 @@ class Team {
   final String? groupId;
   final String? groupName;
   final Map<String, dynamic>? colors;
+
+  /// Takım renkleri ("#RRGGBB"): teams.first_color / second_color.
+  final String? firstColor;
+  final String? secondColor;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -40,18 +46,21 @@ class Team {
       return s.isEmpty ? null : s;
     }
 
-    final seasonId = readNullableString(map['seasonId'] ?? map['season_id']) ??
+    final seasonId =
+        readNullableString(map['seasonId'] ?? map['season_id']) ??
         readNullableString(teamMap['seasonId'] ?? teamMap['season_id']) ??
         readNullableString(map['leagueId'] ?? map['league_id']) ??
         readNullableString(teamMap['leagueId'] ?? teamMap['league_id']);
 
-    final groupId = readNullableString(map['groupId'] ?? map['group_id']) ??
+    final groupId =
+        readNullableString(map['groupId'] ?? map['group_id']) ??
         readNullableString(teamMap['groupId'] ?? teamMap['group_id']);
 
     final groupNameFromGroup = readNullableString(
       groupMap['name'] ?? groupMap['group_name'] ?? groupMap['groupName'],
     );
-    final groupName = readNullableString(map['groupName'] ?? map['group_name']) ??
+    final groupName =
+        readNullableString(map['groupName'] ?? map['group_name']) ??
         readNullableString(teamMap['groupName'] ?? teamMap['group_name']) ??
         groupNameFromGroup;
 
@@ -63,6 +72,8 @@ class Team {
       groupId: groupId,
       groupName: groupName,
       colors: v('colors', 'colors') as Map<String, dynamic>?,
+      firstColor: readNullableString(v('firstColor', 'first_color')),
+      secondColor: readNullableString(v('secondColor', 'second_color')),
       createdAt: _readDate(v('createdAt', 'created_at')),
       updatedAt: _readDate(v('updatedAt', 'updated_at')),
     );

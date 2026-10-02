@@ -21,8 +21,10 @@ import 'admin_match_event_screen.dart';
 import '../../tournament/screens/formation_tab.dart';
 import 'package:football_tournament/core/widgets/picked_image.dart';
 import '../utils/match_clock.dart';
+import '../../../core/widgets/league_logo.dart';
 import 'package:football_tournament/core/widgets/admin_page.dart';
 import 'package:football_tournament/core/widgets/admin_form.dart';
+import '../../../core/utils/string_utils.dart';
 
 // --- YARDIMCI WIDGETLAR ---
 
@@ -86,6 +88,109 @@ class _TeamInfo extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Geri okunun yanında turnuva bandı: logo + ad + hafta.
+class _LeagueStrip extends StatefulWidget {
+  const _LeagueStrip({required this.leagueId, this.week});
+
+  final String leagueId;
+  final int? week;
+
+  @override
+  State<_LeagueStrip> createState() => _LeagueStripState();
+}
+
+class _LeagueStripState extends State<_LeagueStrip> {
+  static final Map<String, Future<({String name, String logo})?>> _cache = {};
+  late Future<({String name, String logo})?> _info;
+
+  @override
+  void initState() {
+    super.initState();
+    _info = _load(widget.leagueId);
+  }
+
+  static Future<({String name, String logo})?> _load(String id) {
+    if (id.trim().isEmpty) return Future.value(null);
+    return _cache.putIfAbsent(id, () async {
+      try {
+        final r = await Supabase.instance.client
+            .from('leagues')
+            .select('name, logo_url')
+            .eq('id', id)
+            .maybeSingle();
+        if (r == null) return null;
+        return (
+          name: (r['name'] ?? '').toString(),
+          logo: (r['logo_url'] ?? '').toString(),
+        );
+      } catch (_) {
+        _cache.remove(id);
+        return null;
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const gold = Color(0xFFE2B845);
+    return FutureBuilder<({String name, String logo})?>(
+      future: _info,
+      builder: (context, snap) {
+        final info = snap.data;
+        if (info == null) return const SizedBox.shrink();
+        // Turnuva adı üstte, hafta altında: uzun adlarda hafta kesilmesin.
+        return Center(
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(5, 3, 14, 3),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F172A).withValues(alpha: 0.6),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: gold.withValues(alpha: 0.5)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                LeagueLogo(url: info.logo, size: 30, fallbackColor: gold),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        info.name.trUpper,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11.5,
+                          height: 1.2,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                      if (widget.week != null)
+                        Text(
+                          '${widget.week}. HAFTA',
+                          style: const TextStyle(
+                            color: gold,
+                            fontSize: 10,
+                            height: 1.2,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -559,6 +664,19 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
               backgroundColor: const Color(0xFF0F172A),
               appBar: AppBar(
                 toolbarHeight: 44,
+                // Bant tam genişlikteki katmanda ortalanır; başlık alanı
+                // geri okundan sonra ortaladığı için sağa kayıyordu. İki
+                // yanda geri oku kadar (56px) boşluk bırakılır.
+                flexibleSpace: SafeArea(
+                  bottom: false,
+                  child: SizedBox(
+                    height: 44,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 56),
+                      child: _LeagueStrip(leagueId: m.leagueId, week: m.week),
+                    ),
+                  ),
+                ),
                 backgroundColor: Colors.transparent,
                 surfaceTintColor: Colors.transparent,
                 elevation: 0,
@@ -600,9 +718,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                       ),
                       Padding(
                         padding: EdgeInsets.only(
-                          // Takım bloğu geri okunun hizasına çıkar; tarih/saat
-                          // satırına daha çok yer kalır.
-                          top: MediaQuery.of(context).padding.top + 22,
+                          // Takım bloğu üst çubuktaki turnuva bandının
+                          // (44px) hemen altından başlar.
+                          top: MediaQuery.of(context).padding.top + 50,
                         ),
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
@@ -1076,111 +1194,183 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
     'Diğer',
   ];
 
+  static IconData _typeIcon(String t) => switch (t) {
+    'Maç Yayın Linki' => Icons.live_tv_rounded,
+    'Takım Fotosu' => Icons.groups_outlined,
+    'Önemli An' => Icons.bolt_rounded,
+    'Maçın Adamı' => Icons.star_outline_rounded,
+    _ => Icons.perm_media_outlined,
+  };
+
+  Widget _inputRow({
+    required IconData icon,
+    required String label,
+    required TextEditingController controller,
+    String? hint,
+    int maxLines = 1,
+    TextInputType? keyboardType,
+  }) {
+    return AdminFieldRow(
+      icon: icon,
+      label: label,
+      child: TextField(
+        controller: controller,
+        enabled: !_isUploading,
+        maxLines: maxLines,
+        minLines: 1,
+        keyboardType: keyboardType,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 15,
+          fontWeight: FontWeight.w700,
+        ),
+        decoration: adminInlineInputDecoration(hint: hint),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final m = widget.match;
-    return AlertDialog(
-      title: const Text('Medya Ekle'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            DropdownButtonFormField<String>(
-              initialValue: _selectedType,
-              items: _types
-                  .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                  .toList(),
-              onChanged: (v) {
-                if (v != null) {
-                  setState(() {
-                    _selectedType = v;
-                    _pickedFile = null;
-                  });
-                }
-              },
-              decoration: const InputDecoration(labelText: 'Medya Türü'),
-            ),
-            const SizedBox(height: 16),
-            if (_selectedType == 'Maç Yayın Linki')
-              TextField(
-                controller: _urlCtrl,
-                decoration: const InputDecoration(labelText: 'YouTube URL'),
-              )
-            else ...[
-              if (_pickedFile != null)
-                Image(
-                  image: pickedImageProvider(_pickedFile!),
-                  height: 100,
-                  fit: BoxFit.cover,
-                ),
-              ElevatedButton.icon(
-                onPressed: () async {
-                  final picked = await ImagePicker().pickImage(
-                    source: ImageSource.gallery,
-                    imageQuality: 85,
-                  );
-                  if (picked != null) {
-                    setState(() => _pickedFile = picked);
-                  }
-                },
-                icon: const Icon(Icons.image),
-                label: const Text('Galeriden Seç'),
+    final isLink = _selectedType == 'Maç Yayın Linki';
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      child: Container(
+        decoration: adminDialogDecoration(),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const AdminDialogHeader(
+                icon: Icons.perm_media_outlined,
+                title: 'Medya Ekle',
               ),
-            ],
-            const SizedBox(height: 16),
-            if (_selectedType == 'Takım Fotosu')
-              Row(
+              const SizedBox(height: 18),
+              AdminFieldGroup(
                 children: [
-                  Expanded(
-                    child: RadioListTile<bool>(
-                      title: const Text(
-                        'Ev Sahibi',
-                        style: TextStyle(fontSize: 12),
-                      ),
-                      value: true,
-                      groupValue: _isHomeTeam,
-                      onChanged: (v) => setState(() => _isHomeTeam = v!),
-                      contentPadding: EdgeInsets.zero,
-                    ),
+                  AdminSelectRow(
+                    icon: _typeIcon(_selectedType),
+                    label: 'Medya Türü',
+                    value: _selectedType,
+                    placeholder: 'Seçin',
+                    onTap: _isUploading
+                        ? null
+                        : () async {
+                            final v = await showAdminOptionPicker<String>(
+                              context: context,
+                              title: 'Medya Türü',
+                              items: _types,
+                              labelBuilder: (t) => t,
+                              selected: _selectedType,
+                            );
+                            if (v != null && mounted) {
+                              setState(() {
+                                _selectedType = v;
+                                _pickedFile = null;
+                              });
+                            }
+                          },
                   ),
-                  Expanded(
-                    child: RadioListTile<bool>(
-                      title: const Text(
-                        'Deplasman',
-                        style: TextStyle(fontSize: 12),
+                  if (isLink)
+                    _inputRow(
+                      icon: Icons.link_rounded,
+                      label: 'YouTube Linki',
+                      controller: _urlCtrl,
+                      hint: 'https://youtube.com/...',
+                      keyboardType: TextInputType.url,
+                    )
+                  else
+                    AdminFieldRow(
+                      icon: Icons.image_outlined,
+                      label: 'Görsel',
+                      onTap: _isUploading
+                          ? null
+                          : () async {
+                              final picked = await ImagePicker().pickImage(
+                                source: ImageSource.gallery,
+                                imageQuality: 85,
+                              );
+                              if (picked != null && mounted) {
+                                setState(() => _pickedFile = picked);
+                              }
+                            },
+                      trailing: const Icon(
+                        Icons.chevron_right_rounded,
+                        color: Colors.white54,
                       ),
-                      value: false,
-                      groupValue: _isHomeTeam,
-                      onChanged: (v) => setState(() => _isHomeTeam = v!),
-                      contentPadding: EdgeInsets.zero,
+                      child: Text(
+                        _pickedFile == null
+                            ? 'Galeriden seçin'
+                            : 'Görsel seçildi',
+                        style: TextStyle(
+                          color: _pickedFile == null
+                              ? Colors.white38
+                              : Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
+                  if (_selectedType == 'Takım Fotosu')
+                    AdminSelectRow(
+                      icon: Icons.shield_outlined,
+                      label: 'Takım',
+                      value: _isHomeTeam ? 'Ev Sahibi' : 'Deplasman',
+                      placeholder: 'Seçin',
+                      onTap: _isUploading
+                          ? null
+                          : () async {
+                              final v = await showAdminOptionPicker<bool>(
+                                context: context,
+                                title: 'Takım',
+                                items: const [true, false],
+                                labelBuilder: (h) =>
+                                    h ? 'Ev Sahibi' : 'Deplasman',
+                                selected: _isHomeTeam,
+                              );
+                              if (v != null && mounted) {
+                                setState(() => _isHomeTeam = v);
+                              }
+                            },
+                    ),
+                  _inputRow(
+                    icon: Icons.notes_rounded,
+                    label: 'Açıklama (İsteğe Bağlı)',
+                    controller: _descCtrl,
+                    hint: 'Kısa bir açıklama',
+                    maxLines: 2,
                   ),
                 ],
               ),
-            TextField(
-              controller: _descCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Açıklama (Opsiyonel)',
+              if (!isLink && _pickedFile != null) ...[
+                const SizedBox(height: 14),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: AspectRatio(
+                    aspectRatio: 16 / 9,
+                    child: Image(
+                      image: pickedImageProvider(_pickedFile!),
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 22),
+              AdminPrimaryButton(
+                label: 'KAYDET',
+                busy: _isUploading,
+                onPressed: _save,
               ),
-              maxLines: 2,
-            ),
-            if (_isUploading) ...[
-              const SizedBox(height: 16),
-              const CircularProgressIndicator(),
+              const SizedBox(height: 10),
+              AdminSecondaryButton(
+                onPressed: _isUploading ? null : () => Navigator.pop(context),
+              ),
             ],
-          ],
+          ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: _isUploading ? null : () => Navigator.pop(context),
-          child: const Text('İptal'),
-        ),
-        ElevatedButton(
-          onPressed: _isUploading ? null : _save,
-          child: const Text('KAYDET'),
-        ),
-      ],
     );
   }
 
@@ -1530,23 +1720,10 @@ class _HighlightsTabView extends StatelessWidget {
     BuildContext context,
     MatchMediaModel media,
   ) async {
-    final ok = await showDialog<bool>(
+    final ok = await showAdminConfirmDialog(
       context: context,
-      builder: (c) => AlertDialog(
-        title: const Text('Medyayı Sil'),
-        content: const Text('Bu medya kalıcı olarak silinecek. Emin misiniz?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(c, false),
-            child: const Text('İptal'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.pop(c, true),
-            child: const Text('Sil'),
-          ),
-        ],
-      ),
+      title: 'Medyayı Sil',
+      message: 'Bu medya kalıcı olarak silinecek. Emin misiniz?',
     );
 
     if (ok == true) {
@@ -2558,19 +2735,7 @@ class _RosterEditSheetState extends State<_RosterEditSheet> {
   }
 
   Future<void> _showError(String msg) {
-    return showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Hata'),
-        content: Text(msg),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Tamam'),
-          ),
-        ],
-      ),
-    );
+    return showAdminInfoDialog(context: context, title: 'Hata', message: msg);
   }
 
   Future<void> _save() async {

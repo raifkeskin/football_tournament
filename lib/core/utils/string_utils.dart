@@ -39,3 +39,10 @@ class TurkishUpperCaseTextFormatter extends TextInputFormatter {
     );
   }
 }
+
+/// Türkçe büyük harf: Dart'ın toUpperCase'i "i" harfini "I" yapar
+/// ("Hürriyet Gençlik Ligi" → "LIGI"). Görünen metinlerde bunu kullanın.
+extension TurkishCase on String {
+  String get trUpper =>
+      replaceAll('i', 'İ').replaceAll('ı', 'I').toUpperCase();
+}

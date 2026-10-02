@@ -14,6 +14,7 @@ import '../features/match/services/interfaces/i_match_service.dart';
 import '../features/team/services/interfaces/i_team_service.dart';
 import '../core/services/service_locator.dart';
 import '../core/utils/string_utils.dart';
+import '../core/widgets/admin_page.dart';
 
 class AdminDataToolsScreen extends StatefulWidget {
   const AdminDataToolsScreen({super.key});
@@ -29,26 +30,14 @@ class _AdminDataToolsScreenState extends State<AdminDataToolsScreen> {
   String? _lastResult;
 
   Future<bool> _confirmDelete(String category) async {
-    final ok = await showDialog<bool>(
+    return showAdminConfirmDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Dikkat'),
-        content: Text(
-          'Tüm $category verilerini silmek istediğinize emin misiniz? Bu işlem geri alınamaz.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Vazgeç'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Evet'),
-          ),
-        ],
-      ),
+      title: 'Dikkat',
+      message:
+          'Tüm $category verilerini silmek istediğinize emin misiniz? '
+          'Bu işlem geri alınamaz.',
+      icon: Icons.warning_amber_rounded,
     );
-    return ok ?? false;
   }
 
   void _showSuccessSnackBar() {

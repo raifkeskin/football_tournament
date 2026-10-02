@@ -23,6 +23,28 @@ class MainNavigator extends StatefulWidget {
 }
 
 class _MainNavigatorState extends State<MainNavigator> {
+  // Menü düğmelerinin arka planları; menü ilk açıldığında gecikmeli
+  // görünmesinler diye önceden yüklenir.
+  static const _menuImages = [
+    'assets/anasayfa.jpg',
+    'assets/acilis_arka_plan.jpg',
+    'assets/images/admin_fixture.jpg',
+    'assets/images/admin_team.jpg',
+    'assets/images/admin_tournament.jpg',
+    'assets/images/admin_license.jpg',
+  ];
+  bool _menuImagesCached = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_menuImagesCached) return;
+    _menuImagesCached = true;
+    for (final path in _menuImages) {
+      precacheImage(AssetImage(path), context);
+    }
+  }
+
   late int _aktifSekme = widget.initialTabIndex;
 
   void _sekmeDegistir(int index) {

@@ -16,6 +16,7 @@ import '../../../core/services/global_filter.dart';
 
 // ORTAK BİLEŞEN
 import '../../../core/widgets/tournament_filter_dialog.dart';
+import '../../../core/utils/string_utils.dart';
 
 class StatsScreen extends StatefulWidget {
   const StatsScreen({super.key});
@@ -1011,7 +1012,7 @@ class _PlayerAvatar extends StatelessWidget {
         .take(2)
         .map((w) => w.characters.first)
         .join()
-        .toUpperCase();
+        .trUpper;
     return Container(
       width: size,
       height: size,

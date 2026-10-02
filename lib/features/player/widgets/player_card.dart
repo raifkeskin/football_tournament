@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../tournament/models/league.dart';
 import '../../../core/widgets/web_safe_image.dart';
+import '../../../core/utils/string_utils.dart';
 
 // Uygulamanın ortak renkleri
 const _bgDark = Color(0xFF0F172A);
@@ -189,9 +190,9 @@ class _PlayerCardState extends State<PlayerCard> {
         .where((e) => e.isNotEmpty)
         .toList();
     if (parts.isEmpty) return '?';
-    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
+    if (parts.length == 1) return parts.first.substring(0, 1).trUpper;
     return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
-        .toUpperCase();
+        .trUpper;
   }
 
   int _readInt(dynamic v) {
@@ -561,15 +562,20 @@ class _PlayerCardState extends State<PlayerCard> {
               ],
             ),
             const SizedBox(height: 2),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                value,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 17,
+            // Değer sağa yaslı; etiket solda kalır.
+            Align(
+              alignment: Alignment.centerRight,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: Text(
+                  value,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
                 ),
               ),
             ),

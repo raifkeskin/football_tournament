@@ -14,6 +14,8 @@ import '../../../core/widgets/app_date_picker.dart';
 import '../../../core/widgets/master_class_app_bar.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../team/screens/team_squad_screen.dart';
+import '../../../core/utils/string_utils.dart';
+import '../../../core/widgets/admin_form.dart';
 
 // Fikstür / Ana Sayfa ile ortak renkler
 const _bgDark = Color(0xFF0F172A);
@@ -309,28 +311,68 @@ class SeasonManagementScreen extends StatelessWidget {
       }
     }
 
-    Widget numberField(TextEditingController controller, String label) {
-      return TextField(
-        controller: controller,
-        decoration: InputDecoration(labelText: label),
-        keyboardType: TextInputType.number,
-        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-        enabled: !saving,
+    Widget textRow(
+      IconData icon,
+      String label,
+      TextEditingController controller, {
+      String? hint,
+      bool number = false,
+      TextInputType? keyboardType,
+    }) {
+      return AdminFieldRow(
+        icon: icon,
+        label: label,
+        child: TextField(
+          controller: controller,
+          enabled: !saving,
+          keyboardType: number ? TextInputType.number : keyboardType,
+          inputFormatters: number
+              ? [FilteringTextInputFormatter.digitsOnly]
+              : null,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+          ),
+          decoration: adminInlineInputDecoration(hint: hint),
+        ),
       );
     }
 
-    Widget dateField(
-      TextEditingController controller,
+    Widget dateRow(
+      IconData icon,
       String label,
+      TextEditingController controller,
       VoidCallback onTap,
     ) {
-      return TextField(
-        controller: controller,
-        readOnly: true,
+      return AdminSelectRow(
+        icon: icon,
+        label: label,
+        value: controller.text,
+        placeholder: 'Tarih seçin',
         onTap: saving ? null : onTap,
-        decoration: InputDecoration(
-          labelText: label,
-          prefixIcon: const Icon(Icons.calendar_month_outlined),
+      );
+    }
+
+    Widget switchRow(
+      IconData icon,
+      String label,
+      String hint,
+      bool value,
+      ValueChanged<bool> onChanged,
+    ) {
+      return AdminFieldRow(
+        icon: icon,
+        label: label,
+        onTap: saving ? null : () => onChanged(!value),
+        trailing: Switch(
+          value: value,
+          activeThumbColor: _accent,
+          onChanged: saving ? null : onChanged,
+        ),
+        child: Text(
+          hint,
+          style: const TextStyle(color: kAdminMuted, fontSize: 13),
         ),
       );
     }
@@ -351,197 +393,177 @@ class SeasonManagementScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const SizedBox(height: 4),
-                    TextField(
-                      controller: nameController,
-                      decoration: const InputDecoration(labelText: 'Sezon Adı'),
-                      enabled: !saving,
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: subtitleController,
-                      decoration: const InputDecoration(
-                        labelText: 'Alt Başlık',
-                      ),
-                      enabled: !saving,
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: dateField(
-                            startDateController,
-                            'Başlangıç',
-                            () => pickDate(
-                              setSheetState: setSheetState,
-                              isStart: true,
-                            ),
+                    AdminFormSection(
+                      title: 'Genel',
+                      child: AdminFieldGroup(
+                        children: [
+                          textRow(
+                            Icons.emoji_events_outlined,
+                            'Sezon Adı',
+                            nameController,
+                            hint: 'Örn. 2026-2027 Sezonu',
                           ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: dateField(
-                            endDateController,
-                            'Bitiş',
-                            () => pickDate(
-                              setSheetState: setSheetState,
-                              isStart: false,
-                            ),
+                          textRow(
+                            Icons.short_text_rounded,
+                            'Alt Başlık',
+                            subtitleController,
+                            hint: 'İsteğe bağlı',
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: numberField(
-                            startingPlayerCountController,
-                            'Başlangıç Oyuncu',
+                          textRow(
+                            Icons.flag_outlined,
+                            'Ülke',
+                            countryController,
+                            hint: 'Türkiye',
                           ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: numberField(
-                            subPlayerCountController,
-                            'Yedek Oyuncu',
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: countryController,
-                            decoration: const InputDecoration(
-                              labelText: 'Ülke',
-                            ),
-                            enabled: !saving,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: TextField(
-                            controller: cityController,
-                            readOnly: true,
+                          AdminSelectRow(
+                            icon: Icons.location_city_outlined,
+                            label: 'Şehir',
+                            value: cityController.text,
+                            placeholder: 'Şehir seçin',
                             onTap: saving
                                 ? null
                                 : () => pickTurkeyCity(
                                     setSheetState: setSheetState,
                                   ),
-                            decoration: const InputDecoration(
-                              labelText: 'Şehir',
-                              prefixIcon: Icon(Icons.search),
+                          ),
+                        ],
+                      ),
+                    ),
+                    AdminFormSection(
+                      title: 'Tarihler',
+                      child: AdminFieldGroup(
+                        children: [
+                          dateRow(
+                            Icons.play_circle_outline_rounded,
+                            'Sezon Başlangıcı',
+                            startDateController,
+                            () => pickDate(
+                              setSheetState: setSheetState,
+                              isStart: true,
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      activeThumbColor: _accent,
-                      title: const Text(
-                        'Aktif',
-                        style: TextStyle(color: Colors.white),
-                      ),
-                      value: isActive,
-                      onChanged: saving
-                          ? null
-                          : (v) => setSheetState(() => isActive = v),
-                    ),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      activeThumbColor: _accent,
-                      title: const Text(
-                        'Varsayılan',
-                        style: TextStyle(color: Colors.white),
-                      ),
-                      value: isDefault,
-                      onChanged: saving
-                          ? null
-                          : (v) => setSheetState(() => isDefault = v),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: numberField(
-                            teamsPerGroupController,
-                            'Toplam Takım Sayısı',
+                          dateRow(
+                            Icons.flag_circle_outlined,
+                            'Sezon Bitişi',
+                            endDateController,
+                            () => pickDate(
+                              setSheetState: setSheetState,
+                              isStart: false,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: numberField(
-                            numberOfGroupsController,
-                            'Grup Sayısı',
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: numberField(
-                            matchPeriodDurationController,
-                            'Devre Süresi (dk)',
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: numberField(
-                            numberOfPlayerChangesController,
-                            'Oyuncu Değişiklik Sınırı',
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: dateField(
+                          dateRow(
+                            Icons.swap_horiz_rounded,
+                            'Transfer Başlangıcı',
                             transferStartController,
-                            'Transfer Başlangıç',
                             () => pickTransferDate(
                               setSheetState: setSheetState,
                               isStart: true,
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: dateField(
+                          dateRow(
+                            Icons.event_busy_outlined,
+                            'Transfer Bitişi',
                             transferEndController,
-                            'Transfer Bitiş',
                             () => pickTransferDate(
                               setSheetState: setSheetState,
                               isStart: false,
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: instagramController,
-                      decoration: const InputDecoration(
-                        labelText: 'Instagram URL',
+                        ],
                       ),
-                      enabled: !saving,
                     ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: youtubeController,
-                      decoration: const InputDecoration(
-                        labelText: 'YouTube URL',
+                    AdminFormSection(
+                      title: 'Maç ve Kadro',
+                      child: AdminFieldGroup(
+                        children: [
+                          textRow(
+                            Icons.groups_outlined,
+                            'İlk 11 Oyuncu Sayısı',
+                            startingPlayerCountController,
+                            number: true,
+                          ),
+                          textRow(
+                            Icons.event_seat_outlined,
+                            'Yedek Oyuncu Sayısı',
+                            subPlayerCountController,
+                            number: true,
+                          ),
+                          textRow(
+                            Icons.timer_outlined,
+                            'Devre Süresi (dk)',
+                            matchPeriodDurationController,
+                            number: true,
+                          ),
+                          textRow(
+                            Icons.swap_vert_rounded,
+                            'Oyuncu Değişikliği Sınırı',
+                            numberOfPlayerChangesController,
+                            number: true,
+                          ),
+                        ],
                       ),
-                      enabled: !saving,
                     ),
-                    const SizedBox(height: 16),
+                    AdminFormSection(
+                      title: 'Gruplar',
+                      child: AdminFieldGroup(
+                        children: [
+                          textRow(
+                            Icons.shield_outlined,
+                            'Toplam Takım Sayısı',
+                            teamsPerGroupController,
+                            number: true,
+                          ),
+                          textRow(
+                            Icons.grid_view_rounded,
+                            'Grup Sayısı',
+                            numberOfGroupsController,
+                            number: true,
+                          ),
+                        ],
+                      ),
+                    ),
+                    AdminFormSection(
+                      title: 'Durum',
+                      child: AdminFieldGroup(
+                        children: [
+                          switchRow(
+                            Icons.check_circle_outline_rounded,
+                            'Aktif',
+                            'Sezon uygulamada görünür',
+                            isActive,
+                            (v) => setSheetState(() => isActive = v),
+                          ),
+                          switchRow(
+                            Icons.star_outline_rounded,
+                            'Varsayılan',
+                            'Turnuva açılınca bu sezon seçilir',
+                            isDefault,
+                            (v) => setSheetState(() => isDefault = v),
+                          ),
+                        ],
+                      ),
+                    ),
+                    AdminFormSection(
+                      title: 'Sosyal Medya',
+                      child: AdminFieldGroup(
+                        children: [
+                          textRow(
+                            Icons.camera_alt_outlined,
+                            'Instagram',
+                            instagramController,
+                            hint: 'https://instagram.com/...',
+                            keyboardType: TextInputType.url,
+                          ),
+                          textRow(
+                            Icons.smart_display_outlined,
+                            'YouTube',
+                            youtubeController,
+                            hint: 'https://youtube.com/...',
+                            keyboardType: TextInputType.url,
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -1024,23 +1046,26 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const _SheetHeader(icon: Icons.groups_outlined, title: 'Grup Ekle'),
-            TextField(
-              controller: nameController,
-              enabled: !saving,
-              maxLength: 10,
-              decoration: const InputDecoration(labelText: 'Grup Adı'),
-            ),
-            const SizedBox(height: 10),
-            FilledButton.tonalIcon(
-              onPressed: saving ? null : () => openTeamPicker(setSheetState),
-              icon: const Icon(Icons.playlist_add_check_outlined),
-              label: Text(
-                'Takım Ekle/Çıkar'
-                '${selectedTeamIds.isEmpty ? '' : ' (${selectedTeamIds.length})'}',
-                style: const TextStyle(fontWeight: FontWeight.w900),
+            AdminFormSection(
+              title: 'Grup',
+              child: AdminFieldGroup(
+                children: [
+                  _groupNameRow(nameController, enabled: !saving),
+                  AdminSelectRow(
+                    icon: Icons.playlist_add_check_outlined,
+                    label: 'Takımlar',
+                    value: selectedTeamIds.isEmpty
+                        ? null
+                        : '${selectedTeamIds.length} takım seçildi',
+                    placeholder: 'Takım ekle / çıkar',
+                    onTap: saving
+                        ? null
+                        : () => openTeamPicker(setSheetState),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 6),
             _SaveButton(
               label: 'KAYDET',
               saving: saving,
@@ -1056,6 +1081,28 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
     );
 
     _disposeControllersLater([nameController]);
+  }
+
+  /// Grup adı satırı (en fazla 10 karakter).
+  Widget _groupNameRow(TextEditingController c, {required bool enabled}) {
+    return AdminFieldRow(
+      icon: Icons.label_outline_rounded,
+      label: 'Grup Adı',
+      child: TextField(
+        controller: c,
+        enabled: enabled,
+        maxLength: 10,
+        textCapitalization: TextCapitalization.words,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 15,
+          fontWeight: FontWeight.w700,
+        ),
+        decoration: adminInlineInputDecoration(
+          hint: 'Örn. Avrupa Yakası',
+        ).copyWith(counterText: ''),
+      ),
+    );
   }
 
   Future<void> _openEditGroupSheet(GroupModel g) async {
@@ -1100,12 +1147,13 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
               icon: Icons.edit_outlined,
               title: 'Grup Düzenle',
             ),
-            TextField(
-              controller: controller,
-              decoration: const InputDecoration(labelText: 'Grup Adı'),
-              enabled: !saving,
+            AdminFormSection(
+              title: 'Grup',
+              child: AdminFieldGroup(
+                children: [_groupNameRow(controller, enabled: !saving)],
+              ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 6),
             _SaveButton(
               label: 'KAYDET',
               saving: saving,
@@ -2077,7 +2125,7 @@ class _ProgressRow extends StatelessWidget {
 
 String _initials(String name) {
   final words = name.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty);
-  return words.take(2).map((w) => w.characters.first).join().toUpperCase();
+  return words.take(2).map((w) => w.characters.first).join().trUpper;
 }
 
 /// Takım logosu; yoksa baş harfler.
