@@ -31,6 +31,17 @@ class AdminPanelWidget extends StatelessWidget {
         },
       ),
       _AdminMenuData(
+        baslik: 'Takım Yönetimi',
+        ikon: Icons.shield_rounded,
+        resimYolu: 'assets/images/admin_team.jpg',
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AdminManageTeamsScreen()),
+          );
+        },
+      ),
+      _AdminMenuData(
         baslik: 'Futbolcu Lisans',
         ikon: Icons.assignment_ind_rounded,
         resimYolu: 'assets/images/admin_license.jpg',
@@ -62,17 +73,6 @@ class AdminPanelWidget extends StatelessWidget {
             MaterialPageRoute(
               builder: (_) => const AdminPenaltyManagementScreen(),
             ),
-          );
-        },
-      ),
-      _AdminMenuData(
-        baslik: 'Takım Yönetimi',
-        ikon: Icons.shield_rounded,
-        resimYolu: 'assets/images/admin_team.jpg',
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const AdminManageTeamsScreen()),
           );
         },
       ),
