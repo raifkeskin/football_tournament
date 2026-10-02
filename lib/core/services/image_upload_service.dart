@@ -8,7 +8,21 @@ import '../utils/logo_background.dart';
 
 /// Resimlerin hangi klasöre yükleneceği (storage kuralları klasöre göre
 /// yetki verir).
-enum MediaFolder { leagues, teams, players, news, matches }
+enum MediaFolder {
+  leagues('leagues'),
+  teams('teams'),
+  players('players'),
+  news('news'),
+  matches('matches'),
+
+  /// Futbolcunun onay bekleyen profil fotoğrafları:
+  /// `profile_requests/<auth uid>/` (yalnızca kendi klasörüne yükleyebilir).
+  profileRequests('profile_requests');
+
+  const MediaFolder(this.path);
+
+  final String path;
+}
 
 /// Resim yükleme işlemleri için soyut arayüz.
 abstract class ImageUploadService {
@@ -17,7 +31,13 @@ abstract class ImageUploadService {
   ///
   /// Görsel seçiciden gelen [XFile] baytları okunur; mobilde ve web'de aynı
   /// şekilde çalışır (dosya sistemi kullanılmaz).
-  Future<String?> uploadImage(XFile image, {required MediaFolder folder});
+  ///
+  /// [subfolder] verilirse dosya `<folder>/<subfolder>/` altına konur.
+  Future<String?> uploadImage(
+    XFile image, {
+    required MediaFolder folder,
+    String? subfolder,
+  });
 
   /// Eski resmi siler. Sadece bizim depomuzdaki linkler silinir; eski
   /// ImgBB linkleri ve boş değerler sessizce atlanır.
@@ -92,6 +112,7 @@ class SupabaseImageUploadService implements ImageUploadService {
   Future<String?> uploadImage(
     XFile image, {
     required MediaFolder folder,
+    String? subfolder,
   }) async {
     final original = await image.readAsBytes();
     final isLogo = folder == MediaFolder.teams || folder == MediaFolder.leagues;
@@ -102,8 +123,8 @@ class SupabaseImageUploadService implements ImageUploadService {
 
     // Web'de (JS) `1 << 32` sıfır olur ve nextInt hata verir; 31 bit yeterli.
     final rand = Random().nextInt(0x7fffffff).toRadixString(16);
-    final path =
-        '${folder.name}/${DateTime.now().millisecondsSinceEpoch}_$rand.$ext';
+    final dir = subfolder == null ? folder.path : '${folder.path}/$subfolder';
+    final path = '$dir/${DateTime.now().millisecondsSinceEpoch}_$rand.$ext';
     try {
       await _client.storage
           .from(bucket)

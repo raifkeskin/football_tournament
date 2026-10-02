@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'; // Supabase kontrolü için
-import '../../../core/config/app_config.dart'; // AppConfig için
 import 'package:football_tournament/screens/admin_panel_screen.dart';
 import '../../home/screens/main_navigator.dart';
 import '../../../core/services/app_session.dart';
 import '../../auth/screens/login_screen.dart';
 import '../../../core/widgets/admin_page.dart';
+import 'my_profile_view.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, required this.onRequestHomeTab});
@@ -95,20 +95,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         Colors.transparent, // Yeşil renk iptal, tamamen şeffaf
                     elevation: 0,
                     iconTheme: const IconThemeData(color: Colors.white),
-                    leading: isAdminPanelVisible
-                        ? IconButton(
-                            icon: const Icon(Icons.home_rounded),
-                            onPressed: () {
-                              Navigator.of(context).pushAndRemoveUntil(
-                                MaterialPageRoute<void>(
-                                  builder: (_) =>
-                                      const MainNavigator(initialTabIndex: 0),
-                                ),
-                                (route) => false,
-                              );
-                            },
-                          )
-                        : null,
+                    // Ana sayfa: admin için yeni gezinme yığını; diğer
+                    // kullanıcılar için ana sekmeye geçiş (menü oradan açılır).
+                    leading: IconButton(
+                      icon: const Icon(Icons.home_rounded),
+                      tooltip: 'Ana Sayfa',
+                      onPressed: () {
+                        if (!isAdminPanelVisible) {
+                          widget.onRequestHomeTab();
+                          return;
+                        }
+                        Navigator.of(context).pushAndRemoveUntil(
+                          MaterialPageRoute<void>(
+                            builder: (_) =>
+                                const MainNavigator(initialTabIndex: 0),
+                          ),
+                          (route) => false,
+                        );
+                      },
+                    ),
                     title: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -174,6 +179,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
   ) {
     final phone = state.phone ?? '';
 
+    final sessionValue = session.value as AppSessionState;
+    final logoutButton = _logoutButton(session);
+    // Futbolcu (ya da oyuncu kaydı olan herkes): kart, maçlar, talepler.
+    // Oyuncu kaydı olmayan turnuva sahibi / takım sorumlusu: bilgi kartı.
+    final isStaffOnly =
+        sessionValue.playerId == null &&
+        (state.role == 'owner' || state.role == 'manager');
+    if (!isStaffOnly) {
+      return MyProfileView(
+        playerId: sessionValue.playerId,
+        displayName: state.displayName,
+        phone: phone,
+        footer: logoutButton,
+      );
+    }
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -230,34 +251,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
         // Takım sorumlusuna özel işlemler (ör. kadroya oyuncu ekleme talebi)
         // ileride buraya eklenecek: if (state.role == 'manager') ...
         const SizedBox(height: 32),
-        SizedBox(
-          width: double.infinity,
-          height: 56,
-          child: OutlinedButton.icon(
-            onPressed: _isLoading ? null : () => _logout(session),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.redAccent,
-              backgroundColor: Colors.redAccent.withValues(alpha: 0.08),
-              side: BorderSide(
-                color: Colors.redAccent.withValues(alpha: 0.5),
-                width: 1.5,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-            ),
-            icon: const Icon(Icons.logout_rounded, size: 22),
-            label: const Text(
-              'ÇIKIŞ YAP',
-              style: TextStyle(
-                fontWeight: FontWeight.w900,
-                fontSize: 16,
-                letterSpacing: 1.2,
-              ),
-            ),
+        logoutButton,
+      ],
+    );
+  }
+
+  Widget _logoutButton(dynamic session) {
+    return SizedBox(
+      width: double.infinity,
+      height: 56,
+      child: OutlinedButton.icon(
+        onPressed: _isLoading ? null : () => _logout(session),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: Colors.redAccent,
+          backgroundColor: Colors.redAccent.withValues(alpha: 0.08),
+          side: BorderSide(
+            color: Colors.redAccent.withValues(alpha: 0.5),
+            width: 1.5,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
           ),
         ),
-      ],
+        icon: const Icon(Icons.logout_rounded, size: 22),
+        label: const Text(
+          'ÇIKIŞ YAP',
+          style: TextStyle(
+            fontWeight: FontWeight.w900,
+            fontSize: 16,
+            letterSpacing: 1.2,
+          ),
+        ),
+      ),
     );
   }
 

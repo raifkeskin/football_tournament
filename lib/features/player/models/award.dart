@@ -21,7 +21,9 @@ class Award {
     if (created is int) {
       createdAt = DateTime.fromMillisecondsSinceEpoch(created);
     }
-    final tournamentId = (v('tournamentId', 'league_id') ?? v('leagueId', 'league_id') ?? '').toString();
+    final tournamentId =
+        (v('tournamentId', 'league_id') ?? v('leagueId', 'league_id') ?? '')
+            .toString();
     final name = (v('awardName', 'name') ?? map['name'] ?? '').toString();
     final description = (map['description'] as String?)?.toString();
     return Award(

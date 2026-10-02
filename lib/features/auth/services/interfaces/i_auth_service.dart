@@ -1,45 +1,32 @@
-import 'package:firebase_auth/firebase_auth.dart';
-
 import '../../models/auth_models.dart';
 
 abstract class IAuthService {
-  Future<ConfirmationResult> startPhoneAuthWeb({
-    required String phoneNumber,
-  });
-
   Stream<UserDoc?> watchUserDoc(String uid);
 
   Stream<List<RosterAssignment>> watchRosterAssignmentsByPhone(String phone);
 
-  Future<void> createOtpRequest({
+  /// Giriş yapmadan çağrılır: geçici şifre talebi açar. Numarada hesap varsa
+  /// talep şifre sıfırlama olur. [isReset] true ise hesabı olmayan numara
+  /// için talep açılmaz ([AccountRequestOutcome.notRegistered]).
+  Future<AccountRequestOutcome> requestAccountPassword({
     required String phoneRaw10,
-    required String code,
-    required DateTime expiresAt,
+    String? fullName,
+    bool isReset = false,
   });
 
-  /// Kodu sunucuda doğrular; hatalıysa açıklamalı Exception fırlatır.
-  /// [consume] true ise kod tek kullanımlıktır ve doğrulanınca kapanır.
-  Future<void> verifyOtpCode({
-    required String phoneRaw10,
-    required String code,
-    bool consume = true,
+  /// Admin: şifre talepleri (yeniden eskiye).
+  Stream<List<AccountRequestEntry>> watchAccountRequests({
+    bool includeClosed = false,
   });
 
-  Stream<List<OtpCodeEntry>> watchOtpCodes({bool includeVerified = false});
+  /// Admin: talebi onaylar; hesabı açar ya da şifresini sıfırlar ve geçici
+  /// şifreyi döner. Onaylanmış talep için yeni şifre üretir.
+  Future<TempPasswordGrant> approveAccountRequest(String id);
 
-  Future<ProfileLookupResult> lookupProfileByPhoneRaw10(String phoneRaw10);
+  /// Admin: talebi reddeder.
+  Future<void> rejectAccountRequest(String id);
 
-  Future<OnlineRegistrationResult> registerOnlineUser({
-    required String phoneRaw10,
-    required String password,
-    required bool profileFound,
-    required String resolvedRole,
-    required String? resolvedTeamId,
-    required String? resolvedTournamentId,
-    required String? matchedPlayerId,
-    required List<String> matchedTournamentIds,
-    required String? selectedTournamentId,
-    required String? name,
-    required String? surname,
-  });
+  /// Giriş yapmış kullanıcı kendi şifresini değiştirir ve "ilk girişte
+  /// şifre değiştir" işaretini kaldırır.
+  Future<void> changeOwnPassword(String newPassword);
 }

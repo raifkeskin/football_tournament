@@ -1,16 +1,18 @@
-import 'package:cloud_functions/cloud_functions.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-class ResetPasswordScreen extends StatefulWidget {
-  const ResetPasswordScreen({
-    super.key,
-    required this.phoneRaw10,
-    required this.otp,
-  });
+import '../../../core/services/app_session.dart';
+import '../../../core/services/service_locator.dart';
+import '../../../core/widgets/admin_form.dart';
+import '../../../core/widgets/admin_page.dart';
+import '../../home/screens/main_navigator.dart';
 
-  final String phoneRaw10;
-  final String otp;
+/// Geçici şifreyle giriş yapan kullanıcı burada kendi şifresini belirler.
+/// Geri dönülürse oturum kapatılır (geçici şifreyle uygulamada kalınmaz).
+class ResetPasswordScreen extends StatefulWidget {
+  const ResetPasswordScreen({super.key, this.rememberMe = false});
+
+  /// Girişte "Beni Hatırla" seçildiyse şifre belirlendikten sonra uygulanır.
+  final bool rememberMe;
 
   @override
   State<ResetPasswordScreen> createState() => _ResetPasswordScreenState();
@@ -20,6 +22,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   final _pass1Controller = TextEditingController();
   final _pass2Controller = TextEditingController();
   bool _busy = false;
+  String? _error;
 
   @override
   void dispose() {
@@ -28,150 +31,172 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     super.dispose();
   }
 
-  bool _validPassword(String s) {
-    final v = s.trim();
-    if (v.length < 6 || v.length > 10) return false;
-    final hasDigit = RegExp(r'\d').hasMatch(v);
-    final hasSpecial = RegExp(r'[^A-Za-z0-9]').hasMatch(v);
-    return hasDigit || hasSpecial;
-  }
+  static bool _lengthOk(String v) => v.length >= 6 && v.length <= 10;
+  static bool _hasDigitOrSpecial(String v) =>
+      RegExp(r'[^A-Za-z]').hasMatch(v);
 
   Future<void> _save() async {
-    final p1 = _pass1Controller.text;
-    final p2 = _pass2Controller.text;
-    if (p1 != p2) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Şifreler eşleşmiyor.')),
+    final p1 = _pass1Controller.text.trim();
+    final p2 = _pass2Controller.text.trim();
+    if (!_lengthOk(p1) || !_hasDigitOrSpecial(p1)) {
+      setState(
+        () => _error =
+            'Şifre 6-10 karakter olmalı ve en az bir rakam veya özel '
+            'karakter içermeli.',
       );
       return;
     }
-    if (!_validPassword(p1)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            "Şifreniz biraz daha 'takım kaptanı' sertliğinde olmalı! Lütfen en az bir rakam veya özel karakter ekleyerek 6-10 karakter arası bir şifre belirleyin.",
-          ),
-        ),
-      );
+    if (p1 != p2) {
+      setState(() => _error = 'Şifreler eşleşmiyor.');
       return;
     }
 
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final session = AppSession.of(context);
     try {
-      final fn = FirebaseFunctions.instance.httpsCallable(
-        'resetPasswordWithOtp',
-      );
-      await fn.call({
-        'phone': widget.phoneRaw10,
-        'otp': widget.otp,
-        'newPassword': p1,
-      });
+      await ServiceLocator.authService.changeOwnPassword(p1);
+      await AppSessionController.setRememberMe(widget.rememberMe);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Şifre başarıyla güncellendi.')),
+      Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+        MaterialPageRoute<void>(
+          builder: (_) =>
+              const MainNavigator(initialTabIndex: MainNavigator.profileTab),
+        ),
+        (Route<dynamic> route) => false,
       );
-      Navigator.of(context).popUntil((route) => route.isFirst);
-    } on FirebaseFunctionsException catch (e) {
-      if (e.code == 'unimplemented' || e.code == 'UNIMPLEMENTED') {
-        final u = FirebaseAuth.instance.currentUser;
-        if (u == null) {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Şifre sıfırlama servisi aktif değil. Lütfen yönetici ile iletişime geçin.',
-              ),
-            ),
-          );
-          return;
-        }
-        try {
-          await u.updatePassword(p1);
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Şifre başarıyla güncellendi.')),
-          );
-          Navigator.of(context).popUntil((route) => route.isFirst);
-          return;
-        } catch (ex) {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Hata: $ex')),
-          );
-          return;
-        }
-      }
-      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Hata: ${e.message ?? e.code}')),
+        const SnackBar(content: Text('Şifreniz kaydedildi.')),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Hata: $e')),
+      final msg = e.toString().toLowerCase();
+      setState(
+        () => _error = msg.contains('different from the old')
+            ? 'Yeni şifre geçici şifreden farklı olmalı.'
+            : 'Şifre kaydedilemedi. Lütfen tekrar deneyin.',
       );
+      // Oturum düşmüşse kullanıcı yeniden giriş yapmalı.
+      if (session.value.user == null && mounted) Navigator.of(context).pop();
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Şifre Sıfırla'),
-        centerTitle: true,
+  Widget _passwordField(TextEditingController c, String hint) {
+    return TextField(
+      controller: c,
+      enabled: !_busy,
+      obscureText: true,
+      onChanged: (_) => setState(() {}),
+      onSubmitted: (_) => _save(),
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 15,
+        fontWeight: FontWeight.w700,
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+      decoration: adminInlineInputDecoration(hint: hint),
+    );
+  }
+
+  Widget _rule(String text, bool ok) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
         children: [
-          TextField(
-            controller: _pass1Controller,
-            obscureText: true,
-            enabled: !_busy,
-            decoration: const InputDecoration(
-              labelText: 'Yeni Şifre',
-              prefixIcon: Icon(Icons.lock_outline),
-            ),
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w800,
-            ),
+          Icon(
+            ok ? Icons.check_circle : Icons.radio_button_unchecked,
+            size: 16,
+            color: ok ? kAdminAccent : kAdminMuted,
           ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _pass2Controller,
-            obscureText: true,
-            enabled: !_busy,
-            decoration: const InputDecoration(
-              labelText: 'Yeni Şifre (Tekrar)',
-              prefixIcon: Icon(Icons.lock_outline),
-            ),
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            height: 52,
-            child: FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: cs.primary),
-              onPressed: _busy ? null : _save,
-              child: _busy
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text(
-                      'KAYDET',
-                      style: TextStyle(fontWeight: FontWeight.w900),
-                    ),
+          const SizedBox(width: 8),
+          Text(
+            text,
+            style: TextStyle(
+              color: ok ? Colors.white70 : kAdminMuted,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p1 = _pass1Controller.text.trim();
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        final nav = Navigator.of(context);
+        await AppSession.of(context).signOut();
+        nav.pop();
+      },
+      child: AdminPageScaffold(
+        title: 'Yeni Şifre Belirle',
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(4, 0, 4, 18),
+              child: Text(
+                'Geçici şifreyle giriş yaptınız. Devam etmek için kendi '
+                'şifrenizi belirleyin.',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
+                  height: 1.45,
+                ),
+              ),
+            ),
+            AdminFormSection(
+              title: 'Yeni Şifre',
+              child: AdminFieldGroup(
+                children: [
+                  AdminFieldRow(
+                    icon: Icons.lock_outline_rounded,
+                    label: 'Şifre',
+                    child: _passwordField(_pass1Controller, '6-10 karakter'),
+                  ),
+                  AdminFieldRow(
+                    icon: Icons.lock_reset_rounded,
+                    label: 'Şifre (Tekrar)',
+                    child: _passwordField(_pass2Controller, 'Aynı şifre'),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 0, 4, 18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _rule('6-10 karakter', _lengthOk(p1)),
+                  _rule(
+                    'En az 1 rakam veya özel karakter',
+                    _hasDigitOrSpecial(p1),
+                  ),
+                ],
+              ),
+            ),
+            if (_error != null) ...[
+              Text(
+                _error!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: kAdminDanger,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 14),
+            ],
+            AdminPrimaryButton(label: 'KAYDET', busy: _busy, onPressed: _save),
+          ],
+        ),
       ),
     );
   }

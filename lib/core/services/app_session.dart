@@ -139,7 +139,7 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
     } catch (_) {}
   }
 
-  static Future<void> _setRememberMe(bool value) async {
+  static Future<void> setRememberMe(bool value) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_kRememberMeKey, value);
@@ -147,7 +147,7 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
   }
 
   Future<void> signOut() async {
-    await _setRememberMe(false);
+    await setRememberMe(false);
     try {
       await _supabase.auth.signOut();
     } catch (e) {
@@ -193,8 +193,15 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
     } else {
       await _supabase.auth.signInWithPassword(phone: raw, password: password);
     }
-    await _setRememberMe(rememberMe);
+    // Geçici şifreyle girişte "Beni Hatırla", kullanıcı kendi şifresini
+    // belirleyince uygulanır (ResetPasswordScreen).
+    await setRememberMe(rememberMe && !mustChangePassword);
   }
+
+  /// Admin onayıyla verilen geçici şifreyle giriş yapıldıysa true.
+  bool get mustChangePassword =>
+      _supabase.auth.currentUser?.userMetadata?['must_change_password'] ==
+      true;
 
   Future<bool> signInSuperAdminBackdoor({required String password}) async {
     final pwd = password.trim();
@@ -210,7 +217,7 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
         await _supabase.auth.signInWithPassword(email: email, password: pwd);
         if (_supabase.auth.currentUser != null) {
           // Gizli admin girişi hatırlanmaz; uygulama tekrar açılınca kapanır.
-          await _setRememberMe(false);
+          await setRememberMe(false);
           value = value.copyWith(isAdmin: true, role: 'super_admin');
           return true;
         }

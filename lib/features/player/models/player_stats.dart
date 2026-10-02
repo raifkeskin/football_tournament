@@ -27,7 +27,10 @@ class PlayerStats {
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
-  static String docId({required String playerPhone, required String tournamentId}) {
+  static String docId({
+    required String playerPhone,
+    required String tournamentId,
+  }) {
     return '${playerPhone.trim()}_${tournamentId.trim()}';
   }
 
@@ -49,8 +52,9 @@ class PlayerStats {
       return null;
     }
 
-    final tournamentId = (v('tournamentId', 'season_id') ?? v('seasonId', 'season_id') ?? '')
-        .toString();
+    final tournamentId =
+        (v('tournamentId', 'season_id') ?? v('seasonId', 'season_id') ?? '')
+            .toString();
 
     return PlayerStats(
       id: id,

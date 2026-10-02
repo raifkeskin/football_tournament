@@ -1,7 +1,6 @@
 import '../../../core/utils/table_feed.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-
 class PlayerPenalty {
   const PlayerPenalty({
     required this.id,
@@ -214,10 +213,7 @@ class PenaltyService {
         if (e2.code != 'PGRST204') rethrow;
         await _client
             .from('player_penalties')
-            .update({
-              'match_count': matchCount,
-              'is_active': matchCount > 0,
-            })
+            .update({'match_count': matchCount, 'is_active': matchCount > 0})
             .eq('id', id);
       }
     }

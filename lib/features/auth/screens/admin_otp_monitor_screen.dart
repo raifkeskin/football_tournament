@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/auth_models.dart';
-import '../../../core/services/in_app_browser.dart';
+import '../widgets/phone_input.dart';
 import '../../../core/services/service_locator.dart';
+import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/custom_popup_selector.dart';
 
+/// Şifre Talepleri (eski adıyla OTP Takip): kayıt / şifre sıfırlama
+/// talepleri. Admin onaylayınca geçici şifre üretilir ve kendi WhatsApp'ından
+/// kullanıcıya gönderir.
 class AdminOtpMonitorScreen extends StatefulWidget {
   const AdminOtpMonitorScreen({super.key});
 
@@ -14,31 +19,27 @@ class AdminOtpMonitorScreen extends StatefulWidget {
 }
 
 class _AdminOtpMonitorScreenState extends State<AdminOtpMonitorScreen> {
-  var _includeVerified = true;
+  static const _loginUrl = 'https://masterfutbol.web.app';
 
-  // Akış sadece filtre değişince yeniden kurulur (build'de değil). Servis,
+  var _includeClosed = false;
+  final _busyIds = <String>{};
+
+  // Akış sadece filtre değişince / işlemden sonra yeniden kurulur. Servis,
   // dinleyici ayrılınca akışı kapattığı için eski akış saklanmaz.
-  late Stream<List<OtpCodeEntry>> _stream = _createStream();
+  late Stream<List<AccountRequestEntry>> _stream = _createStream();
 
-  Stream<List<OtpCodeEntry>> _createStream() =>
-      ServiceLocator.authService.watchOtpCodes(
-        includeVerified: _includeVerified,
-      );
+  Stream<List<AccountRequestEntry>> _createStream() => ServiceLocator
+      .authService
+      .watchAccountRequests(includeClosed: _includeClosed);
+
+  void _refresh() => setState(() => _stream = _createStream());
 
   static (String, Color) _statusStyle(String status) => switch (status) {
-    'pending' => ('Bekliyor', const Color(0xFFFBBF24)),
-    'verified' => ('Doğrulandı', kAdminAccent),
-    'expired' => ('Süresi doldu', const Color(0xFF94A3B8)),
-    'locked' => ('Kilitlendi', kAdminDanger),
-    _ => (status.isEmpty ? '-' : status, const Color(0xFF94A3B8)),
+    'pending' => ('Bekliyor', kAdminAmber),
+    'approved' => ('Gönderildi', kAdminAccent),
+    'rejected' => ('Reddedildi', kAdminMuted),
+    _ => (status.isEmpty ? '-' : status, kAdminMuted),
   };
-
-  static String _formatPhone(String raw10) {
-    final p = raw10.trim();
-    if (p.length != 10) return p.isEmpty ? '-' : p;
-    return '0 (${p.substring(0, 3)}) ${p.substring(3, 6)} '
-        '${p.substring(6, 8)} ${p.substring(8)}';
-  }
 
   static String _time(DateTime? at) {
     if (at == null) return '';
@@ -47,13 +48,183 @@ class _AdminOtpMonitorScreenState extends State<AdminOtpMonitorScreen> {
     return '${two(l.day)}.${two(l.month)} ${two(l.hour)}:${two(l.minute)}';
   }
 
-  Widget _otpCard(OtpCodeEntry e) {
-    final phone = e.phoneRaw10.trim();
-    final code = e.code.trim();
-    final (statusLabel, statusColor) = _statusStyle(e.status.trim());
-    final waPhone = phone.length == 10 ? '90$phone' : phone;
-    final waUrl =
-        'https://wa.me/$waPhone?text=${Uri.encodeComponent('Kodunuz: $code')}';
+  static String _message(TempPasswordGrant g) =>
+      'Master Lig Platformuna giriş için geçici şifreniz: ${g.password}\n\n'
+      'Giriş: $_loginUrl\n'
+      'İlk girişte kendi şifrenizi belirlemeniz istenecek.';
+
+  Future<void> _openWhatsApp(TempPasswordGrant g) async {
+    final uri = Uri.parse(
+      'https://wa.me/90${g.phoneRaw10}'
+      '?text=${Uri.encodeComponent(_message(g))}',
+    );
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('WhatsApp açılamadı.')));
+    }
+  }
+
+  Future<void> _approve(AccountRequestEntry e) async {
+    if (e.status == 'approved') {
+      final ok = await showAdminConfirmDialog(
+        context: context,
+        title: 'Yeni Şifre Gönder',
+        message:
+            'Yeni bir geçici şifre üretilecek; daha önce gönderilen şifre '
+            'geçersiz olacak.',
+        confirmLabel: 'YENİ ŞİFRE ÜRET',
+        destructive: false,
+        icon: Icons.key_rounded,
+      );
+      if (!ok) return;
+    }
+
+    setState(() => _busyIds.add(e.id));
+    try {
+      final grant = await ServiceLocator.authService.approveAccountRequest(
+        e.id,
+      );
+      if (!mounted) return;
+      _refresh();
+      await _showGrantDialog(grant);
+    } catch (err) {
+      if (!mounted) return;
+      await showAdminInfoDialog(
+        context: context,
+        title: 'Onaylanamadı',
+        message: '$err',
+      );
+    } finally {
+      if (mounted) setState(() => _busyIds.remove(e.id));
+    }
+  }
+
+  Future<void> _reject(AccountRequestEntry e) async {
+    final ok = await showAdminConfirmDialog(
+      context: context,
+      title: 'Talebi Reddet',
+      message: '${formatPhoneRaw10(e.phoneRaw10)} numaralı talep reddedilecek.',
+      confirmLabel: 'REDDET',
+      icon: Icons.block_rounded,
+    );
+    if (!ok) return;
+    setState(() => _busyIds.add(e.id));
+    try {
+      await ServiceLocator.authService.rejectAccountRequest(e.id);
+      if (mounted) _refresh();
+    } catch (err) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Reddedilemedi: $err')));
+    } finally {
+      if (mounted) setState(() => _busyIds.remove(e.id));
+    }
+  }
+
+  /// Şifre üretildikten sonra açılır. WhatsApp bu popup'taki butonla açılır:
+  /// tarayıcılar yalnızca doğrudan dokunuşla yeni sekme açmaya izin veriyor.
+  Future<void> _showGrantDialog(TempPasswordGrant g) {
+    return showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Container(
+          padding: const EdgeInsets.all(22),
+          decoration: adminDialogDecoration(),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              AdminDialogHeader(
+                icon: Icons.key_rounded,
+                title: g.isReset ? 'Şifre Sıfırlandı' : 'Hesap Açıldı',
+                subtitle: [
+                  ?g.fullName,
+                  formatPhoneRaw10(g.phoneRaw10),
+                ].join(' · '),
+              ),
+              const SizedBox(height: 18),
+              const Text(
+                'GEÇİCİ ŞİFRE',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: kAdminMuted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1,
+                ),
+              ),
+              const SizedBox(height: 4),
+              SelectableText(
+                g.password,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 32,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 6,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.25),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  _message(g),
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 13,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 22),
+              AdminPrimaryButton(
+                label: 'WHATSAPP İLE GÖNDER',
+                icon: Icons.send_rounded,
+                onPressed: () => _openWhatsApp(g),
+              ),
+              const SizedBox(height: 10),
+              AdminSecondaryButton(
+                label: 'KAPAT',
+                onPressed: () => Navigator.pop(ctx),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _chip(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+
+  Widget _requestCard(AccountRequestEntry e) {
+    final (statusLabel, statusColor) = _statusStyle(e.status);
+    final busy = _busyIds.contains(e.id);
+    final name = e.displayName;
     final created = _time(e.createdAt);
 
     return Container(
@@ -66,7 +237,7 @@ class _AdminOtpMonitorScreenState extends State<AdminOtpMonitorScreen> {
             children: [
               Expanded(
                 child: Text(
-                  _formatPhone(phone),
+                  formatPhoneRaw10(e.phoneRaw10),
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 15,
@@ -74,69 +245,110 @@ class _AdminOtpMonitorScreenState extends State<AdminOtpMonitorScreen> {
                   ),
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  statusLabel,
-                  style: TextStyle(
-                    color: statusColor,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
+              _chip(statusLabel, statusColor),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
+          Text(
+            name ?? 'İsim yazılmamış',
+            style: TextStyle(
+              color: name == null ? kAdminMuted : Colors.white70,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          if (e.playerName != null &&
+              e.fullName != null &&
+              e.playerName != e.fullName)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                'Formda yazılan: ${e.fullName}',
+                style: const TextStyle(color: kAdminMuted, fontSize: 12),
+              ),
+            ),
+          const SizedBox(height: 8),
           Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(
-                code.isEmpty ? '-' : code,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 26,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 4,
-                ),
+              _chip(
+                e.isReset ? 'Şifre sıfırlama' : 'Yeni kayıt',
+                e.isReset ? const Color(0xFF60A5FA) : kAdminAccent,
+              ),
+              const SizedBox(width: 6),
+              _chip(
+                e.playerName != null ? 'Oyuncu kaydı var' : 'Oyuncu kaydı yok',
+                e.playerName != null ? kAdminAccent : kAdminMuted,
               ),
               const Spacer(),
               if (created.isNotEmpty)
                 Text(
                   created,
-                  style: const TextStyle(
-                    color: Color(0xFF94A3B8),
-                    fontSize: 12,
-                  ),
+                  style: const TextStyle(color: kAdminMuted, fontSize: 12),
                 ),
             ],
           ),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 44,
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(
-                foregroundColor: kAdminAccent,
-                side: BorderSide(color: kAdminAccent.withValues(alpha: 0.6)),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+          if (e.status != 'rejected') ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                if (e.status == 'pending') ...[
+                  SizedBox(
+                    height: 44,
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: kAdminDanger,
+                        side: BorderSide(
+                          color: kAdminDanger.withValues(alpha: 0.5),
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onPressed: busy ? null : () => _reject(e),
+                      child: const Text(
+                        'Reddet',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                ],
+                Expanded(
+                  child: SizedBox(
+                    height: 44,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: kAdminAccent,
+                        side: BorderSide(
+                          color: kAdminAccent.withValues(alpha: 0.6),
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onPressed: busy ? null : () => _approve(e),
+                      icon: busy
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: kAdminAccent,
+                              ),
+                            )
+                          : const Icon(Icons.key_rounded, size: 18),
+                      label: Text(
+                        e.status == 'pending'
+                            ? 'Onayla ve Şifre Üret'
+                            : 'Yeni Şifre Gönder',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-              onPressed: phone.isEmpty || code.isEmpty
-                  ? null
-                  : () => openInAppBrowser(context, waUrl),
-              icon: const Icon(Icons.send_outlined, size: 18),
-              label: const Text(
-                'WhatsApp ile Gönder',
-                style: TextStyle(fontWeight: FontWeight.w700),
-              ),
+              ],
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -145,30 +357,37 @@ class _AdminOtpMonitorScreenState extends State<AdminOtpMonitorScreen> {
   @override
   Widget build(BuildContext context) {
     return AdminPageScaffold(
-      title: 'OTP Takip',
+      title: 'Şifre Talepleri',
       body: Column(
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
             child: CustomPopupSelector<bool>(
               label: 'Durum',
-              selectedValue: _includeVerified,
+              selectedValue: _includeClosed,
               items: const [false, true],
-              labelBuilder: (v) => v == true ? 'Tümü' : 'Bekleyen kodlar',
+              labelBuilder: (v) => v == true ? 'Tümü' : 'Bekleyen talepler',
               onChanged: (v) {
-                if (v == null || v == _includeVerified) return;
-                setState(() {
-                  _includeVerified = v;
-                  _stream = _createStream();
-                });
+                if (v == null || v == _includeClosed) return;
+                _includeClosed = v;
+                _refresh();
               },
             ),
           ),
           Expanded(
-            child: StreamBuilder<List<OtpCodeEntry>>(
+            child: StreamBuilder<List<AccountRequestEntry>>(
               stream: _stream,
               builder: (context, snap) {
-                final items = snap.data ?? const <OtpCodeEntry>[];
+                final items = snap.data ?? const <AccountRequestEntry>[];
+                if (snap.hasError && items.isEmpty) {
+                  return Center(
+                    child: Text(
+                      'Talepler yüklenemedi: ${snap.error}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: kAdminDanger),
+                    ),
+                  );
+                }
                 if (snap.connectionState == ConnectionState.waiting &&
                     items.isEmpty) {
                   return const Center(
@@ -176,10 +395,12 @@ class _AdminOtpMonitorScreenState extends State<AdminOtpMonitorScreen> {
                   );
                 }
                 if (items.isEmpty) {
-                  return const Center(
+                  return Center(
                     child: Text(
-                      'Kayıt bulunamadı.',
-                      style: TextStyle(color: Colors.white54),
+                      _includeClosed
+                          ? 'Talep bulunamadı.'
+                          : 'Bekleyen talep yok.',
+                      style: const TextStyle(color: Colors.white54),
                     ),
                   );
                 }
@@ -187,7 +408,7 @@ class _AdminOtpMonitorScreenState extends State<AdminOtpMonitorScreen> {
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                   itemCount: items.length,
                   separatorBuilder: (_, _) => const SizedBox(height: 10),
-                  itemBuilder: (context, i) => _otpCard(items[i]),
+                  itemBuilder: (context, i) => _requestCard(items[i]),
                 );
               },
             ),

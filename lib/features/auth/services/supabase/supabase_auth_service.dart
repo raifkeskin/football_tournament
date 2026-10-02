@@ -1,6 +1,4 @@
 import '../../../../core/utils/table_feed.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:async';
 
@@ -58,16 +56,6 @@ class SupabaseAuthService implements IAuthService {
     AppConfig.logDb(
       '[SUPABASE_RESULT] Rows: ${rows ?? '-'} | Error: ${error == null ? '-' : error.toString()}',
     );
-  }
-
-  @override
-  Future<ConfirmationResult> startPhoneAuthWeb({required String phoneNumber}) {
-    if (!kIsWeb) {
-      throw StateError(
-        'startPhoneAuthWeb sadece Web platformunda kullanılabilir.',
-      );
-    }
-    return FirebaseAuth.instance.signInWithPhoneNumber(phoneNumber);
   }
 
   @override
@@ -162,148 +150,95 @@ class SupabaseAuthService implements IAuthService {
   }
 
   @override
-  Future<void> createOtpRequest({
+  Future<AccountRequestOutcome> requestAccountPassword({
     required String phoneRaw10,
-    required String code,
-    required DateTime expiresAt,
+    String? fullName,
+    bool isReset = false,
   }) async {
     final raw10 = phoneRaw10.trim();
-    final c = code.trim();
-    if (raw10.isEmpty || c.isEmpty) return;
-    try {
-      _sbLog(
-        table: 'otp_codes',
-        query: 'INSERT phone_raw10=$raw10',
-        trace: StackTrace.current,
-      );
-      AppConfig.sqlLogStart(
-        table: 'otp_codes',
-        operation: 'INSERT',
-        filters: 'phone_raw10=$raw10',
-      );
-      await _client.from('otp_codes').insert({
-        'phone_raw10': raw10,
-        'code': c,
-        'status': 'pending',
-        'expires_at': expiresAt.toUtc().toIso8601String(),
-      });
-      AppConfig.sqlLogResult(table: 'otp_codes', operation: 'INSERT', count: 1);
-      _sbResult(rows: 1);
-    } catch (e) {
-      AppConfig.sqlLogResult(table: 'otp_codes', operation: 'INSERT', error: e);
-      _sbResult(rows: 0, error: e);
-      rethrow; // kod kaydedilmediyse ekran "gönderildi" dememeli
-    }
-  }
-
-  @override
-  Future<void> verifyOtpCode({
-    required String phoneRaw10,
-    required String code,
-    bool consume = true,
-  }) async {
-    final raw10 = phoneRaw10.trim();
-    final c = code.trim();
-    if (raw10.isEmpty || c.isEmpty) {
-      throw Exception('Doğrulama kodu hatalı.');
-    }
-    // Kodlar istemciye okunmaz (RLS); kontrol sunucudaki fonksiyonda yapılır.
     _sbLog(
-      table: 'otp_codes',
-      query: 'RPC verify_otp_code phone_raw10=$raw10 | consume=$consume',
+      table: 'account_requests',
+      query: 'RPC request_account_password phone=$raw10 | reset=$isReset',
       trace: StackTrace.current,
     );
     final String result;
     try {
-      result =
-          (await _client.rpc(
-                'verify_otp_code',
-                params: {'p_phone': raw10, 'p_code': c, 'p_consume': consume},
-              ))
-              .toString();
+      result = (await _client.rpc(
+        'request_account_password',
+        params: {
+          'p_phone': raw10,
+          'p_full_name': (fullName ?? '').trim().isEmpty
+              ? null
+              : fullName!.trim(),
+          'p_reset': isReset,
+        },
+      )).toString();
       _sbResult(rows: 1);
     } catch (e) {
       _sbResult(rows: 0, error: e);
       rethrow;
     }
-    switch (result) {
-      case 'ok':
-        return;
-      case 'not_found':
-        throw Exception('Doğrulama kodu bulunamadı.');
-      case 'expired':
-        throw Exception('Doğrulama kodunun süresi doldu.');
-      case 'locked':
-        throw Exception('Çok fazla hatalı deneme. Yeni kod isteyin.');
-      default:
-        throw Exception('Doğrulama kodu hatalı.');
-    }
+    return switch (result) {
+      'requested' => AccountRequestOutcome.requested,
+      'reset_requested' => AccountRequestOutcome.resetRequested,
+      'already_pending' => AccountRequestOutcome.alreadyPending,
+      'not_registered' => AccountRequestOutcome.notRegistered,
+      _ => AccountRequestOutcome.invalidPhone,
+    };
   }
 
   @override
-  Stream<List<OtpCodeEntry>> watchOtpCodes({bool includeVerified = false}) {
-    Future<List<OtpCodeEntry>> fetch() async {
-      _sbLog(
-        table: 'otp_codes',
-        query:
-            'SELECT order=created_at desc | limit=200 | includeVerified=$includeVerified',
-        trace: StackTrace.current,
-      );
-      AppConfig.sqlLogStart(
-        table: 'otp_codes',
-        operation: 'SELECT',
-        filters:
-            'order=created_at desc | limit=200 | includeVerified=$includeVerified',
-      );
-      final res = await _client
-          .from('otp_codes')
-          .select('id, phone_raw10, code, status, expires_at, created_at')
-          .order('created_at', ascending: false)
-          .limit(200);
-      final rows = (res as List).cast<Map<String, dynamic>>();
-      final filtered = includeVerified
-          ? rows
-          : rows.where(
-              (r) => (r['status'] ?? '').toString().trim() == 'pending',
-            );
-      AppConfig.sqlLogResult(
-        table: 'otp_codes',
-        operation: 'SELECT',
-        count: filtered.length,
-      );
-      _sbResult(rows: filtered.length);
-      return filtered.map((row) {
-        final id = (row['id'] ?? '').toString();
-        final phoneRaw10 = (row['phone_raw10'] ?? '').toString().trim();
-        final code = (row['code'] ?? '').toString().trim();
-        final status = (row['status'] ?? '').toString().trim();
-        final expiresAt =
-            _readDate(row['expires_at']) ??
-            DateTime.fromMillisecondsSinceEpoch(0);
-        final createdAt = _readDate(row['created_at']);
-        return OtpCodeEntry(
-          id: id,
-          phoneRaw10: phoneRaw10,
-          code: code,
-          status: status,
-          expiresAt: expiresAt,
-          createdAt: createdAt,
-        );
-      }).toList();
+  Stream<List<AccountRequestEntry>> watchAccountRequests({
+    bool includeClosed = false,
+  }) {
+    String? text(dynamic v) {
+      final s = (v ?? '').toString().trim();
+      return s.isEmpty ? null : s;
     }
 
-    final controller = StreamController<List<OtpCodeEntry>>.broadcast();
+    Future<List<AccountRequestEntry>> fetch() async {
+      _sbLog(
+        table: 'account_requests_view',
+        query: 'SELECT order=created_at desc | includeClosed=$includeClosed',
+        trace: StackTrace.current,
+      );
+      var query = _client.from('account_requests_view').select();
+      if (!includeClosed) query = query.eq('status', 'pending');
+      final res = await query.order('created_at', ascending: false).limit(200);
+      final rows = (res as List).cast<Map<String, dynamic>>();
+      _sbResult(rows: rows.length);
+      return rows
+          .map(
+            (r) => AccountRequestEntry(
+              id: (r['id'] ?? '').toString(),
+              phoneRaw10: (r['phone_raw10'] ?? '').toString().trim(),
+              isReset: r['kind'] == 'reset',
+              status: (r['status'] ?? '').toString().trim(),
+              fullName: text(r['full_name']),
+              playerName: text(r['player_name']),
+              createdAt: _readDate(r['created_at']),
+              reviewedAt: _readDate(r['reviewed_at']),
+            ),
+          )
+          .toList();
+    }
+
+    // Yeni talepler birkaç saniyede bir yoklanır (tablo realtime yayınında
+    // değil; liste küçük).
+    final controller = StreamController<List<AccountRequestEntry>>.broadcast();
     Timer? timer;
 
     Future<void> emit() async {
       try {
         controller.add(await fetch());
-      } catch (_) {}
+      } catch (e) {
+        if (!controller.isClosed) controller.addError(e);
+      }
     }
 
     controller.onListen = () {
       emit();
-      timer = Timer.periodic(const Duration(seconds: 2), (_) => emit());
+      timer = Timer.periodic(const Duration(seconds: 5), (_) => emit());
     };
     controller.onCancel = () async {
       timer?.cancel();
@@ -313,342 +248,62 @@ class SupabaseAuthService implements IAuthService {
   }
 
   @override
-  Future<ProfileLookupResult> lookupProfileByPhoneRaw10(String phoneRaw10) {
-    final raw10 = phoneRaw10.trim();
-    if (raw10.length != 10) {
-      return Future.value(const ProfileLookupResult.notFound());
-    }
-
-    return Future(() async {
-      Future<List<Map<String, dynamic>>> leaguesBy(
-        String field,
-        String value,
-      ) async {
-        _sbLog(
-          table: 'leagues',
-          query: 'SELECT $field=$value | limit=10',
-          trace: StackTrace.current,
-        );
-        AppConfig.sqlLogStart(
-          table: 'leagues',
-          operation: 'SELECT',
-          filters: '$field=$value | limit=10',
-        );
-        final res = await _client
-            .from('leagues')
-            .select()
-            .eq(field, value)
-            .limit(10);
-        final rows = (res as List).cast<Map<String, dynamic>>();
-        AppConfig.sqlLogResult(
-          table: 'leagues',
-          operation: 'SELECT',
-          count: rows.length,
-        );
-        _sbResult(rows: rows.length);
-        return rows;
-      }
-
-      var leagues = await leaguesBy('manager_phone_raw10', raw10);
-      if (leagues.isEmpty) {
-        leagues = await leaguesBy('manager_phone', raw10);
-      }
-      if (leagues.isNotEmpty) {
-        final ids = leagues
-            .map((e) => (e['id'] ?? '').toString().trim())
-            .where((e) => e.isNotEmpty)
-            .toList();
-        return ProfileLookupResult.tournamentAdmin(
-          matchedLeagueIds: ids,
-          leagues: leagues,
-        );
-      }
-
-      Future<Map<String, dynamic>?> firstPlayerBy(
-        String field,
-        String value,
-      ) async {
-        _sbLog(
-          table: 'players',
-          query: 'SELECT $field=$value | limit=1',
-          trace: StackTrace.current,
-        );
-        AppConfig.sqlLogStart(
-          table: 'players',
-          operation: 'SELECT',
-          filters: '$field=$value | limit=1',
-        );
-        final res = await _client
-            .from('players')
-            .select()
-            .eq(field, value)
-            .limit(1);
-        final rows = (res as List).cast<Map<String, dynamic>>();
-        if (rows.isEmpty) {
-          AppConfig.sqlLogResult(
-            table: 'players',
-            operation: 'SELECT',
-            count: 0,
-          );
-          _sbResult(rows: 0);
-          return null;
-        }
-        AppConfig.sqlLogResult(table: 'players', operation: 'SELECT', count: 1);
-        _sbResult(rows: 1);
-        return rows.first;
-      }
-
-      Map<String, dynamic>? player =
-          await firstPlayerBy('phone_raw10', raw10) ??
-          await firstPlayerBy('phone', raw10);
-      player ??= await firstPlayerBy('phone', '0$raw10');
-      player ??= await firstPlayerBy('phone', '+90$raw10');
-      player ??= await firstPlayerBy('phone', '90$raw10');
-
-      if (player == null) {
-        return const ProfileLookupResult.notFound();
-      }
-
-      final playerId = (player['id'] ?? '').toString().trim();
-      final name = (player['name'] ?? '').toString().trim();
-      final teamId = (player['team_id'] ?? player['teamId'] ?? '')
-          .toString()
-          .trim();
-      final pr = (player['role'] ?? '').toString().trim();
-      final resolvedRole = (pr == 'Takım Sorumlusu' || pr == 'Her İkisi')
-          ? 'manager'
-          : 'player';
-
-      String? teamName;
-      String? tournamentId;
-      if (teamId.isNotEmpty && teamId != 'free_agent_pool') {
-        try {
-          _sbLog(
-            table: 'teams',
-            query: 'SELECT id=$teamId | limit=1',
-            trace: StackTrace.current,
-          );
-          AppConfig.sqlLogStart(
-            table: 'teams',
-            operation: 'SELECT',
-            filters: 'id=$teamId | limit=1',
-          );
-          final tRes = await _client
-              .from('teams')
-              .select()
-              .eq('id', teamId)
-              .limit(1);
-          final rows = (tRes as List).cast<Map<String, dynamic>>();
-          if (rows.isNotEmpty) {
-            AppConfig.sqlLogResult(
-              table: 'teams',
-              operation: 'SELECT',
-              count: 1,
-            );
-            _sbResult(rows: 1);
-            final t = rows.first;
-            teamName = (t['name'] ?? '').toString().trim();
-            tournamentId = (t['league_id'] ?? t['tournament_id'] ?? '')
-                .toString()
-                .trim();
-          } else {
-            AppConfig.sqlLogResult(
-              table: 'teams',
-              operation: 'SELECT',
-              count: 0,
-            );
-            _sbResult(rows: 0);
-          }
-        } catch (e) {
-          AppConfig.sqlLogResult(table: 'teams', operation: 'SELECT', error: e);
-          _sbResult(rows: 0, error: e);
-        }
-      }
-
-      return ProfileLookupResult.playerProfile(
-        matchedPlayerId: playerId.isEmpty ? null : playerId,
-        playerName: name.isEmpty ? null : name,
-        resolvedRole: resolvedRole,
-        resolvedTeamId: teamId.isEmpty ? null : teamId,
-        resolvedTournamentId: tournamentId?.isEmpty ?? true
-            ? null
-            : tournamentId,
-        resolvedTeamName: teamName?.isEmpty ?? true ? null : teamName,
+  Future<TempPasswordGrant> approveAccountRequest(String id) async {
+    _sbLog(
+      table: 'account_requests',
+      query: 'RPC approve_account_request id=$id',
+      trace: StackTrace.current,
+    );
+    try {
+      final res = await _client.rpc(
+        'approve_account_request',
+        params: {'p_id': id},
       );
-    }).catchError((_) => const ProfileLookupResult.notFound());
+      _sbResult(rows: 1);
+      final m = Map<String, dynamic>.from(res as Map);
+      final name = (m['full_name'] ?? '').toString().trim();
+      return TempPasswordGrant(
+        phoneRaw10: (m['phone'] ?? '').toString(),
+        password: (m['password'] ?? '').toString(),
+        isReset: m['kind'] == 'reset',
+        fullName: name.isEmpty ? null : name,
+      );
+    } catch (e) {
+      _sbResult(rows: 0, error: e);
+      rethrow;
+    }
   }
 
   @override
-  Future<OnlineRegistrationResult> registerOnlineUser({
-    required String phoneRaw10,
-    required String password,
-    required bool profileFound,
-    required String resolvedRole,
-    required String? resolvedTeamId,
-    required String? resolvedTournamentId,
-    required String? matchedPlayerId,
-    required List<String> matchedTournamentIds,
-    required String? selectedTournamentId,
-    required String? name,
-    required String? surname,
-  }) async {
-    final raw10 = phoneRaw10.trim();
-    final email = '$raw10@masterclass.com';
-
-    UserCredential userCred;
+  Future<void> rejectAccountRequest(String id) async {
+    _sbLog(
+      table: 'account_requests',
+      query: 'UPDATE status=rejected | id=$id',
+      trace: StackTrace.current,
+    );
     try {
-      userCred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-    } on FirebaseAuthException catch (e) {
-      if (e.code == 'email-already-in-use') {
-        throw Exception(
-          'Bu telefon numarası ile zaten kayıt var. Lütfen giriş yapın.',
-        );
-      }
-      rethrow;
-    }
-
-    final user = userCred.user;
-    if (user == null) throw Exception('Kullanıcı oluşturulamadı.');
-
-    final trimmedName = (name ?? '').trim();
-    final trimmedSurname = (surname ?? '').trim();
-    final fullName = profileFound
-        ? null
-        : ('$trimmedName $trimmedSurname').trim().isEmpty
-        ? null
-        : ('$trimmedName $trimmedSurname').trim();
-
-    Map<String, dynamic> roleEntry;
-    String? accessRole;
-    if (resolvedRole == 'tournament_admin') {
-      accessRole = 'tournament_admin';
-      roleEntry = {
-        'tournamentId': (selectedTournamentId ?? '').trim(),
-        'teamId': null,
-        'role': 'turnuva yöneticisi',
-      };
-    } else {
-      accessRole = null;
-      final roleTr = resolvedRole == 'manager' ? 'takım sorumlusu' : 'futbolcu';
-      roleEntry = {
-        'tournamentId': (resolvedTournamentId ?? '').trim().isEmpty
-            ? null
-            : (resolvedTournamentId ?? '').trim(),
-        'teamId': (resolvedTeamId ?? '').trim().isEmpty
-            ? null
-            : (resolvedTeamId ?? '').trim(),
-        'role': roleTr,
-      };
-    }
-
-    final nowIso = DateTime.now().toIso8601String();
-    try {
-      _sbLog(
-        table: 'users',
-        query: 'UPSERT onConflict=id | id=${user.uid}',
-        trace: StackTrace.current,
-      );
-      AppConfig.sqlLogStart(
-        table: 'users',
-        operation: 'UPSERT',
-        filters: 'onConflict=id | id=${user.uid}',
-      );
-      await _client.from('users').upsert({
-        'id': user.uid,
-        'access_role': accessRole,
-        'phone': raw10,
-        'full_name': ?fullName,
-        if (trimmedName.isNotEmpty) 'name': trimmedName,
-        if (trimmedSurname.isNotEmpty) 'surname': trimmedSurname,
-        'roles': [roleEntry],
-        if (resolvedRole == 'tournament_admin')
-          'tournament_ids': matchedTournamentIds,
-        if (resolvedRole == 'tournament_admin')
-          'active_tournament_id': (selectedTournamentId ?? '').trim(),
-        'updated_at': nowIso,
-        'created_at': nowIso,
-      }, onConflict: 'id');
-      AppConfig.sqlLogResult(table: 'users', operation: 'UPSERT', count: 1);
+      await _client
+          .from('account_requests')
+          .update({
+            'status': 'rejected',
+            'reviewed_by': _client.auth.currentUser?.id,
+            'reviewed_at': DateTime.now().toUtc().toIso8601String(),
+          })
+          .eq('id', id);
       _sbResult(rows: 1);
     } catch (e) {
-      AppConfig.sqlLogResult(table: 'users', operation: 'UPSERT', error: e);
       _sbResult(rows: 0, error: e);
+      rethrow;
     }
+  }
 
-    if (resolvedRole == 'tournament_admin') {
-    } else if (profileFound) {
-      final pid = (matchedPlayerId ?? '').trim();
-      if (pid.isNotEmpty) {
-        try {
-          _sbLog(
-            table: 'players',
-            query: 'UPDATE id=$pid',
-            trace: StackTrace.current,
-          );
-          AppConfig.sqlLogStart(
-            table: 'players',
-            operation: 'UPDATE',
-            filters: 'id=$pid',
-          );
-          await _client
-              .from('players')
-              .update({'auth_uid': user.uid})
-              .eq('id', pid);
-          AppConfig.sqlLogResult(
-            table: 'players',
-            operation: 'UPDATE',
-            count: 1,
-          );
-          _sbResult(rows: 1);
-        } catch (e) {
-          AppConfig.sqlLogResult(
-            table: 'players',
-            operation: 'UPDATE',
-            error: e,
-          );
-          _sbResult(rows: 0, error: e);
-        }
-      }
-    } else {
-      try {
-        _sbLog(
-          table: 'players',
-          query: 'INSERT phone=$raw10',
-          trace: StackTrace.current,
-        );
-        AppConfig.sqlLogStart(
-          table: 'players',
-          operation: 'INSERT',
-          filters: 'phone=$raw10',
-        );
-        await _client.from('players').insert({
-          'team_id': (resolvedTeamId ?? 'free_agent_pool').trim().isEmpty
-              ? 'free_agent_pool'
-              : (resolvedTeamId ?? 'free_agent_pool').trim(),
-          'name': ?fullName,
-          'role': 'Futbolcu',
-          'phone': raw10,
-          'phone_raw10': raw10,
-          'auth_uid': user.uid,
-        });
-        AppConfig.sqlLogResult(table: 'players', operation: 'INSERT', count: 1);
-        _sbResult(rows: 1);
-      } catch (e) {
-        AppConfig.sqlLogResult(table: 'players', operation: 'INSERT', error: e);
-        _sbResult(rows: 0, error: e);
-      }
-    }
-
-    final tid = (selectedTournamentId ?? '').trim();
-    final isTournamentAdmin =
-        resolvedRole == 'tournament_admin' && tid.isNotEmpty;
-    return OnlineRegistrationResult(
-      uid: user.uid,
-      isTournamentAdmin: isTournamentAdmin,
-      tournamentId: isTournamentAdmin ? tid : null,
+  @override
+  Future<void> changeOwnPassword(String newPassword) async {
+    await _client.auth.updateUser(
+      UserAttributes(
+        password: newPassword,
+        data: {'must_change_password': false},
+      ),
     );
   }
 }

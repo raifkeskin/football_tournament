@@ -1,12 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../../core/services/app_session.dart';
 import 'forgot_password_screen.dart';
 import '../../home/screens/main_navigator.dart';
 import 'online_registration_screen.dart';
+import 'reset_password_screen.dart';
+import '../widgets/phone_input.dart';
 import '../../../core/widgets/admin_form.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -107,6 +108,14 @@ class _LoginScreenState extends State<LoginScreen> {
         rememberMe: _rememberMe,
       );
       if (!mounted) return;
+      if (session.mustChangePassword) {
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => ResetPasswordScreen(rememberMe: _rememberMe),
+          ),
+        );
+        return;
+      }
       Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
         MaterialPageRoute<void>(
           builder: (_) => const MainNavigator(initialTabIndex: MainNavigator.profileTab),
@@ -228,7 +237,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         controller: _phoneController,
                         textInputAction: TextInputAction.next,
                         keyboardType: TextInputType.phone,
-                        inputFormatters: [_PhoneMaskFormatter()],
+                        inputFormatters: [PhoneMaskFormatter()],
                         decoration: InputDecoration(
                           labelText: 'Telefon Numarası',
                           labelStyle: const TextStyle(color: Colors.white70),
@@ -402,7 +411,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   );
                                 },
                           child: const Text(
-                            'Kayıt Hesabım Yok (Online Form)',
+                            'Hesabım Yok, Kayıt Ol',
                             style: TextStyle(
                               color: Color(
                                 0xFFF59E0B,
@@ -421,52 +430,6 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _PhoneMaskFormatter extends TextInputFormatter {
-  static String _formatFromRaw10(String raw10) {
-    final clipped = raw10.length > 10 ? raw10.substring(0, 10) : raw10;
-    final a = clipped.length >= 3 ? clipped.substring(0, 3) : clipped;
-    final b = clipped.length > 3
-        ? clipped.substring(3, clipped.length >= 6 ? 6 : clipped.length)
-        : '';
-    final c = clipped.length > 6
-        ? clipped.substring(6, clipped.length >= 8 ? 8 : clipped.length)
-        : '';
-    final d = clipped.length > 8 ? clipped.substring(8) : '';
-    final sb = StringBuffer();
-    if (a.isNotEmpty) {
-      sb.write('(');
-      sb.write(a);
-      if (a.length == 3) sb.write(') ');
-    }
-    if (b.isNotEmpty) {
-      sb.write(b);
-      if (b.length == 3) sb.write(' ');
-    }
-    if (c.isNotEmpty) {
-      sb.write(c);
-      if (c.length == 2) sb.write(' ');
-    }
-    if (d.isNotEmpty) sb.write(d);
-    return sb.toString().trimRight();
-  }
-
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    var digits = newValue.text.replaceAll(RegExp(r'\D'), '');
-    if (digits.startsWith('90')) digits = digits.substring(2);
-    if (digits.startsWith('0')) digits = digits.substring(1);
-    if (digits.length > 10) digits = digits.substring(digits.length - 10);
-    final formatted = _formatFromRaw10(digits);
-    return TextEditingValue(
-      text: formatted,
-      selection: TextSelection.collapsed(offset: formatted.length),
     );
   }
 }

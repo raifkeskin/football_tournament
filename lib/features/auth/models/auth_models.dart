@@ -28,115 +28,59 @@ class RosterAssignment {
   final String role;
 }
 
-class OtpRequest {
-  const OtpRequest({
-    required this.phoneRaw10,
-    required this.code,
-    required this.expiresAt,
-  });
-
-  final String phoneRaw10;
-  final String code;
-  final DateTime expiresAt;
-}
-
-class OtpCodeEntry {
-  const OtpCodeEntry({
+/// Admin "Şifre Talepleri" listesindeki satır.
+class AccountRequestEntry {
+  const AccountRequestEntry({
     required this.id,
     required this.phoneRaw10,
-    required this.code,
+    required this.isReset,
     required this.status,
-    required this.expiresAt,
-    required this.createdAt,
+    this.fullName,
+    this.playerName,
+    this.createdAt,
+    this.reviewedAt,
   });
 
   final String id;
   final String phoneRaw10;
-  final String code;
+
+  /// true: hesabı olan kullanıcı yeni şifre istedi; false: yeni kayıt.
+  final bool isReset;
+
+  /// pending | approved | rejected
   final String status;
-  final DateTime expiresAt;
-  final DateTime? createdAt;
-}
 
-class ProfileLookupResult {
-  const ProfileLookupResult._({
-    required this.profileFound,
-    required this.resolvedRole,
-    required this.matchedPlayerId,
-    required this.playerName,
-    required this.resolvedTeamId,
-    required this.resolvedTeamName,
-    required this.resolvedTournamentId,
-    required this.matchedLeagueIds,
-    required this.leagues,
-  });
+  /// Kullanıcının formda yazdığı ad soyad.
+  final String? fullName;
 
-  const ProfileLookupResult.notFound()
-    : this._(
-        profileFound: false,
-        resolvedRole: 'player',
-        matchedPlayerId: null,
-        playerName: null,
-        resolvedTeamId: 'free_agent_pool',
-        resolvedTeamName: null,
-        resolvedTournamentId: null,
-        matchedLeagueIds: const [],
-        leagues: const [],
-      );
-
-  ProfileLookupResult.tournamentAdmin({
-    required List<String> matchedLeagueIds,
-    required List<Map<String, dynamic>> leagues,
-  }) : this._(
-         profileFound: true,
-         resolvedRole: 'tournament_admin',
-         matchedPlayerId: null,
-         playerName: null,
-         resolvedTeamId: null,
-         resolvedTeamName: null,
-         resolvedTournamentId: null,
-         matchedLeagueIds: matchedLeagueIds,
-         leagues: leagues,
-       );
-
-  ProfileLookupResult.playerProfile({
-    required String? matchedPlayerId,
-    required String? playerName,
-    required String resolvedRole,
-    required String? resolvedTeamId,
-    required String? resolvedTournamentId,
-    required String? resolvedTeamName,
-  }) : this._(
-         profileFound: true,
-         resolvedRole: resolvedRole,
-         matchedPlayerId: matchedPlayerId,
-         playerName: playerName,
-         resolvedTeamId: resolvedTeamId,
-         resolvedTeamName: resolvedTeamName,
-         resolvedTournamentId: resolvedTournamentId,
-         matchedLeagueIds: const [],
-         leagues: const [],
-       );
-
-  final bool profileFound;
-  final String resolvedRole;
-  final String? matchedPlayerId;
+  /// Aynı telefonlu oyuncu kaydının adı (varsa).
   final String? playerName;
-  final String? resolvedTeamId;
-  final String? resolvedTeamName;
-  final String? resolvedTournamentId;
-  final List<String> matchedLeagueIds;
-  final List<Map<String, dynamic>> leagues;
+  final DateTime? createdAt;
+  final DateTime? reviewedAt;
+
+  String? get displayName => playerName ?? fullName;
 }
 
-class OnlineRegistrationResult {
-  const OnlineRegistrationResult({
-    required this.uid,
-    required this.isTournamentAdmin,
-    required this.tournamentId,
+/// `request_account_password` sonucu.
+enum AccountRequestOutcome {
+  requested,
+  resetRequested,
+  alreadyPending,
+  notRegistered,
+  invalidPhone,
+}
+
+/// Onaylanan talebin geçici şifresi (yalnızca onay anında döner).
+class TempPasswordGrant {
+  const TempPasswordGrant({
+    required this.phoneRaw10,
+    required this.password,
+    required this.isReset,
+    this.fullName,
   });
 
-  final String uid;
-  final bool isTournamentAdmin;
-  final String? tournamentId;
+  final String phoneRaw10;
+  final String password;
+  final bool isReset;
+  final String? fullName;
 }

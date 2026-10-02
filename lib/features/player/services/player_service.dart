@@ -3,7 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../match/models/match.dart';
 
 class PlayerService {
-  PlayerService({SupabaseClient? client}) : _client = client ?? Supabase.instance.client;
+  PlayerService({SupabaseClient? client})
+    : _client = client ?? Supabase.instance.client;
 
   final SupabaseClient _client;
 
@@ -22,7 +23,9 @@ class PlayerService {
               if (id.isEmpty) continue;
               list.add(PlayerModel.fromMap(row, id));
             }
-            list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+            list.sort(
+              (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+            );
             return list;
           });
     } catch (_) {

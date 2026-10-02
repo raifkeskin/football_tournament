@@ -81,9 +81,10 @@ Future<void> showPlayerCard(
           String str(String k) => (r[k] ?? '').toString().trim();
           return PlayerCard(
             playerPhone: key,
-            name: [str('name'), str('surname')]
-                .where((e) => e.isNotEmpty)
-                .join(' '),
+            name: [
+              str('name'),
+              str('surname'),
+            ].where((e) => e.isNotEmpty).join(' '),
             number: number,
             photoUrl: str('photo_url'),
             position: _positionLabel(str('main_position'), str('sub_position')),
@@ -191,8 +192,7 @@ class _PlayerCardState extends State<PlayerCard> {
         .toList();
     if (parts.isEmpty) return '?';
     if (parts.length == 1) return parts.first.substring(0, 1).trUpper;
-    return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
-        .trUpper;
+    return (parts.first.substring(0, 1) + parts.last.substring(0, 1)).trUpper;
   }
 
   int _readInt(dynamic v) {
@@ -221,7 +221,11 @@ class _PlayerCardState extends State<PlayerCard> {
   Future<String?> _resolvePlayerId(String key) async {
     if (_uuidLike.hasMatch(key)) return key;
     try {
-      final r = await _sb.from('players').select('id').eq('phone', key).limit(1);
+      final r = await _sb
+          .from('players')
+          .select('id')
+          .eq('phone', key)
+          .limit(1);
       return r.isEmpty ? null : (r.first['id'] ?? '').toString();
     } catch (_) {
       return null;
@@ -229,7 +233,6 @@ class _PlayerCardState extends State<PlayerCard> {
   }
 
   Future<Map<String, _StatTotals>> _loadTotalsBySeason(String pid) async {
-
     final events = <Map<String, dynamic>>[];
     final rosterMatchIds = <String>{};
     try {
@@ -354,9 +357,8 @@ class _PlayerCardState extends State<PlayerCard> {
           .from('season_team_players')
           .select('season_id, team_id')
           .eq('player_id', pid);
-      final teamIds = {
-        for (final l in links) (l['team_id'] ?? '').toString(),
-      }..remove('');
+      final teamIds = {for (final l in links) (l['team_id'] ?? '').toString()}
+        ..remove('');
       final teamName = <String, String>{};
       if (teamIds.isNotEmpty) {
         final res = await _sb

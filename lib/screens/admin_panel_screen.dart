@@ -131,8 +131,8 @@ class AdminPanelWidget extends StatelessWidget {
               children: [
                 _buildSmallActionTile(
                   context,
-                  'OTP Takip',
-                  Icons.sms_outlined,
+                  'Şifre Talepleri',
+                  Icons.key_rounded,
                   () => Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => AdminOtpMonitorScreen()),
                   ),
