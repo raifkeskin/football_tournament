@@ -17,7 +17,8 @@ import '../../team/services/interfaces/i_team_service.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/services/global_filter.dart';
 import 'match_details_screen.dart';
-import '../widgets/match_score_line.dart';
+import '../utils/match_clock.dart';
+import '../../../core/widgets/web_safe_image.dart';
 import '../../share/fixture_poster.dart';
 import '../../share/poster_share.dart';
 import '../../../core/utils/team_name.dart';
@@ -957,28 +958,168 @@ class _MatchCard extends StatelessWidget {
           _showQuickScoreDialog(context);
         },
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-          child: MatchScoreLine(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          child: MatchClockBuilder(
             match: match,
-            homeName: homeName.isEmpty ? 'Ev Sahibi' : homeName,
-            awayName: awayName.isEmpty ? 'Deplasman' : awayName,
-            homeLogo: (teamLogoById[match.homeTeamId] ?? '').trim(),
-            awayLogo: (teamLogoById[match.awayTeamId] ?? '').trim(),
-            leading: isAdmin
-                ? IconButton(
+            builder: (context, liveMinute) => _stackedLayout(
+              context,
+              homeName.isEmpty ? 'Ev Sahibi' : homeName,
+              awayName.isEmpty ? 'Deplasman' : awayName,
+              liveMinute,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Fikstürde maçlar alt alta iki satır: solda saat/durum, sağda takımlar.
+  Widget _stackedLayout(
+    BuildContext context,
+    String homeName,
+    String awayName,
+    String? liveMinute,
+  ) {
+    const mid = Color(0xFF94A3B8);
+    const accent = Color(0xFF10B981);
+    const live = Color(0xFFF87171);
+
+    final rawTime = (match.matchTime ?? '').trim();
+    final time = rawTime.length >= 5 ? rawTime.substring(0, 5) : rawTime;
+    final isLive =
+        match.status == MatchStatus.live ||
+        match.status == MatchStatus.halftime;
+    final ({String text, Color color})? status = switch (match.status) {
+      MatchStatus.notStarted => null,
+      MatchStatus.finished => (text: 'MS', color: accent),
+      MatchStatus.halftime => (text: 'İY', color: live),
+      MatchStatus.live => (text: liveMinute ?? 'CANLI', color: live),
+      MatchStatus.cancelled => (text: 'İPT', color: Colors.white54),
+      MatchStatus.postponed => (text: 'ERT', color: Colors.white54),
+    };
+
+    final hs = match.homeScore;
+    final as = match.awayScore;
+    final showScore =
+        match.status == MatchStatus.finished || isLive || hs != 0 || as != 0;
+
+    return Row(
+      children: [
+        SizedBox(
+          width: 50,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isAdmin)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: IconButton(
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
                     icon: const Icon(
                       Icons.edit_calendar,
-                      size: 20,
+                      size: 22,
                       color: Colors.white,
                     ),
                     onPressed: () => _showEditPopup(context),
-                  )
-                : null,
+                  ),
+                ),
+              Text(
+                time.isEmpty ? '--:--' : time,
+                style: const TextStyle(
+                  color: mid,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 11,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
+              if (status != null)
+                Text(
+                  status.text,
+                  style: TextStyle(
+                    color: status.color,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 10,
+                  ),
+                ),
+            ],
           ),
         ),
-      ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            children: [
+              _teamRow(
+                homeName,
+                (teamLogoById[match.homeTeamId] ?? '').trim(),
+                hs,
+                showScore,
+                hs >= as,
+                isLive,
+              ),
+              const SizedBox(height: 12),
+              _teamRow(
+                awayName,
+                (teamLogoById[match.awayTeamId] ?? '').trim(),
+                as,
+                showScore,
+                as >= hs,
+                isLive,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _teamRow(
+    String name,
+    String logo,
+    int score,
+    bool showScore,
+    bool highlight,
+    bool isLive,
+  ) {
+    return Row(
+      children: [
+        WebSafeImage(
+          url: logo,
+          width: 28,
+          height: 28,
+          fit: BoxFit.contain,
+          fallbackIconSize: 18,
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontWeight: FontWeight.w900,
+              color: highlight ? Colors.white : Colors.white70,
+              fontSize: 13,
+            ),
+          ),
+        ),
+        SizedBox(
+          width: 25,
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              showScore ? '$score' : '-',
+              style: TextStyle(
+                color: isLive
+                    ? const Color(0xFFF87171)
+                    : (highlight ? Colors.white : Colors.white38),
+                fontWeight: FontWeight.w900,
+                fontSize: 14,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
