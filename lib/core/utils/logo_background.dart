@@ -4,7 +4,7 @@ import 'dart:typed_data';
 
 import 'package:image/image.dart' as img;
 
-/// Beyaza uzaklık bundan küçükse kesin arka plan.
+/// Arka plan rengine uzaklık bundan küçükse kesin arka plan.
 const _hard = 40;
 
 /// [_hard] ile bu değer arası, arka plana komşu kenarlarda kısmi şeffaflık.
@@ -13,7 +13,8 @@ const _soft = 110;
 /// Logolar en fazla bu kenar uzunluğunda saklanır.
 const _maxSide = 512;
 
-/// Logonun kenarlarındaki beyaz/açık arka planı şeffaf yapar ve PNG döner.
+/// Logonun kenarlarındaki tek renk arka planı (beyaz, siyah, renkli kare)
+/// şeffaf yapar, boş kenarları kırpar ve PNG döner.
 ///
 /// Kenardan başlayan dolgu yalnızca kenara bağlı açık pikselleri siler;
 /// logonun içindeki beyazlar korunur. Silinecek arka plan yoksa (zaten
@@ -31,12 +32,19 @@ Uint8List? removeLogoBackground(Uint8List bytes) {
   src = _trimEdgeStripes(src);
   final w = src.width, h = src.height;
 
+  final bgColor = _edgeBackground(src);
+  if (bgColor == null) return null;
+
   int dist(img.Pixel p) {
     // Zaten şeffaf piksel arka plan sayılır.
     if (p.a < 128) return 0;
+    if (bgColor.transparent) return 255;
     return math.max(
-      255 - p.r.toInt(),
-      math.max(255 - p.g.toInt(), 255 - p.b.toInt()),
+      (bgColor.r - p.r.toInt()).abs(),
+      math.max(
+        (bgColor.g - p.g.toInt()).abs(),
+        (bgColor.b - p.b.toInt()).abs(),
+      ),
     );
   }
 
@@ -127,9 +135,57 @@ Uint8List? removeLogoBackground(Uint8List bytes) {
   return img.encodePng(square);
 }
 
-/// Kenarlardaki ince, tek renk koyu şeritleri (ör. kare yapmak için eklenmiş
-/// siyah satırlar) kırpar; yoksa dolgu kenardan başlayamaz. Her kenarda en
-/// fazla boyun %3'ü kırpılır.
+/// Kenar piksellerinden arka planı bulur: çoğu şeffafsa şeffaf zemin, çoğu
+/// aynı renkse o renk. Kenarlar karışıksa (logo resmin kenarına taşıyor)
+/// `null` döner; o zaman arka plan silinmez.
+({int r, int g, int b, bool transparent})? _edgeBackground(img.Image src) {
+  final w = src.width, h = src.height;
+  final rs = <int>[], gs = <int>[], bs = <int>[];
+  var total = 0, transparent = 0;
+  void add(int x, int y) {
+    final p = src.getPixel(x, y);
+    total++;
+    if (p.a < 128) {
+      transparent++;
+      return;
+    }
+    rs.add(p.r.toInt());
+    gs.add(p.g.toInt());
+    bs.add(p.b.toInt());
+  }
+
+  for (var x = 0; x < w; x++) {
+    add(x, 0);
+    add(x, h - 1);
+  }
+  for (var y = 1; y < h - 1; y++) {
+    add(0, y);
+    add(w - 1, y);
+  }
+  if (transparent >= total * 0.5) {
+    return (r: 0, g: 0, b: 0, transparent: true);
+  }
+  int median(List<int> v) => (v..sort())[v.length ~/ 2];
+  final r = median(List.of(rs)),
+      g = median(List.of(gs)),
+      b = median(List.of(bs));
+  var close = 0;
+  for (var i = 0; i < rs.length; i++) {
+    final d = math.max(
+      (rs[i] - r).abs(),
+      math.max((gs[i] - g).abs(), (bs[i] - b).abs()),
+    );
+    if (d <= _hard) close++;
+  }
+  if (close < total * 0.6) return null;
+  return (r: r, g: g, b: b, transparent: false);
+}
+
+/// Kenarlardaki tek renk koyu şeritleri kırpar; yoksa dolgu kenardan
+/// başlayamaz. İnce şeritler (ör. kare yapmak için eklenmiş siyah satırlar,
+/// boyun en fazla %3'ü) her zaman kırpılır. Kalın şeritler (ör. ekran
+/// görüntüsündeki siyah bantlar) ancak arkalarında açık zemin varsa kırpılır;
+/// yoksa koyu zeminli logodur.
 img.Image _trimEdgeStripes(img.Image src) {
   bool uniformDark(Iterable<img.Pixel> line) {
     img.Pixel? first;
@@ -158,23 +214,50 @@ img.Image _trimEdgeStripes(img.Image src) {
     }
   }
 
-  final maxY = (src.height * 0.03).ceil(), maxX = (src.width * 0.03).ceil();
+  bool mostlyLight(Iterable<img.Pixel> line) {
+    var light = 0, total = 0;
+    for (final p in line) {
+      total++;
+      if (p.a < 128 || math.min(p.r, math.min(p.g, p.b)) > 200) light++;
+    }
+    return total > 0 && light >= total * 0.9;
+  }
+
+  // Bant en fazla boyun %45'i olabilir; ortada içerik kalmalı.
+  final limY = (src.height * 0.45).floor(), limX = (src.width * 0.45).floor();
   var top = 0, bottom = 0, left = 0, right = 0;
-  while (top < maxY && uniformDark(row(top))) {
+  while (top < limY && uniformDark(row(top))) {
     top++;
   }
-  while (bottom < maxY && uniformDark(row(src.height - 1 - bottom))) {
+  while (bottom < limY && uniformDark(row(src.height - 1 - bottom))) {
     bottom++;
   }
-  while (left < maxX && uniformDark(col(left))) {
+  while (left < limX && uniformDark(col(left))) {
     left++;
   }
-  while (right < maxX && uniformDark(col(src.width - 1 - right))) {
+  while (right < limX && uniformDark(col(src.width - 1 - right))) {
     right++;
   }
-  // Şerit sınırı aşıyorsa koyu zeminli logodur; dokunma.
-  if (top == maxY || bottom == maxY || left == maxX || right == maxX) {
+  if (top == limY || bottom == limY || left == limX || right == limX) {
     return src;
+  }
+  final thinY = (src.height * 0.03).ceil(), thinX = (src.width * 0.03).ceil();
+  final thin = top < thinY && bottom < thinY && left < thinX && right < thinX;
+  if (!thin) {
+    // Kalın bandın hemen içi (geçiş pikselleri atlanarak) açık zemin olmalı.
+    bool lightNear(int start, int step, Iterable<img.Pixel> Function(int) at) {
+      for (var k = 0; k < 6; k++) {
+        if (mostlyLight(at(start + k * step))) return true;
+      }
+      return false;
+    }
+
+    final light =
+        (top == 0 || lightNear(top, 1, row)) &&
+        (bottom == 0 || lightNear(src.height - 1 - bottom, -1, row)) &&
+        (left == 0 || lightNear(left, 1, col)) &&
+        (right == 0 || lightNear(src.width - 1 - right, -1, col));
+    if (!light) return src;
   }
   if (top + bottom + left + right == 0) return src;
   return img.copyCrop(

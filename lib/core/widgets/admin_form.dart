@@ -752,6 +752,108 @@ class AdminColorRow extends StatelessWidget {
   }
 }
 
+/// [AdminColorRow]'ın kompakt hâli: iki renk yan yana sığsın diye ikon
+/// kutusu yok; etiket üstte, seçilen renk altta.
+class AdminColorTile extends StatelessWidget {
+  const AdminColorTile({
+    super.key,
+    required this.label,
+    required this.hex,
+    required this.onTap,
+    this.onClear,
+  });
+
+  final String label;
+  final String? hex;
+  final VoidCallback? onTap;
+  final VoidCallback? onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = parseHexColor(hex);
+    final canClear = color != null && onClear != null && onTap != null;
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B).withValues(alpha: 0.94),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: kAdminMuted,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Expanded(
+                      child: color == null
+                          ? const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 3),
+                              child: Text(
+                                'Renk seçin',
+                                style: TextStyle(
+                                  color: Colors.white38,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            )
+                          : Container(
+                              height: 26,
+                              decoration: BoxDecoration(
+                                color: color,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.35),
+                                ),
+                              ),
+                            ),
+                    ),
+                    SizedBox(
+                      width: 32,
+                      height: 26,
+                      child: canClear
+                          ? IconButton(
+                              tooltip: 'Temizle',
+                              padding: EdgeInsets.zero,
+                              iconSize: 18,
+                              onPressed: onClear,
+                              icon: const Icon(
+                                Icons.close_rounded,
+                                color: Colors.white54,
+                              ),
+                            )
+                          : const Icon(
+                              Icons.chevron_right_rounded,
+                              color: Colors.white54,
+                              size: 20,
+                            ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 const _kColorPresets = <String>[
   '#FFFFFF',
   '#111827',
@@ -894,9 +996,7 @@ class _ColorSliders extends StatelessWidget {
                 inactiveTrackColor: Colors.transparent,
                 overlayShape: SliderComponentShape.noOverlay,
                 thumbColor: Colors.white,
-                thumbShape: const RoundSliderThumbShape(
-                  enabledThumbRadius: 10,
-                ),
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10),
               ),
               child: Slider(value: value, onChanged: on),
             ),

@@ -20,6 +20,7 @@ class Season {
     this.youtubeUrl,
     this.matchPeriodDuration = 25,
     this.numberOfPlayerChanges = 3,
+    this.isDoubleRound = false,
   });
 
   final String id;
@@ -42,6 +43,9 @@ class Season {
   final String? youtubeUrl;
   final int matchPeriodDuration;
   final int numberOfPlayerChanges;
+
+  /// Lig aşaması rövanşlı mı (her eşleşme iki kez, ev sahibi değişerek)?
+  final bool isDoubleRound;
 
   factory Season.fromMap(Map<String, dynamic> map) {
     dynamic v(String camel, String snake) => map[camel] ?? map[snake];
@@ -101,6 +105,10 @@ class Season {
       ),
       isActive: boolFrom(v('isActive', 'is_active'), fallback: true),
       isDefault: boolFrom(v('isDefault', 'is_default'), fallback: false),
+      isDoubleRound: boolFrom(
+        v('isDoubleRound', 'is_double_round'),
+        fallback: false,
+      ),
       transferStartDate: _readDate(
         v('transferStartDate', 'transfer_start_date'),
       ),
@@ -145,6 +153,7 @@ class Season {
       'youtube_url': youtubeUrl,
       'match_period_duration': matchPeriodDuration,
       'number_of_player_changes': numberOfPlayerChanges,
+      'is_double_round': isDoubleRound,
       'league_id': leagueId.trim().isEmpty ? null : leagueId.trim(),
     };
   }
@@ -179,6 +188,7 @@ class Season {
         'matchPeriodDuration': matchPeriodDuration,
         'numberOfGroups': numberOfGroups,
         'numberOfPlayerChanges': numberOfPlayerChanges,
+        'isDoubleRound': isDoubleRound,
         'teamsPerGroup': teamsPerGroup,
       };
     }

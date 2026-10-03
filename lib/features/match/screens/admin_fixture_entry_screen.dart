@@ -12,6 +12,7 @@ import '../../../core/services/service_locator.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/app_date_picker.dart';
+import 'fixture_draw_screen.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -37,8 +38,7 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
   final SupabaseClient _sb = Supabase.instance.client;
   late final Stream<List<League>> _leaguesStream = _leagueService
       .watchLeagues();
-  late final Stream<List<Pitch>> _pitchesStream = _leagueService
-      .watchPitches();
+  late final Stream<List<Pitch>> _pitchesStream = _leagueService.watchPitches();
 
   String? _selectedLeagueId;
   String? _selectedSeasonId;
@@ -53,8 +53,16 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
   bool _isLoading = false;
   final _weekController = TextEditingController();
 
+  /// İki takımlı gruplarda aynı eşleşme haftalık tekrarlanabilir: toplam
+  /// [_repeatCount] maç, 7 gün arayla, ev sahibi her hafta değişir.
+  bool _repeat = false;
+  int _repeatCount = 5;
+
+  bool get _canRepeat => _teams.length == 2;
+
   List<League> _leagues = const [];
   List<AdminOption> _seasons = const [];
+  final Map<String, bool> _seasonDoubleRound = {};
   List<AdminOption> _groups = const [];
   List<Team> _teams = const [];
   bool _loadingSeasons = false;
@@ -101,7 +109,7 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
     try {
       final rows = await _sb
           .from('seasons')
-          .select('id, name, is_default')
+          .select('id, name, is_default, is_double_round')
           .eq('league_id', leagueId)
           .order('start_date', ascending: false);
       if (!mounted || _selectedLeagueId != leagueId) return;
@@ -116,6 +124,10 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
       setState(() {
         _seasons = seasons;
         _loadingSeasons = false;
+        for (final r in rows) {
+          _seasonDoubleRound[(r['id'] ?? '').toString()] =
+              r['is_double_round'] == true;
+        }
       });
       final auto = autoPickOption(seasons);
       if (auto != null) _selectSeason(auto);
@@ -178,11 +190,68 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
       setState(() {
         _teams = teams;
         _loadingTeams = false;
+        // İki takım varsa eşleşme bellidir.
+        if (teams.length == 2) {
+          _homeTeamId = teams[0].id;
+          _awayTeamId = teams[1].id;
+        } else {
+          _repeat = false;
+        }
       });
     } catch (e) {
       if (!mounted || _selectedGroupId != groupId) return;
       setState(() => _loadingTeams = false);
       _showError('Takımlar yüklenemedi: $e');
+    }
+  }
+
+  /// Fikstür kurası: grupta maç yoksa önizleme ekranını açar. Başlangıç
+  /// haftası, sezonda başka grupların maçı varsa onların ilk haftası (gruplar
+  /// aynı haftalarda oynar), yoksa 1.
+  Future<void> _openDraw() async {
+    final leagueId = _selectedLeagueId, seasonId = _selectedSeasonId;
+    final groupId = _selectedGroupId;
+    if (leagueId == null || seasonId == null || groupId == null) return;
+    if (_teams.length < 2) {
+      _showError('Kura için grupta en az 2 takım olmalı.');
+      return;
+    }
+    try {
+      final inGroup = await _sb
+          .from('matches')
+          .select('id')
+          .eq('group_id', groupId)
+          .limit(1);
+      if (inGroup.isNotEmpty) {
+        _showError('Bu grupta maç girilmiş; kura çekilemez.');
+        return;
+      }
+      final first = await _sb
+          .from('matches')
+          .select('week')
+          .eq('season_id', seasonId)
+          .not('week', 'is', null)
+          .order('week', ascending: true)
+          .limit(1);
+      final w = first.isEmpty ? null : first.first['week'];
+      final startWeek = w is num ? w.toInt() : 1;
+      if (!mounted) return;
+      final saved = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (_) => FixtureDrawScreen(
+            leagueId: leagueId,
+            seasonId: seasonId,
+            groupId: groupId,
+            groupName: _nameOf(_groups, groupId) ?? '',
+            teams: _teams,
+            doubleRound: _seasonDoubleRound[seasonId] ?? false,
+            startWeek: startWeek < 1 ? 1 : startWeek,
+          ),
+        ),
+      );
+      if (saved == true && mounted) Navigator.pop(context);
+    } catch (e) {
+      _showError('Kura açılamadı: $e');
     }
   }
 
@@ -346,6 +415,24 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                     },
                   ),
                 ),
+                if (groupChosen)
+                  AdminFormSection(
+                    title: 'Kura',
+                    child: AdminFieldGroup(
+                      children: [
+                        AdminSelectRow(
+                          icon: Icons.shuffle_rounded,
+                          label: 'Fikstür kurası',
+                          value: null,
+                          placeholder: _teams.length < 2
+                              ? 'Grupta en az 2 takım olmalı'
+                              : 'Tüm lig maçlarını kurayla oluştur',
+                          loading: _loadingTeams,
+                          onTap: _teams.length < 2 ? null : _openDraw,
+                        ),
+                      ],
+                    ),
+                  ),
                 AdminFormSection(
                   title: 'Eşleşme',
                   child: AdminFieldGroup(
@@ -395,6 +482,7 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                               width: 52,
                               child: TextField(
                                 controller: _weekController,
+                                onChanged: (_) => setState(() {}),
                                 textAlign: TextAlign.center,
                                 keyboardType: TextInputType.number,
                                 inputFormatters: [
@@ -515,6 +603,76 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                     ],
                   ),
                 ),
+                if (_canRepeat)
+                  AdminFormSection(
+                    title: 'Tekrar',
+                    child: AdminFieldGroup(
+                      children: [
+                        AdminFieldRow(
+                          icon: Icons.repeat_rounded,
+                          label: 'Haftalık tekrarla',
+                          onTap: () => setState(() => _repeat = !_repeat),
+                          trailing: Checkbox(
+                            value: _repeat,
+                            activeColor: kAdminAccent,
+                            onChanged: (v) =>
+                                setState(() => _repeat = v ?? false),
+                          ),
+                          child: const Text(
+                            'Ev sahibi her hafta değişir',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        if (_repeat)
+                          AdminFieldRow(
+                            icon: Icons.format_list_numbered_rounded,
+                            label: 'Toplam maç sayısı',
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _StepButton(
+                                  icon: Icons.remove_rounded,
+                                  onTap: () => setState(
+                                    () => _repeatCount = (_repeatCount - 1)
+                                        .clamp(2, 52),
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: 44,
+                                  child: Text(
+                                    '$_repeatCount',
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                ),
+                                _StepButton(
+                                  icon: Icons.add_rounded,
+                                  onTap: () => setState(
+                                    () => _repeatCount = (_repeatCount + 1)
+                                        .clamp(2, 52),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            child: Text(
+                              _repeatSummary(),
+                              style: const TextStyle(
+                                color: kAdminMuted,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                 const SizedBox(height: 6),
                 AdminPrimaryButton(
                   label: 'KAYDET',
@@ -524,6 +682,13 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
               ],
             ),
     );
+  }
+
+  /// Ör. "Hafta 3–7".
+  String _repeatSummary() {
+    final week = int.tryParse(_weekController.text.trim());
+    if (week == null || week < 1) return '$_repeatCount hafta';
+    return 'Hafta $week–${week + _repeatCount - 1}';
   }
 
   Future<void> _pickDate() async {
@@ -572,7 +737,7 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
 
     setState(() => _isLoading = true);
     try {
-      final matchDateTime = _unknownDateTime
+      final firstDateTime = _unknownDateTime
           ? null
           : DateTime(
               _selectedDate.year,
@@ -589,35 +754,64 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
         throw Exception('Takım bilgisi alınamadı.');
       }
 
-      final match = MatchModel(
-        id: '',
-        leagueId: _selectedLeagueId!,
-        seasonId: _selectedSeasonId!,
-        groupId: _selectedGroupId!,
-        homeTeamId: _homeTeamId!,
-        awayTeamId: _awayTeamId!,
-        homeScore: 0,
-        awayScore: 0,
-        week: week,
-        matchDate: matchDateTime == null
-            ? null
-            : "${matchDateTime.year}-${matchDateTime.month.toString().padLeft(2, '0')}-${matchDateTime.day.toString().padLeft(2, '0')}",
-        matchTime: matchDateTime == null
-            ? null
-            : '${matchDateTime.hour.toString().padLeft(2, '0')}:${matchDateTime.minute.toString().padLeft(2, '0')}',
-        pitchId: _selectedPitchId,
-        pitchName: _selectedPitchName,
-        status: MatchStatus.notStarted,
-      );
+      final count = _canRepeat && _repeat ? _repeatCount : 1;
+      var created = 0;
+      try {
+        for (var i = 0; i < count; i++) {
+          // Takvim günü eklenir; yaz saati geçişinde saat kaymaz.
+          final dt = firstDateTime == null
+              ? null
+              : DateTime(
+                  firstDateTime.year,
+                  firstDateTime.month,
+                  firstDateTime.day + 7 * i,
+                  firstDateTime.hour,
+                  firstDateTime.minute,
+                );
+          final swap = i.isOdd;
+          final match = MatchModel(
+            id: '',
+            leagueId: _selectedLeagueId!,
+            seasonId: _selectedSeasonId!,
+            groupId: _selectedGroupId!,
+            homeTeamId: swap ? _awayTeamId! : _homeTeamId!,
+            awayTeamId: swap ? _homeTeamId! : _awayTeamId!,
+            homeScore: 0,
+            awayScore: 0,
+            week: week + i,
+            matchDate: dt == null
+                ? null
+                : '${dt.year}-${_two(dt.month)}-${_two(dt.day)}',
+            matchTime: dt == null
+                ? null
+                : '${_two(dt.hour)}:${_two(dt.minute)}',
+            pitchId: _selectedPitchId,
+            pitchName: _selectedPitchName,
+            status: MatchStatus.notStarted,
+          );
 
-      final newId = await _matchService.addMatch(match);
-      if (newId.trim().isEmpty) {
-        throw Exception('Maç kaydedilemedi.');
+          final newId = await _matchService.addMatch(match);
+          if (newId.trim().isEmpty) {
+            throw Exception('Maç kaydedilemedi.');
+          }
+          created++;
+        }
+      } catch (e) {
+        // Tekrarda yarıda kalırsa kaç maçın girildiği bilinmeli.
+        if (created == 0) rethrow;
+        throw Exception(
+          '$created maç kaydedildi (hafta $week–${week + created - 1}), '
+          'sonrakiler kaydedilemedi: $e',
+        );
       }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Maç başarıyla planlandı.'),
+        SnackBar(
+          content: Text(
+            count == 1
+                ? 'Maç başarıyla planlandı.'
+                : '$count maç planlandı (hafta $week–${week + count - 1}).',
+          ),
           backgroundColor: Colors.green,
         ),
       );

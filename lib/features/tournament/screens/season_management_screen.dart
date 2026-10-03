@@ -122,6 +122,7 @@ class SeasonManagementScreen extends StatelessWidget {
     DateTime? transferEndDate = season?.transferEndDate;
     var isActive = season?.isActive ?? true;
     var isDefault = season?.isDefault ?? false;
+    var isDoubleRound = season?.isDoubleRound ?? false;
     var saving = false;
 
     Future<void> pickTurkeyCity({required StateSetter setSheetState}) async {
@@ -269,6 +270,7 @@ class SeasonManagementScreen extends StatelessWidget {
             : countryController.text.trim(),
         isActive: isActive,
         isDefault: isDefault,
+        isDoubleRound: isDoubleRound,
         transferStartDate: transferStartDate,
         transferEndDate: transferEndDate,
         teamsPerGroup: int.tryParse(teamsPerGroupController.text.trim()) ?? 4,
@@ -292,10 +294,32 @@ class SeasonManagementScreen extends StatelessWidget {
         payload['start_date'] = _dateOnly(startDate!);
         payload['end_date'] = _dateOnly(endDate!);
 
+        String seasonId;
         if (isEdit) {
           await _sb.from('seasons').update(payload).eq('id', season.id);
+          seasonId = season.id;
         } else {
-          await _sb.from('seasons').insert(payload);
+          final res = await _sb
+              .from('seasons')
+              .insert(payload)
+              .select('id')
+              .single();
+          seasonId = (res['id'] ?? '').toString().trim();
+        }
+
+        // Tek gruplu sezonda grup, turnuva adıyla otomatik oluşturulur.
+        if (built.numberOfGroups == 1 && seasonId.isNotEmpty) {
+          final existing = await _sb
+              .from('groups')
+              .select('id')
+              .eq('season_id', seasonId)
+              .limit(1);
+          if ((existing as List).isEmpty) {
+            await _sb.from('groups').insert({
+              'season_id': seasonId,
+              'name': leagueName.trim().isEmpty ? name : leagueName.trim(),
+            });
+          }
         }
 
         // Başarılı kayıtta sheet kapanır; kapanmış sheet'e setState yapılmaz.
@@ -518,6 +542,15 @@ class SeasonManagementScreen extends StatelessWidget {
                             'Grup Sayısı',
                             numberOfGroupsController,
                             number: true,
+                          ),
+                          switchRow(
+                            Icons.sync_alt_rounded,
+                            'Rövanşlı',
+                            isDoubleRound
+                                ? 'Her eşleşme iki maç (rövanşlı)'
+                                : 'Her eşleşme tek maç',
+                            isDoubleRound,
+                            (v) => setSheetState(() => isDoubleRound = v),
                           ),
                         ],
                       ),
@@ -1081,7 +1114,7 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
     _disposeControllersLater([nameController]);
   }
 
-  /// Grup adı satırı (en fazla 10 karakter).
+  /// Grup adı satırı (en fazla 40 karakter).
   Widget _groupNameRow(TextEditingController c, {required bool enabled}) {
     return AdminFieldRow(
       icon: Icons.label_outline_rounded,
@@ -1089,7 +1122,7 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
       child: TextField(
         controller: c,
         enabled: enabled,
-        maxLength: 10,
+        maxLength: 40,
         textCapitalization: TextCapitalization.words,
         style: const TextStyle(
           color: Colors.white,

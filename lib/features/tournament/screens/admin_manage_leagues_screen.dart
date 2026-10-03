@@ -159,11 +159,11 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
             Future<void> pickLogo() async {
               final picked = await _picker.pickImage(
                 source: ImageSource.gallery,
-                imageQuality: 85,
               );
               if (picked == null) return;
+              final logo = await preparePickedLogo(picked);
               setPopupState(() {
-                selectedLogo = picked;
+                selectedLogo = logo;
                 removedLogo = false;
               });
             }
@@ -960,9 +960,10 @@ class _EditLeagueScreenState extends State<EditLeagueScreen> {
   Future<void> _pickLogo() async {
     final picked = await ImagePicker().pickImage(
       source: ImageSource.gallery,
-      imageQuality: 85,
     );
-    if (picked != null) setState(() => _newLogo = picked);
+    if (picked == null) return;
+    final logo = await preparePickedLogo(picked);
+    if (mounted) setState(() => _newLogo = logo);
   }
 
   @override

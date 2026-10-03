@@ -206,10 +206,11 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
   Future<void> _logoSec() async {
     final picked = await _picker.pickImage(
       source: ImageSource.gallery,
-      imageQuality: 85,
     );
-    if (picked == null || !mounted) return;
-    setState(() => _leagueLogo = picked);
+    if (picked == null) return;
+    final logo = await preparePickedLogo(picked);
+    if (!mounted) return;
+    setState(() => _leagueLogo = logo);
   }
 
   Future<void> _tarihAraligiSec() async {
@@ -525,7 +526,7 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
                       image: pickedImageProvider(_leagueLogo!),
                       height: 150,
                       width: double.infinity,
-                      fit: BoxFit.cover,
+                      fit: BoxFit.contain,
                     ),
                   ),
                 ),
