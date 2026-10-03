@@ -446,22 +446,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 if (!_didAutoSelectDefaultLeague ||
                     !allLeagues.any((l) => l.id == _activeLeagueId)) {
-                  // İlk girişte gizli turnuvanın default gelmesini önlemek için küçük kontrol
-                  final def =
-                      allLeagues.any(
-                        (l) => l.isDefault && (!l.isPrivate || isAdmin),
+                  // Gizli turnuvalar yalnızca görme yetkisi olana gelir
+                  // (veritabanı kuralı); burada ayrıca elenmez.
+                  final def = allLeagues
+                      .firstWhere(
+                        (l) => l.isDefault,
+                        orElse: () => allLeagues.first,
                       )
-                      ? allLeagues
-                            .firstWhere(
-                              (l) => l.isDefault && (!l.isPrivate || isAdmin),
-                            )
-                            .id
-                      : allLeagues
-                            .firstWhere(
-                              (l) => !l.isPrivate || isAdmin,
-                              orElse: () => allLeagues.first,
-                            )
-                            .id;
+                      .id;
                   _activeLeagueId = def;
                   _didAutoSelectDefaultLeague = true;
                   // Dinleyiciler setState çağırır; build bittikten sonra yay.
@@ -475,13 +467,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   orElse: () => allLeagues.first,
                 );
 
-                // Seçici gizliyken: normal kullanıcı için gizli (kodlu) ve
-                // pasif turnuvalar hariç tüm turnuvalar; admin hepsini görür.
+                // Seçici gizliyken: kişinin görebildiği tüm aktif turnuvalar
+                // (gizliler yetkisi/kodu olana zaten gelir); admin hepsini.
                 _visibleLeagueIds = _showLeagueFilter
                     ? {currentLeague.id}
                     : {
                         for (final l in allLeagues)
-                          if (isAdmin || (l.isActive && !l.isPrivate)) l.id,
+                          if (isAdmin || l.isActive) l.id,
                       };
                 _leagueNameById = {for (final l in allLeagues) l.id: l.name};
                 _leagueLogoById = {for (final l in allLeagues) l.id: l.logoUrl};

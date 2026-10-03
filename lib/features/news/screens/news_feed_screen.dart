@@ -144,12 +144,9 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
         if (!snap.hasData) {
           return const Center(child: CircularProgressIndicator(color: _accent));
         }
-        final items = snap.data!
-            .where(
-              (n) =>
-                  !n.leagueIsPrivate || session.canManageLeague(n.tournamentId),
-            )
-            .toList();
+        // Gizli turnuvaların haberleri yalnızca görme yetkisi olana gelir
+        // (veritabanı kuralı).
+        final items = snap.data!.toList();
 
         // Sunucu verisi kullanıcının tercihine yetiştiyse geçici durumu bırak.
         for (final n in items) {

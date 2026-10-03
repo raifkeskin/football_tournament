@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:ui'; // Cam efekti (BackdropFilter) için eklendi
 
 import '../../../core/services/app_session.dart';
+import '../../../core/services/league_access.dart';
 import '../../match/screens/fixture_screen.dart';
 import '../../news/screens/news_feed_screen.dart';
 import '../../team/screens/groups_screen.dart';
@@ -225,10 +226,30 @@ class _MainNavigatorState extends State<MainNavigator> {
                     ),
                   ),
 
+                  // Gizli turnuvayı kodla açma (giriş gerekmez).
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+                    child: TextButton.icon(
+                      style: TextButton.styleFrom(
+                        foregroundColor: const Color(0xFF10B981),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                      icon: const Icon(Icons.key_rounded, size: 20),
+                      label: const Text(
+                        'Turnuva Kodu Gir',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      onPressed: () {
+                        Navigator.of(context).pop(); // çekmeceyi kapat
+                        showLeagueCodeDialog(this.context);
+                      },
+                    ),
+                  ),
+
                   // GİRİŞ / ÇIKIŞ BUTONU: misafirde profil (giriş) ekranına
                   // götürür, giriş yapmışta oturumu kapatır.
                   Padding(
-                    padding: const EdgeInsets.all(24.0),
+                    padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
                     child: loggedIn
                         ? OutlinedButton.icon(
                             style: OutlinedButton.styleFrom(
@@ -272,7 +293,15 @@ class _MainNavigatorState extends State<MainNavigator> {
           ),
         ),
       ),
-      body: IndexedStack(index: _aktifSekme, children: ekranlar),
+      // Görülebilen turnuvalar değişince (giriş/çıkış, kod) ekranlar
+      // baştan kurulur ve verilerini yeniden okur.
+      body: ValueListenableBuilder<int>(
+        valueListenable: LeagueAccess.dataEpoch,
+        builder: (context, epoch, _) => KeyedSubtree(
+          key: ValueKey('data_$epoch'),
+          child: IndexedStack(index: _aktifSekme, children: ekranlar),
+        ),
+      ),
     );
   }
 }

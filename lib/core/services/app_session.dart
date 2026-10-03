@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'league_access.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb; // Supabase çakışmasını önlemek için alias
 
 const _kRememberMeKey = 'auth_remember_me';
@@ -128,6 +129,8 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
   static Future<void> enforceRememberMe() async {
     final auth = sb.Supabase.instance.client.auth;
     if (auth.currentSession == null) return;
+    // Kodla turnuva takip eden misafirin isimsiz oturumu korunur.
+    if (auth.currentUser?.isAnonymous ?? false) return;
     var remember = false;
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -232,7 +235,24 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
     value = value.copyWith(isAdmin: isAdmin);
   }
 
-  Future<void> _onAuthChanged(sb.User? user) async {
+  /// Son görülen oturum kimliği; değişince ekranlar verilerini baştan okur
+  /// (gizli turnuvaların görünürlüğü kişiye göre değişir).
+  String? _lastAuthId = '';
+
+  Future<void> _onAuthChanged(sb.User? authUser) async {
+    if (authUser?.id != _lastAuthId) {
+      final first = _lastAuthId == '';
+      _lastAuthId = authUser?.id;
+      if (!first) LeagueAccess.bump();
+      // Çıkışta cihazdaki kodlarla isimsiz takip; girişte hesaba taşınır.
+      if (authUser == null || !authUser.isAnonymous) {
+        LeagueAccess.restoreFollows().then((changed) {
+          if (changed && authUser != null) LeagueAccess.bump();
+        });
+      }
+    }
+    // İsimsiz (kodla takip eden) oturum arayüzde misafir sayılır.
+    final user = (authUser?.isAnonymous ?? false) ? null : authUser;
     if (user == null) {
       _profileSub?.cancel();
       value = value.copyWith(

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/league.dart';
 import '../../../core/services/app_session.dart';
 import '../../../core/services/image_upload_service.dart';
@@ -331,7 +332,7 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                         icon: isPrivate
                             ? Icons.lock_outline_rounded
                             : Icons.public_rounded,
-                        label: 'Görünürlük',
+                        label: 'Gizli turnuva',
                         onTap: saving
                             ? null
                             : () => setPopupState(() {
@@ -361,8 +362,8 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                         ),
                         child: Text(
                           isPrivate
-                              ? 'Gizli · sadece kodla görülür'
-                              : 'Herkese açık',
+                              ? 'Açık · yalnızca üyeler ve kodu girenler görür'
+                              : 'Kapalı · herkes görür',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 15,
@@ -388,18 +389,43 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                             label: 'Erişim Kodu',
                             icon: Icons.key_rounded,
                           ).copyWith(
-                            suffixIcon: IconButton(
-                              tooltip: 'Yeni kod üret',
-                              icon: const Icon(
-                                Icons.refresh_rounded,
-                                color: Colors.white54,
-                              ),
-                              onPressed: saving
-                                  ? null
-                                  : () => setPopupState(
-                                      () => accessCodeController.text =
-                                          _newAccessCode(),
-                                    ),
+                            suffixIcon: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  tooltip: 'Kodu paylaş',
+                                  icon: const Icon(
+                                    Icons.share_rounded,
+                                    color: kAdminAccent,
+                                  ),
+                                  onPressed: saving
+                                      ? null
+                                      : () => _shareLeagueCode(
+                                          nameController.text.trim(),
+                                          accessCodeController.text.trim(),
+                                        ),
+                                ),
+                                IconButton(
+                                  tooltip: 'Kodu yenile',
+                                  icon: const Icon(
+                                    Icons.refresh_rounded,
+                                    color: Colors.white54,
+                                  ),
+                                  onPressed: saving
+                                      ? null
+                                      : () async {
+                                          final code = await _regenerateCode(
+                                            league,
+                                          );
+                                          if (code != null) {
+                                            setPopupState(
+                                              () => accessCodeController.text =
+                                                  code,
+                                            );
+                                          }
+                                        },
+                                ),
+                              ],
                             ),
                           ),
                     ),
@@ -442,6 +468,58 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
       nameController.dispose();
       accessCodeController.dispose();
     });
+  }
+
+  /// Erişim kodunu WhatsApp'ta paylaşılacak hazır mesajla açar.
+  Future<void> _shareLeagueCode(String leagueName, String code) async {
+    if (code.isEmpty) return;
+    final text =
+        '${leagueName.isEmpty ? 'Turnuvamızı' : '$leagueName turnuvasını'} '
+        'takip etmek için uygulamada menüden "Turnuva Kodu Gir"e '
+        '$code yazın.\n\nUygulama: https://masterfutbol.web.app';
+    final uri = Uri.parse('https://wa.me/?text=${Uri.encodeComponent(text)}');
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok) {
+      await Clipboard.setData(ClipboardData(text: text));
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Mesaj panoya kopyalandı.')));
+    }
+  }
+
+  /// Kayıtlı turnuvada yeni kod üretir (eski kodla takip edenlerin erişimi
+  /// kapanır, önce onay alınır); yeni turnuvada yalnızca kod üretir.
+  Future<String?> _regenerateCode(League? league) async {
+    if (league == null) return _newAccessCode();
+    final ok = await showAdminConfirmDialog(
+      context: context,
+      title: 'Kodu Yenile',
+      message:
+          'Yeni kod üretilecek. Eski kodla turnuvayı takip eden herkesin '
+          'erişimi kapanacak; yeni kodu tekrar paylaşmanız gerekecek. '
+          'Devam etmek istiyor musunuz?',
+      confirmLabel: 'YENİLE',
+      icon: Icons.refresh_rounded,
+    );
+    if (!ok || !mounted) return null;
+    try {
+      final code = await _sb.rpc(
+        'regenerate_league_code',
+        params: {'p_league_id': league.id},
+      );
+      if (!mounted) return null;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Yeni kod oluşturuldu.')));
+      return code?.toString();
+    } catch (e) {
+      if (!mounted) return null;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Kod yenilenemedi: $e')));
+      return null;
+    }
   }
 
   Future<void> _softDeleteLeague(League league) async {

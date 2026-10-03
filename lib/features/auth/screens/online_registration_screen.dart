@@ -84,8 +84,10 @@ class _AccountRequestFormState extends State<AccountRequestForm> {
                 'gerekiyor.';
           case AccountRequestOutcome.unknownPhone:
             _error =
-                'Bu numara herhangi bir takım kadrosunda kayıtlı değil. '
-                'Numaranın kadroya eklenmesi için takım sorumlunuzla görüşün.';
+                'Bu numara sistemde kayıtlı değil. Bir turnuvayı takip etmek '
+                'için hesap gerekmez; turnuva sorumlusundan kodu alıp menüdeki '
+                '"Turnuva Kodu Gir"e yazabilirsiniz. Futbolcuysanız takım '
+                'sorumlunuza, turnuva yöneticisiyseniz bize ulaşın.';
           case AccountRequestOutcome.invalidPhone:
             _error = 'Geçerli bir cep telefonu numarası girin.';
         }
