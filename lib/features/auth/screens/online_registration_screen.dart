@@ -7,7 +7,7 @@ import '../models/auth_models.dart';
 import '../widgets/phone_input.dart';
 import 'forgot_password_screen.dart';
 
-/// Kayıt: telefon + ad soyad ile geçici şifre talebi. Admin onaylayınca
+/// Kayıt: telefon numarasıyla geçici şifre talebi. Admin onaylayınca
 /// geçici şifre WhatsApp'tan iletilir (SMS kullanılmıyor).
 class OnlineRegistrationScreen extends StatelessWidget {
   const OnlineRegistrationScreen({super.key});
@@ -33,7 +33,6 @@ class AccountRequestForm extends StatefulWidget {
 
 class _AccountRequestFormState extends State<AccountRequestForm> {
   final _phoneController = TextEditingController();
-  final _nameController = TextEditingController();
 
   bool _busy = false;
   String? _error;
@@ -44,19 +43,13 @@ class _AccountRequestFormState extends State<AccountRequestForm> {
   @override
   void dispose() {
     _phoneController.dispose();
-    _nameController.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
     final raw10 = normalizePhoneToRaw10(_phoneController.text);
-    final name = _nameController.text.trim();
     if (raw10.length != 10 || !raw10.startsWith('5')) {
       setState(() => _error = 'Geçerli bir cep telefonu numarası girin.');
-      return;
-    }
-    if (!widget.isReset && name.length < 3) {
-      setState(() => _error = 'Lütfen adınızı ve soyadınızı yazın.');
       return;
     }
 
@@ -67,7 +60,6 @@ class _AccountRequestFormState extends State<AccountRequestForm> {
     try {
       final outcome = await ServiceLocator.authService.requestAccountPassword(
         phoneRaw10: raw10,
-        fullName: widget.isReset ? null : name,
         isReset: widget.isReset,
       );
       if (!mounted) return;
@@ -90,6 +82,10 @@ class _AccountRequestFormState extends State<AccountRequestForm> {
             _error =
                 'Bu numarayla kayıtlı hesap bulunamadı. Önce kayıt olmanız '
                 'gerekiyor.';
+          case AccountRequestOutcome.unknownPhone:
+            _error =
+                'Bu numara herhangi bir takım kadrosunda kayıtlı değil. '
+                'Numaranın kadroya eklenmesi için takım sorumlunuzla görüşün.';
           case AccountRequestOutcome.invalidPhone:
             _error = 'Geçerli bir cep telefonu numarası girin.';
         }
@@ -188,7 +184,7 @@ class _AccountRequestFormState extends State<AccountRequestForm> {
                   ? 'Kayıtlı telefon numaranızı yazın. Yeni geçici şifreniz, '
                         'yönetici onayından sonra WhatsApp üzerinden '
                         'iletilecektir.'
-                  : 'Telefon numaranızı ve adınızı yazın. Geçici şifreniz, '
+                  : 'Telefon numaranızı yazın. Geçici şifreniz, '
                         'yönetici onayından sonra WhatsApp üzerinden '
                         'iletilecektir.',
               style: const TextStyle(
@@ -213,16 +209,6 @@ class _AccountRequestFormState extends State<AccountRequestForm> {
                     phone: true,
                   ),
                 ),
-                if (!widget.isReset)
-                  AdminFieldRow(
-                    icon: Icons.badge_outlined,
-                    label: 'Ad Soyad',
-                    child: _input(
-                      controller: _nameController,
-                      hint: 'Adınız ve soyadınız',
-                      keyboardType: TextInputType.name,
-                    ),
-                  ),
               ],
             ),
           ),

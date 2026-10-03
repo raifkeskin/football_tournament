@@ -19,8 +19,6 @@ class AdminOtpMonitorScreen extends StatefulWidget {
 }
 
 class _AdminOtpMonitorScreenState extends State<AdminOtpMonitorScreen> {
-  static const _loginUrl = 'https://masterfutbol.web.app';
-
   var _includeClosed = false;
   final _busyIds = <String>{};
 
@@ -48,9 +46,10 @@ class _AdminOtpMonitorScreenState extends State<AdminOtpMonitorScreen> {
     return '${two(l.day)}.${two(l.month)} ${two(l.hour)}:${two(l.minute)}';
   }
 
+  // Kişi uygulamadan kayıt olduğu için adres tekrar gönderilmez.
   static String _message(TempPasswordGrant g) =>
-      'Master Lig Platformuna giriş için geçici şifreniz: ${g.password}\n\n'
-      'Giriş: $_loginUrl\n'
+      'Türk Veteranları Lig Uygulaması\'na giriş için geçici şifreniz: '
+      '${g.password}\n\n'
       'İlk girişte kendi şifrenizi belirlemeniz istenecek.';
 
   Future<void> _openWhatsApp(TempPasswordGrant g) async {

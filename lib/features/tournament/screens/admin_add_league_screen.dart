@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -139,8 +138,8 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
             final filtered = q.isEmpty
                 ? _turkiyeIlleri
                 : _turkiyeIlleri
-                    .where((c) => c.toLowerCase().contains(q))
-                    .toList();
+                      .where((c) => c.toLowerCase().contains(q))
+                      .toList();
             return SafeArea(
               child: SizedBox(
                 height: MediaQuery.of(context).size.height * 0.75,
@@ -165,7 +164,7 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
                           final city = filtered[index];
                           final selected =
                               (initialValue ?? '').trim().toLowerCase() ==
-                                  city.toLowerCase();
+                              city.toLowerCase();
                           return ListTile(
                             title: Text(city),
                             trailing: selected
@@ -216,7 +215,8 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
   Future<void> _tarihAraligiSec() async {
     final now = DateTime.now();
     final initialStart = _startDate ?? now;
-    final initialEnd = _endDate ??
+    final initialEnd =
+        _endDate ??
         (_startDate != null ? _startDate!.add(const Duration(days: 7)) : now);
     final initialRange = DateTimeRange(
       start: initialStart,
@@ -313,16 +313,21 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
         country: 'Türkiye',
         city: city.isEmpty ? null : city,
         managerFullName: managerFullName.isEmpty ? null : managerFullName,
-        managerPhoneRaw10:
-            managerPhone.isEmpty ? null : normalizePhoneToRaw10(managerPhone),
+        managerPhoneRaw10: managerPhone.isEmpty
+            ? null
+            : normalizePhoneToRaw10(managerPhone),
         startDate: _startDate,
         endDate: _endDate,
         isPrivate: _isPrivate,
         accessCode: _isPrivate ? accessCode : null,
         youtubeUrl: _youtubeController.text.trim(),
         instagramUrl: _instagramController.text.trim(),
-        matchPeriodDuration: matchPeriodDuration <= 0 ? 25 : matchPeriodDuration,
-        startingPlayerCount: startingPlayerCount <= 0 ? 11 : startingPlayerCount,
+        matchPeriodDuration: matchPeriodDuration <= 0
+            ? 25
+            : matchPeriodDuration,
+        startingPlayerCount: startingPlayerCount <= 0
+            ? 11
+            : startingPlayerCount,
         subPlayerCount: subPlayerCount < 0 ? 7 : subPlayerCount,
         numberOfGroups: int.tryParse(_groupCountController.text) ?? 1,
         groups: List.generate(
@@ -370,7 +375,8 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
       print('Turnuva ekleme hatası: $e');
       if (!mounted) return;
       final msg = e.toString();
-      final readable = msg.contains('requires an index') ||
+      final readable =
+          msg.contains('requires an index') ||
               msg.contains('The query requires an index')
           ? 'Bu işlem için Firestore index hatası oluştu. Uygulama sorgusu sadeleştirildi; tekrar deneyin.'
           : 'Hata oluştu: $e';

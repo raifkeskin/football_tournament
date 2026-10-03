@@ -183,6 +183,7 @@ class SupabaseAuthService implements IAuthService {
       'reset_requested' => AccountRequestOutcome.resetRequested,
       'already_pending' => AccountRequestOutcome.alreadyPending,
       'not_registered' => AccountRequestOutcome.notRegistered,
+      'unknown_phone' => AccountRequestOutcome.unknownPhone,
       _ => AccountRequestOutcome.invalidPhone,
     };
   }

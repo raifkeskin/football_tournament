@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:football_tournament/features/tournament/utils/pitch_layout.dart';
+import 'package:football_tournament/core/widgets/pitch_token_style.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../match/models/match.dart';
@@ -253,6 +255,23 @@ List<String> starterIdsInFormationOrder({
       const <String>[];
 }
 
+/// Diziliş afişi için: dizilişin adı ve hatlara göre ilk 11 oyuncu id'leri
+/// (lines[0] kaleci, sonra defanstan hücuma). İlk 11 yoksa null.
+({String formation, List<List<String>> lines})? formationLinesFor({
+  required List<MatchRosterModel> starters,
+  required Map<String, PlayerModel> players,
+  String? formation,
+}) {
+  final l = _computeLayout(starters, players, formation: formation);
+  if (l == null) return null;
+  return (
+    formation: l.formation,
+    lines: [
+      for (final line in l.lines) [for (final p in line) p.id],
+    ],
+  );
+}
+
 /// Maç detayı "Diziliş" sekmesi: esamedeki ilk 11 sahaya yerleşir.
 /// Diziliş seçilmemişse oyuncuların mevkilerinden otomatik hesaplanır;
 /// yetkili kullanıcı dizilişi değiştirebilir (matches.home/away_formation).
@@ -300,6 +319,7 @@ class _FormationTabState extends State<FormationTab>
   void initState() {
     super.initState();
     _loadSavedFormations();
+    PitchTokenStylePref.load();
   }
 
   /// Kayıtlı dizilişi doğrudan veritabanından okur; ekranın açılışındaki
@@ -448,7 +468,8 @@ class _FormationTabState extends State<FormationTab>
     super.build(context);
     final teamColor = _selected == 0 ? _accent : const Color(0xFF3B82F6);
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+      // Üst sekmelere yakın başlar; takım seçimi + gösterim seçimi bir arada.
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
       children: [
         _TeamSwitch(
           homeName: widget.homeName,
@@ -456,7 +477,7 @@ class _FormationTabState extends State<FormationTab>
           selected: _selected,
           onChanged: (v) => setState(() => _selected = v),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 10),
         StreamBuilder<List<PlayerModel>>(
           key: ValueKey('players_$_teamId'),
           stream: ServiceLocator.teamService.watchPlayers(
@@ -538,23 +559,33 @@ class _FormationTabState extends State<FormationTab>
                           onChanged: _changeFormation,
                         ),
                         const Spacer(),
-                        if (widget.canEdit)
+                        // Gösterim tercihi diziliş afişine de uygulanır.
+                        // Kaydet butonu da varsa yer açmak için yalnız ikon.
+                        PitchTokenStyleToggle(compact: widget.canEdit),
+                        if (widget.canEdit) ...[
+                          const SizedBox(width: 8),
                           _SaveLayoutButton(
                             dirty: dirty,
                             saving: _saving,
                             onPressed: () => _saveLayout(formation, currentIds),
                           ),
+                        ],
                       ],
                     ),
                     const SizedBox(height: 10),
                     AspectRatio(
-                      aspectRatio: 0.72,
-                      child: _Pitch(
-                        lines: pitchLines,
-                        teamColor: teamColor,
-                        onSwap: widget.canEdit
-                            ? (from, to) => _swap(currentIds, from, to)
-                            : null,
+                      // Kaleciye kadar tüm saha telefon ekranına sığar.
+                      aspectRatio: 0.8,
+                      child: ValueListenableBuilder<PitchTokenStyle>(
+                        valueListenable: PitchTokenStylePref.notifier,
+                        builder: (context, style, _) => _Pitch(
+                          lines: pitchLines,
+                          teamColor: teamColor,
+                          style: style,
+                          onSwap: widget.canEdit
+                              ? (from, to) => _swap(currentIds, from, to)
+                              : null,
+                        ),
                       ),
                     ),
                     if (widget.canEdit)
@@ -716,7 +747,8 @@ class _TeamSwitch extends StatelessWidget {
           onTap: () => onChanged(i),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
-            padding: const EdgeInsets.symmetric(vertical: 11),
+            // Kadrolar sekmesindeki takım başlıklarıyla aynı yükseklik.
+            padding: const EdgeInsets.symmetric(vertical: 6),
             decoration: BoxDecoration(
               color: on ? _accent : Colors.transparent,
               borderRadius: BorderRadius.circular(10),
@@ -738,10 +770,10 @@ class _TeamSwitch extends StatelessWidget {
     }
 
     return Container(
-      padding: const EdgeInsets.all(4),
+      padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.3),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.white10),
       ),
       child: Row(children: [item(0, homeName), item(1, awayName)]),
@@ -750,11 +782,17 @@ class _TeamSwitch extends StatelessWidget {
 }
 
 class _Pitch extends StatelessWidget {
-  const _Pitch({required this.lines, required this.teamColor, this.onSwap});
+  const _Pitch({
+    required this.lines,
+    required this.teamColor,
+    this.style = PitchTokenStyle.circle,
+    this.onSwap,
+  });
 
   /// lines[0]: kaleci, sonrakiler defanstan hücuma dizilişin hatları.
   final List<List<_PitchPlayer>> lines;
   final Color teamColor;
+  final PitchTokenStyle style;
 
   /// null değilse oyuncular sürükle-bırakla yer değiştirebilir.
   final void Function(String fromId, String toId)? onSwap;
@@ -762,12 +800,6 @@ class _Pitch extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final n = lines.length - 1; // saha oyuncusu hat sayısı
-    double yOf(int li) {
-      if (li == 0) return 0.90;
-      // Hatlar defanstan (0.70) hücuma (0.18) eşit aralıklı.
-      if (n <= 1) return 0.44;
-      return 0.70 - (li - 1) * (0.52 / (n - 1));
-    }
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
@@ -780,14 +812,19 @@ class _Pitch extends StatelessWidget {
           for (var li = 0; li < lines.length; li++) {
             final line = lines[li];
             for (var i = 0; i < line.length; i++) {
-              final x = (i + 1) / (line.length + 1);
+              final pos = pitchSlot(
+                li: li,
+                i: i,
+                n: line.length,
+                outfieldLines: n,
+              );
               children.add(
                 Positioned(
-                  left: (x * c.maxWidth - tokenW / 2).clamp(
+                  left: (pos.dx * c.maxWidth - tokenW / 2).clamp(
                     0.0,
                     c.maxWidth - tokenW,
                   ),
-                  top: yOf(li) * c.maxHeight - 26,
+                  top: pos.dy * c.maxHeight - 26,
                   width: tokenW,
                   child: _slot(
                     line[i],
@@ -804,7 +841,7 @@ class _Pitch extends StatelessWidget {
   }
 
   Widget _slot(_PitchPlayer p, Color color) {
-    final token = _PlayerToken(player: p, color: color);
+    final token = _PlayerToken(player: p, color: color, style: style);
     final swap = onSwap;
     if (swap == null) return token;
     return DragTarget<String>(
@@ -834,10 +871,15 @@ class _Pitch extends StatelessWidget {
 }
 
 class _PlayerToken extends StatelessWidget {
-  const _PlayerToken({required this.player, required this.color});
+  const _PlayerToken({
+    required this.player,
+    required this.color,
+    this.style = PitchTokenStyle.circle,
+  });
 
   final _PitchPlayer player;
   final Color color;
+  final PitchTokenStyle style;
 
   @override
   Widget build(BuildContext context) {
@@ -851,31 +893,46 @@ class _PlayerToken extends StatelessWidget {
             clipBehavior: Clip.none,
             alignment: Alignment.center,
             children: [
-              Container(
-                width: 34,
-                height: 34,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
+              if (style == PitchTokenStyle.shirt)
+                JerseyShape(
+                  width: 38,
                   color: color,
-                  border: Border.all(color: Colors.white, width: 2),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Colors.black45,
-                      blurRadius: 6,
-                      offset: Offset(0, 2),
+                  borderColor: Colors.white,
+                  child: Text(
+                    player.number.isEmpty ? '-' : player.number,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 13,
                     ),
-                  ],
-                ),
-                child: Text(
-                  player.number.isEmpty ? '-' : player.number,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 13,
+                  ),
+                )
+              else
+                Container(
+                  width: 34,
+                  height: 34,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: color,
+                    border: Border.all(color: Colors.white, width: 2),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Colors.black45,
+                        blurRadius: 6,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Text(
+                    player.number.isEmpty ? '-' : player.number,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 13,
+                    ),
                   ),
                 ),
-              ),
               if (player.isCaptain)
                 const Positioned(
                   right: 0,

@@ -726,9 +726,7 @@ class SupabaseLeagueService implements ILeagueService {
       ascending: false,
     ).map(
       (rows) => rows
-          .where(
-            (r) => leagueIds.contains((r['league_id'] ?? '').toString()),
-          )
+          .where((r) => leagueIds.contains((r['league_id'] ?? '').toString()))
           .map(_newsFromRow)
           .toList(),
     );

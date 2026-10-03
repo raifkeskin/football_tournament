@@ -28,6 +28,7 @@ Uint8List? removeLogoBackground(Uint8List bytes) {
         ? img.copyResize(src, width: _maxSide * 2)
         : img.copyResize(src, height: _maxSide * 2);
   }
+  src = _trimEdgeStripes(src);
   final w = src.width, h = src.height;
 
   int dist(img.Pixel p) {
@@ -124,4 +125,63 @@ Uint8List? removeLogoBackground(Uint8List bytes) {
     );
   }
   return img.encodePng(square);
+}
+
+/// Kenarlardaki ince, tek renk koyu şeritleri (ör. kare yapmak için eklenmiş
+/// siyah satırlar) kırpar; yoksa dolgu kenardan başlayamaz. Her kenarda en
+/// fazla boyun %3'ü kırpılır.
+img.Image _trimEdgeStripes(img.Image src) {
+  bool uniformDark(Iterable<img.Pixel> line) {
+    img.Pixel? first;
+    for (final p in line) {
+      if (p.a < 128) return false;
+      if (math.max(p.r, math.max(p.g, p.b)) > 200) return false;
+      first ??= p;
+      if ((p.r - first.r).abs() > 24 ||
+          (p.g - first.g).abs() > 24 ||
+          (p.b - first.b).abs() > 24) {
+        return false;
+      }
+    }
+    return first != null;
+  }
+
+  Iterable<img.Pixel> row(int y) sync* {
+    for (var x = 0; x < src.width; x++) {
+      yield src.getPixel(x, y);
+    }
+  }
+
+  Iterable<img.Pixel> col(int x) sync* {
+    for (var y = 0; y < src.height; y++) {
+      yield src.getPixel(x, y);
+    }
+  }
+
+  final maxY = (src.height * 0.03).ceil(), maxX = (src.width * 0.03).ceil();
+  var top = 0, bottom = 0, left = 0, right = 0;
+  while (top < maxY && uniformDark(row(top))) {
+    top++;
+  }
+  while (bottom < maxY && uniformDark(row(src.height - 1 - bottom))) {
+    bottom++;
+  }
+  while (left < maxX && uniformDark(col(left))) {
+    left++;
+  }
+  while (right < maxX && uniformDark(col(src.width - 1 - right))) {
+    right++;
+  }
+  // Şerit sınırı aşıyorsa koyu zeminli logodur; dokunma.
+  if (top == maxY || bottom == maxY || left == maxX || right == maxX) {
+    return src;
+  }
+  if (top + bottom + left + right == 0) return src;
+  return img.copyCrop(
+    src,
+    x: left,
+    y: top,
+    width: src.width - left - right,
+    height: src.height - top - bottom,
+  );
 }

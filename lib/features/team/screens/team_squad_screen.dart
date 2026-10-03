@@ -1462,7 +1462,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
             ),
             PopupMenuButton<String>(
               tooltip: 'Diğer işlemler',
-              icon: const Icon(Icons.more_vert_rounded, color: _squadMuted),
+              icon: const Icon(Icons.menu_rounded, color: _squadMuted),
               color: const Color(0xFF1E293B),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),
@@ -3527,21 +3527,12 @@ class _SquadSummaryCard extends StatelessWidget {
               width: 104,
               constraints: const BoxConstraints(minHeight: 104),
               alignment: Alignment.center,
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFF0F172A), Color(0xFF064E3B)],
-                ),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-              ),
+              // Çerçevesiz: şeffaf logo doğrudan kartın üzerinde durur.
               child: logoUrl.trim().isNotEmpty
                   ? WebSafeImage(
                       url: logoUrl,
-                      width: 84,
-                      height: 84,
+                      width: 100,
+                      height: 100,
                       fit: BoxFit.contain,
                     )
                   : Text(

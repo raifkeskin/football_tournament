@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Türk Veteranları Lig Uygulaması – Teklif Oluşturucu</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+/* Solda form, sağda canlı teklif önizlemesi; yazdırırken yalnızca teklif (A4) çıkar. */
+:root {
+  --bg: #F6F5F1; --surface: #FFFFFF; --fg: #141A33; --muted: #5A6077; --line: #E2DFD6;
+  --navy: #1B2A6B; --gold: #A9822E; --gold-soft: #F3EBD8; --silver: #6B7280; --silver-soft: #ECEEF2;
+  --display: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  --body: 'Barlow', 'Segoe UI', system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: #E9E7E1; color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.5; }
+.app { display: grid; grid-template-columns: 330px minmax(0, 1fr); min-height: 100vh; }
+.form { background: #1B2A6B; color: #fff; padding: 22px 20px 40px; display: grid; gap: 14px; align-content: start; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+.form h1 { font-family: var(--display); font-size: 1.5rem; margin: 0 0 4px; }
+.form .hint { font-size: .82rem; color: #C9CFEA; margin: 0; }
+.form fieldset { border: 1px solid rgba(255,255,255,.18); border-radius: 10px; padding: 10px 12px 12px; margin: 0; display: grid; gap: 8px; }
+.form legend { font-family: var(--display); letter-spacing: 1.5px; text-transform: uppercase; font-size: .85rem; color: #E2B845; padding: 0 4px; }
+.form label { display: grid; gap: 3px; font-size: .85rem; color: #DDE2F5; }
+.form input, .form select { font: inherit; font-size: .95rem; padding: 7px 9px; border-radius: 7px; border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.08); color: #fff; }
+.form select option { color: #111; }
+.form .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.form .check { display: flex; gap: 8px; align-items: flex-start; font-size: .85rem; }
+.form .check input { margin-top: 3px; }
+.btn { font: inherit; font-weight: 700; font-size: 1rem; padding: 12px; border: 0; border-radius: 10px; background: #E2B845; color: #141A33; cursor: pointer; }
+.btn:focus-visible, .form input:focus-visible, .form select:focus-visible { outline: 2px solid #E2B845; outline-offset: 2px; }
+
+.preview { padding: 28px 24px 60px; }
+.page { background: var(--bg); max-width: 860px; margin: 0 auto; padding: 40px 44px 48px; display: grid; gap: 34px; box-shadow: 0 6px 30px rgba(0,0,0,.12); border-radius: 6px; }
+h2, h3, .big-title { font-family: var(--display); margin: 0; text-wrap: balance; letter-spacing: .3px; }
+.big-title { font-size: 2.6rem; line-height: 1.05; color: var(--navy); font-weight: 800; }
+h2 { font-size: 1.55rem; color: var(--navy); }
+h3 { font-size: 1.15rem; }
+p { margin: 0; }
+.eyebrow { font-family: var(--display); font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; color: var(--gold); font-size: .95rem; }
+.lead { color: var(--muted); max-width: 62ch; font-size: 1.03rem; }
+header { display: grid; gap: 10px; border-bottom: 2px solid var(--gold); padding-bottom: 24px; }
+section { display: grid; gap: 14px; break-inside: avoid; }
+.figures { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.fig { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 2px; }
+.fig .v { font-family: var(--display); font-size: 2rem; font-weight: 800; line-height: 1.1; }
+.fig .l { color: var(--muted); font-size: .9rem; }
+.fig .s { font-size: .83rem; color: var(--gold); font-weight: 600; }
+.fig.main { background: var(--navy); border-color: var(--navy); }
+.fig.main .v, .fig.main .l { color: #fff; }
+.fig.main .s { color: #F3EBD8; }
+.bracket { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 12px; }
+.stage { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.stage .big { font-family: var(--display); font-size: 2.2rem; font-weight: 800; line-height: 1; }
+.cups { display: grid; gap: 10px; }
+.cup { border-radius: 12px; padding: 12px 14px; display: grid; gap: 8px; }
+.cup.gold { background: var(--gold-soft); }
+.cup.silver { background: var(--silver-soft); }
+.cup h3 { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.cup.gold h3 { color: var(--gold); }
+.cup.silver h3 { color: var(--silver); }
+.cup h3 small { font-family: var(--body); font-size: .83rem; font-weight: 600; color: var(--muted); }
+.ties { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-weight: 600; font-size: .92rem; }
+.tie { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 2px 9px; }
+.tbl { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); overflow: hidden; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th, td { padding: 9px 13px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; white-space: normal; }
+thead th { font-family: var(--display); font-size: .9rem; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+tbody tr:last-child td { border-bottom: 0; }
+tr.total td { font-weight: 700; background: var(--gold-soft); }
+td.strike { color: var(--muted); text-decoration: line-through; }
+.note { color: var(--muted); font-size: .9rem; max-width: 66ch; }
+.features { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 26px; }
+.feat { display: grid; gap: 2px; padding-top: 9px; border-top: 1px solid var(--line); }
+.feat span { color: var(--muted); font-size: .92rem; }
+.terms { margin: 0; padding-left: 20px; display: grid; gap: 7px; max-width: 68ch; }
+footer { color: var(--muted); font-size: .86rem; border-top: 1px solid var(--line); padding-top: 14px; }
+.num { font-variant-numeric: tabular-nums; }
+
+@media (max-width: 900px) {
+  .app { grid-template-columns: 1fr; }
+  .form { position: static; height: auto; }
+  .page { padding: 28px 18px; }
+  .figures, .bracket, .features { grid-template-columns: 1fr; }
+}
+@page { size: A4; margin: 12mm; }
+@media print {
+  body { background: #fff; }
+  .app { display: block; }
+  .form { display: none; }
+  .preview { padding: 0; }
+  .page { box-shadow: none; max-width: none; padding: 0; gap: 22px; background: #fff; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <form class="form" id="f" autocomplete="off">
+    <div>
+      <h1>Teklif Oluşturucu</h1>
+      <p class="hint">Değerleri değiştirin, sağdaki teklif anında güncellenir. Bitince "PDF olarak kaydet" ile yazdırma penceresinden PDF'e kaydedin.</p>
+    </div>
+
+    <label>Hazır şablon
+      <select id="preset">
+        <option value="">Seçin…</option>
+        <option value="bosphorus">Bosphorus Legends (2 yaka)</option>
+        <option value="champions">Türkiye Champions Master League</option>
+      </select></label>
+
+    <fieldset>
+      <legend>Turnuva</legend>
+      <label>Turnuva adı <input id="name" value="Bosphorus Legends"></label>
+      <label>Sezon <input id="season" value="2026-2027"></label>
+      <label>Ayrı turnuvalar / yakalar (virgülle ayırın, tek turnuvaysa boş bırakın)
+        <input id="groups" value="Anadolu Yakası, Avrupa Yakası"></label>
+      <label>Her turnuvada takım sayısı <input id="teams" type="number" min="3" max="40" value="8"></label>
+      <label>Lig aşaması
+        <select id="rounds"><option value="1" selected>Tek devre</option><option value="2">Çift devre</option></select></label>
+      <label>Kupa aşaması
+        <select id="cups">
+          <option value="both" selected>Altın (1-4) + Gümüş (5-8) kupa</option>
+          <option value="gold">Sadece Altın kupa (ilk 4)</option>
+          <option value="custom">Özel play-off</option>
+          <option value="none">Kupa / play-off yok</option>
+        </select></label>
+      <div class="row2" id="customBox" hidden>
+        <label>Play-off maç sayısı <input id="poMatches" type="number" min="1" value="7"></label>
+        <label>Bir takımın en fazla play-off maçı <input id="poMax" type="number" min="1" value="3"></label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Fiyat</legend>
+      <div class="row2">
+        <label>Maç başı ücret (TL) <input id="price" type="number" min="0" step="50" value="500"></label>
+        <label>Liste fiyatı (TL) <input id="list" type="number" min="0" step="50" value="1000"></label>
+      </div>
+      <p class="hint">Liste fiyatı 0 veya maç başı ücrete eşitse indirim gösterilmez.</p>
+      <label>Mevcut maç başı toplam gider (TL)
+        <input id="cost" type="number" min="0" step="50" value="18350"></label>
+      <p class="hint">Saha, hakem, yayın vb. toplamı. 0 girilirse "Takımlara etkisi" bölümü gizlenir.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Koşullar</legend>
+      <label class="check"><input type="checkbox" id="tInstall" checked> İki taksit (lig + kupa)</label>
+      <label class="check"><input type="checkbox" id="tSetup" checked> Kurulum ve eğitim ücretsiz</label>
+      <label class="check"><input type="checkbox" id="tSupport" checked> Maç günü destek</label>
+      <label class="check"><input type="checkbox" id="tData" checked> Veriler turnuvaya aittir</label>
+    </fieldset>
+
+    <button type="button" class="btn" id="print">PDF olarak kaydet</button>
+  </form>
+
+  <main class="preview"><div class="page" id="page"></div></main>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const tl = n => n.toLocaleString('tr-TR') + ' TL';
+const pct = n => '%' + n.toLocaleString('tr-TR', { maximumFractionDigits: 1 });
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+function render() {
+  const name = $('name').value.trim() || 'Turnuva';
+  const season = $('season').value.trim();
+  const groups = $('groups').value.split(',').map(s => s.trim()).filter(Boolean);
+  const gList = groups.length ? groups : [name];
+  const n = Math.max(3, Math.min(40, parseInt($('teams').value) || 8));
+  const rounds = parseInt($('rounds').value);
+  let cups = $('cups').value;
+  if (cups === 'both' && n < 8) cups = 'gold';
+  if (cups === 'gold' && n < 4) cups = 'none';
+  const price = Math.max(0, parseInt($('price').value) || 0);
+  const listRaw = Math.max(0, parseInt($('list').value) || 0);
+  const list = listRaw > price ? listRaw : 0;
+  const cost = Math.max(0, parseInt($('cost').value) || 0);
+
+  $('customBox').hidden = cups !== 'custom';
+  const poMatches = Math.max(1, parseInt($('poMatches').value) || 1);
+  const poMax = Math.max(1, parseInt($('poMax').value) || 1);
+  const leagueM = n * (n - 1) / 2 * rounds;
+  const cupM = cups === 'both' ? 6 : cups === 'gold' ? 3 : cups === 'custom' ? poMatches : 0;
+  const perT = leagueM + cupM;
+  const g = gList.length;
+  const totalM = perT * g;
+  const total = totalM * price;
+  const leagueTeamM = (n - 1) * rounds;
+  // Altın+Gümüş'te herkes yarı final oynar; diğerlerinde elenenler oynamaz.
+  const minM = leagueTeamM + (cups === 'both' ? 1 : 0);
+  const maxM = leagueTeamM + (cups === 'custom' ? poMax : cupM ? 2 : 0);
+  const half = price / 2;
+
+  const multi = g > 1;
+  const roundsTxt = rounds === 2 ? 'çift devre' : 'tek devre';
+
+  // Format şeması
+  let cupHtml = '';
+  if (cups === 'custom') {
+    cupHtml += `<div class="cup gold"><h3>Play-off <small>${poMatches} maç</small></h3>
+      <p class="note">Lig sıralamasına göre play-off oynanır; bir takım en fazla ${poMax} play-off maçı yapar.</p></div>`;
+  } else if (cups !== 'none') {
+    cupHtml += `<div class="cup gold"><h3>Altın Kupa <small>1–4. sıralar · 3 maç</small></h3>
+      <div class="ties"><span class="tie">1. – 4.</span><span class="tie">2. – 3.</span><span>→</span><span class="tie">Final</span></div></div>`;
+  }
+  if (cups === 'both') {
+    cupHtml += `<div class="cup silver"><h3>Gümüş Kupa <small>5–8. sıralar · 3 maç</small></h3>
+      <div class="ties"><span class="tie">5. – 8.</span><span class="tie">6. – 7.</span><span>→</span><span class="tie">Final</span></div></div>`;
+  }
+
+  // Ücret tablosu
+  const head = `<tr><th>Aşama</th><th>Maç</th>${list ? `<th>Liste (${tl(list)})</th>` : ''}<th>${list ? 'Lansman' : 'Ücret'} (${tl(price)})</th></tr>`;
+  const row = (label, m) => `<tr><td>${esc(label)}</td><td>${m}</td>${list ? `<td class="strike">${tl(m * list)}</td>` : ''}<td>${tl(m * price)}</td></tr>`;
+  let rows = '';
+  for (const gn of gList) {
+    const pre = multi ? gn + ' · ' : '';
+    rows += row(pre + 'lig', leagueM);
+    if (cupM) rows += row(pre + (cups === 'both' ? 'Altın ve Gümüş Kupa' : cups === 'custom' ? 'Play-off' : 'Altın Kupa'), cupM);
+  }
+  rows += `<tr class="total"><td>Toplam</td><td>${totalM}</td>${list ? `<td class="strike">${tl(totalM * list)}</td>` : ''}<td>${tl(total)}</td></tr>`;
+
+  // Takımlara etkisi
+  let impact = '';
+  if (cost > 0) {
+    const pT = cost / 2;
+    const r = (l, a, b) => `<tr><td>${l}</td><td>${tl(a)}</td><td>${tl(b)}</td><td>+${tl(b - a)}</td></tr>`;
+    impact = `<section><h2>Takımlara etkisi</h2><div class="tbl"><table>
+      <thead><tr><th></th><th>Bugün</th><th>Uygulama ile</th><th>Fark</th></tr></thead><tbody>
+      ${r('Maç başı toplam gider', cost, cost + price)}
+      ${r('Takım başına maç ücreti', pT, pT + half)}
+      ${r(`Takım başına sezon (${minM} maç)`, pT * minM, (pT + half) * minM)}
+      ${maxM > minM ? r(`${cups === 'custom' ? 'Play-off\'ta en ileri giden' : 'Finale kalan'} takım (${maxM} maç)`, pT * maxM, (pT + half) * maxM) : ''}
+      </tbody></table></div>
+      <p class="note">Mevcut maç başı giderler turnuvanın ${esc(season)} bütçesine dayanır; katılım payı hariçtir.</p></section>`;
+  }
+
+  // Koşullar
+  const terms = [];
+  if ($('tInstall').checked && cupM) terms.push(`<li><b>İki taksit:</b> lig aşaması (${leagueM * g} maç, ${tl(leagueM * g * price)}) sezon başında; ${cups === 'custom' ? 'play-off' : 'kupa'} maçları (${cupM * g} maç, ${tl(cupM * g * price)}) ${cups === 'custom' ? 'play-off' : 'kupalar'} başlamadan önce.</li>`);
+  else if ($('tInstall').checked) terms.push(`<li><b>Ödeme:</b> ${tl(total)} sezon başında.</li>`);
+  if ($('tSetup').checked) terms.push('<li><b>Kurulum ücretsiz:</b> takımlar, logolar, fikstür ve sahaların sisteme girilmesi ile turnuva sorumlusu ve takım sorumlularına kullanım eğitimi dahildir.</li>');
+  if ($('tSupport').checked) terms.push('<li><b>Maç günü destek:</b> maç saatlerinde oluşabilecek sorunlara aynı gün müdahale edilir.</li>');
+  if ($('tData').checked) terms.push('<li><b>Veriler turnuvaya aittir:</b> sezon sonunda puan durumu, istatistikler ve kadrolar istenirse dışa aktarılır.</li>');
+
+  const discount = list ? (list - price) * totalM : 0;
+  $('page').innerHTML = `
+    <header>
+      <div class="eyebrow">${esc(season)} Sezonu · Teklif</div>
+      <div class="big-title">${esc(name)} için Türk Veteranları Lig Uygulaması</div>
+      <p class="lead">${multi ? esc(gList.join(' ve ')) + ' turnuvalarının' : 'Turnuvanın'} fikstürü, puan durumu, kadroları, canlı maç akışı ve paylaşılabilir afişleri tek uygulamada. Ücret oynanan maç başına hesaplanır ve turnuvanın mevcut maç bütçesine tek bir kalem olarak eklenir.</p>
+    </header>
+    <section><div class="figures">
+      <div class="fig main"><span class="v num">${tl(price)}</span><span class="l">maç başı uygulama ücreti</span><span class="s">${list ? 'Lansman fiyatı · liste ' + tl(list) : '&nbsp;'}</span></div>
+      <div class="fig"><span class="v num">${tl(half)}</span><span class="l">takım başına, maç başı</span><span class="s">${cost ? 'Maç ücretine +' + pct(price / cost * 100) : '&nbsp;'}</span></div>
+      <div class="fig"><span class="v num">${tl(total)}</span><span class="l">${multi ? g + ' turnuva, sezon toplamı' : 'sezon toplamı'}</span><span class="s">${totalM} maç${list ? ' · liste fiyatıyla ' + tl(totalM * list) : ''}</span></div>
+    </div></section>
+    <section>
+      <h2>Sezon formatı</h2>
+      ${multi ? '<p class="note">Her biri ayrı turnuva olarak oynanır; hepsinde aynı yapı vardır.</p>' : ''}
+      <div class="bracket" style="${cupM ? '' : 'grid-template-columns:1fr'}">
+        <div class="stage"><span class="eyebrow">Lig aşaması</span><span class="big num">${leagueM} maç</span>
+          <p>${n} takım ${roundsTxt} oynar. Her takım ${leagueTeamM} maç yapar ve sıralama belirlenir.</p></div>
+        ${cupM ? `<div class="cups">${cupHtml}</div>` : ''}
+      </div>
+      <p class="note">${multi ? 'Turnuva başına' : 'Toplam'} ${leagueM}${cupM ? ' + ' + cupM + ' = ' + perT : ''} maç. ${cupM ? (minM === maxM ? `Her takım ${minM} maç oynar.` : `Her takım en az ${minM} maç oynar, ${cups === 'custom' ? 'play-off\'ta en ileri giden' : 'finale kalanlar'} ${maxM} maç oynar.`) : `Her takım ${leagueTeamM} maç oynar.`}</p>
+    </section>
+    <section>
+      <h2>Ücret</h2>
+      <div class="tbl"><table><thead>${head}</thead><tbody>${rows}</tbody></table></div>
+      ${list ? `<p class="note">Lansman fiyatı ilk sezon için geçerlidir ve ${tl(discount)} indirim içerir.</p>` : ''}
+    </section>
+    ${impact}
+    <section>
+      <h2>Uygulamada neler var</h2>
+      <div class="features">
+        <div class="feat"><b>Canlı maç akışı</b><span>Gözlemci maçı başlatır, devreyi ve bitişi işler; gol, asist, kart ve oyuncu değişikliği dakikasıyla anında görünür.</span></div>
+        <div class="feat"><b>Fikstür ve puan durumu</b><span>Sonuç girildiği an puan tablosu güncellenir; gruplar ayrı sekmelerde izlenir.</span></div>
+        <div class="feat"><b>Kadro, esame ve diziliş</b><span>Takım sorumlusu maç kadrosunu girer; ilk 11 sahada dizilişiyle gösterilir.</span></div>
+        <div class="feat"><b>Instagram için hazır afişler</b><span>Fikstür, puan durumu, takım kadrosu, maç esamesi ve diziliş tek dokunuşla hikaye boyutunda paylaşılır.</span></div>
+        <div class="feat"><b>Oyuncu profilleri ve istatistik</b><span>Gol, asist, kart ve maçın adamı sayıları oyuncu kartında birikir.</span></div>
+        <div class="feat"><b>Medya ve canlı yayın</b><span>Canlı yayın linki ve fotoğrafçının çekimleri maç sayfasında toplanır.</span></div>
+        <div class="feat"><b>Haberler</b><span>Turnuva duyuruları ve maç haberleri fotoğraflı olarak yayınlanır.</span></div>
+        <div class="feat"><b>Yönetici bildirimleri</b><span>Yeni üyelik ve profil değişikliği talepleri anında Telegram'a düşer.</span></div>
+      </div>
+    </section>
+    ${terms.length ? `<section><h2>Ödeme ve koşullar</h2><ol class="terms">${terms.join('')}</ol></section>` : ''}
+    <footer>Türk Veteranları Lig Uygulaması · Teklif ${esc(season)} sezonu için geçerlidir.</footer>`;
+  document.title = `${name} – Teklif ${season}`;
+}
+
+const PRESETS = {
+  bosphorus: { name: 'Bosphorus Legends', season: '2026-2027', groups: 'Anadolu Yakası, Avrupa Yakası', teams: 8, rounds: '1', cups: 'both', price: 500, list: 1000, cost: 18350 },
+  champions: { name: 'Türkiye Champions Master League', season: '2026-2027', groups: '', teams: 8, rounds: '1', cups: 'both', price: 500, list: 1000, cost: 17000 },
+};
+$('preset').addEventListener('change', e => {
+  const p = PRESETS[e.target.value];
+  if (!p) return;
+  for (const [k, v] of Object.entries(p)) $(k).value = v;
+  render();
+});
+$('f').addEventListener('input', render);
+$('f').addEventListener('change', render);
+$('print').addEventListener('click', () => window.print());
+render();
+</script>
+</body>
+</html>

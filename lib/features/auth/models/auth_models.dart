@@ -67,6 +67,9 @@ enum AccountRequestOutcome {
   resetRequested,
   alreadyPending,
   notRegistered,
+
+  /// Numara hiçbir oyuncu kaydında yok (kadroya eklenmemiş).
+  unknownPhone,
   invalidPhone,
 }
 

@@ -730,29 +730,24 @@ class AdminColorRow extends StatelessWidget {
               ),
             )
           : const Icon(Icons.chevron_right_rounded, color: Colors.white54),
-      child: Row(
-        children: [
-          Container(
-            width: 22,
-            height: 22,
-            decoration: BoxDecoration(
-              color: color ?? Colors.transparent,
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
+      // Kullanıcı renk kodu bilmez; yalnızca seçilen renk gösterilir.
+      child: color == null
+          ? const Text(
+              'Renk seçin',
+              style: TextStyle(
+                color: Colors.white38,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+              ),
+            )
+          : Container(
+              height: 26,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
+              ),
             ),
-          ),
-          const SizedBox(width: 10),
-          Text(
-            color == null ? 'Renk seçin' : colorToHex(color),
-            style: TextStyle(
-              color: color == null ? Colors.white38 : Colors.white,
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -837,41 +832,11 @@ Future<String?> showAdminColorPicker({
                   ],
                 ),
                 const SizedBox(height: 16),
-                AdminFieldGroup(
-                  children: [
-                    AdminFieldRow(
-                      icon: Icons.tag_rounded,
-                      label: 'Renk Kodu',
-                      trailing: Container(
-                        width: 26,
-                        height: 26,
-                        margin: const EdgeInsets.only(right: 6),
-                        decoration: BoxDecoration(
-                          color: current ?? Colors.transparent,
-                          borderRadius: BorderRadius.circular(7),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.35),
-                          ),
-                        ),
-                      ),
-                      child: TextField(
-                        controller: hexCtrl,
-                        onChanged: (_) => setState(() {}),
-                        inputFormatters: [
-                          FilteringTextInputFormatter.allow(
-                            RegExp(r'[#0-9a-fA-F]'),
-                          ),
-                          LengthLimitingTextInputFormatter(7),
-                        ],
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                        ),
-                        decoration: adminInlineInputDecoration(hint: '#RRGGBB'),
-                      ),
-                    ),
-                  ],
+                // Hazır renklerde olmayan tonlar için: ton + açıklık kaydırıcı.
+                _ColorSliders(
+                  color: current,
+                  onChanged: (c) =>
+                      setState(() => hexCtrl.text = colorToHex(c)),
                 ),
                 const SizedBox(height: 22),
                 AdminPrimaryButton(
@@ -891,4 +856,108 @@ Future<String?> showAdminColorPicker({
   );
   Future<void>.delayed(const Duration(milliseconds: 600), hexCtrl.dispose);
   return result;
+}
+
+/// Renk seçicide ton ve açıklık kaydırıcıları + seçilen rengin önizlemesi.
+class _ColorSliders extends StatelessWidget {
+  const _ColorSliders({required this.color, required this.onChanged});
+
+  final Color? color;
+  final ValueChanged<Color> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final hsl = HSLColor.fromColor(color ?? const Color(0xFFE85D1F));
+    // Gri tonlarda (beyaz/siyah) ton değişince renk görünsün diye doygunluk
+    // yükseltilir.
+    final sat = hsl.saturation < 0.2 ? 0.85 : hsl.saturation;
+
+    Widget track(List<Color> colors, double value, ValueChanged<double> on) {
+      return SizedBox(
+        height: 32,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Container(
+              height: 14,
+              margin: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(7),
+                gradient: LinearGradient(colors: colors),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+              ),
+            ),
+            SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 0,
+                activeTrackColor: Colors.transparent,
+                inactiveTrackColor: Colors.transparent,
+                overlayShape: SliderComponentShape.noOverlay,
+                thumbColor: Colors.white,
+                thumbShape: const RoundSliderThumbShape(
+                  enabledThumbRadius: 10,
+                ),
+              ),
+              child: Slider(value: value, onChanged: on),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return AdminFieldGroup(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                height: 40,
+                decoration: BoxDecoration(
+                  color: color ?? Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.35),
+                  ),
+                ),
+                alignment: Alignment.center,
+                child: color == null
+                    ? const Text(
+                        'Renk seçin',
+                        style: TextStyle(color: Colors.white38),
+                      )
+                    : null,
+              ),
+              const SizedBox(height: 12),
+              track(
+                [
+                  for (var h = 0; h <= 360; h += 60)
+                    HSLColor.fromAHSL(1, h.toDouble(), 0.9, 0.5).toColor(),
+                ],
+                hsl.hue / 360,
+                (v) => onChanged(
+                  HSLColor.fromAHSL(
+                    1,
+                    v * 360,
+                    sat,
+                    hsl.lightness.clamp(0.15, 0.85),
+                  ).toColor(),
+                ),
+              ),
+              track(
+                [
+                  Colors.black,
+                  HSLColor.fromAHSL(1, hsl.hue, sat, 0.5).toColor(),
+                  Colors.white,
+                ],
+                hsl.lightness,
+                (v) => onChanged(hsl.withLightness(v).toColor()),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 }

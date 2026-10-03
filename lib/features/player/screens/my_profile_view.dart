@@ -54,16 +54,12 @@ class MyProfileView extends StatefulWidget {
     required this.playerId,
     required this.displayName,
     required this.phone,
-    required this.footer,
   });
 
   /// Hesaba bağlı oyuncu kaydı; yoksa "eşleşmedi" görünümü açılır.
   final String? playerId;
   final String? displayName;
   final String phone;
-
-  /// En altta gösterilir (çıkış butonu).
-  final Widget footer;
 
   @override
   State<MyProfileView> createState() => _MyProfileViewState();
@@ -183,11 +179,7 @@ class _MyProfileViewState extends State<MyProfileView> {
   @override
   Widget build(BuildContext context) {
     if (widget.playerId == null) {
-      return _UnmatchedView(
-        name: widget.displayName,
-        phone: widget.phone,
-        footer: widget.footer,
-      );
+      return _UnmatchedView(name: widget.displayName, phone: widget.phone);
     }
     if (_loading && _player == null) {
       return const Center(
@@ -206,8 +198,6 @@ class _MyProfileViewState extends State<MyProfileView> {
           ),
           const SizedBox(height: 16),
           AdminPrimaryButton(label: 'TEKRAR DENE', onPressed: _load),
-          const SizedBox(height: 24),
-          widget.footer,
         ],
       );
     }
@@ -215,7 +205,6 @@ class _MyProfileViewState extends State<MyProfileView> {
     final team = _team;
     final history = _requests
         .where((r) => r.status != ProfileChangeStatus.pending)
-        .take(5)
         .toList();
 
     return RefreshIndicator(
@@ -243,11 +232,9 @@ class _MyProfileViewState extends State<MyProfileView> {
           else
             _matchesSection(team),
           if (history.isNotEmpty) ...[
-            const SizedBox(height: 22),
-            _historySection(history),
+            const SizedBox(height: 18),
+            _historyButton(history),
           ],
-          const SizedBox(height: 28),
-          widget.footer,
         ],
       ),
     );
@@ -943,74 +930,37 @@ class _MyProfileViewState extends State<MyProfileView> {
 
   // --- Geçmiş --------------------------------------------------------------------
 
-  Widget _historySection(List<ProfileChangeRequest> items) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _sectionTitle('GEÇMİŞ TALEPLERİM'),
-        Container(
-          clipBehavior: Clip.antiAlias,
-          decoration: _card(),
-          child: Column(
-            children: [
-              for (var i = 0; i < items.length; i++) ...[
-                if (i > 0)
-                  Divider(
-                    height: 1,
-                    color: Colors.white.withValues(alpha: 0.06),
-                  ),
-                _historyRow(items[i]),
-              ],
-            ],
+  Widget _historyButton(List<ProfileChangeRequest> items) {
+    return Material(
+      color: _surface.withValues(alpha: 0.92),
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => _RequestHistoryScreen(items: items),
           ),
         ),
-      ],
-    );
-  }
-
-  Widget _historyRow(ProfileChangeRequest r) {
-    final (label, color) = switch (r.status) {
-      ProfileChangeStatus.approved => ('Onaylandı', kAdminAccent),
-      ProfileChangeStatus.rejected => ('Reddedildi', kAdminDanger),
-      ProfileChangeStatus.withdrawn => ('Geri çekildi', kAdminMuted),
-      ProfileChangeStatus.pending => ('Bekliyor', kAdminAmber),
-    };
-    final who = switch (r.status) {
-      ProfileChangeStatus.withdrawn => 'senin tarafından',
-      _ => r.reviewerName ?? 'turnuva sorumlusu',
-    };
-    final note = (r.reviewNote ?? '').trim();
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  r.fieldLabels.join(', '),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          child: Row(
+            children: [
+              const Icon(Icons.history_rounded, color: kAdminAccent),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Geçmiş Taleplerim (${items.length})',
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 14,
+                    fontSize: 15,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  [
-                    _dateTime(r.reviewedAt ?? r.createdAt),
-                    who,
-                    if (note.isNotEmpty) '"$note"',
-                  ].join(' · '),
-                  style: const TextStyle(color: kAdminMuted, fontSize: 12),
-                ),
-              ],
-            ),
+              ),
+              const Icon(Icons.chevron_right_rounded, color: Colors.white54),
+            ],
           ),
-          const SizedBox(width: 8),
-          _chip(label, color),
-        ],
+        ),
       ),
     );
   }
@@ -1215,15 +1165,10 @@ class ProfileChangeDiff extends StatelessWidget {
 
 /// Hesaba bağlı oyuncu kaydı yoksa.
 class _UnmatchedView extends StatelessWidget {
-  const _UnmatchedView({
-    required this.name,
-    required this.phone,
-    required this.footer,
-  });
+  const _UnmatchedView({required this.name, required this.phone});
 
   final String? name;
   final String phone;
-  final Widget footer;
 
   @override
   Widget build(BuildContext context) {
@@ -1360,9 +1305,74 @@ class _UnmatchedView extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 28),
-        footer,
       ],
+    );
+  }
+}
+
+/// Futbolcunun sonuçlanmış profil talepleri: ne değişti, kim ne zaman karar
+/// verdi, red sebebi.
+class _RequestHistoryScreen extends StatelessWidget {
+  const _RequestHistoryScreen({required this.items});
+
+  final List<ProfileChangeRequest> items;
+
+  @override
+  Widget build(BuildContext context) {
+    return AdminPageScaffold(
+      title: 'Geçmiş Taleplerim',
+      body: ListView.separated(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+        itemCount: items.length,
+        separatorBuilder: (_, _) => const SizedBox(height: 12),
+        itemBuilder: (context, i) {
+          final r = items[i];
+          final (label, color) = switch (r.status) {
+            ProfileChangeStatus.approved => ('Onaylandı', kAdminAccent),
+            ProfileChangeStatus.rejected => ('Reddedildi', kAdminDanger),
+            ProfileChangeStatus.withdrawn => ('Geri çekildi', kAdminMuted),
+            ProfileChangeStatus.pending => ('Bekliyor', kAdminAmber),
+          };
+          final who = r.status == ProfileChangeStatus.withdrawn
+              ? 'Senin tarafından geri çekildi'
+              : 'Karar: ${r.reviewerName ?? 'turnuva sorumlusu'}';
+          final note = (r.reviewNote ?? '').trim();
+          return Container(
+            padding: const EdgeInsets.all(14),
+            decoration: _card(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Talep: ${_dateTime(r.createdAt)}',
+                        style: const TextStyle(
+                          color: kAdminMuted,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    _chip(label, color),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                ProfileChangeDiff(request: r),
+                const SizedBox(height: 10),
+                Text(
+                  [
+                    who,
+                    _dateTime(r.reviewedAt),
+                    if (note.isNotEmpty) 'Not: $note',
+                  ].join(' · '),
+                  style: const TextStyle(color: kAdminMuted, fontSize: 12),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 }

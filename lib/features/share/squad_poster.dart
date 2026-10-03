@@ -11,11 +11,30 @@ class PosterPlayer {
     required this.firstName,
     required this.lastName,
     this.number,
+    this.isCaptain = false,
   });
 
   final String firstName;
   final String lastName;
   final String? number;
+  final bool isCaptain;
+
+  /// "Ad Soyad" → ad / soyad (soyad son kelime).
+  factory PosterPlayer.fromFullName(
+    String name, {
+    String? number,
+    bool isCaptain = false,
+  }) {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    return PosterPlayer(
+      firstName: parts.length > 1
+          ? parts.sublist(0, parts.length - 1).join(' ')
+          : parts.first,
+      lastName: parts.length > 1 ? parts.last : '',
+      number: number,
+      isCaptain: isCaptain,
+    );
+  }
 }
 
 /// Takım kadrosu afişi: renkler takımın ana / ikinci renginden türetilir
@@ -46,7 +65,6 @@ class SquadPoster extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = palette;
     final cond = GoogleFonts.barlowCondensed;
-    final total = groups.values.fold<int>(0, (a, b) => a + b.length);
 
     Widget group(String title, List<PosterPlayer> players) {
       return Padding(
@@ -271,29 +289,6 @@ class SquadPoster extends StatelessWidget {
                     ),
                   ),
                 ),
-              ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                      color: p.accent,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    '$total OYUNCU · MASTERFUTBOL.WEB.APP',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.55),
-                      fontSize: 10,
-                      letterSpacing: 0.8,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
               ),
             ],
           ),

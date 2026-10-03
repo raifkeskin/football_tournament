@@ -10,9 +10,7 @@ import 'admin_pending_actions_screen.dart';
 import '../features/auth/screens/admin_otp_monitor_screen.dart';
 
 class AdminPanelWidget extends StatelessWidget {
-  const AdminPanelWidget({super.key, required this.onLogout});
-
-  final VoidCallback onLogout;
+  const AdminPanelWidget({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -145,28 +143,6 @@ class AdminPanelWidget extends StatelessWidget {
                   () => Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => AdminPendingActionsScreen(),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // Çıkış Butonu
-                SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: FilledButton.tonalIcon(
-                    onPressed: onLogout,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFFFFEBEE),
-                      foregroundColor: const Color(0xFFC62828),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    icon: const Icon(Icons.logout_rounded),
-                    label: const Text(
-                      'Çıkış Yap',
-                      style: TextStyle(fontWeight: FontWeight.w900),
                     ),
                   ),
                 ),
@@ -318,16 +294,18 @@ class AdminPanelScreen extends StatelessWidget {
         centerTitle: true,
         backgroundColor: Colors.transparent,
         elevation: 0,
+        actions: [
+          IconButton(
+            tooltip: 'Çıkış Yap',
+            icon: const Icon(Icons.logout_rounded, color: Color(0xFFF87171)),
+            onPressed: () async {
+              await onLogout();
+              if (context.mounted) Navigator.of(context).pop();
+            },
+          ),
+        ],
       ),
-      body: AdminPanelWidget(
-        onLogout: () {
-          () async {
-            await onLogout();
-            if (!context.mounted) return;
-            Navigator.of(context).pop();
-          }();
-        },
-      ),
+      body: const AdminPanelWidget(),
     );
   }
 }

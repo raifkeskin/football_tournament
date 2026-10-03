@@ -19,6 +19,11 @@ import '../../team/services/interfaces/i_team_service.dart';
 import '../../../core/services/service_locator.dart';
 import 'admin_match_event_screen.dart';
 import '../../tournament/screens/formation_tab.dart';
+import '../../share/lineup_poster.dart';
+import '../../share/poster_share.dart';
+import '../../share/squad_poster.dart';
+import '../../../core/utils/team_colors.dart';
+import '../../../core/widgets/pitch_token_style.dart';
 import 'package:football_tournament/core/widgets/picked_image.dart';
 import '../utils/match_clock.dart';
 import '../../../core/widgets/league_logo.dart';
@@ -28,22 +33,41 @@ import '../../../core/utils/string_utils.dart';
 
 // --- YARDIMCI WIDGETLAR ---
 
+/// Çift sarıdan ihraç: arkada sarı, önde kırmızı kart.
 class _SecondYellowCardIcon extends StatelessWidget {
   const _SecondYellowCardIcon();
+
+  Widget _card(Color c) => Container(
+    width: 11,
+    height: 15,
+    decoration: BoxDecoration(
+      color: c,
+      borderRadius: BorderRadius.circular(2),
+      boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 2)],
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 14,
-      height: 20,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(2),
-        border: Border.all(color: Colors.white24),
-        gradient: const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Colors.yellow, Colors.red],
-          stops: [0.45, 0.55],
-        ),
+    return SizedBox(
+      width: 20,
+      height: 19,
+      child: Stack(
+        children: [
+          Positioned(
+            left: 0,
+            top: 0,
+            child: Transform.rotate(
+              angle: -0.2,
+              child: _card(Colors.yellow),
+            ),
+          ),
+          Positioned(
+            right: 0,
+            bottom: 0,
+            child: Transform.rotate(angle: 0.15, child: _card(Colors.red)),
+          ),
+        ],
       ),
     );
   }
@@ -64,12 +88,12 @@ class _TeamInfo extends StatelessWidget {
         // Şeffaf logolar kırpılmadan, çerçevesiz gösterilir.
         WebSafeImage(
           url: logoUrl,
-          width: 46,
-          height: 46,
+          width: 64,
+          height: 64,
           fit: BoxFit.contain,
-          fallbackIconSize: 20,
+          fallbackIconSize: 26,
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 4),
         Text(
           shortTeamName(name),
           textAlign: TextAlign.center,
@@ -232,16 +256,11 @@ class _MatchPhaseLabel extends StatelessWidget {
 }
 
 /// Yetkililere görünen maç akışı düğmesi (başlama düdüğü → İY → 2. yarı →
-/// maç sonu). [canUndo] ise son adım geri alınabilir.
+/// maç sonu). Son adımı geri alma, alttaki menü düğmesindedir.
 class _MatchFlowBar extends StatefulWidget {
-  const _MatchFlowBar({
-    required this.match,
-    required this.canUndo,
-    required this.onAction,
-  });
+  const _MatchFlowBar({required this.match, required this.onAction});
 
   final MatchModel match;
-  final bool canUndo;
   final Future<void> Function(String action) onAction;
 
   @override
@@ -291,19 +310,13 @@ class _MatchFlowBarState extends State<_MatchFlowBar> {
           ),
           _ => null,
         };
-    final showUndo =
-        widget.canUndo &&
-        m.status != MatchStatus.notStarted &&
-        m.status != MatchStatus.postponed &&
-        m.status != MatchStatus.cancelled;
-    if (next == null && !showUndo) return const SizedBox.shrink();
+    if (next == null) return const SizedBox.shrink();
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
       child: Row(
         children: [
-          if (next != null)
-            Expanded(
+          Expanded(
               child: SizedBox(
                 height: 44,
                 child: ElevatedButton.icon(
@@ -336,31 +349,7 @@ class _MatchFlowBarState extends State<_MatchFlowBar> {
                   ),
                 ),
               ),
-            )
-          else
-            const Spacer(),
-          if (showUndo) ...[
-            const SizedBox(width: 8),
-            SizedBox(
-              height: 44,
-              width: 44,
-              child: OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  padding: EdgeInsets.zero,
-                  foregroundColor: Colors.white70,
-                  side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-                onPressed: _busy ? null : () => _run('undo'),
-                child: const Tooltip(
-                  message: 'Son adımı geri al',
-                  child: Icon(Icons.undo_rounded, size: 20),
-                ),
-              ),
             ),
-          ],
         ],
       ),
     );
@@ -545,6 +534,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     required MatchModel match,
     required int tabIndex,
     bool canAssignObserver = false,
+    bool canUndo = false,
   }) {
     if (tabIndex == 1 || tabIndex == 3) return null;
 
@@ -570,6 +560,15 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
               label: 'Gözlemci Ata',
               icon: Icons.visibility_outlined,
               onTap: () => _openObserverPicker(match),
+            ),
+          if (canUndo &&
+              match.status != MatchStatus.notStarted &&
+              match.status != MatchStatus.postponed &&
+              match.status != MatchStatus.cancelled)
+            _SpeedDialAction(
+              label: 'Son Adımı Geri Al',
+              icon: Icons.undo_rounded,
+              onTap: () => _runPhaseAction(match, 'undo'),
             ),
         ],
       );
@@ -687,6 +686,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                       match: m,
                       tabIndex: _tabController.index,
                       canAssignObserver: canManageLeague,
+                      canUndo: canManageLeague,
                     ),
               body: Column(
                 children: [
@@ -739,9 +739,11 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                     ),
                                   ),
                                   Padding(
+                                    // Skor, büyütülen logoların ortasına
+                                    // denk gelir.
                                     padding: const EdgeInsets.fromLTRB(
                                       10,
-                                      4,
+                                      12,
                                       10,
                                       0,
                                     ),
@@ -774,7 +776,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 18),
+                              const SizedBox(height: 10),
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 mainAxisSize: MainAxisSize.min,
@@ -900,7 +902,6 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                             if (isSuperAdmin)
                               _MatchFlowBar(
                                 match: m,
-                                canUndo: canManageLeague,
                                 onAction: (action) =>
                                     _runPhaseAction(m, action),
                               ),
@@ -1562,10 +1563,15 @@ class _SpeedDialFabState extends State<_SpeedDialFab> {
               FloatingActionButton(
                 heroTag: 'speed_main',
                 onPressed: _toggle,
-                child: AnimatedRotation(
-                  turns: _open ? 0.125 : 0,
+                tooltip: _open ? 'Kapat' : 'İşlemler',
+                child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 160),
-                  child: const Icon(Icons.add),
+                  transitionBuilder: (c, a) =>
+                      RotationTransition(turns: a, child: c),
+                  child: Icon(
+                    _open ? Icons.close_rounded : Icons.menu_rounded,
+                    key: ValueKey(_open),
+                  ),
                 ),
               ),
             ],
@@ -2286,6 +2292,29 @@ class _LineupTabState extends State<_LineupTab>
             ),
           )
         : null;
+    // Paylaşım: yalnızca o takımın sorumlusu ve lig yöneticileri.
+    final session = AppSession.of(context).value;
+    final canShare =
+        session.canManageLeague(widget.match.leagueId) ||
+        (session.teamId != null && session.teamId == teamId);
+    final share = canShare
+        ? IconButton(
+            tooltip: 'Kadroyu paylaş',
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+            onPressed: () => _shareLineup(teamId),
+            icon: Icon(Icons.ios_share_rounded, size: 20, color: color),
+          )
+        : null;
+    final info = Expanded(
+      child: Column(
+        crossAxisAlignment: alignEnd
+            ? CrossAxisAlignment.end
+            : CrossAxisAlignment.start,
+        children: [label, ?edit],
+      ),
+    );
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
       decoration: BoxDecoration(
@@ -2293,12 +2322,123 @@ class _LineupTabState extends State<_LineupTab>
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
-      child: Column(
-        crossAxisAlignment: alignEnd
-            ? CrossAxisAlignment.end
-            : CrossAxisAlignment.start,
-        children: [label, ?edit],
+      child: Row(
+        children: alignEnd ? [?share, info] : [info, ?share],
       ),
+    );
+  }
+
+  /// Esame veya diziliş afişini hazırlayıp önizleme/paylaşım popup'ını açar.
+  Future<void> _shareLineup(String teamId) async {
+    final kind = await showAdminOptionPicker<String>(
+      context: context,
+      title: 'Kadroyu Paylaş',
+      items: const ['Esame', 'Diziliş'],
+      labelBuilder: (k) => k == 'Esame'
+          ? 'Esame (ilk 11 ve yedekler)'
+          : 'Diziliş (sahada ilk 11)',
+      emptyText: '',
+    );
+    if (kind == null || !mounted) return;
+    await PitchTokenStylePref.load();
+    if (!mounted) return;
+    final m = widget.match;
+    final isHome = teamId == m.homeTeamId;
+    final opponentId = isHome ? m.awayTeamId : m.homeTeamId;
+    final messenger = ScaffoldMessenger.of(context);
+
+    final LineupPosterData data;
+    try {
+      final db = Supabase.instance.client;
+      final results = await Future.wait([
+        ServiceLocator.teamService
+            .watchPlayers(teamId: teamId, tournamentId: m.seasonId)
+            .first,
+        ServiceLocator.matchService.watchMatchRosters(m.id, teamId).first,
+        db
+            .from('teams')
+            .select('id, name, logo_url, first_color, second_color')
+            .inFilter('id', [teamId, opponentId]),
+        db.from('leagues').select('name, logo_url').eq('id', m.leagueId),
+      ]);
+      final players = {
+        for (final p in results[0] as List<PlayerModel>) p.id: p,
+      };
+      final rosters = results[1] as List<MatchRosterModel>;
+      final teams = {
+        for (final r in results[2] as List) (r as Map)['id'].toString(): r,
+      };
+      final leagueRows = results[3] as List;
+      final league = leagueRows.isEmpty ? null : leagueRows.first as Map;
+
+      final starters = rosters.where((r) => r.isStarting).toList();
+      if (starters.isEmpty) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Önce ilk 11 girilmelidir.')),
+        );
+        return;
+      }
+      String jersey(MatchRosterModel r) =>
+          (r.jerseyNumber ?? players[r.playerId]?.number ?? '').trim();
+      PosterPlayer toPoster(MatchRosterModel r) => PosterPlayer.fromFullName(
+        players[r.playerId]?.name ?? '-',
+        number: jersey(r),
+        isCaptain: r.isCaptain,
+      );
+      final byId = {for (final r in rosters) r.playerId: r};
+      final layout = formationLinesFor(
+        starters: starters,
+        players: players,
+        formation: isHome ? m.homeFormation : m.awayFormation,
+      );
+      final subs = rosters.where((r) => !r.isStarting).toList()
+        ..sort(
+          (a, b) => _jerseyValue(jersey(a)).compareTo(_jerseyValue(jersey(b))),
+        );
+      final team = teams[teamId];
+      final opp = teams[opponentId];
+      data = LineupPosterData(
+        teamName: isHome ? widget.homeName : widget.awayName,
+        teamLogo: (team?['logo_url'] ?? '').toString().trim(),
+        opponentName: isHome ? widget.awayName : widget.homeName,
+        opponentLogo: (opp?['logo_url'] ?? '').toString().trim(),
+        isHome: isHome,
+        leagueName: (league?['name'] ?? '').toString(),
+        leagueLogo: (league?['logo_url'] ?? '').toString().trim(),
+        week: m.week,
+        matchDate: m.matchDate ?? '',
+        timeText: (m.matchTime ?? '').trim(),
+        pitchName: (m.pitchName ?? '').trim(),
+        palette: TeamPalette.of(
+          team?['first_color']?.toString(),
+          team?['second_color']?.toString(),
+        ),
+        formation: layout?.formation ?? '',
+        lines: [
+          for (final line in layout?.lines ?? const <List<String>>[])
+            [
+              for (final id in line)
+                if (byId[id] != null) toPoster(byId[id]!),
+            ],
+        ],
+        subs: [for (final r in subs) toPoster(r)],
+        tokenStyle: PitchTokenStylePref.notifier.value,
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Kadro bilgisi okunamadı: $e')),
+      );
+      return;
+    }
+    if (!mounted) return;
+    final slug = data.teamName.replaceAll(RegExp(r'\s+'), '_');
+    await showPosterPreview(
+      context: context,
+      fileName: kind == 'Esame' ? 'esame_$slug' : 'dizilis_$slug',
+      imageUrls: [data.teamLogo, data.opponentLogo, data.leagueLogo],
+      poster: kind == 'Esame'
+          ? LineupListPoster(data: data)
+          : LineupPitchPoster(data: data),
     );
   }
 
@@ -3379,6 +3519,24 @@ class _DetailTabView extends StatelessWidget {
           return at.compareTo(bt);
         });
 
+        String pickPlayerId(Map<String, dynamic> e) {
+          final a = _readString(e['player_id']);
+          if (a.isNotEmpty) return a;
+          return _readString(e['playerId']);
+        }
+
+        // Aynı oyuncunun maçtaki ikinci sarısı "çift sarıdan ihraç" gösterilir.
+        final secondYellows = <Map<String, dynamic>>{};
+        final yellowSeen = <String>{};
+        for (final e in normalized) {
+          if (pickType(e) != 'yellow_card') continue;
+          final pid = pickPlayerId(e);
+          final key = pid.isNotEmpty
+              ? pid
+              : '${pickTeamId(e)}|${pickTitle(e).toLowerCase()}';
+          if (!yellowSeen.add(key)) secondYellows.add(e);
+        }
+
         return ListView.separated(
           padding: const EdgeInsets.all(16),
           itemCount: normalized.length + 1,
@@ -3392,7 +3550,9 @@ class _DetailTabView extends StatelessWidget {
               );
             }
             final e = normalized[i - 1];
-            final type = pickType(e);
+            final type = secondYellows.contains(e)
+                ? 'second_yellow'
+                : pickType(e);
             final title = pickTitle(e);
             final minute = _readMinute(e['minute']);
             final teamId = pickTeamId(e);
@@ -3411,12 +3571,7 @@ class _DetailTabView extends StatelessWidget {
 
             String displayTitle() {
               if (type == 'substitution') {
-                final outName = title;
-                final inName = subIn;
-                if (outName.isNotEmpty && inName.isNotEmpty) {
-                  return '$outName → $inName';
-                }
-                return outName.isEmpty ? 'Değişiklik' : outName;
+                return title.isEmpty ? 'Değişiklik' : title;
               }
               if (type == 'goal') {
                 final suffix = isOwnGoal ? ' (KK)' : '';
@@ -3432,13 +3587,14 @@ class _DetailTabView extends StatelessWidget {
               // Asist, gol atanın altında daha küçük ve soluk gösterilir.
               subtitle: type == 'goal' && assist.isNotEmpty
                   ? 'Asist: $assist'
+                  : type == 'second_yellow'
+                  ? 'Çift sarıdan ihraç'
                   : null,
+              subInName: type == 'substitution' ? subIn : '',
               teamId: teamId,
               homeTeamId: match.homeTeamId,
               system: system,
-              playerId: _readString(e['player_id']).isNotEmpty
-                  ? _readString(e['player_id'])
-                  : _readString(e['playerId']),
+              playerId: pickPlayerId(e),
             );
           },
         );
@@ -3452,6 +3608,9 @@ class _DetailEventTile extends StatelessWidget {
   final String type;
   final String title;
   final String? subtitle;
+
+  /// Oyuncu değişikliğinde giren oyuncu; [title] çıkan oyuncudur.
+  final String subInName;
   final String teamId;
   final String homeTeamId;
   final bool system;
@@ -3463,6 +3622,7 @@ class _DetailEventTile extends StatelessWidget {
     required this.type,
     required this.title,
     this.subtitle,
+    this.subInName = '',
     required this.teamId,
     required this.homeTeamId,
     required this.system,
@@ -3483,7 +3643,53 @@ class _DetailEventTile extends StatelessWidget {
     return const Icon(Icons.info_outline);
   }
 
+  /// Değişiklik: giren oyuncu (yeşil ▲) üstte, çıkan oyuncu (kırmızı ▼)
+  /// altında soluk.
+  Widget _substitutionBlock(bool isHome) {
+    Widget line(String name, bool isIn) {
+      final arrow = Icon(
+        isIn ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+        size: 14,
+        color: isIn ? const Color(0xFF22C55E) : const Color(0xFFEF4444),
+      );
+      final text = Flexible(
+        child: Text(
+          name,
+          overflow: TextOverflow.ellipsis,
+          style: isIn
+              ? const TextStyle(fontWeight: FontWeight.bold)
+              : const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF94A3B8),
+                  fontWeight: FontWeight.w500,
+                ),
+        ),
+      );
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: isHome
+            ? [arrow, const SizedBox(width: 4), text]
+            : [text, const SizedBox(width: 4), arrow],
+      );
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: isHome
+          ? CrossAxisAlignment.start
+          : CrossAxisAlignment.end,
+      children: [
+        line(subInName, true),
+        const SizedBox(height: 2),
+        line(title.isEmpty ? '-' : title, false),
+      ],
+    );
+  }
+
   Widget _titleBlock(CrossAxisAlignment align) {
+    if (type == 'substitution' && subInName.isNotEmpty) {
+      return _substitutionBlock(align == CrossAxisAlignment.start);
+    }
     final sub = (subtitle ?? '').trim();
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -3514,7 +3720,8 @@ class _DetailEventTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool isHome = teamId == homeTeamId;
-    final String min = "$minute'";
+    // Maçın adamının dakikası yoktur.
+    final String min = type == 'man_of_the_match' ? '' : "$minute'";
 
     Widget icon;
     if (system) {
@@ -3534,7 +3741,11 @@ class _DetailEventTile extends StatelessWidget {
           icon = const _SecondYellowCardIcon();
           break;
         case 'substitution':
-          icon = const Icon(Icons.swap_horiz_rounded, size: 18);
+          // Giren/çıkan okları yeterli; ayrıca ikon gösterilmez.
+          icon = const SizedBox.shrink();
+          break;
+        case 'man_of_the_match':
+          icon = const Icon(Icons.star_rounded, size: 18, color: Colors.amber);
           break;
         default:
           icon = const Icon(Icons.info_outline, size: 18);

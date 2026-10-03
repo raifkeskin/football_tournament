@@ -92,7 +92,8 @@ class League {
       city: nullableTrimmed(v('city', 'city')),
       managerFullName: () {
         final direct =
-            (v('managerFullName', 'manager_full_name') as String?)?.trim() ?? '';
+            (v('managerFullName', 'manager_full_name') as String?)?.trim() ??
+            '';
         if (direct.isNotEmpty) return direct;
         final mn = (v('managerName', 'manager_name') as String?)?.trim() ?? '';
         final ms =
@@ -100,9 +101,10 @@ class League {
         final combined = ('$mn $ms').trim();
         return combined.isEmpty ? null : combined;
       }(),
-      managerPhoneRaw10: (v('managerPhoneRaw10', 'manager_phone_raw10') ??
-              v('managerPhone', 'manager_phone'))
-          as String?,
+      managerPhoneRaw10:
+          (v('managerPhoneRaw10', 'manager_phone_raw10') ??
+                  v('managerPhone', 'manager_phone'))
+              as String?,
       startDate: _readDate(v('startDate', 'start_date')),
       endDate: _readDate(v('endDate', 'end_date')),
       season: v('season', 'season') as String?,
@@ -110,8 +112,9 @@ class League {
       isDefault: boolFrom(v('isDefault', 'is_default'), fallback: false),
       isPrivate: boolFrom(v('isPrivate', 'is_private'), fallback: false),
       accessCode: nullableTrimmed(v('accessCode', 'access_code')),
-      transferStartDate:
-          _readDate(v('transferStartDate', 'transfer_start_date')),
+      transferStartDate: _readDate(
+        v('transferStartDate', 'transfer_start_date'),
+      ),
       transferEndDate: _readDate(v('transferEndDate', 'transfer_end_date')),
       youtubeUrl: v('youtubeUrl', 'youtube_url') as String?,
       instagramUrl: v('instagramUrl', 'instagram_url') as String?,
@@ -131,12 +134,13 @@ class League {
         v('numberOfGroups', 'number_of_groups'),
         fallback: 1,
       ),
-      groups: (v('groups', 'groups') as List?)
-              ?.map((e) => e.toString())
-              .toList() ??
+      groups:
+          (v('groups', 'groups') as List?)?.map((e) => e.toString()).toList() ??
           const [],
-      teamsPerGroup:
-          intFrom(v('teamsPerGroup', 'teams_per_group'), fallback: 4),
+      teamsPerGroup: intFrom(
+        v('teamsPerGroup', 'teams_per_group'),
+        fallback: 4,
+      ),
       createdAt: _readDate(v('createdAt', 'created_at')),
       updatedAt: _readDate(v('updatedAt', 'updated_at')),
     );

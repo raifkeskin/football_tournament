@@ -1103,19 +1103,31 @@ class _MatchCard extends StatelessWidget {
             ),
           ),
         ),
-        SizedBox(
-          width: 25,
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: Text(
-              showScore ? '$score' : '-',
-              style: TextStyle(
-                color: isLive
-                    ? const Color(0xFFF87171)
-                    : (highlight ? Colors.white : Colors.white38),
-                fontWeight: FontWeight.w900,
-                fontSize: 14,
-              ),
+        // Skor kutusu: yeşil kare; canlı maçta kırmızı.
+        Container(
+          width: 30,
+          height: 28,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: isLive
+                ? const Color(0xFFF87171).withValues(alpha: 0.22)
+                : const Color(0xFF064E3B),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color:
+                  (isLive ? const Color(0xFFF87171) : const Color(0xFF10B981))
+                      .withValues(alpha: 0.35),
+            ),
+          ),
+          child: Text(
+            showScore ? '$score' : '-',
+            style: TextStyle(
+              color: isLive
+                  ? const Color(0xFFF87171)
+                  : (highlight ? Colors.white : Colors.white60),
+              fontWeight: FontWeight.w900,
+              fontSize: 14,
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
         ),

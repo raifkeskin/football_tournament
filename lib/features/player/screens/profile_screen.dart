@@ -114,6 +114,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         );
                       },
                     ),
+                    // Çıkış: başlığın sağında kırmızı ikon (admin paneli ve
+                    // profil için ortak).
+                    actions: [
+                      IconButton(
+                        tooltip: 'Çıkış Yap',
+                        onPressed: _isLoading ? null : () => _logout(session),
+                        icon: const Icon(
+                          Icons.logout_rounded,
+                          color: Color(0xFFF87171),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                    ],
                     title: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -151,15 +164,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 SafeArea(
                   child: isAdminPanelVisible
-                      ? Column(
-                          children: [
-                            Expanded(
-                              child: AdminPanelWidget(
-                                onLogout: () => _logout(session),
-                              ),
-                            ),
-                          ],
-                        )
+                      ? Column(children: [Expanded(child: AdminPanelWidget())])
                       : (isRealUser
                             ? _buildLoggedInProfileBody(context, state, session)
                             : const LoginScreen()), // Doğrulanmamışsa şifre ekranını (LoginScreen) çağır
@@ -180,7 +185,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final phone = state.phone ?? '';
 
     final sessionValue = session.value as AppSessionState;
-    final logoutButton = _logoutButton(session);
     // Futbolcu (ya da oyuncu kaydı olan herkes): kart, maçlar, talepler.
     // Oyuncu kaydı olmayan turnuva sahibi / takım sorumlusu: bilgi kartı.
     final isStaffOnly =
@@ -191,7 +195,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         playerId: sessionValue.playerId,
         displayName: state.displayName,
         phone: phone,
-        footer: logoutButton,
       );
     }
 
@@ -248,41 +251,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
         ),
-        // Takım sorumlusuna özel işlemler (ör. kadroya oyuncu ekleme talebi)
-        // ileride buraya eklenecek: if (state.role == 'manager') ...
-        const SizedBox(height: 32),
-        logoutButton,
       ],
-    );
-  }
-
-  Widget _logoutButton(dynamic session) {
-    return SizedBox(
-      width: double.infinity,
-      height: 56,
-      child: OutlinedButton.icon(
-        onPressed: _isLoading ? null : () => _logout(session),
-        style: OutlinedButton.styleFrom(
-          foregroundColor: Colors.redAccent,
-          backgroundColor: Colors.redAccent.withValues(alpha: 0.08),
-          side: BorderSide(
-            color: Colors.redAccent.withValues(alpha: 0.5),
-            width: 1.5,
-          ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-        ),
-        icon: const Icon(Icons.logout_rounded, size: 22),
-        label: const Text(
-          'ÇIKIŞ YAP',
-          style: TextStyle(
-            fontWeight: FontWeight.w900,
-            fontSize: 16,
-            letterSpacing: 1.2,
-          ),
-        ),
-      ),
     );
   }
 

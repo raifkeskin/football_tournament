@@ -118,7 +118,8 @@ class _LoginScreenState extends State<LoginScreen> {
       }
       Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
         MaterialPageRoute<void>(
-          builder: (_) => const MainNavigator(initialTabIndex: MainNavigator.profileTab),
+          builder: (_) =>
+              const MainNavigator(initialTabIndex: MainNavigator.profileTab),
         ),
         (Route<dynamic> route) => false,
       );
@@ -411,7 +412,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   );
                                 },
                           child: const Text(
-                            'Hesabım Yok, Kayıt Ol',
+                            'Kayıt Ol',
                             style: TextStyle(
                               color: Color(
                                 0xFFF59E0B,

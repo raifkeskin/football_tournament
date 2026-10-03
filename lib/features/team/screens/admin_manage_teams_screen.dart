@@ -844,7 +844,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                 borderRadius: BorderRadius.circular(14),
                 side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
               ),
-              icon: const Icon(Icons.more_vert_rounded, color: Colors.white54),
+              icon: const Icon(Icons.menu_rounded, color: Colors.white54),
               onSelected: (v) {
                 if (v == 'edit') openEdit();
                 if (v == 'delete') _takimSil(teamId, logoUrl: logoUrl);

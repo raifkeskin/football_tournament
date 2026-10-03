@@ -95,12 +95,15 @@ class Season {
         v('numberOfPlayerChanges', 'number_of_player_changes'),
         fallback: 3,
       ),
-      teamsPerGroup:
-          intFrom(v('teamsPerGroup', 'teams_per_group'), fallback: 4),
+      teamsPerGroup: intFrom(
+        v('teamsPerGroup', 'teams_per_group'),
+        fallback: 4,
+      ),
       isActive: boolFrom(v('isActive', 'is_active'), fallback: true),
       isDefault: boolFrom(v('isDefault', 'is_default'), fallback: false),
-      transferStartDate:
-          _readDate(v('transferStartDate', 'transfer_start_date')),
+      transferStartDate: _readDate(
+        v('transferStartDate', 'transfer_start_date'),
+      ),
       transferEndDate: _readDate(v('transferEndDate', 'transfer_end_date')),
       instagramUrl: nullableTrimmed(v('instagramUrl', 'instagram_url')),
       youtubeUrl: nullableTrimmed(v('youtubeUrl', 'youtube_url')),

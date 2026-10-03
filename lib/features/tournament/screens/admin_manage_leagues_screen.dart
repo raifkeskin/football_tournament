@@ -14,6 +14,7 @@ import '../../../core/widgets/app_date_picker.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../player/screens/admin_awards_screen.dart';
 import 'season_management_screen.dart';
+import '../widgets/league_owners_section.dart';
 import 'package:football_tournament/core/widgets/picked_image.dart';
 
 class AdminManageLeaguesScreen extends StatefulWidget {
@@ -130,7 +131,9 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
         if (!mounted) return;
         messenger.showSnackBar(
           SnackBar(
-            content: Text(isEdit ? 'Turnuva güncellendi.' : 'Turnuva oluşturuldu.'),
+            content: Text(
+              isEdit ? 'Turnuva güncellendi.' : 'Turnuva oluşturuldu.',
+            ),
           ),
         );
         if (popupContext.mounted) Navigator.of(popupContext).pop();
@@ -281,7 +284,10 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                         style: TextButton.styleFrom(
                           foregroundColor: kAdminAccent,
                         ),
-                        icon: const Icon(Icons.photo_library_outlined, size: 18),
+                        icon: const Icon(
+                          Icons.photo_library_outlined,
+                          size: 18,
+                        ),
                         label: Text(hasLogo ? 'Logoyu değiştir' : 'Logo seç'),
                       ),
                       if (hasLogo)
@@ -398,6 +404,18 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                           ),
                     ),
                   ],
+                  // Sahipler yalnız admin tarafından, kayıtlı turnuvaya eklenir.
+                  if (AppSession.of(context).value.isAdmin) ...[
+                    const SizedBox(height: 18),
+                    if (isEdit)
+                      LeagueOwnersSection(leagueId: league.id)
+                    else
+                      const Text(
+                        'Turnuva sahiplerini, turnuvayı kaydettikten sonra '
+                        'düzenle ekranından ekleyebilirsiniz.',
+                        style: TextStyle(color: kAdminMuted, fontSize: 12),
+                      ),
+                  ],
                   const SizedBox(height: 24),
                   AdminPrimaryButton(
                     label: isEdit ? 'GÜNCELLE' : 'KAYDET',
@@ -441,9 +459,9 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
           .update({'is_active': false})
           .eq('id', league.id);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Turnuva pasife alındı.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Turnuva pasife alındı.')));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -655,24 +673,29 @@ class _EditLeagueScreenState extends State<EditLeagueScreen> {
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.league.name);
-    _managerFullNameController =
-        TextEditingController(text: widget.league.managerFullName ?? '');
-    _managerPhoneController =
-        TextEditingController(text: widget.league.managerPhoneRaw10 ?? '');
+    _managerFullNameController = TextEditingController(
+      text: widget.league.managerFullName ?? '',
+    );
+    _managerPhoneController = TextEditingController(
+      text: widget.league.managerPhoneRaw10 ?? '',
+    );
     _matchPeriodDurationController = TextEditingController(
       text: widget.league.matchPeriodDuration.toString(),
     );
-    _groupCountController =
-        TextEditingController(text: widget.league.groupCount.toString());
-    _teamsPerGroupController =
-        TextEditingController(text: widget.league.teamsPerGroup.toString());
+    _groupCountController = TextEditingController(
+      text: widget.league.groupCount.toString(),
+    );
+    _teamsPerGroupController = TextEditingController(
+      text: widget.league.teamsPerGroup.toString(),
+    );
     _ytController = TextEditingController(text: widget.league.youtubeUrl);
     _igController = TextEditingController(text: widget.league.instagramUrl);
     _startDate = widget.league.startDate;
     _endDate = widget.league.endDate;
     _isPrivate = widget.league.isPrivate;
-    _accessCodeController =
-        TextEditingController(text: widget.league.accessCode ?? '');
+    _accessCodeController = TextEditingController(
+      text: widget.league.accessCode ?? '',
+    );
     if (_isPrivate && _accessCodeController.text.trim().isEmpty) {
       _accessCodeController.text = _generateAccessCode();
     }
@@ -734,7 +757,9 @@ class _EditLeagueScreenState extends State<EditLeagueScreen> {
           _startDate = picked;
         }
       }
-      _startDateController.text = _startDate == null ? '' : _formatDate(_startDate!);
+      _startDateController.text = _startDate == null
+          ? ''
+          : _formatDate(_startDate!);
       _endDateController.text = _endDate == null ? '' : _formatDate(_endDate!);
     });
   }
@@ -754,25 +779,29 @@ class _EditLeagueScreenState extends State<EditLeagueScreen> {
     if (name.isEmpty || _startDate == null || _endDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Lütfen turnuva adı, başlangıç ve bitiş tarihini girin.'),
+          content: Text(
+            'Lütfen turnuva adı, başlangıç ve bitiş tarihini girin.',
+          ),
         ),
       );
       return;
     }
     if (groupCount <= 0 || teamsPerGroup <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Grup sayısı ve grup başı takım 0 olamaz.')),
+        const SnackBar(
+          content: Text('Grup sayısı ve grup başı takım 0 olamaz.'),
+        ),
       );
       return;
     }
 
     FocusManager.instance.primaryFocus?.unfocus();
     setState(() => _isLoading = true);
-    
+
     // Değişiklik: Context'i değişkene alıp Navigator.pop() için kullanacağız.
     final nav = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
-    
+
     try {
       String normalizePhoneToRaw10(String input) {
         final digits = input.replaceAll(RegExp(r'\D'), '');
@@ -803,9 +832,12 @@ class _EditLeagueScreenState extends State<EditLeagueScreen> {
         logoUrl: logoUrl,
         country: widget.league.country,
         managerFullName: managerFullName.isEmpty ? null : managerFullName,
-        managerPhoneRaw10:
-            managerPhone.trim().isEmpty ? null : normalizePhoneToRaw10(managerPhone),
-        matchPeriodDuration: matchPeriodDuration <= 0 ? 25 : matchPeriodDuration,
+        managerPhoneRaw10: managerPhone.trim().isEmpty
+            ? null
+            : normalizePhoneToRaw10(managerPhone),
+        matchPeriodDuration: matchPeriodDuration <= 0
+            ? 25
+            : matchPeriodDuration,
         startDate: _startDate,
         endDate: _endDate,
         season: widget.league.season,
@@ -832,12 +864,12 @@ class _EditLeagueScreenState extends State<EditLeagueScreen> {
           widget.league.logoUrl,
         );
       }
-      
+
       if (!mounted) return;
       messenger.showSnackBar(
         const SnackBar(content: Text('Turnuva başarıyla güncellendi.')),
       );
-      
+
       // Sayfa kapatılacağı için setState ile loading durumunu değiştirmeye gerek yok
       nav.pop(true);
     } catch (e) {
@@ -864,213 +896,215 @@ class _EditLeagueScreenState extends State<EditLeagueScreen> {
       body: Stack(
         children: [
           ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                // Logo Düzenleme
-                Center(
-                  child: Stack(
-                    children: [
-                      if (_newLogo != null)
-                        CircleAvatar(
-                          radius: 60,
-                          backgroundImage: pickedImageProvider(_newLogo!),
-                        )
-                      else if (widget.league.logoUrl.isNotEmpty)
-                        SizedBox(
+            padding: const EdgeInsets.all(16),
+            children: [
+              // Logo Düzenleme
+              Center(
+                child: Stack(
+                  children: [
+                    if (_newLogo != null)
+                      CircleAvatar(
+                        radius: 60,
+                        backgroundImage: pickedImageProvider(_newLogo!),
+                      )
+                    else if (widget.league.logoUrl.isNotEmpty)
+                      SizedBox(
+                        width: 120,
+                        height: 120,
+                        child: WebSafeImage(
+                          url: widget.league.logoUrl,
                           width: 120,
                           height: 120,
-                          child: WebSafeImage(
-                            url: widget.league.logoUrl,
-                            width: 120,
-                            height: 120,
-                            isCircle: true,
-                            fallbackIconSize: 40,
-                          ),
-                        )
-                      else
-                        const CircleAvatar(
-                          radius: 60,
-                          child: Icon(Icons.emoji_events, size: 40),
+                          isCircle: true,
+                          fallbackIconSize: 40,
                         ),
-                      Positioned(
-                        bottom: 0,
-                        right: 0,
-                        child: CircleAvatar(
-                          backgroundColor: cs.primary,
-                          child: IconButton(
-                            icon: const Icon(
-                              Icons.camera_alt,
-                              color: Colors.white,
-                            ),
-                            onPressed: _pickLogo,
-                          ),
-                        ),
+                      )
+                    else
+                      const CircleAvatar(
+                        radius: 60,
+                        child: Icon(Icons.emoji_events, size: 40),
                       ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-                TextField(
-                  controller: _nameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Turnuva Adı',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _subtitleController,
-                  decoration: const InputDecoration(
-                    labelText: 'Alt Bilgi (Örn: Yaz Ligi 2024)',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Gizlensin'),
-                  value: _isPrivate,
-                  onChanged: _isLoading
-                      ? null
-                      : (v) {
-                          setState(() {
-                            _isPrivate = v;
-                            if (_isPrivate &&
-                                _accessCodeController.text.trim().isEmpty) {
-                              _accessCodeController.text = _generateAccessCode();
-                            }
-                            if (!_isPrivate) {
-                              _accessCodeController.clear();
-                            }
-                          });
-                        },
-                ),
-                if (_isPrivate) ...[
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _accessCodeController,
-                    readOnly: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Erişim Kodu (6 haneli)',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                ] else
-                  const SizedBox(height: 16),
-                TextField(
-                  controller: _managerFullNameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Turnuva Sorumlusu (Ad Soyad)',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _managerPhoneController,
-                  keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(
-                    labelText: 'Turnuva Sorumlusu Telefon',
-                    hintText: '0 (5XX) XXX XX XX',
-                    border: OutlineInputBorder(),
-                  ),
-                  enabled: !_isLoading,
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _matchPeriodDurationController,
-                  decoration: const InputDecoration(
-                    labelText: 'Maç Süresi (Dakika)',
-                    border: OutlineInputBorder(),
-                  ),
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  enabled: !_isLoading,
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _startDateController,
-                        readOnly: true,
-                        onTap: _isLoading ? null : () => _pickDate(isStart: true),
-                        decoration: const InputDecoration(
-                          hintText: 'Başlangıç Tarihi',
-                          prefixIcon: Icon(Icons.calendar_month_outlined),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: TextField(
-                        controller: _endDateController,
-                        readOnly: true,
-                        onTap: _isLoading ? null : () => _pickDate(isStart: false),
-                        decoration: const InputDecoration(
-                          hintText: 'Bitiş Tarihi',
-                          prefixIcon: Icon(Icons.calendar_month_outlined),
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: CircleAvatar(
+                        backgroundColor: cs.primary,
+                        child: IconButton(
+                          icon: const Icon(
+                            Icons.camera_alt,
+                            color: Colors.white,
+                          ),
+                          onPressed: _pickLogo,
                         ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _groupCountController,
-                        decoration: const InputDecoration(
-                          labelText: 'Grup Sayısı',
-                          border: OutlineInputBorder(),
-                        ),
-                        keyboardType: TextInputType.number,
-                        enabled: !_isLoading,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: TextField(
-                        controller: _teamsPerGroupController,
-                        decoration: const InputDecoration(
-                          labelText: 'Toplam Takım Sayısı',
-                          border: OutlineInputBorder(),
-                        ),
-                        keyboardType: TextInputType.number,
-                        enabled: !_isLoading,
-                      ),
-                    ),
-                  ],
+              ),
+              const SizedBox(height: 24),
+              TextField(
+                controller: _nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Turnuva Adı',
+                  border: OutlineInputBorder(),
                 ),
-                const SizedBox(height: 16),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _subtitleController,
+                decoration: const InputDecoration(
+                  labelText: 'Alt Bilgi (Örn: Yaz Ligi 2024)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Gizlensin'),
+                value: _isPrivate,
+                onChanged: _isLoading
+                    ? null
+                    : (v) {
+                        setState(() {
+                          _isPrivate = v;
+                          if (_isPrivate &&
+                              _accessCodeController.text.trim().isEmpty) {
+                            _accessCodeController.text = _generateAccessCode();
+                          }
+                          if (!_isPrivate) {
+                            _accessCodeController.clear();
+                          }
+                        });
+                      },
+              ),
+              if (_isPrivate) ...[
+                const SizedBox(height: 8),
                 TextField(
-                  controller: _ytController,
+                  controller: _accessCodeController,
+                  readOnly: true,
                   decoration: const InputDecoration(
-                    labelText: 'YouTube Linki',
-                    prefixIcon: Icon(Icons.play_circle_outline),
+                    labelText: 'Erişim Kodu (6 haneli)',
                     border: OutlineInputBorder(),
                   ),
                 ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _igController,
-                  decoration: const InputDecoration(
-                    labelText: 'Instagram Linki',
-                    prefixIcon: Icon(Icons.camera_alt_outlined),
-                    border: OutlineInputBorder(),
-                  ),
+                const SizedBox(height: 16),
+              ] else
+                const SizedBox(height: 16),
+              TextField(
+                controller: _managerFullNameController,
+                decoration: const InputDecoration(
+                  labelText: 'Turnuva Sorumlusu (Ad Soyad)',
+                  border: OutlineInputBorder(),
                 ),
-                const SizedBox(height: 32),
-                FilledButton(
-                  onPressed: _isLoading ? null : _update,
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size(double.infinity, 50),
-                  ),
-                  child: const Text('GÜNCELLE'),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _managerPhoneController,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(
+                  labelText: 'Turnuva Sorumlusu Telefon',
+                  hintText: '0 (5XX) XXX XX XX',
+                  border: OutlineInputBorder(),
                 ),
-              ],
-            ),
+                enabled: !_isLoading,
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _matchPeriodDurationController,
+                decoration: const InputDecoration(
+                  labelText: 'Maç Süresi (Dakika)',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                enabled: !_isLoading,
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _startDateController,
+                      readOnly: true,
+                      onTap: _isLoading ? null : () => _pickDate(isStart: true),
+                      decoration: const InputDecoration(
+                        hintText: 'Başlangıç Tarihi',
+                        prefixIcon: Icon(Icons.calendar_month_outlined),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: _endDateController,
+                      readOnly: true,
+                      onTap: _isLoading
+                          ? null
+                          : () => _pickDate(isStart: false),
+                      decoration: const InputDecoration(
+                        hintText: 'Bitiş Tarihi',
+                        prefixIcon: Icon(Icons.calendar_month_outlined),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _groupCountController,
+                      decoration: const InputDecoration(
+                        labelText: 'Grup Sayısı',
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.number,
+                      enabled: !_isLoading,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: _teamsPerGroupController,
+                      decoration: const InputDecoration(
+                        labelText: 'Toplam Takım Sayısı',
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.number,
+                      enabled: !_isLoading,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _ytController,
+                decoration: const InputDecoration(
+                  labelText: 'YouTube Linki',
+                  prefixIcon: Icon(Icons.play_circle_outline),
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _igController,
+                decoration: const InputDecoration(
+                  labelText: 'Instagram Linki',
+                  prefixIcon: Icon(Icons.camera_alt_outlined),
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 32),
+              FilledButton(
+                onPressed: _isLoading ? null : _update,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 50),
+                ),
+                child: const Text('GÜNCELLE'),
+              ),
+            ],
+          ),
           if (_isLoading)
             Positioned.fill(
               child: AbsorbPointer(

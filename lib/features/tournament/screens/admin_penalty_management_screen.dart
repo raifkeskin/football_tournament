@@ -121,9 +121,7 @@ class _AdminPenaltyManagementScreenState
           CustomPopupSelector<String>(
             label: 'Sezon',
             selectedValue: _selectedSeasonId.isEmpty ? null : _selectedSeasonId,
-            items: [
-              for (final s in seasons) (s['id'] ?? '').toString().trim(),
-            ],
+            items: [for (final s in seasons) (s['id'] ?? '').toString().trim()],
             labelBuilder: (id) => _seasonName(id ?? ''),
             onChanged: (v) {
               setState(() {
@@ -796,7 +794,9 @@ class _PenaltyEditorSheetState extends State<_PenaltyEditorSheet> {
       }
       setState(() {
         _teams = byId.values.toList()
-          ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+          ..sort(
+            (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+          );
         _loadingTeams = false;
       });
     } catch (_) {
@@ -830,7 +830,9 @@ class _PenaltyEditorSheetState extends State<_PenaltyEditorSheet> {
       }
       setState(() {
         _players = byId.values.toList()
-          ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+          ..sort(
+            (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+          );
         _loadingPlayers = false;
       });
     } catch (_) {

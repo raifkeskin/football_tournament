@@ -1058,9 +1058,7 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
                         ? null
                         : '${selectedTeamIds.length} takım seçildi',
                     placeholder: 'Takım ekle / çıkar',
-                    onTap: saving
-                        ? null
-                        : () => openTeamPicker(setSheetState),
+                    onTap: saving ? null : () => openTeamPicker(setSheetState),
                   ),
                 ],
               ),

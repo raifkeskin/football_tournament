@@ -106,7 +106,17 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
 
   Future<void> _addEvent() async {
     final player = _selectedPlayer;
-    final minuteStr = _minuteController.text.trim();
+    final isMotm = _eventType == 'man_of_the_match';
+    // Maçın adamı maç bittikten sonra seçilir; dakikası yoktur (sona sıralanır).
+    final minuteStr = isMotm ? '999' : _minuteController.text.trim();
+    if (isMotm && widget.match.status != MatchStatus.finished) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Maçın adamı maç bittikten sonra seçilebilir.'),
+        ),
+      );
+      return;
+    }
     if (player == null || minuteStr.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Lütfen tüm alanları doldurun.')),
@@ -293,7 +303,13 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                                   final picked = await _pick<String>(
                                     title: 'Olay Türü',
                                     selected: _eventType,
-                                    options: _eventTypes,
+                                    options: [
+                                      for (final o in _eventTypes)
+                                        if (o.value != 'man_of_the_match' ||
+                                            widget.match.status ==
+                                                MatchStatus.finished)
+                                          o,
+                                    ],
                                   );
                                   if (picked == null || !mounted) return;
                                   setState(() {
@@ -392,27 +408,28 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                                   }
                                 : null,
                           ),
-                        AdminFieldRow(
-                          icon: Icons.timer_outlined,
-                          label: 'Dakika',
-                          child: TextField(
-                            controller: _minuteController,
-                            enabled: !_isLoading,
-                            keyboardType: TextInputType.number,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly,
-                              LengthLimitingTextInputFormatter(3),
-                            ],
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                            ),
-                            decoration: adminInlineInputDecoration(
-                              hint: 'Örn. 23',
+                        if (_eventType != 'man_of_the_match')
+                          AdminFieldRow(
+                            icon: Icons.timer_outlined,
+                            label: 'Dakika',
+                            child: TextField(
+                              controller: _minuteController,
+                              enabled: !_isLoading,
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                                LengthLimitingTextInputFormatter(3),
+                              ],
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                              ),
+                              decoration: adminInlineInputDecoration(
+                                hint: 'Örn. 23',
+                              ),
                             ),
                           ),
-                        ),
                         if (isGoal)
                           AdminFieldRow(
                             icon: Icons.u_turn_left_rounded,
