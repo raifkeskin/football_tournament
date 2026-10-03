@@ -59,7 +59,10 @@ class _LeagueOwnersSectionState extends State<LeagueOwnersSection> {
     ];
   }
 
-  void _reload() => setState(() => _owners = _load());
+  // setState içinden Future dönmemeli; atama blok içinde yapılır.
+  void _reload() => setState(() {
+    _owners = _load();
+  });
 
   Future<void> _add() async {
     final input = await _showAddOwnerDialog(context);
