@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:football_tournament/features/auth/widgets/phone_input.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -755,7 +756,9 @@ class _EditLeagueScreenState extends State<EditLeagueScreen> {
       text: widget.league.managerFullName ?? '',
     );
     _managerPhoneController = TextEditingController(
-      text: widget.league.managerPhoneRaw10 ?? '',
+      text: PhoneMaskFormatter.formatFromRaw(
+        widget.league.managerPhoneRaw10 ?? '',
+      ),
     );
     _matchPeriodDurationController = TextEditingController(
       text: widget.league.matchPeriodDuration.toString(),
@@ -1080,9 +1083,11 @@ class _EditLeagueScreenState extends State<EditLeagueScreen> {
               TextField(
                 controller: _managerPhoneController,
                 keyboardType: TextInputType.phone,
+                inputFormatters: [PhoneMaskFormatter()],
                 decoration: const InputDecoration(
                   labelText: 'Turnuva Sorumlusu Telefon',
-                  hintText: '0 (5XX) XXX XX XX',
+                  prefixText: '0 ',
+                  hintText: '(5XX) XXX XX XX',
                   border: OutlineInputBorder(),
                 ),
                 enabled: !_isLoading,

@@ -107,6 +107,13 @@ flutter:
   # "family" key with the font family name, and a "fonts" key with a
   # list giving the asset and other descriptors for the font. For
   # example:
+  fonts:
+    # Uygulama adı bandı (OFL lisanslı, assets/fonts/OFL-BarlowCondensed.txt).
+    - family: BarlowCondensed
+      fonts:
+        - asset: assets/fonts/BarlowCondensed-ExtraBoldItalic.ttf
+          weight: 800
+          style: italic
   # fonts:
   #   - family: Schyler
   #     fonts:

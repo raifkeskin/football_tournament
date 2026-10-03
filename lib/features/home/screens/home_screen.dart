@@ -49,6 +49,10 @@ class _HomeScreenState extends State<HomeScreen> {
   int _seciliIndeks = 2;
   String? _activeLeagueId;
   bool _didAutoSelectDefaultLeague = false;
+
+  /// Kişiye özel turnuva seçiminin yapıldığı kullanıcı (giriş değişince
+  /// yeniden yapılır).
+  String? _preferredForUid;
   late DateTime _selectedDate;
 
   /// Üst banttaki turnuva seçici. Şimdilik gizli: ana sayfa tüm turnuvaların
@@ -173,6 +177,25 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _activeLeagueId = GlobalFilter.leagueId.value ?? _activeLeagueId;
     });
+  }
+
+  /// Kişinin kendi turnuvalarından en yakın maçı olanı seçer
+  /// (my_preferred_league). Fikstür, puan durumu ve istatistik bu ortak
+  /// seçimle açılır. Kullanıcı bu arada kendisi seçim yaptıysa dokunulmaz.
+  Future<void> _applyPreferredLeague(List<League> leagues) async {
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    if (uid == null || _preferredForUid == uid) return;
+    _preferredForUid = uid;
+    final before = GlobalFilter.leagueId.value;
+    try {
+      final res = await Supabase.instance.client.rpc('my_preferred_league');
+      final pref = res?.toString();
+      if (!mounted || pref == null || pref.isEmpty) return;
+      if (!leagues.any((l) => l.id == pref)) return;
+      if (GlobalFilter.leagueId.value != before) return;
+      setState(() => _activeLeagueId = pref);
+      GlobalFilter.setLeague(pref);
+    } catch (_) {}
   }
 
   @override
@@ -462,6 +485,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 }
 
+                final uid = Supabase.instance.client.auth.currentUser?.id;
+                if (uid != null && uid != _preferredForUid) {
+                  WidgetsBinding.instance.addPostFrameCallback(
+                    (_) => _applyPreferredLeague(allLeagues),
+                  );
+                }
+
                 final currentLeague = allLeagues.firstWhere(
                   (l) => l.id == _activeLeagueId,
                   orElse: () => allLeagues.first,
@@ -706,11 +736,7 @@ class _HomeScreenState extends State<HomeScreen> {
             if (_showLeagueFilter &&
                 seasons.isNotEmpty &&
                 GlobalFilter.seasonId.value == null) {
-              final defaultSeason = seasons.any((s) => s.isDefault)
-                  ? seasons.firstWhere((s) => s.isDefault).id
-                  : (seasons.any((s) => s.isActive)
-                        ? seasons.firstWhere((s) => s.isActive).id
-                        : seasons.first.id);
+              final defaultSeason = pickDefaultSeasonId(seasons);
 
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 GlobalFilter.setSeason(defaultSeason);
@@ -1062,7 +1088,7 @@ class _TarihSeridi extends StatelessWidget {
                     FittedBox(
                       fit: BoxFit.scaleDown,
                       child: Text(
-                        '${t.day}/${t.month}',
+                        '${t.day.toString().padLeft(2, '0')}/${t.month.toString().padLeft(2, '0')}',
                         maxLines: 1,
                         style: const TextStyle(
                           fontSize: 13,

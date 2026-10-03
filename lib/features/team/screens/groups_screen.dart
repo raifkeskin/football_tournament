@@ -221,13 +221,14 @@ class _GroupsScreenState extends State<GroupsScreen> {
                         if (_selectedLeagueId != null && seasons.isNotEmpty) {
                           if (_selectedSeasonId == null ||
                               !seasons.any((s) => s.id == _selectedSeasonId)) {
+                            final def = pickDefaultSeasonId(seasons);
                             WidgetsBinding.instance.addPostFrameCallback((_) {
                               if (!mounted) return;
                               setState(() {
-                                _selectedSeasonId = seasons.first.id;
+                                _selectedSeasonId = def;
                                 _selectedGroupId = null;
                               });
-                              GlobalFilter.setSeason(seasons.first.id);
+                              GlobalFilter.setSeason(def);
                             });
                           }
                         }
@@ -544,7 +545,7 @@ class _GroupTabs extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 46,
+      height: 40,
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.55),
         border: Border(
@@ -778,7 +779,7 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
                     // Sütun başlıkları
                     Container(
                       color: Colors.white.withValues(alpha: 0.04),
-                      padding: const EdgeInsets.fromLTRB(3, 10, 10, 10),
+                      padding: const EdgeInsets.fromLTRB(3, 7, 10, 7),
                       child: const _StandingsHeaderRow(),
                     ),
                     for (var i = 0; i < rows.length; i++)
@@ -859,8 +860,11 @@ class _LeagueBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // İnce bant (puan durumunda daha çok takım sığsın); logo bandın üstüne
+    // hafifçe taşar.
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 16, 14, 16),
+      height: 46,
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 0),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -877,26 +881,38 @@ class _LeagueBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          LeagueLogo(url: logoUrl, size: 60, fallbackColor: _gold),
-          const SizedBox(width: 12),
+          SizedBox(
+            width: 54,
+            height: 46,
+            child: OverflowBox(
+              maxHeight: 58,
+              alignment: Alignment.bottomCenter,
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 3),
+                child: LeagueLogo(url: logoUrl, size: 54, fallbackColor: _gold),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   leagueName.trUpper,
-                  maxLines: 2,
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w900,
-                    fontSize: 17,
+                    fontSize: 15,
                     height: 1.1,
                     letterSpacing: 0.4,
                   ),
                 ),
                 if (subtitle.isNotEmpty) ...[
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   Text(
                     subtitle,
                     maxLines: 1,
@@ -982,7 +998,7 @@ class _StandingsHeaderRow extends StatelessWidget {
     return Row(
       children: [
         h('#', c.rank),
-        SizedBox(width: c.gap + 33),
+        SizedBox(width: c.gap + 31),
         const Expanded(
           child: Text(
             'Takım',
@@ -1100,7 +1116,7 @@ class _StandingsRow extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Container(
-          height: 48,
+          height: 40,
           padding: const EdgeInsets.only(right: 10),
           decoration: BoxDecoration(
             border: Border(
@@ -1127,8 +1143,8 @@ class _StandingsRow extends StatelessWidget {
               SizedBox(width: c.gap - 2),
               WebSafeImage(
                 url: entry.logo,
-                width: 24,
-                height: 24,
+                width: 22,
+                height: 22,
                 fit: BoxFit.contain,
                 fallbackIconSize: 18,
               ),

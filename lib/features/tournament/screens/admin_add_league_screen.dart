@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:football_tournament/features/auth/widgets/phone_input.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../models/league.dart';
@@ -437,9 +438,11 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
               TextField(
                 controller: _managerPhoneController,
                 keyboardType: TextInputType.phone,
+                inputFormatters: [PhoneMaskFormatter()],
                 decoration: const InputDecoration(
                   labelText: 'Turnuva Sorumlusu Telefon',
-                  hintText: '0 (5XX) XXX XX XX',
+                  prefixText: '0 ',
+                  hintText: '(5XX) XXX XX XX',
                 ),
                 enabled: !_isLoading,
               ),

@@ -1,12 +1,12 @@
 import 'package:flutter/services.dart';
 
-/// "0 (5xx) xxx xx xx" girişini 10 haneye indirger (başta 0 / 90 atılır).
+/// Telefon girişini 10 haneye indirger: rakam dışı her şey atılır, 10'dan
+/// uzunsa son 10 hane alınır ("+90 532…", "0 532…", "0532…" → "532…").
+/// Kısa girişte (yazarken) baştaki 0'lar atılır.
 String normalizePhoneToRaw10(String input) {
-  var d = input.replaceAll(RegExp(r'\D'), '');
-  if (d.startsWith('90') && d.length >= 12) d = d.substring(2);
-  if (d.startsWith('0')) d = d.substring(1);
-  if (d.length > 10) d = d.substring(d.length - 10);
-  return d;
+  final d = input.replaceAll(RegExp(r'\D'), '');
+  if (d.length > 10) return d.substring(d.length - 10);
+  return d.replaceFirst(RegExp(r'^0+'), '');
 }
 
 /// 10 haneli numarayı "0 (5xx) xxx xx xx" biçiminde gösterir.
@@ -17,8 +17,13 @@ String formatPhoneRaw10(String raw10) {
       '${p.substring(6, 8)} ${p.substring(8)}';
 }
 
-/// Telefon alanı maskesi: yazarken "(5XX) XXX XX XX" biçimine sokar.
+/// Telefon alanı maskesi: yazarken ya da yapıştırırken "(5XX) XXX XX XX"
+/// biçimine sokar. Tüm telefon alanları bunu kullanır.
 class PhoneMaskFormatter extends TextInputFormatter {
+  /// Kayıtlı numarayı (herhangi bir biçimde) alan metnine çevirir.
+  static String formatFromRaw(String raw) =>
+      _formatFromRaw10(normalizePhoneToRaw10(raw));
+
   static String _formatFromRaw10(String raw10) {
     final clipped = raw10.length > 10 ? raw10.substring(0, 10) : raw10;
     final a = clipped.length >= 3 ? clipped.substring(0, 3) : clipped;
@@ -52,11 +57,7 @@ class PhoneMaskFormatter extends TextInputFormatter {
     TextEditingValue oldValue,
     TextEditingValue newValue,
   ) {
-    var digits = newValue.text.replaceAll(RegExp(r'\D'), '');
-    if (digits.startsWith('90')) digits = digits.substring(2);
-    if (digits.startsWith('0')) digits = digits.substring(1);
-    if (digits.length > 10) digits = digits.substring(digits.length - 10);
-    final formatted = _formatFromRaw10(digits);
+    final formatted = formatFromRaw(newValue.text);
     return TextEditingValue(
       text: formatted,
       selection: TextSelection.collapsed(offset: formatted.length),

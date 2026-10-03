@@ -9,6 +9,7 @@ import '../../team/screens/groups_screen.dart';
 import 'home_screen.dart';
 import '../../player/screens/profile_screen.dart';
 import '../../player/screens/stats_screen.dart';
+import '../../../core/widgets/app_name_band.dart';
 
 /// Sol yan menü (Drawer) ile ana ekranlar arasında geçiş.
 class MainNavigator extends StatefulWidget {
@@ -176,7 +177,8 @@ class _MainNavigatorState extends State<MainNavigator> {
                         ),
                         const SizedBox(height: 16),
                         const Text(
-                          'Master Lig',
+                          kAppName,
+                          textAlign: TextAlign.center,
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 22,

@@ -47,8 +47,11 @@ class _FixtureScreenState extends State<FixtureScreen> {
   /// Filtre (turnuva|sezon|grup) başına hafta bilgisi önbelleği.
   final Map<String, Future<({int? maxWeek, int? nextWeek})>> _weekInfo = {};
 
-  /// En büyük hafta ve varsayılan hafta: oynanmış son maçtan sonraki ilk
-  /// oynanmamış maçın haftası. Hiç oynanmamış maç kalmadıysa son oynanan hafta.
+  /// En büyük hafta ve varsayılan (güncel) hafta: en son oynanan haftadan
+  /// itibaren oynanmamış maçı olan ilk hafta (o haftanın kalan maçları
+  /// sürüyorsa aynı hafta); hepsi oynandıysa son oynanan hafta. Ertelenmiş
+  /// eski maçlar (ör. 5. hafta oynanırken bekleyen 3. hafta maçı) seçimi
+  /// geriye çekmez.
   Future<({int? maxWeek, int? nextWeek})> _loadWeekInfo(
     String leagueId,
     String? seasonId,
@@ -69,11 +72,13 @@ class _FixtureScreenState extends State<FixtureScreen> {
       final rows = await q;
 
       int? lastPlayed;
+      int? firstAny;
       final unplayed = <int>[];
       for (final r in rows) {
         final w = r['week'];
         final week = w is num ? w.toInt() : int.tryParse('${w ?? ''}');
         if (week == null) continue;
+        if (firstAny == null || week < firstAny) firstAny = week;
         final status = (r['status'] ?? '').toString().trim();
         if (status == MatchStatus.finished.name) {
           if (lastPlayed == null || week > lastPlayed) lastPlayed = week;
@@ -81,13 +86,12 @@ class _FixtureScreenState extends State<FixtureScreen> {
           unplayed.add(week);
         }
       }
-      unplayed.sort();
-      final afterLast = unplayed.where(
-        (w) => lastPlayed == null || w > lastPlayed,
-      );
-      nextWeek = afterLast.isNotEmpty
-          ? afterLast.first
-          : (unplayed.isNotEmpty ? unplayed.first : lastPlayed);
+      final pending = unplayed
+          .where((w) => lastPlayed == null || w >= lastPlayed)
+          .toList();
+      nextWeek = pending.isNotEmpty
+          ? pending.reduce((a, b) => a < b ? a : b)
+          : (lastPlayed ?? firstAny);
     } catch (_) {}
     return (maxWeek: maxWeek, nextWeek: nextWeek);
   }
@@ -406,14 +410,15 @@ class _FixtureScreenState extends State<FixtureScreen> {
                               _seasonId != null &&
                               seasons.any((s) => s.id == _seasonId);
                           if (!hasSelected) {
+                            final def = pickDefaultSeasonId(seasons);
                             WidgetsBinding.instance.addPostFrameCallback((_) {
                               if (mounted) {
                                 setState(() {
-                                  _seasonId = seasons.first.id;
+                                  _seasonId = def;
                                   _groupId = null;
                                   _week = null;
                                 });
-                                GlobalFilter.setSeason(seasons.first.id);
+                                GlobalFilter.setSeason(def);
                               }
                             });
                           }
@@ -1093,7 +1098,7 @@ class _MatchCard extends StatelessWidget {
         const SizedBox(width: 10),
         Expanded(
           child: Text(
-            name,
+            compactTeamName(name),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
@@ -1103,6 +1108,8 @@ class _MatchCard extends StatelessWidget {
             ),
           ),
         ),
+        // Uzun ad kesilse bile "…" skora yapışmasın.
+        const SizedBox(width: 12),
         // Skor kutusu: yeşil kare; canlı maçta kırmızı.
         Container(
           width: 30,

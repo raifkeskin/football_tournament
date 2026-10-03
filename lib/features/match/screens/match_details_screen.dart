@@ -983,6 +983,8 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                       match: m,
                                       isSuperAdmin: isSuperAdmin,
                                       onDataChanged: _triggerRefresh,
+                                      homeName: homeName,
+                                      awayName: awayName,
                                     ),
                                     FormationTab.fromMatch(
                                       match: m,
@@ -1588,11 +1590,15 @@ class _HighlightsTab extends StatefulWidget {
   final MatchModel match;
   final bool isSuperAdmin;
   final VoidCallback onDataChanged;
+  final String homeName;
+  final String awayName;
   const _HighlightsTab({
     super.key,
     required this.match,
     required this.isSuperAdmin,
     required this.onDataChanged,
+    required this.homeName,
+    required this.awayName,
   });
 
   @override
@@ -1616,109 +1622,195 @@ class _HighlightsTabState extends State<_HighlightsTab>
       isSuperAdmin: widget.isSuperAdmin,
       onDataChanged: widget.onDataChanged,
       mediaStream: _mediaStream,
+      homeName: widget.homeName,
+      awayName: widget.awayName,
     );
   }
 }
 
-class _HighlightsTabView extends StatelessWidget {
+/// Maç fotoğrafları: takım filtresi + 3 sütunlu ızgara (yalnızca ekrana
+/// gelen küçük resimler yüklenir), dokununca kaydırmalı tam ekran galeri.
+/// Yayın linki burada listelenmez; skorun altında gösterilir.
+class _HighlightsTabView extends StatefulWidget {
   final MatchModel match;
   final bool isSuperAdmin;
   final VoidCallback onDataChanged;
   final Stream<List<MatchMediaModel>> mediaStream;
+  final String homeName;
+  final String awayName;
   const _HighlightsTabView({
     required this.match,
     required this.isSuperAdmin,
     required this.onDataChanged,
     required this.mediaStream,
+    required this.homeName,
+    required this.awayName,
   });
+
+  @override
+  State<_HighlightsTabView> createState() => _HighlightsTabViewState();
+}
+
+class _HighlightsTabViewState extends State<_HighlightsTabView> {
+  /// null: tümü; aksi hâlde takım id'si.
+  String? _teamFilter;
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<MatchMediaModel>>(
-      stream: mediaStream,
+      stream: widget.mediaStream,
       builder: (context, snap) {
         if (snap.hasError) return Center(child: Text('Hata: ${snap.error}'));
         if (!snap.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
 
-        final mediaList = snap.data ?? [];
-        if (mediaList.isEmpty) {
-          return const Center(child: Text('Henüz medya eklenmedi.'));
+        final photos =
+            (snap.data ?? const <MatchMediaModel>[])
+                .where((m) => m.mediaType != 'Maç Yayın Linki')
+                .toList()
+              ..sort(
+                (a, b) => (b.createdAt ?? DateTime(0)).compareTo(
+                  a.createdAt ?? DateTime(0),
+                ),
+              );
+        if (photos.isEmpty) {
+          return const Center(
+            child: Text(
+              'Henüz fotoğraf eklenmedi.',
+              style: TextStyle(color: Colors.white60),
+            ),
+          );
         }
 
-        // Yayın linkleri üstte büyük video kartı, diğer medyalar altta liste.
-        final videos = mediaList
-            .where((m) => m.mediaType == 'Maç Yayın Linki')
-            .toList();
-        final others = mediaList
-            .where((m) => m.mediaType != 'Maç Yayın Linki')
-            .toList();
+        final m = widget.match;
+        final homeCount = photos.where((p) => p.teamId == m.homeTeamId).length;
+        final awayCount = photos.where((p) => p.teamId == m.awayTeamId).length;
+        final showFilter = homeCount > 0 || awayCount > 0;
+        final shown = _teamFilter == null
+            ? photos
+            : photos.where((p) => p.teamId == _teamFilter).toList();
 
-        return ListView(
-          padding: const EdgeInsets.symmetric(vertical: 8),
+        return Column(
           children: [
-            for (final v in videos)
-              _YoutubeMediaCard(
-                key: ValueKey(v.id),
-                media: v,
-                onDelete: isSuperAdmin
-                    ? () => _confirmDelete(context, v)
-                    : null,
+            if (showFilter)
+              SizedBox(
+                height: 48,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                  children: [
+                    _filterChip('Tümü', photos.length, null),
+                    if (homeCount > 0)
+                      _filterChip(
+                        shortTeamName(widget.homeName),
+                        homeCount,
+                        m.homeTeamId,
+                      ),
+                    if (awayCount > 0)
+                      _filterChip(
+                        shortTeamName(widget.awayName),
+                        awayCount,
+                        m.awayTeamId,
+                      ),
+                  ],
+                ),
               ),
-            for (var i = 0; i < others.length; i++) ...[
-              if (i > 0)
-                const Divider(color: Colors.white10, height: 1, indent: 72),
-              _buildCompactMediaItem(context, others[i]),
-            ],
+            Expanded(
+              child: shown.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'Bu takım için fotoğraf yok.',
+                        style: TextStyle(color: Colors.white60),
+                      ),
+                    )
+                  : GridView.builder(
+                      padding: const EdgeInsets.fromLTRB(2, 6, 2, 24),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 3,
+                            mainAxisSpacing: 2,
+                            crossAxisSpacing: 2,
+                          ),
+                      itemCount: shown.length,
+                      itemBuilder: (context, i) => _tile(context, shown, i),
+                    ),
+            ),
           ],
         );
       },
     );
   }
 
-  Widget _buildCompactMediaItem(BuildContext context, MatchMediaModel media) {
-    final bool isVideo = media.mediaType == 'Maç Yayın Linki';
+  Widget _filterChip(String label, int count, String? teamId) {
+    final on = _teamFilter == teamId;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: ChoiceChip(
+        selected: on,
+        onSelected: (_) => setState(() => _teamFilter = teamId),
+        label: Text('$label ($count)'),
+        labelStyle: TextStyle(
+          color: on ? Colors.white : Colors.white70,
+          fontWeight: FontWeight.w700,
+          fontSize: 12.5,
+        ),
+        selectedColor: const Color(0xFFC8102E),
+        backgroundColor: const Color(0xFF1E293B),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+        showCheckmark: false,
+        visualDensity: VisualDensity.compact,
+      ),
+    );
+  }
 
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      leading: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: isVideo
-              ? Colors.red.withValues(alpha: 0.1)
-              : Colors.blue.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(
-          isVideo ? Icons.play_arrow_rounded : Icons.camera_alt_rounded,
-          color: isVideo ? Colors.redAccent : Colors.blueAccent,
-        ),
-      ),
-      title: Text(
-        media.mediaType,
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.bold,
-          fontSize: 14,
+  static IconData? _badgeIcon(String type) => switch (type) {
+    'Maçın Adamı' => Icons.star_rounded,
+    'Önemli An' => Icons.bolt_rounded,
+    'Takım Fotosu' => Icons.groups_rounded,
+    _ => null,
+  };
+
+  Widget _tile(BuildContext context, List<MatchMediaModel> list, int i) {
+    final media = list[i];
+    final badge = _badgeIcon(media.mediaType);
+    return GestureDetector(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => _PhotoGalleryScreen(photos: list, initialIndex: i),
         ),
       ),
-      subtitle: Text(
-        media.description ??
-            (isVideo ? 'Maç videosunu izle' : 'Görseli görüntüle'),
-        style: const TextStyle(color: Colors.white60, fontSize: 12),
-      ),
-      trailing: isSuperAdmin
-          ? IconButton(
-              icon: const Icon(
-                Icons.delete_outline,
-                color: Colors.redAccent,
-                size: 22,
+      onLongPress: widget.isSuperAdmin
+          ? () => _confirmDelete(context, media)
+          : null,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          ColoredBox(
+            color: const Color(0xFF1E293B),
+            child: WebSafeImage(
+              url: media.url,
+              width: double.infinity,
+              height: double.infinity,
+              fit: BoxFit.cover,
+              fallbackIconSize: 22,
+            ),
+          ),
+          if (badge != null)
+            Positioned(
+              left: 5,
+              top: 5,
+              child: Container(
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.55),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(badge, size: 13, color: const Color(0xFFFBBF24)),
               ),
-              onPressed: () => _confirmDelete(context, media),
-            )
-          : const Icon(Icons.chevron_right, color: Colors.white24, size: 16),
-      onTap: () => _openFullScreenMedia(context, media),
+            ),
+        ],
+      ),
     );
   }
 
@@ -1728,74 +1820,106 @@ class _HighlightsTabView extends StatelessWidget {
   ) async {
     final ok = await showAdminConfirmDialog(
       context: context,
-      title: 'Medyayı Sil',
-      message: 'Bu medya kalıcı olarak silinecek. Emin misiniz?',
+      title: 'Fotoğrafı Sil',
+      message: 'Bu fotoğraf kalıcı olarak silinecek. Emin misiniz?',
     );
 
     if (ok == true) {
       await ServiceLocator.matchService.deleteMatchMedia(media.id);
 
       if (context.mounted) {
-        onDataChanged();
+        widget.onDataChanged();
       }
     }
   }
 }
 
-Future<void> _openFullScreenMedia(
-  BuildContext context,
-  MatchMediaModel media,
-) async {
-  if (media.mediaType == 'Maç Yayın Linki') {
-    final uri = Uri.parse(media.url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Video linki açılamadı.')));
-      }
-    }
-    return;
+/// Tam ekran galeri: sağa-sola kaydırma, yakınlaştırma, "3 / 24" sayacı ve
+/// varsa açıklama.
+class _PhotoGalleryScreen extends StatefulWidget {
+  const _PhotoGalleryScreen({required this.photos, required this.initialIndex});
+
+  final List<MatchMediaModel> photos;
+  final int initialIndex;
+
+  @override
+  State<_PhotoGalleryScreen> createState() => _PhotoGalleryScreenState();
+}
+
+class _PhotoGalleryScreenState extends State<_PhotoGalleryScreen> {
+  late final PageController _page = PageController(
+    initialPage: widget.initialIndex,
+  );
+  late int _index = widget.initialIndex;
+
+  @override
+  void dispose() {
+    _page.dispose();
+    super.dispose();
   }
 
-  if (!context.mounted) return;
-
-  Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (_) => Scaffold(
+  @override
+  Widget build(BuildContext context) {
+    final current = widget.photos[_index];
+    final caption = [
+      if (current.mediaType != 'Diğer') current.mediaType,
+      if ((current.description ?? '').isNotEmpty) current.description!,
+    ].join(' · ');
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
         backgroundColor: Colors.black,
-        appBar: AppBar(
-          backgroundColor: Colors.black,
-          iconTheme: const IconThemeData(color: Colors.white),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.share_outlined),
-              onPressed: () {},
-            ),
-            IconButton(
-              icon: const Icon(Icons.download_rounded),
-              onPressed: () async {
-                final uri = Uri.parse(media.url);
-                await launchUrl(uri, mode: LaunchMode.externalApplication);
-              },
-            ),
-          ],
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: Text(
+          '${_index + 1} / ${widget.photos.length}',
+          style: const TextStyle(color: Colors.white, fontSize: 16),
         ),
-        body: Center(
-          child: InteractiveViewer(
-            child: WebSafeImage(
-              url: media.url,
-              width: double.infinity,
-              fit: BoxFit.contain,
+        actions: [
+          IconButton(
+            tooltip: 'Aç / indir',
+            icon: const Icon(Icons.download_rounded),
+            onPressed: () => launchUrl(
+              Uri.parse(current.url),
+              mode: LaunchMode.externalApplication,
             ),
           ),
-        ),
+        ],
       ),
-    ),
-  );
+      body: Column(
+        children: [
+          Expanded(
+            child: PageView.builder(
+              controller: _page,
+              itemCount: widget.photos.length,
+              onPageChanged: (i) => setState(() => _index = i),
+              itemBuilder: (context, i) => InteractiveViewer(
+                maxScale: 4,
+                child: Center(
+                  child: WebSafeImage(
+                    url: widget.photos[i].url,
+                    width: double.infinity,
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (caption.isNotEmpty)
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+                child: Text(
+                  caption,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white70, fontSize: 14),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 /// YouTube linkinden video id'si çıkarır (watch, youtu.be, embed, shorts, live).
@@ -1955,78 +2079,6 @@ class _YoutubeVideoViewState extends State<_YoutubeVideoView> {
                 ],
               ),
             ),
-    );
-  }
-}
-
-/// Önemli Anlar sekmesindeki maç yayın linki kartı.
-class _YoutubeMediaCard extends StatelessWidget {
-  final MatchMediaModel media;
-  final VoidCallback? onDelete;
-
-  const _YoutubeMediaCard({super.key, required this.media, this.onDelete});
-
-  @override
-  Widget build(BuildContext context) {
-    final desc = (media.description ?? '').trim();
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.live_tv_rounded,
-                  color: Colors.redAccent,
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    desc.isEmpty ? 'Maç Yayını' : desc,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 15,
-                    ),
-                  ),
-                ),
-                IconButton(
-                  tooltip: "YouTube'da aç",
-                  onPressed: () => _openYoutubeExternally(context, media.url),
-                  icon: const Icon(
-                    Icons.open_in_new_rounded,
-                    color: Colors.white54,
-                    size: 20,
-                  ),
-                ),
-                if (onDelete != null)
-                  IconButton(
-                    tooltip: 'Sil',
-                    onPressed: onDelete,
-                    icon: const Icon(
-                      Icons.delete_outline,
-                      color: Colors.redAccent,
-                      size: 20,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          _YoutubeVideoView(url: media.url),
-        ],
-      ),
     );
   }
 }

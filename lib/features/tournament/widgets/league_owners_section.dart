@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:football_tournament/features/auth/widgets/phone_input.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/widgets/admin_form.dart';
@@ -278,10 +279,7 @@ Future<({String name, String phone})?> _showAddOwnerDialog(
                       child: TextField(
                         controller: phoneCtrl,
                         keyboardType: TextInputType.phone,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.allow(RegExp(r'[0-9 ]')),
-                          LengthLimitingTextInputFormatter(14),
-                        ],
+                        inputFormatters: [PhoneMaskFormatter()],
                         onChanged: (_) => setState(() {}),
                         style: const TextStyle(
                           color: Colors.white,
@@ -289,7 +287,7 @@ Future<({String name, String phone})?> _showAddOwnerDialog(
                           fontWeight: FontWeight.w700,
                         ),
                         decoration: adminInlineInputDecoration(
-                          hint: '5XX XXX XX XX',
+                          hint: '(5XX) XXX XX XX',
                         ),
                       ),
                     ),

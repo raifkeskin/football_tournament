@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'league_access.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb; // Supabase çakışmasını önlemek için alias
+import '../push/push_service.dart';
 
 const _kRememberMeKey = 'auth_remember_me';
 
@@ -151,6 +152,8 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
 
   Future<void> signOut() async {
     await setRememberMe(false);
+    // Oturum kapanmadan (yetki varken) bu cihazın bildirim kaydı silinir.
+    await PushService.onSignOut();
     try {
       await _supabase.auth.signOut();
     } catch (e) {

@@ -42,3 +42,17 @@ Uygulama içinden turnuva düzenlemek isteyenler için başvuru akışı:
 - Herkes herkesle; her hafta bir takım en fazla bir maç; tek sayıda takımda bay. Ev sahibi sayıları dengelenir; rövanşta ev sahibi değişir.
 - Önizleme: başlangıç haftası değiştirilebilir, **Yeniden Çek / İptal / Kaydet**. Maçlar tarih-saat belirsiz, tek istekte kaydedilir.
 - Haftalık tekrarla (2 takımlı gruplar) da Fikstür Planlama'da.
+
+## 4. KVKK onayı olmayan oyuncunun esameye eklenmemesi (market sonrası)
+_Eklendi: 2026-10-03_
+
+- Şimdilik **uygulanmayacak**: onayı olmayan oyuncu kadroda ve esamede yer alabilir, sadece uyarı/bilgi gösterilir.
+- Uygulama markete çıkıp yeni turnuvalar açıldığında: KVKK + sağlık onayı vermemiş oyuncu **maç esamesine eklenemez**.
+- Mevcut turnuvalara geriye dönük uygulanıp uygulanmayacağı o zaman kararlaştırılacak (turnuva bazlı ayar olabilir).
+
+## 5. Bildirime dokununca ilgili sayfanın açılması (deep link)
+_Eklendi: 2026-10-03_
+
+- Şu an bildirime dokununca uygulamanın ana sayfası açılıyor; uygulamada sayfa adresleri (route) tanımlı değil.
+- Yapılacak: maç bildirimi → ilgili maç detayı, haber bildirimi → haber, saat/hatırlatma → maç detayı.
+- Gerekenler: uygulamaya adres yapısı (ör. `/mac/<id>`, `/haber/<id>`), push-sw.js'te tıklamada adresin açılması, veritabanındaki push tetikleyicilerinde `url` alanının doldurulması.

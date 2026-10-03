@@ -220,11 +220,7 @@ class _StatsScreenState extends State<StatsScreen> {
                         if (seasons.isNotEmpty &&
                             _selectedSeasonId == null &&
                             GlobalFilter.seasonId.value == null) {
-                          final defaultSeason = seasons.any((s) => s.isDefault)
-                              ? seasons.firstWhere((s) => s.isDefault).id
-                              : (seasons.any((s) => s.isActive)
-                                    ? seasons.firstWhere((s) => s.isActive).id
-                                    : seasons.first.id);
+                          final defaultSeason = pickDefaultSeasonId(seasons);
 
                           WidgetsBinding.instance.addPostFrameCallback((_) {
                             GlobalFilter.setSeason(defaultSeason);

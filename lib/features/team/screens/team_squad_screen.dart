@@ -5,6 +5,9 @@ import 'dart:math';
 import 'package:excel/excel.dart' hide Border;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import '../../auth/widgets/phone_input.dart';
+import '../../player/consent/consent_service.dart';
+import '../../player/consent/consent_widgets.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:football_tournament/core/widgets/custom_bottom_sheet_dropdown.dart';
@@ -528,6 +531,7 @@ Future<void> showSquadBulkUploadDialog({
 }
 
 class _TeamSquadScreenState extends State<TeamSquadScreen> {
+  final _consentCache = ConsentStatusCache();
   final ITeamService _teamService = ServiceLocator.teamService;
 
   SupabaseTeamService? get _sbTeamService =>
@@ -1322,6 +1326,21 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                                           tournamentId: effectiveTournamentId,
                                           players: allPlayers,
                                         ),
+                                ),
+                                FutureBuilder(
+                                  future: _consentCache.of(
+                                    allPlayers.map((p) => p.id),
+                                  ),
+                                  builder: (context, snap) {
+                                    final st = snap.data ?? const {};
+                                    if (st.values.every((s) => s.complete)) {
+                                      return const SizedBox.shrink();
+                                    }
+                                    return Padding(
+                                      padding: const EdgeInsets.only(top: 12),
+                                      child: ConsentSummaryBanner(statuses: st),
+                                    );
+                                  },
                                 ),
                                 const SizedBox(height: 12),
                                 TextField(
@@ -2750,59 +2769,6 @@ class BirthDateInputFormatter extends TextInputFormatter {
   }
 }
 
-class PhoneMaskFormatter extends TextInputFormatter {
-  static String formatFromRaw(String raw) {
-    String digits = raw.replaceAll(RegExp(r'\D'), '');
-    if (digits.startsWith('0')) digits = digits.substring(1);
-    if (digits.isEmpty) return '';
-
-    final clipped = digits.length > 10 ? digits.substring(0, 10) : digits;
-    final a = clipped.isNotEmpty
-        ? clipped.substring(0, min(3, clipped.length))
-        : '';
-    final b = clipped.length > 3
-        ? clipped.substring(3, min(6, clipped.length))
-        : '';
-    final c = clipped.length > 6
-        ? clipped.substring(6, min(8, clipped.length))
-        : '';
-    final e = clipped.length > 8
-        ? clipped.substring(8, min(10, clipped.length))
-        : '';
-
-    final sb = StringBuffer();
-    if (a.isNotEmpty) {
-      sb.write('(');
-      sb.write(a);
-      if (a.length == 3) sb.write(') ');
-    }
-    if (b.isNotEmpty) {
-      sb.write(b);
-      if (b.length == 3) sb.write(' ');
-    }
-    if (c.isNotEmpty) {
-      sb.write(c);
-      if (c.length == 2) sb.write(' ');
-    }
-    if (e.isNotEmpty) {
-      sb.write(e);
-    }
-    return sb.toString().trimRight();
-  }
-
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    final formatted = formatFromRaw(newValue.text);
-    return TextEditingValue(
-      text: formatted,
-      selection: TextSelection.collapsed(offset: formatted.length),
-    );
-  }
-}
-
 class FootballerLicenseScreen extends StatefulWidget {
   const FootballerLicenseScreen({super.key});
 
@@ -2812,6 +2778,7 @@ class FootballerLicenseScreen extends StatefulWidget {
 }
 
 class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
+  final _consentCache = ConsentStatusCache();
   final ITeamService _teamService = ServiceLocator.teamService;
   final ILeagueService _leagueService = ServiceLocator.leagueService;
 
@@ -3222,10 +3189,33 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
                             ),
                           );
                         }
-                        return ListView.builder(
-                          padding: const EdgeInsets.only(bottom: 24),
-                          itemCount: list.length,
-                          itemBuilder: (context, i) => _licenseCard(list[i]),
+                        // Durum tüm futbolcular için bir kez yüklenir (aramada
+                        // yeniden sorgu atılmaz).
+                        final all = snap.data!
+                            .where((p) => _isFootballerRole(p.role))
+                            .map((p) => p.id);
+                        return FutureBuilder(
+                          future: _consentCache.of(all),
+                          builder: (context, cs) {
+                            final st = cs.data ?? const {};
+                            final showBanner = st.values.any(
+                              (s) => !s.complete,
+                            );
+                            return ListView.builder(
+                              padding: const EdgeInsets.only(bottom: 24),
+                              itemCount: list.length + (showBanner ? 1 : 0),
+                              itemBuilder: (context, i) {
+                                if (showBanner && i == 0) {
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 10),
+                                    child: ConsentSummaryBanner(statuses: st),
+                                  );
+                                }
+                                final p = list[i - (showBanner ? 1 : 0)];
+                                return _licenseCard(p, consent: st[p.id]);
+                              },
+                            );
+                          },
                         );
                       },
                     ),
@@ -3239,7 +3229,7 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
     );
   }
 
-  Widget _licenseCard(PlayerModel p) {
+  Widget _licenseCard(PlayerModel p, {ConsentStatus? consent}) {
     const accent = Color(0xFF10B981);
     final photo = _normalizeUrl((p.photoUrl ?? '').trim());
     return Container(
@@ -3282,15 +3272,25 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      p.name.trim().isEmpty ? p.id : p.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15,
-                      ),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            p.name.trim().isEmpty ? p.id : p.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ),
+                        if (consent != null && !consent.complete) ...[
+                          const SizedBox(width: 6),
+                          ConsentChip(status: consent),
+                        ],
+                      ],
                     ),
                     const SizedBox(height: 2),
                     Text(

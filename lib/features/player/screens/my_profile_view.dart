@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/push/push_card.dart';
 import '../../../core/utils/team_colors.dart';
 import '../../../core/utils/team_name.dart';
 import '../../../core/widgets/admin_form.dart';
@@ -10,29 +11,30 @@ import '../../match/models/match.dart';
 import '../../match/screens/fixture_screen.dart';
 import '../../match/screens/match_details_screen.dart';
 import '../../match/widgets/match_score_line.dart';
+import '../consent/consent_screen.dart';
+import '../consent/consent_service.dart';
 import '../services/player_profile_service.dart';
 import '../widgets/player_card.dart';
 import 'edit_my_profile_screen.dart';
 
 const _surface = Color(0xFF1E293B);
 const _months = [
-  'Oca',
-  'Şub',
-  'Mar',
-  'Nis',
-  'May',
-  'Haz',
-  'Tem',
-  'Ağu',
-  'Eyl',
-  'Eki',
-  'Kas',
-  'Ara',
+  'Ocak',
+  'Şubat',
+  'Mart',
+  'Nisan',
+  'Mayıs',
+  'Haziran',
+  'Temmuz',
+  'Ağustos',
+  'Eylül',
+  'Ekim',
+  'Kasım',
+  'Aralık',
 ];
-const _weekdays = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
 
-String _dayLabel(DateTime d) =>
-    '${_weekdays[d.weekday - 1]} ${d.day} ${_months[d.month - 1]}';
+/// Ör. "22 Eylül 2026".
+String _dayLabel(DateTime d) => '${d.day} ${_months[d.month - 1]} ${d.year}';
 
 String _dateTime(DateTime? d) {
   if (d == null) return '';
@@ -67,12 +69,14 @@ class MyProfileView extends StatefulWidget {
 
 class _MyProfileViewState extends State<MyProfileView> {
   final _service = PlayerProfileService();
+  final _consentService = ConsentService();
 
   bool _loading = true;
   String? _error;
   MyPlayer? _player;
   List<MyTeam> _teams = const [];
   List<ProfileChangeRequest> _requests = const [];
+  MyConsents? _consents;
   int _selected = 0;
   bool _showPlayed = false;
   final _matches = <String, Future<List<TeamMatch>>>{};
@@ -105,12 +109,17 @@ class _MyProfileViewState extends State<MyProfileView> {
         _service.loadPlayer(id),
         _service.loadTeams(id),
         _service.listRequests(onlyPending: false, playerId: id),
+        _consentService
+            .loadMine(id)
+            .then<MyConsents?>((c) => c)
+            .catchError((_) => null),
       ]);
       if (!mounted) return;
       setState(() {
         _player = results[0] as MyPlayer?;
         _teams = results[1] as List<MyTeam>;
         _requests = results[2] as List<ProfileChangeRequest>;
+        _consents = results[3] as MyConsents?;
         if (_selected >= _teams.length) _selected = 0;
         _matches.clear();
         _stats.clear();
@@ -218,6 +227,12 @@ class _MyProfileViewState extends State<MyProfileView> {
             const SizedBox(height: 14),
           ],
           _playerCard(player, team),
+          if (_consents != null) ...[
+            const SizedBox(height: 14),
+            _consentCard(_consents!),
+          ],
+          const SizedBox(height: 14),
+          const PushCard(),
           for (final r in _pending) ...[
             const SizedBox(height: 14),
             _pendingCard(r),
@@ -965,6 +980,84 @@ class _MyProfileViewState extends State<MyProfileView> {
     );
   }
 
+  Future<void> _openConsents() async {
+    final id = widget.playerId;
+    final current = _consents;
+    if (id == null || current == null) return;
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => ConsentScreen(playerId: id, initial: current.granted),
+      ),
+    );
+    if (saved != true || !mounted) return;
+    try {
+      final c = await _consentService.loadMine(id);
+      if (mounted) setState(() => _consents = c);
+    } catch (_) {}
+  }
+
+  /// Onay eksikse uyarı; tamamsa sade bir "onaylandı" satırı (geri almak
+  /// ya da metinleri tekrar okumak için).
+  Widget _consentCard(MyConsents c) {
+    final ok = c.complete;
+    final color = ok ? kAdminAccent : kAdminAmber;
+    final last = c.lastAt;
+    return Material(
+      color: ok ? _surface : kAdminAmber.withValues(alpha: 0.10),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(
+          color: ok
+              ? Colors.white.withValues(alpha: 0.08)
+              : kAdminAmber.withValues(alpha: 0.4),
+        ),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: _openConsents,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+          child: Row(
+            children: [
+              Icon(
+                ok ? Icons.verified_user_outlined : Icons.privacy_tip_outlined,
+                color: color,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      ok
+                          ? 'İzinler ve beyanlar onaylandı'
+                          : 'KVKK ve sağlık onayın eksik',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      ok
+                          ? (last == null
+                                ? 'Görüntülemek için dokun'
+                                : 'Son güncelleme: ${last.day.toString().padLeft(2, '0')}.${last.month.toString().padLeft(2, '0')}.${last.year}')
+                          : 'Turnuvada oynayabilmek için metinleri okuyup onayla.',
+                      style: const TextStyle(color: kAdminMuted, fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, color: color),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _infoCard(IconData icon, String text) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -1212,6 +1305,8 @@ class _UnmatchedView extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
       children: [
+        const PushCard(),
+        const SizedBox(height: 14),
         Container(
           padding: const EdgeInsets.all(22),
           decoration: _card(),

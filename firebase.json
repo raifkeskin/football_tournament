@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "site": "masterfutbol", 
+    "site": "masterfutbol",
     "public": "build/web",
     "ignore": [
       "firebase.json",
@@ -11,6 +11,17 @@
       {
         "source": "**",
         "destination": "/index.html"
+      }
+    ],
+    "headers": [
+      {
+        "source": "/push*.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
       }
     ]
   }

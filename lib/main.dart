@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/config/app_config.dart';
 import 'features/home/screens/main_navigator.dart';
 import 'core/services/app_session.dart';
+import 'core/widgets/app_name_band.dart';
 import 'core/widgets/web_responsive_frame.dart';
 
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
@@ -164,7 +165,8 @@ class _SplashScreenState extends State<SplashScreen>
                   _reveal(
                     start: 0.15,
                     child: const Text(
-                      'Master Lig',
+                      kAppName,
+                      textAlign: TextAlign.center,
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 34,
@@ -271,7 +273,7 @@ class _MyAppState extends State<MyApp> {
       controller: _sessionController,
       child: MaterialApp(
         navigatorKey: appNavigatorKey,
-        title: 'Futbol Turnuvası',
+        title: kAppName,
         debugShowCheckedModeBanner: false,
         localizationsDelegates: const [
           GlobalMaterialLocalizations.delegate,
@@ -393,7 +395,7 @@ class _MyAppState extends State<MyApp> {
         ),
         builder: (context, child) {
           if (child == null) return const SizedBox.shrink();
-          return WebResponsiveFrame(child: child);
+          return WebResponsiveFrame(child: AppNameBand(child: child));
         },
         home: const SplashScreen(),
       ),
