@@ -875,16 +875,18 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
     return '$cleaned Grubu';
   }
 
-  /// Seçici için TÜM takımları getirir. Önceden yalnızca `season_teams`
-  /// tablosunda bu sezona bağlı takımlar listeleniyordu; yeni bir sezonda bu
-  /// liste boş olduğundan "Takım bulunamadı." görünüyordu.
+  /// Seçici için takımları getirir: admin tümünü; kurucu / bölge sorumlusu
+  /// bu turnuvada yer almış ve henüz hiçbir sezona bağlanmamış takımları
+  /// (başka turnuvaların takımları listelenmez; bkz. list_linkable_teams).
   Future<List<_TeamOption>?> _loadTeamOptions() async {
     setState(() => _busy = true);
     try {
-      final teamsRes = await _sb
-          .from('teams')
-          .select()
-          .order('name', ascending: true);
+      final teamsRes =
+          await _sb.rpc(
+                'list_linkable_teams',
+                params: {'p_season_id': widget.seasonId.trim()},
+              )
+              as List;
       final linksRes = await _sb
           .from('season_teams')
           .select('team_id, group_id')
