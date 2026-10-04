@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../core/utils/resilient_stream.dart';
+import '../../../core/utils/table_feed.dart';
 import 'package:football_tournament/core/widgets/master_class_app_bar.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../tournament/models/league.dart';
@@ -39,14 +39,15 @@ class _StatsScreenState extends State<StatsScreen> {
   Stream<List<Season>>? _seasonsStream;
 
   Stream<List<Season>> _watchSeasons(String leagueId) {
-    return resilientStream(
-      () => Supabase.instance.client
-          .from('seasons')
-          .stream(primaryKey: ['id'])
-          .eq('league_id', leagueId)
-          .order('start_date', ascending: false)
-          .map((rows) => rows.map((r) => Season.fromMap(r)).toList()),
-    );
+    // Önce normal sorgu, canlı bağlantı arkadan (bkz. watchTableRows).
+    return watchTableRows(
+      Supabase.instance.client,
+      table: 'seasons',
+      column: 'league_id',
+      value: leagueId,
+      orderBy: 'start_date',
+      ascending: false,
+    ).map((rows) => rows.map((r) => Season.fromMap(r)).toList());
   }
 
   Stream<List<Season>> _getSeasonsStream(String leagueId) {

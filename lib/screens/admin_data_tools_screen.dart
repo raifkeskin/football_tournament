@@ -96,7 +96,10 @@ class _AdminDataToolsScreenState extends State<AdminDataToolsScreen> {
   }
 
   Future<void> _clearPlayers() async {
-    await _runDelete(category: 'Futbolcu', action: _teamService.deleteAllPlayers);
+    await _runDelete(
+      category: 'Futbolcu',
+      action: _teamService.deleteAllPlayers,
+    );
   }
 
   @override
@@ -521,10 +524,9 @@ class _AdminTeamFixtureBuildScreenState
         );
       }
 
-      final teams =
-          teamByNameKey.values
-              .map((t) => FixtureImportTeam(name: t.name, groupName: t.groupName))
-              .toList();
+      final teams = teamByNameKey.values
+          .map((t) => FixtureImportTeam(name: t.name, groupName: t.groupName))
+          .toList();
       await _matchService.importTeamsAndFixture(
         tournamentId: leagueId,
         teams: teams,

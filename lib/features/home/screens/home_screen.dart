@@ -72,26 +72,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Gün bazlı maç akışları ve son listeleri. Akış her yeniden çizimde
   /// kurulmaz; daha önce açılan bir güne dönünce maçlar hemen görünür.
-  static final Map<String, Stream<List<Map<String, dynamic>>>> _dayFeeds = {};
-  static final Map<String, List<Map<String, dynamic>>> _dayCache = {};
-
+  /// (Akış ve önbellek watchTableRows içinde tutulur.)
   /// Seçilen günün tüm turnuvalardaki maçları.
   Stream<List<MatchModel>> _watchMatchesOnDate(DateTime date) {
     final key = _dateKey(date);
-    final feed = _dayFeeds.putIfAbsent(
-      key,
-      () => resilientStream(() async* {
-        final cached = _dayCache[key];
-        if (cached != null) yield cached;
-        await for (final rows
-            in Supabase.instance.client
-                .from('matches')
-                .stream(primaryKey: ['id'])
-                .eq('match_date', key)) {
-          _dayCache[key] = rows;
-          yield rows;
-        }
-      }),
+    final feed = watchTableRows(
+      Supabase.instance.client,
+      table: 'matches',
+      column: 'match_date',
+      value: key,
     );
     return feed.map(
       (rows) => rows
@@ -206,14 +195,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Stream<List<Season>> _watchSeasons(String leagueId) {
-    return resilientStream(
-      () => Supabase.instance.client
-          .from('seasons')
-          .stream(primaryKey: ['id'])
-          .eq('league_id', leagueId)
-          .order('start_date', ascending: false)
-          .map((rows) => rows.map((r) => Season.fromMap(r)).toList()),
-    );
+    // Önce normal sorgu, canlı bağlantı arkadan (bkz. watchTableRows).
+    return watchTableRows(
+      Supabase.instance.client,
+      table: 'seasons',
+      column: 'league_id',
+      value: leagueId,
+      orderBy: 'start_date',
+      ascending: false,
+    ).map((rows) => rows.map((r) => Season.fromMap(r)).toList());
   }
 
   bool _bugunMu(DateTime t) {

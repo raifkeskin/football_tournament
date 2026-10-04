@@ -1,8 +1,5 @@
 class FixtureImportTeam {
-  const FixtureImportTeam({
-    required this.name,
-    required this.groupName,
-  });
+  const FixtureImportTeam({required this.name, required this.groupName});
 
   final String name;
   final String groupName;

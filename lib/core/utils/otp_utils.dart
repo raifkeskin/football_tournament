@@ -5,4 +5,3 @@ String generateOtp6({Random? random}) {
   final n = 100000 + r.nextInt(900000);
   return n.toString().padLeft(6, '0');
 }
-

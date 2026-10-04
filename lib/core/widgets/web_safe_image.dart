@@ -37,4 +37,3 @@ class WebSafeImage extends StatelessWidget {
     );
   }
 }
-

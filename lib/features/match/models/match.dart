@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-
 enum MatchStatus { notStarted, live, finished, postponed, cancelled, halftime }
 
 class LineupPlayer {
@@ -167,7 +166,8 @@ class MatchModel {
   factory MatchModel.fromMap(Map<String, dynamic> map, String id) {
     dynamic v(String camel, String snake) => map[camel] ?? map[snake];
 
-    final rawMatchDate = v('matchDate', 'match_date') ?? v('dateString', 'date_string');
+    final rawMatchDate =
+        v('matchDate', 'match_date') ?? v('dateString', 'date_string');
     DateTime? legacyTs;
     String? matchDateStr;
     if (rawMatchDate is DateTime) {
@@ -281,7 +281,8 @@ class MatchModel {
     return MatchModel(
       id: id,
       leagueId: (map['leagueId'] ?? map['league_id'] ?? '').toString(),
-      firebaseId: (v('firebaseId', 'firebase_id') ?? '').toString().trim().isEmpty
+      firebaseId:
+          (v('firebaseId', 'firebase_id') ?? '').toString().trim().isEmpty
           ? null
           : (v('firebaseId', 'firebase_id') ?? '').toString().trim(),
       homeTeamId: (v('homeTeamId', 'home_team_id') ?? '').toString(),
@@ -297,10 +298,11 @@ class MatchModel {
       minute: readScore(v('minute', 'minute')),
       kickoffAt: readDate(v('kickoffAt', 'kickoff_at'))?.toUtc(),
       secondHalfAt: readDate(v('secondHalfAt', 'second_half_at'))?.toUtc(),
-      observerId: (v('observerId', 'observer_id') ?? '').toString().trim().isEmpty
+      observerId:
+          (v('observerId', 'observer_id') ?? '').toString().trim().isEmpty
           ? null
           : (v('observerId', 'observer_id') ?? '').toString().trim(),
-      seasonId:(map['seasonId'] ?? map['season_id'] ?? '').toString(),
+      seasonId: (map['seasonId'] ?? map['season_id'] ?? '').toString(),
       groupId: (v('groupId', 'group_id') ?? '').toString().trim().isEmpty
           ? null
           : (v('groupId', 'group_id') ?? '').toString().trim(),
@@ -416,14 +418,13 @@ class MatchEvent {
     return MatchEvent(
       id: id,
       matchId: (v('matchId', 'match_id') ?? '').toString(),
-      seasonId: (v('seasonId', 'season_id') ?? v('tournamentId', 'season_id') ?? '')
-          .toString()
-          .trim(),
+      seasonId:
+          (v('seasonId', 'season_id') ?? v('tournamentId', 'season_id') ?? '')
+              .toString()
+              .trim(),
       eventName: (v('playerName', 'player_name') ?? '').toString(),
-      playerId:
-          (v('playerId', 'player_id'))?.toString(),
-      assistPlayerId:
-          (v('assistPlayerId', 'assist_player_id')).toString(),
+      playerId: (v('playerId', 'player_id'))?.toString(),
+      assistPlayerId: (v('assistPlayerId', 'assist_player_id')).toString(),
       subInPlayerId: (v('subInPlayerId', 'sub_in_player_id')).toString(),
       eventType: (v('eventType', 'event_type') ?? '').toString(),
       minute: minute,
@@ -574,15 +575,20 @@ class PlayerModel {
             .toString()
             .trim();
     final phone = phoneRaw.isEmpty ? null : phoneRaw;
-    final name = (v('playerName', 'player_name') ?? v('name', 'name') ?? '').toString().trim();
+    final name = (v('playerName', 'player_name') ?? v('name', 'name') ?? '')
+        .toString()
+        .trim();
     final roleRaw = (v('role', 'role') ?? '').toString().trim();
     final role = roleRaw.isEmpty ? 'Futbolcu' : roleRaw;
     final birthDate = normalizeBirthDate(v('birthDate', 'birth_date'));
-    final mainPosition = (v('mainPosition', 'main_position') as String?)?.trim();
-    final position = (v('subPosition', 'sub_position') ?? v('position', 'position'))
-        ?.toString()
-        .trim();
-    final preferredFoot = (v('preferredFoot', 'preferred_foot') as String?)?.trim();
+    final mainPosition = (v('mainPosition', 'main_position') as String?)
+        ?.trim();
+    final position =
+        (v('subPosition', 'sub_position') ?? v('position', 'position'))
+            ?.toString()
+            .trim();
+    final preferredFoot = (v('preferredFoot', 'preferred_foot') as String?)
+        ?.trim();
     final nationalId = (v('nationalId', 'national_id'))?.toString().trim();
     final photoUrl = (v('photoUrl', 'photo_url') as String?)?.trim();
     int readInt(dynamic v) {
@@ -601,13 +607,16 @@ class PlayerModel {
     }
 
     final height = readNullableInt(v('height', 'height'));
-    final weight= readNullableInt(v('weight', 'weight'));
+    final weight = readNullableInt(v('weight', 'weight'));
 
-    final suspendedMatches = readInt(v('suspendedMatches', 'suspended_matches'));
+    final suspendedMatches = readInt(
+      v('suspendedMatches', 'suspended_matches'),
+    );
 
-    final numberRaw = (v('jerseyNumber', 'jersey_number') ?? v('number', 'number'))
-        ?.toString()
-        .trim();
+    final numberRaw =
+        (v('jerseyNumber', 'jersey_number') ?? v('number', 'number'))
+            ?.toString()
+            .trim();
     final number = (numberRaw ?? '').isEmpty ? null : numberRaw;
 
     if (isRoster) {
@@ -664,7 +673,11 @@ class PlayerModel {
 
   Map<String, dynamic> toPlayerIdentityMapDb({bool snakeCase = false}) {
     if (!snakeCase) return toPlayerIdentityMap();
-    return {'name': name, 'birth_date': birthDate, 'main_position': mainPosition};
+    return {
+      'name': name,
+      'birth_date': birthDate,
+      'main_position': mainPosition,
+    };
   }
 
   Map<String, dynamic> toRosterMap({bool snakeCase = false}) {
@@ -720,7 +733,11 @@ class MatchRosterModel {
     this.playerInfo,
   });
 
-  factory MatchRosterModel.fromMap(Map<String, dynamic> map, String id, {PlayerModel? playerInfo}) {
+  factory MatchRosterModel.fromMap(
+    Map<String, dynamic> map,
+    String id, {
+    PlayerModel? playerInfo,
+  }) {
     return MatchRosterModel(
       id: id,
       matchId: (map['match_id'] ?? '').toString(),

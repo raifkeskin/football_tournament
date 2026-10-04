@@ -49,4 +49,3 @@ Widget buildWebSafeImage(
   }
   return img;
 }
-

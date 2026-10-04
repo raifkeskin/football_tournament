@@ -11,6 +11,7 @@ import '../../../core/services/global_filter.dart';
 import '../../../core/utils/team_name.dart';
 import '../../../core/utils/realtime_signal.dart';
 import '../../../core/utils/resilient_stream.dart';
+import '../../../core/utils/table_feed.dart';
 import 'team_squad_screen.dart';
 
 // YENİ OLUŞTURDUĞUMUZ ORTAK BİLEŞENİ IMPORT EDİYORUZ
@@ -62,14 +63,15 @@ class _GroupsScreenState extends State<GroupsScreen> {
   Stream<List<GroupModel>>? _groupsStream;
 
   Stream<List<Season>> _watchSeasons(String leagueId) {
-    return resilientStream(
-      () => Supabase.instance.client
-          .from('seasons')
-          .stream(primaryKey: ['id'])
-          .eq('league_id', leagueId)
-          .order('start_date', ascending: false)
-          .map((rows) => rows.map((r) => Season.fromMap(r)).toList()),
-    );
+    // Önce normal sorgu, canlı bağlantı arkadan (bkz. watchTableRows).
+    return watchTableRows(
+      Supabase.instance.client,
+      table: 'seasons',
+      column: 'league_id',
+      value: leagueId,
+      orderBy: 'start_date',
+      ascending: false,
+    ).map((rows) => rows.map((r) => Season.fromMap(r)).toList());
   }
 
   @override

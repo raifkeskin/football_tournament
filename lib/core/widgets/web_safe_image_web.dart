@@ -30,7 +30,6 @@ Widget buildWebSafeImage(
     );
   }
 
-
   // Önce normal (tuvale çizilen) resim: Supabase depolaması ve Wikimedia
   // CORS'a izin verir. Gömülü HTML resim (platform view) yalnızca bu
   // yüklenemezse kullanılır; çok sayıda platform view'da Flutter yarı saydam
@@ -79,14 +78,13 @@ Widget _htmlImage(
     _ => 'cover',
   };
 
-  final radiusPx =
-      isCircle ? 9999 : (borderRadius?.topLeft.x ?? 0).toDouble();
+  final radiusPx = isCircle ? 9999 : (borderRadius?.topLeft.x ?? 0).toDouble();
   final w = (width ?? 0).toDouble();
   final h = (height ?? 0).toDouble();
 
   final key = '$trimmed|$w|$h|$fitCss|$radiusPx|$isCircle';
-  final viewType =
-      _viewTypeByKey[key] ??= 'websafeimg_${_viewTypeByKey.length}_${key.hashCode}';
+  final viewType = _viewTypeByKey[key] ??=
+      'websafeimg_${_viewTypeByKey.length}_${key.hashCode}';
 
   try {
     ui.platformViewRegistry.registerViewFactory(viewType, (int viewId) {

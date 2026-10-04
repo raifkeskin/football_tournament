@@ -10,7 +10,7 @@ import '../../../core/services/app_session.dart';
 import '../../../core/services/app_settings.dart';
 import '../../../core/services/image_upload_service.dart';
 import '../../../core/services/service_locator.dart';
-import '../../../core/utils/resilient_stream.dart';
+import '../../../core/utils/table_feed.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/app_date_picker.dart';
@@ -47,23 +47,15 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
   }
 
   Stream<List<League>> _watchActiveLeagues() {
-    return resilientStream(
-      () => _sb
-          .from('leagues')
-          .stream(primaryKey: ['id'])
-          .eq('is_active', true)
-          .order('name', ascending: true)
-          .map((rows) {
-            final list = rows
-                .cast<Map<String, dynamic>>()
-                .map((r) => League.fromJson(r))
-                .toList();
-            list.sort(
-              (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-            );
-            return list;
-          }),
-    );
+    // Önce normal sorgu, canlı bağlantı arkadan (bkz. watchTableRows).
+    return watchTableRows(_sb, table: 'leagues', orderBy: 'name').map((rows) {
+      final list = rows
+          .where((r) => r['is_active'] == true)
+          .map((r) => League.fromJson(r))
+          .toList();
+      list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+      return list;
+    });
   }
 
   static String _newAccessCode() {

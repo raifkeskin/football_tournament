@@ -26,8 +26,12 @@ class AppConfig {
   static String _formatError(Object error) {
     final dynamic dyn = error;
     try {
-      final code = (dyn.code ?? dyn.statusCode ?? dyn.errorCode)?.toString().trim();
-      final message = (dyn.message ?? dyn.details ?? dyn.toString()).toString().trim();
+      final code = (dyn.code ?? dyn.statusCode ?? dyn.errorCode)
+          ?.toString()
+          .trim();
+      final message = (dyn.message ?? dyn.details ?? dyn.toString())
+          .toString()
+          .trim();
       final c = (code ?? '').isEmpty ? null : code;
       if (c != null) return '($c) $message';
       return message;

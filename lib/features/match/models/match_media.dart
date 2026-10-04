@@ -35,7 +35,8 @@ class MatchMediaModel {
           : (v('teamId', 'team_id') ?? '').toString().trim(),
       mediaType: (v('mediaType', 'media_type') ?? '').toString(),
       url: (v('url', 'url') ?? '').toString(),
-      description: (v('description', 'description') ?? '').toString().trim().isEmpty
+      description:
+          (v('description', 'description') ?? '').toString().trim().isEmpty
           ? null
           : (v('description', 'description') ?? '').toString().trim(),
       createdAt: readDate(v('createdAt', 'created_at')),

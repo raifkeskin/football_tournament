@@ -195,8 +195,12 @@ class SupabaseMatchService implements IMatchService {
       final cached = _matchCache[id];
       if (cached != null) yield cached;
       // Yalnızca bu maçın satırı dinlenir (önceden tüm tablo indiriliyordu).
-      await for (final rows
-          in _client.from('matches').stream(primaryKey: ['id']).eq('id', id)) {
+      await for (final rows in watchTableRows(
+        _client,
+        table: 'matches',
+        column: 'id',
+        value: id,
+      )) {
         final row = rows.isEmpty
             ? const <String, dynamic>{}
             : rows.first.cast<String, dynamic>();

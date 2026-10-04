@@ -32,8 +32,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   }
 
   static bool _lengthOk(String v) => v.length >= 6 && v.length <= 10;
-  static bool _hasDigitOrSpecial(String v) =>
-      RegExp(r'[^A-Za-z]').hasMatch(v);
+  static bool _hasDigitOrSpecial(String v) => RegExp(r'[^A-Za-z]').hasMatch(v);
 
   Future<void> _save() async {
     final p1 = _pass1Controller.text.trim();
@@ -67,9 +66,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         ),
         (Route<dynamic> route) => false,
       );
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Şifreniz kaydedildi.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Şifreniz kaydedildi.')));
     } catch (e) {
       if (!mounted) return;
       final msg = e.toString().toLowerCase();

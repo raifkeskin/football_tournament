@@ -11,7 +11,10 @@ abstract class ITeamService {
 
   Future<Team?> getTeamOnce(String teamId, {String? caller});
 
-  Future<PlayerModel?> getPlayerByPhoneOnce(String playerPhone, {String? caller});
+  Future<PlayerModel?> getPlayerByPhoneOnce(
+    String playerPhone, {
+    String? caller,
+  });
 
   Stream<String> watchTeamName(String teamId, {String? caller});
 
@@ -23,7 +26,11 @@ abstract class ITeamService {
     String? caller,
   });
 
-  Future<List<PlayerModel>> getEligiblePlayers(String teamId, String seasonId, {String? caller});
+  Future<List<PlayerModel>> getEligiblePlayers(
+    String teamId,
+    String seasonId, {
+    String? caller,
+  });
 
   Stream<List<PlayerModel>> watchAllPlayers({String? caller});
 
@@ -45,7 +52,10 @@ abstract class ITeamService {
     String? caller,
   });
 
-  Future<Map<String, dynamic>?> getPenaltyForPlayer(String playerId, {String? caller});
+  Future<Map<String, dynamic>?> getPenaltyForPlayer(
+    String playerId, {
+    String? caller,
+  });
 
   Future<void> upsertPenaltyForPlayer({
     required String playerId,
@@ -55,7 +65,10 @@ abstract class ITeamService {
     String? caller,
   });
 
-  Future<void> clearPenaltyForPlayer({required String playerId, String? caller});
+  Future<void> clearPenaltyForPlayer({
+    required String playerId,
+    String? caller,
+  });
 
   Future<void> upsertRosterEntry({
     required String tournamentId,
@@ -88,9 +101,16 @@ abstract class ITeamService {
     String? caller,
   });
 
-  Future<List<League>> getTeamActiveTournaments(String teamId, {String? caller});
+  Future<List<League>> getTeamActiveTournaments(
+    String teamId, {
+    String? caller,
+  });
 
-  Future<void> updateTeam(String teamId, Map<String, dynamic> data, {String? caller});
+  Future<void> updateTeam(
+    String teamId,
+    Map<String, dynamic> data, {
+    String? caller,
+  });
 
   Future<void> deleteTeamCascade(String teamId, {String? caller});
 

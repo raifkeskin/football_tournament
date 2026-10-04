@@ -43,10 +43,7 @@ class WebResponsiveFrame extends StatelessWidget {
         Center(
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: maxContentWidth),
-            child: Material(
-              color: contentColor,
-              child: child,
-            ),
+            child: Material(color: contentColor, child: child),
           ),
         ),
       ],

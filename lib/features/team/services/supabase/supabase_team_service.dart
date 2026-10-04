@@ -45,10 +45,7 @@ class SupabaseTeamService implements ITeamService {
 
     if (r.isNotEmpty) {
       try {
-        await _client
-            .from('players')
-            .update({'role': r})
-            .eq('id', pid);
+        await _client.from('players').update({'role': r}).eq('id', pid);
       } on PostgrestException catch (e) {
         if (e.code != 'PGRST204') rethrow;
       }
@@ -152,74 +149,71 @@ class SupabaseTeamService implements ITeamService {
         filters: 'order=team_id asc',
       );
       return resilientStream(
-      () => _client
-          .from('season_teams')
-          .stream(primaryKey: ['id'])
-          .order('team_id', ascending: true)
-          .asyncMap((rows) async {
-            final links = rows.cast<Map<String, dynamic>>();
-            final teamIds = <String>{};
-            final groupIds = <String>{};
-            for (final r in links) {
-              final tid = (r['team_id'] ?? '').toString().trim();
-              if (tid.isNotEmpty) teamIds.add(tid);
-              final gid = (r['group_id'] ?? '').toString().trim();
-              if (gid.isNotEmpty) groupIds.add(gid);
-            }
-
-            final teamById = <String, Map<String, dynamic>>{};
-            if (teamIds.isNotEmpty) {
-              final res = await _client
-                  .from('teams')
-                  .select()
-                  .inFilter('id', teamIds.toList());
-              for (final any in res) {
-                final row = (any as Map).cast<String, dynamic>();
-                final id = (row['id'] ?? '').toString().trim();
-                if (id.isNotEmpty) teamById[id] = row;
+        () => watchTableRows(_client, table: 'season_teams', orderBy: 'team_id')
+            .asyncMap((rows) async {
+              final links = rows.cast<Map<String, dynamic>>();
+              final teamIds = <String>{};
+              final groupIds = <String>{};
+              for (final r in links) {
+                final tid = (r['team_id'] ?? '').toString().trim();
+                if (tid.isNotEmpty) teamIds.add(tid);
+                final gid = (r['group_id'] ?? '').toString().trim();
+                if (gid.isNotEmpty) groupIds.add(gid);
               }
-            }
 
-            final groupNameById = <String, String>{};
-            if (groupIds.isNotEmpty) {
-              final res = await _client
-                  .from('groups')
-                  .select('id, name')
-                  .inFilter('id', groupIds.toList());
-              for (final any in res) {
-                final row = (any as Map).cast<String, dynamic>();
-                final id = (row['id'] ?? '').toString().trim();
-                if (id.isEmpty) continue;
-                final name = (row['name'] ?? '').toString().trim();
-                if (name.isNotEmpty) groupNameById[id] = name;
+              final teamById = <String, Map<String, dynamic>>{};
+              if (teamIds.isNotEmpty) {
+                final res = await _client
+                    .from('teams')
+                    .select()
+                    .inFilter('id', teamIds.toList());
+                for (final any in res) {
+                  final row = (any as Map).cast<String, dynamic>();
+                  final id = (row['id'] ?? '').toString().trim();
+                  if (id.isNotEmpty) teamById[id] = row;
+                }
               }
-            }
 
-            final list = <Team>[];
-            for (final link in links) {
-              final tid = (link['team_id'] ?? '').toString().trim();
-              final team = teamById[tid];
-              if (team == null) continue;
-              final gid = (link['group_id'] ?? '').toString().trim();
-              final merged = <String, dynamic>{
-                ...link,
-                'team': team,
-                if ((link['group_name'] ?? '').toString().trim().isEmpty &&
-                    gid.isNotEmpty &&
-                    (groupNameById[gid] ?? '').trim().isNotEmpty)
-                  'group_name': groupNameById[gid],
-                if (gid.isNotEmpty &&
-                    (groupNameById[gid] ?? '').trim().isNotEmpty)
-                  'group': {'id': gid, 'name': groupNameById[gid]},
-              };
-              list.add(Team.fromMap(merged));
-            }
-            list.sort(
-              (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-            );
-            return list;
-          }),
-    );
+              final groupNameById = <String, String>{};
+              if (groupIds.isNotEmpty) {
+                final res = await _client
+                    .from('groups')
+                    .select('id, name')
+                    .inFilter('id', groupIds.toList());
+                for (final any in res) {
+                  final row = (any as Map).cast<String, dynamic>();
+                  final id = (row['id'] ?? '').toString().trim();
+                  if (id.isEmpty) continue;
+                  final name = (row['name'] ?? '').toString().trim();
+                  if (name.isNotEmpty) groupNameById[id] = name;
+                }
+              }
+
+              final list = <Team>[];
+              for (final link in links) {
+                final tid = (link['team_id'] ?? '').toString().trim();
+                final team = teamById[tid];
+                if (team == null) continue;
+                final gid = (link['group_id'] ?? '').toString().trim();
+                final merged = <String, dynamic>{
+                  ...link,
+                  'team': team,
+                  if ((link['group_name'] ?? '').toString().trim().isEmpty &&
+                      gid.isNotEmpty &&
+                      (groupNameById[gid] ?? '').trim().isNotEmpty)
+                    'group_name': groupNameById[gid],
+                  if (gid.isNotEmpty &&
+                      (groupNameById[gid] ?? '').trim().isNotEmpty)
+                    'group': {'id': gid, 'name': groupNameById[gid]},
+                };
+                list.add(Team.fromMap(merged));
+              }
+              list.sort(
+                (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+              );
+              return list;
+            }),
+      );
     } catch (e) {
       AppConfig.sqlLogResult(
         table: 'season_teams',
@@ -251,70 +245,67 @@ class SupabaseTeamService implements ITeamService {
         filters: 'order=team_id asc',
       );
       return resilientStream(
-      () => _client
-          .from('season_teams')
-          .stream(primaryKey: ['id'])
-          .order('team_id', ascending: true)
-          .asyncMap((rows) async {
-            final links = rows.cast<Map<String, dynamic>>();
-            final teamIds = <String>{};
-            final groupIds = <String>{};
-            for (final r in links) {
-              final tid = (r['team_id'] ?? '').toString().trim();
-              if (tid.isNotEmpty) teamIds.add(tid);
-              final gid = (r['group_id'] ?? '').toString().trim();
-              if (gid.isNotEmpty) groupIds.add(gid);
-            }
-
-            final teamById = <String, Map<String, dynamic>>{};
-            if (teamIds.isNotEmpty) {
-              final res = await _client
-                  .from('teams')
-                  .select()
-                  .inFilter('id', teamIds.toList());
-              for (final any in res) {
-                final row = (any as Map).cast<String, dynamic>();
-                final id = (row['id'] ?? '').toString().trim();
-                if (id.isNotEmpty) teamById[id] = row;
+        () => watchTableRows(_client, table: 'season_teams', orderBy: 'team_id')
+            .asyncMap((rows) async {
+              final links = rows.cast<Map<String, dynamic>>();
+              final teamIds = <String>{};
+              final groupIds = <String>{};
+              for (final r in links) {
+                final tid = (r['team_id'] ?? '').toString().trim();
+                if (tid.isNotEmpty) teamIds.add(tid);
+                final gid = (r['group_id'] ?? '').toString().trim();
+                if (gid.isNotEmpty) groupIds.add(gid);
               }
-            }
 
-            final groupNameById = <String, String>{};
-            if (groupIds.isNotEmpty) {
-              final res = await _client
-                  .from('groups')
-                  .select('id, name')
-                  .inFilter('id', groupIds.toList());
-              for (final any in res) {
-                final row = (any as Map).cast<String, dynamic>();
-                final id = (row['id'] ?? '').toString().trim();
-                if (id.isEmpty) continue;
-                final name = (row['name'] ?? '').toString().trim();
-                if (name.isNotEmpty) groupNameById[id] = name;
+              final teamById = <String, Map<String, dynamic>>{};
+              if (teamIds.isNotEmpty) {
+                final res = await _client
+                    .from('teams')
+                    .select()
+                    .inFilter('id', teamIds.toList());
+                for (final any in res) {
+                  final row = (any as Map).cast<String, dynamic>();
+                  final id = (row['id'] ?? '').toString().trim();
+                  if (id.isNotEmpty) teamById[id] = row;
+                }
               }
-            }
 
-            final out = <Map<String, dynamic>>[];
-            for (final link in links) {
-              final tid = (link['team_id'] ?? '').toString().trim();
-              final team = teamById[tid];
-              if (team == null) continue;
-              final gid = (link['group_id'] ?? '').toString().trim();
-              out.add({
-                ...link,
-                'team': team,
-                if ((link['group_name'] ?? '').toString().trim().isEmpty &&
-                    gid.isNotEmpty &&
-                    (groupNameById[gid] ?? '').trim().isNotEmpty)
-                  'group_name': groupNameById[gid],
-                if (gid.isNotEmpty &&
-                    (groupNameById[gid] ?? '').trim().isNotEmpty)
-                  'group': {'id': gid, 'name': groupNameById[gid]},
-              });
-            }
-            return out;
-          }),
-    );
+              final groupNameById = <String, String>{};
+              if (groupIds.isNotEmpty) {
+                final res = await _client
+                    .from('groups')
+                    .select('id, name')
+                    .inFilter('id', groupIds.toList());
+                for (final any in res) {
+                  final row = (any as Map).cast<String, dynamic>();
+                  final id = (row['id'] ?? '').toString().trim();
+                  if (id.isEmpty) continue;
+                  final name = (row['name'] ?? '').toString().trim();
+                  if (name.isNotEmpty) groupNameById[id] = name;
+                }
+              }
+
+              final out = <Map<String, dynamic>>[];
+              for (final link in links) {
+                final tid = (link['team_id'] ?? '').toString().trim();
+                final team = teamById[tid];
+                if (team == null) continue;
+                final gid = (link['group_id'] ?? '').toString().trim();
+                out.add({
+                  ...link,
+                  'team': team,
+                  if ((link['group_name'] ?? '').toString().trim().isEmpty &&
+                      gid.isNotEmpty &&
+                      (groupNameById[gid] ?? '').trim().isNotEmpty)
+                    'group_name': groupNameById[gid],
+                  if (gid.isNotEmpty &&
+                      (groupNameById[gid] ?? '').trim().isNotEmpty)
+                    'group': {'id': gid, 'name': groupNameById[gid]},
+                });
+              }
+              return out;
+            }),
+      );
     } catch (e) {
       AppConfig.sqlLogResult(
         table: 'season_teams',
@@ -502,43 +493,45 @@ class SupabaseTeamService implements ITeamService {
             'primaryKey=id | clientFilter=group_id=$gid | order=team_id asc',
       );
       return resilientStream(
-      () => _client
-          .from('season_teams')
-          .stream(primaryKey: ['id'])
-          .eq('group_id', gid)
-          .order('team_id', ascending: true)
-          .asyncMap((rows) async {
-            final links = rows.cast<Map<String, dynamic>>();
-            final teamIds = <String>{};
-            for (final r in links) {
-              final tid = (r['team_id'] ?? '').toString().trim();
-              if (tid.isNotEmpty) teamIds.add(tid);
-            }
-            final teamById = <String, Map<String, dynamic>>{};
-            if (teamIds.isNotEmpty) {
-              final res = await _client
-                  .from('teams')
-                  .select()
-                  .inFilter('id', teamIds.toList());
-              for (final any in res) {
-                final row = (any as Map).cast<String, dynamic>();
-                final id = (row['id'] ?? '').toString().trim();
-                if (id.isNotEmpty) teamById[id] = row;
+        () =>
+            watchTableRows(
+              _client,
+              table: 'season_teams',
+              column: 'group_id',
+              value: gid,
+              orderBy: 'team_id',
+            ).asyncMap((rows) async {
+              final links = rows.cast<Map<String, dynamic>>();
+              final teamIds = <String>{};
+              for (final r in links) {
+                final tid = (r['team_id'] ?? '').toString().trim();
+                if (tid.isNotEmpty) teamIds.add(tid);
               }
-            }
-            final list = <Team>[];
-            for (final link in links) {
-              final tid = (link['team_id'] ?? '').toString().trim();
-              final team = teamById[tid];
-              if (team == null) continue;
-              list.add(Team.fromMap({...link, 'team': team}));
-            }
-            list.sort(
-              (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-            );
-            return list;
-          }),
-    );
+              final teamById = <String, Map<String, dynamic>>{};
+              if (teamIds.isNotEmpty) {
+                final res = await _client
+                    .from('teams')
+                    .select()
+                    .inFilter('id', teamIds.toList());
+                for (final any in res) {
+                  final row = (any as Map).cast<String, dynamic>();
+                  final id = (row['id'] ?? '').toString().trim();
+                  if (id.isNotEmpty) teamById[id] = row;
+                }
+              }
+              final list = <Team>[];
+              for (final link in links) {
+                final tid = (link['team_id'] ?? '').toString().trim();
+                final team = teamById[tid];
+                if (team == null) continue;
+                list.add(Team.fromMap({...link, 'team': team}));
+              }
+              list.sort(
+                (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+              );
+              return list;
+            }),
+      );
     } catch (e) {
       AppConfig.sqlLogResult(
         table: 'season_teams',
@@ -2014,7 +2007,8 @@ class SupabaseTeamService implements ITeamService {
 
         _sbLog(
           table: 'seasons',
-          query: 'SELECT *, leagues(name, is_active) | id IN (${seasonIds.length})',
+          query:
+              'SELECT *, leagues(name, is_active) | id IN (${seasonIds.length})',
           trace: StackTrace.current,
         );
         AppConfig.sqlLogStart(
@@ -2658,10 +2652,7 @@ class SupabaseTeamService implements ITeamService {
         if (teamId.isEmpty) {
           final inserted = await _client
               .from('teams')
-              .insert({
-                'name': name,
-                'logo_url': logoUrl.trim(),
-              })
+              .insert({'name': name, 'logo_url': logoUrl.trim()})
               .select('id')
               .single();
           teamId = (inserted['id'] ?? '').toString().trim();

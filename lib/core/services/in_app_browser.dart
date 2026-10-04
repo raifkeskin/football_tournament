@@ -8,8 +8,8 @@ Future<void> openInAppBrowser(BuildContext context, String rawUrl) async {
 
   final normalized =
       trimmed.startsWith('http://') || trimmed.startsWith('https://')
-          ? trimmed
-          : 'https://$trimmed';
+      ? trimmed
+      : 'https://$trimmed';
 
   final uri = Uri.tryParse(normalized);
   if (uri == null) {

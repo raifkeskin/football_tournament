@@ -11,6 +11,7 @@ import '../../team/models/team.dart';
 import '../../../core/services/app_session.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/utils/resilient_stream.dart';
+import '../../../core/utils/table_feed.dart';
 import '../../../core/widgets/app_date_picker.dart';
 import '../../../core/widgets/master_class_app_bar.dart';
 import '../../../core/widgets/web_safe_image.dart';
@@ -41,12 +42,14 @@ class SeasonManagementScreen extends StatelessWidget {
   SupabaseClient get _sb => Supabase.instance.client;
 
   Stream<List<Season>> _watchSeasons() {
-    return resilientStream(
-      () => _sb
-          .from('seasons')
-          .stream(primaryKey: ['id'])
-          .eq('league_id', leagueId)
-          .order('start_date', ascending: false),
+    // Önce normal sorgu, canlı bağlantı arkadan (bkz. watchTableRows).
+    return watchTableRows(
+      _sb,
+      table: 'seasons',
+      column: 'league_id',
+      value: leagueId,
+      orderBy: 'start_date',
+      ascending: false,
     ).map(
       (rows) => rows.cast<Map<String, dynamic>>().map(Season.fromJson).toList(),
     );

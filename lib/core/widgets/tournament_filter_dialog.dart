@@ -254,7 +254,9 @@ class _TournamentFilterDialogState extends State<_TournamentFilterDialog> {
                                         await showAdminOptionPicker<String>(
                                           context: context,
                                           title: 'Grup Seç',
-                                          items: groups.map((g) => g.id).toList(),
+                                          items: groups
+                                              .map((g) => g.id)
+                                              .toList(),
                                           labelBuilder: (id) =>
                                               groupNameById[id] ?? '',
                                           selected: groupId,

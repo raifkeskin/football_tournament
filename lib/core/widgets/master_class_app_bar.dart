@@ -4,11 +4,7 @@ class MasterClassAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
   final List<Widget>? actions;
 
-  const MasterClassAppBar({
-    super.key,
-    required this.title,
-    this.actions,
-  });
+  const MasterClassAppBar({super.key, required this.title, this.actions});
 
   @override
   Widget build(BuildContext context) {
@@ -16,7 +12,8 @@ class MasterClassAppBar extends StatelessWidget implements PreferredSizeWidget {
     final canPop = Navigator.canPop(context);
 
     return AppBar(
-      backgroundColor: Colors.transparent, // Tüm sayfalarda ortak şeffaf üst bar
+      backgroundColor:
+          Colors.transparent, // Tüm sayfalarda ortak şeffaf üst bar
       elevation: 0,
       centerTitle: true,
       iconTheme: const IconThemeData(color: Colors.white),
@@ -44,13 +41,13 @@ class MasterClassAppBar extends StatelessWidget implements PreferredSizeWidget {
               // YENİ VE KESİN ÇÖZÜM:
               // Önce en yakındaki Scaffold'u (Örn: Fikstür'ün kendi Scaffold'u) bul
               ScaffoldState? scaffold = Scaffold.maybeOf(ctx);
-              
-              // Eğer bu Scaffold'un bir yan menüsü (Drawer) yoksa, 
+
+              // Eğer bu Scaffold'un bir yan menüsü (Drawer) yoksa,
               // hiyerarşideki en üst root Scaffold'a (MainNavigator'a) çık!
               if (scaffold != null && !scaffold.hasDrawer) {
                 scaffold = ctx.findRootAncestorStateOfType<ScaffoldState>();
               }
-              
+
               if (scaffold != null && scaffold.hasDrawer) {
                 scaffold.openDrawer();
               } else {

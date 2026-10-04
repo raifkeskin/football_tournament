@@ -103,14 +103,16 @@ class _AdminAddNewsScreenState extends State<AdminAddNewsScreen> {
                     border: OutlineInputBorder(),
                   ),
                   items: leagues
-                      .map((l) => DropdownMenuItem<String>(
-                            value: l.id,
-                            child: Text(
-                              l.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ))
+                      .map(
+                        (l) => DropdownMenuItem<String>(
+                          value: l.id,
+                          child: Text(
+                            l.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      )
                       .toList(),
                   onChanged: (v) => setState(() => _selectedTournamentId = v),
                 );

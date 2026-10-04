@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'app_settings.dart';
 import 'league_access.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' as sb; // Supabase çakışmasını önlemek için alias
+import 'package:supabase_flutter/supabase_flutter.dart'
+    as sb; // Supabase çakışmasını önlemek için alias
 import '../push/push_service.dart';
 
 const _kRememberMeKey = 'auth_remember_me';
@@ -37,7 +38,7 @@ class AppSessionState {
   static const _unset = Object();
 
   // Artık Supabase'in User objesini taşıyoruz
-  final sb.User? user; 
+  final sb.User? user;
   final bool isAdmin;
   final String role; // admin, owner, region, manager, player, user
   final String? teamId;
@@ -77,8 +78,10 @@ class AppSessionState {
       : {...ownedLeagueIds, for (final r in ownedRegions) r.leagueId};
 
   /// Bu sezonda sorumlu olduğu bölgeler (kurucu/admin için boş).
-  List<OwnedRegion> regionsInSeason(String seasonId) =>
-      [for (final r in ownedRegions) if (r.seasonId == seasonId) r];
+  List<OwnedRegion> regionsInSeason(String seasonId) => [
+    for (final r in ownedRegions)
+      if (r.seasonId == seasonId) r,
+  ];
 
   /// Bölgeyi yönetebilir mi?
   bool canManageRegion(String? leagueId, String? regionId) =>
@@ -89,9 +92,8 @@ class AppSessionState {
   bool canManageLeague(String? leagueId) =>
       isAdmin || (leagueId != null && ownedLeagueIds.contains(leagueId));
 
-  bool managesTeam(String? seasonId, String? teamId) => managedTeams.any(
-    (t) => t.seasonId == seasonId && t.teamId == teamId,
-  );
+  bool managesTeam(String? seasonId, String? teamId) =>
+      managedTeams.any((t) => t.seasonId == seasonId && t.teamId == teamId);
 
   AppSessionState copyWith({
     Object? user = _unset,
@@ -152,24 +154,23 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
   StreamSubscription<sb.AuthState>? _sub;
   StreamSubscription<List<Map<String, dynamic>>>? _profileSub;
 
-  AppSessionController({
-    sb.SupabaseClient? supabase,
-  })  : _supabase = supabase ?? sb.Supabase.instance.client,
-        super(
-          AppSessionState(
-            user: (supabase ?? sb.Supabase.instance.client).auth.currentUser,
-            isAdmin: false,
-            role: 'user',
-            teamId: null,
-            phone: '',
-            isLoading: true,
-          ),
-        ) {
+  AppSessionController({sb.SupabaseClient? supabase})
+    : _supabase = supabase ?? sb.Supabase.instance.client,
+      super(
+        AppSessionState(
+          user: (supabase ?? sb.Supabase.instance.client).auth.currentUser,
+          isAdmin: false,
+          role: 'user',
+          teamId: null,
+          phone: '',
+          isLoading: true,
+        ),
+      ) {
     // Akışı Supabase Auth değişikliklerine kaydırdık
     _sub = _supabase.auth.onAuthStateChange.listen((data) {
       _onAuthChanged(data.session?.user);
     });
-    
+
     // İlk açılışta mevcut kullanıcıyı kontrol et
     _onAuthChanged(_supabase.auth.currentUser);
   }
@@ -256,8 +257,7 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
 
   /// Admin onayıyla verilen geçici şifreyle giriş yapıldıysa true.
   bool get mustChangePassword =>
-      _supabase.auth.currentUser?.userMetadata?['must_change_password'] ==
-      true;
+      _supabase.auth.currentUser?.userMetadata?['must_change_password'] == true;
 
   Future<bool> signInSuperAdminBackdoor({required String password}) async {
     final pwd = password.trim();
@@ -377,10 +377,11 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
               id: (r['season_regions']['id'] ?? '').toString(),
               name: (r['season_regions']['name'] ?? '').toString(),
               seasonId: (r['season_regions']['season_id'] ?? '').toString(),
-              leagueId: (r['season_regions']['seasons'] is Map
-                      ? r['season_regions']['seasons']['league_id'] ?? ''
-                      : '')
-                  .toString(),
+              leagueId:
+                  (r['season_regions']['seasons'] is Map
+                          ? r['season_regions']['seasons']['league_id'] ?? ''
+                          : '')
+                      .toString(),
             ),
       ];
     } catch (_) {

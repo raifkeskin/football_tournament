@@ -21,7 +21,10 @@ class TurkishUpperCaseTextFormatter extends TextInputFormatter {
   const TurkishUpperCaseTextFormatter();
 
   @override
-  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
     final upperCaseText = newValue.text
         .replaceAll('i', 'İ')
         .replaceAll('ı', 'I')
@@ -43,6 +46,5 @@ class TurkishUpperCaseTextFormatter extends TextInputFormatter {
 /// Türkçe büyük harf: Dart'ın toUpperCase'i "i" harfini "I" yapar
 /// ("Hürriyet Gençlik Ligi" → "LIGI"). Görünen metinlerde bunu kullanın.
 extension TurkishCase on String {
-  String get trUpper =>
-      replaceAll('i', 'İ').replaceAll('ı', 'I').toUpperCase();
+  String get trUpper => replaceAll('i', 'İ').replaceAll('ı', 'I').toUpperCase();
 }

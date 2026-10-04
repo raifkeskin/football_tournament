@@ -67,13 +67,13 @@ class SupabaseLeagueService implements ILeagueService {
       );
     }
 
-    return resilientStream(
-      () => _client
-          .from('leagues')
-          .stream(primaryKey: ['id'])
-          .eq('is_active', true)
-          .order('name', ascending: true)
-          .map((rows) => rows.map((r) => League.fromMap(r)).toList()),
+    // Önce normal sorgu, canlı bağlantı arkadan (bkz. watchTableRows).
+    // Tablo küçük; pasife alınan turnuva da yakalansın diye filtre burada.
+    return watchTableRows(_client, table: 'leagues', orderBy: 'name').map(
+      (rows) => rows
+          .where((r) => r['is_active'] == true)
+          .map((r) => League.fromMap(r))
+          .toList(),
     );
   }
 
