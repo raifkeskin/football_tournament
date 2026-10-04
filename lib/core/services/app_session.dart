@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'active_tournament.dart';
 import 'app_settings.dart';
 import 'league_access.dart';
+import 'league_scope.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'
     as sb; // Supabase çakışmasını önlemek için alias
 import '../push/push_service.dart';
@@ -316,6 +317,7 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
     final user = (authUser?.isAnonymous ?? false) ? null : authUser;
     if (user == null) {
       _profileSub?.cancel();
+      LeagueScope.ids.value = null; // misafir tüm turnuvaları görür
       value = value.copyWith(
         user: null,
         isAdmin: false,
@@ -510,6 +512,32 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
       photoUrl: photoUrl,
       isLoading: false,
     );
+    await _loadLeagueScope(isAdmin);
+  }
+
+  /// Giriş yapan kişi (admin hariç) yalnızca kendi turnuvalarını görür.
+  /// Kapsam değişince ana sekmeler verilerini yeniden kurar.
+  Future<void> _loadLeagueScope(bool isAdmin) async {
+    Set<String>? next;
+    if (!isAdmin) {
+      try {
+        final res = await _supabase.rpc('my_league_ids');
+        final list = [for (final x in (res as List? ?? const [])) x.toString()];
+        next = list.isEmpty ? null : list.toSet();
+      } catch (_) {
+        next = null;
+      }
+    }
+    final prev = LeagueScope.ids.value;
+    final same =
+        (prev == null && next == null) ||
+        (prev != null &&
+            next != null &&
+            prev.length == next.length &&
+            prev.containsAll(next));
+    if (same) return;
+    LeagueScope.ids.value = next;
+    LeagueAccess.bump();
   }
 
   @override

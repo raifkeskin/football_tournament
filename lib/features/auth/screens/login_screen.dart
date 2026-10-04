@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show AuthException;
 
 import '../../../core/services/app_session.dart';
@@ -11,8 +12,35 @@ import 'reset_password_screen.dart';
 import '../widgets/phone_input.dart';
 import '../../../core/widgets/admin_form.dart';
 
+/// Açılışta "Misafir olarak devam et" seçildi mi (cihazda saklanır).
+class GuestMode {
+  GuestMode._();
+
+  static const _key = 'guest_mode_chosen';
+  static bool chosen = false;
+
+  static Future<void> load() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      chosen = prefs.getBool(_key) ?? false;
+    } catch (_) {}
+  }
+
+  static Future<void> set(bool value) async {
+    chosen = value;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_key, value);
+    } catch (_) {}
+  }
+}
+
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  const LoginScreen({super.key, this.gate = false});
+
+  /// Uygulama açılışındaki giriş kapısı: menü yok, girişten sonra ana
+  /// sayfa, altta "Misafir olarak devam et".
+  final bool gate;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -159,8 +187,9 @@ class _LoginScreenState extends State<LoginScreen> {
       }
       Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
         MaterialPageRoute<void>(
-          builder: (_) =>
-              const MainNavigator(initialTabIndex: MainNavigator.profileTab),
+          builder: (_) => MainNavigator(
+            initialTabIndex: widget.gate ? 0 : MainNavigator.profileTab,
+          ),
         ),
         (Route<dynamic> route) => false,
       );
@@ -204,27 +233,30 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
         ),
-        leading: Builder(
-          builder: (ctx) => IconButton(
-            icon: const Icon(
-              Icons.menu, // 3 çizgi (Hamburger) ikonumuz
-              color: Colors.white,
-              size: 28,
-            ),
-            onPressed: () {
-              // YENİ YÖNTEM: En üstteki root Scaffold'u bulup Drawer'ı açmaya zorlar
-              final scaffoldState = ctx
-                  .findRootAncestorStateOfType<ScaffoldState>();
+        automaticallyImplyLeading: false,
+        leading: widget.gate
+            ? null
+            : Builder(
+                builder: (ctx) => IconButton(
+                  icon: const Icon(
+                    Icons.menu, // 3 çizgi (Hamburger) ikonumuz
+                    color: Colors.white,
+                    size: 28,
+                  ),
+                  onPressed: () {
+                    // YENİ YÖNTEM: En üstteki root Scaffold'u bulup Drawer'ı açmaya zorlar
+                    final scaffoldState = ctx
+                        .findRootAncestorStateOfType<ScaffoldState>();
 
-              if (scaffoldState != null && scaffoldState.hasDrawer) {
-                scaffoldState.openDrawer();
-              } else {
-                // Eğer Drawer bulunamazsa (veya farklı bir root yapısı varsa) kullanıcıyı Ana Sayfa sekmesine döndür
-                Navigator.of(context).popUntil((route) => route.isFirst);
-              }
-            },
-          ),
-        ),
+                    if (scaffoldState != null && scaffoldState.hasDrawer) {
+                      scaffoldState.openDrawer();
+                    } else {
+                      // Eğer Drawer bulunamazsa (veya farklı bir root yapısı varsa) kullanıcıyı Ana Sayfa sekmesine döndür
+                      Navigator.of(context).popUntil((route) => route.isFirst);
+                    }
+                  },
+                ),
+              ),
       ),
       body: Stack(
         children: [
@@ -466,6 +498,46 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                       ),
+                      // Açılış kapısı: hesabı olmayanlar uygulamayı misafir
+                      // olarak gezer (tüm turnuvalar); menüden her zaman
+                      // giriş yapılabilir.
+                      if (widget.gate) ...[
+                        const SizedBox(height: 4),
+                        Divider(color: Colors.white.withValues(alpha: 0.12)),
+                        const SizedBox(height: 4),
+                        OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white70,
+                            side: BorderSide(
+                              color: Colors.white.withValues(alpha: 0.25),
+                            ),
+                            minimumSize: const Size.fromHeight(46),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          onPressed: _loading
+                              ? null
+                              : () async {
+                                  await GuestMode.set(true);
+                                  if (!context.mounted) return;
+                                  Navigator.of(
+                                    context,
+                                    rootNavigator: true,
+                                  ).pushAndRemoveUntil(
+                                    MaterialPageRoute<void>(
+                                      builder: (_) => const MainNavigator(),
+                                    ),
+                                    (Route<dynamic> route) => false,
+                                  );
+                                },
+                          icon: const Icon(Icons.travel_explore_rounded),
+                          label: const Text(
+                            'Misafir olarak devam et',
+                            style: TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),

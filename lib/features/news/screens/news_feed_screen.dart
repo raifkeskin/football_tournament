@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/services/app_session.dart';
+import '../../../core/services/league_scope.dart';
 import '../../../core/services/app_settings.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/widgets/master_class_app_bar.dart';
@@ -152,7 +153,10 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
         }
         // Gizli turnuvaların haberleri yalnızca görme yetkisi olana gelir
         // (veritabanı kuralı).
-        final items = snap.data!.toList();
+        // Giriş yapan kişi yalnızca kendi turnuvalarının haberlerini görür.
+        final items = snap.data!
+            .where((n) => LeagueScope.allows(n.tournamentId))
+            .toList();
 
         // Sunucu verisi kullanıcının tercihine yetiştiyse geçici durumu bırak.
         for (final n in items) {

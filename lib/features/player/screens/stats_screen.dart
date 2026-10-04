@@ -13,6 +13,7 @@ import '../../team/services/interfaces/i_team_service.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../../core/services/global_filter.dart';
+import '../../../core/widgets/league_filter_header.dart';
 import '../../../core/services/active_tournament.dart';
 
 // ORTAK BİLEŞEN
@@ -230,12 +231,10 @@ class _StatsScreenState extends State<StatsScreen> {
                           });
                         }
 
-                        final currentLeagueName = leagues
-                            .firstWhere(
-                              (l) => l.id == _selectedLeagueId,
-                              orElse: () => leagues.first,
-                            )
-                            .name;
+                        final currentLeague = leagues.firstWhere(
+                          (l) => l.id == _selectedLeagueId,
+                          orElse: () => leagues.first,
+                        );
                         final currentSeasonName = seasons.isEmpty
                             ? ''
                             : seasons
@@ -245,58 +244,14 @@ class _StatsScreenState extends State<StatsScreen> {
                                   )
                                   .name;
 
+                        // Fikstür ve puan durumuyla aynı filtre kapsülü.
                         return Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                          child: InkWell(
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                          child: LeagueFilterCapsule(
+                            logoUrl: currentLeague.logoUrl,
+                            leagueName: currentLeague.name,
+                            seasonName: currentSeasonName,
                             onTap: () => _showFilterDialog(context, leagues),
-                            borderRadius: BorderRadius.circular(24),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 12,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.4),
-                                borderRadius: BorderRadius.circular(24),
-                                border: Border.all(color: Colors.white24),
-                                boxShadow: const [
-                                  BoxShadow(
-                                    color: Colors.black26,
-                                    blurRadius: 8,
-                                    offset: Offset(0, 4),
-                                  ),
-                                ],
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.tune_rounded,
-                                    color: Color(0xFF10B981),
-                                    size: 18,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Flexible(
-                                    child: Text(
-                                      "$currentLeagueName • $currentSeasonName",
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 13,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  const Icon(
-                                    Icons.keyboard_arrow_down,
-                                    color: Colors.white70,
-                                    size: 18,
-                                  ),
-                                ],
-                              ),
-                            ),
                           ),
                         );
                       },

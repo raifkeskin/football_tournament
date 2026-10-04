@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/config/app_config.dart';
+import 'features/auth/screens/login_screen.dart';
 import 'features/home/screens/main_navigator.dart';
 import 'core/services/app_session.dart';
 import 'core/services/active_tournament.dart';
@@ -38,6 +39,7 @@ void main() async {
   // ekranıyla açılır.
   await AppSessionController.enforceRememberMe();
   await AppSettings.load();
+  await GuestMode.load();
   // Son turnuva teması hemen; kişiye göre güncel tema arkadan.
   await ActiveTournament.init();
 
@@ -71,10 +73,15 @@ class _SplashScreenState extends State<SplashScreen>
     if (_hasNavigated) return;
     _hasNavigated = true;
 
+    // Oturum yoksa ve misafir seçimi yapılmadıysa önce giriş kapısı:
+    // giriş yapan kişi uygulamayı kendi turnuvasıyla görür.
+    final user = Supabase.instance.client.auth.currentUser;
+    final signedIn = user != null && !user.isAnonymous;
+    final showGate = !signedIn && !GuestMode.chosen;
     Navigator.of(context).pushReplacement(
       PageRouteBuilder<void>(
         pageBuilder: (context, animation, secondaryAnimation) =>
-            const MainNavigator(),
+            showGate ? const LoginScreen(gate: true) : const MainNavigator(),
         transitionsBuilder: (context, animation, _, child) =>
             FadeTransition(opacity: animation, child: child),
         transitionDuration: const Duration(milliseconds: 350),

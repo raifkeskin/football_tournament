@@ -1,3 +1,4 @@
+import '../../../../core/services/league_scope.dart';
 import '../../../../core/utils/table_feed.dart';
 import '../../../../core/utils/realtime_signal.dart';
 import '../../../../core/utils/resilient_stream.dart';
@@ -72,6 +73,8 @@ class SupabaseLeagueService implements ILeagueService {
     return watchTableRows(_client, table: 'leagues', orderBy: 'name').map(
       (rows) => rows
           .where((r) => r['is_active'] == true)
+          // Giriş yapan kişi yalnızca kendi turnuvalarını görür.
+          .where((r) => LeagueScope.allows(r['id']?.toString()))
           .map((r) => League.fromMap(r))
           .toList(),
     );
