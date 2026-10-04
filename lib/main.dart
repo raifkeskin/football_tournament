@@ -16,6 +16,12 @@ import 'core/widgets/web_responsive_frame.dart';
 
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 
+bool _showLoginGate() {
+  final user = Supabase.instance.client.auth.currentUser;
+  final signedIn = user != null && !user.isAnonymous;
+  return !signedIn && !GuestMode.chosen;
+}
+
 /// Uygulama giriş noktası.
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -397,7 +403,11 @@ class _MyAppState extends State<MyApp> {
           if (child == null) return const SizedBox.shrink();
           return WebResponsiveFrame(child: AppNameBand(child: child));
         },
-        home: const SplashScreen(),
+        // Oturum yoksa ve misafir seçimi yapılmadıysa uygulama doğrudan giriş
+        // ekranıyla açılır; aksi halde (kişinin turnuvasıyla) açılış ekranı.
+        home: _showLoginGate()
+            ? const LoginScreen(gate: true)
+            : const SplashScreen(),
       ),
     );
   }

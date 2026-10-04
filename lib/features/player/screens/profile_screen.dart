@@ -36,6 +36,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
       setState(() => _isLoading = true);
       await session.signOut();
       if (mounted) setState(() => _isLoading = false);
+      // Çıkıştan sonra uygulama açılışındaki giriş ekranı (misafir seçeneğiyle).
+      await GuestMode.set(false);
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+        MaterialPageRoute<void>(builder: (_) => const LoginScreen(gate: true)),
+        (route) => false,
+      );
     }
   }
 

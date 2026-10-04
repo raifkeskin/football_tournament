@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:ui'; // Cam efekti (BackdropFilter) için eklendi
 
 import '../../../core/services/app_session.dart';
+import '../../auth/screens/login_screen.dart';
 import '../../../core/services/active_tournament.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../../core/services/app_settings.dart';
@@ -64,11 +65,13 @@ class _MainNavigatorState extends State<MainNavigator> {
   Future<void> _cikisYap(AppSessionController session) async {
     Navigator.of(context).pop(); // çekmeceyi kapat
     await session.signOut();
+    // Çıkıştan sonra uygulama açılışındaki giriş ekranı (misafir seçeneğiyle).
+    await GuestMode.set(false);
     if (!mounted) return;
-    setState(() => _aktifSekme = 0);
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Çıkış yapıldı.')));
+    Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+      MaterialPageRoute<void>(builder: (_) => const LoginScreen(gate: true)),
+      (route) => false,
+    );
   }
 
   @override
