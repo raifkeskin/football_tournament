@@ -7,6 +7,10 @@ import 'web_safe_image.dart';
 /// Uygulama adı.
 const kAppName = 'Türk Veteranlar Ligi';
 
+/// Uygulama adı ekranlarda (bant, menü, açılış, logo halkası, afiş) görünsün
+/// mü? Geçici olarak kapalı; açmak için true yapmak yeterli.
+const kShowAppName = false;
+
 /// Tüm ekranların en üstündeki uygulama adı bandı. Durum çubuğu boşluğunu
 /// bant üstlenir; altındaki ekranlara üst boşluk verilmez (çift boşluk
 /// olmasın).
@@ -61,21 +65,24 @@ class AppNameBand extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 TvlLogo(size: 46, ringText: true),
-                SizedBox(width: 12),
-                Text(
-                  'TÜRK VETERANLAR LİGİ',
-                  maxLines: 1,
-                  style: TextStyle(
-                    fontFamily: 'BarlowCondensed',
-                    fontStyle: FontStyle.italic,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                    fontSize: 18,
-                    letterSpacing: 2.6,
-                    decoration: TextDecoration.none,
-                    shadows: [Shadow(color: Color(0x66000000), blurRadius: 4)],
+                if (kShowAppName) SizedBox(width: 12),
+                if (kShowAppName)
+                  Text(
+                    'TÜRK VETERANLAR LİGİ',
+                    maxLines: 1,
+                    style: TextStyle(
+                      fontFamily: 'BarlowCondensed',
+                      fontStyle: FontStyle.italic,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      fontSize: 18,
+                      letterSpacing: 2.6,
+                      decoration: TextDecoration.none,
+                      shadows: [
+                        Shadow(color: Color(0x66000000), blurRadius: 4),
+                      ],
+                    ),
                   ),
-                ),
               ],
             ),
           ),

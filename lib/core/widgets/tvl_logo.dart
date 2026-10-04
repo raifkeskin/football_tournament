@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'app_name_band.dart' show kShowAppName;
+
 /// Türk Veteranlar Ligi monogram rozeti (kırmızı halka, beyaz merkez, içinde
 /// top olan kırmızı V, yanlarda T ve L). Resim dosyası yerine çizilir; her
 /// boyutta keskin kalır. [ringText] büyük boyutlar içindir (açılış ekranı):
@@ -72,7 +74,7 @@ class _TvlLogoPainter extends CustomPainter {
     _letter(canvas, 'T', const Offset(57, 104), 40);
     _letter(canvas, 'L', const Offset(143, 104), 40);
 
-    if (ringText) {
+    if (ringText && kShowAppName) {
       _arcText(canvas, 'TÜRK VETERANLAR LİGİ', 77, top: true, fontSize: 21);
       _arcText(canvas, 'KURULUŞ 2026', 79, top: false, fontSize: 17);
       _star(canvas, const Offset(17, 100), 8.5);

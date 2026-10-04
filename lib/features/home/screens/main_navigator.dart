@@ -179,16 +179,17 @@ class _MainNavigatorState extends State<MainNavigator> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  t?.name ?? kAppName,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w900,
-                                    letterSpacing: 0.5,
+                                if (t != null || kShowAppName)
+                                  Text(
+                                    t?.name ?? kAppName,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w900,
+                                      letterSpacing: 0.5,
+                                    ),
                                   ),
-                                ),
-                                if (t != null)
+                                if (t != null && kShowAppName)
                                   Text(
                                     kAppName,
                                     style: TextStyle(

@@ -165,22 +165,23 @@ class _SplashScreenState extends State<SplashScreen>
                           ),
                   ),
                   const SizedBox(height: 28),
-                  _reveal(
-                    start: 0.15,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      child: Text(
-                        theme?.name ?? kAppName,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 34,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 0.5,
+                  if (theme != null || kShowAppName)
+                    _reveal(
+                      start: 0.15,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Text(
+                          theme?.name ?? kAppName,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 34,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.5,
+                          ),
                         ),
                       ),
                     ),
-                  ),
                   const SizedBox(height: 10),
                   _reveal(
                     start: 0.3,
@@ -194,19 +195,20 @@ class _SplashScreenState extends State<SplashScreen>
                     ),
                   ),
                   const SizedBox(height: 14),
-                  _reveal(
-                    start: 0.4,
-                    child: Text(
-                      theme == null ? 'Hoş Geldiniz' : kAppName,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.8),
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                        letterSpacing: 0.3,
+                  if (theme == null || kShowAppName)
+                    _reveal(
+                      start: 0.4,
+                      child: Text(
+                        theme == null ? 'Hoş Geldiniz' : kAppName,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.8),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 0.3,
+                        ),
                       ),
                     ),
-                  ),
                   const Spacer(flex: 4),
                   _reveal(
                     start: 0.6,

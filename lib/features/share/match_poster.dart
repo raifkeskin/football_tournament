@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/utils/string_utils.dart';
 import '../../core/utils/team_name.dart';
+import '../../core/widgets/app_name_band.dart' show kShowAppName;
 import '../../core/widgets/tvl_logo.dart';
 import 'poster_share.dart';
 
@@ -287,16 +288,17 @@ class MatchPoster extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   const TvlLogo(size: 22),
-                  const SizedBox(width: 6),
-                  Text(
-                    'TÜRK VETERANLAR LİGİ',
-                    style: _cond(
-                      12,
-                      italic: true,
-                      spacing: 2,
-                      color: Colors.white70,
+                  if (kShowAppName) const SizedBox(width: 6),
+                  if (kShowAppName)
+                    Text(
+                      'TÜRK VETERANLAR LİGİ',
+                      style: _cond(
+                        12,
+                        italic: true,
+                        spacing: 2,
+                        color: Colors.white70,
+                      ),
                     ),
-                  ),
                 ],
               ),
             ],
