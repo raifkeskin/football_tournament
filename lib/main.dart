@@ -41,7 +41,7 @@ void main() async {
   await AppSettings.load();
   await GuestMode.load();
   // Son turnuva teması hemen; kişiye göre güncel tema arkadan.
-  await ActiveTournament.init();
+  await ActiveTournament.init(guestChosen: GuestMode.chosen);
 
   runApp(const MyApp());
 }

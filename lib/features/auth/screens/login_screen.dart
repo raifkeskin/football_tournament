@@ -187,9 +187,8 @@ class _LoginScreenState extends State<LoginScreen> {
       }
       Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
         MaterialPageRoute<void>(
-          builder: (_) => MainNavigator(
-            initialTabIndex: widget.gate ? 0 : MainNavigator.profileTab,
-          ),
+          // Girişten sonra her zaman ana sayfa (kişinin turnuvasıyla).
+          builder: (_) => const MainNavigator(initialTabIndex: 0),
         ),
         (Route<dynamic> route) => false,
       );

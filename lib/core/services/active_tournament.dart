@@ -79,10 +79,17 @@ class ActiveTournament {
     return u != null && !u.isAnonymous;
   }
 
-  /// Saklanan son temayı yükler (main'de, runApp'ten önce).
-  static Future<void> init() async {
+  /// Saklanan son temayı yükler (main'de, runApp'ten önce). Giriş yapılmamış
+  /// ve misafir seçimi de yapılmamışsa (açılışta giriş kapısı çıkacak) uygulama
+  /// TVL kimliğiyle açılır; eski tema temizlenir.
+  static Future<void> init({required bool guestChosen}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      if (!_isRealUser && !guestChosen) {
+        theme.value = null;
+        await prefs.remove(_kTheme);
+        return;
+      }
       final raw = prefs.getString(_kTheme);
       if (raw == null) return;
       theme.value = TournamentTheme.fromRow(

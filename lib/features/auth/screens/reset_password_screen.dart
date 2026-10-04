@@ -61,8 +61,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
         MaterialPageRoute<void>(
-          builder: (_) =>
-              const MainNavigator(initialTabIndex: MainNavigator.profileTab),
+          builder: (_) => const MainNavigator(
+            initialTabIndex: 0,
+          ), // girişten sonra ana sayfa
         ),
         (Route<dynamic> route) => false,
       );
