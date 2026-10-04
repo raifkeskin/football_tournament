@@ -2306,7 +2306,10 @@ class _LineupTab extends StatefulWidget {
 
 /// Kadrolar sekmesindeki esame giriş bilgisi.
 class _RosterInfoNote extends StatelessWidget {
-  const _RosterInfoNote();
+  const _RosterInfoNote({required this.hours});
+
+  /// Turnuvanın esame açılış süresi (leagues.roster_open_hours).
+  final int hours;
 
   @override
   Widget build(BuildContext context) {
@@ -2319,17 +2322,26 @@ class _RosterInfoNote extends StatelessWidget {
           color: const Color(0xFFF59E0B).withValues(alpha: 0.35),
         ),
       ),
-      child: const Row(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.info_outline_rounded, size: 18, color: Color(0xFFF59E0B)),
-          SizedBox(width: 8),
+          const Icon(
+            Icons.info_outline_rounded,
+            size: 18,
+            color: Color(0xFFF59E0B),
+          ),
+          const SizedBox(width: 8),
           Expanded(
             child: Text(
-              'Takım sorumluları, kendi takımlarının esamesini maç saatinden '
-              '1 saat önce bu sekmedeki "Esame" butonundan girebilir. '
-              'Bu saatten önce buton kilitli görünür.',
-              style: TextStyle(
+              hours == 0
+                  ? 'Takım sorumluları, kendi takımlarının esamesini maç '
+                        'saatinde bu sekmedeki "Esame" butonundan girebilir. '
+                        'Bu saatten önce buton kilitli görünür.'
+                  : 'Takım sorumluları, kendi takımlarının esamesini maç '
+                        'saatinden $hours saat önce bu sekmedeki "Esame" '
+                        'butonundan girebilir. Bu saatten önce buton kilitli '
+                        'görünür.',
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 12.5,
                 height: 1.35,
@@ -2345,9 +2357,9 @@ class _RosterInfoNote extends StatelessWidget {
 
 int _jerseyValue(String? n) => int.tryParse((n ?? '').trim()) ?? 999;
 
-/// Takım sorumlusunun esameyi girebileceği an: maç saatinden 1 saat önce.
-/// Maç tarih/saati Türkiye saatidir (UTC+3). Tarih/saat yoksa null.
-DateTime? _rosterOpenAt(MatchModel m) {
+/// Takım sorumlusunun esameyi girebileceği an: maç saatinden [hours] saat
+/// önce. Maç tarih/saati Türkiye saatidir (UTC+3). Tarih/saat yoksa null.
+DateTime? _rosterOpenAt(MatchModel m, int hours) {
   final d = DateTime.tryParse((m.matchDate ?? '').trim());
   final t = RegExp(
     r'^(\d{1,2}):(\d{2})',
@@ -2360,7 +2372,7 @@ DateTime? _rosterOpenAt(MatchModel m) {
     int.parse(t.group(1)!),
     int.parse(t.group(2)!),
   ).subtract(const Duration(hours: 3));
-  return kickoff.subtract(const Duration(hours: 1));
+  return kickoff.subtract(Duration(hours: hours));
 }
 
 class _LineupTabState extends State<_LineupTab>
@@ -2375,6 +2387,29 @@ class _LineupTabState extends State<_LineupTab>
   /// Esame açılış anında ekranı yeniler (sayfa açıkken süre dolarsa).
   Timer? _openTimer;
   DateTime? _openTimerAt;
+
+  /// Turnuvanın esame açılış süresi (saat); yüklenene kadar varsayılan 1.
+  int _openHours = 1;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadOpenHours();
+  }
+
+  Future<void> _loadOpenHours() async {
+    try {
+      final row = await Supabase.instance.client
+          .from('leagues')
+          .select('roster_open_hours')
+          .eq('id', widget.match.leagueId)
+          .maybeSingle();
+      final h = (row?['roster_open_hours'] as num?)?.toInt();
+      if (h != null && h != _openHours && mounted) {
+        setState(() => _openHours = h);
+      }
+    } catch (_) {}
+  }
 
   @override
   void dispose() {
@@ -2413,7 +2448,7 @@ class _LineupTabState extends State<_LineupTab>
         if (widget.isSuperAdmin ||
             _managesTeam(m.homeTeamId) ||
             _managesTeam(m.awayTeamId)) ...[
-          const _RosterInfoNote(),
+          _RosterInfoNote(hours: _openHours),
           const SizedBox(height: 10),
         ],
         // Takım başlıkları + VS
@@ -2512,10 +2547,11 @@ class _LineupTabState extends State<_LineupTab>
       ),
     );
     // Esame: admin / turnuva sahibi / gözlemci her zaman; takım sorumlusu
-    // yalnızca kendi takımını, maçtan 1 saat önce ve maç bitene kadar.
+    // yalnızca kendi takımını, turnuvanın belirlediği süre kadar önce ve
+    // maç bitene kadar.
     final m = widget.match;
     final managesThis = !widget.isSuperAdmin && _managesTeam(teamId);
-    final openAt = _rosterOpenAt(m);
+    final openAt = _rosterOpenAt(m, _openHours);
     if (managesThis) _scheduleOpen(openAt);
     final managerOpen =
         managesThis &&
@@ -2527,7 +2563,9 @@ class _LineupTabState extends State<_LineupTab>
         ? Tooltip(
             message: m.status == MatchStatus.finished
                 ? 'Maç bitti; esame kapandı.'
-                : 'Esame maçtan 1 saat önce açılır.',
+                : _openHours == 0
+                ? 'Esame maç saatinde açılır.'
+                : 'Esame maçtan $_openHours saat önce açılır.',
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 4),
               child: Row(

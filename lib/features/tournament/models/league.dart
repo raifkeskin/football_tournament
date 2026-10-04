@@ -30,6 +30,7 @@ class League {
     this.themePrimary,
     this.themeSecondary,
     this.shortName,
+    this.rosterOpenHours = 1,
   });
 
   final String id;
@@ -64,6 +65,9 @@ class League {
   final String? themePrimary;
   final String? themeSecondary;
   final String? shortName;
+
+  /// Takım sorumlusunun esameyi maçtan kaç saat önce girebileceği.
+  final int rosterOpenHours;
 
   factory League.fromMap(Map<String, dynamic> map) {
     dynamic v(String camel, String snake) => map[camel] ?? map[snake];
@@ -154,6 +158,10 @@ class League {
       themePrimary: nullableTrimmed(v('themePrimary', 'theme_primary')),
       themeSecondary: nullableTrimmed(v('themeSecondary', 'theme_secondary')),
       shortName: nullableTrimmed(v('shortName', 'short_name')),
+      rosterOpenHours: intFrom(
+        v('rosterOpenHours', 'roster_open_hours'),
+        fallback: 1,
+      ),
     );
   }
 

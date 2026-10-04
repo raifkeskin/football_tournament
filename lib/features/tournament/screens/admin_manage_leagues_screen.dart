@@ -74,6 +74,8 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
     );
     String? themePrimary = league?.themePrimary;
     String? themeSecondary = league?.themeSecondary;
+    // Esame: takım sorumlusu kadroyu maçtan kaç saat önce girebilir.
+    var rosterOpenHours = league?.rosterOpenHours ?? 1;
     final accessCodeController = TextEditingController(
       text: (league?.accessCode ?? '').trim(),
     );
@@ -124,6 +126,7 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
           'short_name': shortNameController.text.trim().isEmpty
               ? null
               : shortNameController.text.trim(),
+          'roster_open_hours': rosterOpenHours,
         };
         if (isEdit) {
           await _sb.from('leagues').update(payload).eq('id', league.id);
@@ -420,6 +423,62 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                           ],
                         ),
                       ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  AdminFieldGroup(
+                    children: [
+                      AdminFieldRow(
+                        icon: Icons.lock_clock_rounded,
+                        label: 'Esame açılışı',
+                        enabled: !saving,
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              tooltip: 'Azalt',
+                              icon: const Icon(
+                                Icons.remove_circle_outline_rounded,
+                                color: kAdminAccent,
+                              ),
+                              onPressed: saving || rosterOpenHours <= 0
+                                  ? null
+                                  : () =>
+                                        setPopupState(() => rosterOpenHours--),
+                            ),
+                            IconButton(
+                              tooltip: 'Artır',
+                              icon: const Icon(
+                                Icons.add_circle_outline_rounded,
+                                color: kAdminAccent,
+                              ),
+                              onPressed: saving || rosterOpenHours >= 168
+                                  ? null
+                                  : () =>
+                                        setPopupState(() => rosterOpenHours++),
+                            ),
+                          ],
+                        ),
+                        child: Text(
+                          rosterOpenHours == 0
+                              ? 'Maç saatinde'
+                              : 'Maçtan $rosterOpenHours saat önce',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(4, 6, 4, 0),
+                    child: Text(
+                      'Takım sorumluları kendi takımlarının esamesini bu '
+                      'süreden itibaren girebilir. Yöneticiler ve gözlemci '
+                      'için süre sınırı yoktur.',
+                      style: TextStyle(color: kAdminMuted, fontSize: 12),
                     ),
                   ),
                   if (privateOn) const SizedBox(height: 12),
