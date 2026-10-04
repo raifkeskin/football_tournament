@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'tvl_logo.dart';
+
 /// Uygulama adı.
 const kAppName = 'Türk Veteranlar Ligi';
 
@@ -18,37 +20,47 @@ class AppNameBand extends StatelessWidget {
       color: const Color(0xFF0F172A),
       child: Column(
         children: [
-          // Kırmızı-beyaz bant; yazı tipi uygulamaya gömülü (pubspec fonts).
+          // Yeşil bant: solda logo (yazıdan büyük), yanında uygulama adı.
+          // Yazı tipi uygulamaya gömülü (pubspec fonts).
           Container(
             padding: EdgeInsets.only(top: top),
             decoration: const BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  Color(0xFF8B0A1F),
-                  Color(0xFFC8102E),
-                  Color(0xFF8B0A1F),
+                  Color(0xFF064E3B),
+                  Color(0xFF10B981),
+                  Color(0xFF064E3B),
                 ],
               ),
               border: Border(
-                bottom: BorderSide(color: Colors.white, width: 2),
+                bottom: BorderSide(color: Colors.white, width: 1.5),
               ),
             ),
             child: const SizedBox(
-              height: 26,
-              child: Center(
-                child: Text(
-                  'TÜRK VETERANLAR LİGİ',
-                  maxLines: 1,
-                  style: TextStyle(
-                    fontFamily: 'BarlowCondensed',
-                    fontStyle: FontStyle.italic,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                    fontSize: 15,
-                    letterSpacing: 3,
-                    decoration: TextDecoration.none,
+              height: 50,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  TvlLogo(size: 46, ringText: true),
+                  SizedBox(width: 12),
+                  Text(
+                    'TÜRK VETERANLAR LİGİ',
+                    maxLines: 1,
+                    style: TextStyle(
+                      fontFamily: 'BarlowCondensed',
+                      fontStyle: FontStyle.italic,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      fontSize: 18,
+                      letterSpacing: 2.6,
+                      decoration: TextDecoration.none,
+                      shadows: [
+                        Shadow(color: Color(0x66000000), blurRadius: 4),
+                      ],
+                    ),
                   ),
-                ),
+                ],
               ),
             ),
           ),

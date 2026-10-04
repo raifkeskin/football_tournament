@@ -27,6 +27,7 @@ import '../../../core/utils/team_name.dart';
 import '../../../core/widgets/tournament_filter_dialog.dart';
 import '../../../core/widgets/app_date_picker.dart';
 import '../../../core/utils/string_utils.dart';
+import '../../../core/widgets/league_filter_header.dart';
 
 class FixtureScreen extends StatefulWidget {
   const FixtureScreen({super.key});
@@ -317,6 +318,77 @@ class _FixtureScreenState extends State<FixtureScreen> {
     });
   }
 
+  /// Fikstür üst kısmı: turnuva + sezon kapsülü (dokununca filtre),
+  /// hafta okları ve birden fazla grup varsa grup sekmeleri.
+  Widget _buildFixtureHeader({
+    required BuildContext context,
+    required List<League> leagues,
+    required List<Season> seasons,
+    required List<int> weeks,
+    required int week,
+    required List<GroupModel> groups,
+    required Map<String, String> groupNameById,
+    required String? selectedGroupId,
+    required String currentGroupName,
+    required List<MatchModel> matches,
+    required Map<String, String> teamNameById,
+    required Map<String, String> teamLogoById,
+  }) {
+    final league = leagues.firstWhere(
+      (l) => l.id == _leagueId,
+      orElse: () => leagues.first,
+    );
+    final seasonName = seasons
+        .where((s) => s.id == _seasonId)
+        .map((s) => s.name)
+        .firstOrNull;
+    final canShare =
+        matches.isNotEmpty &&
+        AppSession.of(context).value.canManageLeague(_leagueId);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          LeagueFilterCapsule(
+            logoUrl: league.logoUrl,
+            leagueName: league.name,
+            seasonName: seasonName,
+            // Hafta ve grup yalnızca filtreden değişir; burada bilgi olarak.
+            detail: groups.length > 1
+                ? '$week. Hafta · $currentGroupName'
+                : '$week. Hafta',
+            onTap: () =>
+                _showFilterDialog(context, leagues, week, selectedGroupId),
+            // Paylaş şimdilik yalnızca admin ve turnuva sahibine açık.
+            trailing: !canShare
+                ? null
+                : Material(
+                    color: const Color(0xFF10B981),
+                    shape: const CircleBorder(),
+                    child: IconButton(
+                      tooltip: 'Afişi paylaş',
+                      icon: const Icon(
+                        Icons.ios_share_rounded,
+                        color: Colors.white,
+                      ),
+                      onPressed: () => _shareFixturePoster(
+                        league: league,
+                        groupName: groups.length > 1 ? currentGroupName : '',
+                        week: week,
+                        matches: matches,
+                        teamNameById: teamNameById,
+                        teamLogoById: teamLogoById,
+                      ),
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool isAdmin = AppSession.of(context).value.isAdmin;
@@ -455,13 +527,14 @@ class _FixtureScreenState extends State<FixtureScreen> {
                                 e.$2.id: groupDisplayName(e.$2, e.$1),
                             };
 
+                            // "Tümü" yok: seçili grup yoksa ilk grup.
                             final selectedGroupId =
                                 (_groupId != null &&
                                     groupNameById.containsKey(_groupId))
                                 ? _groupId
-                                : null;
-                            final showGroupInHeader =
-                                selectedGroupId == null || groups.length > 1;
+                                : (groups.isEmpty ? null : groups.first.id);
+                            // Tek grup gösterilir; grup adı sekmede.
+                            const showGroupInHeader = false;
 
                             final weekKey =
                                 '$_leagueId|$_seasonId|$selectedGroupId';
@@ -540,13 +613,6 @@ class _FixtureScreenState extends State<FixtureScreen> {
                                           b.matchTime ?? '',
                                         );
                                       });
-
-                                    final currentLeagueName = leagues
-                                        .firstWhere(
-                                          (l) => l.id == _leagueId,
-                                          orElse: () => leagues.first,
-                                        )
-                                        .name;
                                     //final currentSeasonName = seasons.isEmpty ? '' : seasons.firstWhere((s) => s.id == _seasonId, orElse: () => seasons.first).name;
                                     final currentGroupName =
                                         selectedGroupId == null
@@ -554,195 +620,41 @@ class _FixtureScreenState extends State<FixtureScreen> {
                                         : (groupNameById[selectedGroupId] ??
                                               '');
 
-                                    return Column(
-                                      children: [
-                                        // YENİ FİLTRE KAPSÜLÜ
-                                        Padding(
-                                          padding: const EdgeInsets.fromLTRB(
-                                            16,
-                                            8,
-                                            16,
-                                            16,
-                                          ),
-                                          child: Row(
-                                            children: [
-                                              Expanded(
-                                                child: InkWell(
-                                                  onTap: () {
-                                                    _showFilterDialog(
-                                                      context,
-                                                      leagues,
-                                                      displayWeek ?? 1,
-                                                      selectedGroupId,
-                                                    );
-                                                  },
-                                                  borderRadius:
-                                                      BorderRadius.circular(24),
-                                                  child: Container(
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 16,
-                                                          vertical: 12,
-                                                        ),
-                                                    decoration: BoxDecoration(
-                                                      color: Colors.black
-                                                          .withValues(
-                                                            alpha: 0.4,
-                                                          ),
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            24,
-                                                          ),
-                                                      border: Border.all(
-                                                        color: Colors.white24,
-                                                      ),
-                                                      boxShadow: const [
-                                                        BoxShadow(
-                                                          color: Colors.black26,
-                                                          blurRadius: 8,
-                                                          offset: Offset(0, 4),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                    child: Row(
-                                                      mainAxisSize:
-                                                          MainAxisSize.min,
-                                                      children: [
-                                                        const Icon(
-                                                          Icons.tune_rounded,
-                                                          color: Color(
-                                                            0xFF10B981,
-                                                          ),
-                                                          size: 18,
-                                                        ),
-                                                        const SizedBox(
-                                                          width: 8,
-                                                        ),
-                                                        Flexible(
-                                                          child: Text(
-                                                            "$currentLeagueName • ${displayWeek ?? 1}. Hafta",
-                                                            style:
-                                                                const TextStyle(
-                                                                  color: Colors
-                                                                      .white,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .bold,
-                                                                  fontSize: 13,
-                                                                ),
-                                                            maxLines: 1,
-                                                            overflow:
-                                                                TextOverflow
-                                                                    .ellipsis,
-                                                          ),
-                                                        ),
-                                                        const SizedBox(
-                                                          width: 8,
-                                                        ),
-                                                        const Icon(
-                                                          Icons
-                                                              .keyboard_arrow_down,
-                                                          color: Colors.white70,
-                                                          size: 18,
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                              // Paylaş şimdilik yalnızca admin
-                                              // ve turnuva sahibine açık.
-                                              if (matches.isNotEmpty &&
-                                                  AppSession.of(
-                                                    context,
-                                                  ).value.canManageLeague(
-                                                    _leagueId,
-                                                  )) ...[
-                                                const SizedBox(width: 10),
-                                                Material(
-                                                  color: const Color(
-                                                    0xFF10B981,
-                                                  ),
-                                                  shape: const CircleBorder(),
-                                                  child: IconButton(
-                                                    tooltip: 'Afişi paylaş',
-                                                    icon: const Icon(
-                                                      Icons.ios_share_rounded,
-                                                      color: Colors.white,
-                                                    ),
-                                                    onPressed: () =>
-                                                        _shareFixturePoster(
-                                                          league: leagues
-                                                              .firstWhere(
-                                                                (l) =>
-                                                                    l.id ==
-                                                                    _leagueId,
-                                                                orElse: () =>
-                                                                    leagues
-                                                                        .first,
-                                                              ),
-                                                          groupName:
-                                                              selectedGroupId ==
-                                                                  null
-                                                              ? ''
-                                                              : currentGroupName,
-                                                          week:
-                                                              displayWeek ?? 1,
-                                                          matches: matches,
-                                                          teamNameById:
-                                                              teamNameById,
-                                                          teamLogoById:
-                                                              teamLogoById,
-                                                        ),
-                                                  ),
-                                                ),
-                                              ],
-                                            ],
-                                          ),
+                                    final header = _buildFixtureHeader(
+                                      context: context,
+                                      leagues: leagues,
+                                      seasons: seasons,
+                                      weeks: weeks,
+                                      week: displayWeek ?? 1,
+                                      groups: groups,
+                                      groupNameById: groupNameById,
+                                      selectedGroupId: selectedGroupId,
+                                      currentGroupName: currentGroupName,
+                                      matches: matches,
+                                      teamNameById: teamNameById,
+                                      teamLogoById: teamLogoById,
+                                    );
+                                    // Başlık listeyle birlikte kayar; aşağı
+                                    // kaydırınca ekranın tamamı maçlara kalır.
+                                    return _FixtureList(
+                                      header: header,
+                                      matches: matches,
+                                      dateStripText: _dateStripText,
+                                      groupNameById: groupNameById,
+                                      showGroupInHeader: showGroupInHeader,
+                                      teamLogoById: teamLogoById,
+                                      teamNameById: teamNameById,
+                                      isAdmin: isAdmin,
+                                      onMatchTap: (m) => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              MatchDetailsScreen(match: m),
                                         ),
-
-                                        // Liste Kısmı
-                                        Expanded(
-                                          child: Container(
-                                            color: Colors.transparent,
-                                            child: matches.isEmpty
-                                                ? const Center(
-                                                    child: Text(
-                                                      'Maç bulunamadı.',
-                                                      style: TextStyle(
-                                                        color: Colors.white,
-                                                      ),
-                                                    ),
-                                                  )
-                                                : _FixtureList(
-                                                    matches: matches,
-                                                    dateStripText:
-                                                        _dateStripText,
-                                                    groupNameById:
-                                                        groupNameById,
-                                                    showGroupInHeader:
-                                                        showGroupInHeader,
-                                                    teamLogoById: teamLogoById,
-                                                    teamNameById: teamNameById,
-                                                    isAdmin: isAdmin,
-                                                    onMatchTap: (m) =>
-                                                        Navigator.push(
-                                                          context,
-                                                          MaterialPageRoute(
-                                                            builder: (_) =>
-                                                                MatchDetailsScreen(
-                                                                  match: m,
-                                                                ),
-                                                          ),
-                                                        ),
-                                                    cardColor: cardBg,
-                                                    outlineColor: outline,
-                                                    onDataChanged: () =>
-                                                        setState(() {}),
-                                                  ),
-                                          ),
-                                        ),
-                                      ],
+                                      ),
+                                      cardColor: cardBg,
+                                      outlineColor: outline,
+                                      onDataChanged: () => setState(() {}),
                                     );
                                   },
                                 );
@@ -765,6 +677,7 @@ class _FixtureScreenState extends State<FixtureScreen> {
 
 class _FixtureList extends StatelessWidget {
   const _FixtureList({
+    required this.header,
     required this.matches,
     required this.dateStripText,
     required this.groupNameById,
@@ -778,6 +691,7 @@ class _FixtureList extends StatelessWidget {
     required this.onDataChanged,
   });
 
+  final Widget header;
   final List<MatchModel> matches;
   final String Function(String yyyyMmDd) dateStripText;
   final Map<String, String> groupNameById;
@@ -807,50 +721,44 @@ class _FixtureList extends StatelessWidget {
 
     final sortedDates = byDate.keys.toList()..sort();
 
+    String dayLabel(String key) {
+      if (key == '__NO_DATE__') return 'Tarih Belirlenmedi';
+      final dt = DateTime.tryParse(key);
+      if (dt == null) return key;
+      // Ör. "04 Ekim Pazar"
+      return DateFormat('dd MMMM EEEE', 'tr_TR').format(dt);
+    }
+
     return ListView(
       physics: const ClampingScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 120),
+      padding: const EdgeInsets.fromLTRB(0, 0, 0, 120),
       children: [
-        for (final dKey in sortedDates)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 16),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(14),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: cardColor,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: outlineColor),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8, top: 4),
-                        child: Text(
-                          dKey == '__NO_DATE__'
-                              ? 'Tarih Belirlenmedi'
-                              : dateStripText(dKey),
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w900,
-                            color: Colors.white,
-                            fontSize: 14,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ),
-                      const Divider(color: Colors.white10, height: 1),
-                      const SizedBox(height: 12),
-                      ..._buildGroupedSection(byDate[dKey]!, groupLabel),
-                    ],
-                  ),
-                ),
+        header,
+        if (matches.isEmpty)
+          const Padding(
+            padding: EdgeInsets.only(top: 48),
+            child: Center(
+              child: Text(
+                'Maç bulunamadı.',
+                style: TextStyle(color: Colors.white),
               ),
             ),
           ),
+        for (final dKey in sortedDates) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(70, 12, 16, 6),
+            child: Text(
+              dayLabel(dKey),
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+                fontSize: 13.5,
+                letterSpacing: 0.3,
+              ),
+            ),
+          ),
+          ..._buildGroupedSection(byDate[dKey]!, groupLabel),
+        ],
       ],
     );
   }
@@ -872,7 +780,7 @@ class _FixtureList extends StatelessWidget {
       if (showGroupInHeader && gId.isNotEmpty) {
         items.add(
           Padding(
-            padding: const EdgeInsets.only(top: 8, bottom: 8),
+            padding: const EdgeInsets.fromLTRB(70, 2, 16, 6),
             child: Text(
               groupLabel(gId).trUpper,
               style: TextStyle(
@@ -890,28 +798,18 @@ class _FixtureList extends StatelessWidget {
       for (int i = 0; i < groupMatches.length; i++) {
         final m = groupMatches[i];
         items.add(
-          _MatchCard(
-            match: m,
-            teamLogoById: teamLogoById,
-            teamNameById: teamNameById,
-            isAdmin: isAdmin,
-            onTap: () => onMatchTap(m),
-            onDataChanged: onDataChanged,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 16, 0),
+            child: _MatchCard(
+              match: m,
+              teamLogoById: teamLogoById,
+              teamNameById: teamNameById,
+              isAdmin: isAdmin,
+              onTap: () => onMatchTap(m),
+              onDataChanged: onDataChanged,
+            ),
           ),
         );
-
-        // Maçlar arasına ince çizgi ekleme (gruptaki son maç hariç)
-        if (i < groupMatches.length - 1) {
-          items.add(
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Divider(
-                color: Colors.white.withValues(alpha: 0.08),
-                height: 1,
-              ),
-            ),
-          );
-        }
       }
     }
     return items;
@@ -943,43 +841,33 @@ class _MatchCard extends StatelessWidget {
     final homeName = (teamNameById[match.homeTeamId] ?? '').trim();
     final awayName = (teamNameById[match.awayTeamId] ?? '').trim();
 
-    return Card(
-      margin: EdgeInsets.zero,
-      color: Colors.transparent,
-      elevation: 0,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onTap,
-        onLongPress: () {
-          if (!isAdmin) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Bu işlem için yetkiniz bulunmamaktadır.'),
-                duration: Duration(seconds: 2),
-              ),
-            );
-            return;
-          }
-          _showQuickScoreDialog(context);
-        },
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          child: MatchClockBuilder(
-            match: match,
-            builder: (context, liveMinute) => _stackedLayout(
-              context,
-              homeName.isEmpty ? 'Ev Sahibi' : homeName,
-              awayName.isEmpty ? 'Deplasman' : awayName,
-              liveMinute,
-            ),
-          ),
-        ),
+    return MatchClockBuilder(
+      match: match,
+      builder: (context, liveMinute) => _timelineItem(
+        context,
+        homeName.isEmpty ? 'Ev Sahibi' : homeName,
+        awayName.isEmpty ? 'Deplasman' : awayName,
+        liveMinute,
       ),
     );
   }
 
-  // Fikstürde maçlar alt alta iki satır: solda saat/durum, sağda takımlar.
-  Widget _stackedLayout(
+  void _onLongPress(BuildContext context) {
+    if (!isAdmin) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Bu işlem için yetkiniz bulunmamaktadır.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+    _showQuickScoreDialog(context);
+  }
+
+  // Zaman çizelgesi satırı: solda saat/durum, ortada çizgi ve nokta, sağda
+  // iki takımlı kart. Kazanan beyaz ve kalın, kaybeden soluk.
+  Widget _timelineItem(
     BuildContext context,
     String homeName,
     String awayName,
@@ -1002,108 +890,169 @@ class _MatchCard extends StatelessWidget {
       MatchStatus.cancelled => (text: 'İPT', color: Colors.white54),
       MatchStatus.postponed => (text: 'ERT', color: Colors.white54),
     };
+    final dotColor = isLive
+        ? live
+        : (match.status == MatchStatus.finished ? accent : Colors.white38);
 
     final hs = match.homeScore;
     final as = match.awayScore;
     final showScore =
         match.status == MatchStatus.finished || isLive || hs != 0 || as != 0;
 
-    return Row(
-      children: [
-        SizedBox(
-          width: 50,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (isAdmin)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: IconButton(
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    icon: const Icon(
-                      Icons.edit_calendar,
-                      size: 22,
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: 44,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 9),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    time.isEmpty ? '--:--' : time,
+                    style: const TextStyle(
                       color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13,
+                      fontFeatures: [FontFeature.tabularFigures()],
                     ),
-                    onPressed: () => _showEditPopup(context),
+                  ),
+                  if (status != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3),
+                      child: Text(
+                        status.text,
+                        style: TextStyle(
+                          color: status.color,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ),
+                  if (isAdmin)
+                    IconButton(
+                      padding: const EdgeInsets.only(top: 6),
+                      constraints: const BoxConstraints(),
+                      tooltip: 'Tarih / saat düzenle',
+                      icon: const Icon(
+                        Icons.edit_calendar,
+                        size: 18,
+                        color: mid,
+                      ),
+                      onPressed: () => _showEditPopup(context),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 22,
+            child: Stack(
+              children: [
+                Positioned(
+                  left: 10,
+                  top: 0,
+                  bottom: 0,
+                  child: Container(
+                    width: 2,
+                    color: Colors.white.withValues(alpha: 0.08),
                   ),
                 ),
-              Text(
-                time.isEmpty ? '--:--' : time,
-                style: const TextStyle(
-                  color: mid,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 11,
-                  fontFeatures: [FontFeature.tabularFigures()],
-                ),
-              ),
-              if (status != null)
-                Text(
-                  status.text,
-                  style: TextStyle(
-                    color: status.color,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 10,
+                Positioned(
+                  left: 6,
+                  top: 12,
+                  child: Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: dotColor,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: const Color(0xFF0F172A),
+                        width: 2,
+                      ),
+                    ),
                   ),
                 ),
-            ],
+              ],
+            ),
           ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            children: [
-              _teamRow(
-                homeName,
-                (teamLogoById[match.homeTeamId] ?? '').trim(),
-                hs,
-                showScore,
-                hs >= as,
-                isLive,
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Material(
+                color: const Color(0xFF152036).withValues(alpha: 0.9),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  side: BorderSide(
+                    color: isLive
+                        ? live.withValues(alpha: 0.45)
+                        : Colors.white.withValues(alpha: 0.06),
+                  ),
+                ),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: onTap,
+                  onLongPress: () => _onLongPress(context),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 7, 12, 7),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _teamLine(
+                          homeName,
+                          (teamLogoById[match.homeTeamId] ?? '').trim(),
+                          showScore ? '$hs' : '-',
+                          !showScore || hs >= as,
+                          isLive,
+                        ),
+                        const SizedBox(height: 4),
+                        _teamLine(
+                          awayName,
+                          (teamLogoById[match.awayTeamId] ?? '').trim(),
+                          showScore ? '$as' : '-',
+                          !showScore || as >= hs,
+                          isLive,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
-              const SizedBox(height: 12),
-              _teamRow(
-                awayName,
-                (teamLogoById[match.awayTeamId] ?? '').trim(),
-                as,
-                showScore,
-                as >= hs,
-                isLive,
-              ),
-            ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
-  Widget _teamRow(
+  Widget _teamLine(
     String name,
     String logo,
-    int score,
-    bool showScore,
-    bool highlight,
+    String score,
+    bool strong,
     bool isLive,
   ) {
     return Row(
       children: [
         WebSafeImage(
           url: logo,
-          width: 28,
-          height: 28,
+          width: 22,
+          height: 22,
           fit: BoxFit.contain,
-          fallbackIconSize: 18,
+          fallbackIconSize: 16,
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         Expanded(
           child: Text(
             compactTeamName(name),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontWeight: FontWeight.w900,
-              color: highlight ? Colors.white : Colors.white70,
+              fontWeight: strong ? FontWeight.w800 : FontWeight.w600,
+              color: strong ? Colors.white : const Color(0xFF94A3B8),
               fontSize: 13,
             ),
           ),
@@ -1113,7 +1062,7 @@ class _MatchCard extends StatelessWidget {
         // Skor kutusu: yeşil kare; canlı maçta kırmızı.
         Container(
           width: 30,
-          height: 28,
+          height: 25,
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: isLive
@@ -1127,11 +1076,11 @@ class _MatchCard extends StatelessWidget {
             ),
           ),
           child: Text(
-            showScore ? '$score' : '-',
+            score,
             style: TextStyle(
               color: isLive
                   ? const Color(0xFFF87171)
-                  : (highlight ? Colors.white : Colors.white60),
+                  : (strong ? Colors.white : Colors.white60),
               fontWeight: FontWeight.w900,
               fontSize: 14,
               fontFeatures: const [FontFeature.tabularFigures()],

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:ui'; // Cam efekti (BackdropFilter) için eklendi
 
 import '../../../core/services/app_session.dart';
+import '../../../core/services/app_settings.dart';
 import '../../../core/services/league_access.dart';
 import '../../match/screens/fixture_screen.dart';
 import '../../news/screens/news_feed_screen.dart';
@@ -10,6 +11,7 @@ import 'home_screen.dart';
 import '../../player/screens/profile_screen.dart';
 import '../../player/screens/stats_screen.dart';
 import '../../../core/widgets/app_name_band.dart';
+import '../../../core/widgets/tvl_logo.dart';
 
 /// Sol yan menü (Drawer) ile ana ekranlar arasında geçiş.
 class MainNavigator extends StatefulWidget {
@@ -149,50 +151,23 @@ class _MainNavigatorState extends State<MainNavigator> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // MENÜ ÜST KISMI
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 32,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                  // MENÜ ÜST KISMI: logo + uygulama adı tek satırda (menü
+                  // kartlarına daha çok yer kalsın).
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(20, 12, 20, 14),
+                    child: Row(
                       children: [
-                        Container(
-                          width: 64,
-                          height: 64,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.white.withValues(alpha: 0.1),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.3),
-                              width: 1.5,
+                        TvlLogo(size: 52, ringText: true),
+                        SizedBox(width: 14),
+                        Expanded(
+                          child: Text(
+                            kAppName,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.5,
                             ),
-                          ),
-                          child: const Icon(
-                            Icons.sports_soccer,
-                            size: 36,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        const Text(
-                          kAppName,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Hoş Geldiniz',
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.7),
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ],
@@ -203,7 +178,7 @@ class _MainNavigatorState extends State<MainNavigator> {
                     color: Colors.white.withValues(alpha: 0.15),
                     height: 1,
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
 
                   // YENİ RESİMLİ MENÜ KARTLARI
                   Expanded(
@@ -228,25 +203,27 @@ class _MainNavigatorState extends State<MainNavigator> {
                     ),
                   ),
 
-                  // Gizli turnuvayı kodla açma (giriş gerekmez).
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
-                    child: TextButton.icon(
-                      style: TextButton.styleFrom(
-                        foregroundColor: const Color(0xFF10B981),
-                        padding: const EdgeInsets.symmetric(vertical: 10),
+                  // Gizli turnuvayı kodla açma (giriş gerekmez); yalnızca
+                  // admin panelden gizli turnuva özelliği açıksa.
+                  if (AppSettings.privateLeaguesEnabled.value)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+                      child: TextButton.icon(
+                        style: TextButton.styleFrom(
+                          foregroundColor: const Color(0xFF10B981),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                        ),
+                        icon: const Icon(Icons.key_rounded, size: 20),
+                        label: const Text(
+                          'Turnuva Kodu Gir',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () {
+                          Navigator.of(context).pop(); // çekmeceyi kapat
+                          showLeagueCodeDialog(this.context);
+                        },
                       ),
-                      icon: const Icon(Icons.key_rounded, size: 20),
-                      label: const Text(
-                        'Turnuva Kodu Gir',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      onPressed: () {
-                        Navigator.of(context).pop(); // çekmeceyi kapat
-                        showLeagueCodeDialog(this.context);
-                      },
                     ),
-                  ),
 
                   // GİRİŞ / ÇIKIŞ BUTONU: misafirde profil (giriş) ekranına
                   // götürür, giriş yapmışta oturumu kapatır.

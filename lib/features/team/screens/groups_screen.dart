@@ -15,13 +15,12 @@ import 'team_squad_screen.dart';
 
 // YENİ OLUŞTURDUĞUMUZ ORTAK BİLEŞENİ IMPORT EDİYORUZ
 import '../../../core/widgets/tournament_filter_dialog.dart';
-import '../../../core/utils/string_utils.dart';
-import '../../../core/widgets/league_logo.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../utils/standings.dart';
 import '../../share/poster_share.dart';
 import '../../../core/services/app_session.dart';
 import '../../share/standings_poster.dart';
+import '../../../core/widgets/league_filter_header.dart';
 
 class GroupsScreen extends StatefulWidget {
   const GroupsScreen({
@@ -260,71 +259,15 @@ class _GroupsScreenState extends State<GroupsScreen> {
                               ? Stream.value([])
                               : _getGroupsStream(_selectedSeasonId!),
                           builder: (context, groupSnap) {
-                            final groups = groupSnap.data ?? [];
-
-                            String groupText = '';
-                            if (_selectedGroupId != null &&
-                                groups.any((g) => g.id == _selectedGroupId)) {
-                              final g = groups.firstWhere(
-                                (grp) => grp.id == _selectedGroupId,
-                              );
-                              groupText = ' • ${g.name}';
-                            }
-
                             return Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                              child: InkWell(
-                                onTap: () {
-                                  _showFilterDialog(context, leagues);
-                                },
-                                borderRadius: BorderRadius.circular(24),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 12,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withValues(alpha: 0.4),
-                                    borderRadius: BorderRadius.circular(24),
-                                    border: Border.all(color: Colors.white24),
-                                    boxShadow: const [
-                                      BoxShadow(
-                                        color: Colors.black26,
-                                        blurRadius: 8,
-                                        offset: Offset(0, 4),
-                                      ),
-                                    ],
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(
-                                        Icons.tune_rounded,
-                                        color: Color(0xFF10B981),
-                                        size: 18,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Flexible(
-                                        child: Text(
-                                          "$currentLeagueName • $currentSeasonName$groupText",
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 13,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      const Icon(
-                                        Icons.keyboard_arrow_down,
-                                        color: Colors.white70,
-                                        size: 18,
-                                      ),
-                                    ],
-                                  ),
-                                ),
+                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                              child: LeagueFilterCapsule(
+                                logoUrl:
+                                    _leagueLogoById[_selectedLeagueId] ?? '',
+                                leagueName: currentLeagueName,
+                                seasonName: currentSeasonName,
+                                onTap: () =>
+                                    _showFilterDialog(context, leagues),
                               ),
                             );
                           },
@@ -374,31 +317,28 @@ class _GroupsScreenState extends State<GroupsScreen> {
                               orElse: () => allGroups.first,
                             );
                             _activeGroup = active;
-
-                            final leagueLogo =
-                                _leagueLogoById[_selectedLeagueId] ?? '';
-                            final leagueName =
-                                _leagueNameById[_selectedLeagueId] ?? '';
                             return Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                // Turnuva bandı: logo, ad ve sezon.
-                                if (leagueLogo.trim().isNotEmpty &&
-                                    leagueName.trim().isNotEmpty)
-                                  _LeagueBanner(
-                                    logoUrl: leagueLogo,
-                                    leagueName: leagueName,
-                                    subtitle:
-                                        (_seasonNameById[_selectedSeasonId] ??
-                                                '')
-                                            .trim(),
-                                  ),
                                 if (allGroups.length > 1)
-                                  _GroupTabs(
-                                    groups: allGroups,
-                                    activeId: active.id,
-                                    onSelect: (g) =>
-                                        setState(() => _selectedGroupId = g.id),
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      16,
+                                      0,
+                                      16,
+                                      8,
+                                    ),
+                                    child: GroupSegmentTabs(
+                                      groups: [
+                                        for (final g in allGroups)
+                                          (id: g.id, name: g.name),
+                                      ],
+                                      selectedId: active.id,
+                                      onSelect: (id) {
+                                        GlobalFilter.setGroup(id);
+                                        setState(() => _selectedGroupId = id);
+                                      },
+                                    ),
                                   ),
                                 Expanded(
                                   child: ListView(
@@ -527,69 +467,6 @@ class _GroupsScreenState extends State<GroupsScreen> {
       _selectedSeasonId = result.seasonId;
       _selectedGroupId = result.groupId;
     });
-  }
-}
-
-/// Sezondaki gruplar için sekme şeridi (yatay kaydırılır).
-class _GroupTabs extends StatelessWidget {
-  const _GroupTabs({
-    required this.groups,
-    required this.activeId,
-    required this.onSelect,
-  });
-
-  final List<GroupModel> groups;
-  final String activeId;
-  final ValueChanged<GroupModel> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 40,
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.55),
-        border: Border(
-          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
-        ),
-      ),
-      // Sekmeler tüm genişliği eşit paylaşır; grup sayısı arttıkça daralır,
-      // uzun adlar küçülerek sığar.
-      child: Row(
-        children: [
-          for (final g in groups)
-            Expanded(
-              child: InkWell(
-                onTap: () => onSelect(g),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    border: Border(
-                      bottom: BorderSide(
-                        color: g.id == activeId ? _kAccent : Colors.transparent,
-                        width: 3,
-                      ),
-                    ),
-                  ),
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      g.name.trUpper,
-                      maxLines: 1,
-                      style: TextStyle(
-                        color: g.id == activeId ? Colors.white : _kMidText,
-                        fontWeight: FontWeight.w800,
-                        fontSize: groups.length > 3 ? 12 : 14,
-                        letterSpacing: 0.4,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
   }
 }
 
@@ -844,94 +721,6 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
 // Sütun genişlikleri başlık ve satırlarda ortak kullanılır.
 const _kMidText = Color(0xFF94A3B8);
 const _kAccent = Color(0xFF10B981);
-
-class _LeagueBanner extends StatelessWidget {
-  const _LeagueBanner({
-    required this.logoUrl,
-    required this.leagueName,
-    required this.subtitle,
-  });
-
-  final String logoUrl;
-  final String leagueName;
-  final String subtitle;
-
-  static const _gold = Color(0xFFE2B845);
-
-  @override
-  Widget build(BuildContext context) {
-    // İnce bant (puan durumunda daha çok takım sığsın); logo bandın üstüne
-    // hafifçe taşar.
-    return Container(
-      height: 46,
-      padding: const EdgeInsets.fromLTRB(14, 0, 14, 0),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            const Color(0xFF1B2A6B).withValues(alpha: 0.95),
-            const Color(0xFF0F172A).withValues(alpha: 0.6),
-          ],
-          stops: const [0, 0.75],
-        ),
-        border: Border(
-          bottom: BorderSide(color: _gold.withValues(alpha: 0.35)),
-        ),
-      ),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 54,
-            height: 46,
-            child: OverflowBox(
-              maxHeight: 58,
-              alignment: Alignment.bottomCenter,
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 3),
-                child: LeagueLogo(url: logoUrl, size: 54, fallbackColor: _gold),
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  leagueName.trUpper,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 15,
-                    height: 1.1,
-                    letterSpacing: 0.4,
-                  ),
-                ),
-                if (subtitle.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: _gold,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 /// Sütun genişlikleri başlık ve satırlarda ortak kullanılır. Dar ekranlarda
 /// (ör. 360dp) G/B/M de görünsün diye sütunlar sıkıştırılır.

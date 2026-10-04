@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'; // Supabase kontrolü için
 import 'package:football_tournament/screens/admin_panel_screen.dart';
 import '../../home/screens/main_navigator.dart';
@@ -7,6 +8,8 @@ import '../../../core/services/app_session.dart';
 import '../../auth/screens/login_screen.dart';
 import '../../../core/widgets/admin_page.dart';
 import 'my_profile_view.dart';
+import '../../../core/services/image_upload_service.dart';
+import '../../../core/widgets/web_safe_image.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, required this.onRequestHomeTab});
@@ -185,11 +188,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final phone = state.phone ?? '';
 
     final sessionValue = session.value as AppSessionState;
+    // Kurucu başkan / bölge sorumlusu: bilgi kartı + yetkili olduğu yönetim
+    // kartları (admin panelinin süzülmüş hâli).
+    if (sessionValue.hasManagementPanel) {
+      return AdminPanelWidget(
+        header: _staffInfoCard(context, state, phone, sessionValue),
+      );
+    }
     // Futbolcu (ya da oyuncu kaydı olan herkes): kart, maçlar, talepler.
-    // Oyuncu kaydı olmayan turnuva sahibi / takım sorumlusu: bilgi kartı.
+    // Oyuncu kaydı olmayan takım sorumlusu: bilgi kartı.
     final isStaffOnly =
-        sessionValue.playerId == null &&
-        (state.role == 'owner' || state.role == 'manager');
+        sessionValue.playerId == null && state.role == 'manager';
     if (!isStaffOnly) {
       return MyProfileView(
         playerId: sessionValue.playerId,
@@ -200,101 +209,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     return ListView(
       padding: const EdgeInsets.all(16),
-      children: [
-        Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFF1E293B).withValues(alpha: 0.85),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-            boxShadow: const [
-              BoxShadow(
-                color: Colors.black26,
-                blurRadius: 15,
-                offset: Offset(0, 8),
-              ),
-            ],
-          ),
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildInfoRow(
-                'İsim Soyisim',
-                state.displayName ??
-                    (state.isLoading ? 'Yükleniyor...' : 'Belirtilmemiş'),
-                Icons.badge_rounded,
-              ),
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
-                child: Divider(color: Colors.white12, height: 1),
-              ),
-              _buildInfoRow(
-                'Telefon',
-                phone.isEmpty ? 'Girilmemiş' : phone,
-                Icons.phone_iphone_rounded,
-              ),
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
-                child: Divider(color: Colors.white12, height: 1),
-              ),
-              _buildInfoRow(
-                'Rol',
-                state.isAdmin
-                    ? 'Sistem Yöneticisi'
-                    : state.role == 'owner'
-                    ? 'Turnuva Sahibi'
-                    : (state.role == 'manager'
-                          ? 'Takım Sorumlusu'
-                          : 'Futbolcu'),
-                Icons.workspace_premium_rounded,
-              ),
-            ],
-          ),
-        ),
-      ],
+      children: [_staffInfoCard(context, state, phone, sessionValue)],
     );
   }
 
-  Widget _buildInfoRow(String label, String value, IconData icon) {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: const Color(0xFF064E3B).withValues(alpha: 0.6),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: const Color(0xFF10B981).withValues(alpha: 0.3),
-            ),
-          ),
-          child: Icon(icon, size: 24, color: const Color(0xFF10B981)),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: Colors.white60,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 17,
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
+  /// Ad, telefon, rol (ve sorumlu olduğu turnuva/bölgeler) kartı.
+  Widget _staffInfoCard(
+    BuildContext context,
+    ProfileState state,
+    String phone,
+    AppSessionState session,
+  ) {
+    final roleText = state.isAdmin
+        ? 'Sistem Yöneticisi'
+        : session.isLeagueOwner
+        ? 'Kurucu Başkan'
+        : session.isRegionOwner
+        ? 'Bölge Sorumlusu'
+        : (state.role == 'manager' ? 'Takım Sorumlusu' : 'Futbolcu');
+    return _StaffHeaderCard(
+      name:
+          state.displayName ??
+          (state.isLoading ? 'Yükleniyor...' : 'Belirtilmemiş'),
+      phone: phone,
+      roleText: roleText,
+      session: session,
     );
   }
 }
@@ -313,4 +252,307 @@ class ProfileState {
     this.isAdmin = false,
     this.isLoading = false,
   });
+}
+
+/// Yönetici profil kartı (futbolcu kartı tarzında): fotoğraf (dokununca
+/// değişir), ad, telefon, rol ve sorumlu olduğu turnuva/bölgeler.
+class _StaffHeaderCard extends StatefulWidget {
+  const _StaffHeaderCard({
+    required this.name,
+    required this.phone,
+    required this.roleText,
+    required this.session,
+  });
+
+  final String name;
+  final String phone;
+  final String roleText;
+  final AppSessionState session;
+
+  @override
+  State<_StaffHeaderCard> createState() => _StaffHeaderCardState();
+}
+
+class _StaffHeaderCardState extends State<_StaffHeaderCard> {
+  static const _accent = Color(0xFF10B981);
+  bool _uploading = false;
+
+  Future<void> _changePhoto() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final controller = AppSession.of(context);
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    if (uid == null) return;
+    final file = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 800,
+      maxHeight: 800,
+      imageQuality: 85,
+    );
+    if (file == null || !mounted) return;
+    setState(() => _uploading = true);
+    try {
+      final upload = SupabaseImageUploadService();
+      final url = await upload.uploadImage(
+        file,
+        folder: MediaFolder.staff,
+        subfolder: uid,
+      );
+      if (url == null) throw Exception('Fotoğraf yüklenemedi.');
+      await Supabase.instance.client.rpc(
+        'set_my_photo',
+        params: {'p_url': url},
+      );
+      final old = widget.session.photoUrl;
+      controller.setPhotoUrl(url);
+      if ((old ?? '').isNotEmpty) await upload.deleteImageByUrl(old);
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Hata: $e')));
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final session = widget.session;
+    final photo = (session.photoUrl ?? '').trim();
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B).withValues(alpha: 0.85),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(height: 5, color: _accent),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+            child: Row(
+              children: [
+                GestureDetector(
+                  onTap: _uploading ? null : _changePhoto,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Container(
+                        width: 80,
+                        height: 80,
+                        padding: const EdgeInsets.all(3),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: _accent, width: 3),
+                        ),
+                        child: ClipOval(
+                          child: _uploading
+                              ? const ColoredBox(
+                                  color: Color(0xFF334155),
+                                  child: Center(
+                                    child: SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: _accent,
+                                      ),
+                                    ),
+                                  ),
+                                )
+                              : photo.isEmpty
+                              ? const ColoredBox(
+                                  color: Color(0xFF334155),
+                                  child: Center(
+                                    child: Icon(
+                                      Icons.person_rounded,
+                                      color: Colors.white54,
+                                      size: 40,
+                                    ),
+                                  ),
+                                )
+                              : WebSafeImage(url: photo, width: 74, height: 74),
+                        ),
+                      ),
+                      Positioned(
+                        right: -2,
+                        bottom: -2,
+                        child: Container(
+                          width: 28,
+                          height: 28,
+                          decoration: BoxDecoration(
+                            color: _accent,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: const Color(0xFF1E293B),
+                              width: 2,
+                            ),
+                          ),
+                          child: const Icon(
+                            Icons.photo_camera_outlined,
+                            size: 14,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.name,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          height: 1.15,
+                        ),
+                      ),
+                      // Kurucu başkan / bölge sorumlusunda telefon gösterilmez.
+                      if (widget.phone.isNotEmpty &&
+                          !session.isLeagueOwner &&
+                          !session.isRegionOwner) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          widget.phone,
+                          style: const TextStyle(
+                            color: Color(0xFF94A3B8),
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 7),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _accent.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: _accent.withValues(alpha: 0.4),
+                          ),
+                        ),
+                        child: Text(
+                          widget.roleText,
+                          style: const TextStyle(
+                            color: _accent,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      if (session.isLeagueOwner || session.isRegionOwner) ...[
+                        const SizedBox(height: 6),
+                        _ScopeText(session: session),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (session.playerId != null)
+            InkWell(
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => Scaffold(
+                    backgroundColor: const Color(0xFF0F172A),
+                    appBar: AppBar(
+                      title: const Text('Futbolcu Profilim'),
+                      backgroundColor: Colors.transparent,
+                      foregroundColor: Colors.white,
+                    ),
+                    body: SafeArea(
+                      child: MyProfileView(
+                        playerId: session.playerId,
+                        displayName: widget.name,
+                        phone: widget.phone,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  border: Border(
+                    top: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.06),
+                    ),
+                  ),
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.sports_soccer_rounded, color: _accent, size: 18),
+                    SizedBox(width: 6),
+                    Text(
+                      'Futbolcu Profilim',
+                      style: TextStyle(
+                        color: _accent,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Rolün altındaki sorumluluk satırı: kurucu başkanın turnuvaları, bölge
+/// sorumlusunun bölgeleri. Diğer rollerde rol adı yazılır.
+class _ScopeText extends StatefulWidget {
+  const _ScopeText({required this.session});
+
+  final AppSessionState session;
+
+  @override
+  State<_ScopeText> createState() => _ScopeTextState();
+}
+
+class _ScopeTextState extends State<_ScopeText> {
+  late final Future<String> _text = _load();
+
+  Future<String> _load() async {
+    final session = widget.session;
+    final parts = <String>[];
+    if (session.ownedLeagueIds.isNotEmpty) {
+      final rows = await Supabase.instance.client
+          .from('leagues')
+          .select('name')
+          .inFilter('id', session.ownedLeagueIds.toList())
+          .order('name', ascending: true);
+      parts.addAll(rows.map((r) => (r['name'] ?? '').toString()));
+    }
+    parts.addAll(session.ownedRegions.map((r) => r.name));
+    return parts.where((p) => p.trim().isNotEmpty).join(' · ');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<String>(
+      future: _text,
+      builder: (context, snap) => Text(
+        snap.data ?? '…',
+        maxLines: 3,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(
+          fontSize: 13,
+          color: Colors.white70,
+          fontWeight: FontWeight.w700,
+          height: 1.3,
+        ),
+      ),
+    );
+  }
 }

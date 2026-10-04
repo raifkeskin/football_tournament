@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../player/widgets/player_card.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:image_picker/image_picker.dart';
@@ -20,6 +22,7 @@ import '../../../core/services/service_locator.dart';
 import 'admin_match_event_screen.dart';
 import '../../tournament/screens/formation_tab.dart';
 import '../../share/lineup_poster.dart';
+import '../../share/match_poster.dart';
 import '../../share/poster_share.dart';
 import '../../share/squad_poster.dart';
 import '../../../core/utils/team_colors.dart';
@@ -30,6 +33,7 @@ import '../../../core/widgets/league_logo.dart';
 import 'package:football_tournament/core/widgets/admin_page.dart';
 import 'package:football_tournament/core/widgets/admin_form.dart';
 import '../../../core/utils/string_utils.dart';
+import '../../player/services/penalty_service.dart';
 
 // --- YARDIMCI WIDGETLAR ---
 
@@ -57,10 +61,7 @@ class _SecondYellowCardIcon extends StatelessWidget {
           Positioned(
             left: 0,
             top: 0,
-            child: Transform.rotate(
-              angle: -0.2,
-              child: _card(Colors.yellow),
-            ),
+            child: Transform.rotate(angle: -0.2, child: _card(Colors.yellow)),
           ),
           Positioned(
             right: 0,
@@ -317,39 +318,39 @@ class _MatchFlowBarState extends State<_MatchFlowBar> {
       child: Row(
         children: [
           Expanded(
-              child: SizedBox(
-                height: 44,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: next.color,
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor: next.color.withValues(alpha: 0.4),
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
+            child: SizedBox(
+              height: 44,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: next.color,
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: next.color.withValues(alpha: 0.4),
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
                   ),
-                  onPressed: _busy ? null : () => _run(next.action),
-                  icon: _busy
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : Icon(next.icon, size: 22),
-                  label: Text(
-                    next.label,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 0.3,
-                    ),
+                ),
+                onPressed: _busy ? null : () => _run(next.action),
+                icon: _busy
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Icon(next.icon, size: 22),
+                label: Text(
+                  next.label,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.3,
                   ),
                 ),
               ),
             ),
+          ),
         ],
       ),
     );
@@ -419,6 +420,82 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
   }
 
   int _refreshKey = 0;
+
+  /// Tek maç afişi: turnuva logosu, grup, hafta, takımlar, saha, tarih, saat.
+  Future<void> _shareMatchPoster({
+    required MatchModel m,
+    required String homeName,
+    required String awayName,
+    required String homeLogo,
+    required String awayLogo,
+  }) async {
+    final messenger = ScaffoldMessenger.of(context);
+    String leagueName = '', leagueLogo = '', groupName = '';
+    var pitchName = (m.pitchName ?? '').trim();
+    try {
+      final db = Supabase.instance.client;
+      final league = await db
+          .from('leagues')
+          .select('name, logo_url')
+          .eq('id', m.leagueId)
+          .maybeSingle();
+      leagueName = (league?['name'] ?? '').toString().trim();
+      leagueLogo = (league?['logo_url'] ?? '').toString().trim();
+      final gid = (m.groupId ?? '').trim();
+      if (gid.isNotEmpty) {
+        // Tek gruplu sezonda grup adı turnuva adıyla aynı; başlıkta tekrar
+        // etmesin.
+        final groups = await db
+            .from('groups')
+            .select('id, name')
+            .eq('season_id', m.seasonId);
+        if (groups.length > 1) {
+          for (final g in groups) {
+            if (g['id'] == gid) groupName = (g['name'] ?? '').toString().trim();
+          }
+        }
+      }
+      final pid = (m.pitchId ?? '').trim();
+      if (pitchName.isEmpty && pid.isNotEmpty) {
+        final pitch = await db
+            .from('pitches')
+            .select('name')
+            .eq('id', pid)
+            .maybeSingle();
+        pitchName = (pitch?['name'] ?? '').toString().trim();
+      }
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Maç bilgisi okunamadı: $e')),
+      );
+      return;
+    }
+    if (!mounted) return;
+
+    final date = DateTime.tryParse((m.matchDate ?? '').trim());
+    final rawTime = (m.matchTime ?? '').trim();
+    await showPosterPreview(
+      context: context,
+      fileName: 'mac_${homeName}_$awayName'.replaceAll(RegExp(r'\s+'), '_'),
+      imageUrls: [leagueLogo, homeLogo, awayLogo],
+      poster: MatchPoster(
+        leagueName: leagueName,
+        leagueLogo: leagueLogo,
+        groupName: groupName,
+        week: m.week,
+        homeName: homeName,
+        homeLogo: homeLogo,
+        awayName: awayName,
+        awayLogo: awayLogo,
+        pitchName: pitchName,
+        dayName: date == null ? '' : DateFormat('EEEE', 'tr_TR').format(date),
+        dateText: date == null
+            ? ''
+            : DateFormat('dd.MM.yyyy', 'tr_TR').format(date),
+        timeText: rawTime.length >= 5 ? rawTime.substring(0, 5) : rawTime,
+      ),
+    );
+  }
 
   void _triggerRefresh() {
     if (mounted) {
@@ -679,6 +756,24 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                 backgroundColor: Colors.transparent,
                 surfaceTintColor: Colors.transparent,
                 elevation: 0,
+                // Maç afişi: diğer afişler gibi admin ve turnuva sahibine.
+                actions: [
+                  if (canManageLeague)
+                    IconButton(
+                      tooltip: 'Maç afişini paylaş',
+                      icon: const Icon(
+                        Icons.ios_share_rounded,
+                        color: Colors.white,
+                      ),
+                      onPressed: () => _shareMatchPoster(
+                        m: m,
+                        homeName: homeName,
+                        awayName: awayName,
+                        homeLogo: homeLogo,
+                        awayLogo: awayLogo,
+                      ),
+                    ),
+                ],
               ),
               floatingActionButton: !isSuperAdmin
                   ? null
@@ -973,7 +1068,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                     // İŞTE DEĞİŞİKLİK YAPILAN YER: YENİ _LineupTab BAĞLANTISI
                                     _LineupTab(
                                       match: m,
-                                      isAdminAccess: isAdminAccess,
+                                      isSuperAdmin: isSuperAdmin,
                                       homeName: homeName,
                                       awayName: awayName,
                                     ),
@@ -2192,13 +2287,15 @@ class _LiveStreamPanelState extends State<_LiveStreamPanel> {
 
 class _LineupTab extends StatefulWidget {
   final MatchModel match;
-  final bool isAdminAccess;
+
+  /// Admin, turnuva sahibi ve maç gözlemcisi: esame her zaman açık.
+  final bool isSuperAdmin;
   final String homeName;
   final String awayName;
 
   const _LineupTab({
     required this.match,
-    required this.isAdminAccess,
+    required this.isSuperAdmin,
     required this.homeName,
     required this.awayName,
   });
@@ -2207,7 +2304,64 @@ class _LineupTab extends StatefulWidget {
   State<_LineupTab> createState() => _LineupTabState();
 }
 
+/// Kadrolar sekmesindeki esame giriş bilgisi.
+class _RosterInfoNote extends StatelessWidget {
+  const _RosterInfoNote();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF59E0B).withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFFF59E0B).withValues(alpha: 0.35),
+        ),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline_rounded, size: 18, color: Color(0xFFF59E0B)),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Takım sorumluları, kendi takımlarının esamesini maç saatinden '
+              '1 saat önce bu sekmedeki "Esame" butonundan girebilir. '
+              'Bu saatten önce buton kilitli görünür.',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 12.5,
+                height: 1.35,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 int _jerseyValue(String? n) => int.tryParse((n ?? '').trim()) ?? 999;
+
+/// Takım sorumlusunun esameyi girebileceği an: maç saatinden 1 saat önce.
+/// Maç tarih/saati Türkiye saatidir (UTC+3). Tarih/saat yoksa null.
+DateTime? _rosterOpenAt(MatchModel m) {
+  final d = DateTime.tryParse((m.matchDate ?? '').trim());
+  final t = RegExp(
+    r'^(\d{1,2}):(\d{2})',
+  ).firstMatch((m.matchTime ?? '').trim());
+  if (d == null || t == null) return null;
+  final kickoff = DateTime.utc(
+    d.year,
+    d.month,
+    d.day,
+    int.parse(t.group(1)!),
+    int.parse(t.group(2)!),
+  ).subtract(const Duration(hours: 3));
+  return kickoff.subtract(const Duration(hours: 1));
+}
 
 class _LineupTabState extends State<_LineupTab>
     with AutomaticKeepAliveClientMixin {
@@ -2218,6 +2372,35 @@ class _LineupTabState extends State<_LineupTab>
   @override
   bool get wantKeepAlive => true;
 
+  /// Esame açılış anında ekranı yeniler (sayfa açıkken süre dolarsa).
+  Timer? _openTimer;
+  DateTime? _openTimerAt;
+
+  @override
+  void dispose() {
+    _openTimer?.cancel();
+    super.dispose();
+  }
+
+  void _scheduleOpen(DateTime? openAt) {
+    if (openAt == _openTimerAt) return;
+    _openTimer?.cancel();
+    _openTimerAt = openAt;
+    if (openAt == null) return;
+    final wait = openAt.difference(DateTime.now().toUtc());
+    if (wait.isNegative) return;
+    _openTimer = Timer(wait + const Duration(seconds: 1), () {
+      if (mounted) setState(() {});
+    });
+  }
+
+  /// Takım sorumlusu bu takımın sorumlusu mu (yetkili rolleri hariç).
+  bool _managesTeam(String teamId) {
+    final session = AppSession.of(context).value;
+    return session.managesTeam(widget.match.seasonId, teamId) ||
+        (session.teamId != null && session.teamId == teamId);
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -2225,6 +2408,14 @@ class _LineupTabState extends State<_LineupTab>
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
       children: [
+        // Esame bilgisi: düzenleme yetkisi olanlara (yetkililer ve maçın
+        // takım sorumluları) gösterilir.
+        if (widget.isSuperAdmin ||
+            _managesTeam(m.homeTeamId) ||
+            _managesTeam(m.awayTeamId)) ...[
+          const _RosterInfoNote(),
+          const SizedBox(height: 10),
+        ],
         // Takım başlıkları + VS
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -2320,7 +2511,55 @@ class _LineupTabState extends State<_LineupTab>
         fontSize: 14,
       ),
     );
-    final edit = widget.isAdminAccess
+    // Esame: admin / turnuva sahibi / gözlemci her zaman; takım sorumlusu
+    // yalnızca kendi takımını, maçtan 1 saat önce ve maç bitene kadar.
+    final m = widget.match;
+    final managesThis = !widget.isSuperAdmin && _managesTeam(teamId);
+    final openAt = _rosterOpenAt(m);
+    if (managesThis) _scheduleOpen(openAt);
+    final managerOpen =
+        managesThis &&
+        m.status != MatchStatus.finished &&
+        openAt != null &&
+        !DateTime.now().toUtc().isBefore(openAt);
+    final locked = managesThis && !managerOpen;
+    final edit = locked
+        ? Tooltip(
+            message: m.status == MatchStatus.finished
+                ? 'Maç bitti; esame kapandı.'
+                : 'Esame maçtan 1 saat önce açılır.',
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.lock_clock_rounded,
+                    size: 15,
+                    color: Colors.white38,
+                  ),
+                  const SizedBox(width: 3),
+                  Flexible(
+                    child: Text(
+                      m.status == MatchStatus.finished
+                          ? 'Esame kapandı'
+                          : openAt == null
+                          ? 'Esame kapalı'
+                          : 'Esame açılışı ${DateFormat('HH:mm').format(openAt.add(const Duration(hours: 3)))}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white38,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+        : widget.isSuperAdmin || managerOpen
         ? InkWell(
             onTap: () => _showRosterEditSheet(context, teamId),
             borderRadius: BorderRadius.circular(8),
@@ -2374,9 +2613,7 @@ class _LineupTabState extends State<_LineupTab>
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
-      child: Row(
-        children: alignEnd ? [?share, info] : [info, ?share],
-      ),
+      child: Row(children: alignEnd ? [?share, info] : [info, ?share]),
     );
   }
 
@@ -2792,6 +3029,9 @@ class _RosterEditSheetState extends State<_RosterEditSheet> {
   int _startingLimit = 11;
   int _subLimit = 7;
 
+  /// Bu sezonda onaylı ve süren cezası olan oyuncular (kadroya eklenemez).
+  Map<String, PlayerPenalty> _penalized = const {};
+
   static const _green = Color(0xFF10B981);
   static const _blue = Color(0xFF3B82F6);
   static const _mid = Color(0xFF94A3B8);
@@ -2827,10 +3067,21 @@ class _RosterEditSheetState extends State<_RosterEditSheet> {
         }
       }
 
-      final (sRes, players, rosters) = await (
+      Future<Map<String, PlayerPenalty>> loadPenalties() async {
+        try {
+          return await PenaltyService()
+              .watchActivePenaltiesByPlayerId(widget.match.seasonId)
+              .first;
+        } catch (_) {
+          return const {};
+        }
+      }
+
+      final (sRes, players, rosters, penalties) = await (
         loadSeasonLimits(),
         _teamService.getEligiblePlayers(widget.teamId, widget.match.seasonId),
         _matchService.watchMatchRosters(widget.match.id, widget.teamId).first,
+        loadPenalties(),
       ).wait;
       final int sCount = sRes?['starting_player_count'] ?? 11;
       final int subCount = sRes?['sub_player_count'] ?? 7;
@@ -2840,6 +3091,7 @@ class _RosterEditSheetState extends State<_RosterEditSheet> {
         _startingLimit = sCount;
         _subLimit = subCount;
         _teamPlayers = players;
+        _penalized = penalties;
         for (final p in _teamPlayers) {
           final pid = p.id;
           final r = rosters.where((x) => x.playerId == pid).firstOrNull;
@@ -2883,7 +3135,9 @@ class _RosterEditSheetState extends State<_RosterEditSheet> {
     if (_starterIds.length < _startingLimit) return;
     for (final p in _ordered) {
       if (_subIds.length >= _subLimit) break;
-      if (!_starterIds.contains(p.id)) _subIds.add(p.id);
+      if (!_starterIds.contains(p.id) && _penalized[p.id] == null) {
+        _subIds.add(p.id);
+      }
     }
   }
 
@@ -2895,6 +3149,7 @@ class _RosterEditSheetState extends State<_RosterEditSheet> {
       });
       return;
     }
+    if (_blockedByPenalty(pid)) return;
     if (_starterIds.length >= _startingLimit) {
       _toast('İlk 11 dolu ($_startingLimit). Önce birini çıkarın.');
       return;
@@ -2911,11 +3166,22 @@ class _RosterEditSheetState extends State<_RosterEditSheet> {
       setState(() => _subIds.remove(pid));
       return;
     }
+    if (_blockedByPenalty(pid)) return;
     if (_subIds.length >= _subLimit) {
       _toast('Yedek kontenjanı dolu ($_subLimit).');
       return;
     }
     setState(() => _subIds.add(pid));
+  }
+
+  /// Cezalı oyuncu bu turnuvanın maç kadrosuna eklenemez (başka turnuvayı
+  /// etkilemez; ceza sezona bağlı).
+  bool _blockedByPenalty(String pid) {
+    final p = _penalized[pid];
+    if (p == null) return false;
+    final left = p.remainingMatches ?? p.matchCount;
+    _toast('Bu oyuncu cezalı ($left maç kaldı); kadroya eklenemez.');
+    return true;
   }
 
   void _toast(String msg) {
@@ -3120,6 +3386,23 @@ class _RosterEditSheetState extends State<_RosterEditSheet> {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
+            if (_penalized[pid] != null)
+              Container(
+                margin: const EdgeInsets.only(left: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFDC2626).withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'Cezalı · ${_penalized[pid]!.remainingMatches ?? _penalized[pid]!.matchCount} maç',
+                  style: const TextStyle(
+                    color: Color(0xFFF87171),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
             if (starterTab && selected)
               GestureDetector(
                 onTap: () =>

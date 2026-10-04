@@ -19,6 +19,7 @@ import '../../tournament/services/interfaces/i_league_service.dart';
 import '../../match/models/match.dart';
 import '../../player/widgets/player_card.dart';
 import '../../../core/services/app_session.dart';
+import '../../../core/services/panel_scope.dart';
 import '../../../core/services/image_upload_service.dart';
 import '../models/team.dart';
 import '../services/interfaces/i_team_service.dart';
@@ -3061,9 +3062,20 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
     () => _teamService.watchAllPlayers(caller: 'FootballerLicenseScreen'),
   );
 
+  /// Kurucu / bölge sorumlusu yalnızca kendi takımlarının oyuncularını görür
+  /// (admin için null: hepsi).
+  Future<Set<String>?>? _allowedPlayers;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _allowedPlayers ??= PanelScope.playerIds(AppSession.of(context).value);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final isAdmin = AppSession.of(context).value.isAdmin;
+    final session = AppSession.of(context).value;
+    final isAdmin = session.isAdmin;
     const accent = Color(0xFF10B981);
 
     return Scaffold(
@@ -3072,7 +3084,7 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
       appBar: MasterClassAppBar(
         title: 'Futbolcu Lisans Yönetimi',
         actions: [
-          if (isAdmin)
+          if (session.hasManagementPanel)
             PopupMenuButton<String>(
               tooltip: 'Futbolcu ekle',
               icon: const Icon(
@@ -3088,8 +3100,8 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
                 if (v == 'create') _openPlayerForm();
                 if (v == 'bulk') _openBulkUploadFlow();
               },
-              itemBuilder: (_) => const [
-                PopupMenuItem(
+              itemBuilder: (_) => [
+                const PopupMenuItem(
                   value: 'create',
                   child: ListTile(
                     dense: true,
@@ -3104,18 +3116,20 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
                     ),
                   ),
                 ),
-                PopupMenuItem(
-                  value: 'bulk',
-                  child: ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.upload_file_rounded, color: accent),
-                    title: Text(
-                      'Toplu Yükle (Excel)',
-                      style: TextStyle(color: Colors.white),
+                // Toplu yükleme yalnızca admin.
+                if (isAdmin)
+                  const PopupMenuItem(
+                    value: 'bulk',
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.upload_file_rounded, color: accent),
+                      title: Text(
+                        'Toplu Yükle (Excel)',
+                        style: TextStyle(color: Colors.white),
+                      ),
                     ),
                   ),
-                ),
               ],
             ),
         ],
@@ -3159,65 +3173,91 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
                   ),
                   const SizedBox(height: 12),
                   Expanded(
-                    child: StreamBuilder<List<PlayerModel>>(
-                      stream: _playersStream,
-                      builder: (context, snap) {
-                        if (!snap.hasData) {
-                          return const Center(
-                            child: CircularProgressIndicator(color: accent),
-                          );
-                        }
-                        final q = _norm(_q);
-                        final list =
-                            snap.data!
-                                .where((p) => _isFootballerRole(p.role))
-                                .where(
-                                  (p) => q.isEmpty || _norm(p.name).contains(q),
-                                )
-                                .toList()
-                              ..sort(
-                                (a, b) => a.name.toLowerCase().compareTo(
-                                  b.name.toLowerCase(),
-                                ),
-                              );
+                    child: FutureBuilder<Set<String>?>(
+                      future: _allowedPlayers,
+                      builder: (context, allowedSnap) =>
+                          StreamBuilder<List<PlayerModel>>(
+                            stream: _playersStream,
+                            builder: (context, snap) {
+                              if (!snap.hasData ||
+                                  allowedSnap.connectionState !=
+                                      ConnectionState.done) {
+                                return const Center(
+                                  child: CircularProgressIndicator(
+                                    color: accent,
+                                  ),
+                                );
+                              }
+                              final allowed = allowedSnap.data;
+                              final q = _norm(_q);
+                              final list =
+                                  snap.data!
+                                      .where(
+                                        (p) =>
+                                            allowed == null ||
+                                            allowed.contains(p.id),
+                                      )
+                                      .where((p) => _isFootballerRole(p.role))
+                                      .where(
+                                        (p) =>
+                                            q.isEmpty ||
+                                            _norm(p.name).contains(q),
+                                      )
+                                      .toList()
+                                    ..sort(
+                                      (a, b) => a.name.toLowerCase().compareTo(
+                                        b.name.toLowerCase(),
+                                      ),
+                                    );
 
-                        if (list.isEmpty) {
-                          return const Center(
-                            child: Text(
-                              'Futbolcu bulunamadı.',
-                              style: TextStyle(color: Colors.white54),
-                            ),
-                          );
-                        }
-                        // Durum tüm futbolcular için bir kez yüklenir (aramada
-                        // yeniden sorgu atılmaz).
-                        final all = snap.data!
-                            .where((p) => _isFootballerRole(p.role))
-                            .map((p) => p.id);
-                        return FutureBuilder(
-                          future: _consentCache.of(all),
-                          builder: (context, cs) {
-                            final st = cs.data ?? const {};
-                            final showBanner = st.values.any(
-                              (s) => !s.complete,
-                            );
-                            return ListView.builder(
-                              padding: const EdgeInsets.only(bottom: 24),
-                              itemCount: list.length + (showBanner ? 1 : 0),
-                              itemBuilder: (context, i) {
-                                if (showBanner && i == 0) {
-                                  return Padding(
-                                    padding: const EdgeInsets.only(bottom: 10),
-                                    child: ConsentSummaryBanner(statuses: st),
+                              if (list.isEmpty) {
+                                return const Center(
+                                  child: Text(
+                                    'Futbolcu bulunamadı.',
+                                    style: TextStyle(color: Colors.white54),
+                                  ),
+                                );
+                              }
+                              // Durum tüm futbolcular için bir kez yüklenir (aramada
+                              // yeniden sorgu atılmaz).
+                              final all = snap.data!
+                                  .where(
+                                    (p) =>
+                                        allowed == null ||
+                                        allowed.contains(p.id),
+                                  )
+                                  .where((p) => _isFootballerRole(p.role))
+                                  .map((p) => p.id);
+                              return FutureBuilder(
+                                future: _consentCache.of(all),
+                                builder: (context, cs) {
+                                  final st = cs.data ?? const {};
+                                  final showBanner = st.values.any(
+                                    (s) => !s.complete,
                                   );
-                                }
-                                final p = list[i - (showBanner ? 1 : 0)];
-                                return _licenseCard(p, consent: st[p.id]);
-                              },
-                            );
-                          },
-                        );
-                      },
+                                  return ListView.builder(
+                                    padding: const EdgeInsets.only(bottom: 24),
+                                    itemCount:
+                                        list.length + (showBanner ? 1 : 0),
+                                    itemBuilder: (context, i) {
+                                      if (showBanner && i == 0) {
+                                        return Padding(
+                                          padding: const EdgeInsets.only(
+                                            bottom: 10,
+                                          ),
+                                          child: ConsentSummaryBanner(
+                                            statuses: st,
+                                          ),
+                                        );
+                                      }
+                                      final p = list[i - (showBanner ? 1 : 0)];
+                                      return _licenseCard(p, consent: st[p.id]);
+                                    },
+                                  );
+                                },
+                              );
+                            },
+                          ),
                     ),
                   ),
                 ],

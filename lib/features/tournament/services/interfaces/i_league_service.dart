@@ -71,6 +71,7 @@ abstract class ILeagueService {
     String? imageUrl,
     bool isPublished = true,
     DateTime? publishUntil,
+    String? regionId,
   });
 
   Future<void> setNewsPublished({
@@ -78,12 +79,14 @@ abstract class ILeagueService {
     required bool isPublished,
   });
 
-  /// [imageUrl] null ise fotoğraf, [publishUntil] null ise süre kaldırılır.
+  /// [imageUrl] null ise fotoğraf, [publishUntil] null ise süre, [regionId]
+  /// null ise bölge kaldırılır.
   Future<void> updateNews({
     required String newsId,
     required String content,
     String? imageUrl,
     DateTime? publishUntil,
+    String? regionId,
   });
 
   Future<void> deleteNews({required String newsId});

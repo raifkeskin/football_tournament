@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:football_tournament/core/services/app_session.dart';
+import 'package:football_tournament/core/services/app_settings.dart';
 import 'package:football_tournament/features/team/screens/admin_manage_teams_screen.dart';
 import 'package:football_tournament/features/team/screens/team_squad_screen.dart';
 import 'package:football_tournament/features/tournament/screens/admin_manage_leagues_screen.dart';
@@ -9,11 +11,17 @@ import '../features/tournament/screens/admin_penalty_management_screen.dart';
 import 'admin_pending_actions_screen.dart';
 import '../features/auth/screens/admin_otp_monitor_screen.dart';
 
+/// Yönetim paneli. Admin tüm kartları görür; kurucu başkan ve bölge
+/// sorumlusu yalnızca yetkili oldukları kartları (veriler ekranlarda kendi
+/// turnuva/bölgeleriyle süzülür). [header] profil bilgi kartı içindir.
 class AdminPanelWidget extends StatelessWidget {
-  const AdminPanelWidget({super.key});
+  const AdminPanelWidget({super.key, this.header});
+
+  final Widget? header;
 
   @override
   Widget build(BuildContext context) {
+    final isAdmin = AppSession.of(context).value.isAdmin;
     // Mevcut buton verilerini modern yapıya uygun şekilde listeliyoruz
     // admin_panel_screen.dart içindeki menü listeni buna göre güncelle:
     final List<_AdminMenuData> menuItems = [
@@ -85,23 +93,29 @@ class AdminPanelWidget extends StatelessWidget {
           );
         },
       ),
-      _AdminMenuData(
-        baslik: 'Saha Yönetimi',
-        ikon: Icons.stadium_rounded,
-        resimYolu: 'assets/admin/pitch_bg.jpg',
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => const AdminPitchManagementScreen(),
-            ),
-          );
-        },
-      ),
+      if (isAdmin)
+        _AdminMenuData(
+          baslik: 'Saha Yönetimi',
+          ikon: Icons.stadium_rounded,
+          resimYolu: 'assets/admin/pitch_bg.jpg',
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const AdminPitchManagementScreen(),
+              ),
+            );
+          },
+        ),
     ];
 
     return CustomScrollView(
       slivers: [
+        if (header != null)
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            sliver: SliverToBoxAdapter(child: header),
+          ),
         // Grid Menü
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
@@ -127,15 +141,19 @@ class AdminPanelWidget extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Column(
               children: [
-                _buildSmallActionTile(
-                  context,
-                  'Şifre Talepleri',
-                  Icons.key_rounded,
-                  () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => AdminOtpMonitorScreen()),
+                if (isAdmin) ...[
+                  _buildSmallActionTile(
+                    context,
+                    'Şifre Talepleri',
+                    Icons.key_rounded,
+                    () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => AdminOtpMonitorScreen(),
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
+                  const SizedBox(height: 8),
+                ],
                 _buildSmallActionTile(
                   context,
                   'Bekleyen Onaylar',
@@ -146,6 +164,10 @@ class AdminPanelWidget extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (isAdmin) ...[
+                  const SizedBox(height: 8),
+                  const _PrivateLeaguesSwitch(),
+                ],
                 const SizedBox(height: 40),
               ],
             ),
@@ -175,6 +197,66 @@ class AdminPanelWidget extends StatelessWidget {
       trailing: const Icon(Icons.chevron_right, color: Colors.white24),
       tileColor: Colors.white.withValues(alpha: 0.05),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    );
+  }
+}
+
+/// Gizli turnuva özelliği: kapalıyken "Turnuva Kodu Gir" ve turnuva
+/// formundaki "Gizli turnuva" alanı gizlenir, tüm turnuvalar herkese açılır.
+class _PrivateLeaguesSwitch extends StatefulWidget {
+  const _PrivateLeaguesSwitch();
+
+  @override
+  State<_PrivateLeaguesSwitch> createState() => _PrivateLeaguesSwitchState();
+}
+
+class _PrivateLeaguesSwitchState extends State<_PrivateLeaguesSwitch> {
+  bool _saving = false;
+
+  Future<void> _set(bool v) async {
+    setState(() => _saving = true);
+    try {
+      await AppSettings.setPrivateLeaguesEnabled(v);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Ayar kaydedilemedi: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: AppSettings.privateLeaguesEnabled,
+      builder: (context, on, _) => SwitchListTile.adaptive(
+        value: on,
+        onChanged: _saving ? null : _set,
+        secondary: Icon(
+          on ? Icons.lock_outline_rounded : Icons.public_rounded,
+          color: Colors.white70,
+        ),
+        title: const Text(
+          'Gizli Turnuva Özelliği',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+          ),
+        ),
+        subtitle: Text(
+          on
+              ? 'Açık · "Turnuva Kodu Gir" ve gizli turnuva seçimi görünür'
+              : 'Kapalı · tüm turnuvalar herkese açık',
+          style: const TextStyle(color: Colors.white54, fontSize: 12),
+        ),
+        activeTrackColor: const Color(0xFF10B981),
+        tileColor: Colors.white.withValues(alpha: 0.05),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
     );
   }
 }

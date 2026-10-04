@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/services/app_session.dart';
+import '../../../core/services/app_settings.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/widgets/master_class_app_bar.dart';
 import '../../../core/widgets/web_safe_image.dart';
@@ -108,7 +109,12 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
               stream: _leaguesStream,
               builder: (context, leaguesSnap) {
                 final leagues = (leaguesSnap.data ?? const <League>[])
-                    .where((l) => !l.isPrivate || session.canManageLeague(l.id))
+                    .where(
+                      (l) =>
+                          !AppSettings.privateLeaguesEnabled.value ||
+                          !l.isPrivate ||
+                          session.canManageLeague(l.id),
+                    )
                     .toList();
                 if (_leagueId != null &&
                     leaguesSnap.hasData &&
@@ -256,7 +262,9 @@ class _LeagueChips extends StatelessWidget {
               child: Text(
                 e.value,
                 style: TextStyle(
-                  color: active ? const Color(0xFF04241A) : const Color(0xFFCBD5E1),
+                  color: active
+                      ? const Color(0xFF04241A)
+                      : const Color(0xFFCBD5E1),
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
@@ -353,8 +361,17 @@ class _NewsCard extends StatelessWidget {
             ),
             clipBehavior: Clip.antiAlias,
             child: logo.isEmpty
-                ? const Icon(Icons.emoji_events_outlined, color: _accent, size: 22)
-                : WebSafeImage(url: logo, width: 40, height: 40, isCircle: true),
+                ? const Icon(
+                    Icons.emoji_events_outlined,
+                    color: _accent,
+                    size: 22,
+                  )
+                : WebSafeImage(
+                    url: logo,
+                    width: 40,
+                    height: 40,
+                    fit: BoxFit.contain,
+                  ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -362,7 +379,10 @@ class _NewsCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  item.leagueName.isEmpty ? 'Turnuva' : item.leagueName,
+                  [
+                    item.leagueName.isEmpty ? 'Turnuva' : item.leagueName,
+                    if (item.regionName.isNotEmpty) item.regionName,
+                  ].join(' · '),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -423,7 +443,11 @@ class _NewsCard extends StatelessWidget {
           IconButton(
             tooltip: 'Paylaş',
             onPressed: onShare,
-            icon: const Icon(Icons.send_outlined, color: Colors.white, size: 23),
+            icon: const Icon(
+              Icons.send_outlined,
+              color: Colors.white,
+              size: 23,
+            ),
           ),
         ],
       ),
@@ -533,19 +557,16 @@ class _NewsPhotoState extends State<_NewsPhoto> {
     _ratio = _ratioCache[widget.url];
     if (_ratio != null || kIsWeb) return;
     final stream = NetworkImage(widget.url).resolve(ImageConfiguration.empty);
-    final listener = ImageStreamListener(
-      (info, _) {
-        final w = info.image.width.toDouble();
-        final h = info.image.height.toDouble();
-        if (h > 0) {
-          final r = w / h;
-          _ratioCache[widget.url] = r;
-          if (mounted) setState(() => _ratio = r);
-        }
-        _detach();
-      },
-      onError: (_, _) => _detach(),
-    );
+    final listener = ImageStreamListener((info, _) {
+      final w = info.image.width.toDouble();
+      final h = info.image.height.toDouble();
+      if (h > 0) {
+        final r = w / h;
+        _ratioCache[widget.url] = r;
+        if (mounted) setState(() => _ratio = r);
+      }
+      _detach();
+    }, onError: (_, _) => _detach());
     stream.addListener(listener);
     _stream = stream;
     _listener = listener;

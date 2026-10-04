@@ -113,13 +113,18 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
           .eq('league_id', leagueId)
           .order('start_date', ascending: false);
       if (!mounted || _selectedLeagueId != leagueId) return;
+      // Bölge sorumlusu yalnızca bölgesinin bulunduğu sezonları görür.
+      final session = AppSession.of(context).value;
+      final full = session.canManageLeague(leagueId);
+      final mySeasons = {for (final r in session.ownedRegions) r.seasonId};
       final seasons = [
         for (final r in rows)
-          (
-            id: (r['id'] ?? '').toString(),
-            name: (r['name'] ?? '').toString().trim(),
-            isDefault: r['is_default'] == true,
-          ),
+          if (full || mySeasons.contains((r['id'] ?? '').toString()))
+            (
+              id: (r['id'] ?? '').toString(),
+              name: (r['name'] ?? '').toString().trim(),
+              isDefault: r['is_default'] == true,
+            ),
       ];
       setState(() {
         _seasons = seasons;
@@ -151,17 +156,24 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
     try {
       final rows = await _sb
           .from('groups')
-          .select('id, name')
+          .select('id, name, region_id')
           .eq('season_id', seasonId)
           .order('name', ascending: true);
       if (!mounted || _selectedSeasonId != seasonId) return;
+      // Bölge sorumlusu yalnızca kendi bölgesinin gruplarını görür.
+      final session = AppSession.of(context).value;
+      final full = session.canManageLeague(_selectedLeagueId);
+      final myRegions = {
+        for (final r in session.regionsInSeason(seasonId)) r.id,
+      };
       final groups = [
         for (final r in rows)
-          (
-            id: (r['id'] ?? '').toString(),
-            name: (r['name'] ?? '').toString().trim(),
-            isDefault: false,
-          ),
+          if (full || myRegions.contains((r['region_id'] ?? '').toString()))
+            (
+              id: (r['id'] ?? '').toString(),
+              name: (r['name'] ?? '').toString().trim(),
+              isDefault: false,
+            ),
       ];
       setState(() {
         _groups = groups;
@@ -321,8 +333,9 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isAdmin = AppSession.of(context).value.isAdmin;
-    if (!isAdmin) {
+    final session = AppSession.of(context).value;
+    final panelLeagueIds = session.panelLeagueIds;
+    if (!session.hasManagementPanel) {
       return const AdminPageScaffold(
         title: 'Fikstür Planlama',
         body: Center(
@@ -354,7 +367,9 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                       _leagues = snapshot.data ?? _leagues;
                       final leagueOptions = [
                         for (final l in _leagues)
-                          (id: l.id, name: l.name, isDefault: false),
+                          if (panelLeagueIds == null ||
+                              panelLeagueIds.contains(l.id))
+                            (id: l.id, name: l.name, isDefault: false),
                       ];
                       return AdminFieldGroup(
                         children: [

@@ -9,6 +9,10 @@ class PlayerPenalty {
     required this.matchCount,
     required this.isActive,
     required this.reason,
+    this.status = 'approved',
+    this.kind = 'manual',
+    this.remainingMatches,
+    this.matchId,
   });
 
   final String id;
@@ -17,6 +21,16 @@ class PlayerPenalty {
   final int matchCount;
   final bool isActive;
   final String reason;
+
+  /// 'pending' (kart cezası, onay bekliyor) | 'approved' | 'rejected'.
+  final String status;
+
+  /// 'manual' | 'red_card' | 'second_yellow'.
+  final String kind;
+
+  /// Onaylı cezada kalan maç (takım maç bitirdikçe düşer).
+  final int? remainingMatches;
+  final String? matchId;
 
   factory PlayerPenalty.fromMap(Map<String, dynamic> map) {
     int readInt(dynamic v) {
@@ -45,6 +59,18 @@ class PlayerPenalty {
       reason: readString(
         map['description'] ?? map['penalty_reason'] ?? map['reason'],
       ),
+      status: readString(map['status']).isEmpty
+          ? 'approved'
+          : readString(map['status']),
+      kind: readString(map['kind']).isEmpty
+          ? 'manual'
+          : readString(map['kind']),
+      remainingMatches: map['remaining_matches'] == null
+          ? null
+          : readInt(map['remaining_matches']),
+      matchId: readString(map['match_id']).isEmpty
+          ? null
+          : readString(map['match_id']),
     );
   }
 }
@@ -73,6 +99,8 @@ class PenaltyService {
           final row = Map<String, dynamic>.from(r);
           final p = PlayerPenalty.fromMap(row);
           if (p.seasonId.trim() != sid) continue;
+          // Onay bekleyen / reddedilen kart cezaları ayrı listelenir.
+          if (p.status != 'approved') continue;
           if (isActive != null && p.isActive != isActive) continue;
           final pid = p.playerId.trim();
           if (pid.isEmpty) continue;
@@ -94,6 +122,40 @@ class PenaltyService {
     }
   }
 
+  /// Kırmızı kart / ikinci sarıdan otomatik açılan, onay bekleyen cezalar.
+  Stream<List<PlayerPenalty>> watchPendingPenalties(String seasonId) {
+    final sid = seasonId.trim();
+    if (sid.isEmpty) return const Stream<List<PlayerPenalty>>.empty();
+    return watchTableRows(
+      _client,
+      table: 'player_penalties',
+      column: 'season_id',
+      value: sid,
+    ).map(
+      (rows) => [
+        for (final r in rows)
+          if ((r['status'] ?? '').toString() == 'pending')
+            PlayerPenalty.fromMap(Map<String, dynamic>.from(r)),
+      ],
+    );
+  }
+
+  /// Turnuva sahibi onayı; onayda maç sayısı değiştirilebilir.
+  Future<void> reviewPenalty(
+    String penaltyId, {
+    required bool approve,
+    int? matchCount,
+  }) {
+    return _client.rpc(
+      'review_player_penalty',
+      params: {
+        'p_penalty_id': penaltyId,
+        'p_approve': approve,
+        'p_match_count': ?matchCount,
+      },
+    );
+  }
+
   Future<bool> checkPlayerPenalty(String playerId, String seasonId) async {
     final pid = playerId.trim();
     final sid = seasonId.trim();
@@ -105,6 +167,7 @@ class PenaltyService {
           .eq('player_id', pid)
           .eq('season_id', sid)
           .eq('is_active', true)
+          .eq('status', 'approved')
           .limit(1);
       return res.isNotEmpty;
     } catch (_) {

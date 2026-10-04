@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/services/app_settings.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
@@ -83,11 +84,15 @@ class _AccountRequestFormState extends State<AccountRequestForm> {
                 'Bu numarayla kayıtlı hesap bulunamadı. Önce kayıt olmanız '
                 'gerekiyor.';
           case AccountRequestOutcome.unknownPhone:
-            _error =
-                'Bu numara sistemde kayıtlı değil. Bir turnuvayı takip etmek '
-                'için hesap gerekmez; turnuva sorumlusundan kodu alıp menüdeki '
-                '"Turnuva Kodu Gir"e yazabilirsiniz. Futbolcuysanız takım '
-                'sorumlunuza, turnuva yöneticisiyseniz bize ulaşın.';
+            _error = AppSettings.privateLeaguesEnabled.value
+                ? 'Bu numara sistemde kayıtlı değil. Bir turnuvayı takip etmek '
+                      'için hesap gerekmez; turnuva sorumlusundan kodu alıp '
+                      'menüdeki "Turnuva Kodu Gir"e yazabilirsiniz. '
+                      'Futbolcuysanız takım sorumlunuza, turnuva '
+                      'yöneticisiyseniz bize ulaşın.'
+                : 'Bu numara sistemde kayıtlı değil. Turnuvaları takip etmek '
+                      'için hesap gerekmez. Futbolcuysanız takım sorumlunuza, '
+                      'turnuva yöneticisiyseniz bize ulaşın.';
           case AccountRequestOutcome.invalidPhone:
             _error = 'Geçerli bir cep telefonu numarası girin.';
         }

@@ -28,6 +28,8 @@ class NewsItem {
     this.leagueIsPrivate = false,
     this.likedByMe = false,
     this.publishUntil,
+    this.regionId,
+    this.regionName = '',
   });
 
   final String id;
@@ -49,6 +51,12 @@ class NewsItem {
 
   /// Yayın bitiş zamanı; geçince haber herkese kapanır (null: süresiz).
   final DateTime? publishUntil;
+
+  /// İsteğe bağlı bölge (ör. İstanbul (Avrupa)); null: tüm turnuva.
+  final String? regionId;
+
+  /// Akışta bölge etiketi (`season_regions` ile okunduğunda dolu).
+  final String regionName;
 
   bool get isExpired =>
       publishUntil != null && !publishUntil!.isAfter(DateTime.now());

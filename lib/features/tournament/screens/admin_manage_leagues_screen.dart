@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/league.dart';
 import '../../../core/services/app_session.dart';
+import '../../../core/services/app_settings.dart';
 import '../../../core/services/image_upload_service.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/utils/resilient_stream.dart';
@@ -81,6 +82,8 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
     XFile? selectedLogo;
     var removedLogo = false;
     var isPrivate = league?.isPrivate ?? false;
+    // Gizli turnuva özelliği kapalıyken alan gösterilmez; mevcut değer korunur.
+    final privateOn = AppSettings.privateLeaguesEnabled.value;
     var saving = false;
 
     Future<void> submit(
@@ -326,31 +329,19 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                       icon: Icons.emoji_events_outlined,
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  AdminFieldGroup(
-                    children: [
-                      AdminFieldRow(
-                        icon: isPrivate
-                            ? Icons.lock_outline_rounded
-                            : Icons.public_rounded,
-                        label: 'Gizli turnuva',
-                        onTap: saving
-                            ? null
-                            : () => setPopupState(() {
-                                isPrivate = !isPrivate;
-                                if (isPrivate &&
-                                    accessCodeController.text.trim().isEmpty) {
-                                  accessCodeController.text = _newAccessCode();
-                                }
-                                if (!isPrivate) accessCodeController.clear();
-                              }),
-                        trailing: Switch.adaptive(
-                          value: isPrivate,
-                          activeTrackColor: kAdminAccent,
-                          onChanged: saving
+                  if (privateOn) const SizedBox(height: 12),
+                  if (privateOn)
+                    AdminFieldGroup(
+                      children: [
+                        AdminFieldRow(
+                          icon: isPrivate
+                              ? Icons.lock_outline_rounded
+                              : Icons.public_rounded,
+                          label: 'Gizli turnuva',
+                          onTap: saving
                               ? null
-                              : (v) => setPopupState(() {
-                                  isPrivate = v;
+                              : () => setPopupState(() {
+                                  isPrivate = !isPrivate;
                                   if (isPrivate &&
                                       accessCodeController.text
                                           .trim()
@@ -360,21 +351,38 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                                   }
                                   if (!isPrivate) accessCodeController.clear();
                                 }),
-                        ),
-                        child: Text(
-                          isPrivate
-                              ? 'Açık · yalnızca üyeler ve kodu girenler görür'
-                              : 'Kapalı · herkes görür',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
+                          trailing: Switch.adaptive(
+                            value: isPrivate,
+                            activeTrackColor: kAdminAccent,
+                            onChanged: saving
+                                ? null
+                                : (v) => setPopupState(() {
+                                    isPrivate = v;
+                                    if (isPrivate &&
+                                        accessCodeController.text
+                                            .trim()
+                                            .isEmpty) {
+                                      accessCodeController.text =
+                                          _newAccessCode();
+                                    }
+                                    if (!isPrivate)
+                                      accessCodeController.clear();
+                                  }),
+                          ),
+                          child: Text(
+                            isPrivate
+                                ? 'Açık · yalnızca üyeler ve kodu girenler görür'
+                                : 'Kapalı · herkes görür',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                  if (isPrivate) ...[
+                      ],
+                    ),
+                  if (privateOn && isPrivate) ...[
                     const SizedBox(height: 12),
                     TextField(
                       controller: accessCodeController,
@@ -563,8 +571,12 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isAdmin = AppSession.of(context).value.isAdmin;
-    if (!isAdmin) {
+    // Admin tüm turnuvaları; kurucu başkan ve bölge sorumlusu yalnızca
+    // kendi turnuvalarını görür (turnuva ekleme/kaldırma admin'de).
+    final session = AppSession.of(context).value;
+    final isAdmin = session.isAdmin;
+    final panelLeagueIds = session.panelLeagueIds;
+    if (!session.hasManagementPanel) {
       return const AdminPageScaffold(
         title: 'Turnuva Yönetimi',
         body: Center(
@@ -579,18 +591,22 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
     return AdminPageScaffold(
       title: 'Turnuva Yönetimi',
       actions: [
-        AdminBarAction(
-          icon: Icons.emoji_events_outlined,
-          tooltip: 'Ödüller',
-          onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(builder: (_) => const AdminAwardsScreen()),
+        if (isAdmin || session.isLeagueOwner)
+          AdminBarAction(
+            icon: Icons.emoji_events_outlined,
+            tooltip: 'Ödüller',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const AdminAwardsScreen(),
+              ),
+            ),
           ),
-        ),
-        AdminBarAction(
-          icon: Icons.add_rounded,
-          tooltip: 'Yeni Turnuva',
-          onPressed: () => _openLeagueForm(),
-        ),
+        if (isAdmin)
+          AdminBarAction(
+            icon: Icons.add_rounded,
+            tooltip: 'Yeni Turnuva',
+            onPressed: () => _openLeagueForm(),
+          ),
       ],
       body: StreamBuilder<List<League>>(
         stream: _leaguesStream,
@@ -612,7 +628,10 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
               child: CircularProgressIndicator(color: kAdminAccent),
             );
           }
-          final leagues = snapshot.data!;
+          final leagues = [
+            for (final l in snapshot.data!)
+              if (panelLeagueIds == null || panelLeagueIds.contains(l.id)) l,
+          ];
           if (leagues.isEmpty) {
             return const Center(
               child: Text(
@@ -670,7 +689,9 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    subtitle: league.isPrivate
+                    subtitle:
+                        league.isPrivate &&
+                            AppSettings.privateLeaguesEnabled.value
                         ? const Row(
                             children: [
                               Icon(
@@ -692,20 +713,24 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        AdminSmallAction(
-                          icon: Icons.edit_outlined,
-                          tooltip: 'Düzenle',
-                          color: Colors.white70,
-                          onTap: () => _openLeagueForm(league: league),
-                        ),
-                        const SizedBox(width: 6),
-                        AdminSmallAction(
-                          icon: Icons.delete_outline_rounded,
-                          tooltip: 'Kaldır',
-                          color: kAdminDanger,
-                          onTap: () => _softDeleteLeague(league),
-                        ),
-                        const SizedBox(width: 2),
+                        if (session.canManageLeague(league.id)) ...[
+                          AdminSmallAction(
+                            icon: Icons.edit_outlined,
+                            tooltip: 'Düzenle',
+                            color: Colors.white70,
+                            onTap: () => _openLeagueForm(league: league),
+                          ),
+                          const SizedBox(width: 6),
+                        ],
+                        if (isAdmin) ...[
+                          AdminSmallAction(
+                            icon: Icons.delete_outline_rounded,
+                            tooltip: 'Kaldır',
+                            color: kAdminDanger,
+                            onTap: () => _softDeleteLeague(league),
+                          ),
+                          const SizedBox(width: 2),
+                        ],
                         const Icon(Icons.chevron_right, color: Colors.white24),
                       ],
                     ),
@@ -961,9 +986,7 @@ class _EditLeagueScreenState extends State<EditLeagueScreen> {
   }
 
   Future<void> _pickLogo() async {
-    final picked = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-    );
+    final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
     if (picked == null) return;
     final logo = await preparePickedLogo(picked);
     if (mounted) setState(() => _newLogo = logo);
@@ -997,7 +1020,7 @@ class _EditLeagueScreenState extends State<EditLeagueScreen> {
                           url: widget.league.logoUrl,
                           width: 120,
                           height: 120,
-                          isCircle: true,
+                          fit: BoxFit.contain,
                           fallbackIconSize: 40,
                         ),
                       )

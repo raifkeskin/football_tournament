@@ -26,15 +26,30 @@ String _formatPhone(String raw) {
       '${raw.substring(6, 8)} ${raw.substring(8)}';
 }
 
-/// Turnuva düzenleme formundaki "Turnuva Sahipleri" bölümü (yalnız admin).
+/// Turnuva formundaki "Turnuva Sahipleri" (yalnız admin) ya da sezon
+/// bölgesindeki "Bölge Sorumluları" (turnuva sahibi / admin) bölümü.
 ///
 /// Sahipler ad soyad + telefonla eklenir; değişiklikler anında kaydedilir.
 /// Telefonun hesabı yoksa kişi kayıt olup onaylandığında sahiplik otomatik
 /// bağlanır (bkz. migration 20261006100000_league_owner_invites).
 class LeagueOwnersSection extends StatefulWidget {
-  const LeagueOwnersSection({super.key, required this.leagueId});
+  const LeagueOwnersSection({super.key, required String leagueId})
+    : _id = leagueId,
+      _region = false;
 
-  final String leagueId;
+  /// Bölge sorumluları (turnuva sahibi ve admin yönetir; bkz. migration
+  /// 20261008130000_season_regions).
+  const LeagueOwnersSection.region({super.key, required String regionId})
+    : _id = regionId,
+      _region = true;
+
+  final String _id;
+  final bool _region;
+
+  String get _rpcSuffix => _region ? 'region_owner' : 'league_owner';
+  String get _idParam => _region ? 'p_region_id' : 'p_league_id';
+  String get _title => _region ? 'Bölge Sorumluları' : 'Turnuva Sahipleri';
+  String get _what => _region ? 'bölgeyi' : 'turnuvayı';
 
   @override
   State<LeagueOwnersSection> createState() => _LeagueOwnersSectionState();
@@ -47,8 +62,8 @@ class _LeagueOwnersSectionState extends State<LeagueOwnersSection> {
 
   Future<List<_Owner>> _load() async {
     final rows = await _sb.rpc(
-      'list_league_owners',
-      params: {'p_league_id': widget.leagueId},
+      'list_${widget._rpcSuffix}s',
+      params: {widget._idParam: widget._id},
     );
     return [
       for (final r in rows as List)
@@ -66,15 +81,15 @@ class _LeagueOwnersSectionState extends State<LeagueOwnersSection> {
   });
 
   Future<void> _add() async {
-    final input = await _showAddOwnerDialog(context);
+    final input = await _showAddOwnerDialog(context, region: widget._region);
     if (input == null || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _busy = true);
     try {
       final result = await _sb.rpc(
-        'add_league_owner',
+        'add_${widget._rpcSuffix}',
         params: {
-          'p_league_id': widget.leagueId,
+          widget._idParam: widget._id,
           'p_full_name': input.name,
           'p_phone': input.phone,
         },
@@ -83,9 +98,9 @@ class _LeagueOwnersSectionState extends State<LeagueOwnersSection> {
         SnackBar(
           content: Text(
             result == 'linked'
-                ? '${input.name} turnuva sahibi yapıldı.'
+                ? '${input.name} ${widget._region ? 'bölge sorumlusu' : 'turnuva sahibi'} yapıldı.'
                 : '${input.name} eklendi. Kayıt olup onaylandığında '
-                      'turnuvayı yönetebilecek.',
+                      '${widget._what} yönetebilecek.',
           ),
         ),
       );
@@ -104,7 +119,7 @@ class _LeagueOwnersSectionState extends State<LeagueOwnersSection> {
       context: context,
       title: 'Sahipliği Kaldır',
       message:
-          '${o.name} (${_formatPhone(o.phone)}) bu turnuvayı artık '
+          '${o.name} (${_formatPhone(o.phone)}) bu ${widget._what} artık '
           'yönetemeyecek. Hesabı silinmez.',
       confirmLabel: 'KALDIR',
       icon: Icons.person_remove_outlined,
@@ -114,8 +129,8 @@ class _LeagueOwnersSectionState extends State<LeagueOwnersSection> {
     setState(() => _busy = true);
     try {
       await _sb.rpc(
-        'remove_league_owner',
-        params: {'p_league_id': widget.leagueId, 'p_phone': o.phone},
+        'remove_${widget._rpcSuffix}',
+        params: {widget._idParam: widget._id, 'p_phone': o.phone},
       );
       _reload();
     } catch (e) {
@@ -128,7 +143,7 @@ class _LeagueOwnersSectionState extends State<LeagueOwnersSection> {
   @override
   Widget build(BuildContext context) {
     return AdminFormSection(
-      title: 'Turnuva Sahipleri',
+      title: widget._title,
       child: FutureBuilder<List<_Owner>>(
         future: _owners,
         builder: (context, snap) {
@@ -136,9 +151,9 @@ class _LeagueOwnersSectionState extends State<LeagueOwnersSection> {
           return AdminFieldGroup(
             children: [
               if (snap.connectionState == ConnectionState.waiting)
-                const AdminSelectRow(
+                AdminSelectRow(
                   icon: Icons.manage_accounts_outlined,
-                  label: 'Sahipler',
+                  label: widget._region ? 'Sorumlular' : 'Sahipler',
                   value: null,
                   placeholder: 'Yükleniyor…',
                   loading: true,
@@ -189,7 +204,9 @@ class _LeagueOwnersSectionState extends State<LeagueOwnersSection> {
                 ),
               AdminFieldRow(
                 icon: Icons.person_add_alt_1_outlined,
-                label: owners.isEmpty ? 'Henüz sahip yok' : 'Yeni sahip',
+                label: owners.isEmpty
+                    ? (widget._region ? 'Henüz sorumlu yok' : 'Henüz sahip yok')
+                    : (widget._region ? 'Yeni sorumlu' : 'Yeni sahip'),
                 onTap: _busy ? null : _add,
                 trailing: _busy
                     ? const SizedBox(
@@ -223,8 +240,9 @@ class _LeagueOwnersSectionState extends State<LeagueOwnersSection> {
 
 /// Ad soyad + telefon girişi; iptalde null.
 Future<({String name, String phone})?> _showAddOwnerDialog(
-  BuildContext context,
-) async {
+  BuildContext context, {
+  bool region = false,
+}) async {
   final nameCtrl = TextEditingController();
   final phoneCtrl = TextEditingController();
   final result = await showDialog<({String name, String phone})>(
@@ -245,12 +263,15 @@ Future<({String name, String phone})?> _showAddOwnerDialog(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const AdminDialogHeader(
+                AdminDialogHeader(
                   icon: Icons.person_add_alt_1_outlined,
-                  title: 'Turnuva Sahibi Ekle',
+                  title: region
+                      ? 'Bölge Sorumlusu Ekle'
+                      : 'Turnuva Sahibi Ekle',
                   subtitle:
                       'Kişi bu telefonla Kayıt Ol\'dan kayıt olup '
-                      'onaylandığında turnuvayı yönetebilir.',
+                      'onaylandığında ${region ? 'bölgeyi' : 'turnuvayı'} '
+                      'yönetebilir.',
                 ),
                 const SizedBox(height: 16),
                 AdminFieldGroup(

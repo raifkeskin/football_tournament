@@ -466,10 +466,14 @@ class GroupModel {
   final String seasonId;
   final String name;
 
+  /// Grubun bölgesi (season_regions); bölgesiz gruplarda null.
+  final String? regionId;
+
   GroupModel({
     required this.id,
     required this.seasonId,
     required this.name,
+    this.regionId,
   });
 
   factory GroupModel.fromMap(Map<String, dynamic> map, String id) {
@@ -478,6 +482,7 @@ class GroupModel {
       id: id,
       seasonId: (v('seasonId', 'season_id') ?? '').toString(),
       name: (v('name', 'name') ?? '').toString(),
+      regionId: v('regionId', 'region_id')?.toString(),
     );
   }
 

@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../models/league.dart';
 import '../../../core/services/app_session.dart';
+import '../../../core/services/app_settings.dart';
 import '../../../core/services/image_upload_service.dart';
 import '../services/interfaces/i_league_service.dart';
 import '../../../core/services/service_locator.dart';
@@ -205,9 +206,7 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
   }
 
   Future<void> _logoSec() async {
-    final picked = await _picker.pickImage(
-      source: ImageSource.gallery,
-    );
+    final picked = await _picker.pickImage(source: ImageSource.gallery);
     if (picked == null) return;
     final logo = await preparePickedLogo(picked);
     if (!mounted) return;
@@ -580,16 +579,17 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
                 ],
               ),
               const SizedBox(height: 8),
-              SwitchListTile(
-                value: _isPrivate,
-                onChanged: _isLoading
-                    ? null
-                    : (v) {
-                        setState(() => _isPrivate = v);
-                      },
-                title: const Text('Özel Turnuva'),
-                contentPadding: EdgeInsets.zero,
-              ),
+              if (AppSettings.privateLeaguesEnabled.value)
+                SwitchListTile(
+                  value: _isPrivate,
+                  onChanged: _isLoading
+                      ? null
+                      : (v) {
+                          setState(() => _isPrivate = v);
+                        },
+                  title: const Text('Özel Turnuva'),
+                  contentPadding: EdgeInsets.zero,
+                ),
               if (_isPrivate) ...[
                 const SizedBox(height: 8),
                 TextField(

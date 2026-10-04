@@ -655,7 +655,7 @@ class SupabaseLeagueService implements ILeagueService {
 
   static const _newsColumns =
       'id, league_id, content, is_published, image_url, like_count, created_at, '
-      'publish_until';
+      'publish_until, region_id';
 
   NewsItem _newsFromRow(Map<String, dynamic> r) {
     final league = r['leagues'];
@@ -677,6 +677,12 @@ class SupabaseLeagueService implements ILeagueService {
       likedByMe:
           r['news_likes'] is List && (r['news_likes'] as List).isNotEmpty,
       publishUntil: _readDate(r['publish_until']),
+      regionId: (r['region_id'] ?? '').toString().isEmpty
+          ? null
+          : r['region_id'].toString(),
+      regionName: r['season_regions'] is Map
+          ? ((r['season_regions'] as Map)['name'] ?? '').toString()
+          : '',
     );
   }
 
@@ -743,9 +749,10 @@ class SupabaseLeagueService implements ILeagueService {
     return _newsFeeds.putIfAbsent('${uid ?? '-'}|$id', () {
       // Misafirin news_likes yetkisi yok; beğeni bilgisi sadece girişte okunur.
       final select = uid == null
-          ? '$_newsColumns, leagues(name, logo_url, is_private)'
+          ? '$_newsColumns, leagues(name, logo_url, is_private), '
+                'season_regions(name)'
           : '$_newsColumns, leagues(name, logo_url, is_private), '
-                'news_likes(user_id)';
+                'season_regions(name), news_likes(user_id)';
       Future<List<NewsItem>> fetch() async {
         AppConfig.sqlLogStart(
           table: 'news',
@@ -840,6 +847,7 @@ class SupabaseLeagueService implements ILeagueService {
     String? imageUrl,
     bool isPublished = true,
     DateTime? publishUntil,
+    String? regionId,
   }) async {
     final tId = tournamentId.trim();
     final text = content.trim();
@@ -860,6 +868,7 @@ class SupabaseLeagueService implements ILeagueService {
         'is_published': isPublished,
         'image_url': img.isEmpty ? null : img,
         'publish_until': publishUntil?.toUtc().toIso8601String(),
+        'region_id': regionId,
       });
       AppConfig.sqlLogResult(table: 'news', operation: 'INSERT', count: 1);
     } catch (e) {
@@ -898,6 +907,7 @@ class SupabaseLeagueService implements ILeagueService {
     required String content,
     String? imageUrl,
     DateTime? publishUntil,
+    String? regionId,
   }) async {
     final id = newsId.trim();
     if (id.isEmpty) return;
@@ -915,6 +925,7 @@ class SupabaseLeagueService implements ILeagueService {
             'content': text,
             'image_url': img.isEmpty ? null : img,
             'publish_until': publishUntil?.toUtc().toIso8601String(),
+            'region_id': regionId,
           })
           .eq('id', id);
       AppConfig.sqlLogResult(table: 'news', operation: 'UPDATE', count: 1);

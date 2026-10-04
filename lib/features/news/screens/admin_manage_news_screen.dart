@@ -1,6 +1,6 @@
-
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../tournament/models/league.dart';
@@ -36,6 +36,49 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
 
   /// Filtrede "Tümü" (bütün yönetilebilen turnuvalar).
   static const _allTournaments = '';
+
+  /// Bölgeler (id → ad, turnuva); haber isteğe bağlı bir bölgeye bağlanır.
+  Map<String, ({String name, String leagueId})> _regions = const {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRegions();
+  }
+
+  Future<void> _loadRegions() async {
+    try {
+      final rows = await Supabase.instance.client
+          .from('season_regions')
+          .select('id, name, sort_order, seasons(league_id)')
+          .order('sort_order', ascending: true);
+      if (!mounted) return;
+      setState(() {
+        _regions = {
+          for (final r in rows)
+            (r['id'] ?? '').toString(): (
+              name: (r['name'] ?? '').toString(),
+              leagueId: ((r['seasons'] as Map?)?['league_id'] ?? '').toString(),
+            ),
+        };
+      });
+    } catch (e) {
+      debugPrint('Bölgeler okunamadı: $e');
+    }
+  }
+
+  /// Kullanıcının bu turnuvada haber girebileceği bölgeler. Kurucu/admin
+  /// tüm bölgeleri seçebilir; bölge sorumlusu yalnızca kendininkileri.
+  List<String> _regionsFor(String leagueId) {
+    final session = AppSession.of(context).value;
+    final full = session.canManageLeague(leagueId);
+    final mine = {for (final r in session.ownedRegions) r.id};
+    return [
+      for (final e in _regions.entries)
+        if (e.value.leagueId == leagueId && (full || mine.contains(e.key)))
+          e.key,
+    ];
+  }
 
   String _tournamentName(String? id) {
     for (final l in _tournaments) {
@@ -118,6 +161,32 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
         ? item.tournamentId
         : (_selectedTournamentId ?? '').trim();
     DateTime? publishUntil = item?.publishUntil;
+    // Bölge sorumlusu turnuvanın tamamına haber giremez: bölge zorunlu.
+    bool regionRequired(String tId) =>
+        !AppSession.of(context).value.canManageLeague(tId);
+    String? defaultRegion(String tId) {
+      if (!regionRequired(tId)) return null;
+      final list = _regionsFor(tId);
+      return list.isEmpty ? null : list.first;
+    }
+
+    var formRegionId = isEdit ? item.regionId : defaultRegion(formTournamentId);
+
+    Future<void> pickRegion(StateSetter setLocal) async {
+      final options = _regionsFor(formTournamentId);
+      final required = regionRequired(formTournamentId);
+      final picked = await showAdminOptionPicker<String>(
+        context: context,
+        title: 'Bölge Seçin',
+        items: [if (!required) '', ...options],
+        labelBuilder: (id) =>
+            id.isEmpty ? 'Tüm turnuva' : (_regions[id]?.name ?? ''),
+        selected: formRegionId ?? (required ? null : ''),
+      );
+      if (picked != null) {
+        setLocal(() => formRegionId = picked.isEmpty ? null : picked);
+      }
+    }
 
     Future<void> pickTournament(StateSetter setLocal) async {
       final picked = await showAdminOptionPicker<String>(
@@ -127,7 +196,12 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
         labelBuilder: _tournamentName,
         selected: formTournamentId.isEmpty ? null : formTournamentId,
       );
-      if (picked != null) setLocal(() => formTournamentId = picked);
+      if (picked != null) {
+        setLocal(() {
+          formTournamentId = picked;
+          formRegionId = defaultRegion(picked);
+        });
+      }
     }
 
     Future<void> pickUntil(StateSetter setLocal) async {
@@ -175,6 +249,10 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
         _snack('Lütfen turnuva seçin.');
         return;
       }
+      if (regionRequired(tId) && formRegionId == null) {
+        _snack('Lütfen bölge seçin.');
+        return;
+      }
       setLocal(() => saving = true);
       if (isEdit) setState(() => _busyIds.add(item.id));
       try {
@@ -197,6 +275,7 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
             content: text,
             imageUrl: imageUrl,
             publishUntil: publishUntil,
+            regionId: formRegionId,
           );
         } else {
           await _leagueService.addNews(
@@ -205,6 +284,7 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
             imageUrl: imageUrl,
             isPublished: publishNow,
             publishUntil: publishUntil,
+            regionId: formRegionId,
           );
         }
         if (isEdit && existingUrl.isNotEmpty && existingUrl != imageUrl) {
@@ -222,7 +302,8 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
 
     Widget photoField(StateSetter setLocal) {
       final file = picked;
-      final showExisting = file == null && !removeImage && existingUrl.isNotEmpty;
+      final showExisting =
+          file == null && !removeImage && existingUrl.isNotEmpty;
       final hasPhoto = file != null || showExisting;
 
       if (!hasPhoto) {
@@ -239,8 +320,11 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
             child: const Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.add_photo_alternate_outlined,
-                    color: kAdminAccent, size: 32),
+                Icon(
+                  Icons.add_photo_alternate_outlined,
+                  color: kAdminAccent,
+                  size: 32,
+                ),
                 SizedBox(height: 8),
                 Text(
                   'Fotoğraf ekle',
@@ -345,6 +429,18 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
                         locked: isEdit,
                         onTap: saving ? null : () => pickTournament(setLocal),
                       ),
+                      if (_regionsFor(formTournamentId).isNotEmpty)
+                        AdminSelectRow(
+                          icon: Icons.map_outlined,
+                          label: regionRequired(formTournamentId)
+                              ? 'Bölge'
+                              : 'Bölge (isteğe bağlı)',
+                          value: formRegionId == null
+                              ? null
+                              : _regions[formRegionId]?.name,
+                          placeholder: 'Tüm turnuva',
+                          onTap: saving ? null : () => pickRegion(setLocal),
+                        ),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -432,7 +528,10 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
                       ),
                       subtitle: const Text(
                         'Kapalıysa taslak olarak kaydedilir',
-                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                        style: TextStyle(
+                          color: Color(0xFF94A3B8),
+                          fontSize: 12,
+                        ),
                       ),
                     ),
                   ],
@@ -529,7 +628,7 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (showTournament) ...[
+          if (showTournament || doc.regionId != null) ...[
             Row(
               children: [
                 const Icon(
@@ -540,7 +639,11 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    _tournamentName(doc.tournamentId),
+                    [
+                      if (showTournament) _tournamentName(doc.tournamentId),
+                      if (doc.regionId != null)
+                        _regions[doc.regionId]?.name ?? '',
+                    ].where((t) => t.isNotEmpty).join(' · '),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -641,8 +744,7 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
                   icon: Icons.edit_outlined,
                   tooltip: 'Düzenle',
                   color: Colors.white70,
-                  onTap: () =>
-                      _openNewsForm(item: doc),
+                  onTap: () => _openNewsForm(item: doc),
                 ),
                 const SizedBox(width: 6),
                 AdminSmallAction(
@@ -662,7 +764,7 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
   @override
   Widget build(BuildContext context) {
     final session = AppSession.of(context).value;
-    if (!session.isAdmin && !session.isLeagueOwner) {
+    if (!session.hasManagementPanel) {
       return const AdminPageScaffold(
         title: 'Haber Yönetimi',
         body: Center(
@@ -691,10 +793,12 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
               child: CircularProgressIndicator(color: kAdminAccent),
             );
           }
-          // Admin her turnuvayı, turnuva sahibi sadece kendisininkileri görür.
+          // Admin her turnuvayı; kurucu ve bölge sorumlusu kendininkileri.
+          final allowed = session.panelLeagueIds;
           _tournaments = (tSnap.data ?? const <League>[])
-              .where((l) => session.canManageLeague(l.id))
+              .where((l) => allowed == null || allowed.contains(l.id))
               .toList();
+          final myRegions = {for (final r in session.ownedRegions) r.id};
           if (_tournaments.isEmpty) {
             return const Center(
               child: Text(
@@ -742,6 +846,12 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
                             _NewsStatus.live => n.isLive,
                             _NewsStatus.passive => !n.isLive,
                           },
+                        )
+                        // Bölge sorumlusu yalnızca kendi bölgesinin haberleri.
+                        .where(
+                          (n) =>
+                              session.canManageLeague(n.tournamentId) ||
+                              myRegions.contains(n.regionId),
                         )
                         .toList();
                     if (docs.isEmpty) {

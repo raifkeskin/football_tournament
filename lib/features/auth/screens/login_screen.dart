@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show AuthException;
 
 import '../../../core/services/app_session.dart';
 import 'forgot_password_screen.dart';
@@ -90,6 +91,46 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  /// Supabase giriş hatasını kullanıcının anlayacağı bir mesaja çevirir.
+  static String _loginErrorMessage(Object e) {
+    if (e is AuthException) {
+      final code = e.code ?? '';
+      final msg = e.message.toLowerCase();
+      if (code == 'invalid_credentials' || msg.contains('invalid login')) {
+        return 'Telefon numarası veya şifre hatalı. Lütfen kontrol edip '
+            'tekrar deneyin. Şifrenizi hatırlamıyorsanız "Şifremi '
+            'Unuttum"a dokunun.';
+      }
+      if (code == 'phone_provider_disabled' || msg.contains('phone')) {
+        return 'Lütfen geçerli bir cep telefonu numarası girin '
+            '(5XX XXX XX XX).';
+      }
+      if (code == 'over_request_rate_limit' ||
+          e.statusCode == '429' ||
+          msg.contains('rate limit')) {
+        return 'Çok fazla deneme yaptınız. Lütfen birkaç dakika sonra '
+            'tekrar deneyin.';
+      }
+      if (code == 'user_banned') {
+        return 'Hesabınız kullanıma kapatılmış. Lütfen bizimle iletişime '
+            'geçin.';
+      }
+    }
+    final text = e.toString().toLowerCase();
+    if (text.contains('socket') ||
+        text.contains('network') ||
+        text.contains('clientexception') ||
+        text.contains('failed host lookup')) {
+      return 'İnternet bağlantısı kurulamadı. Bağlantınızı kontrol edip '
+          'tekrar deneyin.';
+    }
+    if (e is ArgumentError) {
+      return 'Lütfen telefon numaranızı girin.';
+    }
+    return 'Giriş yapılamadı. Lütfen bilgilerinizi kontrol edip tekrar '
+        'deneyin.';
+  }
+
   Future<void> _login(AppSessionController session) async {
     final phone = _phoneController.text.trim();
     final password = _passwordController.text;
@@ -125,9 +166,11 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Giriş başarısız: $e')));
+      await showAdminInfoDialog(
+        context: context,
+        title: 'Giriş yapılamadı',
+        message: _loginErrorMessage(e),
+      );
     } finally {
       if (mounted) setState(() => _loading = false);
     }

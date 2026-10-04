@@ -147,6 +147,36 @@ class _AdminPenaltyManagementScreenState
     );
   }
 
+  /// Bölge sorumlusunun bu sezonda görebileceği oyuncular (bölgesindeki
+  /// takımların kadroları). Kurucu / admin için null (hepsi).
+  final Map<String, Future<Set<String>?>> _allowedBySeason = {};
+
+  Future<Set<String>?> _allowedPlayers(String seasonId) {
+    final session = AppSession.of(context).value;
+    if (session.canManageLeague(_selectedLeagueId)) return Future.value(null);
+    final regions = {for (final r in session.regionsInSeason(seasonId)) r.id};
+    return _allowedBySeason[seasonId] ??= () async {
+      final teams = await _sb
+          .from('season_teams')
+          .select('team_id, groups(region_id)')
+          .eq('season_id', seasonId);
+      final teamIds = [
+        for (final t in teams)
+          if (regions.contains(
+            ((t['groups'] as Map?)?['region_id'] ?? '').toString(),
+          ))
+            (t['team_id'] ?? '').toString(),
+      ];
+      if (teamIds.isEmpty) return <String>{};
+      final rows = await _sb
+          .from('season_team_players')
+          .select('player_id')
+          .eq('season_id', seasonId)
+          .inFilter('team_id', teamIds);
+      return {for (final r in rows) (r['player_id'] ?? '').toString()};
+    }();
+  }
+
   Future<List<Map<String, dynamic>>> _fetchSeasons(String leagueId) async {
     final lid = leagueId.trim();
     if (lid.isEmpty) return const <Map<String, dynamic>>[];
@@ -155,7 +185,15 @@ class _AdminPenaltyManagementScreenState
         .select('id, name')
         .eq('league_id', lid)
         .order('name', ascending: true);
-    return res.cast<Map<String, dynamic>>();
+    // Bölge sorumlusu yalnızca bölgesinin bulunduğu sezonları görür.
+    if (!mounted) return const <Map<String, dynamic>>[];
+    final session = AppSession.of(context).value;
+    if (session.canManageLeague(lid)) return res.cast<Map<String, dynamic>>();
+    final mine = {for (final r in session.ownedRegions) r.seasonId};
+    return [
+      for (final r in res.cast<Map<String, dynamic>>())
+        if (mine.contains((r['id'] ?? '').toString())) r,
+    ];
   }
 
   Future<Map<String, Map<String, dynamic>>> _fetchPlayersByIds(
@@ -334,8 +372,8 @@ class _AdminPenaltyManagementScreenState
 
   @override
   Widget build(BuildContext context) {
-    final isAdmin = AppSession.of(context).value.isAdmin;
-    if (!isAdmin) {
+    final session = AppSession.of(context).value;
+    if (!session.hasManagementPanel) {
       return const AdminPageScaffold(
         title: 'Ceza Yönetimi',
         body: Center(
@@ -368,6 +406,10 @@ class _AdminPenaltyManagementScreenState
                 for (final l in (snap.data ?? const <League>[])) {
                   final id = l.id.trim();
                   if (id.isEmpty) continue;
+                  final allowedLeagues = session.panelLeagueIds;
+                  if (allowedLeagues != null && !allowedLeagues.contains(id)) {
+                    continue;
+                  }
                   byId.putIfAbsent(id, () => l);
                 }
                 _leagues = byId.values.toList()
@@ -398,6 +440,21 @@ class _AdminPenaltyManagementScreenState
                 );
               },
             ),
+            if (_selectedSeasonId.trim().isNotEmpty)
+              FutureBuilder<Set<String>?>(
+                future: _allowedPlayers(_selectedSeasonId),
+                builder: (context, allowedSnap) {
+                  if (allowedSnap.connectionState != ConnectionState.done) {
+                    return const SizedBox.shrink();
+                  }
+                  return _PendingPenaltiesCard(
+                    key: ValueKey('pending_$_selectedSeasonId'),
+                    seasonId: _selectedSeasonId,
+                    penaltyService: _penaltyService,
+                    allowedPlayerIds: allowedSnap.data,
+                  );
+                },
+              ),
             Expanded(
               child: _selectedSeasonId.trim().isEmpty
                   ? Center(
@@ -406,260 +463,304 @@ class _AdminPenaltyManagementScreenState
                         style: TextStyle(color: cs.onSurfaceVariant),
                       ),
                     )
-                  : StreamBuilder<Map<String, PlayerPenalty>>(
-                      stream: _penaltyService.watchPenaltiesByPlayerId(
-                        _selectedSeasonId,
-                        isActive: switch (_penaltyFilter) {
-                          _PenaltyFilter.active => true,
-                          _PenaltyFilter.passive => false,
-                          _PenaltyFilter.all => null,
-                        },
-                      ),
-                      initialData: const <String, PlayerPenalty>{},
-                      builder: (context, snap) {
-                        final penalties =
-                            snap.data ?? const <String, PlayerPenalty>{};
-                        final list =
-                            penalties.values
-                                .where((p) => !_hiddenPenaltyIds.contains(p.id))
-                                .toList()
-                              ..sort(
-                                (a, b) => b.matchCount.compareTo(a.matchCount),
-                              );
-                        if (list.isEmpty) {
-                          return Center(
-                            child: Text(switch (_penaltyFilter) {
-                              _PenaltyFilter.active => 'Aktif ceza yok.',
-                              _PenaltyFilter.passive => 'Pasif ceza yok.',
-                              _PenaltyFilter.all => 'Ceza kaydı yok.',
-                            }, style: TextStyle(color: cs.onSurfaceVariant)),
+                  : FutureBuilder<Set<String>?>(
+                      future: _allowedPlayers(_selectedSeasonId),
+                      builder: (context, allowedSnap) {
+                        if (allowedSnap.connectionState !=
+                            ConnectionState.done) {
+                          return const Center(
+                            child: CircularProgressIndicator(
+                              color: kAdminAccent,
+                            ),
                           );
                         }
+                        final allowed = allowedSnap.data;
+                        return StreamBuilder<Map<String, PlayerPenalty>>(
+                          stream: _penaltyService.watchPenaltiesByPlayerId(
+                            _selectedSeasonId,
+                            isActive: switch (_penaltyFilter) {
+                              _PenaltyFilter.active => true,
+                              _PenaltyFilter.passive => false,
+                              _PenaltyFilter.all => null,
+                            },
+                          ),
+                          initialData: const <String, PlayerPenalty>{},
+                          builder: (context, snap) {
+                            final penalties =
+                                snap.data ?? const <String, PlayerPenalty>{};
+                            final list =
+                                penalties.values
+                                    .where(
+                                      (p) =>
+                                          !_hiddenPenaltyIds.contains(p.id) &&
+                                          (allowed == null ||
+                                              allowed.contains(p.playerId)),
+                                    )
+                                    .toList()
+                                  ..sort(
+                                    (a, b) =>
+                                        b.matchCount.compareTo(a.matchCount),
+                                  );
+                            if (list.isEmpty) {
+                              return Center(
+                                child: Text(
+                                  switch (_penaltyFilter) {
+                                    _PenaltyFilter.active => 'Aktif ceza yok.',
+                                    _PenaltyFilter.passive => 'Pasif ceza yok.',
+                                    _PenaltyFilter.all => 'Ceza kaydı yok.',
+                                  },
+                                  style: TextStyle(color: cs.onSurfaceVariant),
+                                ),
+                              );
+                            }
 
-                        final playerIds = list.map((e) => e.playerId).toSet();
-                        return FutureBuilder<Map<String, Map<String, dynamic>>>(
-                          future: _fetchPlayersByIds(playerIds),
-                          builder: (context, playersSnap) {
-                            final playerById =
-                                playersSnap.data ??
-                                const <String, Map<String, dynamic>>{};
+                            final playerIds = list
+                                .map((e) => e.playerId)
+                                .toSet();
                             return FutureBuilder<
                               Map<String, Map<String, dynamic>>
                             >(
-                              future: _fetchRosterByPlayerIds(
-                                seasonId: _selectedSeasonId,
-                                playerIds: playerIds,
-                              ),
-                              builder: (context, rosterSnap) {
-                                final rosterByPlayerId =
-                                    rosterSnap.data ??
+                              future: _fetchPlayersByIds(playerIds),
+                              builder: (context, playersSnap) {
+                                final playerById =
+                                    playersSnap.data ??
                                     const <String, Map<String, dynamic>>{};
-                                final teamIds = rosterByPlayerId.values
-                                    .map(
-                                      (r) => (r['team_id'] ?? '')
-                                          .toString()
-                                          .trim(),
-                                    )
-                                    .where((e) => e.isNotEmpty)
-                                    .toSet();
-
                                 return FutureBuilder<
                                   Map<String, Map<String, dynamic>>
                                 >(
-                                  future: _fetchTeamsByIds(teamIds),
-                                  builder: (context, teamsSnap) {
-                                    final teamById =
-                                        teamsSnap.data ??
+                                  future: _fetchRosterByPlayerIds(
+                                    seasonId: _selectedSeasonId,
+                                    playerIds: playerIds,
+                                  ),
+                                  builder: (context, rosterSnap) {
+                                    final rosterByPlayerId =
+                                        rosterSnap.data ??
                                         const <String, Map<String, dynamic>>{};
-                                    return ListView.separated(
-                                      padding: const EdgeInsets.fromLTRB(
-                                        0,
-                                        0,
-                                        0,
-                                        24,
-                                      ),
-                                      itemCount: list.length,
-                                      separatorBuilder: (_, _) =>
-                                          const SizedBox(height: 6),
-                                      itemBuilder: (context, i) {
-                                        final pen = list[i];
-                                        final pRow =
-                                            playerById[pen.playerId] ??
-                                            const <String, dynamic>{};
-                                        final pName = (pRow['name'] ?? '')
-                                            .toString()
-                                            .trim();
-                                        final pPhotoUrl =
-                                            (pRow['photo_url'] ?? '')
-                                                .toString()
-                                                .trim();
+                                    final teamIds = rosterByPlayerId.values
+                                        .map(
+                                          (r) => (r['team_id'] ?? '')
+                                              .toString()
+                                              .trim(),
+                                        )
+                                        .where((e) => e.isNotEmpty)
+                                        .toSet();
 
-                                        final roster =
-                                            rosterByPlayerId[pen.playerId] ??
-                                            const <String, dynamic>{};
-                                        final pNum =
-                                            (roster['jersey_number'] ?? '')
-                                                .toString()
-                                                .trim();
-                                        final pTeamId =
-                                            (roster['team_id'] ?? '')
-                                                .toString()
-                                                .trim();
-                                        final tName =
-                                            (teamById[pTeamId]?['name'] ?? '')
-                                                .toString()
-                                                .trim();
-
-                                        final resolvedName = pName.isEmpty
-                                            ? pen.playerId
-                                            : pName;
-                                        final resolvedTeam = tName.isEmpty
-                                            ? pTeamId
-                                            : tName;
-
-                                        return Container(
-                                          decoration: adminCardDecoration(),
-                                          child: ListTile(
-                                            leading: pPhotoUrl.isEmpty
-                                                ? Container(
-                                                    width: 38,
-                                                    height: 38,
-                                                    decoration: BoxDecoration(
-                                                      color: cs.primary
-                                                          .withValues(
-                                                            alpha: 0.10,
-                                                          ),
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            10,
-                                                          ),
-                                                    ),
-                                                    alignment: Alignment.center,
-                                                    child: Text(
-                                                      pNum.isEmpty ? '—' : pNum,
-                                                      style: TextStyle(
-                                                        fontWeight:
-                                                            FontWeight.w900,
-                                                        color: cs.primary,
-                                                      ),
-                                                    ),
-                                                  )
-                                                : WebSafeImage(
-                                                    url: pPhotoUrl,
-                                                    width: 38,
-                                                    height: 38,
-                                                    fit: BoxFit.cover,
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          10,
-                                                        ),
-                                                    fallbackIconSize: 18,
-                                                  ),
-                                            title: Text(
-                                              resolvedName,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.w900,
-                                                fontSize: 14,
-                                              ),
-                                            ),
-                                            subtitle: Text(
-                                              resolvedTeam,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: TextStyle(
-                                                color: cs.onSurfaceVariant
-                                                    .withValues(alpha: 0.72),
-                                                fontWeight: FontWeight.w500,
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                            dense: true,
-                                            visualDensity:
-                                                VisualDensity.compact,
-                                            contentPadding:
-                                                const EdgeInsets.symmetric(
-                                                  horizontal: 12,
-                                                  vertical: 6,
-                                                ),
-                                            trailing: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Container(
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
-                                                        horizontal: 8,
-                                                        vertical: 4,
-                                                      ),
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.red
-                                                        .withValues(
-                                                          alpha: 0.10,
-                                                        ),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          10,
-                                                        ),
-                                                    border: Border.all(
-                                                      color: Colors.red
-                                                          .withValues(
-                                                            alpha: 0.25,
-                                                          ),
-                                                    ),
-                                                  ),
-                                                  child: Text(
-                                                    '${pen.matchCount} maç',
-                                                    style: const TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.w900,
-                                                      color: Colors.red,
-                                                      fontSize: 12,
-                                                    ),
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 6),
-                                                AdminSmallAction(
-                                                  icon: Icons.edit_outlined,
-                                                  tooltip: 'Düzenle',
-                                                  color: Colors.white70,
-                                                  onTap: () =>
-                                                      _openPenaltySheet(
-                                                        initialLeagueId:
-                                                            _selectedLeagueId,
-                                                        initialSeasonId:
-                                                            _selectedSeasonId,
-                                                        initialTeamId: pTeamId,
-                                                        initialPlayerId:
-                                                            pen.playerId,
-                                                        penaltyId: pen.id,
-                                                      ),
-                                                ),
-                                                const SizedBox(width: 6),
-                                                AdminSmallAction(
-                                                  icon: Icons
-                                                      .delete_outline_rounded,
-                                                  tooltip: 'Sil',
-                                                  color: kAdminDanger,
-                                                  onTap: () => _deletePenalty(
-                                                    penaltyId: pen.id,
-                                                    playerId: pen.playerId,
-                                                    resolvedName: resolvedName,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                            onTap: () => _openPenaltySheet(
-                                              initialLeagueId:
-                                                  _selectedLeagueId,
-                                              initialSeasonId:
-                                                  _selectedSeasonId,
-                                              initialTeamId: pTeamId,
-                                              initialPlayerId: pen.playerId,
-                                              penaltyId: pen.id,
-                                            ),
+                                    return FutureBuilder<
+                                      Map<String, Map<String, dynamic>>
+                                    >(
+                                      future: _fetchTeamsByIds(teamIds),
+                                      builder: (context, teamsSnap) {
+                                        final teamById =
+                                            teamsSnap.data ??
+                                            const <
+                                              String,
+                                              Map<String, dynamic>
+                                            >{};
+                                        return ListView.separated(
+                                          padding: const EdgeInsets.fromLTRB(
+                                            0,
+                                            0,
+                                            0,
+                                            24,
                                           ),
+                                          itemCount: list.length,
+                                          separatorBuilder: (_, _) =>
+                                              const SizedBox(height: 6),
+                                          itemBuilder: (context, i) {
+                                            final pen = list[i];
+                                            final pRow =
+                                                playerById[pen.playerId] ??
+                                                const <String, dynamic>{};
+                                            final pName = (pRow['name'] ?? '')
+                                                .toString()
+                                                .trim();
+                                            final pPhotoUrl =
+                                                (pRow['photo_url'] ?? '')
+                                                    .toString()
+                                                    .trim();
+
+                                            final roster =
+                                                rosterByPlayerId[pen
+                                                    .playerId] ??
+                                                const <String, dynamic>{};
+                                            final pNum =
+                                                (roster['jersey_number'] ?? '')
+                                                    .toString()
+                                                    .trim();
+                                            final pTeamId =
+                                                (roster['team_id'] ?? '')
+                                                    .toString()
+                                                    .trim();
+                                            final tName =
+                                                (teamById[pTeamId]?['name'] ??
+                                                        '')
+                                                    .toString()
+                                                    .trim();
+
+                                            final resolvedName = pName.isEmpty
+                                                ? pen.playerId
+                                                : pName;
+                                            final resolvedTeam = tName.isEmpty
+                                                ? pTeamId
+                                                : tName;
+
+                                            return Container(
+                                              decoration: adminCardDecoration(),
+                                              child: ListTile(
+                                                leading: pPhotoUrl.isEmpty
+                                                    ? Container(
+                                                        width: 38,
+                                                        height: 38,
+                                                        decoration: BoxDecoration(
+                                                          color: cs.primary
+                                                              .withValues(
+                                                                alpha: 0.10,
+                                                              ),
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                10,
+                                                              ),
+                                                        ),
+                                                        alignment:
+                                                            Alignment.center,
+                                                        child: Text(
+                                                          pNum.isEmpty
+                                                              ? '—'
+                                                              : pNum,
+                                                          style: TextStyle(
+                                                            fontWeight:
+                                                                FontWeight.w900,
+                                                            color: cs.primary,
+                                                          ),
+                                                        ),
+                                                      )
+                                                    : WebSafeImage(
+                                                        url: pPhotoUrl,
+                                                        width: 38,
+                                                        height: 38,
+                                                        fit: BoxFit.cover,
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              10,
+                                                            ),
+                                                        fallbackIconSize: 18,
+                                                      ),
+                                                title: Text(
+                                                  resolvedName,
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontWeight: FontWeight.w900,
+                                                    fontSize: 14,
+                                                  ),
+                                                ),
+                                                subtitle: Text(
+                                                  resolvedTeam,
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: TextStyle(
+                                                    color: cs.onSurfaceVariant
+                                                        .withValues(
+                                                          alpha: 0.72,
+                                                        ),
+                                                    fontWeight: FontWeight.w500,
+                                                    fontSize: 12,
+                                                  ),
+                                                ),
+                                                dense: true,
+                                                visualDensity:
+                                                    VisualDensity.compact,
+                                                contentPadding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 12,
+                                                      vertical: 6,
+                                                    ),
+                                                trailing: Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    Container(
+                                                      padding:
+                                                          const EdgeInsets.symmetric(
+                                                            horizontal: 8,
+                                                            vertical: 4,
+                                                          ),
+                                                      decoration: BoxDecoration(
+                                                        color: Colors.red
+                                                            .withValues(
+                                                              alpha: 0.10,
+                                                            ),
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              10,
+                                                            ),
+                                                        border: Border.all(
+                                                          color: Colors.red
+                                                              .withValues(
+                                                                alpha: 0.25,
+                                                              ),
+                                                        ),
+                                                      ),
+                                                      child: Text(
+                                                        '${pen.matchCount} maç',
+                                                        style: const TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.w900,
+                                                          color: Colors.red,
+                                                          fontSize: 12,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 6),
+                                                    AdminSmallAction(
+                                                      icon: Icons.edit_outlined,
+                                                      tooltip: 'Düzenle',
+                                                      color: Colors.white70,
+                                                      onTap: () =>
+                                                          _openPenaltySheet(
+                                                            initialLeagueId:
+                                                                _selectedLeagueId,
+                                                            initialSeasonId:
+                                                                _selectedSeasonId,
+                                                            initialTeamId:
+                                                                pTeamId,
+                                                            initialPlayerId:
+                                                                pen.playerId,
+                                                            penaltyId: pen.id,
+                                                          ),
+                                                    ),
+                                                    const SizedBox(width: 6),
+                                                    AdminSmallAction(
+                                                      icon: Icons
+                                                          .delete_outline_rounded,
+                                                      tooltip: 'Sil',
+                                                      color: kAdminDanger,
+                                                      onTap: () =>
+                                                          _deletePenalty(
+                                                            penaltyId: pen.id,
+                                                            playerId:
+                                                                pen.playerId,
+                                                            resolvedName:
+                                                                resolvedName,
+                                                          ),
+                                                    ),
+                                                  ],
+                                                ),
+                                                onTap: () => _openPenaltySheet(
+                                                  initialLeagueId:
+                                                      _selectedLeagueId,
+                                                  initialSeasonId:
+                                                      _selectedSeasonId,
+                                                  initialTeamId: pTeamId,
+                                                  initialPlayerId: pen.playerId,
+                                                  penaltyId: pen.id,
+                                                ),
+                                              ),
+                                            );
+                                          },
                                         );
                                       },
                                     );
@@ -1264,3 +1365,212 @@ class _PenaltyEditorSheetState extends State<_PenaltyEditorSheet> {
 }
 
 enum _PenaltyFilter { active, passive, all }
+
+/// Kırmızı kart / ikinci sarıdan otomatik açılan, turnuva sahibinin onayını
+/// bekleyen cezalar. Onayda maç sayısı değiştirilebilir; onaylanan ceza
+/// yalnızca bu sezonun maçlarında geçerlidir.
+class _PendingPenaltiesCard extends StatefulWidget {
+  const _PendingPenaltiesCard({
+    super.key,
+    required this.seasonId,
+    required this.penaltyService,
+    this.allowedPlayerIds,
+  });
+
+  final String seasonId;
+  final PenaltyService penaltyService;
+
+  /// Bölge sorumlusu: yalnızca bölgesindeki oyuncular (null = hepsi).
+  final Set<String>? allowedPlayerIds;
+
+  @override
+  State<_PendingPenaltiesCard> createState() => _PendingPenaltiesCardState();
+}
+
+class _PendingPenaltiesCardState extends State<_PendingPenaltiesCard> {
+  late final Stream<List<PlayerPenalty>> _pending = widget.penaltyService
+      .watchPendingPenalties(widget.seasonId);
+  final Map<String, int> _counts = {};
+  final Set<String> _busy = {};
+  final Map<String, String> _nameById = {};
+  final Map<String, String> _teamByPlayer = {};
+  Set<String> _loadedFor = {};
+
+  Future<void> _loadNames(Set<String> ids) async {
+    if (ids.isEmpty || _loadedFor.containsAll(ids)) return;
+    _loadedFor = {..._loadedFor, ...ids};
+    try {
+      final sb = Supabase.instance.client;
+      final players = await sb
+          .from('players')
+          .select('id, name, surname')
+          .inFilter('id', ids.toList());
+      final rosters = await sb
+          .from('season_team_players')
+          .select('player_id, teams(name)')
+          .eq('season_id', widget.seasonId)
+          .inFilter('player_id', ids.toList());
+      if (!mounted) return;
+      setState(() {
+        for (final p in players) {
+          _nameById[p['id'].toString()] =
+              '${p['name'] ?? ''} ${p['surname'] ?? ''}'.trim();
+        }
+        for (final r in rosters) {
+          final t = (r['teams'] as Map?)?['name'];
+          if (t != null) _teamByPlayer[r['player_id'].toString()] = '$t';
+        }
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _review(PlayerPenalty p, bool approve) async {
+    setState(() => _busy.add(p.id));
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await widget.penaltyService.reviewPenalty(
+        p.id,
+        approve: approve,
+        matchCount: approve ? (_counts[p.id] ?? p.matchCount) : null,
+      );
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(approve ? 'Ceza onaylandı.' : 'Ceza reddedildi.'),
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Hata: $e')));
+    } finally {
+      if (mounted) setState(() => _busy.remove(p.id));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<PlayerPenalty>>(
+      stream: _pending,
+      builder: (context, snap) {
+        final allowed = widget.allowedPlayerIds;
+        final list = [
+          for (final p in snap.data ?? const <PlayerPenalty>[])
+            if (allowed == null || allowed.contains(p.playerId)) p,
+        ];
+        if (list.isEmpty) return const SizedBox.shrink();
+        final ids = list.map((p) => p.playerId).toSet();
+        WidgetsBinding.instance.addPostFrameCallback((_) => _loadNames(ids));
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: AdminFormSection(
+            title: 'Onay bekleyen cezalar (${list.length})',
+            child: AdminFieldGroup(children: [for (final p in list) _row(p)]),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _row(PlayerPenalty p) {
+    final count = _counts[p.id] ?? p.matchCount;
+    final busy = _busy.contains(p.id);
+    final name = _nameById[p.playerId] ?? '…';
+    final team = _teamByPlayer[p.playerId];
+    final isRed = p.kind == 'red_card';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 14,
+                height: 19,
+                decoration: BoxDecoration(
+                  color: isRed
+                      ? const Color(0xFFDC2626)
+                      : const Color(0xFFF59E0B),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                      ),
+                    ),
+                    Text(
+                      [
+                        if (team != null) team,
+                        isRed ? 'Kırmızı kart' : 'İkinci sarı kart',
+                      ].join(' · '),
+                      style: const TextStyle(
+                        color: kAdminMuted,
+                        fontSize: 12.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                onPressed: busy || count <= 1
+                    ? null
+                    : () => setState(() => _counts[p.id] = count - 1),
+                icon: const Icon(Icons.remove_circle_outline_rounded),
+                color: Colors.white70,
+              ),
+              Text(
+                '$count maç',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              IconButton(
+                onPressed: busy
+                    ? null
+                    : () => setState(() => _counts[p.id] = count + 1),
+                icon: const Icon(Icons.add_circle_outline_rounded),
+                color: Colors.white70,
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: busy ? null : () => _review(p, false),
+                  child: const Text('Reddet'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton(
+                  style: FilledButton.styleFrom(backgroundColor: kAdminAccent),
+                  onPressed: busy ? null : () => _review(p, true),
+                  child: busy
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Onayla'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}

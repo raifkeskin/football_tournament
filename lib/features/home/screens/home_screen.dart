@@ -7,6 +7,7 @@ import '../../tournament/models/league.dart';
 import '../../tournament/models/season.dart';
 import '../../match/models/match.dart';
 import '../../../core/services/app_session.dart';
+import '../../../core/services/app_settings.dart';
 import '../../team/models/team.dart';
 import '../../tournament/services/interfaces/i_league_service.dart';
 import '../../match/services/interfaces/i_match_service.dart';
@@ -348,8 +349,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     itemBuilder: (context, index) {
                       final l = leagues[index];
-                      // Gizli ve admin değilse kilitli kabul et
-                      final isLocked = l.isPrivate && !isAdmin;
+                      // Gizli ve admin değilse kilitli kabul et (özellik
+                      // kapalıyken gizli turnuva yok sayılır).
+                      final isLocked =
+                          l.isPrivate &&
+                          !isAdmin &&
+                          AppSettings.privateLeaguesEnabled.value;
                       final isSelected = l.id == _activeLeagueId;
 
                       return ListTile(

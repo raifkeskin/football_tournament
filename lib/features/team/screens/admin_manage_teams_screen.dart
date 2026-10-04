@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/services/app_session.dart';
+import '../../../core/services/panel_scope.dart';
 import '../../../core/services/image_upload_service.dart';
 import '../services/interfaces/i_team_service.dart';
 import '../../../core/services/service_locator.dart';
@@ -37,23 +38,32 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
   Future<List<Map<String, dynamic>>>? _teamsFuture;
 
   @override
-  void initState() {
-    super.initState();
-    _teamsFuture = _fetchTeamsOnce();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Oturum (yetki kapsamı) bağlamdan okunduğu için initState yerine burada.
+    _teamsFuture ??= _fetchTeamsOnce();
   }
 
   /// Takımlar + sorumlu adları + kaç sezonda yer aldıkları (liste kartları
   /// için; toplam 3 sorgu).
   Future<List<Map<String, dynamic>>> _fetchTeamsOnce() async {
     final client = Supabase.instance.client;
+    // Kurucu / bölge sorumlusu yalnızca kendi takımlarını görür.
+    final allowed = await PanelScope.teamIds(AppSession.of(context).value);
     final res = await client.from('teams').select();
-    final teams = res.map((e) => Map<String, dynamic>.from((e as Map))).toList()
-      ..sort(
-        (a, b) => _trCompare(
-          (a['name'] ?? '').toString(),
-          (b['name'] ?? '').toString(),
-        ),
-      );
+    final teams =
+        res
+            .map((e) => Map<String, dynamic>.from((e as Map)))
+            .where(
+              (t) => allowed == null || allowed.contains(t['id'].toString()),
+            )
+            .toList()
+          ..sort(
+            (a, b) => _trCompare(
+              (a['name'] ?? '').toString(),
+              (b['name'] ?? '').toString(),
+            ),
+          );
 
     final managerIds = <String>{
       for (final t in teams)
@@ -364,9 +374,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
     var saving = false;
 
     Future<void> pickLogo(void Function(void Function()) setSheetState) async {
-      final picked = await _picker.pickImage(
-        source: ImageSource.gallery,
-      );
+      final picked = await _picker.pickImage(source: ImageSource.gallery);
       if (picked == null) return;
       final logo = await preparePickedLogo(picked);
       setSheetState(() {
@@ -452,7 +460,16 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
           _teamsFuture = _fetchTeamsOnce();
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(isEdit ? 'Güncellendi.' : 'Takım eklendi.')),
+          SnackBar(
+            content: Text(
+              isEdit
+                  ? 'Güncellendi.'
+                  : AppSession.of(context).value.isAdmin
+                  ? 'Takım eklendi.'
+                  : 'Takım eklendi. Turnuva Yönetimi\'nde bir gruba '
+                        'atadığınızda bu listede görünür.',
+            ),
+          ),
         );
       } catch (e) {
         if (!mounted) return;
@@ -529,7 +546,11 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                                     Container(
                                       width: 112,
                                       height: 112,
-                                      clipBehavior: Clip.antiAlias,
+                                      // Zemin (decoration) yokken kırpma
+                                      // yapılamaz; Flutter hata verir.
+                                      clipBehavior: hasLogo
+                                          ? Clip.none
+                                          : Clip.antiAlias,
                                       alignment: Alignment.center,
                                       // Logo varsa zemin yok; logo kendi
                                       // şekliyle görünür.
@@ -887,8 +908,8 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                 if (v == 'edit') openEdit();
                 if (v == 'delete') _takimSil(teamId, logoUrl: logoUrl);
               },
-              itemBuilder: (_) => const [
-                PopupMenuItem(
+              itemBuilder: (_) => [
+                const PopupMenuItem(
                   value: 'edit',
                   child: Row(
                     children: [
@@ -902,20 +923,22 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                     ],
                   ),
                 ),
-                PopupMenuItem(
-                  value: 'delete',
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.delete_outline_rounded,
-                        color: kAdminDanger,
-                        size: 20,
-                      ),
-                      SizedBox(width: 10),
-                      Text('Sil', style: TextStyle(color: kAdminDanger)),
-                    ],
+                // Takım silme yalnızca admin.
+                if (AppSession.of(context).value.isAdmin)
+                  const PopupMenuItem(
+                    value: 'delete',
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.delete_outline_rounded,
+                          color: kAdminDanger,
+                          size: 20,
+                        ),
+                        SizedBox(width: 10),
+                        Text('Sil', style: TextStyle(color: kAdminDanger)),
+                      ],
+                    ),
                   ),
-                ),
               ],
             ),
           ],
@@ -982,8 +1005,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isAdmin = AppSession.of(context).value.isAdmin;
-    if (!isAdmin) {
+    if (!AppSession.of(context).value.hasManagementPanel) {
       return const AdminPageScaffold(
         title: 'Takım Yönetimi',
         body: Center(
@@ -1370,9 +1392,7 @@ class _EditTeamScreenState extends State<EditTeamScreen> {
   }
 
   Future<void> _pickLogo() async {
-    final picked = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-    );
+    final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
     if (picked == null) return;
     final logo = await preparePickedLogo(picked);
     if (mounted) setState(() => _newLogo = logo);
@@ -1423,7 +1443,7 @@ class _EditTeamScreenState extends State<EditTeamScreen> {
                                     url: currentLogoUrl,
                                     width: 128,
                                     height: 128,
-                                    isCircle: true,
+                                    fit: BoxFit.contain,
                                     fallbackIconSize: 46,
                                   ),
                                 )

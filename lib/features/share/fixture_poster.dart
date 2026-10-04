@@ -198,93 +198,110 @@ class FixturePoster extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Zemin: stadyum fotoğrafı; üstünde okunurluk için lacivert geçiş.
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 16, 14, 12),
       decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xFF0B1440), _navy, Color(0xFF08102E)],
-          stops: [0, 0.4, 1],
+        color: _navy,
+        image: DecorationImage(
+          image: AssetImage('assets/anasayfa.jpg'),
+          fit: BoxFit.cover,
         ),
       ),
-      child: Stack(
-        children: [
-          // Logonun arkasında altın, altta yeşil hafif ışıma.
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: RadialGradient(
-                  center: const Alignment(0, -0.85),
-                  radius: 0.75,
-                  colors: [
-                    _gold.withValues(alpha: 0.28),
-                    _gold.withValues(alpha: 0),
-                  ],
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 16, 14, 12),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              const Color(0xFF0B1440).withValues(alpha: 0.9),
+              _navy.withValues(alpha: 0.72),
+              const Color(0xFF08102E).withValues(alpha: 0.88),
+            ],
+            stops: const [0, 0.45, 1],
+          ),
+        ),
+        child: Stack(
+          children: [
+            // Logonun arkasında altın, altta yeşil hafif ışıma.
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: RadialGradient(
+                    center: const Alignment(0, -0.85),
+                    radius: 0.75,
+                    colors: [
+                      _gold.withValues(alpha: 0.28),
+                      _gold.withValues(alpha: 0),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-          Column(
-            children: [
-              PosterLogo(url: leagueLogo, name: leagueName, size: 104),
-              const SizedBox(height: 4),
-              Text(
-                leagueName.trUpper,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                style: _cond(28, w: FontWeight.w900, italic: true),
-              ),
-              if (subtitle.isNotEmpty) ...[
-                const SizedBox(height: 3),
+            Column(
+              children: [
+                PosterLogo(url: leagueLogo, name: leagueName, size: 104),
+                const SizedBox(height: 4),
                 Text(
-                  subtitle.trUpper,
+                  leagueName.trUpper,
                   textAlign: TextAlign.center,
-                  style: _cond(14, color: _gold, spacing: 1.6),
+                  maxLines: 2,
+                  style: _cond(28, w: FontWeight.w900, italic: true),
                 ),
-              ],
-              if (weekText.isNotEmpty) ...[
-                const SizedBox(height: 7),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 22,
-                    vertical: 3,
+                if (subtitle.isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle.trUpper,
+                    textAlign: TextAlign.center,
+                    style: _cond(14, color: _gold, spacing: 1.6),
                   ),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(6),
-                    gradient: const LinearGradient(
-                      colors: [
-                        Color(0x00C81E3A),
-                        Color(0xFFC81E3A),
-                        Color(0xFFC81E3A),
-                        Color(0x00C81E3A),
-                      ],
-                      stops: [0, 0.15, 0.85, 1],
+                ],
+                if (weekText.isNotEmpty) ...[
+                  const SizedBox(height: 7),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 22,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(6),
+                      gradient: const LinearGradient(
+                        colors: [
+                          Color(0x00C81E3A),
+                          Color(0xFFC81E3A),
+                          Color(0xFFC81E3A),
+                          Color(0x00C81E3A),
+                        ],
+                        stops: [0, 0.15, 0.85, 1],
+                      ),
+                    ),
+                    child: Text(
+                      weekText.trUpper,
+                      style: _cond(15, spacing: 1.4),
                     ),
                   ),
-                  child: Text(weekText.trUpper, style: _cond(15, spacing: 1.4)),
-                ),
-              ],
-              // Maç sayısı fazlaysa liste afişe sığacak şekilde küçülür.
-              Expanded(
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
+                ],
+                // Maç sayısı fazlaysa liste afişe sığacak şekilde küçülür.
+                Expanded(
+                  child: Align(
                     alignment: Alignment.topCenter,
-                    child: SizedBox(
-                      width: kPosterSize.width - 28,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [for (final d in days) _day(d)],
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.topCenter,
+                      child: SizedBox(
+                        width: kPosterSize.width - 28,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [for (final d in days) _day(d)],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
-          ),
-        ],
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

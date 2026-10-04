@@ -30,6 +30,45 @@ Widget buildWebSafeImage(
     );
   }
 
+
+  // Önce normal (tuvale çizilen) resim: Supabase depolaması ve Wikimedia
+  // CORS'a izin verir. Gömülü HTML resim (platform view) yalnızca bu
+  // yüklenemezse kullanılır; çok sayıda platform view'da Flutter yarı saydam
+  // zeminleri resmin üstüne çizip logoları soluk gösterebiliyor.
+  Widget htmlFallback() => _htmlImage(
+    trimmed,
+    width: width,
+    height: height,
+    fit: fit,
+    borderRadius: borderRadius,
+    isCircle: isCircle,
+    fallback: fallback,
+  );
+
+  Widget image = Image.network(
+    trimmed,
+    width: width,
+    height: height,
+    fit: fit,
+    errorBuilder: (_, _, _) => htmlFallback(),
+  );
+  if (isCircle) {
+    image = ClipOval(child: image);
+  } else if (borderRadius != null) {
+    image = ClipRRect(borderRadius: borderRadius, child: image);
+  }
+  return SizedBox(width: width, height: height, child: image);
+}
+
+Widget _htmlImage(
+  String trimmed, {
+  required double? width,
+  required double? height,
+  required BoxFit fit,
+  required BorderRadius? borderRadius,
+  required bool isCircle,
+  required Widget fallback,
+}) {
   final fitCss = switch (fit) {
     BoxFit.contain => 'contain',
     BoxFit.fill => 'fill',

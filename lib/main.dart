@@ -6,7 +6,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/config/app_config.dart';
 import 'features/home/screens/main_navigator.dart';
 import 'core/services/app_session.dart';
+import 'core/services/app_settings.dart';
 import 'core/widgets/app_name_band.dart';
+import 'core/widgets/tvl_logo.dart';
 import 'core/widgets/web_responsive_frame.dart';
 
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
@@ -33,6 +35,7 @@ void main() async {
   // "Beni Hatırla" işaretlenmediyse önceki oturumu kapat: uygulama giriş
   // ekranıyla açılır.
   await AppSessionController.enforceRememberMe();
+  await AppSettings.load();
 
   runApp(const MyApp());
 }
@@ -132,34 +135,7 @@ class _SplashScreenState extends State<SplashScreen>
                   const Spacer(flex: 3),
                   _reveal(
                     start: 0,
-                    child: Container(
-                      width: 104,
-                      height: 104,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: const LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [Color(0xFF1E293B), Color(0xFF064E3B)],
-                        ),
-                        border: Border.all(
-                          color: accent.withValues(alpha: 0.7),
-                          width: 2,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: accent.withValues(alpha: 0.25),
-                            blurRadius: 30,
-                            spreadRadius: 2,
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.sports_soccer,
-                        color: Colors.white,
-                        size: 52,
-                      ),
-                    ),
+                    child: const TvlLogo(size: 150, ringText: true),
                   ),
                   const SizedBox(height: 28),
                   _reveal(
@@ -191,7 +167,7 @@ class _SplashScreenState extends State<SplashScreen>
                   _reveal(
                     start: 0.4,
                     child: Text(
-                      'Dünyasına Hoş Geldiniz',
+                      'Hoş Geldiniz',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.8),

@@ -176,9 +176,10 @@ class _TournamentFilterDialogState extends State<_TournamentFilterDialog> {
                         ? e.$2.name.trim()
                         : 'Grup ${e.$1 + 1}',
                 };
+                // "Tüm gruplar" seçeneği yok; seçim yoksa ilk grup.
                 final groupId = groupNameById.containsKey(_groupId)
                     ? _groupId
-                    : null;
+                    : (groups.isEmpty ? null : groups.first.id);
 
                 final ready =
                     seasonId != null && !groupsLoading && seasonId == _seasonId;
@@ -240,9 +241,7 @@ class _TournamentFilterDialogState extends State<_TournamentFilterDialog> {
                             icon: Icons.workspaces_outline,
                             label: 'Grup',
                             value: groups.length > 1
-                                ? (groupId == null
-                                      ? 'Tüm Gruplar'
-                                      : groupNameById[groupId])
+                                ? groupNameById[groupId]
                                 : null,
                             placeholder: groupsLoading && seasonId != null
                                 ? 'Yükleniyor…'
@@ -251,25 +250,19 @@ class _TournamentFilterDialogState extends State<_TournamentFilterDialog> {
                             onTap: groups.length < 2
                                 ? null
                                 : () async {
-                                    const all = '';
                                     final picked =
                                         await showAdminOptionPicker<String>(
                                           context: context,
                                           title: 'Grup Seç',
-                                          items: [
-                                            all,
-                                            ...groups.map((g) => g.id),
-                                          ],
-                                          labelBuilder: (id) => id == all
-                                              ? 'Tüm Gruplar'
-                                              : (groupNameById[id] ?? ''),
-                                          selected: groupId ?? all,
+                                          items: groups.map((g) => g.id).toList(),
+                                          labelBuilder: (id) =>
+                                              groupNameById[id] ?? '',
+                                          selected: groupId,
                                         );
                                     if (picked == null || !mounted) return;
-                                    final val = picked == all ? null : picked;
-                                    if (val == _groupId) return;
+                                    if (picked == groupId) return;
                                     setState(() {
-                                      _groupId = val;
+                                      _groupId = picked;
                                       _week = null;
                                     });
                                   },

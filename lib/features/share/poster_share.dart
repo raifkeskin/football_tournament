@@ -62,6 +62,8 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
     await GoogleFonts.pendingFonts();
     if (!mounted) return;
     await Future.wait([
+      // Afiş zemini (stadyum fotoğrafı) PNG'ye çizilmeden önce hazır olsun.
+      precacheImage(const AssetImage('assets/anasayfa.jpg'), context),
       for (final u in widget.imageUrls.where((u) => u.trim().isNotEmpty))
         precacheImage(NetworkImage(u), context, onError: (_, _) {}),
     ]);
@@ -180,6 +182,7 @@ class PosterLogo extends StatelessWidget {
     required this.size,
     this.badgeColor = const Color(0xFFF5C400),
     this.badgeTextColor = const Color(0xFF111827),
+    this.shadow = false,
   });
 
   final String url;
@@ -187,6 +190,9 @@ class PosterLogo extends StatelessWidget {
   final double size;
   final Color badgeColor;
   final Color badgeTextColor;
+
+  /// Koyu zeminde öne çıksın diye logonun şeklini izleyen gölge.
+  final bool shadow;
 
   String get _initials {
     final w = name.trim().split(RegExp(r'\s+')).where((e) => e.isNotEmpty);
@@ -216,12 +222,33 @@ class PosterLogo extends StatelessWidget {
       ),
     );
     if (url.trim().isEmpty) return badge;
-    return Image.network(
+    Widget image({Color? color}) => Image.network(
       url,
       width: size,
       height: size,
       fit: BoxFit.contain,
-      errorBuilder: (_, _, _) => badge,
+      filterQuality: FilterQuality.high,
+      color: color,
+      colorBlendMode: color == null ? null : BlendMode.srcIn,
+      errorBuilder: (_, _, _) => color == null ? badge : const SizedBox(),
+    );
+    if (!shadow) return image();
+    // Logonun kendi şeklinde koyu, bulanık gölge (çerçeve/daire yok).
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        Transform.translate(
+          offset: Offset(0, size * 0.035),
+          child: ImageFiltered(
+            imageFilter: ui.ImageFilter.blur(
+              sigmaX: size * 0.05,
+              sigmaY: size * 0.05,
+            ),
+            child: image(color: Colors.black.withValues(alpha: 0.6)),
+          ),
+        ),
+        image(),
+      ],
     );
   }
 }

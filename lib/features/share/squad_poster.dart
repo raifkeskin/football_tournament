@@ -193,21 +193,13 @@ class SquadPoster extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Container(
-                    width: 64,
-                    height: 64,
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: PosterLogo(
-                      url: teamLogo,
-                      name: teamName,
-                      size: 56,
-                      badgeColor: p.primary,
-                      badgeTextColor: Colors.white,
-                    ),
+                  PosterLogo(
+                    url: teamLogo,
+                    name: teamName,
+                    size: 64,
+                    badgeColor: p.primary,
+                    badgeTextColor: Colors.white,
+                    shadow: true,
                   ),
                   const SizedBox(width: 12),
                   Expanded(

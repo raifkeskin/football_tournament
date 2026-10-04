@@ -17,7 +17,11 @@ enum MediaFolder {
 
   /// Futbolcunun onay bekleyen profil fotoğrafları:
   /// `profile_requests/<auth uid>/` (yalnızca kendi klasörüne yükleyebilir).
-  profileRequests('profile_requests');
+  profileRequests('profile_requests'),
+
+  /// Yöneticilerin profil fotoğrafı: `staff/<auth uid>/` (yalnızca kendi
+  /// klasörü).
+  staff('staff');
 
   const MediaFolder(this.path);
 

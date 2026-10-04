@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'app_settings.dart';
 import 'league_access.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb; // Supabase çakışmasını önlemek için alias
 import '../push/push_service.dart';
@@ -29,6 +30,8 @@ class AppSessionState {
     this.playerId,
     this.ownedLeagueIds = const <String>{},
     this.managedTeams = const <ManagedTeam>[],
+    this.ownedRegions = const <OwnedRegion>[],
+    this.photoUrl,
   });
 
   static const _unset = Object();
@@ -36,7 +39,7 @@ class AppSessionState {
   // Artık Supabase'in User objesini taşıyoruz
   final sb.User? user; 
   final bool isAdmin;
-  final String role; // admin, owner, manager, player, user
+  final String role; // admin, owner, region, manager, player, user
   final String? teamId;
   final String phone;
   final bool isLoading;
@@ -51,11 +54,36 @@ class AppSessionState {
   /// Sorumlu olduğu takımlar (`team_managers`).
   final List<ManagedTeam> managedTeams;
 
+  /// Sorumlu olduğu bölgeler (`region_owners`).
+  final List<OwnedRegion> ownedRegions;
+
+  /// Profil fotoğrafı (`app_users.photo_url`; yönetici kartında).
+  final String? photoUrl;
+
   bool get isManager => role == 'manager';
   bool get isLeagueOwner => ownedLeagueIds.isNotEmpty;
+  bool get isRegionOwner => ownedRegions.isNotEmpty;
+
+  /// Profilde yönetim paneli: admin, kurucu başkan, bölge sorumlusu.
+  bool get hasManagementPanel => isAdmin || isLeagueOwner || isRegionOwner;
 
   /// Onay ekranını görebilir mi? (Talepler RLS ile zaten süzülür.)
-  bool get canReviewApprovals => isAdmin || isLeagueOwner;
+  bool get canReviewApprovals => isAdmin || isLeagueOwner || isRegionOwner;
+
+  /// Panelde görünen turnuvalar: sahibi olduğu + bölgesi olan turnuvalar.
+  /// Admin için null (hepsi).
+  Set<String>? get panelLeagueIds => isAdmin
+      ? null
+      : {...ownedLeagueIds, for (final r in ownedRegions) r.leagueId};
+
+  /// Bu sezonda sorumlu olduğu bölgeler (kurucu/admin için boş).
+  List<OwnedRegion> regionsInSeason(String seasonId) =>
+      [for (final r in ownedRegions) if (r.seasonId == seasonId) r];
+
+  /// Bölgeyi yönetebilir mi?
+  bool canManageRegion(String? leagueId, String? regionId) =>
+      canManageLeague(leagueId) ||
+      (regionId != null && ownedRegions.any((r) => r.id == regionId));
 
   /// Turnuvayı yönetebilir mi? Admin her turnuvayı, sahibi kendisininkini.
   bool canManageLeague(String? leagueId) =>
@@ -76,6 +104,8 @@ class AppSessionState {
     Object? playerId = _unset,
     Set<String>? ownedLeagueIds,
     List<ManagedTeam>? managedTeams,
+    List<OwnedRegion>? ownedRegions,
+    Object? photoUrl = _unset,
   }) {
     return AppSessionState(
       user: identical(user, _unset) ? this.user : user as sb.User?,
@@ -92,8 +122,28 @@ class AppSessionState {
           : playerId as String?,
       ownedLeagueIds: ownedLeagueIds ?? this.ownedLeagueIds,
       managedTeams: managedTeams ?? this.managedTeams,
+      ownedRegions: ownedRegions ?? this.ownedRegions,
+      photoUrl: identical(photoUrl, _unset)
+          ? this.photoUrl
+          : photoUrl as String?,
     );
   }
+}
+
+/// Bölge sorumluluğu: bölge + sezonu + turnuvası.
+@immutable
+class OwnedRegion {
+  const OwnedRegion({
+    required this.id,
+    required this.name,
+    required this.seasonId,
+    required this.leagueId,
+  });
+
+  final String id;
+  final String name;
+  final String seasonId;
+  final String leagueId;
 }
 
 class AppSessionController extends ValueNotifier<AppSessionState> {
@@ -234,6 +284,10 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
     return false;
   }
 
+  void setPhotoUrl(String? url) {
+    value = value.copyWith(photoUrl: url);
+  }
+
   void setAdmin(bool isAdmin) {
     value = value.copyWith(isAdmin: isAdmin);
   }
@@ -248,7 +302,8 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
       _lastAuthId = authUser?.id;
       if (!first) LeagueAccess.bump();
       // Çıkışta cihazdaki kodlarla isimsiz takip; girişte hesaba taşınır.
-      if (authUser == null || !authUser.isAnonymous) {
+      if ((authUser == null || !authUser.isAnonymous) &&
+          AppSettings.privateLeaguesEnabled.value) {
         LeagueAccess.restoreFollows().then((changed) {
           if (changed && authUser != null) LeagueAccess.bump();
         });
@@ -269,6 +324,8 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
         playerId: null,
         ownedLeagueIds: const <String>{},
         managedTeams: const <ManagedTeam>[],
+        ownedRegions: const <OwnedRegion>[],
+        photoUrl: null,
       );
       return;
     }
@@ -304,6 +361,30 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
           .toSet();
     } catch (_) {
       return const <String>{};
+    }
+  }
+
+  Future<List<OwnedRegion>> _loadOwnedRegions(String uid) async {
+    try {
+      final res = await _supabase
+          .from('region_owners')
+          .select('season_regions(id, name, season_id, seasons(league_id))')
+          .eq('user_id', uid);
+      return [
+        for (final r in res)
+          if (r['season_regions'] is Map)
+            OwnedRegion(
+              id: (r['season_regions']['id'] ?? '').toString(),
+              name: (r['season_regions']['name'] ?? '').toString(),
+              seasonId: (r['season_regions']['season_id'] ?? '').toString(),
+              leagueId: (r['season_regions']['seasons'] is Map
+                      ? r['season_regions']['seasons']['league_id'] ?? ''
+                      : '')
+                  .toString(),
+            ),
+      ];
+    } catch (_) {
+      return const <OwnedRegion>[];
     }
   }
 
@@ -349,20 +430,24 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
     String? name;
     String? teamId;
     String? playerId;
+    String? photoUrl;
 
     final ownedLeagueIds = await _loadOwnedLeagues(user.id);
     final managedTeams = await _loadManagedTeams(user.id);
+    final ownedRegions = await _loadOwnedRegions(user.id);
 
     try {
       final res = await _supabase
           .from('app_users')
-          .select('name, phone, team_id')
+          .select('name, phone, team_id, photo_url')
           .eq('auth_uid', user.id)
           .limit(1);
       if (res.isNotEmpty) {
         final r = res.first;
         name = (r['name'] ?? '').toString().trim();
         teamId = r['team_id']?.toString();
+        final ph = (r['photo_url'] ?? '').toString().trim();
+        photoUrl = ph.isEmpty ? null : ph;
         final p = _raw10((r['phone'] ?? '').toString());
         if (phone.isEmpty) phone = p;
       }
@@ -400,6 +485,8 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
         ? 'admin'
         : ownedLeagueIds.isNotEmpty
         ? 'owner'
+        : ownedRegions.isNotEmpty
+        ? 'region'
         : managedTeams.isNotEmpty
         ? 'manager'
         : 'player';
@@ -415,6 +502,8 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
       playerId: (playerId ?? '').isEmpty ? null : playerId,
       ownedLeagueIds: ownedLeagueIds,
       managedTeams: managedTeams,
+      ownedRegions: ownedRegions,
+      photoUrl: photoUrl,
       isLoading: false,
     );
   }
