@@ -17,6 +17,7 @@ import '../services/interfaces/i_match_service.dart';
 import '../../team/services/interfaces/i_team_service.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/services/global_filter.dart';
+import '../../../core/services/active_tournament.dart';
 import 'match_details_screen.dart';
 import '../utils/match_clock.dart';
 import '../../../core/widgets/web_safe_image.dart';
@@ -310,6 +311,7 @@ class _FixtureScreenState extends State<FixtureScreen> {
     );
     if (result == null || !mounted) return;
     GlobalFilter.setLeague(result.leagueId);
+    ActiveTournament.noteViewed(result.leagueId);
     GlobalFilter.setSeason(result.seasonId);
     GlobalFilter.setGroup(result.groupId);
     setState(() {

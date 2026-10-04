@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'dart:ui'; // Cam efekti (BackdropFilter) için eklendi
 
 import '../../../core/services/app_session.dart';
+import '../../../core/services/active_tournament.dart';
+import '../../../core/widgets/web_safe_image.dart';
 import '../../../core/services/app_settings.dart';
 import '../../../core/services/league_access.dart';
 import '../../match/screens/fixture_screen.dart';
@@ -153,24 +155,50 @@ class _MainNavigatorState extends State<MainNavigator> {
                 children: [
                   // MENÜ ÜST KISMI: logo + uygulama adı tek satırda (menü
                   // kartlarına daha çok yer kalsın).
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(20, 12, 20, 14),
-                    child: Row(
-                      children: [
-                        TvlLogo(size: 52, ringText: true),
-                        SizedBox(width: 14),
-                        Expanded(
-                          child: Text(
-                            kAppName,
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 0.5,
+                  // Turnuva temalıysa onun logosu ve adı, altında TVL.
+                  ValueListenableBuilder<TournamentTheme?>(
+                    valueListenable: ActiveTournament.theme,
+                    builder: (context, t, _) => Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 14),
+                      child: Row(
+                        children: [
+                          if (t == null)
+                            const TvlLogo(size: 52, ringText: true)
+                          else
+                            WebSafeImage(
+                              url: t.logoUrl,
+                              width: 56,
+                              height: 56,
+                              fit: BoxFit.contain,
+                            ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  t?.name ?? kAppName,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                                if (t != null)
+                                  Text(
+                                    kAppName,
+                                    style: TextStyle(
+                                      color: t.secondary,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
 

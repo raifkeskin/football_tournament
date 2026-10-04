@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'active_tournament.dart';
 import 'app_settings.dart';
 import 'league_access.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'
@@ -301,6 +302,8 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
       final first = _lastAuthId == '';
       _lastAuthId = authUser?.id;
       if (!first) LeagueAccess.bump();
+      // Uygulama kişinin turnuvasının kimliğine bürünür (giriş/çıkışta).
+      ActiveTournament.refresh();
       // Çıkışta cihazdaki kodlarla isimsiz takip; girişte hesaba taşınır.
       if ((authUser == null || !authUser.isAnonymous) &&
           AppSettings.privateLeaguesEnabled.value) {

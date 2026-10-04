@@ -27,6 +27,9 @@ class League {
     this.teamsPerGroup = 4,
     this.createdAt,
     this.updatedAt,
+    this.themePrimary,
+    this.themeSecondary,
+    this.shortName,
   });
 
   final String id;
@@ -56,6 +59,11 @@ class League {
   final int teamsPerGroup;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+
+  /// Uygulama teması (#RRGGBB) ve bantta görünen kısa ad.
+  final String? themePrimary;
+  final String? themeSecondary;
+  final String? shortName;
 
   factory League.fromMap(Map<String, dynamic> map) {
     dynamic v(String camel, String snake) => map[camel] ?? map[snake];
@@ -143,6 +151,9 @@ class League {
       ),
       createdAt: _readDate(v('createdAt', 'created_at')),
       updatedAt: _readDate(v('updatedAt', 'updated_at')),
+      themePrimary: nullableTrimmed(v('themePrimary', 'theme_primary')),
+      themeSecondary: nullableTrimmed(v('themeSecondary', 'theme_secondary')),
+      shortName: nullableTrimmed(v('shortName', 'short_name')),
     );
   }
 

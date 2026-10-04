@@ -6,9 +6,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/config/app_config.dart';
 import 'features/home/screens/main_navigator.dart';
 import 'core/services/app_session.dart';
+import 'core/services/active_tournament.dart';
 import 'core/services/app_settings.dart';
 import 'core/widgets/app_name_band.dart';
 import 'core/widgets/tvl_logo.dart';
+import 'core/widgets/web_safe_image.dart';
 import 'core/widgets/web_responsive_frame.dart';
 
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
@@ -36,6 +38,8 @@ void main() async {
   // ekranıyla açılır.
   await AppSessionController.enforceRememberMe();
   await AppSettings.load();
+  // Son turnuva teması hemen; kişiye göre güncel tema arkadan.
+  await ActiveTournament.init();
 
   runApp(const MyApp());
 }
@@ -97,6 +101,7 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
+    final theme = ActiveTournament.theme.value;
     const bgDark = Color(0xFF0F172A);
     const accent = Color(0xFF10B981);
 
@@ -133,21 +138,33 @@ class _SplashScreenState extends State<SplashScreen>
               child: Column(
                 children: [
                   const Spacer(flex: 3),
+                  // Kişinin turnuvası temalıysa açılış o turnuvanın logosu
+                  // ve adıyla; altında küçük "Türk Veteranlar Ligi".
                   _reveal(
                     start: 0,
-                    child: const TvlLogo(size: 150, ringText: true),
+                    child: theme == null
+                        ? const TvlLogo(size: 150, ringText: true)
+                        : WebSafeImage(
+                            url: theme.logoUrl,
+                            width: 170,
+                            height: 170,
+                            fit: BoxFit.contain,
+                          ),
                   ),
                   const SizedBox(height: 28),
                   _reveal(
                     start: 0.15,
-                    child: const Text(
-                      kAppName,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 34,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0.5,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Text(
+                        theme?.name ?? kAppName,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 34,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.5,
+                        ),
                       ),
                     ),
                   ),
@@ -158,7 +175,7 @@ class _SplashScreenState extends State<SplashScreen>
                       width: 40,
                       height: 3,
                       decoration: BoxDecoration(
-                        color: accent,
+                        color: theme?.secondary ?? accent,
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
@@ -167,7 +184,7 @@ class _SplashScreenState extends State<SplashScreen>
                   _reveal(
                     start: 0.4,
                     child: Text(
-                      'Hoş Geldiniz',
+                      theme == null ? 'Hoş Geldiniz' : kAppName,
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.8),

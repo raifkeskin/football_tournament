@@ -13,6 +13,7 @@ import '../../team/services/interfaces/i_team_service.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../../core/services/global_filter.dart';
+import '../../../core/services/active_tournament.dart';
 
 // ORTAK BİLEŞEN
 import '../../../core/widgets/tournament_filter_dialog.dart';
@@ -149,6 +150,7 @@ class _StatsScreenState extends State<StatsScreen> {
     );
     if (result == null || !mounted) return;
     GlobalFilter.setLeague(result.leagueId);
+    ActiveTournament.noteViewed(result.leagueId);
     GlobalFilter.setSeason(result.seasonId);
     setState(() {
       _selectedLeagueId = result.leagueId;

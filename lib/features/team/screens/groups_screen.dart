@@ -8,6 +8,7 @@ import '../models/team.dart';
 import '../../tournament/services/interfaces/i_league_service.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/services/global_filter.dart';
+import '../../../core/services/active_tournament.dart';
 import '../../../core/utils/team_name.dart';
 import '../../../core/utils/realtime_signal.dart';
 import '../../../core/utils/resilient_stream.dart';
@@ -463,6 +464,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
     );
     if (result == null || !mounted) return;
     GlobalFilter.setLeague(result.leagueId);
+    ActiveTournament.noteViewed(result.leagueId);
     GlobalFilter.setSeason(result.seasonId);
     setState(() {
       _selectedLeagueId = result.leagueId;

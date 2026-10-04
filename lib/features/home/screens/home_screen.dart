@@ -14,6 +14,7 @@ import '../../match/services/interfaces/i_match_service.dart';
 import '../../team/services/interfaces/i_team_service.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/services/global_filter.dart';
+import '../../../core/services/active_tournament.dart';
 import '../../../core/utils/resilient_stream.dart';
 import '../../../core/widgets/app_date_picker.dart';
 import '../../team/screens/groups_screen.dart';
@@ -160,6 +161,8 @@ class _HomeScreenState extends State<HomeScreen> {
     _activeLeagueId = GlobalFilter.leagueId.value;
 
     GlobalFilter.leagueId.addListener(_onGlobalFilterChanged);
+    // Turnuva teması değişince tarih şeridi yeni renkle çizilsin.
+    ActiveTournament.theme.addListener(_onThemeChanged);
   }
 
   void _onGlobalFilterChanged() {
@@ -188,9 +191,14 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (_) {}
   }
 
+  void _onThemeChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
     GlobalFilter.leagueId.removeListener(_onGlobalFilterChanged);
+    ActiveTournament.theme.removeListener(_onThemeChanged);
     super.dispose();
   }
 
@@ -393,6 +401,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           } else {
                             setState(() => _activeLeagueId = l.id);
                             GlobalFilter.setLeague(l.id);
+                            ActiveTournament.noteViewed(l.id);
                             Navigator.pop(
                               context,
                             ); // Tıklandığı an popup kapanır
@@ -466,12 +475,17 @@ class _HomeScreenState extends State<HomeScreen> {
                     !allLeagues.any((l) => l.id == _activeLeagueId)) {
                   // Gizli turnuvalar yalnızca görme yetkisi olana gelir
                   // (veritabanı kuralı); burada ayrıca elenmez.
-                  final def = allLeagues
-                      .firstWhere(
-                        (l) => l.isDefault,
-                        orElse: () => allLeagues.first,
-                      )
-                      .id;
+                  // Uygulamanın büründüğü turnuva (kişinin / misafirin son
+                  // baktığı) önce; yoksa "varsayılan" işaretli turnuva.
+                  final themed = ActiveTournament.theme.value?.leagueId;
+                  final def = allLeagues.any((l) => l.id == themed)
+                      ? themed!
+                      : allLeagues
+                            .firstWhere(
+                              (l) => l.isDefault,
+                              orElse: () => allLeagues.first,
+                            )
+                            .id;
                   _activeLeagueId = def;
                   _didAutoSelectDefaultLeague = true;
                   // Dinleyiciler setState çağırır; build bittikten sonra yay.
@@ -522,9 +536,14 @@ class _HomeScreenState extends State<HomeScreen> {
                         gradient: LinearGradient(
                           begin: Alignment.centerLeft,
                           end: Alignment.centerRight,
+                          // Turnuva temalıysa şerit turnuvanın renginde.
                           colors: [
-                            const Color(0xFF064E3B).withValues(alpha: 0.95),
-                            const Color(0xFF064E3B).withValues(alpha: 0.6),
+                            (ActiveTournament.theme.value?.primary ??
+                                    const Color(0xFF064E3B))
+                                .withValues(alpha: 0.95),
+                            (ActiveTournament.theme.value?.primary ??
+                                    const Color(0xFF064E3B))
+                                .withValues(alpha: 0.6),
                           ],
                         ),
                       ),
@@ -867,6 +886,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               onTap: () {
                                 GlobalFilter.setLeague(sectionLeagueId);
                                 GlobalFilter.setSeason(sId);
+                                ActiveTournament.noteViewed(sectionLeagueId);
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(

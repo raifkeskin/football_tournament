@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/league.dart';
+import '../../../core/services/active_tournament.dart';
 import '../../../core/services/app_session.dart';
 import '../../../core/services/app_settings.dart';
 import '../../../core/services/image_upload_service.dart';
@@ -67,6 +68,12 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
   Future<void> _openLeagueForm({League? league}) async {
     final isEdit = league != null;
     final nameController = TextEditingController(text: league?.name ?? '');
+    // Uygulama teması: kişi uygulamayı açınca bant bu renklerle boyanır.
+    final shortNameController = TextEditingController(
+      text: league?.shortName ?? '',
+    );
+    String? themePrimary = league?.themePrimary;
+    String? themeSecondary = league?.themeSecondary;
     final accessCodeController = TextEditingController(
       text: (league?.accessCode ?? '').trim(),
     );
@@ -112,6 +119,11 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
           'access_code': isPrivate ? access : null,
           if (newLogoUrl != null) 'logo_url': newLogoUrl,
           if (newLogoUrl == null && removedLogo) 'logo_url': null,
+          'theme_primary': themePrimary,
+          'theme_secondary': themePrimary == null ? null : themeSecondary,
+          'short_name': shortNameController.text.trim().isEmpty
+              ? null
+              : shortNameController.text.trim(),
         };
         if (isEdit) {
           await _sb.from('leagues').update(payload).eq('id', league.id);
@@ -134,6 +146,10 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
           ),
         );
         if (popupContext.mounted) Navigator.of(popupContext).pop();
+        // Uygulama bu turnuvanın kimliğindeyse yeni renkler hemen görünsün.
+        if (isEdit && ActiveTournament.theme.value?.leagueId == league.id) {
+          ActiveTournament.refresh();
+        }
       } catch (e) {
         if (!mounted) return;
         messenger.showSnackBar(SnackBar(content: Text('Hata: $e')));
@@ -321,6 +337,91 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                       icon: Icons.emoji_events_outlined,
                     ),
                   ),
+                  AdminFormSection(
+                    title: 'Uygulama Teması',
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 10),
+                          child: Text(
+                            'Oyuncularınız uygulamayı açtığında üst bant, '
+                            'açılış ve menü turnuvanızın logosu, adı ve bu '
+                            'renklerle görünür. Ana renk boşsa genel '
+                            'görünüm kullanılır.',
+                            style: TextStyle(
+                              color: Colors.white60,
+                              fontSize: 12.5,
+                              height: 1.35,
+                            ),
+                          ),
+                        ),
+                        TextField(
+                          controller: shortNameController,
+                          enabled: !saving,
+                          maxLength: 24,
+                          textCapitalization: TextCapitalization.words,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          cursorColor: kAdminAccent,
+                          decoration: adminInputDecoration(
+                            label: 'Bantta görünen kısa ad (isteğe bağlı)',
+                            icon: Icons.short_text_rounded,
+                          ).copyWith(counterText: ''),
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: AdminColorTile(
+                                label: 'Ana Renk',
+                                hex: themePrimary,
+                                onTap: saving
+                                    ? null
+                                    : () async {
+                                        final c = await showAdminColorPicker(
+                                          context: context,
+                                          title: 'Ana Renk',
+                                          initial: themePrimary,
+                                        );
+                                        if (c != null) {
+                                          setPopupState(() => themePrimary = c);
+                                        }
+                                      },
+                                onClear: () =>
+                                    setPopupState(() => themePrimary = null),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: AdminColorTile(
+                                label: 'Vurgu Rengi',
+                                hex: themeSecondary,
+                                onTap: saving
+                                    ? null
+                                    : () async {
+                                        final c = await showAdminColorPicker(
+                                          context: context,
+                                          title: 'Vurgu Rengi',
+                                          initial: themeSecondary,
+                                        );
+                                        if (c != null) {
+                                          setPopupState(
+                                            () => themeSecondary = c,
+                                          );
+                                        }
+                                      },
+                                onClear: () =>
+                                    setPopupState(() => themeSecondary = null),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
                   if (privateOn) const SizedBox(height: 12),
                   if (privateOn)
                     AdminFieldGroup(
@@ -468,6 +569,7 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
     Future<void>.delayed(const Duration(milliseconds: 600), () {
       nameController.dispose();
       accessCodeController.dispose();
+      shortNameController.dispose();
     });
   }
 
