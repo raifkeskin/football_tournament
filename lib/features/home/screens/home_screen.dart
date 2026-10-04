@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../../core/utils/table_feed.dart';
 import '../../tournament/models/league.dart';
 import '../../tournament/models/season.dart';
@@ -24,6 +23,7 @@ import '../../../core/widgets/league_logo.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/tvl_logo.dart';
 import '../../../core/widgets/web_safe_image.dart';
+import '../../../core/widgets/youtube_player_page.dart';
 import '../widgets/home_news_card.dart';
 
 /// Ana sayfa — günün maçları, tarih şeridi ve maç kartları.
@@ -1044,15 +1044,8 @@ class _MatchCardState extends State<_MatchCard> {
             leading: _broadcastUrl == null
                 ? null
                 : InkWell(
-                    onTap: () async {
-                      final uri = Uri.tryParse(_broadcastUrl!);
-                      if (uri != null && await canLaunchUrl(uri)) {
-                        await launchUrl(
-                          uri,
-                          mode: LaunchMode.externalApplication,
-                        );
-                      }
-                    },
+                    // Yayın uygulamanın içinde, tam ekran oynar.
+                    onTap: () => openYoutubeInApp(context, _broadcastUrl!),
                     child: const Icon(
                       Icons.play_circle_fill,
                       color: Colors.redAccent,
