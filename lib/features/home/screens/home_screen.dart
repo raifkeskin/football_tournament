@@ -22,10 +22,16 @@ import '../../match/screens/match_details_screen.dart';
 import '../../match/widgets/match_score_line.dart';
 import '../../../core/widgets/league_logo.dart';
 import '../../../core/widgets/admin_form.dart';
+import '../../../core/widgets/tvl_logo.dart';
+import '../../../core/widgets/web_safe_image.dart';
+import '../widgets/home_news_card.dart';
 
 /// Ana sayfa — günün maçları, tarih şeridi ve maç kartları.
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({super.key, this.onOpenNews});
+
+  /// Son dakika haber kartına dokununca (Haberler sekmesine geçiş).
+  final VoidCallback? onOpenNews;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -426,19 +432,33 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       body: Stack(
         children: [
-          Positioned.fill(
-            child: Image.asset('assets/anasayfa.jpg', fit: BoxFit.cover),
-          ),
-          Positioned.fill(
+          // Sade zemin; altta turnuvanın logosu silik filigran olarak.
+          const Positioned.fill(
             child: DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [
-                    const Color(0xFF0F172A).withValues(alpha: 0.6),
-                    const Color(0xFF0F172A).withValues(alpha: 0.95),
-                  ],
+                  colors: [Color(0xFF13203A), Color(0xFF0F172A)],
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: -40,
+            right: -40,
+            bottom: -60,
+            child: IgnorePointer(
+              child: Opacity(
+                opacity: 0.06,
+                child: AspectRatio(
+                  aspectRatio: 1,
+                  child: (ActiveTournament.theme.value?.logoUrl ?? '').isEmpty
+                      ? const FittedBox(child: TvlLogo(size: 200))
+                      : WebSafeImage(
+                          url: ActiveTournament.theme.value!.logoUrl,
+                          fit: BoxFit.contain,
+                        ),
                 ),
               ),
             ),
@@ -526,13 +546,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     Container(
                       height: headerHeight + 60,
                       decoration: BoxDecoration(
-                        color: cs.primaryContainer,
-                        image: const DecorationImage(
-                          image: AssetImage('assets/cim.jpg'),
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                      foregroundDecoration: BoxDecoration(
                         gradient: LinearGradient(
                           begin: Alignment.centerLeft,
                           end: Alignment.centerRight,
@@ -563,7 +576,19 @@ class _HomeScreenState extends State<HomeScreen> {
                                 top: Radius.circular(24),
                               ),
                             ),
-                            child: _buildMatchList(context, currentLeague),
+                            child: Column(
+                              children: [
+                                HomeNewsCard(
+                                  onOpenNews: () => widget.onOpenNews?.call(),
+                                ),
+                                Expanded(
+                                  child: _buildMatchList(
+                                    context,
+                                    currentLeague,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ],

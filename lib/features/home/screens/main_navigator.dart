@@ -80,7 +80,7 @@ class _MainNavigatorState extends State<MainNavigator> {
     final user = session.value.user;
     final loggedIn = user != null && !user.isAnonymous;
     final ekranlar = <Widget>[
-      const HomeScreen(),
+      HomeScreen(onOpenNews: () => setState(() => _aktifSekme = 1)),
       const NewsFeedScreen(),
       const FixtureScreen(),
       const GroupsScreen(),
