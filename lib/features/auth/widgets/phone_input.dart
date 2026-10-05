@@ -57,6 +57,14 @@ class PhoneMaskFormatter extends TextInputFormatter {
     TextEditingValue oldValue,
     TextEditingValue newValue,
   ) {
+    // Elle yazarken (tek seferde en fazla 1 rakam) 10. haneden sonrası
+    // kabul edilmez; yapıştırmada (birden çok rakam) son 10 hane alınır.
+    final oldDigits = oldValue.text.replaceAll(RegExp(r'\D'), '');
+    final newDigits = newValue.text.replaceAll(RegExp(r'\D'), '');
+    final typed = newDigits.length - oldDigits.length <= 1;
+    if (typed && oldDigits.length >= 10 && newDigits.length > 10) {
+      return oldValue;
+    }
     final formatted = formatFromRaw(newValue.text);
     return TextEditingValue(
       text: formatted,

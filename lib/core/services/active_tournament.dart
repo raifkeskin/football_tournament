@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'global_filter.dart';
+
 /// Uygulamanın büründüğü turnuva kimliği (logo, ad, renkler).
 @immutable
 class TournamentTheme {
@@ -69,11 +71,20 @@ class ActiveTournament {
 
   static final theme = ValueNotifier<TournamentTheme?>(null);
 
+  /// Uygulamanın içinde bulunduğu turnuva (teması olmasa da).
+  static final currentLeagueId = ValueNotifier<String?>(null);
+
+  /// Kişinin turnuvaları (bant seçicisi; birden fazlaysa ▾ görünür).
+  static final myLeagues = ValueNotifier<List<LeagueChoice>>(const []);
+
   static const _kTheme = 'active_tournament_theme';
   static const _kGuestLeague = 'guest_last_league';
 
   /// Misafir modu seçildi mi (GuestMode ile aynı anahtar).
   static const _kGuestChosen = 'guest_mode_chosen';
+
+  /// Giriş yapmış kişinin bantta seçtiği turnuva (kullanıcıya göre).
+  static String _kChosen(String uid) => 'chosen_league_$uid';
 
   /// Üst üste gelen refresh çağrılarında yalnızca sonuncusu uygulanır.
   static int _generation = 0;
@@ -101,6 +112,7 @@ class ActiveTournament {
       theme.value = TournamentTheme.fromRow(
         Map<String, dynamic>.from(jsonDecode(raw) as Map),
       );
+      currentLeagueId.value = theme.value?.leagueId;
     } catch (_) {}
   }
 
@@ -110,20 +122,74 @@ class ActiveTournament {
   static Future<void> refresh() async {
     final gen = ++_generation;
     try {
-      String? leagueId;
+      String? id;
+      final prefs = await SharedPreferences.getInstance();
       if (_isRealUser) {
-        final res = await _sb.rpc('my_preferred_league');
-        leagueId = res?.toString();
+        final uid = _sb.auth.currentUser!.id;
+        final choices = await _loadMyLeagues();
+        if (gen == _generation) myLeagues.value = choices;
+        // Bantta seçtiği turnuva hâlâ onun turnuvasıysa o; yoksa en yakın
+        // maçı olan kendi turnuvası.
+        final chosen = prefs.getString(_kChosen(uid));
+        if (chosen != null && choices.any((c) => c.id == chosen)) {
+          id = chosen;
+        } else {
+          final res = await _sb.rpc('my_preferred_league');
+          id = res?.toString();
+        }
       } else {
-        final prefs = await SharedPreferences.getInstance();
+        myLeagues.value = const [];
         if (prefs.getBool(_kGuestChosen) ?? false) {
-          leagueId = prefs.getString(_kGuestLeague);
+          id = prefs.getString(_kGuestLeague);
         }
       }
-      await _apply(leagueId, gen: gen);
+      await _apply(id, gen: gen);
     } catch (e) {
       debugPrint('Turnuva teması belirlenemedi: $e');
     }
+  }
+
+  /// Bant seçicisinden turnuva değişimi: tema, ortak filtre (Fikstür, Puan
+  /// Durumu, İstatistik, ana sayfa) ve cihazdaki seçim birlikte değişir.
+  static Future<void> choose(String id) async {
+    final gen = ++_generation;
+    GlobalFilter.setLeague(id);
+    try {
+      final uid = _sb.auth.currentUser?.id;
+      if (uid != null) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_kChosen(uid), id);
+      }
+      await _apply(id, gen: gen);
+    } catch (e) {
+      debugPrint('Turnuva seçilemedi: $e');
+    }
+  }
+
+  /// Kişinin turnuvaları: admin tüm aktif turnuvalar, diğerleri
+  /// my_league_ids (oyuncu, sorumlu, kurucu, bölge, gözlemci, takipçi).
+  static Future<List<LeagueChoice>> _loadMyLeagues() async {
+    final isAdmin = await _sb.rpc('is_admin') == true;
+    var query = _sb
+        .from('leagues')
+        .select('id, name, short_name, logo_url, is_active');
+    if (!isAdmin) {
+      final ids = ((await _sb.rpc('my_league_ids')) as List? ?? const [])
+          .map((e) => e.toString())
+          .toList();
+      if (ids.length < 2) return const [];
+      query = query.inFilter('id', ids);
+    }
+    final rows = await query.order('name');
+    return [
+      for (final r in rows)
+        if (r['is_active'] != false)
+          LeagueChoice(
+            id: r['id'].toString(),
+            name: (r['name'] ?? '').toString(),
+            logoUrl: (r['logo_url'] ?? '').toString(),
+          ),
+    ];
   }
 
   /// Misafir bir turnuvayı seçip baktığında: uygulama o turnuvaya bürünür.
@@ -153,6 +219,11 @@ class ActiveTournament {
     // Bu arada daha yeni bir refresh başladıysa onun sonucu geçerli.
     if (gen != null && gen != _generation) return;
     theme.value = next;
+    currentLeagueId.value = (leagueId ?? '').isEmpty ? null : leagueId;
+    // Diğer ekranlar da bu turnuvayla açılsın.
+    if (leagueId != null && leagueId.isNotEmpty) {
+      GlobalFilter.setLeague(leagueId);
+    }
     final prefs = await SharedPreferences.getInstance();
     if (next == null) {
       await prefs.remove(_kTheme);
@@ -160,4 +231,18 @@ class ActiveTournament {
       await prefs.setString(_kTheme, jsonEncode(next.toJson()));
     }
   }
+}
+
+/// Bant seçicisindeki bir turnuva.
+@immutable
+class LeagueChoice {
+  const LeagueChoice({
+    required this.id,
+    required this.name,
+    required this.logoUrl,
+  });
+
+  final String id;
+  final String name;
+  final String logoUrl;
 }
