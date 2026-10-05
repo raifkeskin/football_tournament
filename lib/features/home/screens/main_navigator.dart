@@ -15,6 +15,8 @@ import '../../player/screens/profile_screen.dart';
 import '../../player/screens/stats_screen.dart';
 import '../../../core/widgets/app_name_band.dart';
 import '../../../core/widgets/tvl_logo.dart';
+import '../../../core/design_flags.dart';
+import '../widgets/home_dashboard.dart' show DashColors;
 
 /// Sol yan menü (Drawer) ile ana ekranlar arasında geçiş.
 class MainNavigator extends StatefulWidget {
@@ -80,7 +82,10 @@ class _MainNavigatorState extends State<MainNavigator> {
     final user = session.value.user;
     final loggedIn = user != null && !user.isAnonymous;
     final ekranlar = <Widget>[
-      HomeScreen(onOpenNews: () => setState(() => _aktifSekme = 1)),
+      HomeScreen(
+        onOpenNews: () => setState(() => _aktifSekme = 1),
+        onOpenTab: (i) => setState(() => _aktifSekme = i),
+      ),
       const NewsFeedScreen(),
       const FixtureScreen(),
       const GroupsScreen(),
@@ -129,7 +134,13 @@ class _MainNavigatorState extends State<MainNavigator> {
     ];
 
     return Scaffold(
-      extendBody: true,
+      extendBody: !kNewHomeDesign,
+      bottomNavigationBar: kNewHomeDesign
+          ? _BottomBar(
+              index: _aktifSekme,
+              onTap: (i) => setState(() => _aktifSekme = i),
+            )
+          : null,
       drawer: Drawer(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -419,6 +430,76 @@ class _DrawerImageMenuCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Yeni tasarımın alt gezinme çubuğu (Profil yan menüde kalır).
+class _BottomBar extends StatelessWidget {
+  const _BottomBar({required this.index, required this.onTap});
+
+  final int index;
+  final ValueChanged<int> onTap;
+
+  static const _items = [
+    (Icons.home_rounded, 'Ana Sayfa'),
+    (Icons.article_outlined, 'Haberler'),
+    (Icons.format_list_bulleted_rounded, 'Fikstür'),
+    (Icons.emoji_events_outlined, 'Puan Durumu'),
+    (Icons.bar_chart_rounded, 'İstatistik'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<TournamentTheme?>(
+      valueListenable: ActiveTournament.theme,
+      builder: (context, _, _) {
+        final accent = DashColors.accent();
+        return Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF0B1220),
+            border: Border(
+              top: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+            ),
+          ),
+          child: SafeArea(
+            top: false,
+            child: SizedBox(
+              height: 62,
+              child: Row(
+                children: [
+                  for (var i = 0; i < _items.length; i++)
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => onTap(i),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              _items[i].$1,
+                              size: 23,
+                              color: i == index ? accent : Colors.white60,
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              _items[i].$2,
+                              maxLines: 1,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: i == index ? accent : Colors.white60,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

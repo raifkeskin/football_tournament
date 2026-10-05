@@ -25,13 +25,18 @@ import '../../../core/widgets/tvl_logo.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../../core/widgets/youtube_player_page.dart';
 import '../widgets/home_news_card.dart';
+import '../widgets/home_dashboard.dart';
+import '../../../core/design_flags.dart';
 
 /// Ana sayfa — günün maçları, tarih şeridi ve maç kartları.
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, this.onOpenNews});
+  const HomeScreen({super.key, this.onOpenNews, this.onOpenTab});
 
   /// Son dakika haber kartına dokununca (Haberler sekmesine geçiş).
   final VoidCallback? onOpenNews;
+
+  /// Yeni tasarımda bölüm bağlantıları (Fikstür, Puan Durumu, İstatistik).
+  final ValueChanged<int>? onOpenTab;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -200,6 +205,15 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() => _activeLeagueId = pref);
       GlobalFilter.setLeague(pref);
     } catch (_) {}
+  }
+
+  /// Ana gezginin yan menüsünü açar (bu ekranın kendi Scaffold'u menüsüz).
+  void _openMenu(BuildContext ctx) {
+    ScaffoldState? scaffold = Scaffold.maybeOf(ctx);
+    if (scaffold != null && !scaffold.hasDrawer) {
+      scaffold = scaffold.context.findAncestorStateOfType<ScaffoldState>();
+    }
+    scaffold?.openDrawer();
   }
 
   void _onThemeChanged() {
@@ -541,6 +555,16 @@ class _HomeScreenState extends State<HomeScreen> {
                       };
                 _leagueNameById = {for (final l in allLeagues) l.id: l.name};
                 _leagueLogoById = {for (final l in allLeagues) l.id: l.logoUrl};
+
+                if (kNewHomeDesign) {
+                  return HomeDashboard(
+                    key: ValueKey('dash_${currentLeague.id}'),
+                    league: currentLeague,
+                    onOpenNews: () => widget.onOpenNews?.call(),
+                    onOpenTab: (i) => widget.onOpenTab?.call(i),
+                    onOpenMenu: () => _openMenu(context),
+                  );
+                }
 
                 // Tek satırlık üst bant: durum çubuğu + 60px tarih şeridi.
                 final headerHeight = MediaQuery.of(context).padding.top + 80;
