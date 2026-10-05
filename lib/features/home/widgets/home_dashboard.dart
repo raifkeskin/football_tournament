@@ -585,7 +585,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
     final first = (session.displayName ?? '').trim().split(' ').first;
     final myGroup = data == null ? null : _myGroupId(data);
     final sub = !loggedIn
-        ? 'Misafir olarak geziyorsun'
+        ? 'Misafir girişi'
         : [
             if (data != null && data.seasonName.isNotEmpty) data.seasonName,
             if (myGroup != null)
