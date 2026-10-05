@@ -162,6 +162,11 @@ class ActiveTournament {
         } else {
           final res = await _sb.rpc('my_preferred_league');
           id = res?.toString();
+          // Hiçbir turnuvaya bağlı olmayan (ör. admin): varsayılan sezonu
+          // olan turnuva, yoksa listedeki ilki; bant seçicisi görünür olur.
+          if ((id == null || id.isEmpty) && choices.isNotEmpty) {
+            id = await _defaultLeague(choices);
+          }
         }
       } else {
         final guest = prefs.getBool(_kGuestChosen) ?? false;
@@ -174,23 +179,25 @@ class ActiveTournament {
           id = prefs.getString(_kGuestLeague);
           // Henüz seçmediyse varsayılan sezonu olan turnuva (yoksa ilki):
           // bant giriş yapmış kişidekiyle aynı görünür.
-          if (id == null || id.isEmpty) {
-            final def = await _sb
-                .from('seasons')
-                .select('league_id')
-                .eq('is_default', true)
-                .limit(1);
-            final defId = def.isEmpty ? null : def.first['league_id'];
-            id = choices.any((c) => c.id == defId)
-                ? defId.toString()
-                : (choices.isEmpty ? null : choices.first.id);
-          }
+          if (id == null || id.isEmpty) id = await _defaultLeague(choices);
         }
       }
       await _apply(id, gen: gen);
     } catch (e) {
       debugPrint('Turnuva teması belirlenemedi: $e');
     }
+  }
+
+  /// Varsayılan sezonu olan turnuva (listede varsa), yoksa listedeki ilki.
+  static Future<String?> _defaultLeague(List<LeagueChoice> choices) async {
+    final def = await _sb
+        .from('seasons')
+        .select('league_id')
+        .eq('is_default', true)
+        .limit(1);
+    final defId = def.isEmpty ? null : def.first['league_id']?.toString();
+    if (choices.any((c) => c.id == defId)) return defId;
+    return choices.isEmpty ? null : choices.first.id;
   }
 
   /// Bant seçicisinden turnuva değişimi: tema, ortak filtre (Fikstür, Puan

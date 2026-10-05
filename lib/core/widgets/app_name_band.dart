@@ -50,23 +50,35 @@ class AppNameBand extends StatelessWidget {
                     ? null
                     : panelActions.value;
                 if (t == null || genericScreens.value > 0) {
-                  return actions == null
-                      ? tvlBand!
-                      : Stack(
-                          children: [
-                            tvlBand!,
-                            Positioned(
-                              left: 4,
-                              bottom: 3,
-                              child: actions.menuButton(Colors.white),
-                            ),
-                            Positioned(
-                              right: 4,
-                              bottom: 3,
-                              child: actions.logoutButton(),
-                            ),
-                          ],
+                  // Turnuva seçilmemişse de kişinin turnuvaları arasında
+                  // geçiş yapılabilsin (giriş ekranında değil).
+                  final switcher = genericScreens.value > 0
+                      ? null
+                      : const Positioned(
+                          right: 4,
+                          bottom: 3,
+                          child: LeagueSwitchButton(),
                         );
+                  if (actions == null) {
+                    return switcher == null
+                        ? tvlBand!
+                        : Stack(children: [tvlBand!, switcher]);
+                  }
+                  return Stack(
+                    children: [
+                      tvlBand!,
+                      Positioned(
+                        left: 4,
+                        bottom: 3,
+                        child: actions.menuButton(Colors.white),
+                      ),
+                      Positioned(
+                        right: 4,
+                        bottom: 3,
+                        child: actions.logoutButton(),
+                      ),
+                    ],
+                  );
                 }
                 return _TournamentBand(theme: t, top: top, actions: actions);
               },
