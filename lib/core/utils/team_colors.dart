@@ -88,3 +88,58 @@ class TeamPalette {
     return la > lb ? la / lb : lb / la;
   }
 }
+
+/// Maç başlığında iki tarafın renkleri: [home] / [away] zemin, [homeStripe] /
+/// [awayStripe] alt şerit (takımın diğer rengi).
+typedef MatchSideColors = ({
+  Color home,
+  Color homeStripe,
+  Color away,
+  Color awayStripe,
+});
+
+/// Sahadaki forma kuralı gibi: ev sahibi ana rengini kullanır; deplasmanın
+/// ana rengi çok yakınsa ikinci rengine geçer; o da yakınsa ev sahibi ikinci
+/// rengine geçer; hepsi aynıysa deplasman koyu nötr zemine döner. Renk
+/// girilmemiş tarafta [fallback] kullanılır.
+MatchSideColors matchSideColors({
+  String? homeFirst,
+  String? homeSecond,
+  String? awayFirst,
+  String? awaySecond,
+  required Color fallback,
+}) {
+  final h1 = parseHexColor(homeFirst) ?? fallback;
+  final h2 = parseHexColor(homeSecond);
+  final a1 = parseHexColor(awayFirst) ?? fallback;
+  final a2 = parseHexColor(awaySecond);
+  const white = Color(0xFFFFFFFF);
+  const neutral = Color(0xFF334155);
+
+  if (!colorsClash(h1, a1)) {
+    return (
+      home: h1,
+      homeStripe: h2 ?? white,
+      away: a1,
+      awayStripe: a2 ?? white,
+    );
+  }
+  if (a2 != null && !colorsClash(h1, a2)) {
+    return (home: h1, homeStripe: h2 ?? white, away: a2, awayStripe: a1);
+  }
+  if (h2 != null && !colorsClash(h2, a1)) {
+    return (home: h2, homeStripe: h1, away: a1, awayStripe: a2 ?? white);
+  }
+  return (home: h1, homeStripe: h2 ?? white, away: neutral, awayStripe: a1);
+}
+
+/// İki renk yan yana ayırt edilemeyecek kadar yakın mı ("redmean" uzaklığı).
+bool colorsClash(Color a, Color b) {
+  final r1 = a.r * 255, g1 = a.g * 255, b1 = a.b * 255;
+  final r2 = b.r * 255, g2 = b.g * 255, b2 = b.b * 255;
+  final rm = (r1 + r2) / 2;
+  final dr = r1 - r2, dg = g1 - g2, db = b1 - b2;
+  final d2 =
+      (2 + rm / 256) * dr * dr + 4 * dg * dg + (2 + (255 - rm) / 256) * db * db;
+  return d2 < 130 * 130;
+}

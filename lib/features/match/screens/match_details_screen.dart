@@ -720,12 +720,24 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
             }
             final Map<String, String> logoMap = {};
             final Map<String, String> nameMap = {};
+            Team? homeTeam, awayTeam;
             if (teamsSnap.hasData) {
               for (final team in teamsSnap.data!) {
                 logoMap[team.id] = team.logoUrl;
                 nameMap[team.id] = team.name;
+                if (team.id == m.homeTeamId) homeTeam = team;
+                if (team.id == m.awayTeamId) awayTeam = team;
               }
             }
+            final sides = matchSideColors(
+              homeFirst: homeTeam?.firstColor,
+              homeSecond: homeTeam?.secondColor,
+              awayFirst: awayTeam?.firstColor,
+              awaySecond: awayTeam?.secondColor,
+              fallback:
+                  ActiveTournament.theme.value?.primary ??
+                  const Color(0xFF064E3B),
+            );
 
             final homeLogo = (logoMap[m.homeTeamId] ?? '').trim();
             final awayLogo = (logoMap[m.awayTeamId] ?? '').trim();
@@ -788,31 +800,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                 children: [
                   Stack(
                     children: [
-                      // Fotoğraf yerine turnuvanın ana renginden zemin.
+                      // Takım renkleriyle çapraz bölünmüş zemin + alt şerit.
                       Positioned.fill(
-                        child: ColoredBox(
-                          color:
-                              ActiveTournament.theme.value?.primary ??
-                              const Color(0xFF064E3B),
-                        ),
-                      ),
-                      // Okunurluk için koyu gradient: üstte ve altta koyulaşır,
-                      // alt kenar sayfa zeminine yumuşakça bağlanır.
-                      Positioned.fill(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                Colors.black.withValues(alpha: 0.70),
-                                const Color(0xFF0F172A).withValues(alpha: 0.55),
-                                const Color(0xFF0F172A).withValues(alpha: 0.95),
-                              ],
-                              stops: const [0.0, 0.5, 1.0],
-                            ),
-                          ),
-                        ),
+                        child: CustomPaint(painter: _SplitHeaderPainter(sides)),
                       ),
                       Padding(
                         padding: EdgeInsets.only(
@@ -997,33 +987,24 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                               key: ValueKey('live_${m.id}_$_refreshKey'),
                               matchId: m.id,
                             ),
+                            // Tam genişlikte sekme satırı: başlığın altında
+                            // ayrı bir şerit, seçili sekmenin altı çizili.
                             Container(
-                              height: 42,
-                              margin: const EdgeInsets.fromLTRB(12, 10, 12, 6),
-                              padding: const EdgeInsets.all(4),
+                              height: 46,
                               decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.4),
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.1),
+                                color: const Color(0xFF111A2E),
+                                border: Border(
+                                  bottom: BorderSide(
+                                    color: Colors.white.withValues(alpha: 0.08),
+                                  ),
                                 ),
                               ),
                               child: TabBar(
                                 controller: _tabController,
                                 dividerColor: Colors.transparent,
                                 indicatorSize: TabBarIndicatorSize.tab,
-                                indicator: BoxDecoration(
-                                  color: const Color(0xFF10B981),
-                                  borderRadius: BorderRadius.circular(10),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: const Color(
-                                        0xFF10B981,
-                                      ).withValues(alpha: 0.35),
-                                      blurRadius: 8,
-                                    ),
-                                  ],
-                                ),
+                                indicatorColor: const Color(0xFF10B981),
+                                indicatorWeight: 3,
                                 labelColor: Colors.white,
                                 unselectedLabelColor: Colors.white60,
                                 overlayColor: WidgetStateProperty.all(
@@ -1035,12 +1016,12 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                 labelStyle: const TextStyle(
                                   fontFamily: 'Batangas',
                                   fontWeight: FontWeight.w900,
-                                  fontSize: 12.5,
+                                  fontSize: 13.5,
                                 ),
                                 unselectedLabelStyle: const TextStyle(
                                   fontFamily: 'Batangas',
                                   fontWeight: FontWeight.w600,
-                                  fontSize: 12.5,
+                                  fontSize: 13.5,
                                 ),
                                 tabs: const [
                                   Tab(text: 'Detay'),
@@ -4220,4 +4201,68 @@ class _DetailEventTile extends StatelessWidget {
       child: tile,
     );
   }
+}
+
+/// Maç başlığının zemini: sol ev sahibi, sağ deplasman rengi; ortada hafif
+/// eğik beyaz kesik, okunurluk için koyu perde ve altta iki takımın diğer
+/// renklerinden ince şerit.
+class _SplitHeaderPainter extends CustomPainter {
+  const _SplitHeaderPainter(this.sides);
+
+  final MatchSideColors sides;
+
+  static const _stripe = 4.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width, h = size.height - _stripe;
+    final tilt = h * 0.13;
+    final left = Path()
+      ..moveTo(0, 0)
+      ..lineTo(w / 2 + tilt, 0)
+      ..lineTo(w / 2 - tilt, h)
+      ..lineTo(0, h)
+      ..close();
+    final right = Path()
+      ..moveTo(w / 2 + tilt, 0)
+      ..lineTo(w, 0)
+      ..lineTo(w, h)
+      ..lineTo(w / 2 - tilt, h)
+      ..close();
+    canvas.drawPath(left, Paint()..color = sides.home);
+    canvas.drawPath(right, Paint()..color = sides.away);
+    canvas.drawLine(
+      Offset(w / 2 + tilt, 0),
+      Offset(w / 2 - tilt, h),
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.85)
+        ..strokeWidth = 3,
+    );
+    final rect = Rect.fromLTWH(0, 0, w, h);
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.black.withValues(alpha: 0.45),
+            Colors.black.withValues(alpha: 0.18),
+            Colors.black.withValues(alpha: 0.55),
+          ],
+          stops: const [0.0, 0.45, 1.0],
+        ).createShader(rect),
+    );
+    canvas.drawRect(
+      Rect.fromLTWH(0, h, w / 2, _stripe),
+      Paint()..color = sides.homeStripe,
+    );
+    canvas.drawRect(
+      Rect.fromLTWH(w / 2, h, w / 2, _stripe),
+      Paint()..color = sides.awayStripe,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_SplitHeaderPainter old) => old.sides != sides;
 }
