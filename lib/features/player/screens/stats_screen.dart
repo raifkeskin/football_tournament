@@ -65,6 +65,10 @@ class _StatsScreenState extends State<StatsScreen> {
   String? _playersKey;
   Future<Map<String, _PlayerLite>>? _playersFuture;
 
+  /// Şimdiye kadar okunan oyuncular (ekran yeniden çizilince isimler
+  /// bir an kaybolup geri gelmesin).
+  static final Map<String, _PlayerLite> _playersKnown = {};
+
   Future<Map<String, _PlayerLite>> _playersFor(Set<String> ids) {
     final key = (ids.toList()..sort()).join(',');
     if (key == _playersKey && _playersFuture != null) return _playersFuture!;
@@ -105,6 +109,7 @@ class _StatsScreenState extends State<StatsScreen> {
           if (key.isNotEmpty) out[key] = p;
         }
       }
+      _playersKnown.addAll(out);
       return out;
     }();
   }
@@ -332,13 +337,25 @@ class _StatsScreenState extends State<StatsScreen> {
                                         Map<String, _PlayerLite>
                                       >(
                                         future: _playersFor(ids),
-                                        builder: (context, pSnap) => _StatsTabs(
-                                          stats: stats,
-                                          teamById: teamById,
-                                          players:
-                                              pSnap.data ??
-                                              const <String, _PlayerLite>{},
-                                        ),
+                                        initialData:
+                                            ids.every(_playersKnown.containsKey)
+                                            ? _playersKnown
+                                            : null,
+                                        builder: (context, pSnap) {
+                                          // İsimler gelmeden ham anahtarlar
+                                          // gösterilmez.
+                                          if (!pSnap.hasData) {
+                                            return const Center(
+                                              child:
+                                                  CircularProgressIndicator(),
+                                            );
+                                          }
+                                          return _StatsTabs(
+                                            stats: stats,
+                                            teamById: teamById,
+                                            players: pSnap.data!,
+                                          );
+                                        },
                                       );
                                     },
                                   );

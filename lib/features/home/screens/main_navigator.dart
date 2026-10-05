@@ -56,6 +56,9 @@ class _MainNavigatorState extends State<MainNavigator> {
 
   late int _aktifSekme = widget.initialTabIndex;
 
+  /// Yan menüyü kaydırma hareketinden açmak için.
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
+
   void _sekmeDegistir(int index) {
     setState(() {
       _aktifSekme = index;
@@ -134,6 +137,7 @@ class _MainNavigatorState extends State<MainNavigator> {
     ];
 
     return Scaffold(
+      key: _scaffoldKey,
       extendBody: !kNewHomeDesign,
       bottomNavigationBar: kNewHomeDesign
           ? _BottomBar(
@@ -321,7 +325,26 @@ class _MainNavigatorState extends State<MainNavigator> {
         valueListenable: LeagueAccess.dataEpoch,
         builder: (context, epoch, _) => KeyedSubtree(
           key: ValueKey('data_$epoch'),
-          child: IndexedStack(index: _aktifSekme, children: ekranlar),
+          // Ana sekmeler parmakla kaydırılır (Ana Sayfa → Haberler →
+          // Fikstür → Puan Durumu → İstatistik); Profil menüden açılır ve
+          // sekmelerin üstünde durur.
+          child: Stack(
+            children: [
+              _TabPager(
+                index: _aktifSekme < 5 ? _aktifSekme : null,
+                onChanged: (i) => setState(() => _aktifSekme = i),
+                onSwipePastFirst: () => _scaffoldKey.currentState?.openDrawer(),
+                children: ekranlar.take(5).toList(),
+              ),
+              Offstage(
+                offstage: _aktifSekme != 5,
+                child: TickerMode(
+                  enabled: _aktifSekme == 5,
+                  child: ekranlar[5],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -501,5 +524,100 @@ class _BottomBar extends StatelessWidget {
         );
       },
     );
+  }
+}
+
+/// Kaydırılabilir ana sekmeler. Sayfalar açık kalır (sekmeye dönünce
+/// yeniden yüklenmez). İlk sekmede sağa kaydırmak yan menüyü açar.
+class _TabPager extends StatefulWidget {
+  const _TabPager({
+    required this.index,
+    required this.onChanged,
+    required this.onSwipePastFirst,
+    required this.children,
+  });
+
+  /// Gösterilecek sekme; null ise (Profil açık) sayfa yerinde kalır.
+  final int? index;
+  final ValueChanged<int> onChanged;
+  final VoidCallback onSwipePastFirst;
+  final List<Widget> children;
+
+  @override
+  State<_TabPager> createState() => _TabPagerState();
+}
+
+class _TabPagerState extends State<_TabPager> {
+  late final PageController _controller = PageController(
+    initialPage: widget.index ?? 0,
+  );
+
+  /// Bir sürükleme boyunca menü yalnızca bir kez açılsın.
+  bool _drawerFired = false;
+
+  @override
+  void didUpdateWidget(covariant _TabPager oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final i = widget.index;
+    if (i != null && _controller.hasClients) {
+      final current = _controller.page?.round();
+      if (current != i) _controller.jumpToPage(i);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  bool _onScroll(ScrollNotification n) {
+    // Yalnızca sekmelerin kendi kaydırması (iç listeler değil).
+    if (n.depth != 0 || n.metrics.axis != Axis.horizontal) return false;
+    if (n is ScrollStartNotification) _drawerFired = false;
+    if (n is OverscrollNotification &&
+        n.overscroll < 0 &&
+        n.metrics.pixels <= n.metrics.minScrollExtent &&
+        !_drawerFired) {
+      _drawerFired = true;
+      widget.onSwipePastFirst();
+    }
+    return false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return NotificationListener<ScrollNotification>(
+      onNotification: _onScroll,
+      child: PageView(
+        controller: _controller,
+        physics: const ClampingScrollPhysics(),
+        // Yandaki sekme önceden hazırlanır: kaydırınca boş ekran görünmez.
+        allowImplicitScrolling: true,
+        onPageChanged: widget.onChanged,
+        children: [for (final c in widget.children) _KeepAlive(child: c)],
+      ),
+    );
+  }
+}
+
+class _KeepAlive extends StatefulWidget {
+  const _KeepAlive({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_KeepAlive> createState() => _KeepAliveState();
+}
+
+class _KeepAliveState extends State<_KeepAlive>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
   }
 }
