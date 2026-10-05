@@ -357,7 +357,10 @@ class _MenuDrawer extends StatelessWidget {
     if (s.isAdmin) return 'Admin';
     if (s.isLeagueOwner) return 'Kurucu Başkan';
     if (s.isRegionOwner) return 'Bölge Sorumlusu';
-    if (s.isManager || s.managedTeams.isNotEmpty) return 'Takım Sorumlusu';
+    final manager = s.isManager || s.managedTeams.isNotEmpty;
+    // Hem futbolcu hem takım sorumlusu olan kişide iki rol birlikte yazılır.
+    if (manager && s.playerId != null) return 'Futbolcu · Takım Sorumlusu';
+    if (manager) return 'Takım Sorumlusu';
     if (s.playerId != null) return 'Futbolcu';
     return 'Üye';
   }
