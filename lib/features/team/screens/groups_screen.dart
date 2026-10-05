@@ -244,10 +244,10 @@ class _GroupsScreenState extends State<GroupsScreen> {
                               ? Stream.value([])
                               : _getGroupsStream(_selectedSeasonId!),
                           builder: (context, groupSnap) {
-                            // Seçilecek tek sezon ve tek grup varsa filtre
-                            // gösterilmez (turnuva zaten üst bantta).
-                            final groupCount = groupSnap.data?.length ?? 0;
-                            if (seasons.length < 2 && groupCount < 2) {
+                            // Gruplar/bölgeler zaten sekme olarak görünür;
+                            // filtre yalnızca turnuvada birden fazla aktif
+                            // sezon varsa gösterilir.
+                            if (seasons.where((s) => s.isActive).length < 2) {
                               return const SizedBox(height: 4);
                             }
                             return Padding(

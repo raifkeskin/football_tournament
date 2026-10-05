@@ -238,8 +238,8 @@ class _StatsScreenState extends State<StatsScreen> {
                                   .name;
 
                         // Fikstür ve puan durumuyla aynı filtre kapsülü;
-                        // seçilecek tek sezon varsa gösterilmez.
-                        if (seasons.length < 2) {
+                        // birden fazla aktif sezon yoksa gösterilmez.
+                        if (seasons.where((s) => s.isActive).length < 2) {
                           return const SizedBox(height: 4);
                         }
                         return Padding(
