@@ -6,6 +6,7 @@ import '../../../core/services/active_tournament.dart';
 import '../../../core/services/league_scope.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/widgets/web_safe_image.dart';
+import '../../match/screens/live_draw_screen.dart';
 import '../../news/screens/news_feed_screen.dart';
 import '../../tournament/models/league_extras.dart';
 
@@ -101,15 +102,29 @@ class _HomeNewsCardState extends State<HomeNewsCard> {
             )
             .take(_maxItems)
             .toList();
+        // Canlı kura haberi dönen kartta değil, üstte kendi kartıyla
+        // (geri sayım / CANLI / sonuçlar) gösterilir.
+        final draw = items.where((n) => n.liveDrawId != null).firstOrNull;
+        items.removeWhere((n) => n.liveDrawId != null);
+        final drawCard = draw == null
+            ? null
+            : Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: LiveDrawNewsCard(
+                  key: ValueKey(draw.liveDrawId),
+                  drawId: draw.liveDrawId!,
+                  content: draw.content,
+                ),
+              );
         _syncTimer(items.length);
-        if (items.isEmpty) return const SizedBox.shrink();
+        if (items.isEmpty) return drawCard ?? const SizedBox.shrink();
         if (_index >= items.length) _index = 0;
 
         final theme = ActiveTournament.theme.value;
         final primary = theme?.primary ?? const Color(0xFF0B2A6B);
         final accent = theme?.secondary ?? const Color(0xFFD4A017);
 
-        return Padding(
+        final normal = Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
           child: Material(
             color: Colors.transparent,
@@ -228,6 +243,7 @@ class _HomeNewsCardState extends State<HomeNewsCard> {
             ),
           ),
         );
+        return drawCard == null ? normal : Column(children: [drawCard, normal]);
       },
     );
   }
