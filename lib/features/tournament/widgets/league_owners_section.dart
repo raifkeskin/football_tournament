@@ -256,77 +256,78 @@ Future<({String name, String phone})?> _showAddOwnerDialog(
         return Dialog(
           backgroundColor: Colors.transparent,
           insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Container(
-            padding: const EdgeInsets.all(22),
-            decoration: adminDialogDecoration(),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                AdminDialogHeader(
-                  icon: Icons.person_add_alt_1_outlined,
-                  title: region
-                      ? 'Bölge Sorumlusu Ekle'
-                      : 'Turnuva Sahibi Ekle',
-                  subtitle:
-                      'Kişi bu telefonla Kayıt Ol\'dan kayıt olup '
-                      'onaylandığında ${region ? 'bölgeyi' : 'turnuvayı'} '
-                      'yönetebilir.',
-                ),
-                const SizedBox(height: 16),
-                AdminFieldGroup(
-                  children: [
-                    AdminFieldRow(
-                      icon: Icons.person_outline_rounded,
-                      label: 'Ad Soyad',
-                      child: TextField(
-                        controller: nameCtrl,
-                        autofocus: true,
-                        textCapitalization: TextCapitalization.words,
-                        onChanged: (_) => setState(() {}),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                        ),
-                        decoration: adminInlineInputDecoration(
-                          hint: 'Örn. Ahmet Yılmaz',
-                        ),
-                      ),
-                    ),
-                    AdminFieldRow(
-                      icon: Icons.phone_iphone_rounded,
-                      label: 'Cep Telefonu',
-                      child: TextField(
-                        controller: phoneCtrl,
-                        keyboardType: TextInputType.phone,
-                        inputFormatters: [PhoneMaskFormatter()],
-                        onChanged: (_) => setState(() {}),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                        ),
-                        decoration: adminInlineInputDecoration(
-                          hint: '(5XX) XXX XX XX',
+          child: AdminDialogCloseOverlay(
+            onClose: () => Navigator.pop(ctx),
+            child: Container(
+              padding: const EdgeInsets.all(22),
+              decoration: adminDialogDecoration(),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  AdminDialogHeader(
+                    icon: Icons.person_add_alt_1_outlined,
+                    title: region
+                        ? 'Bölge Sorumlusu Ekle'
+                        : 'Turnuva Sahibi Ekle',
+                    subtitle:
+                        'Kişi bu telefonla Kayıt Ol\'dan kayıt olup '
+                        'onaylandığında ${region ? 'bölgeyi' : 'turnuvayı'} '
+                        'yönetebilir.',
+                  ),
+                  const SizedBox(height: 16),
+                  AdminFieldGroup(
+                    children: [
+                      AdminFieldRow(
+                        icon: Icons.person_outline_rounded,
+                        label: 'Ad Soyad',
+                        child: TextField(
+                          controller: nameCtrl,
+                          autofocus: true,
+                          textCapitalization: TextCapitalization.words,
+                          onChanged: (_) => setState(() {}),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          decoration: adminInlineInputDecoration(
+                            hint: 'Örn. Ahmet Yılmaz',
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 22),
-                AdminPrimaryButton(
-                  label: 'EKLE',
-                  onPressed: !valid
-                      ? null
-                      : () => Navigator.pop(ctx, (
-                          name: nameCtrl.text.trim(),
-                          phone: digits,
-                        )),
-                ),
-                const SizedBox(height: 10),
-                AdminSecondaryButton(onPressed: () => Navigator.pop(ctx)),
-              ],
+                      AdminFieldRow(
+                        icon: Icons.phone_iphone_rounded,
+                        label: 'Cep Telefonu',
+                        child: TextField(
+                          controller: phoneCtrl,
+                          keyboardType: TextInputType.phone,
+                          inputFormatters: [PhoneMaskFormatter()],
+                          onChanged: (_) => setState(() {}),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          decoration: adminInlineInputDecoration(
+                            hint: '(5XX) XXX XX XX',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 22),
+                  AdminPrimaryButton(
+                    label: 'EKLE',
+                    onPressed: !valid
+                        ? null
+                        : () => Navigator.pop(ctx, (
+                            name: nameCtrl.text.trim(),
+                            phone: digits,
+                          )),
+                  ),
+                ],
+              ),
             ),
           ),
         );

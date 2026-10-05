@@ -1205,40 +1205,39 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
           return Dialog(
             backgroundColor: Colors.transparent,
             insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Container(
-              padding: const EdgeInsets.all(22),
-              decoration: adminDialogDecoration(),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const AdminDialogHeader(
-                    icon: Icons.stadium_outlined,
-                    title: 'Saha Seçimi',
-                  ),
-                  const SizedBox(height: 18),
-                  AdminFieldGroup(
-                    children: [
-                      AdminSelectRow(
-                        icon: Icons.location_on_outlined,
-                        label: 'Saha',
-                        value: sel,
-                        placeholder: 'Saha seçin',
-                        onTap: saving ? null : pick,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 22),
-                  AdminPrimaryButton(
-                    label: 'KAYDET',
-                    busy: saving,
-                    onPressed: save,
-                  ),
-                  const SizedBox(height: 10),
-                  AdminSecondaryButton(
-                    onPressed: saving ? null : () => Navigator.pop(c),
-                  ),
-                ],
+            child: AdminDialogCloseOverlay(
+              onClose: saving ? null : () => Navigator.pop(c),
+              child: Container(
+                padding: const EdgeInsets.all(22),
+                decoration: adminDialogDecoration(),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const AdminDialogHeader(
+                      icon: Icons.stadium_outlined,
+                      title: 'Saha Seçimi',
+                    ),
+                    const SizedBox(height: 18),
+                    AdminFieldGroup(
+                      children: [
+                        AdminSelectRow(
+                          icon: Icons.location_on_outlined,
+                          label: 'Saha',
+                          value: sel,
+                          placeholder: 'Saha seçin',
+                          onTap: saving ? null : pick,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 22),
+                    AdminPrimaryButton(
+                      label: 'KAYDET',
+                      busy: saving,
+                      onPressed: save,
+                    ),
+                  ],
+                ),
               ),
             ),
           );
@@ -1326,139 +1325,138 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-      child: Container(
-        decoration: adminDialogDecoration(),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(22),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const AdminDialogHeader(
-                icon: Icons.perm_media_outlined,
-                title: 'Medya Ekle',
-              ),
-              const SizedBox(height: 18),
-              AdminFieldGroup(
-                children: [
-                  AdminSelectRow(
-                    icon: _typeIcon(_selectedType),
-                    label: 'Medya Türü',
-                    value: _selectedType,
-                    placeholder: 'Seçin',
-                    onTap: _isUploading
-                        ? null
-                        : () async {
-                            final v = await showAdminOptionPicker<String>(
-                              context: context,
-                              title: 'Medya Türü',
-                              items: _types,
-                              labelBuilder: (t) => t,
-                              selected: _selectedType,
-                            );
-                            if (v != null && mounted) {
-                              setState(() {
-                                _selectedType = v;
-                                _pickedFile = null;
-                              });
-                            }
-                          },
-                  ),
-                  if (isLink)
-                    _inputRow(
-                      icon: Icons.link_rounded,
-                      label: 'YouTube Linki',
-                      controller: _urlCtrl,
-                      hint: 'https://youtube.com/...',
-                      keyboardType: TextInputType.url,
-                    )
-                  else
-                    AdminFieldRow(
-                      icon: Icons.image_outlined,
-                      label: 'Görsel',
-                      onTap: _isUploading
-                          ? null
-                          : () async {
-                              final picked = await ImagePicker().pickImage(
-                                source: ImageSource.gallery,
-                                imageQuality: 85,
-                              );
-                              if (picked != null && mounted) {
-                                setState(() => _pickedFile = picked);
-                              }
-                            },
-                      trailing: const Icon(
-                        Icons.chevron_right_rounded,
-                        color: Colors.white54,
-                      ),
-                      child: Text(
-                        _pickedFile == null
-                            ? 'Galeriden seçin'
-                            : 'Görsel seçildi',
-                        style: TextStyle(
-                          color: _pickedFile == null
-                              ? Colors.white38
-                              : Colors.white,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  if (_selectedType == 'Takım Fotosu')
+      child: AdminDialogCloseOverlay(
+        onClose: _isUploading ? null : () => Navigator.pop(context),
+        child: Container(
+          decoration: adminDialogDecoration(),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(22),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const AdminDialogHeader(
+                  icon: Icons.perm_media_outlined,
+                  title: 'Medya Ekle',
+                ),
+                const SizedBox(height: 18),
+                AdminFieldGroup(
+                  children: [
                     AdminSelectRow(
-                      icon: Icons.shield_outlined,
-                      label: 'Takım',
-                      value: _isHomeTeam ? 'Ev Sahibi' : 'Deplasman',
+                      icon: _typeIcon(_selectedType),
+                      label: 'Medya Türü',
+                      value: _selectedType,
                       placeholder: 'Seçin',
                       onTap: _isUploading
                           ? null
                           : () async {
-                              final v = await showAdminOptionPicker<bool>(
+                              final v = await showAdminOptionPicker<String>(
                                 context: context,
-                                title: 'Takım',
-                                items: const [true, false],
-                                labelBuilder: (h) =>
-                                    h ? 'Ev Sahibi' : 'Deplasman',
-                                selected: _isHomeTeam,
+                                title: 'Medya Türü',
+                                items: _types,
+                                labelBuilder: (t) => t,
+                                selected: _selectedType,
                               );
                               if (v != null && mounted) {
-                                setState(() => _isHomeTeam = v);
+                                setState(() {
+                                  _selectedType = v;
+                                  _pickedFile = null;
+                                });
                               }
                             },
                     ),
-                  _inputRow(
-                    icon: Icons.notes_rounded,
-                    label: 'Açıklama (İsteğe Bağlı)',
-                    controller: _descCtrl,
-                    hint: 'Kısa bir açıklama',
-                    maxLines: 2,
-                  ),
-                ],
-              ),
-              if (!isLink && _pickedFile != null) ...[
-                const SizedBox(height: 14),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: AspectRatio(
-                    aspectRatio: 16 / 9,
-                    child: Image(
-                      image: pickedImageProvider(_pickedFile!),
-                      fit: BoxFit.cover,
+                    if (isLink)
+                      _inputRow(
+                        icon: Icons.link_rounded,
+                        label: 'YouTube Linki',
+                        controller: _urlCtrl,
+                        hint: 'https://youtube.com/...',
+                        keyboardType: TextInputType.url,
+                      )
+                    else
+                      AdminFieldRow(
+                        icon: Icons.image_outlined,
+                        label: 'Görsel',
+                        onTap: _isUploading
+                            ? null
+                            : () async {
+                                final picked = await ImagePicker().pickImage(
+                                  source: ImageSource.gallery,
+                                  imageQuality: 85,
+                                );
+                                if (picked != null && mounted) {
+                                  setState(() => _pickedFile = picked);
+                                }
+                              },
+                        trailing: const Icon(
+                          Icons.chevron_right_rounded,
+                          color: Colors.white54,
+                        ),
+                        child: Text(
+                          _pickedFile == null
+                              ? 'Galeriden seçin'
+                              : 'Görsel seçildi',
+                          style: TextStyle(
+                            color: _pickedFile == null
+                                ? Colors.white38
+                                : Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    if (_selectedType == 'Takım Fotosu')
+                      AdminSelectRow(
+                        icon: Icons.shield_outlined,
+                        label: 'Takım',
+                        value: _isHomeTeam ? 'Ev Sahibi' : 'Deplasman',
+                        placeholder: 'Seçin',
+                        onTap: _isUploading
+                            ? null
+                            : () async {
+                                final v = await showAdminOptionPicker<bool>(
+                                  context: context,
+                                  title: 'Takım',
+                                  items: const [true, false],
+                                  labelBuilder: (h) =>
+                                      h ? 'Ev Sahibi' : 'Deplasman',
+                                  selected: _isHomeTeam,
+                                );
+                                if (v != null && mounted) {
+                                  setState(() => _isHomeTeam = v);
+                                }
+                              },
+                      ),
+                    _inputRow(
+                      icon: Icons.notes_rounded,
+                      label: 'Açıklama (İsteğe Bağlı)',
+                      controller: _descCtrl,
+                      hint: 'Kısa bir açıklama',
+                      maxLines: 2,
+                    ),
+                  ],
+                ),
+                if (!isLink && _pickedFile != null) ...[
+                  const SizedBox(height: 14),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: AspectRatio(
+                      aspectRatio: 16 / 9,
+                      child: Image(
+                        image: pickedImageProvider(_pickedFile!),
+                        fit: BoxFit.cover,
+                      ),
                     ),
                   ),
+                ],
+                const SizedBox(height: 22),
+                AdminPrimaryButton(
+                  label: 'KAYDET',
+                  busy: _isUploading,
+                  onPressed: _save,
                 ),
               ],
-              const SizedBox(height: 22),
-              AdminPrimaryButton(
-                label: 'KAYDET',
-                busy: _isUploading,
-                onPressed: _save,
-              ),
-              const SizedBox(height: 10),
-              AdminSecondaryButton(
-                onPressed: _isUploading ? null : () => Navigator.pop(context),
-              ),
-            ],
+            ),
           ),
         ),
       ),

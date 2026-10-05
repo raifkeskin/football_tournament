@@ -435,92 +435,88 @@ Future<void> showSquadBulkUploadDialog({
           insetPadding: const EdgeInsets.symmetric(horizontal: 20),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 460),
-            child: Container(
-              decoration: adminDialogDecoration(),
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(22),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    AdminDialogHeader(
-                      icon: Icons.upload_file_rounded,
-                      title: 'Toplu Kadro Yükle',
-                      subtitle: teamName,
-                    ),
-                    const SizedBox(height: 18),
-                    AdminFieldGroup(
-                      children: [
-                        action(
-                          icon: Icons.download_rounded,
-                          label: 'Örnek Şablon',
-                          value: 'Şablonu indir',
-                          onTap: busy ? null : downloadTemplate,
-                        ),
-                        action(
-                          icon: Icons.upload_file_rounded,
-                          label: 'Dosya (.xls / .xlsx / .csv / .numbers)',
-                          value: pickedFileName ?? 'Dosya seçin',
-                          onTap: busy ? null : pickAndParse,
-                        ),
-                      ],
-                    ),
-                    if (pickedFileName != null) ...[
-                      const SizedBox(height: 14),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        alignment: WrapAlignment.center,
+            child: AdminDialogCloseOverlay(
+              onClose: busy ? null : () => Navigator.pop(dialogContext),
+              child: Container(
+                decoration: adminDialogDecoration(),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(22),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      AdminDialogHeader(
+                        icon: Icons.upload_file_rounded,
+                        title: 'Toplu Kadro Yükle',
+                        subtitle: teamName,
+                      ),
+                      const SizedBox(height: 18),
+                      AdminFieldGroup(
                         children: [
-                          for (final (label, color) in [
-                            ('Okunan: ${parsed.length}', kAdminAccent),
-                            (
-                              'Atlanan: '
-                                  '${skippedEmpty + skippedShort + skippedNoName}',
-                              kAdminAmber,
-                            ),
-                          ])
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: color.withValues(alpha: 0.14),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: color.withValues(alpha: 0.4),
-                                ),
-                              ),
-                              child: Text(
-                                label,
-                                style: TextStyle(
-                                  color: color,
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
+                          action(
+                            icon: Icons.download_rounded,
+                            label: 'Örnek Şablon',
+                            value: 'Şablonu indir',
+                            onTap: busy ? null : downloadTemplate,
+                          ),
+                          action(
+                            icon: Icons.upload_file_rounded,
+                            label: 'Dosya (.xls / .xlsx / .csv / .numbers)',
+                            value: pickedFileName ?? 'Dosya seçin',
+                            onTap: busy ? null : pickAndParse,
+                          ),
                         ],
                       ),
+                      if (pickedFileName != null) ...[
+                        const SizedBox(height: 14),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          alignment: WrapAlignment.center,
+                          children: [
+                            for (final (label, color) in [
+                              ('Okunan: ${parsed.length}', kAdminAccent),
+                              (
+                                'Atlanan: '
+                                    '${skippedEmpty + skippedShort + skippedNoName}',
+                                kAdminAmber,
+                              ),
+                            ])
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: color.withValues(alpha: 0.14),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: color.withValues(alpha: 0.4),
+                                  ),
+                                ),
+                                child: Text(
+                                  label,
+                                  style: TextStyle(
+                                    color: color,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                      if (busy) ...[
+                        const SizedBox(height: 14),
+                        const LinearProgressIndicator(color: kAdminAccent),
+                      ],
+                      const SizedBox(height: 22),
+                      AdminPrimaryButton(
+                        label: 'ONAYA GÖNDER',
+                        onPressed: busy ? null : submitForApproval,
+                      ),
                     ],
-                    if (busy) ...[
-                      const SizedBox(height: 14),
-                      const LinearProgressIndicator(color: kAdminAccent),
-                    ],
-                    const SizedBox(height: 22),
-                    AdminPrimaryButton(
-                      label: 'ONAYA GÖNDER',
-                      onPressed: busy ? null : submitForApproval,
-                    ),
-                    const SizedBox(height: 10),
-                    AdminSecondaryButton(
-                      label: 'KAPAT',
-                      onPressed: busy
-                          ? null
-                          : () => Navigator.pop(dialogContext),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -1597,11 +1593,14 @@ Future<bool?> showPlayerFormPopup(BuildContext context, PlayerFormScreen form) {
     builder: (ctx) => Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
-      child: Container(
-        height: MediaQuery.of(ctx).size.height * 0.9,
-        clipBehavior: Clip.antiAlias,
-        decoration: adminDialogDecoration(),
-        child: form,
+      child: AdminDialogCloseOverlay(
+        onClose: () => Navigator.pop(ctx),
+        child: Container(
+          height: MediaQuery.of(ctx).size.height * 0.9,
+          clipBehavior: Clip.antiAlias,
+          decoration: adminDialogDecoration(),
+          child: form,
+        ),
       ),
     ),
   );
@@ -2450,12 +2449,6 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                 label: editing ? 'GÜNCELLE' : 'KAYDET',
                 busy: _saving,
                 onPressed: _save,
-              ),
-              const SizedBox(height: 10),
-              AdminSecondaryButton(
-                onPressed: _saving
-                    ? null
-                    : () => Navigator.of(context).pop(false),
               ),
             ],
           ),

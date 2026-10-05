@@ -102,22 +102,26 @@ class AdminDialogHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: kAdminAccent, size: 22),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
+        // Yanlardaki boşluk: sağ üstteki X düğmesiyle çakışmasın.
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 30),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: kAdminAccent, size: 22),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
         if (subtitle != null) ...[
           const SizedBox(height: 4),
@@ -129,6 +133,50 @@ class AdminDialogHeader extends StatelessWidget {
         ],
         const SizedBox(height: 12),
         const Divider(color: Colors.white24, height: 1),
+      ],
+    );
+  }
+}
+
+/// Popup'ın sağ üst köşesindeki kapatma (X) düğmesi. Popuplarda VAZGEÇ
+/// düğmesi yerine bu kullanılır.
+class AdminDialogCloseButton extends StatelessWidget {
+  const AdminDialogCloseButton({super.key, required this.onPressed});
+
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: 'Kapat',
+      onPressed: onPressed,
+      visualDensity: VisualDensity.compact,
+      icon: const Icon(Icons.close_rounded, color: Colors.white70, size: 24),
+    );
+  }
+}
+
+/// [child] popup içeriğinin sağ üst köşesine [AdminDialogCloseButton] koyar.
+class AdminDialogCloseOverlay extends StatelessWidget {
+  const AdminDialogCloseOverlay({
+    super.key,
+    required this.child,
+    required this.onClose,
+  });
+
+  final Widget child;
+  final VoidCallback? onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        child,
+        Positioned(
+          top: 6,
+          right: 6,
+          child: AdminDialogCloseButton(onPressed: onClose),
+        ),
       ],
     );
   }
@@ -578,54 +626,59 @@ Future<String?> showAdminTextInputDialog({
         return Dialog(
           backgroundColor: Colors.transparent,
           insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Container(
-            padding: const EdgeInsets.all(22),
-            decoration: adminDialogDecoration(),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                AdminDialogHeader(icon: icon, title: title, subtitle: subtitle),
-                const SizedBox(height: 18),
-                AdminFieldGroup(
-                  children: [
-                    AdminFieldRow(
-                      icon: fieldIcon,
-                      label: label,
-                      child: TextField(
-                        controller: controller,
-                        autofocus: true,
-                        obscureText: obscureText,
-                        keyboardType: keyboardType,
-                        inputFormatters: inputFormatters,
-                        textInputAction: TextInputAction.done,
-                        onSubmitted: (_) => submit(),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
+          child: AdminDialogCloseOverlay(
+            onClose: () => Navigator.pop(ctx),
+            child: Container(
+              padding: const EdgeInsets.all(22),
+              decoration: adminDialogDecoration(),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  AdminDialogHeader(
+                    icon: icon,
+                    title: title,
+                    subtitle: subtitle,
+                  ),
+                  const SizedBox(height: 18),
+                  AdminFieldGroup(
+                    children: [
+                      AdminFieldRow(
+                        icon: fieldIcon,
+                        label: label,
+                        child: TextField(
+                          controller: controller,
+                          autofocus: true,
+                          obscureText: obscureText,
+                          keyboardType: keyboardType,
+                          inputFormatters: inputFormatters,
+                          textInputAction: TextInputAction.done,
+                          onSubmitted: (_) => submit(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          decoration: adminInlineInputDecoration(hint: hint),
                         ),
-                        decoration: adminInlineInputDecoration(hint: hint),
+                      ),
+                    ],
+                  ),
+                  if (error != null) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      error!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: kAdminDanger,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ],
-                ),
-                if (error != null) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    error!,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: kAdminDanger,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+                  const SizedBox(height: 22),
+                  AdminPrimaryButton(label: confirmLabel, onPressed: submit),
                 ],
-                const SizedBox(height: 22),
-                AdminPrimaryButton(label: confirmLabel, onPressed: submit),
-                const SizedBox(height: 10),
-                AdminSecondaryButton(onPressed: () => Navigator.pop(ctx)),
-              ],
+              ),
             ),
           ),
         );
@@ -897,59 +950,62 @@ Future<String?> showAdminColorPicker({
         return Dialog(
           backgroundColor: Colors.transparent,
           insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Container(
-            padding: const EdgeInsets.all(22),
-            decoration: adminDialogDecoration(),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                AdminDialogHeader(icon: Icons.palette_outlined, title: title),
-                const SizedBox(height: 18),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  alignment: WrapAlignment.center,
-                  children: [
-                    for (final h in _kColorPresets)
-                      GestureDetector(
-                        onTap: () => setState(() => hexCtrl.text = h),
-                        child: Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: parseHexColor(h),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: current != null && colorToHex(current) == h
-                                  ? kAdminAccent
-                                  : Colors.white.withValues(alpha: 0.25),
-                              width: current != null && colorToHex(current) == h
-                                  ? 3
-                                  : 1,
+          child: AdminDialogCloseOverlay(
+            onClose: () => Navigator.pop(ctx),
+            child: Container(
+              padding: const EdgeInsets.all(22),
+              decoration: adminDialogDecoration(),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  AdminDialogHeader(icon: Icons.palette_outlined, title: title),
+                  const SizedBox(height: 18),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    alignment: WrapAlignment.center,
+                    children: [
+                      for (final h in _kColorPresets)
+                        GestureDetector(
+                          onTap: () => setState(() => hexCtrl.text = h),
+                          child: Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: parseHexColor(h),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color:
+                                    current != null && colorToHex(current) == h
+                                    ? kAdminAccent
+                                    : Colors.white.withValues(alpha: 0.25),
+                                width:
+                                    current != null && colorToHex(current) == h
+                                    ? 3
+                                    : 1,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                // Hazır renklerde olmayan tonlar için: ton + açıklık kaydırıcı.
-                _ColorSliders(
-                  color: current,
-                  onChanged: (c) =>
-                      setState(() => hexCtrl.text = colorToHex(c)),
-                ),
-                const SizedBox(height: 22),
-                AdminPrimaryButton(
-                  label: 'SEÇ',
-                  onPressed: current == null
-                      ? null
-                      : () => Navigator.pop(ctx, colorToHex(current)),
-                ),
-                const SizedBox(height: 10),
-                AdminSecondaryButton(onPressed: () => Navigator.pop(ctx)),
-              ],
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  // Hazır renklerde olmayan tonlar için: ton + açıklık kaydırıcı.
+                  _ColorSliders(
+                    color: current,
+                    onChanged: (c) =>
+                        setState(() => hexCtrl.text = colorToHex(c)),
+                  ),
+                  const SizedBox(height: 22),
+                  AdminPrimaryButton(
+                    label: 'SEÇ',
+                    onPressed: current == null
+                        ? null
+                        : () => Navigator.pop(ctx, colorToHex(current)),
+                  ),
+                ],
+              ),
             ),
           ),
         );

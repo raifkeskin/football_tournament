@@ -198,11 +198,6 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.white70),
           ),
-          const SizedBox(height: 18),
-          AdminSecondaryButton(
-            label: 'KAPAT',
-            onPressed: () => Navigator.pop(context),
-          ),
         ],
       );
     }
@@ -495,12 +490,6 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                       busy: _isLoading,
                       onPressed: _addEvent,
                     ),
-                    const SizedBox(height: 10),
-                    AdminSecondaryButton(
-                      onPressed: _isLoading
-                          ? null
-                          : () => Navigator.pop(context),
-                    ),
                   ],
                 );
               },
@@ -516,14 +505,17 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-      child: Container(
-        decoration: adminDialogDecoration(),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(22),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: children,
+      child: AdminDialogCloseOverlay(
+        onClose: _isLoading ? null : () => Navigator.pop(context),
+        child: Container(
+          decoration: adminDialogDecoration(),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(22),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: children,
+            ),
           ),
         ),
       ),

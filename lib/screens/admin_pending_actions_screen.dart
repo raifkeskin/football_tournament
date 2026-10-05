@@ -3,6 +3,7 @@ import 'package:football_tournament/features/admin/services/approval_service.dar
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/services/app_session.dart';
 import '../core/widgets/admin_page.dart';
+import '../core/widgets/admin_form.dart';
 import '../core/widgets/web_safe_image.dart';
 import '../features/player/screens/my_profile_view.dart';
 import '../features/player/services/player_profile_service.dart';
@@ -145,76 +146,68 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
       builder: (context) => Dialog(
         backgroundColor: Colors.transparent,
         insetPadding: const EdgeInsets.symmetric(horizontal: 20),
-        child: Container(
-          padding: const EdgeInsets.all(22),
-          decoration: adminDialogDecoration(),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                approve ? 'Talebi Onayla' : 'Talebi Reddet',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: controller,
-                maxLines: 3,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  hintText: approve
-                      ? 'Not (isteğe bağlı)'
-                      : 'Red nedeni (sorumluya gösterilir)',
-                  hintStyle: const TextStyle(color: Colors.white38),
-                  filled: true,
-                  fillColor: Colors.black.withValues(alpha: 0.3),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                      color: Colors.white.withValues(alpha: 0.15),
-                    ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: kAdminAccent),
+        child: AdminDialogCloseOverlay(
+          onClose: () => Navigator.pop(context),
+          child: Container(
+            padding: const EdgeInsets.all(22),
+            decoration: adminDialogDecoration(),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  approve ? 'Talebi Onayla' : 'Talebi Reddet',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
                   ),
                 ),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                height: 50,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: approve ? kAdminAccent : kAdminDanger,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
+                const SizedBox(height: 16),
+                TextField(
+                  controller: controller,
+                  maxLines: 3,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: approve
+                        ? 'Not (isteğe bağlı)'
+                        : 'Red nedeni (sorumluya gösterilir)',
+                    hintStyle: const TextStyle(color: Colors.white38),
+                    filled: true,
+                    fillColor: Colors.black.withValues(alpha: 0.3),
+                    enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.15),
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: kAdminAccent),
                     ),
                   ),
-                  onPressed: () => Navigator.pop(context, controller.text),
-                  child: Text(
-                    approve ? 'ONAYLA' : 'REDDET',
-                    style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  height: 50,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: approve ? kAdminAccent : kAdminDanger,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onPressed: () => Navigator.pop(context, controller.text),
+                    child: Text(
+                      approve ? 'ONAYLA' : 'REDDET',
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 10),
-              SizedBox(
-                height: 50,
-                child: OutlinedButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text(
-                    'VAZGEÇ',
-                    style: TextStyle(fontWeight: FontWeight.w900),
-                  ),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

@@ -126,186 +126,189 @@ class _TournamentFilterDialogState extends State<_TournamentFilterDialog> {
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-      child: Container(
-        padding: const EdgeInsets.all(22),
-        decoration: adminDialogDecoration(),
-        child: StreamBuilder<List<Season>>(
-          stream: _leagueId == null
-              ? Stream.value(const <Season>[])
-              : _seasons(_leagueId!),
-          builder: (context, seasonSnap) {
-            // Akış değişince StreamBuilder yeni veri gelene kadar önceki
-            // turnuvanın sezonlarını tutar; beklerken boş kabul et.
-            final seasonsLoading =
-                seasonSnap.connectionState == ConnectionState.waiting;
-            final seasons = seasonsLoading
-                ? const <Season>[]
-                : (seasonSnap.data ?? const <Season>[]);
-            // Turnuva değişince geçersiz kalan sezon seçimi varsayılana çekilir.
-            final seasonId = seasons.any((s) => s.id == _seasonId)
-                ? _seasonId
-                : (seasons.isNotEmpty ? _defaultSeasonId(seasons) : null);
-            if (!seasonsLoading && seasonId != _seasonId) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (!mounted) return;
-                setState(() {
-                  _seasonId = seasonId;
-                  _groupId = null;
-                  _week = null;
+      child: AdminDialogCloseOverlay(
+        onClose: () => Navigator.pop(context),
+        child: Container(
+          padding: const EdgeInsets.all(22),
+          decoration: adminDialogDecoration(),
+          child: StreamBuilder<List<Season>>(
+            stream: _leagueId == null
+                ? Stream.value(const <Season>[])
+                : _seasons(_leagueId!),
+            builder: (context, seasonSnap) {
+              // Akış değişince StreamBuilder yeni veri gelene kadar önceki
+              // turnuvanın sezonlarını tutar; beklerken boş kabul et.
+              final seasonsLoading =
+                  seasonSnap.connectionState == ConnectionState.waiting;
+              final seasons = seasonsLoading
+                  ? const <Season>[]
+                  : (seasonSnap.data ?? const <Season>[]);
+              // Turnuva değişince geçersiz kalan sezon seçimi varsayılana çekilir.
+              final seasonId = seasons.any((s) => s.id == _seasonId)
+                  ? _seasonId
+                  : (seasons.isNotEmpty ? _defaultSeasonId(seasons) : null);
+              if (!seasonsLoading && seasonId != _seasonId) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted) return;
+                  setState(() {
+                    _seasonId = seasonId;
+                    _groupId = null;
+                    _week = null;
+                  });
                 });
-              });
-            }
+              }
 
-            return StreamBuilder<List<GroupModel>>(
-              stream: seasonId == null || widget.watchGroups == null
-                  ? Stream.value(const <GroupModel>[])
-                  : _groups(seasonId),
-              builder: (context, groupSnap) {
-                final groupsLoading =
-                    groupSnap.connectionState == ConnectionState.waiting;
-                final groups = groupsLoading
-                    ? <GroupModel>[]
-                    : [...(groupSnap.data ?? const <GroupModel>[])];
-                groups.sort(
-                  (a, b) =>
-                      a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-                );
-                final groupNameById = <String, String>{
-                  for (final e in groups.indexed)
-                    e.$2.id: e.$2.name.trim().isNotEmpty
-                        ? e.$2.name.trim()
-                        : 'Grup ${e.$1 + 1}',
-                };
-                // "Tüm gruplar" seçeneği yok; seçim yoksa ilk grup.
-                final groupId = groupNameById.containsKey(_groupId)
-                    ? _groupId
-                    : (groups.isEmpty ? null : groups.first.id);
+              return StreamBuilder<List<GroupModel>>(
+                stream: seasonId == null || widget.watchGroups == null
+                    ? Stream.value(const <GroupModel>[])
+                    : _groups(seasonId),
+                builder: (context, groupSnap) {
+                  final groupsLoading =
+                      groupSnap.connectionState == ConnectionState.waiting;
+                  final groups = groupsLoading
+                      ? <GroupModel>[]
+                      : [...(groupSnap.data ?? const <GroupModel>[])];
+                  groups.sort(
+                    (a, b) =>
+                        a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+                  );
+                  final groupNameById = <String, String>{
+                    for (final e in groups.indexed)
+                      e.$2.id: e.$2.name.trim().isNotEmpty
+                          ? e.$2.name.trim()
+                          : 'Grup ${e.$1 + 1}',
+                  };
+                  // "Tüm gruplar" seçeneği yok; seçim yoksa ilk grup.
+                  final groupId = groupNameById.containsKey(_groupId)
+                      ? _groupId
+                      : (groups.isEmpty ? null : groups.first.id);
 
-                final ready =
-                    seasonId != null && !groupsLoading && seasonId == _seasonId;
-                final seasonName = seasons
-                    .where((s) => s.id == seasonId)
-                    .firstOrNull
-                    ?.name;
+                  final ready =
+                      seasonId != null &&
+                      !groupsLoading &&
+                      seasonId == _seasonId;
+                  final seasonName = seasons
+                      .where((s) => s.id == seasonId)
+                      .firstOrNull
+                      ?.name;
 
-                // Satırlar seçime göre kaybolmaz (yükleniyor / tek grup
-                // durumunda kilitli gösterilir); pencere boyu sabit kalır ve
-                // "Filtreleri Uygula" yerinden oynamaz.
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const AdminDialogHeader(
-                      icon: Icons.tune_rounded,
-                      title: 'Filtrele',
-                    ),
-                    const SizedBox(height: 16),
-                    AdminFieldGroup(
-                      children: [
-                        _leagueRow(),
-                        AdminSelectRow(
-                          icon: Icons.calendar_month_outlined,
-                          label: 'Sezon',
-                          value: seasonName,
-                          placeholder: _leagueId == null
-                              ? 'Önce turnuva seçin'
-                              : (seasonsLoading ? 'Yükleniyor…' : 'Sezon yok'),
-                          loading: _leagueId != null && seasonsLoading,
-                          onTap: seasons.length < 2
-                              ? null
-                              : () async {
-                                  final picked =
-                                      await showAdminOptionPicker<Season>(
-                                        context: context,
-                                        title: 'Sezon Seç',
-                                        items: seasons,
-                                        labelBuilder: (s) => s.name,
-                                        selected: seasons
-                                            .where((s) => s.id == seasonId)
-                                            .firstOrNull,
-                                      );
-                                  if (picked == null ||
-                                      picked.id == _seasonId ||
-                                      !mounted) {
-                                    return;
-                                  }
-                                  setState(() {
-                                    _seasonId = picked.id;
-                                    _groupId = null;
-                                    _week = null;
-                                  });
-                                },
-                        ),
-                        if (widget.watchGroups != null)
+                  // Satırlar seçime göre kaybolmaz (yükleniyor / tek grup
+                  // durumunda kilitli gösterilir); pencere boyu sabit kalır ve
+                  // "Filtreleri Uygula" yerinden oynamaz.
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const AdminDialogHeader(
+                        icon: Icons.tune_rounded,
+                        title: 'Filtrele',
+                      ),
+                      const SizedBox(height: 16),
+                      AdminFieldGroup(
+                        children: [
+                          _leagueRow(),
                           AdminSelectRow(
-                            icon: Icons.workspaces_outline,
-                            label: 'Grup',
-                            value: groups.length > 1
-                                ? groupNameById[groupId]
-                                : null,
-                            placeholder: groupsLoading && seasonId != null
-                                ? 'Yükleniyor…'
-                                : 'Tek grup',
-                            loading: groupsLoading && seasonId != null,
-                            onTap: groups.length < 2
+                            icon: Icons.calendar_month_outlined,
+                            label: 'Sezon',
+                            value: seasonName,
+                            placeholder: _leagueId == null
+                                ? 'Önce turnuva seçin'
+                                : (seasonsLoading
+                                      ? 'Yükleniyor…'
+                                      : 'Sezon yok'),
+                            loading: _leagueId != null && seasonsLoading,
+                            onTap: seasons.length < 2
                                 ? null
                                 : () async {
                                     final picked =
-                                        await showAdminOptionPicker<String>(
+                                        await showAdminOptionPicker<Season>(
                                           context: context,
-                                          title: 'Grup Seç',
-                                          items: groups
-                                              .map((g) => g.id)
-                                              .toList(),
-                                          labelBuilder: (id) =>
-                                              groupNameById[id] ?? '',
-                                          selected: groupId,
+                                          title: 'Sezon Seç',
+                                          items: seasons,
+                                          labelBuilder: (s) => s.name,
+                                          selected: seasons
+                                              .where((s) => s.id == seasonId)
+                                              .firstOrNull,
                                         );
-                                    if (picked == null || !mounted) return;
-                                    if (picked == groupId) return;
+                                    if (picked == null ||
+                                        picked.id == _seasonId ||
+                                        !mounted) {
+                                      return;
+                                    }
                                     setState(() {
-                                      _groupId = picked;
+                                      _seasonId = picked.id;
+                                      _groupId = null;
                                       _week = null;
                                     });
                                   },
                           ),
-                        if (widget.loadWeekInfo != null)
-                          ready
-                              ? _weekRow(_leagueId!, seasonId, groupId)
-                              : const AdminSelectRow(
-                                  icon: Icons.event_note_outlined,
-                                  label: 'Hafta',
-                                  value: null,
-                                  placeholder: 'Yükleniyor…',
-                                  loading: true,
-                                  onTap: null,
-                                ),
-                      ],
-                    ),
-                    const SizedBox(height: 22),
-                    AdminPrimaryButton(
-                      label: 'FİLTRELERİ UYGULA',
-                      onPressed: !ready
-                          ? null
-                          : () => Navigator.pop(
-                              context,
-                              TournamentFilter(
-                                leagueId: _leagueId,
-                                seasonId: seasonId,
-                                groupId: groupId,
-                                week: _week,
-                              ),
+                          if (widget.watchGroups != null)
+                            AdminSelectRow(
+                              icon: Icons.workspaces_outline,
+                              label: 'Grup',
+                              value: groups.length > 1
+                                  ? groupNameById[groupId]
+                                  : null,
+                              placeholder: groupsLoading && seasonId != null
+                                  ? 'Yükleniyor…'
+                                  : 'Tek grup',
+                              loading: groupsLoading && seasonId != null,
+                              onTap: groups.length < 2
+                                  ? null
+                                  : () async {
+                                      final picked =
+                                          await showAdminOptionPicker<String>(
+                                            context: context,
+                                            title: 'Grup Seç',
+                                            items: groups
+                                                .map((g) => g.id)
+                                                .toList(),
+                                            labelBuilder: (id) =>
+                                                groupNameById[id] ?? '',
+                                            selected: groupId,
+                                          );
+                                      if (picked == null || !mounted) return;
+                                      if (picked == groupId) return;
+                                      setState(() {
+                                        _groupId = picked;
+                                        _week = null;
+                                      });
+                                    },
                             ),
-                    ),
-                    const SizedBox(height: 10),
-                    AdminSecondaryButton(
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ],
-                );
-              },
-            );
-          },
+                          if (widget.loadWeekInfo != null)
+                            ready
+                                ? _weekRow(_leagueId!, seasonId, groupId)
+                                : const AdminSelectRow(
+                                    icon: Icons.event_note_outlined,
+                                    label: 'Hafta',
+                                    value: null,
+                                    placeholder: 'Yükleniyor…',
+                                    loading: true,
+                                    onTap: null,
+                                  ),
+                        ],
+                      ),
+                      const SizedBox(height: 22),
+                      AdminPrimaryButton(
+                        label: 'FİLTRELERİ UYGULA',
+                        onPressed: !ready
+                            ? null
+                            : () => Navigator.pop(
+                                context,
+                                TournamentFilter(
+                                  leagueId: _leagueId,
+                                  seasonId: seasonId,
+                                  groupId: groupId,
+                                  week: _week,
+                                ),
+                              ),
+                      ),
+                    ],
+                  );
+                },
+              );
+            },
+          ),
         ),
       ),
     );

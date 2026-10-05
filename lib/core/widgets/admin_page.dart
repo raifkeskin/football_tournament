@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'admin_form.dart';
 import 'master_class_app_bar.dart';
 
 // Yönetim ekranlarının ortak renkleri
@@ -127,81 +128,69 @@ Future<bool> showAdminConfirmDialog({
     builder: (ctx) => Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Container(
-        padding: const EdgeInsets.all(22),
-        decoration: adminDialogDecoration(),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  icon,
-                  color: destructive ? kAdminDanger : kAdminAccent,
-                  size: 22,
+      child: AdminDialogCloseOverlay(
+        onClose: () => Navigator.pop(ctx, false),
+        child: Container(
+          padding: const EdgeInsets.all(22),
+          decoration: adminDialogDecoration(),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 30),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      icon,
+                      color: destructive ? kAdminDanger : kAdminAccent,
+                      size: 22,
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Text(
-                    title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
+              ),
+              const SizedBox(height: 14),
+              const Divider(color: Colors.white24, height: 1),
+              const SizedBox(height: 16),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white70, height: 1.4),
+              ),
+              const SizedBox(height: 22),
+              SizedBox(
+                height: 48,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: destructive
+                        ? const Color(0xFFDC2626)
+                        : kAdminAccent,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            const Divider(color: Colors.white24, height: 1),
-            const SizedBox(height: 16),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white70, height: 1.4),
-            ),
-            const SizedBox(height: 22),
-            SizedBox(
-              height: 48,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: destructive
-                      ? const Color(0xFFDC2626)
-                      : kAdminAccent,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: Text(
+                    confirmLabel,
+                    style: const TextStyle(fontWeight: FontWeight.w900),
                   ),
                 ),
-                onPressed: () => Navigator.pop(ctx, true),
-                child: Text(
-                  confirmLabel,
-                  style: const TextStyle(fontWeight: FontWeight.w900),
-                ),
               ),
-            ),
-            const SizedBox(height: 10),
-            SizedBox(
-              height: 48,
-              child: OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.white70,
-                  side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text(
-                  'VAZGEÇ',
-                  style: TextStyle(fontWeight: FontWeight.w900),
-                ),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     ),

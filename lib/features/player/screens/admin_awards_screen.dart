@@ -6,6 +6,7 @@ import '../../../core/services/app_session.dart';
 import '../../tournament/services/interfaces/i_league_service.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/widgets/admin_page.dart';
+import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/custom_popup_selector.dart';
 
 class AdminAwardsScreen extends StatefulWidget {
@@ -80,86 +81,78 @@ class _AdminAwardsScreenState extends State<AdminAwardsScreen> {
         builder: (ctx, setLocal) => Dialog(
           backgroundColor: Colors.transparent,
           insetPadding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Container(
-            padding: const EdgeInsets.all(22),
-            decoration: adminDialogDecoration(),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.emoji_events_outlined, color: kAdminAccent),
-                      SizedBox(width: 8),
-                      Text(
-                        'Yeni Ödül / Kupa',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
+          child: AdminDialogCloseOverlay(
+            onClose: saving ? null : () => Navigator.pop(ctx),
+            child: Container(
+              padding: const EdgeInsets.all(22),
+              decoration: adminDialogDecoration(),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.emoji_events_outlined, color: kAdminAccent),
+                        SizedBox(width: 8),
+                        Text(
+                          'Yeni Ödül / Kupa',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  const Divider(color: Colors.white24, height: 1),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: nameController,
-                    enabled: !saving,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: _fieldDecoration('Ödül Adı'),
-                    textInputAction: TextInputAction.next,
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: descController,
-                    enabled: !saving,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: _fieldDecoration('Açıklama (isteğe bağlı)'),
-                    textInputAction: TextInputAction.done,
-                  ),
-                  const SizedBox(height: 22),
-                  SizedBox(
-                    height: 50,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: kAdminAccent,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    const Divider(color: Colors.white24, height: 1),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: nameController,
+                      enabled: !saving,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: _fieldDecoration('Ödül Adı'),
+                      textInputAction: TextInputAction.next,
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: descController,
+                      enabled: !saving,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: _fieldDecoration('Açıklama (isteğe bağlı)'),
+                      textInputAction: TextInputAction.done,
+                    ),
+                    const SizedBox(height: 22),
+                    SizedBox(
+                      height: 50,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: kAdminAccent,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
-                      ),
-                      onPressed: saving ? null : () => save(ctx, setLocal),
-                      child: saving
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
+                        onPressed: saving ? null : () => save(ctx, setLocal),
+                        child: saving
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text(
+                                'KAYDET',
+                                style: TextStyle(fontWeight: FontWeight.w900),
                               ),
-                            )
-                          : const Text(
-                              'KAYDET',
-                              style: TextStyle(fontWeight: FontWeight.w900),
-                            ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    height: 50,
-                    child: OutlinedButton(
-                      onPressed: saving ? null : () => Navigator.pop(ctx),
-                      child: const Text(
-                        'VAZGEÇ',
-                        style: TextStyle(fontWeight: FontWeight.w900),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

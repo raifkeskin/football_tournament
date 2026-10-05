@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/utils/resilient_stream.dart';
 import '../../../core/widgets/master_class_app_bar.dart';
+import '../../../core/widgets/admin_form.dart';
 import '../models/league_extras.dart';
 import '../../../core/services/app_session.dart';
 import '../services/interfaces/i_league_service.dart';
@@ -19,6 +20,26 @@ class _AdminPitchManagementScreenState
     extends State<AdminPitchManagementScreen> {
   final ILeagueService _leagueService = ServiceLocator.leagueService;
   bool _busy = false;
+  final _searchController = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  /// Türkçe büyük/küçük harf duyarsız arama için.
+  static String _norm(String v) =>
+      v.replaceAll('İ', 'i').replaceAll('I', 'ı').toLowerCase().trim();
+
+  bool _matches(Pitch p) {
+    final q = _norm(_query);
+    if (q.isEmpty) return true;
+    return _norm(p.name).contains(q) ||
+        _norm(p.city).contains(q) ||
+        _norm(p.location).contains(q);
+  }
 
   static const _turkiyeIlleri = <String>[
     'Adana',
@@ -181,27 +202,32 @@ class _AdminPitchManagementScreenState
               horizontal: 20,
               vertical: 24,
             ),
-            child: Container(
-              constraints: BoxConstraints(maxHeight: maxH),
-              height: tall ? maxH * 0.85 : null,
-              padding: const EdgeInsets.all(22),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(24),
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFF1E293B), Color(0xFF064E3B)],
-                ),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Colors.black54,
-                    blurRadius: 15,
-                    offset: Offset(0, 8),
+            child: AdminDialogCloseOverlay(
+              onClose: () => Navigator.pop(ctx),
+              child: Container(
+                constraints: BoxConstraints(maxHeight: maxH),
+                height: tall ? maxH * 0.85 : null,
+                padding: const EdgeInsets.all(22),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(24),
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF1E293B), Color(0xFF064E3B)],
                   ),
-                ],
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.12),
+                  ),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black54,
+                      blurRadius: 15,
+                      offset: Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: builder(ctx, setLocal),
               ),
-              child: builder(ctx, setLocal),
             ),
           );
         },
@@ -214,20 +240,25 @@ class _AdminPitchManagementScreenState
       padding: const EdgeInsets.only(bottom: 16),
       child: Column(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, color: _accent, size: 22),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 30),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, color: _accent, size: 22),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           const SizedBox(height: 14),
           const Divider(color: Colors.white24, height: 1),
@@ -240,13 +271,6 @@ class _AdminPitchManagementScreenState
     backgroundColor: _accent,
     foregroundColor: Colors.white,
     disabledBackgroundColor: _accent.withValues(alpha: 0.5),
-    minimumSize: const Size(double.infinity, 50),
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-  );
-
-  ButtonStyle get _cancelStyle => OutlinedButton.styleFrom(
-    foregroundColor: Colors.white70,
-    side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
     minimumSize: const Size(double.infinity, 50),
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
   );
@@ -496,15 +520,6 @@ class _AdminPitchManagementScreenState
                         style: const TextStyle(fontWeight: FontWeight.w900),
                       ),
               ),
-              const SizedBox(height: 10),
-              OutlinedButton(
-                style: _cancelStyle,
-                onPressed: saving ? null : () => Navigator.pop(ctx),
-                child: const Text(
-                  'VAZGEÇ',
-                  style: TextStyle(fontWeight: FontWeight.w900),
-                ),
-              ),
             ],
           ),
         );
@@ -541,15 +556,6 @@ class _AdminPitchManagementScreenState
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text(
               'SİL',
-              style: TextStyle(fontWeight: FontWeight.w900),
-            ),
-          ),
-          const SizedBox(height: 10),
-          OutlinedButton(
-            style: _cancelStyle,
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text(
-              'VAZGEÇ',
               style: TextStyle(fontWeight: FontWeight.w900),
             ),
           ),
@@ -736,9 +742,60 @@ class _AdminPitchManagementScreenState
                           ),
                         );
                       }
-                      return ListView(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                        children: pitches.map(_pitchCard).toList(),
+                      final shown = pitches.where(_matches).toList();
+                      return Column(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                            child: TextField(
+                              controller: _searchController,
+                              style: const TextStyle(color: Colors.white),
+                              cursorColor: _accent,
+                              textInputAction: TextInputAction.search,
+                              onChanged: (v) => setState(() => _query = v),
+                              decoration:
+                                  adminInputDecoration(
+                                    hint: 'Saha, il veya konum ara',
+                                    icon: Icons.search_rounded,
+                                  ).copyWith(
+                                    suffixIcon: _query.isEmpty
+                                        ? null
+                                        : IconButton(
+                                            tooltip: 'Temizle',
+                                            icon: const Icon(
+                                              Icons.close_rounded,
+                                              color: Colors.white54,
+                                            ),
+                                            onPressed: () => setState(() {
+                                              _searchController.clear();
+                                              _query = '';
+                                            }),
+                                          ),
+                                  ),
+                            ),
+                          ),
+                          Expanded(
+                            child: shown.isEmpty
+                                ? const Center(
+                                    child: Text(
+                                      'Aramaya uyan saha yok.',
+                                      style: TextStyle(color: Colors.white54),
+                                    ),
+                                  )
+                                : ListView(
+                                    keyboardDismissBehavior:
+                                        ScrollViewKeyboardDismissBehavior
+                                            .onDrag,
+                                    padding: const EdgeInsets.fromLTRB(
+                                      16,
+                                      12,
+                                      16,
+                                      24,
+                                    ),
+                                    children: shown.map(_pitchCard).toList(),
+                                  ),
+                          ),
+                        ],
                       );
                     },
                   ),

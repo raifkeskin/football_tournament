@@ -21,6 +21,7 @@ import '../../../core/services/active_tournament.dart';
 import 'match_details_screen.dart';
 import '../utils/match_clock.dart';
 import '../../../core/widgets/web_safe_image.dart';
+import '../../../core/widgets/admin_form.dart';
 import '../../share/fixture_poster.dart';
 import '../../share/poster_share.dart';
 import '../../../core/utils/team_name.dart';
@@ -1181,137 +1182,122 @@ class _MatchCard extends StatelessWidget {
           return Dialog(
             backgroundColor: Colors.transparent,
             insetPadding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(24),
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFF1E293B), Color(0xFF064E3B)],
-                ),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Colors.black54,
-                    blurRadius: 15,
-                    offset: Offset(0, 8),
+            child: AdminDialogCloseOverlay(
+              onClose: saving ? null : () => Navigator.pop(c),
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(24),
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF1E293B), Color(0xFF064E3B)],
                   ),
-                ],
-              ),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.scoreboard_outlined,
-                          color: accent,
-                          size: 22,
-                        ),
-                        SizedBox(width: 8),
-                        Text(
-                          'Hızlı Skor Girişi',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w900,
-                            fontSize: 18,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    const Divider(color: Colors.white24, height: 1),
-                    const SizedBox(height: 20),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        scoreBox(
-                          homeName.isEmpty ? 'Ev Sahibi' : homeName,
-                          homeScoreCtrl,
-                        ),
-                        const Padding(
-                          padding: EdgeInsets.fromLTRB(12, 0, 12, 18),
-                          child: Text(
-                            '-',
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 28,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                        ),
-                        scoreBox(
-                          awayName.isEmpty ? 'Deplasman' : awayName,
-                          awayScoreCtrl,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Kaydedildiğinde maç "Bitti" olarak işaretlenir.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.55),
-                        fontSize: 12,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    SizedBox(
-                      height: 50,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: accent,
-                          disabledBackgroundColor: accent.withValues(
-                            alpha: 0.5,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        onPressed: saving ? null : save,
-                        child: saving
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Text(
-                                'KAYDET',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w900,
-                                ),
-                              ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      height: 50,
-                      child: OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white70,
-                          side: BorderSide(
-                            color: Colors.white.withValues(alpha: 0.2),
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        onPressed: saving ? null : () => Navigator.pop(c),
-                        child: const Text(
-                          'VAZGEÇ',
-                          style: TextStyle(fontWeight: FontWeight.w900),
-                        ),
-                      ),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.12),
+                  ),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black54,
+                      blurRadius: 15,
+                      offset: Offset(0, 8),
                     ),
                   ],
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.scoreboard_outlined,
+                            color: accent,
+                            size: 22,
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            'Hızlı Skor Girişi',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 18,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      const Divider(color: Colors.white24, height: 1),
+                      const SizedBox(height: 20),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          scoreBox(
+                            homeName.isEmpty ? 'Ev Sahibi' : homeName,
+                            homeScoreCtrl,
+                          ),
+                          const Padding(
+                            padding: EdgeInsets.fromLTRB(12, 0, 12, 18),
+                            child: Text(
+                              '-',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 28,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                          scoreBox(
+                            awayName.isEmpty ? 'Deplasman' : awayName,
+                            awayScoreCtrl,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Kaydedildiğinde maç "Bitti" olarak işaretlenir.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.55),
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      SizedBox(
+                        height: 50,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: accent,
+                            disabledBackgroundColor: accent.withValues(
+                              alpha: 0.5,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          onPressed: saving ? null : save,
+                          child: saving
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Text(
+                                  'KAYDET',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -1539,210 +1525,193 @@ class _MatchCard extends StatelessWidget {
         builder: (c, setDialogState) => Dialog(
           backgroundColor: Colors.transparent,
           insetPadding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Container(
-            padding: const EdgeInsets.all(22),
-            decoration: dialogBox(),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.edit_calendar_rounded, color: accent),
-                      SizedBox(width: 8),
-                      Text(
-                        'Maçı Düzenle',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
+          child: AdminDialogCloseOverlay(
+            onClose: () => Navigator.pop(c),
+            child: Container(
+              padding: const EdgeInsets.all(22),
+              decoration: dialogBox(),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.edit_calendar_rounded, color: accent),
+                        SizedBox(width: 8),
+                        Text(
+                          'Maçı Düzenle',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  const Divider(color: Colors.white24, height: 1),
-                  const SizedBox(height: 18),
-                  // Elle yazılabilir; buton standart takvimi açar.
-                  TextField(
-                    controller: dCtrl,
-                    focusNode: dateFocus,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [_DateInputFormatter()],
-                    style: const TextStyle(color: Colors.white),
-                    decoration: deco(
-                      'Tarih (GG/AA/YYYY)',
-                      Icons.event_rounded,
-                      suffix: IconButton(
-                        tooltip: 'Takvimden seç',
-                        icon: const Icon(
-                          Icons.calendar_month_outlined,
-                          color: accent,
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    const Divider(color: Colors.white24, height: 1),
+                    const SizedBox(height: 18),
+                    // Elle yazılabilir; buton standart takvimi açar.
+                    TextField(
+                      controller: dCtrl,
+                      focusNode: dateFocus,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [_DateInputFormatter()],
+                      style: const TextStyle(color: Colors.white),
+                      decoration: deco(
+                        'Tarih (GG/AA/YYYY)',
+                        Icons.event_rounded,
+                        suffix: IconButton(
+                          tooltip: 'Takvimden seç',
+                          icon: const Icon(
+                            Icons.calendar_month_outlined,
+                            color: accent,
+                          ),
+                          onPressed: () => pickDateFromCalendar(setDialogState),
                         ),
-                        onPressed: () => pickDateFromCalendar(setDialogState),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: tCtrl,
-                    focusNode: timeFocus,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [_TimeInputFormatter()],
-                    style: const TextStyle(color: Colors.white),
-                    decoration: deco('Saat (SS:DD)', Icons.schedule_rounded),
-                  ),
-                  const SizedBox(height: 12),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: () async {
-                      final picked = await pickPitch();
-                      if (picked == null) return;
-                      setDialogState(() {
-                        if (picked.isEmpty) {
-                          selectedPitchId = null;
-                          selectedPitchName = null;
-                        } else {
-                          selectedPitchId = picked;
-                          final name = pitches
-                              .firstWhere((p) => p.id == picked)
-                              .name
-                              .trim();
-                          selectedPitchName = name.isEmpty ? null : name;
-                        }
-                      });
-                    },
-                    child: InputDecorator(
-                      decoration: deco('Stad', Icons.stadium_outlined),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              selectedPitchName ?? 'Stad Seçilmedi',
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: selectedPitchName == null
-                                    ? Colors.white54
-                                    : Colors.white,
-                                fontWeight: FontWeight.w600,
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: tCtrl,
+                      focusNode: timeFocus,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [_TimeInputFormatter()],
+                      style: const TextStyle(color: Colors.white),
+                      decoration: deco('Saat (SS:DD)', Icons.schedule_rounded),
+                    ),
+                    const SizedBox(height: 12),
+                    InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () async {
+                        final picked = await pickPitch();
+                        if (picked == null) return;
+                        setDialogState(() {
+                          if (picked.isEmpty) {
+                            selectedPitchId = null;
+                            selectedPitchName = null;
+                          } else {
+                            selectedPitchId = picked;
+                            final name = pitches
+                                .firstWhere((p) => p.id == picked)
+                                .name
+                                .trim();
+                            selectedPitchName = name.isEmpty ? null : name;
+                          }
+                        });
+                      },
+                      child: InputDecorator(
+                        decoration: deco('Stad', Icons.stadium_outlined),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                selectedPitchName ?? 'Stad Seçilmedi',
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: selectedPitchName == null
+                                      ? Colors.white54
+                                      : Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
-                          ),
-                          const Icon(
-                            Icons.arrow_drop_down,
-                            color: Colors.white70,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    height: 50,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: accent,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                            const Icon(
+                              Icons.arrow_drop_down,
+                              color: Colors.white70,
+                            ),
+                          ],
                         ),
                       ),
-                      onPressed: () async {
-                        final dateText = dCtrl.text;
-                        final timeText = tCtrl.text;
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      height: 50,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: accent,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: () async {
+                          final dateText = dCtrl.text;
+                          final timeText = tCtrl.text;
 
-                        final dateMatch = RegExp(
-                          r'^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$',
-                        ).firstMatch(dateText);
-                        if (dateMatch == null) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'Tarih formatı hatalı! (GG/AA/YYYY)',
-                              ),
-                              backgroundColor: Colors.redAccent,
-                            ),
-                          );
-                          return;
-                        }
-                        final timeMatch = RegExp(
-                          r'^(\d{2}):(\d{2})$',
-                        ).firstMatch(timeText);
-                        if (timeMatch == null) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Saat formatı hatalı! (SS:DD)'),
-                              backgroundColor: Colors.redAccent,
-                            ),
-                          );
-                          return;
-                        }
-
-                        final dd = dateMatch.group(1)!;
-                        final mm = dateMatch.group(2)!;
-                        final yyyy = dateMatch.group(3)!;
-                        final dbDate = '$yyyy-$mm-$dd';
-
-                        try {
-                          await _matchService.updateMatchSchedule(
-                            matchId: match.id,
-                            matchDateDb: dbDate,
-                            matchTime: timeText,
-                            pitchId: selectedPitchId,
-                            pitchName: selectedPitchName,
-                          );
-                          if (c.mounted) Navigator.pop(c);
-                          if (context.mounted) {
+                          final dateMatch = RegExp(
+                            r'^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$',
+                          ).firstMatch(dateText);
+                          if (dateMatch == null) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text('Maç güncellendi.'),
-                                backgroundColor: Colors.green,
-                                duration: Duration(seconds: 2),
+                                content: Text(
+                                  'Tarih formatı hatalı! (GG/AA/YYYY)',
+                                ),
+                                backgroundColor: Colors.redAccent,
+                              ),
+                            );
+                            return;
+                          }
+                          final timeMatch = RegExp(
+                            r'^(\d{2}):(\d{2})$',
+                          ).firstMatch(timeText);
+                          if (timeMatch == null) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Saat formatı hatalı! (SS:DD)'),
+                                backgroundColor: Colors.redAccent,
+                              ),
+                            );
+                            return;
+                          }
+
+                          final dd = dateMatch.group(1)!;
+                          final mm = dateMatch.group(2)!;
+                          final yyyy = dateMatch.group(3)!;
+                          final dbDate = '$yyyy-$mm-$dd';
+
+                          try {
+                            await _matchService.updateMatchSchedule(
+                              matchId: match.id,
+                              matchDateDb: dbDate,
+                              matchTime: timeText,
+                              pitchId: selectedPitchId,
+                              pitchName: selectedPitchName,
+                            );
+                            if (c.mounted) Navigator.pop(c);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Maç güncellendi.'),
+                                  backgroundColor: Colors.green,
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
+                            }
+                            onDataChanged();
+                          } catch (e) {
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Güncelleme başarısız: $e'),
+                                backgroundColor: Colors.redAccent,
                               ),
                             );
                           }
-                          onDataChanged();
-                        } catch (e) {
-                          if (!context.mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Güncelleme başarısız: $e'),
-                              backgroundColor: Colors.redAccent,
-                            ),
-                          );
-                        }
-                      },
-                      child: const Text(
-                        'GÜNCELLE',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w900,
+                        },
+                        child: const Text(
+                          'GÜNCELLE',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    height: 50,
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white70,
-                        side: BorderSide(
-                          color: Colors.white.withValues(alpha: 0.2),
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onPressed: () => Navigator.pop(c),
-                      child: const Text(
-                        'VAZGEÇ',
-                        style: TextStyle(fontWeight: FontWeight.w900),
-                      ),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

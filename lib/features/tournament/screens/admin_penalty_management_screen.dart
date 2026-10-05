@@ -301,20 +301,23 @@ class _AdminPenaltyManagementScreenState
       builder: (dctx) => Dialog(
         backgroundColor: Colors.transparent,
         insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-        child: Container(
-          height: MediaQuery.of(dctx).size.height * 0.8,
-          clipBehavior: Clip.antiAlias,
-          decoration: adminDialogDecoration(),
-          child: _PenaltyEditorSheet(
-            leagueService: _leagueService,
-            teamService: _teamService,
-            penaltyService: _penaltyService,
-            sb: _sb,
-            initialLeagueId: (initialLeagueId ?? _selectedLeagueId).trim(),
-            initialSeasonId: (initialSeasonId ?? _selectedSeasonId).trim(),
-            initialTeamId: (initialTeamId ?? '').trim(),
-            initialPlayerId: (initialPlayerId ?? '').trim(),
-            penaltyId: (penaltyId ?? '').trim(),
+        child: AdminDialogCloseOverlay(
+          onClose: () => Navigator.pop(dctx, false),
+          child: Container(
+            height: MediaQuery.of(dctx).size.height * 0.8,
+            clipBehavior: Clip.antiAlias,
+            decoration: adminDialogDecoration(),
+            child: _PenaltyEditorSheet(
+              leagueService: _leagueService,
+              teamService: _teamService,
+              penaltyService: _penaltyService,
+              sb: _sb,
+              initialLeagueId: (initialLeagueId ?? _selectedLeagueId).trim(),
+              initialSeasonId: (initialSeasonId ?? _selectedSeasonId).trim(),
+              initialTeamId: (initialTeamId ?? '').trim(),
+              initialPlayerId: (initialPlayerId ?? '').trim(),
+              penaltyId: (penaltyId ?? '').trim(),
+            ),
           ),
         ),
       ),
@@ -1353,10 +1356,6 @@ class _PenaltyEditorSheetState extends State<_PenaltyEditorSheet> {
             label: _isEdit ? 'GÜNCELLE' : 'KAYDET',
             busy: _saving,
             onPressed: _loadingExisting ? null : _submit,
-          ),
-          const SizedBox(height: 10),
-          AdminSecondaryButton(
-            onPressed: _saving ? null : () => Navigator.of(context).pop(false),
           ),
         ],
       ),

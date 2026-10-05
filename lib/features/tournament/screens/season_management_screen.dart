@@ -549,10 +549,6 @@ class SeasonManagementScreen extends StatelessWidget {
               saving: saving,
               onPressed: () => submit(sheetContext, setSheetState),
             ),
-            const SizedBox(height: 10),
-            _CancelButton(
-              onPressed: saving ? null : () => Navigator.of(sheetContext).pop(),
-            ),
           ],
         );
       },
@@ -764,8 +760,6 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
                   : null,
               onTap: () => Navigator.of(sheetContext).pop(r.id),
             ),
-          const SizedBox(height: 10),
-          _CancelButton(onPressed: () => Navigator.of(sheetContext).pop()),
         ],
       ),
     );
@@ -1064,8 +1058,6 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
               onPressed: () =>
                   Navigator.of(sheetContext).pop(<String>{...working}),
             ),
-            const SizedBox(height: 10),
-            _CancelButton(onPressed: () => Navigator.of(sheetContext).pop()),
           ],
         );
       },
@@ -1167,10 +1159,6 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
               label: 'KAYDET',
               saving: saving,
               onPressed: () => submit(sheetContext, setSheetState),
-            ),
-            const SizedBox(height: 10),
-            _CancelButton(
-              onPressed: saving ? null : () => Navigator.of(sheetContext).pop(),
             ),
           ],
         );
@@ -1280,10 +1268,6 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
               label: 'KAYDET',
               saving: saving,
               onPressed: () => submit(sheetContext, setSheetState),
-            ),
-            const SizedBox(height: 10),
-            _CancelButton(
-              onPressed: saving ? null : () => Navigator.of(sheetContext).pop(),
             ),
           ],
         );
@@ -1776,27 +1760,30 @@ Future<T?> _showAdminSheet<T>({
             horizontal: 20,
             vertical: 24,
           ),
-          child: Container(
-            constraints: BoxConstraints(maxHeight: available),
-            height: compact ? null : (available * 0.9).clamp(320.0, 720.0),
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(24),
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [_sheetBg, _forest],
-              ),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-              boxShadow: const [
-                BoxShadow(
-                  color: Colors.black54,
-                  blurRadius: 15,
-                  offset: Offset(0, 8),
+          child: AdminDialogCloseOverlay(
+            onClose: () => Navigator.pop(sheetContext),
+            child: Container(
+              constraints: BoxConstraints(maxHeight: available),
+              height: compact ? null : (available * 0.9).clamp(320.0, 720.0),
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(24),
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [_sheetBg, _forest],
                 ),
-              ],
+                border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black54,
+                    blurRadius: 15,
+                    offset: Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: compact ? SingleChildScrollView(child: content) : content,
             ),
-            child: compact ? SingleChildScrollView(child: content) : content,
           ),
         );
       },
@@ -1839,20 +1826,25 @@ class _SheetHeader extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 16),
       child: Column(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, color: _accent, size: 22),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 30),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, color: _accent, size: 22),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           if (subtitle != null) ...[
             const SizedBox(height: 4),
@@ -1907,29 +1899,6 @@ class _SaveButton extends StatelessWidget {
                 letterSpacing: 1.2,
               ),
             ),
-    );
-  }
-}
-
-class _CancelButton extends StatelessWidget {
-  const _CancelButton({required this.onPressed});
-
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return OutlinedButton(
-      onPressed: onPressed,
-      style: OutlinedButton.styleFrom(
-        foregroundColor: Colors.white70,
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-      child: const Text(
-        'VAZGEÇ',
-        style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.2),
-      ),
     );
   }
 }
@@ -2601,8 +2570,6 @@ Future<bool> _addRegion(
                     },
                   ),
           ),
-          const SizedBox(height: 10),
-          _CancelButton(onPressed: () => Navigator.of(sheetContext).pop()),
         ],
       );
     },
@@ -2639,8 +2606,6 @@ Future<void> _showRegionOwnersSheet(BuildContext context, _Region region) {
             child: LeagueOwnersSection.region(regionId: region.id),
           ),
         ),
-        const SizedBox(height: 10),
-        _CancelButton(onPressed: () => Navigator.of(sheetContext).pop()),
       ],
     ),
   );

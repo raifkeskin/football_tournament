@@ -110,62 +110,60 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-      child: Container(
-        padding: const EdgeInsets.all(18),
-        decoration: adminDialogDecoration(),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const AdminDialogHeader(
-              icon: Icons.ios_share_rounded,
-              title: 'Afişi Paylaş',
-              subtitle: 'Instagram hikayesi için 1080×1920',
-            ),
-            const SizedBox(height: 14),
-            FutureBuilder<void>(
-              future: _ready,
-              builder: (context, snap) {
-                final done = snap.connectionState == ConnectionState.done;
-                return ConstrainedBox(
-                  constraints: BoxConstraints(maxHeight: maxH),
-                  child: AspectRatio(
-                    aspectRatio: kPosterSize.width / kPosterSize.height,
-                    child: !done
-                        ? const Center(
-                            child: CircularProgressIndicator(
-                              color: kAdminAccent,
-                            ),
-                          )
-                        : ClipRRect(
-                            borderRadius: BorderRadius.circular(14),
-                            child: FittedBox(
-                              child: RepaintBoundary(
-                                key: _boundaryKey,
-                                child: SizedBox.fromSize(
-                                  size: kPosterSize,
-                                  child: widget.poster,
+      child: AdminDialogCloseOverlay(
+        onClose: _sharing ? null : () => Navigator.pop(context),
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: adminDialogDecoration(),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const AdminDialogHeader(
+                icon: Icons.ios_share_rounded,
+                title: 'Afişi Paylaş',
+                subtitle: 'Instagram hikayesi için 1080×1920',
+              ),
+              const SizedBox(height: 14),
+              FutureBuilder<void>(
+                future: _ready,
+                builder: (context, snap) {
+                  final done = snap.connectionState == ConnectionState.done;
+                  return ConstrainedBox(
+                    constraints: BoxConstraints(maxHeight: maxH),
+                    child: AspectRatio(
+                      aspectRatio: kPosterSize.width / kPosterSize.height,
+                      child: !done
+                          ? const Center(
+                              child: CircularProgressIndicator(
+                                color: kAdminAccent,
+                              ),
+                            )
+                          : ClipRRect(
+                              borderRadius: BorderRadius.circular(14),
+                              child: FittedBox(
+                                child: RepaintBoundary(
+                                  key: _boundaryKey,
+                                  child: SizedBox.fromSize(
+                                    size: kPosterSize,
+                                    child: widget.poster,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 16),
-            AdminPrimaryButton(
-              label: 'PAYLAŞ',
-              icon: Icons.ios_share_rounded,
-              busy: _sharing,
-              onPressed: _share,
-            ),
-            const SizedBox(height: 10),
-            AdminSecondaryButton(
-              label: 'KAPAT',
-              onPressed: _sharing ? null : () => Navigator.pop(context),
-            ),
-          ],
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+              AdminPrimaryButton(
+                label: 'PAYLAŞ',
+                icon: Icons.ios_share_rounded,
+                busy: _sharing,
+                onPressed: _share,
+              ),
+            ],
+          ),
         ),
       ),
     );

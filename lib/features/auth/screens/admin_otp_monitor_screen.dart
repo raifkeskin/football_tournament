@@ -131,71 +131,69 @@ class _AdminOtpMonitorScreenState extends State<AdminOtpMonitorScreen> {
       builder: (ctx) => Dialog(
         backgroundColor: Colors.transparent,
         insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Container(
-          padding: const EdgeInsets.all(22),
-          decoration: adminDialogDecoration(),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              AdminDialogHeader(
-                icon: Icons.key_rounded,
-                title: g.isReset ? 'Şifre Sıfırlandı' : 'Hesap Açıldı',
-                subtitle: [
-                  ?g.fullName,
-                  formatPhoneRaw10(g.phoneRaw10),
-                ].join(' · '),
-              ),
-              const SizedBox(height: 18),
-              const Text(
-                'GEÇİCİ ŞİFRE',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: kAdminMuted,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1,
+        child: AdminDialogCloseOverlay(
+          onClose: () => Navigator.pop(ctx),
+          child: Container(
+            padding: const EdgeInsets.all(22),
+            decoration: adminDialogDecoration(),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                AdminDialogHeader(
+                  icon: Icons.key_rounded,
+                  title: g.isReset ? 'Şifre Sıfırlandı' : 'Hesap Açıldı',
+                  subtitle: [
+                    ?g.fullName,
+                    formatPhoneRaw10(g.phoneRaw10),
+                  ].join(' · '),
                 ),
-              ),
-              const SizedBox(height: 4),
-              SelectableText(
-                g.password,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 32,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 6,
-                ),
-              ),
-              const SizedBox(height: 14),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.25),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  _message(g),
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 13,
-                    height: 1.4,
+                const SizedBox(height: 18),
+                const Text(
+                  'GEÇİCİ ŞİFRE',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: kAdminMuted,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1,
                   ),
                 ),
-              ),
-              const SizedBox(height: 22),
-              AdminPrimaryButton(
-                label: 'WHATSAPP İLE GÖNDER',
-                icon: Icons.send_rounded,
-                onPressed: () => _openWhatsApp(g),
-              ),
-              const SizedBox(height: 10),
-              AdminSecondaryButton(
-                label: 'KAPAT',
-                onPressed: () => Navigator.pop(ctx),
-              ),
-            ],
+                const SizedBox(height: 4),
+                SelectableText(
+                  g.password,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 32,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 6,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.25),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    _message(g),
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 13,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 22),
+                AdminPrimaryButton(
+                  label: 'WHATSAPP İLE GÖNDER',
+                  icon: Icons.send_rounded,
+                  onPressed: () => _openWhatsApp(g),
+                ),
+              ],
+            ),
           ),
         ),
       ),
