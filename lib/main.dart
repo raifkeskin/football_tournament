@@ -1,3 +1,4 @@
+import 'core/app_navigator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -13,8 +14,6 @@ import 'core/widgets/app_name_band.dart';
 import 'core/widgets/tvl_logo.dart';
 import 'core/widgets/web_safe_image.dart';
 import 'core/widgets/web_responsive_frame.dart';
-
-final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 
 bool _showLoginGate() {
   final user = Supabase.instance.client.auth.currentUser;

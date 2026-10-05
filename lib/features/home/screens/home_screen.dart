@@ -192,8 +192,13 @@ class _HomeScreenState extends State<HomeScreen> {
     _preferredForUid = uid;
     final before = GlobalFilter.leagueId.value;
     try {
-      final res = await Supabase.instance.client.rpc('my_preferred_league');
-      final pref = res?.toString();
+      // Bantta seçilen turnuva (ActiveTournament) önce; yoksa en yakın maçı
+      // olan kendi turnuvası.
+      final pref =
+          ActiveTournament.currentLeagueId.value ??
+          (await Supabase.instance.client.rpc(
+            'my_preferred_league',
+          ))?.toString();
       if (!mounted || pref == null || pref.isEmpty) return;
       if (!leagues.any((l) => l.id == pref)) return;
       if (GlobalFilter.leagueId.value != before) return;
@@ -511,7 +516,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   // (veritabanı kuralı); burada ayrıca elenmez.
                   // Uygulamanın büründüğü turnuva (kişinin / misafirin son
                   // baktığı) önce; yoksa "varsayılan" işaretli turnuva.
-                  final themed = ActiveTournament.theme.value?.leagueId;
+                  final themed = ActiveTournament.currentLeagueId.value;
                   final def = allLeagues.any((l) => l.id == themed)
                       ? themed!
                       : allLeagues

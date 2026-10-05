@@ -75,8 +75,11 @@ List<StandingEntry> computeGroupStandings({
 
   final table = <String, StandingEntry>{
     for (final t in allTeams)
+      // Fikstürü henüz çekilmemiş grupta da gruba atanmış takımlar 0
+      // puanla listelenir (grup kimliği benzersiz; sezon/turnuva ayrıca
+      // karşılaştırılmaz).
       if (playedIds.contains(t.id) ||
-          ((t.leagueId ?? '').toString().trim() == leagueId.trim() &&
+          (groupId.trim().isNotEmpty &&
               (t.groupId ?? '').toString().trim() == groupId.trim()))
         t.id: StandingEntry(teamId: t.id, name: t.name, logo: t.logoUrl),
   };
