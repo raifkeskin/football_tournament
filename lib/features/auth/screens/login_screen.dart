@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' show AuthException;
 
 import '../../../core/services/active_tournament.dart';
 import '../../../core/services/app_session.dart';
+import '../../../core/widgets/app_name_band.dart';
 import 'forgot_password_screen.dart';
 import '../../home/screens/main_navigator.dart';
 import 'online_registration_screen.dart';
@@ -58,7 +59,16 @@ class _LoginScreenState extends State<LoginScreen> {
   Timer? _adminTapTimer;
 
   @override
+  void initState() {
+    super.initState();
+    // Giriş ekranında bant her zaman genel görünümde (turnuva adı yok).
+    // (Kurulum/kaldırma sırasında bant yeniden çizilemez; ertelenir.)
+    Future.microtask(() => AppNameBand.genericScreens.value++);
+  }
+
+  @override
   void dispose() {
+    Future.microtask(() => AppNameBand.genericScreens.value--);
     _adminTapTimer?.cancel();
     _phoneController.dispose();
     _passwordController.dispose();

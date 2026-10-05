@@ -20,6 +20,10 @@ class AppNameBand extends StatelessWidget {
 
   final Widget child;
 
+  /// Açık olan "genel bant" ekranlarının sayısı (giriş ekranı). Sıfırdan
+  /// büyükse bantta turnuva kimliği gösterilmez.
+  static final genericScreens = ValueNotifier<int>(0);
+
   @override
   Widget build(BuildContext context) {
     final top = MediaQuery.paddingOf(context).top;
@@ -30,10 +34,17 @@ class AppNameBand extends StatelessWidget {
           // Kişinin turnuvası temalıysa bant o turnuvanın kimliğiyle.
           KeyedSubtree(
             key: _bandKey,
-            child: ValueListenableBuilder<TournamentTheme?>(
-              valueListenable: ActiveTournament.theme,
-              builder: (context, t, tvlBand) =>
-                  t == null ? tvlBand! : _TournamentBand(theme: t, top: top),
+            child: ListenableBuilder(
+              listenable: Listenable.merge([
+                ActiveTournament.theme,
+                genericScreens,
+              ]),
+              builder: (context, tvlBand) {
+                final t = ActiveTournament.theme.value;
+                return t == null || genericScreens.value > 0
+                    ? tvlBand!
+                    : _TournamentBand(theme: t, top: top);
+              },
               child: _tvlBand(top),
             ),
           ),
