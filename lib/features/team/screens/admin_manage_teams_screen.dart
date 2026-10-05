@@ -14,6 +14,7 @@ import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import 'package:football_tournament/core/widgets/picked_image.dart';
 import '../../../core/utils/string_utils.dart';
+import 'team_squad_screen.dart';
 
 class AdminManageTeamsScreen extends StatefulWidget {
   const AdminManageTeamsScreen({
@@ -152,6 +153,76 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
       return 'Bağlantı hatası. İnternet bağlantısını kontrol edin.\n\n$s';
     }
     return s;
+  }
+
+  /// Takımın kadro ekranı. Kadro sezona bağlıdır: takım tek sezondaysa
+  /// doğrudan açılır, birden fazla sezondaysa önce sezon seçilir.
+  Future<void> _openSquad(
+    BuildContext ctx, {
+    required String teamId,
+    required String teamName,
+    required String logoUrl,
+  }) async {
+    final sb = Supabase.instance.client;
+    List<({String id, String name})> seasons;
+    try {
+      final links = await sb
+          .from('season_teams')
+          .select('season_id')
+          .eq('team_id', teamId);
+      final ids = {for (final r in links) (r['season_id'] ?? '').toString()}
+        ..remove('');
+      final rows = ids.isEmpty
+          ? const <Map<String, dynamic>>[]
+          : await sb
+                .from('seasons')
+                .select('id, name, start_date')
+                .inFilter('id', ids.toList())
+                .order('start_date', ascending: false);
+      seasons = [
+        for (final r in rows)
+          (id: (r['id'] ?? '').toString(), name: (r['name'] ?? '').toString()),
+      ];
+    } catch (e) {
+      if (ctx.mounted) {
+        ScaffoldMessenger.of(
+          ctx,
+        ).showSnackBar(SnackBar(content: Text('Sezonlar okunamadı: $e')));
+      }
+      return;
+    }
+    if (!ctx.mounted) return;
+    if (seasons.isEmpty) {
+      await showAdminInfoDialog(
+        context: ctx,
+        title: 'Kadro',
+        message:
+            'Takım henüz bir sezona eklenmemiş. Kadro, takım bir sezona '
+            'eklendikten sonra düzenlenebilir.',
+        icon: Icons.info_outline_rounded,
+        iconColor: kAdminAccent,
+      );
+      return;
+    }
+    final season = seasons.length == 1
+        ? seasons.first
+        : await showAdminOptionPicker<({String id, String name})>(
+            context: ctx,
+            title: 'Sezon Seç',
+            items: seasons,
+            labelBuilder: (s) => s.name,
+          );
+    if (season == null || !ctx.mounted) return;
+    await Navigator.of(ctx).push(
+      MaterialPageRoute<void>(
+        builder: (_) => TeamSquadScreen(
+          teamId: teamId,
+          tournamentId: season.id,
+          teamName: teamName,
+          teamLogoUrl: logoUrl,
+        ),
+      ),
+    );
   }
 
   /// Takım sorumlusu seçimi (Takım Sorumlusu / Her İkisi rolündekiler).
@@ -681,6 +752,22 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                                       managerName = '';
                                     }),
                                   ),
+                                  if (isEdit)
+                                    AdminSelectRow(
+                                      icon: Icons.groups_outlined,
+                                      label: 'Kadro',
+                                      value: 'Kadroyu aç',
+                                      placeholder: 'Kadroyu aç',
+                                      onTap: saving
+                                          ? null
+                                          : () => _openSquad(
+                                              context,
+                                              teamId: teamId!,
+                                              teamName: nameController.text
+                                                  .trim(),
+                                              logoUrl: existingLogoUrl,
+                                            ),
+                                    ),
                                 ],
                               ),
                             ),
