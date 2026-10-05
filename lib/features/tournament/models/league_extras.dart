@@ -31,7 +31,11 @@ class NewsItem {
     this.publishUntil,
     this.regionId,
     this.regionName = '',
+    this.liveDrawId,
   });
+
+  /// Canlı kura haberi ise kuranın kimliği (kart kura görünümüyle çizilir).
+  final String? liveDrawId;
 
   final String id;
   final String tournamentId;

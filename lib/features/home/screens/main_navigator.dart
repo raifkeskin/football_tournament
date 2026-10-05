@@ -31,6 +31,12 @@ class MainNavigator extends StatefulWidget {
   /// Yan menüyü açar (ör. yönetim panelinde bantaki ☰).
   static void openMenu() => scaffoldKey.currentState?.openDrawer();
 
+  /// Gezgin dışından sekme değiştirme isteği (ör. canlı kura → Fikstür).
+  static final tabRequest = ValueNotifier<int?>(null);
+
+  /// Fikstür sekmesinin sırası.
+  static const int fixtureTab = 2;
+
   final int initialTabIndex;
 
   @override
@@ -39,6 +45,25 @@ class MainNavigator extends StatefulWidget {
 
 class _MainNavigatorState extends State<MainNavigator> {
   late int _aktifSekme = widget.initialTabIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    MainNavigator.tabRequest.addListener(_onTabRequest);
+  }
+
+  @override
+  void dispose() {
+    MainNavigator.tabRequest.removeListener(_onTabRequest);
+    super.dispose();
+  }
+
+  void _onTabRequest() {
+    final i = MainNavigator.tabRequest.value;
+    if (i == null || !mounted) return;
+    setState(() => _aktifSekme = i);
+    MainNavigator.tabRequest.value = null;
+  }
 
   /// Yan menüyü kaydırma hareketinden açmak için.
   GlobalKey<ScaffoldState> get _scaffoldKey => MainNavigator.scaffoldKey;

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../match/screens/live_draw_screen.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -335,6 +336,13 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
           separatorBuilder: (_, _) => const SizedBox(height: 10),
           itemBuilder: (context, i) {
             final n = items[i];
+            if (n.liveDrawId != null) {
+              return LiveDrawNewsCard(
+                key: _keys.putIfAbsent(n.id, GlobalKey.new),
+                drawId: n.liveDrawId!,
+                content: n.content,
+              );
+            }
             final liked = _likeOverride[n.id] ?? n.likedByMe;
             final count =
                 (n.likeCount - (n.likedByMe ? 1 : 0) + (liked ? 1 : 0)).clamp(

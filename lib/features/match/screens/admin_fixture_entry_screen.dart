@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../services/live_draw_service.dart';
+import 'live_draw_screen.dart';
 import 'package:flutter/services.dart';
 import '../../tournament/models/league.dart';
 import '../../tournament/models/league_extras.dart';
@@ -229,6 +231,30 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
       return;
     }
     try {
+      // Planlanmış / süren canlı kura varsa yenisi çekilmez; kura açılır.
+      final live = await LiveDrawService.instance.forGroup(groupId);
+      if (!mounted) return;
+      if (live != null && !live.done && !live.cancelled) {
+        final open = await showAdminConfirmDialog(
+          context: context,
+          title: 'Canlı kura planlandı',
+          message: live.notStarted
+              ? 'Bu grubun canlı kurası planlandı. Kura sayfasından izleyebilir '
+                    've başlamadan iptal edebilirsin.'
+              : 'Bu grubun canlı kurası şu an sürüyor.',
+          confirmLabel: 'KURAYI AÇ',
+          destructive: false,
+          icon: Icons.sensors_rounded,
+        );
+        if (open && mounted) {
+          await Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => LiveDrawScreen(drawId: live.id),
+            ),
+          );
+        }
+        return;
+      }
       final inGroup = await _sb
           .from('matches')
           .select('id')
