@@ -15,7 +15,17 @@ class TournamentTheme {
     required this.logoUrl,
     required this.primary,
     required this.secondary,
+    this.instagramUrl = '',
+    this.facebookUrl = '',
+    this.youtubeUrl = '',
+    this.websiteUrl = '',
   });
+
+  /// Turnuvanın sosyal medya / web adresleri (boş: yok).
+  final String instagramUrl;
+  final String facebookUrl;
+  final String youtubeUrl;
+  final String websiteUrl;
 
   final String leagueId;
 
@@ -48,6 +58,10 @@ class TournamentTheme {
       name: short.isNotEmpty ? short : (r['name'] ?? '').toString().trim(),
       logoUrl: (r['logo_url'] ?? '').toString().trim(),
       primary: p,
+      instagramUrl: (r['instagram_url'] ?? '').toString().trim(),
+      facebookUrl: (r['facebook_url'] ?? '').toString().trim(),
+      youtubeUrl: (r['youtube_url'] ?? '').toString().trim(),
+      websiteUrl: (r['website_url'] ?? '').toString().trim(),
       secondary:
           _hex(r['theme_secondary']) ??
           (_hex(r['theme_primary']) == null
@@ -62,6 +76,10 @@ class TournamentTheme {
     'logo_url': logoUrl,
     'theme_primary': _toHex(primary),
     'theme_secondary': _toHex(secondary),
+    'instagram_url': instagramUrl,
+    'facebook_url': facebookUrl,
+    'youtube_url': youtubeUrl,
+    'website_url': websiteUrl,
   };
 }
 
@@ -240,7 +258,8 @@ class ActiveTournament {
       final row = await _sb
           .from('leagues')
           .select(
-            'id, name, short_name, logo_url, theme_primary, theme_secondary',
+            'id, name, short_name, logo_url, theme_primary, theme_secondary, '
+            'instagram_url, facebook_url, youtube_url, website_url',
           )
           .eq('id', leagueId!)
           .maybeSingle();

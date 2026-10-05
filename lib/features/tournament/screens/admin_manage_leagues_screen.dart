@@ -76,6 +76,19 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
     String? themeSecondary = league?.themeSecondary;
     // Esame: takım sorumlusu kadroyu maçtan kaç saat önce girebilir.
     var rosterOpenHours = league?.rosterOpenHours ?? 1;
+    // Sosyal medya / web: yan menüde turnuva adının altında simge olur.
+    final igController = TextEditingController(
+      text: league?.instagramUrl ?? '',
+    );
+    final fbController = TextEditingController(text: league?.facebookUrl ?? '');
+    final ytController = TextEditingController(text: league?.youtubeUrl ?? '');
+    final webController = TextEditingController(text: league?.websiteUrl ?? '');
+    String? link(TextEditingController c) {
+      final v = c.text.trim();
+      if (v.isEmpty) return null;
+      return v.startsWith('http') ? v : 'https://$v';
+    }
+
     final accessCodeController = TextEditingController(
       text: (league?.accessCode ?? '').trim(),
     );
@@ -127,6 +140,10 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
               ? null
               : shortNameController.text.trim(),
           'roster_open_hours': rosterOpenHours,
+          'instagram_url': link(igController),
+          'facebook_url': link(fbController),
+          'youtube_url': link(ytController),
+          'website_url': link(webController),
         };
         if (isEdit) {
           await _sb.from('leagues').update(payload).eq('id', league.id);
@@ -481,6 +498,40 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                       style: TextStyle(color: kAdminMuted, fontSize: 12),
                     ),
                   ),
+                  AdminFormSection(
+                    title: 'Sosyal Medya',
+                    child: Column(
+                      children: [
+                        for (final (c, label, icon) in [
+                          (
+                            igController,
+                            'Instagram adresi',
+                            Icons.camera_alt_outlined,
+                          ),
+                          (fbController, 'Facebook adresi', Icons.facebook),
+                          (
+                            ytController,
+                            'YouTube adresi',
+                            Icons.smart_display_outlined,
+                          ),
+                          (webController, 'Web sitesi', Icons.language_rounded),
+                        ]) ...[
+                          TextField(
+                            controller: c,
+                            enabled: !saving,
+                            keyboardType: TextInputType.url,
+                            style: const TextStyle(color: Colors.white),
+                            cursorColor: kAdminAccent,
+                            decoration: adminInputDecoration(
+                              label: label,
+                              icon: icon,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                        ],
+                      ],
+                    ),
+                  ),
                   if (privateOn) const SizedBox(height: 12),
                   if (privateOn)
                     AdminFieldGroup(
@@ -629,6 +680,10 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
       nameController.dispose();
       accessCodeController.dispose();
       shortNameController.dispose();
+      igController.dispose();
+      fbController.dispose();
+      ytController.dispose();
+      webController.dispose();
     });
   }
 

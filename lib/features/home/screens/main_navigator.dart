@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'dart:ui'; // Cam efekti (BackdropFilter) için eklendi
 
 import '../../../core/services/app_session.dart';
 import '../../auth/screens/login_screen.dart';
 import '../../../core/services/active_tournament.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../../core/services/app_settings.dart';
 import '../../../core/services/league_access.dart';
@@ -39,7 +39,6 @@ class MainNavigator extends StatefulWidget {
 }
 
 class _MainNavigatorState extends State<MainNavigator> {
-
   late int _aktifSekme = widget.initialTabIndex;
 
   /// Yan menüyü kaydırma hareketinden açmak için.
@@ -88,40 +87,6 @@ class _MainNavigatorState extends State<MainNavigator> {
       ),
     ];
 
-    // YENİ MENÜ LİSTESİ: İkon ve Resim yolları eklendi
-    final menuItems = [
-      {
-        'label': 'Ana Sayfa',
-        'icon': Icons.home_outlined,
-        'image': 'assets/anasayfa.jpg',
-      }, // Mevcut ana sayfa resmin
-      {
-        'label': 'Haberler',
-        'icon': Icons.newspaper_outlined,
-        'image': 'assets/acilis_arka_plan.jpg',
-      },
-      {
-        'label': 'Fikstür',
-        'icon': Icons.calendar_month_outlined,
-        'image': 'assets/images/admin_fixture.jpg',
-      },
-      {
-        'label': 'Puan Durumu',
-        'icon': Icons.groups_outlined,
-        'image': 'assets/images/admin_team.jpg',
-      },
-      {
-        'label': 'İstatistik',
-        'icon': Icons.bar_chart_outlined,
-        'image': 'assets/images/admin_tournament.jpg',
-      },
-      {
-        'label': 'Profil',
-        'icon': Icons.person_outline,
-        'image': 'assets/images/admin_license.jpg',
-      },
-    ];
-
     return Scaffold(
       key: _scaffoldKey,
       extendBody: !kNewHomeDesign,
@@ -136,173 +101,16 @@ class _MainNavigatorState extends State<MainNavigator> {
               onTap: (i) => setState(() => _aktifSekme = i),
             )
           : null,
-      drawer: Drawer(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
-          child: Container(
-            decoration: BoxDecoration(
-              // Yeni tasarımın düz zemini.
-              color: const Color(0xFF0F172A),
-              border: Border(
-                right: BorderSide(
-                  color: Colors.white.withValues(alpha: 0.1),
-                  width: 1,
-                ),
-              ),
-            ),
-            child: SafeArea(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // MENÜ ÜST KISMI: logo + uygulama adı tek satırda (menü
-                  // kartlarına daha çok yer kalsın).
-                  // Turnuva temalıysa onun logosu ve adı, altında TVL.
-                  ValueListenableBuilder<TournamentTheme?>(
-                    valueListenable: ActiveTournament.theme,
-                    builder: (context, t, _) => Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 14),
-                      child: Row(
-                        children: [
-                          if (t == null)
-                            const TvlLogo(size: 52, ringText: true)
-                          else
-                            WebSafeImage(
-                              url: t.logoUrl,
-                              width: 56,
-                              height: 56,
-                              fit: BoxFit.contain,
-                            ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (t != null || kShowAppName)
-                                  Text(
-                                    t?.name ?? kAppName,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w900,
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                                if (t != null && kShowAppName)
-                                  Text(
-                                    kAppName,
-                                    style: TextStyle(
-                                      color: t.secondary,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  Divider(
-                    color: Colors.white.withValues(alpha: 0.15),
-                    height: 1,
-                  ),
-                  const SizedBox(height: 12),
-
-                  // YENİ RESİMLİ MENÜ KARTLARI
-                  Expanded(
-                    child: ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: menuItems.length,
-                      itemBuilder: (context, index) {
-                        final item = menuItems[index];
-                        final isSelected = _aktifSekme == index;
-
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: _DrawerImageMenuCard(
-                            title: item['label'] as String,
-                            icon: item['icon'] as IconData,
-                            imagePath: item['image'] as String,
-                            isSelected: isSelected,
-                            onTap: () => _sekmeDegistir(index),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-
-                  // Gizli turnuvayı kodla açma (giriş gerekmez); yalnızca
-                  // admin panelden gizli turnuva özelliği açıksa.
-                  if (AppSettings.privateLeaguesEnabled.value)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
-                      child: TextButton.icon(
-                        style: TextButton.styleFrom(
-                          foregroundColor: const Color(0xFF10B981),
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                        ),
-                        icon: const Icon(Icons.key_rounded, size: 20),
-                        label: const Text(
-                          'Turnuva Kodu Gir',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        onPressed: () {
-                          Navigator.of(context).pop(); // çekmeceyi kapat
-                          showLeagueCodeDialog(this.context);
-                        },
-                      ),
-                    ),
-
-                  // GİRİŞ / ÇIKIŞ BUTONU: misafirde profil (giriş) ekranına
-                  // götürür, giriş yapmışta oturumu kapatır.
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-                    child: loggedIn
-                        ? OutlinedButton.icon(
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.white70,
-                              side: BorderSide(
-                                color: Colors.white.withValues(alpha: 0.3),
-                              ),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            icon: const Icon(Icons.logout, size: 20),
-                            label: const Text(
-                              'Çıkış Yap',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            onPressed: () => _cikisYap(session),
-                          )
-                        : FilledButton.icon(
-                            style: FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFF10B981),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            icon: const Icon(Icons.login, size: 20),
-                            label: const Text(
-                              'Giriş Yap',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            onPressed: () =>
-                                _sekmeDegistir(MainNavigator.profileTab),
-                          ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
+      drawer: _MenuDrawer(
+        activeIndex: _aktifSekme,
+        session: session.value,
+        loggedIn: loggedIn,
+        onSelect: _sekmeDegistir,
+        onLogout: () => _cikisYap(session),
+        onEnterCode: () {
+          Navigator.of(context).pop(); // çekmeceyi kapat
+          showLeagueCodeDialog(this.context);
+        },
       ),
       // Görülebilen turnuvalar değişince (giriş/çıkış, kod) ekranlar
       // baştan kurulur ve verilerini yeniden okur.
@@ -326,76 +134,6 @@ class _MainNavigatorState extends State<MainNavigator> {
                 child: TickerMode(
                   enabled: _aktifSekme == 5,
                   child: ekranlar[5],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// YAN MENÜ İÇİN ÖZEL RESİMLİ KART WIDGET'I
-class _DrawerImageMenuCard extends StatelessWidget {
-  final String title;
-  final IconData icon;
-  final String imagePath;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _DrawerImageMenuCard({
-    required this.title,
-    required this.icon,
-    required this.imagePath,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    // Düz kart (fotoğraf yok); seçili olan turnuvanın vurgu renginde.
-    final accent =
-        ActiveTournament.theme.value?.secondary ?? const Color(0xFF10B981);
-    return Material(
-      color: isSelected
-          ? accent.withValues(alpha: 0.12)
-          : const Color(0xFF1E293B),
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          height: 56,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: isSelected
-                  ? accent.withValues(alpha: 0.7)
-                  : Colors.white.withValues(alpha: 0.06),
-            ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: accent.withValues(alpha: isSelected ? 0.22 : 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, color: accent, size: 20),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Text(
-                  title,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                    fontSize: 15,
-                  ),
                 ),
               ),
             ],
@@ -568,5 +306,430 @@ class _KeepAliveState extends State<_KeepAlive>
   Widget build(BuildContext context) {
     super.build(context);
     return widget.child;
+  }
+}
+
+/// Yan menü: üstte turnuva kartı (logo, ad, sosyal simgeler), arkada silik
+/// turnuva logosu, renkli ikonlu bölümler; altta giriş yapan kişinin kartı
+/// (dokununca profil) ve çıkış. Fotoğraf yok: anında açılır.
+class _MenuDrawer extends StatelessWidget {
+  const _MenuDrawer({
+    required this.activeIndex,
+    required this.session,
+    required this.loggedIn,
+    required this.onSelect,
+    required this.onLogout,
+    required this.onEnterCode,
+  });
+
+  final int activeIndex;
+  final AppSessionState session;
+  final bool loggedIn;
+  final ValueChanged<int> onSelect;
+  final VoidCallback onLogout;
+  final VoidCallback onEnterCode;
+
+  static const _ground = Color(0xFF0F172A);
+  static const _surface = Color(0xFF1E293B);
+
+  /// (ikon, ad, renk geçişi) — her bölümün kendi rengi.
+  static const _items = [
+    (Icons.home_rounded, 'Ana Sayfa', [Color(0xFF22C55E), Color(0xFF15803D)]),
+    (Icons.article_rounded, 'Haberler', [Color(0xFFFB7185), Color(0xFFE11D48)]),
+    (
+      Icons.calendar_month_rounded,
+      'Fikstür',
+      [Color(0xFF60A5FA), Color(0xFF2563EB)],
+    ),
+    (
+      Icons.emoji_events_rounded,
+      'Puan Durumu',
+      [Color(0xFFFCD34D), Color(0xFFD97706)],
+    ),
+    (
+      Icons.bar_chart_rounded,
+      'İstatistik',
+      [Color(0xFFC084FC), Color(0xFF7C3AED)],
+    ),
+  ];
+
+  static String _roleLabel(AppSessionState s) {
+    if (s.isAdmin) return 'Admin';
+    if (s.isLeagueOwner) return 'Kurucu Başkan';
+    if (s.isRegionOwner) return 'Bölge Sorumlusu';
+    if (s.isManager || s.managedTeams.isNotEmpty) return 'Takım Sorumlusu';
+    if (s.playerId != null) return 'Futbolcu';
+    return 'Üye';
+  }
+
+  Future<void> _open(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    try {
+      // Instagram / YouTube varsa kendi uygulamasında açılır.
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<TournamentTheme?>(
+      valueListenable: ActiveTournament.theme,
+      builder: (context, t, _) {
+        final primary = t?.primary ?? const Color(0xFF064E3B);
+        final accent = t?.secondary ?? const Color(0xFF10B981);
+        final logo = (t?.logoUrl ?? '').trim();
+        return Drawer(
+          backgroundColor: _ground,
+          elevation: 0,
+          shape: const RoundedRectangleBorder(),
+          child: Stack(
+            children: [
+              // Zemin: turnuva renginden koyuya.
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      stops: const [0, 0.55],
+                      colors: [Color.lerp(primary, _ground, 0.55)!, _ground],
+                    ),
+                  ),
+                ),
+              ),
+              // Silik turnuva logosu (bantta zaten indirilmiş olan).
+              if (logo.isNotEmpty)
+                Positioned(
+                  right: -50,
+                  bottom: 60,
+                  width: 260,
+                  height: 260,
+                  child: IgnorePointer(
+                    child: Opacity(
+                      opacity: 0.07,
+                      child: WebSafeImage(url: logo, fit: BoxFit.contain),
+                    ),
+                  ),
+                ),
+              SafeArea(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _header(t, primary, accent, logo),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: ListView(
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        children: [
+                          for (var i = 0; i < _items.length; i++)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: _item(i, accent),
+                            ),
+                        ],
+                      ),
+                    ),
+                    if (AppSettings.privateLeaguesEnabled.value)
+                      TextButton.icon(
+                        style: TextButton.styleFrom(foregroundColor: accent),
+                        icon: const Icon(Icons.key_rounded, size: 20),
+                        label: const Text(
+                          'Turnuva Kodu Gir',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: onEnterCode,
+                      ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 8, 14, 16),
+                      child: loggedIn
+                          ? _userBlock(accent)
+                          : _loginButton(accent),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _header(TournamentTheme? t, Color primary, Color accent, String logo) {
+    final links = [
+      if ((t?.instagramUrl ?? '').isNotEmpty)
+        (
+          Icons.camera_alt_rounded,
+          const Color(0xFFE1306C),
+          t!.instagramUrl,
+          'Instagram',
+        ),
+      if ((t?.facebookUrl ?? '').isNotEmpty)
+        (Icons.facebook, const Color(0xFF1877F2), t!.facebookUrl, 'Facebook'),
+      if ((t?.youtubeUrl ?? '').isNotEmpty)
+        (
+          Icons.smart_display_rounded,
+          const Color(0xFFFF0000),
+          t!.youtubeUrl,
+          'YouTube',
+        ),
+      if ((t?.websiteUrl ?? '').isNotEmpty)
+        (
+          Icons.language_rounded,
+          const Color(0xFF64748B),
+          t!.websiteUrl,
+          'Web sitesi',
+        ),
+    ];
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [primary, Color.lerp(primary, _ground, 0.6)!],
+        ),
+        border: Border(bottom: BorderSide(color: accent, width: 2)),
+      ),
+      child: Row(
+        children: [
+          if (logo.isNotEmpty)
+            WebSafeImage(url: logo, width: 54, height: 54, fit: BoxFit.contain)
+          else
+            const TvlLogo(size: 52, ringText: true),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  t?.name ?? (kShowAppName ? kAppName : 'Turnuva'),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    height: 1.15,
+                  ),
+                ),
+                if (links.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      for (final (icon, color, url, label) in links)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: Material(
+                            color: color,
+                            shape: const CircleBorder(),
+                            child: InkWell(
+                              customBorder: const CircleBorder(),
+                              onTap: () => _open(url),
+                              child: SizedBox(
+                                width: 32,
+                                height: 32,
+                                child: Icon(
+                                  icon,
+                                  size: 18,
+                                  color: Colors.white,
+                                  semanticLabel: label,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _item(int i, Color accent) {
+    final (icon, label, colors) = _items[i];
+    final selected = activeIndex == i;
+    return Material(
+      color: selected ? Color.lerp(_surface, accent, 0.16) : _surface,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: () => onSelect(i),
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          height: 54,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected ? accent : Colors.white.withValues(alpha: 0.06),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: colors,
+                  ),
+                ),
+                child: Icon(icon, color: Colors.white, size: 20),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Giriş yapan kişi: kartına dokununca profil; altında çıkış.
+  Widget _userBlock(Color accent) {
+    final name = (session.displayName ?? '').trim();
+    final photo = (session.photoUrl ?? '').trim();
+    final selected = activeIndex == MainNavigator.profileTab;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Material(
+          color: selected ? Color.lerp(_surface, accent, 0.16) : _surface,
+          borderRadius: BorderRadius.circular(14),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () => onSelect(MainNavigator.profileTab),
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: selected
+                      ? accent
+                      : Colors.white.withValues(alpha: 0.06),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    clipBehavior: Clip.antiAlias,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: accent,
+                    ),
+                    child: photo.isNotEmpty
+                        ? WebSafeImage(
+                            url: photo,
+                            width: 40,
+                            height: 40,
+                            fit: BoxFit.cover,
+                          )
+                        : Text(
+                            name.isEmpty ? '?' : name.characters.first,
+                            style: TextStyle(
+                              color: accent.computeLuminance() > 0.45
+                                  ? const Color(0xFF0B1220)
+                                  : Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          name.isEmpty ? 'Profilim' : name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 15,
+                          ),
+                        ),
+                        Text(
+                          _roleLabel(session),
+                          style: TextStyle(
+                            color: accent,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: Colors.white38,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: const Color(0xFFFCA5A5),
+            side: BorderSide(
+              color: const Color(0xFFF87171).withValues(alpha: 0.4),
+            ),
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          icon: const Icon(Icons.logout_rounded, size: 20),
+          label: const Text(
+            'Çıkış Yap',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          onPressed: onLogout,
+        ),
+      ],
+    );
+  }
+
+  Widget _loginButton(Color accent) {
+    return FilledButton.icon(
+      style: FilledButton.styleFrom(
+        backgroundColor: accent,
+        foregroundColor: accent.computeLuminance() > 0.45
+            ? const Color(0xFF0B1220)
+            : Colors.white,
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      icon: const Icon(Icons.login_rounded, size: 20),
+      label: const Text(
+        'Giriş Yap',
+        style: TextStyle(fontWeight: FontWeight.bold),
+      ),
+      onPressed: () => onSelect(MainNavigator.profileTab),
+    );
   }
 }

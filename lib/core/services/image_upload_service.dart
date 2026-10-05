@@ -85,8 +85,9 @@ class SupabaseImageUploadService implements ImageUploadService {
   static (Uint8List, String)? _shrinkPure(
     Uint8List bytes,
     String srcExt,
-    int maxSide,
-  ) {
+    int maxSide, {
+    bool forceJpeg = false,
+  }) {
     final decoded = img.decodeImage(bytes);
     if (decoded == null) return null;
     var im = img.bakeOrientation(decoded);
@@ -95,7 +96,7 @@ class SupabaseImageUploadService implements ImageUploadService {
           ? img.copyResize(im, width: maxSide)
           : img.copyResize(im, height: maxSide);
     }
-    if (srcExt == 'png' && im.hasAlpha) {
+    if (!forceJpeg && srcExt == 'png' && im.hasAlpha) {
       final png = img.encodePng(im, level: 6);
       if (png.length <= _maxPngBytes) return (png, 'png');
     }
@@ -115,12 +116,16 @@ class SupabaseImageUploadService implements ImageUploadService {
     Uint8List bytes,
     String srcExt, {
     int maxSide = _maxSide,
+    bool forceJpeg = false,
   }) async {
     if (kIsWeb) {
       try {
-        final out = _shrinkPure(bytes, srcExt, maxSide);
-        // Küçültme dosyayı büyütürse (zaten küçük resim) orijinal kalır.
-        if (out != null && out.$1.length < bytes.length) return out;
+        final out = _shrinkPure(bytes, srcExt, maxSide, forceJpeg: forceJpeg);
+        // Küçültme dosyayı büyütürse (zaten küçük resim) orijinal kalır;
+        // JPEG zorunluysa (haber) her zaman dönüştürülmüş hali.
+        if (out != null && (forceJpeg || out.$1.length < bytes.length)) {
+          return out;
+        }
       } catch (e) {
         debugPrint('Resim küçültülemedi, orijinal yükleniyor: $e');
       }
@@ -136,7 +141,7 @@ class SupabaseImageUploadService implements ImageUploadService {
             format: format,
           );
 
-      if (srcExt == 'png') {
+      if (srcExt == 'png' && !forceJpeg) {
         // Fotoğraf içerikli PNG küçültülse de MB'larca kalır; o zaman JPEG.
         final png = await compress(CompressFormat.png);
         if (png.length <= _maxPngBytes) return (png, 'png');
@@ -174,6 +179,8 @@ class SupabaseImageUploadService implements ImageUploadService {
             original,
             _extOf(image.name),
             maxSide: _maxSideFor(folder),
+            // Haber fotoğrafları Instagram'a da gidebilir: yalnız JPEG.
+            forceJpeg: folder == MediaFolder.news,
           );
 
     // Web'de (JS) `1 << 32` sıfır olur ve nextInt hata verir; 31 bit yeterli.

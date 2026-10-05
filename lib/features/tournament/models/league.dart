@@ -31,6 +31,8 @@ class League {
     this.themeSecondary,
     this.shortName,
     this.rosterOpenHours = 1,
+    this.facebookUrl,
+    this.websiteUrl,
   });
 
   final String id;
@@ -68,6 +70,10 @@ class League {
 
   /// Takım sorumlusunun esameyi maçtan kaç saat önce girebileceği.
   final int rosterOpenHours;
+
+  /// Sosyal medya / web (instagramUrl ve youtubeUrl yukarıda).
+  final String? facebookUrl;
+  final String? websiteUrl;
 
   factory League.fromMap(Map<String, dynamic> map) {
     dynamic v(String camel, String snake) => map[camel] ?? map[snake];
@@ -158,6 +164,8 @@ class League {
       themePrimary: nullableTrimmed(v('themePrimary', 'theme_primary')),
       themeSecondary: nullableTrimmed(v('themeSecondary', 'theme_secondary')),
       shortName: nullableTrimmed(v('shortName', 'short_name')),
+      facebookUrl: nullableTrimmed(v('facebookUrl', 'facebook_url')),
+      websiteUrl: nullableTrimmed(v('websiteUrl', 'website_url')),
       rosterOpenHours: intFrom(
         v('rosterOpenHours', 'roster_open_hours'),
         fallback: 1,
