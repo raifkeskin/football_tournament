@@ -323,8 +323,8 @@ class _FixtureScreenState extends State<FixtureScreen> {
     });
   }
 
-  /// Fikstür üst kısmı: turnuva + sezon kapsülü (dokununca filtre),
-  /// hafta okları ve birden fazla grup varsa grup sekmeleri.
+  /// Fikstür üst kısmı: gerekirse sezon/grup kapsülü (dokununca filtre) ve
+  /// hafta şeridi.
   Widget _buildFixtureHeader({
     required BuildContext context,
     required List<League> leagues,
@@ -351,43 +351,57 @@ class _FixtureScreenState extends State<FixtureScreen> {
         matches.isNotEmpty &&
         AppSession.of(context).value.canManageLeague(_leagueId);
 
+    final shareButton = !canShare
+        ? null
+        : Material(
+            color: const Color(0xFF10B981),
+            shape: const CircleBorder(),
+            child: IconButton(
+              tooltip: 'Afişi paylaş',
+              icon: const Icon(Icons.ios_share_rounded, color: Colors.white),
+              onPressed: () => _shareFixturePoster(
+                league: league,
+                groupName: groups.length > 1 ? currentGroupName : '',
+                week: week,
+                matches: matches,
+                teamNameById: teamNameById,
+                teamLogoById: teamLogoById,
+              ),
+            ),
+          );
+    // Turnuva üst bantta duruyor; sezon/grup filtresi yalnızca seçilecek
+    // birden fazla sezon ya da grup varsa görünür.
+    final hasFilter = seasons.length > 1 || groups.length > 1;
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          LeagueFilterCapsule(
-            logoUrl: league.logoUrl,
-            leagueName: league.name,
-            seasonName: seasonName,
-            // Hafta ve grup yalnızca filtreden değişir; burada bilgi olarak.
-            detail: groups.length > 1
-                ? '$week. Hafta · $currentGroupName'
-                : '$week. Hafta',
-            onTap: () =>
-                _showFilterDialog(context, leagues, week, selectedGroupId),
-            // Paylaş şimdilik yalnızca admin ve turnuva sahibine açık.
-            trailing: !canShare
-                ? null
-                : Material(
-                    color: const Color(0xFF10B981),
-                    shape: const CircleBorder(),
-                    child: IconButton(
-                      tooltip: 'Afişi paylaş',
-                      icon: const Icon(
-                        Icons.ios_share_rounded,
-                        color: Colors.white,
-                      ),
-                      onPressed: () => _shareFixturePoster(
-                        league: league,
-                        groupName: groups.length > 1 ? currentGroupName : '',
-                        week: week,
-                        matches: matches,
-                        teamNameById: teamNameById,
-                        teamLogoById: teamLogoById,
-                      ),
-                    ),
-                  ),
+          if (hasFilter) ...[
+            LeagueFilterCapsule(
+              seasonName: seasonName,
+              detail: groups.length > 1 ? currentGroupName : null,
+              onTap: () =>
+                  _showFilterDialog(context, leagues, week, selectedGroupId),
+              trailing: shareButton,
+            ),
+            const SizedBox(height: 8),
+          ],
+          Row(
+            children: [
+              Expanded(
+                child: _WeekStrip(
+                  weeks: weeks,
+                  week: week,
+                  onSelect: (w) => setState(() => _week = w),
+                ),
+              ),
+              if (!hasFilter && shareButton != null) ...[
+                const SizedBox(width: 8),
+                shareButton,
+              ],
+            ],
           ),
         ],
       ),
@@ -1769,6 +1783,86 @@ class _TimeInputFormatter extends TextInputFormatter {
     return TextEditingValue(
       text: finalString,
       selection: TextSelection.collapsed(offset: finalString.length),
+    );
+  }
+}
+
+/// Hafta şeridi: ortada seçili hafta, yanlarında önceki ve sonraki hafta;
+/// uçlardaki oklar birer hafta ilerletir. Haftaya dokunmak onu seçer.
+class _WeekStrip extends StatelessWidget {
+  const _WeekStrip({
+    required this.weeks,
+    required this.week,
+    required this.onSelect,
+  });
+
+  final List<int> weeks;
+  final int week;
+  final ValueChanged<int> onSelect;
+
+  static const _accent = Color(0xFF10B981);
+
+  @override
+  Widget build(BuildContext context) {
+    final sorted = [...weeks]..sort();
+    final i = sorted.indexOf(week);
+    final prev = i > 0 ? sorted[i - 1] : null;
+    final next = i >= 0 && i < sorted.length - 1 ? sorted[i + 1] : null;
+
+    Widget arrow(IconData icon, int? target) => IconButton(
+      onPressed: target == null ? null : () => onSelect(target),
+      icon: Icon(icon),
+      color: Colors.white,
+      disabledColor: Colors.white24,
+      visualDensity: VisualDensity.compact,
+    );
+
+    Widget cell(int? w, {bool current = false}) => Expanded(
+      flex: current ? 4 : 3,
+      child: w == null
+          ? const SizedBox()
+          : GestureDetector(
+              onTap: current ? null : () => onSelect(w),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                height: 38,
+                alignment: Alignment.center,
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                decoration: BoxDecoration(
+                  color: current
+                      ? _accent
+                      : Colors.white.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '$w. Hafta',
+                  maxLines: 1,
+                  style: TextStyle(
+                    color: current ? Colors.white : Colors.white60,
+                    fontSize: current ? 15 : 13,
+                    fontWeight: current ? FontWeight.w900 : FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+    );
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+      ),
+      child: Row(
+        children: [
+          arrow(Icons.chevron_left_rounded, prev),
+          cell(prev),
+          cell(week, current: true),
+          cell(next),
+          arrow(Icons.chevron_right_rounded, next),
+        ],
+      ),
     );
   }
 }

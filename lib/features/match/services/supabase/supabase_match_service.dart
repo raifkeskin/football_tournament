@@ -932,31 +932,60 @@ class SupabaseMatchService implements IMatchService {
   Future<List<PlayerStats>> _loadSeasonStats(String seasonId) async {
     final matchesRes = await _client
         .from('matches')
-        .select('id')
+        .select('id, status')
         .eq('season_id', seasonId);
-    final matchIds = [
-      for (final any in matchesRes)
-        ((any as Map)['id'] ?? '').toString().trim(),
-    ]..removeWhere((e) => e.isEmpty);
+    final matchIds = <String>[];
+    // Oynanmış (bitmiş / sürüyor) maçlar: maç sayısı yalnız bunlardan sayılır;
+    // önceden girilmiş kadro oynanmamış maçı saydırmasın.
+    final played = <String>{};
+    for (final any in matchesRes) {
+      final m = any as Map;
+      final id = (m['id'] ?? '').toString().trim();
+      if (id.isEmpty) continue;
+      matchIds.add(id);
+      final st = (m['status'] ?? '').toString().trim();
+      if (st == 'finished' || st == 'live' || st == 'halftime') played.add(id);
+    }
 
-    final events = matchIds.isEmpty
-        ? const <Map<String, dynamic>>[]
-        : (await _client
-                  .from('match_events')
-                  .select()
-                  .inFilter('match_id', matchIds))
-              .map((e) => Map<String, dynamic>.from(e))
-              .toList();
-    final stats = await _aggregateSeasonStats(seasonId, events);
+    final results = matchIds.isEmpty
+        ? const <List<Map<String, dynamic>>>[[], []]
+        : await Future.wait([
+            _client
+                .from('match_events')
+                .select()
+                .inFilter('match_id', matchIds)
+                .then(
+                  (r) => r.map((e) => Map<String, dynamic>.from(e)).toList(),
+                ),
+            played.isEmpty
+                ? Future.value(const <Map<String, dynamic>>[])
+                : _client
+                      .from('match_rosters')
+                      .select('match_id, player_id, team_id')
+                      .inFilter('match_id', played.toList())
+                      .then(
+                        (r) =>
+                            r.map((e) => Map<String, dynamic>.from(e)).toList(),
+                      ),
+          ]);
+    final stats = await _aggregateSeasonStats(
+      seasonId,
+      results[0],
+      rosters: results[1],
+    );
     _statsCache[seasonId] = stats;
     return stats;
   }
 
   /// [events] yalnızca bu sezonun maç olaylarıdır.
+  ///
+  /// Maç sayısı oynanmış maçların kadrolarından (esame) gelir; kadrosu
+  /// girilmemiş maçlarda olay kaydı olan oyuncu yine o maçı oynamış sayılır.
   Future<List<PlayerStats>> _aggregateSeasonStats(
     String seasonId,
-    List<Map<String, dynamic>> events,
-  ) async {
+    List<Map<String, dynamic>> events, {
+    List<Map<String, dynamic>> rosters = const [],
+  }) async {
     // key: player_id
     final goals = <String, int>{};
     final assists = <String, int>{};
@@ -969,6 +998,15 @@ class SupabaseMatchService implements IMatchService {
     void bump(Map<String, int> m, String pid) {
       if (pid.isEmpty) return;
       m[pid] = (m[pid] ?? 0) + 1;
+    }
+
+    for (final r in rosters) {
+      final pid = (r['player_id'] ?? '').toString().trim();
+      final mid = (r['match_id'] ?? '').toString().trim();
+      final tid = (r['team_id'] ?? '').toString().trim();
+      if (pid.isEmpty || mid.isEmpty) continue;
+      matchesByPlayer.putIfAbsent(pid, () => <String>{}).add(mid);
+      if (tid.isNotEmpty) teamByPlayer.putIfAbsent(pid, () => tid);
     }
 
     for (final e in events) {
@@ -1022,7 +1060,14 @@ class SupabaseMatchService implements IMatchService {
 
     final playerIds = events.isEmpty
         ? {for (final r in fallbackRows) (r['player_id'] ?? '').toString()}
-        : matchesByPlayer.keys.toSet();
+        // Yalnız kadroda olup hiç olayı olmayan oyuncular listelenmez.
+        : {
+            ...goals.keys,
+            ...assists.keys,
+            ...yellows.keys,
+            ...reds.keys,
+            ...motm.keys,
+          };
     playerIds.remove('');
     if (playerIds.isEmpty) return const <PlayerStats>[];
 

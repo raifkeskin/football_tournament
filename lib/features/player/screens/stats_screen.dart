@@ -228,10 +228,6 @@ class _StatsScreenState extends State<StatsScreen> {
                           });
                         }
 
-                        final currentLeague = leagues.firstWhere(
-                          (l) => l.id == _selectedLeagueId,
-                          orElse: () => leagues.first,
-                        );
                         final currentSeasonName = seasons.isEmpty
                             ? ''
                             : seasons
@@ -241,12 +237,14 @@ class _StatsScreenState extends State<StatsScreen> {
                                   )
                                   .name;
 
-                        // Fikstür ve puan durumuyla aynı filtre kapsülü.
+                        // Fikstür ve puan durumuyla aynı filtre kapsülü;
+                        // seçilecek tek sezon varsa gösterilmez.
+                        if (seasons.length < 2) {
+                          return const SizedBox(height: 4);
+                        }
                         return Padding(
                           padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                           child: LeagueFilterCapsule(
-                            logoUrl: currentLeague.logoUrl,
-                            leagueName: currentLeague.name,
                             seasonName: currentSeasonName,
                             onTap: () => _showFilterDialog(context, leagues),
                           ),

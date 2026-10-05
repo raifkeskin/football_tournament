@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'league_logo.dart';
-
 const _gold = Color(0xFFE2B845);
 const _panel = Color(0xFF152036);
 const _accent = Color(0xFF10B981);
@@ -12,19 +10,14 @@ const _accent = Color(0xFF10B981);
 class LeagueFilterCapsule extends StatelessWidget {
   const LeagueFilterCapsule({
     super.key,
-    required this.logoUrl,
-    required this.leagueName,
     required this.seasonName,
     required this.onTap,
     this.detail,
     this.trailing,
   });
 
-  final String logoUrl;
-
   /// Sezonun altındaki ince satır (ör. "5. Hafta · Avrupa Yakası").
   final String? detail;
-  final String leagueName;
   final String? seasonName;
   final VoidCallback onTap;
   final Widget? trailing;
@@ -47,14 +40,15 @@ class LeagueFilterCapsule extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  LeagueLogo(url: logoUrl, size: 34, fallbackColor: _gold),
+                  const Icon(Icons.tune_rounded, color: _gold, size: 20),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // Turnuva üst bantta; burada yalnız sezon (ve grup).
                         Text(
-                          leagueName,
+                          season.isEmpty ? 'Sezon' : season,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
@@ -63,17 +57,6 @@ class LeagueFilterCapsule extends StatelessWidget {
                             fontSize: 14,
                           ),
                         ),
-                        if (season.isNotEmpty)
-                          Text(
-                            season,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: _gold,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 11.5,
-                            ),
-                          ),
                         if ((detail ?? '').isNotEmpty)
                           Text(
                             detail!,

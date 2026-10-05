@@ -189,13 +189,6 @@ class _GroupsScreenState extends State<GroupsScreen> {
                       });
                     }
 
-                    final currentLeagueName = leagues
-                        .firstWhere(
-                          (l) => l.id == _selectedLeagueId,
-                          orElse: () => leagues.first,
-                        )
-                        .name;
-
                     return StreamBuilder<List<Season>>(
                       stream: _selectedLeagueId == null
                           ? Stream.value([])
@@ -251,12 +244,15 @@ class _GroupsScreenState extends State<GroupsScreen> {
                               ? Stream.value([])
                               : _getGroupsStream(_selectedSeasonId!),
                           builder: (context, groupSnap) {
+                            // Seçilecek tek sezon ve tek grup varsa filtre
+                            // gösterilmez (turnuva zaten üst bantta).
+                            final groupCount = groupSnap.data?.length ?? 0;
+                            if (seasons.length < 2 && groupCount < 2) {
+                              return const SizedBox(height: 4);
+                            }
                             return Padding(
                               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                               child: LeagueFilterCapsule(
-                                logoUrl:
-                                    _leagueLogoById[_selectedLeagueId] ?? '',
-                                leagueName: currentLeagueName,
                                 seasonName: currentSeasonName,
                                 onTap: () =>
                                     _showFilterDialog(context, leagues),
