@@ -50,6 +50,23 @@ Future<Map<String, _DrawTeam>> _loadTeams(List<String> ids) async {
   };
 }
 
+/// Turnuva logoları (kura görseli için); oturum boyunca bir kez okunur.
+final Map<String, Future<String>> _logoCache = {};
+
+Future<String> _leagueLogo(String leagueId) =>
+    _logoCache.putIfAbsent(leagueId, () async {
+      try {
+        final r = await Supabase.instance.client
+            .from('leagues')
+            .select('logo_url')
+            .eq('id', leagueId)
+            .maybeSingle();
+        return (r?['logo_url'] ?? '').toString().trim();
+      } catch (_) {
+        return '';
+      }
+    });
+
 String _two(int v) => v.toString().padLeft(2, '0');
 
 String _clock(DateTime t) => '${_two(t.hour)}:${_two(t.minute)}';
@@ -222,7 +239,11 @@ class _LiveDrawScreenState extends State<LiveDrawScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _HeroCard(badge: _SoonBadge(text: _dayLabel(s.startAt)), height: 170),
+        _HeroCard(
+          badge: _SoonBadge(text: _dayLabel(s.startAt)),
+          height: 170,
+          leagueId: s.leagueId,
+        ),
         const SizedBox(height: 16),
         Text(
           s.title,
@@ -894,12 +915,16 @@ class _CountdownBoxes extends StatelessWidget {
 
 /// Kartın üst görseli: gece mavisi zemin, iki renkli ışık ve kura kâsesi.
 class _HeroCard extends StatelessWidget {
-  const _HeroCard({required this.badge, this.height = 150});
+  const _HeroCard({required this.badge, this.height = 150, this.leagueId});
   final Widget badge;
   final double height;
 
+  /// Turnuvanın logosu ortada; logo yoksa kura kâsesi.
+  final String? leagueId;
+
   @override
   Widget build(BuildContext context) {
+    final logoSize = height * 0.5;
     return Container(
       height: height,
       clipBehavior: Clip.antiAlias,
@@ -914,7 +939,36 @@ class _HeroCard extends StatelessWidget {
       child: Stack(
         children: [
           Positioned.fill(child: CustomPaint(painter: _GlowPainter())),
-          Center(child: _Bowl(size: height * 0.46)),
+          Center(
+            child: leagueId == null
+                ? _Bowl(size: height * 0.46)
+                : FutureBuilder<String>(
+                    future: _leagueLogo(leagueId!),
+                    builder: (context, snap) {
+                      final url = snap.data ?? '';
+                      if (url.isEmpty) {
+                        // Okunurken boş; logo yoksa kâse.
+                        return snap.connectionState == ConnectionState.done
+                            ? _Bowl(size: height * 0.46)
+                            : SizedBox(width: logoSize, height: logoSize);
+                      }
+                      return Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          WebSafeImage(
+                            url: url,
+                            width: logoSize,
+                            height: logoSize,
+                            fit: BoxFit.contain,
+                            fallbackIconSize: logoSize * 0.4,
+                          ),
+                          SizedBox(width: height * 0.08),
+                          _Bowl(size: height * 0.32),
+                        ],
+                      );
+                    },
+                  ),
+          ),
           Positioned(left: 12, top: 12, child: badge),
         ],
       ),
@@ -1214,71 +1268,97 @@ class _LiveDrawNewsCardState extends State<LiveDrawNewsCard> {
       sub = '${s.revealed.length} / ${s.total} maç çekildi';
     }
 
-    return Material(
-      color: _card,
-      borderRadius: BorderRadius.circular(18),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: _open,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _HeroCard(badge: badge, height: s != null && s.live ? 110 : 140),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    headline,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  if (sub.isNotEmpty) ...[
-                    const SizedBox(height: 4),
+    final live = s != null && s.live;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: live
+            ? [
+                BoxShadow(
+                  color: _live.withValues(alpha: 0.45),
+                  blurRadius: 18,
+                  spreadRadius: 1,
+                ),
+              ]
+            : null,
+      ),
+      child: Material(
+        color: _card,
+        clipBehavior: Clip.antiAlias,
+        // Çekim sürerken kırmızı kenarlıkla öne çıkar.
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(
+            color: live ? _live : Colors.white.withValues(alpha: 0.08),
+            width: live ? 2 : 1,
+          ),
+        ),
+        child: InkWell(
+          onTap: _open,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _HeroCard(
+                badge: badge,
+                height: s != null && s.live ? 120 : 140,
+                leagueId: s?.leagueId,
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
                     Text(
-                      sub,
-                      style: const TextStyle(
-                        color: _muted,
-                        fontSize: 12.5,
-                        height: 1.4,
-                      ),
-                    ),
-                  ],
-                  if (s != null && s.notStarted) ...[
-                    const SizedBox(height: 10),
-                    _CountdownBoxes(left: s.startAt.difference(s.serverNow)),
-                  ],
-                  const SizedBox(height: 10),
-                  Container(
-                    height: 40,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: ctaFilled ? _live : Colors.transparent,
-                      borderRadius: BorderRadius.circular(12),
-                      border: ctaFilled
-                          ? null
-                          : Border.all(
-                              color: Colors.white.withValues(alpha: 0.2),
-                            ),
-                    ),
-                    child: Text(
-                      cta,
+                      headline,
                       style: const TextStyle(
                         color: Colors.white,
+                        fontSize: 18,
                         fontWeight: FontWeight.w900,
-                        fontSize: 13.5,
-                        letterSpacing: 0.5,
                       ),
                     ),
-                  ),
-                ],
+                    if (sub.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        sub,
+                        style: const TextStyle(
+                          color: _muted,
+                          fontSize: 12.5,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                    if (s != null && s.notStarted) ...[
+                      const SizedBox(height: 10),
+                      _CountdownBoxes(left: s.startAt.difference(s.serverNow)),
+                    ],
+                    const SizedBox(height: 10),
+                    Container(
+                      height: 40,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: ctaFilled ? _live : Colors.transparent,
+                        borderRadius: BorderRadius.circular(12),
+                        border: ctaFilled
+                            ? null
+                            : Border.all(
+                                color: Colors.white.withValues(alpha: 0.2),
+                              ),
+                      ),
+                      child: Text(
+                        cta,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 13.5,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
