@@ -91,6 +91,9 @@ class ActiveTournament {
 
   static SupabaseClient get _sb => Supabase.instance.client;
 
+  /// Giriş yapmış (misafir olmayan) kullanıcı mı.
+  static bool get isRealUser => _isRealUser;
+
   static bool get _isRealUser {
     final u = _sb.auth.currentUser;
     return u != null && !u.isAnonymous;
@@ -138,10 +141,13 @@ class ActiveTournament {
           id = res?.toString();
         }
       } else {
-        myLeagues.value = const [];
-        if (prefs.getBool(_kGuestChosen) ?? false) {
-          id = prefs.getString(_kGuestLeague);
-        }
+        final guest = prefs.getBool(_kGuestChosen) ?? false;
+        // Misafir: herkese açık tüm aktif turnuvalar arasında seçebilir.
+        final choices = guest
+            ? await _loadMyLeagues(guest: true)
+            : const <LeagueChoice>[];
+        if (gen == _generation) myLeagues.value = choices;
+        if (guest) id = prefs.getString(_kGuestLeague);
       }
       await _apply(id, gen: gen);
     } catch (e) {
@@ -155,10 +161,12 @@ class ActiveTournament {
     final gen = ++_generation;
     GlobalFilter.setLeague(id);
     try {
-      final uid = _sb.auth.currentUser?.id;
-      if (uid != null) {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString(_kChosen(uid), id);
+      final prefs = await SharedPreferences.getInstance();
+      if (_isRealUser) {
+        await prefs.setString(_kChosen(_sb.auth.currentUser!.id), id);
+      } else {
+        // Misafirin son turnuvası (açılışta bu turnuvayla gelir).
+        await prefs.setString(_kGuestLeague, id);
       }
       await _apply(id, gen: gen);
     } catch (e) {
@@ -166,14 +174,15 @@ class ActiveTournament {
     }
   }
 
-  /// Kişinin turnuvaları: admin tüm aktif turnuvalar, diğerleri
+  /// Kişinin turnuvaları: admin ve misafir tüm aktif turnuvalar (gizli ve
+  /// demo turnuvalar veritabanı kuralıyla misafire gelmez), diğerleri
   /// my_league_ids (oyuncu, sorumlu, kurucu, bölge, gözlemci, takipçi).
-  static Future<List<LeagueChoice>> _loadMyLeagues() async {
-    final isAdmin = await _sb.rpc('is_admin') == true;
+  static Future<List<LeagueChoice>> _loadMyLeagues({bool guest = false}) async {
+    final all = guest || await _sb.rpc('is_admin') == true;
     var query = _sb
         .from('leagues')
         .select('id, name, short_name, logo_url, is_active');
-    if (!isAdmin) {
+    if (!all) {
       final ids = ((await _sb.rpc('my_league_ids')) as List? ?? const [])
           .map((e) => e.toString())
           .toList();
@@ -181,7 +190,7 @@ class ActiveTournament {
       query = query.inFilter('id', ids);
     }
     final rows = await query.order('name');
-    return [
+    final list = [
       for (final r in rows)
         if (r['is_active'] != false)
           LeagueChoice(
@@ -190,6 +199,7 @@ class ActiveTournament {
             logoUrl: (r['logo_url'] ?? '').toString(),
           ),
     ];
+    return list.length < 2 ? const [] : list;
   }
 
   /// Misafir bir turnuvayı seçip baktığında: uygulama o turnuvaya bürünür.

@@ -235,10 +235,12 @@ class _LeagueDropdownRoute extends PopupRoute<String> {
                     shrinkWrap: true,
                     padding: const EdgeInsets.symmetric(vertical: 6),
                     children: [
-                      const Padding(
-                        padding: EdgeInsets.fromLTRB(16, 6, 16, 6),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
                         child: Text(
-                          'TURNUVALARIM',
+                          ActiveTournament.isRealUser
+                              ? 'TURNUVALARIM'
+                              : 'TURNUVALAR',
                           style: TextStyle(
                             color: Color(0xFF94A3B8),
                             fontSize: 11,
