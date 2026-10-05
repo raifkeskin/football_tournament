@@ -39,27 +39,6 @@ class MainNavigator extends StatefulWidget {
 }
 
 class _MainNavigatorState extends State<MainNavigator> {
-  // Menü düğmelerinin arka planları; menü ilk açıldığında gecikmeli
-  // görünmesinler diye önceden yüklenir.
-  static const _menuImages = [
-    'assets/anasayfa.jpg',
-    'assets/acilis_arka_plan.jpg',
-    'assets/images/admin_fixture.jpg',
-    'assets/images/admin_team.jpg',
-    'assets/images/admin_tournament.jpg',
-    'assets/images/admin_license.jpg',
-  ];
-  bool _menuImagesCached = false;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_menuImagesCached) return;
-    _menuImagesCached = true;
-    for (final path in _menuImages) {
-      precacheImage(AssetImage(path), context);
-    }
-  }
 
   late int _aktifSekme = widget.initialTabIndex;
 
@@ -164,14 +143,8 @@ class _MainNavigatorState extends State<MainNavigator> {
           filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
           child: Container(
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF1E293B), // Üst sol lacivert
-                  Color(0xFF064E3B), // Alt sağ koyu zümrüt yeşili
-                ],
-              ),
+              // Yeni tasarımın düz zemini.
+              color: const Color(0xFF0F172A),
               border: Border(
                 right: BorderSide(
                   color: Colors.white.withValues(alpha: 0.1),
@@ -381,87 +354,51 @@ class _DrawerImageMenuCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 64, // Admin panelindeki 80'den biraz daha ince, menüye tam uyar
-      decoration: BoxDecoration(
+    // Düz kart (fotoğraf yok); seçili olan turnuvanın vurgu renginde.
+    final accent =
+        ActiveTournament.theme.value?.secondary ?? const Color(0xFF10B981);
+    return Material(
+      color: isSelected
+          ? accent.withValues(alpha: 0.12)
+          : const Color(0xFF1E293B),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: isSelected
-              ? const Color(0xFF10B981)
-              : Colors.white.withValues(alpha: 0.1),
-          width: isSelected ? 1.5 : 1.0,
-        ),
-        boxShadow: isSelected
-            ? [
-                BoxShadow(
-                  color: const Color(0xFF10B981).withValues(alpha: 0.3),
-                  blurRadius: 8,
-                ),
-              ]
-            : const [
-                BoxShadow(
-                  color: Colors.black26,
-                  blurRadius: 4,
-                  offset: Offset(0, 2),
-                ),
-              ],
-        image: DecorationImage(
-          image: AssetImage(imagePath),
-          fit: BoxFit.cover,
-          colorFilter: ColorFilter.mode(
-            Colors.black.withValues(
-              alpha: isSelected ? 0.6 : 0.8,
-            ), // Seçili olan biraz daha aydınlık
-            BlendMode.darken,
-          ),
-        ),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(14),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? const Color(0xFF10B981).withValues(alpha: 0.2)
-                        : Colors.white.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    icon,
-                    color: isSelected ? const Color(0xFF10B981) : Colors.white,
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: TextStyle(
-                      color: isSelected
-                          ? const Color(0xFF10B981)
-                          : Colors.white,
-                      fontWeight: isSelected
-                          ? FontWeight.w900
-                          : FontWeight.bold,
-                      fontSize: 15,
-                    ),
-                  ),
-                ),
-                if (isSelected)
-                  const Icon(
-                    Icons.arrow_forward_ios_rounded,
-                    color: Color(0xFF10B981),
-                    size: 14,
-                  ),
-              ],
+        child: Container(
+          height: 56,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isSelected
+                  ? accent.withValues(alpha: 0.7)
+                  : Colors.white.withValues(alpha: 0.06),
             ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: isSelected ? 0.22 : 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: accent, size: 20),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                    fontSize: 15,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

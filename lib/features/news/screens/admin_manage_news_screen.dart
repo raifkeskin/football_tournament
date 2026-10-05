@@ -416,192 +416,221 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
 
     await showDialog<void>(
       context: context,
+      // Boşluğa dokununca kapanır (kayıt sürerken değil).
+      barrierDismissible: true,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) => Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Container(
-            padding: const EdgeInsets.all(22),
-            decoration: adminDialogDecoration(),
-            child: SingleChildScrollView(
+        builder: (ctx, setLocal) => PopScope(
+          canPop: !saving,
+          child: Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 20,
+              vertical: 24,
+            ),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(22, 14, 14, 18),
+              decoration: adminDialogDecoration(),
+              // Başlık ve kaydet düğmesi sabit; aradaki alanlar kayar.
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(
                         isEdit ? Icons.edit_note_rounded : Icons.post_add,
                         color: kAdminAccent,
                       ),
                       const SizedBox(width: 8),
-                      Text(
-                        isEdit ? 'Haberi Düzenle' : 'Haber Ekle',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  const Divider(color: Colors.white24, height: 1),
-                  const SizedBox(height: 16),
-                  AdminFieldGroup(
-                    children: [
-                      AdminSelectRow(
-                        icon: Icons.emoji_events_outlined,
-                        label: 'Turnuva',
-                        value: _tournamentName(formTournamentId),
-                        placeholder: 'Turnuva seçin',
-                        locked: isEdit,
-                        onTap: saving ? null : () => pickTournament(setLocal),
-                      ),
-                      if (_regionsFor(formTournamentId).isNotEmpty)
-                        AdminSelectRow(
-                          icon: Icons.map_outlined,
-                          label: regionRequired(formTournamentId)
-                              ? 'Bölge'
-                              : 'Bölge (isteğe bağlı)',
-                          value: formRegionId == null
-                              ? null
-                              : _regions[formRegionId]?.name,
-                          placeholder: 'Tüm turnuva',
-                          onTap: saving ? null : () => pickRegion(setLocal),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  const Text.rich(
-                    TextSpan(
-                      text: 'Fotoğraf ',
-                      style: TextStyle(
-                        color: Color(0xFFCBD5E1),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      children: [
-                        TextSpan(
-                          text: '(isteğe bağlı)',
-                          style: TextStyle(
-                            color: Color(0xFF94A3B8),
-                            fontWeight: FontWeight.w400,
+                      Expanded(
+                        child: Text(
+                          isEdit ? 'Haberi Düzenle' : 'Haber Ekle',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  photoField(setLocal),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Tek fotoğraf · yüklenirken otomatik küçültülür',
-                    style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: controller,
-                    enabled: !saving,
-                    minLines: 4,
-                    maxLines: 8,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      labelText: 'Haber Metni',
-                      alignLabelWithHint: true,
-                      filled: true,
-                      fillColor: Colors.black.withValues(alpha: 0.3),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                          color: Colors.white.withValues(alpha: 0.15),
+                      ),
+                      IconButton(
+                        tooltip: 'Kapat',
+                        onPressed: saving ? null : () => Navigator.pop(ctx),
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          color: Colors.white70,
                         ),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: kAdminAccent),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  AdminFieldGroup(
-                    children: [
-                      AdminSelectRow(
-                        icon: Icons.event_available_outlined,
-                        label: 'Yayın bitiş tarihi (isteğe bağlı)',
-                        value: publishUntil == null
-                            ? null
-                            : '${_tarihYaz(publishUntil)} gün sonuna kadar',
-                        placeholder: 'Süresiz yayında kalır',
-                        onTap: saving ? null : () => pickUntil(setLocal),
-                        onClear: () => setLocal(() => publishUntil = null),
                       ),
                     ],
                   ),
-                  if (!isEdit) ...[
-                    const SizedBox(height: 8),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      value: publishNow,
-                      activeThumbColor: Colors.white,
-                      activeTrackColor: kAdminAccent,
-                      onChanged: saving
-                          ? null
-                          : (v) => setLocal(() => publishNow = v),
-                      title: const Text(
-                        'Hemen yayınla',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      subtitle: const Text(
-                        'Kapalıysa taslak olarak kaydedilir',
-                        style: TextStyle(
-                          color: Color(0xFF94A3B8),
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    height: 50,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: kAdminAccent,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onPressed: saving ? null : () => save(ctx, setLocal),
-                      child: saving
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
+                  const SizedBox(height: 6),
+                  const Divider(color: Colors.white24, height: 1),
+                  Flexible(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(0, 16, 8, 16),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          AdminFieldGroup(
+                            children: [
+                              AdminSelectRow(
+                                icon: Icons.emoji_events_outlined,
+                                label: 'Turnuva',
+                                value: _tournamentName(formTournamentId),
+                                placeholder: 'Turnuva seçin',
+                                locked: isEdit,
+                                onTap: saving
+                                    ? null
+                                    : () => pickTournament(setLocal),
                               ),
-                            )
-                          : Text(
-                              isEdit ? 'GÜNCELLE' : 'KAYDET',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w900,
+                              if (_regionsFor(formTournamentId).isNotEmpty)
+                                AdminSelectRow(
+                                  icon: Icons.map_outlined,
+                                  label: regionRequired(formTournamentId)
+                                      ? 'Bölge'
+                                      : 'Bölge (isteğe bağlı)',
+                                  value: formRegionId == null
+                                      ? null
+                                      : _regions[formRegionId]?.name,
+                                  placeholder: 'Tüm turnuva',
+                                  onTap: saving
+                                      ? null
+                                      : () => pickRegion(setLocal),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          const Text.rich(
+                            TextSpan(
+                              text: 'Fotoğraf ',
+                              style: TextStyle(
+                                color: Color(0xFFCBD5E1),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              children: [
+                                TextSpan(
+                                  text: '(isteğe bağlı)',
+                                  style: TextStyle(
+                                    color: Color(0xFF94A3B8),
+                                    fontWeight: FontWeight.w400,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          photoField(setLocal),
+                          const SizedBox(height: 6),
+                          const Text(
+                            'En fazla 5 fotoğraf · ilki kapak · otomatik küçültülür',
+                            style: TextStyle(
+                              color: Color(0xFF94A3B8),
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: controller,
+                            enabled: !saving,
+                            minLines: 4,
+                            maxLines: 8,
+                            style: const TextStyle(color: Colors.white),
+                            decoration: InputDecoration(
+                              labelText: 'Haber Metni',
+                              alignLabelWithHint: true,
+                              filled: true,
+                              fillColor: Colors.black.withValues(alpha: 0.3),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(
+                                  color: Colors.white.withValues(alpha: 0.15),
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(
+                                  color: kAdminAccent,
+                                ),
                               ),
                             ),
+                          ),
+                          const SizedBox(height: 16),
+                          AdminFieldGroup(
+                            children: [
+                              AdminSelectRow(
+                                icon: Icons.event_available_outlined,
+                                label: 'Yayın bitiş tarihi (isteğe bağlı)',
+                                value: publishUntil == null
+                                    ? null
+                                    : '${_tarihYaz(publishUntil)} gün sonuna kadar',
+                                placeholder: 'Süresiz yayında kalır',
+                                onTap: saving
+                                    ? null
+                                    : () => pickUntil(setLocal),
+                                onClear: () =>
+                                    setLocal(() => publishUntil = null),
+                              ),
+                            ],
+                          ),
+                          if (!isEdit) ...[
+                            const SizedBox(height: 8),
+                            SwitchListTile(
+                              contentPadding: EdgeInsets.zero,
+                              value: publishNow,
+                              activeThumbColor: Colors.white,
+                              activeTrackColor: kAdminAccent,
+                              onChanged: saving
+                                  ? null
+                                  : (v) => setLocal(() => publishNow = v),
+                              title: const Text(
+                                'Hemen yayınla',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              subtitle: const Text(
+                                'Kapalıysa taslak olarak kaydedilir',
+                                style: TextStyle(
+                                  color: Color(0xFF94A3B8),
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    height: 50,
-                    child: OutlinedButton(
-                      onPressed: saving ? null : () => Navigator.pop(ctx),
-                      child: const Text(
-                        'VAZGEÇ',
-                        style: TextStyle(fontWeight: FontWeight.w900),
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: SizedBox(
+                      height: 50,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: kAdminAccent,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: saving ? null : () => save(ctx, setLocal),
+                        child: saving
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : Text(
+                                isEdit ? 'GÜNCELLE' : 'KAYDET',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
                       ),
                     ),
                   ),

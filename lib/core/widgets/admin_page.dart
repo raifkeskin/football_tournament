@@ -27,20 +27,7 @@ class AdminPageScaffold extends StatelessWidget {
       backgroundColor: kAdminBg,
       extendBodyBehindAppBar: true,
       appBar: MasterClassAppBar(title: title, actions: actions),
-      body: Stack(
-        children: [
-          Positioned.fill(
-            child: Opacity(
-              opacity: 0.15,
-              child: Image.asset(
-                'assets/images/background_ball.jpg',
-                fit: BoxFit.cover,
-              ),
-            ),
-          ),
-          SafeArea(child: body),
-        ],
-      ),
+      body: Stack(children: [SafeArea(child: body)]),
     );
   }
 }

@@ -1243,15 +1243,6 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
       ),
       body: Stack(
         children: [
-          Positioned.fill(
-            child: Opacity(
-              opacity: 0.15,
-              child: Image.asset(
-                'assets/images/background_ball.jpg',
-                fit: BoxFit.cover,
-              ),
-            ),
-          ),
           SafeArea(
             child: Column(
               children: [
@@ -3136,15 +3127,6 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
       ),
       body: Stack(
         children: [
-          Positioned.fill(
-            child: Opacity(
-              opacity: 0.15,
-              child: Image.asset(
-                'assets/images/background_ball.jpg',
-                fit: BoxFit.cover,
-              ),
-            ),
-          ),
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),

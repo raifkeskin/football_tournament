@@ -150,17 +150,6 @@ class _GroupsScreenState extends State<GroupsScreen> {
       ),
       body: Stack(
         children: [
-          // FİKSTÜR EKRANINDAKİ AYNI ARKA PLAN
-          Positioned.fill(
-            child: Opacity(
-              opacity: 0.15,
-              child: Image.asset(
-                'assets/images/background_ball.jpg',
-                fit: BoxFit.cover,
-                alignment: Alignment.center,
-              ),
-            ),
-          ),
           SafeArea(
             child: Column(
               children: [

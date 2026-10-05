@@ -705,15 +705,6 @@ class _AdminPitchManagementScreenState
       ),
       body: Stack(
         children: [
-          Positioned.fill(
-            child: Opacity(
-              opacity: 0.15,
-              child: Image.asset(
-                'assets/images/background_ball.jpg',
-                fit: BoxFit.cover,
-              ),
-            ),
-          ),
           SafeArea(
             child: !isAdmin
                 ? const Center(

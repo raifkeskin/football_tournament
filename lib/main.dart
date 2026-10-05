@@ -125,14 +125,6 @@ class _SplashScreenState extends State<SplashScreen>
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // Diğer ekranlarla ortak saha görseli, çok soluk.
-            Opacity(
-              opacity: 0.18,
-              child: Image.asset(
-                'assets/images/background_ball.jpg',
-                fit: BoxFit.cover,
-              ),
-            ),
             const DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(

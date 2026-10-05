@@ -193,19 +193,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             body: Stack(
               // ... geri kalanı aynı
               children: [
-                // Fikstür/Gruplar ekranlarındaki ortak top görselli arka plan
-                // (yönetim panelinde yok: yeni tasarımın düz zemini).
-                if (!panelMode)
-                  Positioned.fill(
-                    child: Opacity(
-                      opacity: 0.15,
-                      child: Image.asset(
-                        'assets/images/background_ball.jpg',
-                        fit: BoxFit.cover,
-                        alignment: Alignment.center,
-                      ),
-                    ),
-                  ),
                 SafeArea(
                   child: isAdminPanelVisible
                       ? Column(children: [Expanded(child: AdminPanelWidget())])

@@ -1,3 +1,4 @@
+import '../../../core/services/active_tournament.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../player/widgets/player_card.dart';
@@ -787,10 +788,12 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                 children: [
                   Stack(
                     children: [
+                      // Fotoğraf yerine turnuvanın ana renginden zemin.
                       Positioned.fill(
-                        child: Image.asset(
-                          'assets/anasayfa.jpg',
-                          fit: BoxFit.cover,
+                        child: ColoredBox(
+                          color:
+                              ActiveTournament.theme.value?.primary ??
+                              const Color(0xFF064E3B),
                         ),
                       ),
                       // Okunurluk için koyu gradient: üstte ve altta koyulaşır,
@@ -982,16 +985,6 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                   Expanded(
                     child: Stack(
                       children: [
-                        // Üst bandın altı: diğer ekranlardaki soluk saha zemini
-                        Positioned.fill(
-                          child: Opacity(
-                            opacity: 0.15,
-                            child: Image.asset(
-                              'assets/images/background_ball.jpg',
-                              fit: BoxFit.cover,
-                            ),
-                          ),
-                        ),
                         Column(
                           children: [
                             if (isSuperAdmin)
