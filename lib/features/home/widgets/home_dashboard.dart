@@ -498,6 +498,16 @@ class _HomeDashboardState extends State<HomeDashboard> {
           ((p['remaining_matches'] ?? p['match_count']) as num?)?.toInt() ?? 0;
     }
 
+    // Turnuva özeti: gol sayısı oynanmış maçların skorlarından (hızlı skor
+    // girişiyle olaysız kaydedilen maçlar da sayılsın).
+    var scoreGoals = 0;
+    for (final m in matches) {
+      if (m.status == MatchStatus.finished) {
+        scoreGoals += m.homeScore + m.awayScore;
+      }
+    }
+    if (scoreGoals > totalGoals) totalGoals = scoreGoals;
+
     return _DashData(
       seasonId: seasonId,
       seasonName: (season['name'] ?? '').toString(),

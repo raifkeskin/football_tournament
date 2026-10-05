@@ -58,17 +58,29 @@ class _LoginScreenState extends State<LoginScreen> {
   int _adminTapCount = 0;
   Timer? _adminTapTimer;
 
-  @override
-  void initState() {
-    super.initState();
-    // Giriş ekranında bant her zaman genel görünümde (turnuva adı yok).
+  /// Bu giriş formu bandı genel görünüme aldı mı. Yalnız form görünürken
+  /// sayılır: Profil sekmesine gömülü form, sekme arkadayken (TickerMode
+  /// kapalı) bandı etkilemez.
+  bool _bandGeneric = false;
+
+  void _syncBand(bool visible) {
+    if (visible == _bandGeneric) return;
+    _bandGeneric = visible;
     // (Kurulum/kaldırma sırasında bant yeniden çizilemez; ertelenir.)
-    Future.microtask(() => AppNameBand.genericScreens.value++);
+    Future.microtask(
+      () => AppNameBand.genericScreens.value += visible ? 1 : -1,
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncBand(TickerMode.of(context));
   }
 
   @override
   void dispose() {
-    Future.microtask(() => AppNameBand.genericScreens.value--);
+    _syncBand(false);
     _adminTapTimer?.cancel();
     _phoneController.dispose();
     _passwordController.dispose();
