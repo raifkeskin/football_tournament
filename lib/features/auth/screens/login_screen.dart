@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show AuthException;
 
+import '../../../core/services/active_tournament.dart';
 import '../../../core/services/app_session.dart';
 import 'forgot_password_screen.dart';
 import '../../home/screens/main_navigator.dart';
@@ -32,6 +33,8 @@ class GuestMode {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_key, value);
     } catch (_) {}
+    // Misafir: son baktığı turnuvanın kimliği; kapıya dönüş: tema temizlenir.
+    await ActiveTournament.refresh();
   }
 }
 
