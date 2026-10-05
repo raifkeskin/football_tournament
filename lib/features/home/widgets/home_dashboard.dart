@@ -178,6 +178,7 @@ class _DashData {
     required this.teams,
     required this.groups,
     required this.groupRegion,
+    required this.groupRegionId,
     required this.matches,
     required this.myTeamIds,
     required this.scorers,
@@ -193,6 +194,7 @@ class _DashData {
   final Map<String, _TeamInfo> teams;
   final Map<String, String> groups; // id -> ad
   final Map<String, String> groupRegion; // grup id -> bölge adı
+  final Map<String, String> groupRegionId; // grup id -> bölge id
   final List<MatchModel> matches;
   final Set<String> myTeamIds;
   final List<_Scorer> scorers;
@@ -349,7 +351,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
           .eq('season_id', seasonId),
       _sb
           .from('groups')
-          .select('id, name, season_regions(name)')
+          .select('id, name, region_id, season_regions(name)')
           .eq('season_id', seasonId),
       _sb.from('matches').select('*, pitches(name)').eq('season_id', seasonId),
       _sb
@@ -426,8 +428,11 @@ class _HomeDashboardState extends State<HomeDashboard> {
 
     final groups = <String, String>{};
     final groupRegion = <String, String>{};
+    final groupRegionId = <String, String>{};
     for (final g in (raw['groups'] as List? ?? const [])) {
       final id = g['id'].toString();
+      final rid = g['region_id']?.toString();
+      if (rid != null && rid.isNotEmpty) groupRegionId[id] = rid;
       groups[id] = (g['name'] ?? '').toString();
       final region = (g['season_regions'] as Map?)?['name'];
       if (region != null) groupRegion[id] = region.toString();
@@ -500,6 +505,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
       teams: teams,
       groups: groups,
       groupRegion: groupRegion,
+      groupRegionId: groupRegionId,
       matches: matches,
       myTeamIds: myTeams,
       scorers: ranked(scorerMap),
@@ -832,7 +838,12 @@ class _HomeDashboardState extends State<HomeDashboard> {
           const SizedBox(height: 12),
         ],
         // Son dakika haber kartı (mevcut bileşen).
-        HomeNewsCard(onOpenNews: widget.onOpenNews),
+        // Yalnız bu turnuvanın ve kişinin bölgesinin haberleri.
+        HomeNewsCard(
+          onOpenNews: widget.onOpenNews,
+          leagueId: widget.league.id,
+          regionId: myGroup == null ? null : d.groupRegionId[myGroup],
+        ),
         if (thisWeekMatches.isNotEmpty) ...[
           _sectionHeader(
             'BU HAFTA · $thisWeek. HAFTA',

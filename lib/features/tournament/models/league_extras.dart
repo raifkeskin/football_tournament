@@ -22,6 +22,7 @@ class NewsItem {
     required this.isPublished,
     required this.createdAt,
     this.imageUrl,
+    this.imageUrls = const [],
     this.likeCount = 0,
     this.leagueName = '',
     this.leagueLogoUrl,
@@ -38,6 +39,9 @@ class NewsItem {
   final bool isPublished;
   final DateTime? createdAt;
   final String? imageUrl;
+
+  /// Haberin fotoğrafları (en fazla 5; ilki kapak = [imageUrl]).
+  final List<String> imageUrls;
   final int likeCount;
 
   /// Akış kartının başlığı için (`leagues` ile birlikte okunduğunda dolu).

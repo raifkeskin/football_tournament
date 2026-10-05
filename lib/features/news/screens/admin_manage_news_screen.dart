@@ -151,9 +151,11 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
   Future<void> _openNewsForm({NewsItem? item}) async {
     final isEdit = item != null;
     final controller = TextEditingController(text: item?.content ?? '');
-    final existingUrl = (item?.imageUrl ?? '').trim();
-    XFile? picked;
-    var removeImage = false;
+    // Fotoğraflar (en fazla 5): kayıtlı adresler ve yeni seçilen dosyalar,
+    // gösterim sırasıyla. İlki kapak olur.
+    const maxPhotos = 5;
+    final existingUrls = [...?item?.imageUrls];
+    final photos = <Object>[...existingUrls]; // String (adres) | XFile
     var publishNow = true;
     var saving = false;
     // Ekleme: filtredeki turnuva önerilir ama popup'ta değiştirilebilir.
@@ -223,19 +225,21 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
       setLocal(() => publishUntil = end);
     }
 
-    Future<void> pickPhoto(StateSetter setLocal) async {
-      // Yüklemeden önce küçültülür: depolama ve mobil veri dostu.
-      final file = await ImagePicker().pickImage(
-        source: ImageSource.gallery,
+    Future<void> pickPhotos(StateSetter setLocal) async {
+      final room = maxPhotos - photos.length;
+      if (room <= 0) return;
+      // Yüklemeden önce ayrıca küçültülür (bkz. SupabaseImageUploadService).
+      final files = await ImagePicker().pickMultiImage(
         maxWidth: 1600,
         maxHeight: 1600,
         imageQuality: 82,
+        limit: room > 1 ? room : null,
       );
-      if (file == null) return;
-      setLocal(() {
-        picked = file;
-        removeImage = false;
-      });
+      if (files.isEmpty) return;
+      if (files.length > room) {
+        _snack('En fazla $maxPhotos fotoğraf eklenebilir.');
+      }
+      setLocal(() => photos.addAll(files.take(room)));
     }
 
     Future<void> save(BuildContext ctx, StateSetter setLocal) async {
@@ -256,24 +260,27 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
       setLocal(() => saving = true);
       if (isEdit) setState(() => _busyIds.add(item.id));
       try {
-        String? imageUrl = removeImage || existingUrl.isEmpty
-            ? null
-            : existingUrl;
-        final file = picked;
-        if (file != null) {
-          imageUrl = await SupabaseImageUploadService().uploadImage(
-            file,
+        // Yeni dosyalar sırası korunarak yüklenir.
+        final urls = <String>[];
+        for (final p in photos) {
+          if (p is String) {
+            urls.add(p);
+            continue;
+          }
+          final url = await SupabaseImageUploadService().uploadImage(
+            p as XFile,
             folder: MediaFolder.news,
           );
-          if (imageUrl == null) {
+          if (url == null) {
             throw Exception('Fotoğraf yüklenemedi, tekrar deneyin.');
           }
+          urls.add(url);
         }
         if (isEdit) {
           await _leagueService.updateNews(
             newsId: item.id,
             content: text,
-            imageUrl: imageUrl,
+            imageUrls: urls,
             publishUntil: publishUntil,
             regionId: formRegionId,
           );
@@ -281,14 +288,17 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
           await _leagueService.addNews(
             tournamentId: tId,
             content: text,
-            imageUrl: imageUrl,
+            imageUrls: urls,
             isPublished: publishNow,
             publishUntil: publishUntil,
             regionId: formRegionId,
           );
         }
-        if (isEdit && existingUrl.isNotEmpty && existingUrl != imageUrl) {
-          await SupabaseImageUploadService().deleteImageByUrl(existingUrl);
+        // Formdan kaldırılan eski fotoğraflar depodan da silinir.
+        for (final old in existingUrls) {
+          if (!urls.contains(old)) {
+            await SupabaseImageUploadService().deleteImageByUrl(old);
+          }
         }
         if (ctx.mounted) Navigator.pop(ctx);
         if (mounted) _snack(isEdit ? 'Haber güncellendi.' : 'Haber eklendi.');
@@ -301,36 +311,57 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
     }
 
     Widget photoField(StateSetter setLocal) {
-      final file = picked;
-      final showExisting =
-          file == null && !removeImage && existingUrl.isNotEmpty;
-      final hasPhoto = file != null || showExisting;
-
-      if (!hasPhoto) {
-        return InkWell(
-          onTap: saving ? null : () => pickPhoto(setLocal),
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            height: 120,
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
-            ),
-            child: const Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+      Widget thumb(Object p, int i) {
+        final Widget image = p is String
+            ? WebSafeImage(url: p, fit: BoxFit.cover)
+            : (kIsWeb
+                  ? Image.network((p as XFile).path, fit: BoxFit.cover)
+                  : Image(
+                      image: pickedImageProvider(p as XFile),
+                      fit: BoxFit.cover,
+                    ));
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: SizedBox(
+            width: 92,
+            height: 92,
+            child: Stack(
+              fit: StackFit.expand,
               children: [
-                Icon(
-                  Icons.add_photo_alternate_outlined,
-                  color: kAdminAccent,
-                  size: 32,
-                ),
-                SizedBox(height: 8),
-                Text(
-                  'Fotoğraf ekle',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
+                image,
+                if (i == 0)
+                  Positioned(
+                    left: 4,
+                    bottom: 4,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.65),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Text(
+                        'Kapak',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
+                Positioned(
+                  right: 2,
+                  top: 2,
+                  child: _PhotoButton(
+                    icon: Icons.close_rounded,
+                    color: kAdminDanger,
+                    tooltip: 'Fotoğrafı kaldır',
+                    onTap: saving
+                        ? null
+                        : () => setLocal(() => photos.removeAt(i)),
                   ),
                 ),
               ],
@@ -339,48 +370,47 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
         );
       }
 
-      final preview = file != null
-          ? (kIsWeb
-                ? Image.network(file.path, fit: BoxFit.cover)
-                : Image(image: pickedImageProvider(file), fit: BoxFit.cover))
-          : WebSafeImage(url: existingUrl, fit: BoxFit.cover);
-
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: AspectRatio(
-          aspectRatio: 16 / 10,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              preview,
-              Positioned(
-                right: 8,
-                bottom: 8,
-                child: Row(
+      return Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (var i = 0; i < photos.length; i++) thumb(photos[i], i),
+          if (photos.length < maxPhotos)
+            InkWell(
+              onTap: saving ? null : () => pickPhotos(setLocal),
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                width: 92,
+                height: 92,
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.15),
+                  ),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    _PhotoButton(
-                      icon: Icons.image_outlined,
-                      label: 'Değiştir',
-                      onTap: saving ? null : () => pickPhoto(setLocal),
+                    const Icon(
+                      Icons.add_photo_alternate_outlined,
+                      color: kAdminAccent,
+                      size: 26,
                     ),
-                    const SizedBox(width: 8),
-                    _PhotoButton(
-                      icon: Icons.delete_outline_rounded,
-                      color: kAdminDanger,
-                      tooltip: 'Fotoğrafı kaldır',
-                      onTap: saving
-                          ? null
-                          : () => setLocal(() {
-                              picked = null;
-                              removeImage = true;
-                            }),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Fotoğraf ${photos.length}/$maxPhotos',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ],
                 ),
               ),
-            ],
-          ),
-        ),
+            ),
+        ],
       );
     }
 
@@ -587,7 +617,10 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
     Future<void>.delayed(const Duration(milliseconds: 600), controller.dispose);
   }
 
-  Future<void> _deleteNews(String newsId, {String? imageUrl}) async {
+  Future<void> _deleteNews(
+    String newsId, {
+    List<String> imageUrls = const [],
+  }) async {
     final ok = await showAdminConfirmDialog(
       context: context,
       title: 'Haberi Sil',
@@ -598,7 +631,9 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
     setState(() => _busyIds.add(newsId));
     try {
       await _leagueService.deleteNews(newsId: newsId);
-      await SupabaseImageUploadService().deleteImageByUrl(imageUrl);
+      for (final url in imageUrls) {
+        await SupabaseImageUploadService().deleteImageByUrl(url);
+      }
       if (mounted) _snack('Haber silindi.');
     } catch (e) {
       if (mounted) _snack('Hata: $e');
@@ -751,7 +786,7 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
                   icon: Icons.delete_outline_rounded,
                   tooltip: 'Sil',
                   color: kAdminDanger,
-                  onTap: () => _deleteNews(doc.id, imageUrl: doc.imageUrl),
+                  onTap: () => _deleteNews(doc.id, imageUrls: doc.imageUrls),
                 ),
               ],
             ],
@@ -889,17 +924,16 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
 enum _NewsStatus { all, live, passive }
 
 /// Fotoğraf önizlemesinin üzerindeki küçük koyu buton (Değiştir / Kaldır).
+/// Fotoğraf küçük resminin köşesindeki küçük simge düğmesi.
 class _PhotoButton extends StatelessWidget {
   const _PhotoButton({
     required this.icon,
     required this.onTap,
-    this.label,
     this.tooltip,
     this.color = Colors.white,
   });
 
   final IconData icon;
-  final String? label;
   final String? tooltip;
   final Color color;
   final VoidCallback? onTap;
@@ -908,32 +942,14 @@ class _PhotoButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final child = Material(
       color: const Color(0xFF0F172A).withValues(alpha: 0.85),
-      borderRadius: BorderRadius.circular(10),
+      shape: const CircleBorder(),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          height: 40,
-          constraints: const BoxConstraints(minWidth: 40),
-          padding: EdgeInsets.symmetric(horizontal: label == null ? 0 : 12),
-          alignment: Alignment.center,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 18, color: color),
-              if (label != null) ...[
-                const SizedBox(width: 6),
-                Text(
-                  label!,
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ],
-          ),
+        customBorder: const CircleBorder(),
+        child: SizedBox(
+          width: 28,
+          height: 28,
+          child: Icon(icon, size: 16, color: color),
         ),
       ),
     );

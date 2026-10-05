@@ -68,7 +68,7 @@ abstract class ILeagueService {
   Future<void> addNews({
     required String tournamentId,
     required String content,
-    String? imageUrl,
+    List<String> imageUrls = const [],
     bool isPublished = true,
     DateTime? publishUntil,
     String? regionId,
@@ -84,7 +84,7 @@ abstract class ILeagueService {
   Future<void> updateNews({
     required String newsId,
     required String content,
-    String? imageUrl,
+    List<String> imageUrls = const [],
     DateTime? publishUntil,
     String? regionId,
   });

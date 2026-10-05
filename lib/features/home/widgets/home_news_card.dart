@@ -6,15 +6,26 @@ import '../../../core/services/active_tournament.dart';
 import '../../../core/services/league_scope.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/widgets/web_safe_image.dart';
+import '../../news/screens/news_feed_screen.dart';
 import '../../tournament/models/league_extras.dart';
 
 /// Ana sayfanın üstündeki "Son Dakika" haber kartı: son günlerin haberleri
 /// sırayla döner; dokununca Haberler sekmesi açılır. Yeni haber yoksa hiç
 /// görünmez.
 class HomeNewsCard extends StatefulWidget {
-  const HomeNewsCard({super.key, required this.onOpenNews});
+  const HomeNewsCard({
+    super.key,
+    required this.onOpenNews,
+    this.leagueId,
+    this.regionId,
+  });
 
   final VoidCallback onOpenNews;
+
+  /// Verilirse yalnız bu turnuvanın haberleri; [regionId] verilirse o
+  /// bölgenin ve tüm turnuvanın haberleri (kişinin bölgesi).
+  final String? leagueId;
+  final String? regionId;
 
   @override
   State<HomeNewsCard> createState() => _HomeNewsCardState();
@@ -80,6 +91,11 @@ class _HomeNewsCardState extends State<HomeNewsCard> {
             .where(
               (n) =>
                   LeagueScope.allows(n.tournamentId) &&
+                  (widget.leagueId == null ||
+                      n.tournamentId == widget.leagueId) &&
+                  (widget.regionId == null ||
+                      n.regionId == null ||
+                      n.regionId == widget.regionId) &&
                   n.createdAt != null &&
                   n.createdAt!.isAfter(since),
             )
@@ -98,7 +114,11 @@ class _HomeNewsCardState extends State<HomeNewsCard> {
           child: Material(
             color: Colors.transparent,
             child: InkWell(
-              onTap: widget.onOpenNews,
+              // Haberler'de bu haber açık gelsin.
+              onTap: () {
+                NewsFeedScreen.focusNewsId.value = items[_index].id;
+                widget.onOpenNews();
+              },
               borderRadius: BorderRadius.circular(18),
               child: Ink(
                 padding: const EdgeInsets.all(12),

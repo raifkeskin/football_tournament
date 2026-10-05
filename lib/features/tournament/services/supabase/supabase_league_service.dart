@@ -657,14 +657,22 @@ class SupabaseLeagueService implements ILeagueService {
   }
 
   static const _newsColumns =
-      'id, league_id, content, is_published, image_url, like_count, created_at, '
-      'publish_until, region_id';
+      'id, league_id, content, is_published, image_url, image_urls, '
+      'like_count, created_at, publish_until, region_id';
+
+  /// Haberde en fazla 5 fotoğraf (veritabanı da sınırlar).
+  static List<String> _cleanImages(List<String> urls) =>
+      urls.map((u) => u.trim()).where((u) => u.isNotEmpty).take(5).toList();
 
   NewsItem _newsFromRow(Map<String, dynamic> r) {
     final league = r['leagues'];
     final l = league is Map ? league : const <String, dynamic>{};
     final img = (r['image_url'] ?? '').toString().trim();
     final logo = (l['logo_url'] ?? '').toString().trim();
+    final imgs = [
+      for (final u in (r['image_urls'] as List? ?? const []))
+        if (u.toString().trim().isNotEmpty) u.toString().trim(),
+    ];
     return NewsItem(
       id: (r['id'] ?? '').toString(),
       tournamentId: (r['league_id'] ?? '').toString(),
@@ -672,6 +680,7 @@ class SupabaseLeagueService implements ILeagueService {
       isPublished: r['is_published'] == true,
       createdAt: _readDate(r['created_at']),
       imageUrl: img.isEmpty ? null : img,
+      imageUrls: imgs.isEmpty && img.isNotEmpty ? [img] : imgs,
       likeCount: (r['like_count'] as num?)?.toInt() ?? 0,
       leagueName: (l['name'] ?? '').toString().trim(),
       leagueLogoUrl: logo.isEmpty ? null : logo,
@@ -847,7 +856,7 @@ class SupabaseLeagueService implements ILeagueService {
   Future<void> addNews({
     required String tournamentId,
     required String content,
-    String? imageUrl,
+    List<String> imageUrls = const [],
     bool isPublished = true,
     DateTime? publishUntil,
     String? regionId,
@@ -858,7 +867,7 @@ class SupabaseLeagueService implements ILeagueService {
       throw Exception('Turnuva seçilmeden haber eklenemez.');
     }
     if (text.isEmpty) return;
-    final img = (imageUrl ?? '').trim();
+    final imgs = _cleanImages(imageUrls);
     try {
       AppConfig.sqlLogStart(
         table: 'news',
@@ -869,7 +878,8 @@ class SupabaseLeagueService implements ILeagueService {
         'league_id': tId,
         'content': text,
         'is_published': isPublished,
-        'image_url': img.isEmpty ? null : img,
+        // Kapak (image_url) veritabanında ilk fotoğraftan doldurulur.
+        'image_urls': imgs,
         'publish_until': publishUntil?.toUtc().toIso8601String(),
         'region_id': regionId,
       });
@@ -908,14 +918,14 @@ class SupabaseLeagueService implements ILeagueService {
   Future<void> updateNews({
     required String newsId,
     required String content,
-    String? imageUrl,
+    List<String> imageUrls = const [],
     DateTime? publishUntil,
     String? regionId,
   }) async {
     final id = newsId.trim();
     if (id.isEmpty) return;
     final text = content.trim();
-    final img = (imageUrl ?? '').trim();
+    final imgs = _cleanImages(imageUrls);
     try {
       AppConfig.sqlLogStart(
         table: 'news',
@@ -926,7 +936,7 @@ class SupabaseLeagueService implements ILeagueService {
           .from('news')
           .update({
             'content': text,
-            'image_url': img.isEmpty ? null : img,
+            'image_urls': imgs,
             'publish_until': publishUntil?.toUtc().toIso8601String(),
             'region_id': regionId,
           })

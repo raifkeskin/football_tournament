@@ -691,7 +691,9 @@ class SupabaseMatchService implements IMatchService {
             .eq('id', id)
             .select('id');
         if (rows.isEmpty) {
-          throw Exception('Skor kaydedilemedi: bu maçı düzenleme yetkiniz yok.');
+          throw Exception(
+            'Skor kaydedilemedi: bu maçı düzenleme yetkiniz yok.',
+          );
         }
         AppConfig.sqlLogResult(table: 'matches', operation: 'UPDATE', count: 1);
       } catch (e) {

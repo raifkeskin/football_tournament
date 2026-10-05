@@ -1,46 +1,222 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/services/active_tournament.dart';
 import '../../../core/services/app_session.dart';
+import '../../../core/services/global_filter.dart';
 import '../../../core/services/league_scope.dart';
-import '../../../core/services/app_settings.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/widgets/master_class_app_bar.dart';
 import '../../../core/widgets/web_safe_image.dart';
-import '../../tournament/models/league.dart';
 import '../../tournament/models/league_extras.dart';
 import '../../tournament/services/interfaces/i_league_service.dart';
 
 const _bgDark = Color(0xFF0F172A);
 const _card = Color(0xFF1E293B);
-const _accent = Color(0xFF10B981);
 const _muted = Color(0xFF94A3B8);
 const _heart = Color(0xFFF87171);
 
-/// Menü → Haberler: turnuvaların yayındaki haberleri, en yeni önce.
-/// Beğeni yalnızca giriş yapmış kullanıcıya açıktır; misafir sayıyı görür.
+Color _accent() =>
+    ActiveTournament.theme.value?.secondary ?? const Color(0xFF10B981);
+
+/// Haberler: bantta seçili turnuvanın yayındaki haberleri, en yeni önce.
+/// Turnuvanın bölgeleri varsa üstte "Tümü · Bölge…" sekmeleri; ekran kişinin
+/// kendi bölgesiyle açılır. Haberler kompakt listelenir, dokununca yerinde
+/// açılır (aynı anda tek haber açık).
 class NewsFeedScreen extends StatefulWidget {
   const NewsFeedScreen({super.key});
+
+  /// Ana sayfadaki son dakika kartından gelinen haber: açık gösterilir.
+  static final focusNewsId = ValueNotifier<String?>(null);
 
   @override
   State<NewsFeedScreen> createState() => _NewsFeedScreenState();
 }
 
+class _Region {
+  const _Region(this.id, this.name);
+  final String id;
+  final String name;
+}
+
+/// Turnuvanın bölgeleri + kişinin bölgesi.
+class _RegionMeta {
+  const _RegionMeta(this.regions, this.mine);
+  final List<_Region> regions;
+  final String? mine;
+}
+
 class _NewsFeedScreenState extends State<NewsFeedScreen> {
   final ILeagueService _leagueService = ServiceLocator.leagueService;
-  late final Stream<List<League>> _leaguesStream = _leagueService
-      .watchLeagues();
 
-  String? _leagueId; // null = tümü
-  final Set<String> _expanded = {};
+  /// Bölge bilgisi turnuva + kişi başına bir kez okunur.
+  static final Map<String, _RegionMeta> _metaCache = {};
+
+  /// Turnuva başına seçili sekme (null: Tümü).
+  final Map<String, String?> _tabByLeague = {};
+  final Set<String> _tabChosen = {};
+
+  String? _openId;
+  final Map<String, GlobalKey> _keys = {};
+  List<NewsItem> _visible = const [];
 
   /// Sunucu yanıtı gelene kadar kullanıcının son tercihi (iyimser güncelleme).
   final Map<String, bool> _likeOverride = {};
   final Set<String> _likeBusy = {};
 
+  @override
+  void initState() {
+    super.initState();
+    GlobalFilter.leagueId.addListener(_onChanged);
+    ActiveTournament.theme.addListener(_onChanged);
+    NewsFeedScreen.focusNewsId.addListener(_onFocus);
+    // Sekme ilk kez kurulurken bekleyen bir haber varsa.
+    if (NewsFeedScreen.focusNewsId.value != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _onFocus());
+    }
+  }
+
+  @override
+  void dispose() {
+    GlobalFilter.leagueId.removeListener(_onChanged);
+    ActiveTournament.theme.removeListener(_onChanged);
+    NewsFeedScreen.focusNewsId.removeListener(_onFocus);
+    super.dispose();
+  }
+
+  void _onChanged() {
+    if (mounted) setState(() {});
+  }
+
+  String? get _leagueId =>
+      GlobalFilter.leagueId.value ?? ActiveTournament.currentLeagueId.value;
+
   void _snack(String text) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+  }
+
+  // ---- Bölgeler -------------------------------------------------------
+
+  Future<void> _ensureMeta(String leagueId, AppSessionState session) async {
+    final key = '$leagueId|${session.user?.id}';
+    if (_metaCache.containsKey(key)) return;
+    _metaCache[key] = const _RegionMeta([], null); // tekrar istenmesin
+    try {
+      final sb = Supabase.instance.client;
+      final seasons = await sb
+          .from('seasons')
+          .select('id')
+          .eq('league_id', leagueId)
+          .order('is_active', ascending: false)
+          .order('start_date', ascending: false)
+          .limit(1);
+      if (seasons.isEmpty) return;
+      final seasonId = seasons.first['id'].toString();
+      final rows = await sb
+          .from('season_regions')
+          .select('id, name, sort_order')
+          .eq('season_id', seasonId)
+          .order('sort_order');
+      final regions = [
+        for (final r in rows) _Region(r['id'].toString(), '${r['name']}'),
+      ];
+      String? mine;
+      if (regions.length > 1) {
+        mine = await _myRegion(leagueId, seasonId, session, regions);
+      }
+      _metaCache[key] = _RegionMeta(regions, mine);
+      if (mounted) setState(() {});
+    } catch (_) {
+      _metaCache.remove(key);
+    }
+  }
+
+  /// Kişinin bölgesi: bölge sorumlusu → kendi bölgesi; oyuncu / takım
+  /// sorumlusu / takip edilen takım → takımın grubunun bölgesi.
+  Future<String?> _myRegion(
+    String leagueId,
+    String seasonId,
+    AppSessionState s,
+    List<_Region> regions,
+  ) async {
+    for (final r in s.ownedRegions) {
+      if (r.seasonId == seasonId && regions.any((x) => x.id == r.id)) {
+        return r.id;
+      }
+    }
+    final sb = Supabase.instance.client;
+    final teamIds = <String>{
+      for (final m in s.managedTeams)
+        if (m.seasonId == seasonId) m.teamId,
+      ?s.teamId,
+    };
+    final playerId = s.playerId ?? '';
+    if (playerId.isNotEmpty) {
+      final rows = await sb
+          .from('season_team_players')
+          .select('team_id')
+          .eq('season_id', seasonId)
+          .eq('player_id', playerId)
+          .eq('is_active', true);
+      teamIds.addAll(rows.map((r) => r['team_id'].toString()));
+    }
+    if (teamIds.isEmpty) {
+      final prefs = await SharedPreferences.getInstance();
+      final followed = prefs.getString('followed_team_$leagueId');
+      if (followed != null) teamIds.add(followed);
+    }
+    if (teamIds.isEmpty) return null;
+    final links = await sb
+        .from('season_teams')
+        .select('groups(region_id)')
+        .eq('season_id', seasonId)
+        .inFilter('team_id', teamIds.toList());
+    for (final l in links) {
+      final rid = (l['groups'] as Map?)?['region_id']?.toString();
+      if (rid != null && regions.any((x) => x.id == rid)) return rid;
+    }
+    return null;
+  }
+
+  // ---- Etkileşim ------------------------------------------------------
+
+  void _onFocus() {
+    final id = NewsFeedScreen.focusNewsId.value;
+    if (id == null || !mounted) return;
+    final leagueId = _leagueId;
+    final item = _visible.where((n) => n.id == id).firstOrNull;
+    setState(() {
+      _openId = id;
+      // Haber seçili sekmede yoksa Tümü'ne geç.
+      if (item == null && leagueId != null) {
+        _tabByLeague[leagueId] = null;
+        _tabChosen.add(leagueId);
+      }
+    });
+    NewsFeedScreen.focusNewsId.value = null;
+    _scrollTo(id);
+  }
+
+  void _toggle(String id) {
+    setState(() => _openId = _openId == id ? null : id);
+    if (_openId == id) _scrollTo(id);
+  }
+
+  /// Açılan haber ekranın üstüne gelsin (üstteki haber kapanınca liste
+  /// kaysa da gözden kaçmasın).
+  void _scrollTo(String id) {
+    Future.delayed(const Duration(milliseconds: 260), () {
+      final ctx = _keys[id]?.currentContext;
+      if (ctx == null || !ctx.mounted) return;
+      Scrollable.ensureVisible(
+        ctx,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOutCubic,
+        alignment: 0.02,
+      );
+    });
   }
 
   Future<void> _toggleLike(NewsItem n, bool currentlyLiked) async {
@@ -63,100 +239,84 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
 
   Future<void> _share(NewsItem n) async {
     final title = n.leagueName.isEmpty ? '' : '${n.leagueName}\n\n';
-    final image = (n.imageUrl ?? '').isEmpty ? '' : '\n\n${n.imageUrl}';
+    final images = n.imageUrls.isEmpty ? '' : '\n\n${n.imageUrls.join('\n')}';
     await SharePlus.instance.share(
-      ShareParams(text: '$title${n.content}$image'),
+      ShareParams(text: '$title${n.content}$images'),
     );
   }
 
-  void _openPhoto(String url) {
+  void _openGallery(List<String> urls, int index) {
     showDialog<void>(
       context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.92),
-      builder: (ctx) => GestureDetector(
-        onTap: () => Navigator.pop(ctx),
-        child: InteractiveViewer(
-          maxScale: 4,
-          child: Center(
-            child: WebSafeImage(url: url, fit: BoxFit.contain),
-          ),
-        ),
-      ),
+      barrierColor: Colors.black.withValues(alpha: 0.94),
+      builder: (ctx) => _GalleryViewer(urls: urls, initial: index),
     );
   }
+
+  // ---- Görünüm --------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
     final session = AppSession.of(context).value;
-    final loggedIn = session.user != null;
+    final leagueId = _leagueId;
+    _RegionMeta? meta;
+    if (leagueId != null) {
+      _ensureMeta(leagueId, session);
+      meta = _metaCache['$leagueId|${session.user?.id}'];
+      // Kişinin bölgesi bilinince (kendisi seçmediyse) o sekmeyle açılır.
+      if (meta != null && !_tabChosen.contains(leagueId)) {
+        _tabByLeague[leagueId] = meta.mine;
+      }
+    }
+    final regions = meta?.regions ?? const <_Region>[];
+    final tab = leagueId == null ? null : _tabByLeague[leagueId];
 
     return Scaffold(
       backgroundColor: _bgDark,
       extendBodyBehindAppBar: true,
       appBar: const MasterClassAppBar(title: 'Haberler'),
-      body: Stack(
-        children: [
-          Positioned.fill(
-            child: Opacity(
-              opacity: 0.15,
-              child: Image.asset(
-                'assets/images/background_ball.jpg',
-                fit: BoxFit.cover,
+      body: SafeArea(
+        child: Column(
+          children: [
+            if (regions.length > 1)
+              _RegionTabs(
+                regions: regions,
+                selectedId: tab,
+                onSelected: (id) => setState(() {
+                  _tabByLeague[leagueId!] = id;
+                  _tabChosen.add(leagueId);
+                }),
               ),
-            ),
-          ),
-          SafeArea(
-            child: StreamBuilder<List<League>>(
-              stream: _leaguesStream,
-              builder: (context, leaguesSnap) {
-                final leagues = (leaguesSnap.data ?? const <League>[])
-                    .where(
-                      (l) =>
-                          !AppSettings.privateLeaguesEnabled.value ||
-                          !l.isPrivate ||
-                          session.canManageLeague(l.id),
-                    )
-                    .toList();
-                if (_leagueId != null &&
-                    leaguesSnap.hasData &&
-                    leagues.every((l) => l.id != _leagueId)) {
-                  _leagueId = null;
-                }
-                return Column(
-                  children: [
-                    _LeagueChips(
-                      leagues: leagues,
-                      selectedId: _leagueId,
-                      onSelected: (id) => setState(() => _leagueId = id),
-                    ),
-                    Expanded(child: _feed(session, loggedIn)),
-                  ],
-                );
-              },
-            ),
-          ),
-        ],
+            Expanded(child: _feed(session, leagueId, tab)),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _feed(AppSessionState session, bool loggedIn) {
+  Widget _feed(AppSessionState session, String? leagueId, String? regionId) {
+    final loggedIn = session.user != null;
     return StreamBuilder<List<NewsItem>>(
-      // Servis aynı kullanıcı + filtre için tek akış döndürür.
-      stream: _leagueService.watchNewsFeed(leagueId: _leagueId),
+      // Servis aynı kullanıcı + turnuva için tek akış döndürür.
+      stream: _leagueService.watchNewsFeed(leagueId: leagueId),
       builder: (context, snap) {
         if (snap.hasError && !snap.hasData) {
           return const _Message('Haberler yüklenemedi.');
         }
         if (!snap.hasData) {
-          return const Center(child: CircularProgressIndicator(color: _accent));
+          return Center(child: CircularProgressIndicator(color: _accent()));
         }
-        // Gizli turnuvaların haberleri yalnızca görme yetkisi olana gelir
-        // (veritabanı kuralı).
-        // Giriş yapan kişi yalnızca kendi turnuvalarının haberlerini görür.
+        // Bölge sekmesinde: o bölgenin ve tüm turnuvanın haberleri.
         final items = snap.data!
-            .where((n) => LeagueScope.allows(n.tournamentId))
+            .where(
+              (n) =>
+                  LeagueScope.allows(n.tournamentId) &&
+                  (regionId == null ||
+                      n.regionId == null ||
+                      n.regionId == regionId),
+            )
             .toList();
+        _visible = items;
 
         // Sunucu verisi kullanıcının tercihine yetiştiyse geçici durumu bırak.
         for (final n in items) {
@@ -170,9 +330,9 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
           return const _Message('Henüz yayınlanmış haber yok.');
         }
         return ListView.separated(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+          padding: const EdgeInsets.fromLTRB(14, 4, 14, 32),
           itemCount: items.length,
-          separatorBuilder: (_, _) => const SizedBox(height: 16),
+          separatorBuilder: (_, _) => const SizedBox(height: 10),
           itemBuilder: (context, i) {
             final n = items[i];
             final liked = _likeOverride[n.id] ?? n.likedByMe;
@@ -181,18 +341,17 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
                   0,
                   1 << 31,
                 );
-            return _NewsCard(
+            return _NewsTile(
+              key: _keys.putIfAbsent(n.id, GlobalKey.new),
               item: n,
+              open: _openId == n.id,
               loggedIn: loggedIn,
               liked: liked,
               likeCount: count,
-              expanded: _expanded.contains(n.id),
-              onToggleExpand: () => setState(() {
-                if (!_expanded.remove(n.id)) _expanded.add(n.id);
-              }),
+              onToggle: () => _toggle(n.id),
               onToggleLike: () => _toggleLike(n, liked),
               onShare: () => _share(n),
-              onOpenPhoto: _openPhoto,
+              onOpenPhoto: (i) => _openGallery(n.imageUrls, i),
             );
           },
         );
@@ -221,14 +380,14 @@ class _Message extends StatelessWidget {
   }
 }
 
-class _LeagueChips extends StatelessWidget {
-  const _LeagueChips({
-    required this.leagues,
+class _RegionTabs extends StatelessWidget {
+  const _RegionTabs({
+    required this.regions,
     required this.selectedId,
     required this.onSelected,
   });
 
-  final List<League> leagues;
+  final List<_Region> regions;
   final String? selectedId;
   final ValueChanged<String?> onSelected;
 
@@ -236,13 +395,17 @@ class _LeagueChips extends StatelessWidget {
   Widget build(BuildContext context) {
     final entries = <MapEntry<String?, String>>[
       const MapEntry(null, 'Tümü'),
-      for (final l in leagues) MapEntry(l.id, l.name),
+      for (final r in regions) MapEntry(r.id, r.name),
     ];
+    final accent = _accent();
+    final onAccent = accent.computeLuminance() > 0.45
+        ? const Color(0xFF0B1220)
+        : Colors.white;
     return SizedBox(
       height: 52,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+        padding: const EdgeInsets.fromLTRB(14, 6, 14, 10),
         itemCount: entries.length,
         separatorBuilder: (_, _) => const SizedBox(width: 8),
         itemBuilder: (context, i) {
@@ -255,22 +418,18 @@ class _LeagueChips extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 14),
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: active ? _accent : _card.withValues(alpha: 0.9),
+                color: active ? accent : _card,
                 borderRadius: BorderRadius.circular(999),
                 border: Border.all(
-                  color: active
-                      ? _accent
-                      : Colors.white.withValues(alpha: 0.12),
+                  color: active ? accent : Colors.white.withValues(alpha: 0.12),
                 ),
               ),
               child: Text(
                 e.value,
                 style: TextStyle(
-                  color: active
-                      ? const Color(0xFF04241A)
-                      : const Color(0xFFCBD5E1),
+                  color: active ? onAccent : const Color(0xFFCBD5E1),
                   fontSize: 13,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: active ? FontWeight.w800 : FontWeight.w600,
                 ),
               ),
             ),
@@ -281,127 +440,168 @@ class _LeagueChips extends StatelessWidget {
   }
 }
 
-class _NewsCard extends StatelessWidget {
-  const _NewsCard({
+/// Kompakt haber kartı: solda kapak, sağda başlık ve bilgi; dokununca
+/// yerinde açılır (tam metin, fotoğraf kaydırıcı, beğen / paylaş).
+class _NewsTile extends StatelessWidget {
+  const _NewsTile({
+    super.key,
     required this.item,
+    required this.open,
     required this.loggedIn,
     required this.liked,
     required this.likeCount,
-    required this.expanded,
-    required this.onToggleExpand,
+    required this.onToggle,
     required this.onToggleLike,
     required this.onShare,
     required this.onOpenPhoto,
   });
 
   final NewsItem item;
+  final bool open;
   final bool loggedIn;
   final bool liked;
   final int likeCount;
-  final bool expanded;
-  final VoidCallback onToggleExpand;
+  final VoidCallback onToggle;
   final VoidCallback onToggleLike;
   final VoidCallback onShare;
-  final ValueChanged<String> onOpenPhoto;
+  final ValueChanged<int> onOpenPhoto;
+
+  /// İlk satır kısa ise başlık, kalanı gövde; değilse metnin tamamı.
+  (String, String) _split() {
+    final text = item.content.trim();
+    final nl = text.indexOf('\n');
+    if (nl > 0 && nl <= 140) {
+      return (text.substring(0, nl).trim(), text.substring(nl + 1).trim());
+    }
+    return (text, '');
+  }
 
   @override
   Widget build(BuildContext context) {
-    final img = (item.imageUrl ?? '').trim();
-    final hasImg = img.isNotEmpty;
-    final caption = _Caption(
-      text: item.content,
-      large: !hasImg,
-      expanded: expanded,
-      onToggle: onToggleExpand,
-    );
+    final (title, body) = _split();
+    final accent = _accent();
+    final imgs = item.imageUrls;
+    final meta = [
+      _timeAgo(item.createdAt),
+      if (item.regionName.isNotEmpty) item.regionName,
+    ].join(' · ');
 
-    return Container(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: _card.withValues(alpha: 0.94),
+        color: _card,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        border: Border.all(
+          color: open
+              ? accent.withValues(alpha: 0.6)
+              : Colors.white.withValues(alpha: 0.06),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _header(),
-          if (hasImg)
-            GestureDetector(
-              onTap: () => onOpenPhoto(img),
-              child: _NewsPhoto(url: img),
-            ),
-          if (!hasImg)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 2, 16, 4),
-              child: caption,
-            ),
-          _actions(),
-          if (hasImg)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 2, 16, 16),
-              child: caption,
-            )
-          else
-            const SizedBox(height: 10),
-        ],
-      ),
-    );
-  }
-
-  Widget _header() {
-    final logo = (item.leagueLogoUrl ?? '').trim();
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: _bgDark,
-              border: Border.all(color: _accent.withValues(alpha: 0.55)),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: logo.isEmpty
-                ? const Icon(
-                    Icons.emoji_events_outlined,
-                    color: _accent,
-                    size: 22,
-                  )
-                : WebSafeImage(
-                    url: logo,
-                    width: 40,
-                    height: 40,
-                    fit: BoxFit.contain,
+          InkWell(
+            onTap: onToggle,
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _Thumb(item: item),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          maxLines: open && body.isEmpty ? null : 2,
+                          overflow: open && body.isEmpty
+                              ? TextOverflow.visible
+                              : TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14.5,
+                            height: 1.3,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                meta,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: _muted,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                            Icon(
+                              liked
+                                  ? Icons.favorite_rounded
+                                  : Icons.favorite_border_rounded,
+                              size: 14,
+                              color: liked ? _heart : _muted,
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              '$likeCount',
+                              style: const TextStyle(
+                                color: _muted,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            AnimatedRotation(
+                              turns: open ? 0.5 : 0,
+                              duration: const Duration(milliseconds: 200),
+                              child: const Icon(
+                                Icons.keyboard_arrow_down_rounded,
+                                size: 20,
+                                color: _muted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
+                ],
+              ),
+            ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  [
-                    item.leagueName.isEmpty ? 'Turnuva' : item.leagueName,
-                    if (item.regionName.isNotEmpty) item.regionName,
-                  ].join(' · '),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
+          AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: !open
+                ? const SizedBox(width: double.infinity)
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (imgs.isNotEmpty)
+                        _Carousel(urls: imgs, onOpen: onOpenPhoto),
+                      if (body.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+                          child: SelectableText(
+                            body,
+                            style: const TextStyle(
+                              color: Color(0xFFE2E8F0),
+                              fontSize: 14,
+                              height: 1.5,
+                            ),
+                          ),
+                        ),
+                      _actions(),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  _timeAgo(item.createdAt),
-                  style: const TextStyle(color: _muted, fontSize: 12),
-                ),
-              ],
-            ),
           ),
         ],
       ),
@@ -410,7 +610,7 @@ class _NewsCard extends StatelessWidget {
 
   Widget _actions() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 2, 4, 0),
+      padding: const EdgeInsets.fromLTRB(4, 4, 4, 2),
       child: Row(
         children: [
           if (loggedIn) ...[
@@ -420,27 +620,23 @@ class _NewsCard extends StatelessWidget {
               icon: Icon(
                 liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
                 color: liked ? _heart : Colors.white,
-                size: 27,
+                size: 25,
               ),
             ),
             Text(
-              '$likeCount',
+              liked ? 'Beğendin' : 'Beğen',
               style: const TextStyle(
                 color: Colors.white,
-                fontSize: 14,
+                fontSize: 13,
                 fontWeight: FontWeight.w700,
               ),
             ),
           ] else
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
               child: Text(
-                '$likeCount beğeni',
-                style: const TextStyle(
-                  color: _muted,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
+                'Beğenmek için giriş yap',
+                style: TextStyle(color: _muted, fontSize: 13),
               ),
             ),
           const Spacer(),
@@ -450,7 +646,7 @@ class _NewsCard extends StatelessWidget {
             icon: const Icon(
               Icons.send_outlined,
               color: Colors.white,
-              size: 23,
+              size: 22,
             ),
           ),
         ],
@@ -459,144 +655,185 @@ class _NewsCard extends StatelessWidget {
   }
 }
 
-/// Uzun metni 3 satırda keser, "devamını gör" ile açar.
-class _Caption extends StatelessWidget {
-  const _Caption({
-    required this.text,
-    required this.large,
-    required this.expanded,
-    required this.onToggle,
-  });
+/// Kartın solundaki kare kapak; birden fazla fotoğrafta "+N" rozeti.
+class _Thumb extends StatelessWidget {
+  const _Thumb({required this.item});
 
-  final String text;
-  final bool large;
-  final bool expanded;
-  final VoidCallback onToggle;
-
-  static const _maxLines = 3;
+  final NewsItem item;
 
   @override
   Widget build(BuildContext context) {
-    final style = large
-        ? const TextStyle(
-            color: Colors.white,
-            fontSize: 16,
-            height: 1.5,
-            fontWeight: FontWeight.w600,
-          )
-        : const TextStyle(color: Color(0xFFE2E8F0), fontSize: 14, height: 1.5);
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final painter = TextPainter(
-          text: TextSpan(text: text, style: style),
-          maxLines: _maxLines,
-          textDirection: Directionality.of(context),
-        )..layout(maxWidth: constraints.maxWidth);
-        final overflows = painter.didExceedMaxLines;
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    final imgs = item.imageUrls;
+    final logo = (item.leagueLogoUrl ?? '').trim();
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: SizedBox(
+        width: 68,
+        height: 68,
+        child: Stack(
+          fit: StackFit.expand,
           children: [
-            Text(
-              text,
-              style: style,
-              maxLines: expanded ? null : _maxLines,
-              overflow: expanded ? TextOverflow.visible : TextOverflow.ellipsis,
-            ),
-            if (overflows)
-              InkWell(
-                onTap: onToggle,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
+            if (imgs.isNotEmpty)
+              WebSafeImage(url: imgs.first, fit: BoxFit.cover)
+            else
+              Container(
+                color: _bgDark,
+                padding: const EdgeInsets.all(10),
+                child: logo.isEmpty
+                    ? Icon(Icons.article_outlined, color: _accent(), size: 28)
+                    : WebSafeImage(url: logo, fit: BoxFit.contain),
+              ),
+            if (imgs.length > 1)
+              Positioned(
+                right: 4,
+                bottom: 4,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 5,
+                    vertical: 1,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.7),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
                   child: Text(
-                    expanded ? 'daha az' : 'devamını gör',
+                    '+${imgs.length - 1}',
                     style: const TextStyle(
-                      color: _accent,
-                      fontSize: 14,
+                      color: Colors.white,
+                      fontSize: 11,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
               ),
           ],
-        );
-      },
+        ),
+      ),
     );
   }
 }
 
-/// Fotoğrafı kendi oranında gösterir; en dik 4:5, en yatay 1.91:1 (Instagram
-/// ile aynı sınırlar). Web'de resim HTML ile çizildiği için oran ölçülemez;
-/// orada 4:3 kullanılır.
-class _NewsPhoto extends StatefulWidget {
-  const _NewsPhoto({required this.url});
+/// Açık haberdeki fotoğraflar: parmakla kaydırılır, altta nokta göstergesi;
+/// dokununca tam ekran.
+class _Carousel extends StatefulWidget {
+  const _Carousel({required this.urls, required this.onOpen});
 
-  final String url;
+  final List<String> urls;
+  final ValueChanged<int> onOpen;
 
   @override
-  State<_NewsPhoto> createState() => _NewsPhotoState();
+  State<_Carousel> createState() => _CarouselState();
 }
 
-class _NewsPhotoState extends State<_NewsPhoto> {
-  static final Map<String, double> _ratioCache = {};
-  double? _ratio;
-  ImageStream? _stream;
-  ImageStreamListener? _listener;
+class _CarouselState extends State<_Carousel> {
+  int _page = 0;
 
   @override
-  void initState() {
-    super.initState();
-    _resolve();
+  Widget build(BuildContext context) {
+    final urls = widget.urls;
+    return Column(
+      children: [
+        AspectRatio(
+          aspectRatio: 4 / 3,
+          child: PageView.builder(
+            itemCount: urls.length,
+            onPageChanged: (i) => setState(() => _page = i),
+            itemBuilder: (context, i) => GestureDetector(
+              onTap: () => widget.onOpen(i),
+              child: WebSafeImage(url: urls[i], fit: BoxFit.cover),
+            ),
+          ),
+        ),
+        if (urls.length > 1)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                for (var i = 0; i < urls.length; i++)
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    width: i == _page ? 16 : 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: i == _page ? _accent() : Colors.white24,
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
   }
+}
+
+/// Tam ekran fotoğraf galerisi (kaydır, yakınlaştır, dokununca kapan).
+class _GalleryViewer extends StatefulWidget {
+  const _GalleryViewer({required this.urls, required this.initial});
+
+  final List<String> urls;
+  final int initial;
 
   @override
-  void didUpdateWidget(covariant _NewsPhoto oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.url != widget.url) _resolve();
-  }
+  State<_GalleryViewer> createState() => _GalleryViewerState();
+}
 
-  void _resolve() {
-    _detach();
-    _ratio = _ratioCache[widget.url];
-    if (_ratio != null || kIsWeb) return;
-    final stream = NetworkImage(widget.url).resolve(ImageConfiguration.empty);
-    final listener = ImageStreamListener((info, _) {
-      final w = info.image.width.toDouble();
-      final h = info.image.height.toDouble();
-      if (h > 0) {
-        final r = w / h;
-        _ratioCache[widget.url] = r;
-        if (mounted) setState(() => _ratio = r);
-      }
-      _detach();
-    }, onError: (_, _) => _detach());
-    stream.addListener(listener);
-    _stream = stream;
-    _listener = listener;
-  }
-
-  void _detach() {
-    final l = _listener;
-    if (l != null) _stream?.removeListener(l);
-    _stream = null;
-    _listener = null;
-  }
+class _GalleryViewerState extends State<_GalleryViewer> {
+  late final _controller = PageController(initialPage: widget.initial);
+  late int _page = widget.initial;
 
   @override
   void dispose() {
-    _detach();
+    _controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // Dikey fotoğraflar kare alana kırpılır (ekranı kaplamasın); yatay olanlar
-    // 1.91:1'e kadar kendi oranında gösterilir. Tamamı dokununca açılır.
-    final ratio = (_ratio ?? 4 / 3).clamp(1.0, 1.91);
-    return AspectRatio(
-      aspectRatio: ratio,
-      child: WebSafeImage(url: widget.url, fit: BoxFit.cover),
+    return Stack(
+      children: [
+        PageView.builder(
+          controller: _controller,
+          itemCount: widget.urls.length,
+          onPageChanged: (i) => setState(() => _page = i),
+          itemBuilder: (context, i) => GestureDetector(
+            onTap: () => Navigator.pop(context),
+            child: InteractiveViewer(
+              maxScale: 4,
+              child: Center(
+                child: WebSafeImage(url: widget.urls[i], fit: BoxFit.contain),
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          top: MediaQuery.paddingOf(context).top + 8,
+          right: 8,
+          child: IconButton(
+            tooltip: 'Kapat',
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(Icons.close_rounded, color: Colors.white),
+          ),
+        ),
+        if (widget.urls.length > 1)
+          Positioned(
+            bottom: MediaQuery.paddingOf(context).bottom + 16,
+            left: 0,
+            right: 0,
+            child: Text(
+              '${_page + 1} / ${widget.urls.length}',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                decoration: TextDecoration.none,
+                fontSize: 14,
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
