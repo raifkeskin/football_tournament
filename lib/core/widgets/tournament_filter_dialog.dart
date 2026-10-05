@@ -24,6 +24,7 @@ class TournamentFilter {
 }
 
 /// Puan Durumu / Fikstür / İstatistik ekranlarının ortak filtre paneli.
+/// Turnuva üst banttaki turnuva seçiminden gelir; panelde seçilmez.
 ///
 /// Seçimler panel içinde taslak tutulur; ekrana yalnızca "Filtreleri Uygula"
 /// ile yansır (dışarı dokunup kapatınca `null` döner). Sezon ve grup listeleri
@@ -206,7 +207,6 @@ class _TournamentFilterDialogState extends State<_TournamentFilterDialog> {
                       const SizedBox(height: 16),
                       AdminFieldGroup(
                         children: [
-                          _leagueRow(),
                           AdminSelectRow(
                             icon: Icons.calendar_month_outlined,
                             label: 'Sezon',
@@ -311,33 +311,6 @@ class _TournamentFilterDialogState extends State<_TournamentFilterDialog> {
           ),
         ),
       ),
-    );
-  }
-
-  Widget _leagueRow() {
-    final leagues = widget.leagues;
-    final name = leagues.where((l) => l.id == _leagueId).firstOrNull?.name;
-    return AdminSelectRow(
-      icon: Icons.emoji_events_outlined,
-      label: 'Turnuva',
-      value: name,
-      placeholder: 'Turnuva seçin',
-      onTap: () async {
-        final picked = await showAdminOptionPicker<League>(
-          context: context,
-          title: 'Turnuva Seç',
-          items: leagues,
-          labelBuilder: (l) => l.name,
-          selected: leagues.where((l) => l.id == _leagueId).firstOrNull,
-        );
-        if (picked == null || picked.id == _leagueId || !mounted) return;
-        setState(() {
-          _leagueId = picked.id;
-          _seasonId = null;
-          _groupId = null;
-          _week = null;
-        });
-      },
     );
   }
 

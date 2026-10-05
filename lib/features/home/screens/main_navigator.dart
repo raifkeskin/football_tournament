@@ -16,7 +16,6 @@ import '../../player/screens/stats_screen.dart';
 import '../../../core/widgets/app_name_band.dart';
 import '../../../core/widgets/tvl_logo.dart';
 import '../../../core/design_flags.dart';
-import '../widgets/home_dashboard.dart' show DashColors;
 
 /// Sol yan menü (Drawer) ile ana ekranlar arasında geçiş.
 class MainNavigator extends StatefulWidget {
@@ -144,72 +143,112 @@ class _MainNavigatorState extends State<MainNavigator> {
   }
 }
 
-/// Yeni tasarımın alt gezinme çubuğu (Profil yan menüde kalır).
+/// Yeni tasarımın alt gezinme çubuğu (Profil yan menüde kalır). İkonlar yan
+/// menüdekiyle aynı renkli kutular: seçili olan tam renkli ve büyük, diğerleri
+/// soluk.
 class _BottomBar extends StatelessWidget {
   const _BottomBar({required this.index, required this.onTap});
 
   final int index;
   final ValueChanged<int> onTap;
 
-  static const _items = [
-    (Icons.home_rounded, 'Ana Sayfa'),
-    (Icons.article_outlined, 'Haberler'),
-    (Icons.format_list_bulleted_rounded, 'Fikstür'),
-    (Icons.emoji_events_outlined, 'Puan Durumu'),
-    (Icons.bar_chart_rounded, 'İstatistik'),
-  ];
+  @override
+  Widget build(BuildContext context) {
+    const items = _MenuDrawer._items;
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF0B1220),
+        border: Border(
+          top: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+      ),
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: 66,
+          child: Row(
+            children: [
+              for (var i = 0; i < items.length; i++)
+                Expanded(
+                  child: InkWell(
+                    onTap: () => onTap(i),
+                    child: _BottomItem(
+                      icon: items[i].$1,
+                      label: items[i].$2,
+                      colors: items[i].$3,
+                      selected: i == index,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BottomItem extends StatelessWidget {
+  const _BottomItem({
+    required this.icon,
+    required this.label,
+    required this.colors,
+    required this.selected,
+  });
+
+  final IconData icon;
+  final String label;
+  final List<Color> colors;
+  final bool selected;
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<TournamentTheme?>(
-      valueListenable: ActiveTournament.theme,
-      builder: (context, _, _) {
-        final accent = DashColors.accent();
-        return Container(
+    final size = selected ? 34.0 : 28.0;
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+          width: size,
+          height: size,
           decoration: BoxDecoration(
-            color: const Color(0xFF0B1220),
-            border: Border(
-              top: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+            borderRadius: BorderRadius.circular(selected ? 10 : 8),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                for (final c in colors)
+                  selected ? c : c.withValues(alpha: 0.38),
+              ],
             ),
-          ),
-          child: SafeArea(
-            top: false,
-            child: SizedBox(
-              height: 62,
-              child: Row(
-                children: [
-                  for (var i = 0; i < _items.length; i++)
-                    Expanded(
-                      child: InkWell(
-                        onTap: () => onTap(i),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              _items[i].$1,
-                              size: 23,
-                              color: i == index ? accent : Colors.white60,
-                            ),
-                            const SizedBox(height: 3),
-                            Text(
-                              _items[i].$2,
-                              maxLines: 1,
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                color: i == index ? accent : Colors.white60,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: colors.last.withValues(alpha: 0.45),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
                     ),
-                ],
-              ),
-            ),
+                  ]
+                : null,
           ),
-        );
-      },
+          child: Icon(
+            icon,
+            size: selected ? 20 : 17,
+            color: selected ? Colors.white : Colors.white70,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          maxLines: 1,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+            color: selected ? Colors.white : Colors.white54,
+          ),
+        ),
+      ],
     );
   }
 }

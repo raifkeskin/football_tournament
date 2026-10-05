@@ -19,6 +19,8 @@ import '../../../core/services/active_tournament.dart';
 // ORTAK BİLEŞEN
 import '../../../core/widgets/tournament_filter_dialog.dart';
 import '../../../core/utils/string_utils.dart';
+import '../../../core/utils/team_colors.dart';
+import '../../../core/services/app_session.dart';
 
 class StatsScreen extends StatefulWidget {
   const StatsScreen({super.key});
@@ -303,8 +305,11 @@ class _StatsScreenState extends State<StatsScreen> {
                                                   const <PlayerStats>[])
                                               .where(
                                                 (s) =>
-                                                    (s.goals > 0 ||
-                                                    s.assists > 0),
+                                                    s.goals > 0 ||
+                                                    s.assists > 0 ||
+                                                    s.manOfTheMatch > 0 ||
+                                                    s.yellowCards > 0 ||
+                                                    s.redCards > 0,
                                               )
                                               .toList();
 
@@ -390,15 +395,13 @@ class _MiniTeamLogo extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Krallık sekmeleri: kürsü (ilk 3) + sıralama listesi.
+// Krallıklar: kategori düğmeleri, lider kartı ve çubuklu sıralama listesi.
 // ---------------------------------------------------------------------------
 
 const _accent = Color(0xFF10B981);
 const _card = Color(0xFF1E293B);
 const _muted = Color(0xFF94A3B8);
 const _gold = Color(0xFFFBBF24);
-const _silver = Color(0xFFCBD5E1);
-const _bronze = Color(0xFFD97706);
 
 class _PlayerLite {
   const _PlayerLite({required this.name, required this.photoUrl});
@@ -414,22 +417,107 @@ class _Ranked {
   final int value;
 }
 
-List<_Ranked> _rank(List<PlayerStats> all, int Function(PlayerStats) value) {
+List<_Ranked> _rank(
+  List<PlayerStats> all,
+  int Function(PlayerStats) value, {
+  bool tieRed = false,
+}) {
   final list = all.where((s) => value(s) > 0).toList()
     ..sort((a, b) {
       final c = value(b).compareTo(value(a));
       if (c != 0) return c;
+      // Kartlarda eşitlikte kırmızısı çok olan önde.
+      if (tieRed && a.redCards != b.redCards) {
+        return b.redCards.compareTo(a.redCards);
+      }
       // Eşitlikte daha az maçta yapan önde.
       return a.matchesPlayed.compareTo(b.matchesPlayed);
     });
   final out = <_Ranked>[];
-  for (var i = 0; i < list.length && i < 10; i++) {
+  for (var i = 0; i < list.length && i < 20; i++) {
     final v = value(list[i]);
     final rank = i > 0 && value(list[i - 1]) == v ? out[i - 1].rank : i + 1;
     out.add(_Ranked(rank, list[i], v));
   }
   return out;
 }
+
+/// İstatistik kategorisi: sıralama değeri, birimi ve satırdaki ek bilgi.
+class _Category {
+  const _Category({
+    required this.label,
+    required this.unit,
+    required this.crown,
+    required this.icon,
+    required this.value,
+    this.perMatch = true,
+    this.detail,
+  });
+
+  final String label;
+  final String unit;
+
+  /// Lider kartındaki unvan (GOL KRALI…).
+  final String crown;
+  final IconData icon;
+  final int Function(PlayerStats) value;
+
+  /// Maç başı ortalama gösterilsin mi (kartlarda anlamsız).
+  final bool perMatch;
+
+  /// Değerin altındaki küçük yazı (ör. "2 sarı · 1 kırmızı").
+  final String Function(PlayerStats)? detail;
+}
+
+final _categories = <_Category>[
+  _Category(
+    label: 'Gol',
+    unit: 'gol',
+    crown: 'GOL KRALI',
+    icon: Icons.sports_soccer_rounded,
+    value: (s) => s.goals,
+  ),
+  _Category(
+    label: 'Asist',
+    unit: 'asist',
+    crown: 'ASİST KRALI',
+    icon: Icons.assistant_rounded,
+    value: (s) => s.assists,
+  ),
+  _Category(
+    label: 'Gol + Asist',
+    unit: 'G+A',
+    crown: 'SKOR KATKISI LİDERİ',
+    icon: Icons.bolt_rounded,
+    value: (s) => s.goals + s.assists,
+  ),
+  _Category(
+    label: 'Maçın Adamı',
+    unit: 'kez',
+    crown: 'EN ÇOK MAÇIN ADAMI',
+    icon: Icons.star_rounded,
+    value: (s) => s.manOfTheMatch,
+  ),
+  _Category(
+    label: 'Kartlar',
+    unit: 'kart',
+    crown: 'EN ÇOK KART',
+    icon: Icons.style_rounded,
+    // Kırmızı kart sarıdan ağır sayılır; ekranda toplam kart görünür.
+    value: (s) => s.yellowCards + s.redCards,
+    perMatch: false,
+    detail: (s) => '${s.yellowCards} sarı · ${s.redCards} kırmızı',
+  ),
+];
+
+/// "1,50" biçiminde maç başı ortalama; maç sayısı yoksa null.
+String? _perMatch(int value, int matches) {
+  if (matches <= 0) return null;
+  return (value / matches).toStringAsFixed(2).replaceAll('.', ',');
+}
+
+Color _teamColor(Team? team) =>
+    parseHexColor(team?.firstColor) ?? const Color(0xFF15803D);
 
 class _StatsTabs extends StatefulWidget {
   const _StatsTabs({
@@ -446,105 +534,65 @@ class _StatsTabs extends StatefulWidget {
   State<_StatsTabs> createState() => _StatsTabsState();
 }
 
-class _StatsTabsState extends State<_StatsTabs>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabs = TabController(length: 2, vsync: this)
-    ..addListener(() {
-      if (mounted) setState(() {});
-    });
-
-  @override
-  void dispose() {
-    _tabs.dispose();
-    super.dispose();
-  }
-
-  Widget _tabButton(int index, IconData icon, String label) {
-    final selected = _tabs.index == index;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => _tabs.animateTo(index),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 11),
-          decoration: BoxDecoration(
-            color: selected ? _accent : Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: selected
-                ? [
-                    BoxShadow(
-                      color: _accent.withValues(alpha: 0.35),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ]
-                : null,
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                icon,
-                size: 18,
-                color: selected ? Colors.white : Colors.white60,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  color: selected ? Colors.white : Colors.white60,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 14,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+class _StatsTabsState extends State<_StatsTabs> {
+  int _cat = 0;
 
   @override
   Widget build(BuildContext context) {
+    final session = AppSession.of(context).value;
+    final mine = {
+      if ((session.playerId ?? '').isNotEmpty) session.playerId!,
+      if (session.phone.isNotEmpty) session.phone,
+    };
+    final cat = _categories[_cat];
+    final rows = _rank(widget.stats, cat.value, tieRed: _cat == 4);
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-          child: Container(
-            padding: const EdgeInsets.all(5),
-            decoration: BoxDecoration(
-              color: _card.withValues(alpha: 0.94),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-            ),
-            child: Row(
-              children: [
-                _tabButton(0, Icons.sports_soccer_rounded, 'Gol Krallığı'),
-                const SizedBox(width: 6),
-                _tabButton(1, Icons.assistant_rounded, 'Asist Krallığı'),
-              ],
-            ),
+        SizedBox(
+          height: 40,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: _categories.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 8),
+            itemBuilder: (context, i) {
+              final on = i == _cat;
+              return GestureDetector(
+                onTap: () => setState(() => _cat = i),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.symmetric(horizontal: 15),
+                  decoration: BoxDecoration(
+                    color: on ? Colors.white : _card,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: on
+                          ? Colors.white
+                          : Colors.white.withValues(alpha: 0.08),
+                    ),
+                  ),
+                  child: Text(
+                    _categories[i].label,
+                    style: TextStyle(
+                      color: on ? const Color(0xFF0B1220) : _muted,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              );
+            },
           ),
         ),
         Expanded(
-          child: TabBarView(
-            controller: _tabs,
-            children: [
-              _Board(
-                rows: _rank(widget.stats, (s) => s.goals),
-                unit: 'gol',
-                icon: Icons.sports_soccer_rounded,
-                teamById: widget.teamById,
-                players: widget.players,
-              ),
-              _Board(
-                rows: _rank(widget.stats, (s) => s.assists),
-                unit: 'asist',
-                icon: Icons.assistant_rounded,
-                teamById: widget.teamById,
-                players: widget.players,
-              ),
-            ],
+          child: _Board(
+            key: ValueKey(_cat),
+            category: cat,
+            rows: rows,
+            teamById: widget.teamById,
+            players: widget.players,
+            mine: mine,
           ),
         ),
       ],
@@ -554,18 +602,21 @@ class _StatsTabsState extends State<_StatsTabs>
 
 class _Board extends StatelessWidget {
   const _Board({
+    super.key,
+    required this.category,
     required this.rows,
-    required this.unit,
-    required this.icon,
     required this.teamById,
     required this.players,
+    required this.mine,
   });
 
+  final _Category category;
   final List<_Ranked> rows;
-  final String unit;
-  final IconData icon;
   final Map<String, Team> teamById;
   final Map<String, _PlayerLite> players;
+
+  /// Giriş yapan futbolcunun istatistik anahtarları (id / telefon).
+  final Set<String> mine;
 
   @override
   Widget build(BuildContext context) {
@@ -574,378 +625,388 @@ class _Board extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 48, color: Colors.white24),
+            Icon(category.icon, size: 48, color: Colors.white24),
             const SizedBox(height: 10),
             Text(
-              'Henüz $unit kaydı yok.',
+              'Henüz ${category.label.toLowerCase()} kaydı yok.',
               style: const TextStyle(color: Colors.white54),
             ),
           ],
         ),
       );
     }
-    final podium = rows.take(3).toList();
-    final rest = rows.skip(3).toList();
+    final leader = rows.first;
+    final top = leader.value;
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 120),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 120),
       children: [
-        _Podium(rows: podium, unit: unit, teamById: teamById, players: players),
-        if (rest.isNotEmpty) ...[
-          const SizedBox(height: 18),
-          Container(
-            clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
-              color: _card.withValues(alpha: 0.94),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-            ),
-            child: Material(
-              type: MaterialType.transparency,
-              child: Column(
-                children: [
-                  for (var i = 0; i < rest.length; i++)
-                    _RankRow(
-                      row: rest[i],
-                      unit: unit,
-                      first: i == 0,
-                      team: teamById[rest[i].stats.teamId],
-                      player: players[rest[i].stats.playerPhone],
-                    ),
-                ],
-              ),
+        _LeaderCard(
+          row: leader,
+          category: category,
+          team: teamById[leader.stats.teamId],
+          player: players[leader.stats.playerPhone],
+        ),
+        const SizedBox(height: 12),
+        for (final r in rows.skip(1))
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: _RankRow(
+              row: r,
+              category: category,
+              ratio: top <= 0 ? 0 : r.value / top,
+              team: teamById[r.stats.teamId],
+              player: players[r.stats.playerPhone],
+              isMe: mine.contains(r.stats.playerPhone),
             ),
           ),
-        ],
       ],
     );
   }
 }
 
-Color _medal(int rank) => switch (rank) {
-  1 => _gold,
-  2 => _silver,
-  _ => _bronze,
-};
-
-/// İlk üç: 2. solda, 1. ortada (yüksek), 3. sağda.
-class _Podium extends StatelessWidget {
-  const _Podium({
-    required this.rows,
-    required this.unit,
-    required this.teamById,
-    required this.players,
-  });
-
-  final List<_Ranked> rows;
-  final String unit;
-  final Map<String, Team> teamById;
-  final Map<String, _PlayerLite> players;
-
-  Widget _slot(_Ranked? r, {required double height, required double avatar}) {
-    if (r == null) return const Expanded(child: SizedBox());
-    final color = _medal(r.rank);
-    final player = players[r.stats.playerPhone];
-    final team = teamById[r.stats.teamId];
-    final name = (player?.name ?? '').isEmpty ? 'Oyuncu' : player!.name;
-    return Expanded(
-      child: Builder(
-        builder: (context) => GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => showPlayerCard(context, playerKey: r.stats.playerPhone),
-          child: _slotBody(r, color, player, team, name, height, avatar),
-        ),
-      ),
-    );
-  }
-
-  Widget _slotBody(
-    _Ranked r,
-    Color color,
-    _PlayerLite? player,
-    Team? team,
-    String name,
-    double height,
-    double avatar,
-  ) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (r.rank == 1)
-          const Icon(Icons.workspace_premium_rounded, color: _gold, size: 28),
-        Stack(
-          clipBehavior: Clip.none,
-          alignment: Alignment.bottomCenter,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(3),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [color, color.withValues(alpha: 0.45)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: color.withValues(alpha: 0.35),
-                    blurRadius: 14,
-                  ),
-                ],
-              ),
-              child: _PlayerAvatar(
-                name: name,
-                photoUrl: player?.photoUrl ?? '',
-                size: avatar,
-              ),
-            ),
-            Positioned(
-              bottom: -10,
-              child: Container(
-                width: 24,
-                height: 24,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: color,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0xFF0F172A), width: 2),
-                ),
-                child: Text(
-                  '${r.rank}',
-                  style: const TextStyle(
-                    color: Color(0xFF0F172A),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        Text(
-          name,
-          maxLines: 2,
-          textAlign: TextAlign.center,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w800,
-            fontSize: 13,
-            height: 1.15,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _MiniTeamLogo(logoUrl: team?.logoUrl ?? '', fallbackText: ''),
-            const SizedBox(width: 4),
-            Flexible(
-              child: Text(
-                team?.name ?? '',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: _muted, fontSize: 11),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        // Kürsü basamağı
-        Container(
-          height: height,
-          width: double.infinity,
-          margin: const EdgeInsets.symmetric(horizontal: 4),
-          decoration: BoxDecoration(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                color.withValues(alpha: 0.30),
-                color.withValues(alpha: 0.05),
-              ],
-            ),
-            border: Border(
-              top: BorderSide(color: color.withValues(alpha: 0.7), width: 2),
-            ),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text.rich(
-                TextSpan(
-                  text: '${r.value}',
-                  style: TextStyle(
-                    fontSize: r.rank == 1 ? 30 : 24,
-                    fontWeight: FontWeight.w900,
-                    height: 1,
-                  ),
-                  children: [
-                    TextSpan(
-                      text: ' $unit',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
-                ),
-                style: TextStyle(color: color),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                '${r.stats.matchesPlayed} maç',
-                style: const TextStyle(color: Colors.white70, fontSize: 11),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    _Ranked? at(int i) => i < rows.length ? rows[i] : null;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(8, 14, 8, 0),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(22),
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            _card.withValues(alpha: 0.94),
-            const Color(0xFF064E3B).withValues(alpha: 0.85),
-          ],
-        ),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          _slot(at(1), height: 78, avatar: 62),
-          _slot(at(0), height: 104, avatar: 78),
-          _slot(at(2), height: 62, avatar: 62),
-        ],
-      ),
-    );
-  }
-}
-
-class _RankRow extends StatelessWidget {
-  const _RankRow({
+/// Lider kartı: takım renginden koyu zemine geçiş, sağda oyuncunun silik
+/// fotoğrafı (avatarla aynı dosya, ek indirme yok), solda yuvarlak profil.
+class _LeaderCard extends StatelessWidget {
+  const _LeaderCard({
     required this.row,
-    required this.unit,
-    required this.first,
+    required this.category,
     required this.team,
     required this.player,
   });
 
   final _Ranked row;
-  final String unit;
-  final bool first;
+  final _Category category;
   final Team? team;
   final _PlayerLite? player;
+
+  static const _dark = Color(0xFF0F172A);
 
   @override
   Widget build(BuildContext context) {
     final name = (player?.name ?? '').isEmpty ? 'Oyuncu' : player!.name;
-    return InkWell(
-      onTap: () => showPlayerCard(context, playerKey: row.stats.playerPhone),
+    final photo = player?.photoUrl ?? '';
+    final color = _teamColor(team);
+    final s = row.stats;
+    final avg = category.perMatch
+        ? _perMatch(row.value, s.matchesPlayed)
+        : null;
+    return GestureDetector(
+      onTap: () => showPlayerCard(context, playerKey: s.playerPhone),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        height: 156,
+        clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          border: first
-              ? null
-              : Border(
-                  top: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
-                ),
+          borderRadius: BorderRadius.circular(22),
+          color: _dark,
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.black45,
+              blurRadius: 18,
+              offset: Offset(0, 8),
+            ),
+          ],
         ),
-        child: Row(
+        child: Stack(
           children: [
-            SizedBox(
-              width: 26,
-              child: Text(
-                '${row.rank}',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: _muted,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w900,
+            if (photo.isNotEmpty)
+              Positioned(
+                right: 0,
+                top: 0,
+                bottom: 0,
+                width: 190,
+                child: WebSafeImage(
+                  url: photo,
+                  width: 190,
+                  height: 156,
+                  fit: BoxFit.cover,
+                ),
+              ),
+            // Takım rengi soldan gelir, fotoğrafın üstünü örterek silikleştirir.
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: [
+                      color,
+                      Color.lerp(color, _dark, 0.55)!,
+                      Color.lerp(
+                        color,
+                        _dark,
+                        0.7,
+                      )!.withValues(alpha: photo.isEmpty ? 1 : 0.55),
+                    ],
+                    stops: const [0.0, 0.5, 1.0],
+                  ),
                 ),
               ),
             ),
-            const SizedBox(width: 10),
-            _PlayerAvatar(
-              name: name,
-              photoUrl: player?.photoUrl ?? '',
-              size: 42,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                    ),
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.15),
+                      Colors.black.withValues(alpha: 0.35),
+                    ],
                   ),
-                  const SizedBox(height: 3),
-                  Row(
-                    children: [
-                      _MiniTeamLogo(
-                        logoUrl: team?.logoUrl ?? '',
-                        fallbackText: '',
-                      ),
-                      const SizedBox(width: 5),
-                      Expanded(
-                        child: Text(
-                          '${team?.name ?? ''} · ${row.stats.matchesPlayed} maç',
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _gold,
+                    ),
+                    child: _PlayerAvatar(name: name, photoUrl: photo, size: 72),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          '♛ ${category.crown}',
+                          style: const TextStyle(
+                            color: _gold,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.3,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: _muted, fontSize: 12),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 21,
+                            fontWeight: FontWeight.w900,
+                          ),
                         ),
-                      ),
-                    ],
+                        if (team != null)
+                          Row(
+                            children: [
+                              _MiniTeamLogo(
+                                logoUrl: team!.logoUrl,
+                                fallbackText: team!.name,
+                              ),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  team!.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        const SizedBox(height: 6),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.baseline,
+                          textBaseline: TextBaseline.alphabetic,
+                          children: [
+                            Text(
+                              '${row.value}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 40,
+                                height: 1,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              category.unit,
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          [
+                            '${s.matchesPlayed} maç',
+                            if (avg != null) '$avg maç başı',
+                            if (category.detail != null) category.detail!(s),
+                          ].join('  ·  '),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: _accent.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Text.rich(
-                TextSpan(
-                  text: '${row.value}',
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Liste satırı: sıra, avatar, ad + lidere göre takım renginde çubuk, değer
+/// ve maç başı ortalama. Giriş yapan futbolcunun satırı vurgulanır.
+class _RankRow extends StatelessWidget {
+  const _RankRow({
+    required this.row,
+    required this.category,
+    required this.ratio,
+    required this.team,
+    required this.player,
+    required this.isMe,
+  });
+
+  final _Ranked row;
+  final _Category category;
+  final double ratio;
+  final Team? team;
+  final _PlayerLite? player;
+  final bool isMe;
+
+  @override
+  Widget build(BuildContext context) {
+    final name = (player?.name ?? '').isEmpty ? 'Oyuncu' : player!.name;
+    final s = row.stats;
+    final color = _teamColor(team);
+    final sub =
+        category.detail?.call(s) ??
+        (category.perMatch
+            ? (_perMatch(row.value, s.matchesPlayed) ?? '-')
+            : null);
+    return Material(
+      color: isMe ? Color.lerp(_card, _accent, 0.14) : _card,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => showPlayerCard(context, playerKey: s.playerPhone),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isMe ? _accent : Colors.white.withValues(alpha: 0.07),
+              width: isMe ? 1.5 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 22,
+                child: Text(
+                  '${row.rank}',
+                  textAlign: TextAlign.center,
                   style: const TextStyle(
-                    color: _accent,
-                    fontSize: 16,
+                    color: _muted,
+                    fontSize: 14,
                     fontWeight: FontWeight.w900,
                   ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _PlayerAvatar(
+                name: name,
+                photoUrl: player?.photoUrl ?? '',
+                size: 36,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    TextSpan(
-                      text: ' $unit',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
+                    Row(
+                      children: [
+                        if (team != null) ...[
+                          _MiniTeamLogo(
+                            logoUrl: team!.logoUrl,
+                            fallbackText: team!.name,
+                          ),
+                          const SizedBox(width: 6),
+                        ],
+                        Expanded(
+                          child: Text(
+                            isMe ? '$name · Sen' : name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(3),
+                      child: Stack(
+                        children: [
+                          Container(
+                            height: 5,
+                            color: Colors.white.withValues(alpha: 0.07),
+                          ),
+                          FractionallySizedBox(
+                            widthFactor: ratio.clamp(0.04, 1.0),
+                            child: Container(
+                              height: 5,
+                              color: Color.lerp(color, Colors.white, 0.15),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
-            ),
-          ],
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '${row.value}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 19,
+                      height: 1,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  if (sub != null) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      category.detail != null ? sub : '$sub/maç',
+                      style: const TextStyle(color: _muted, fontSize: 10.5),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
