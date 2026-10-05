@@ -808,40 +808,20 @@ class SupabaseTeamService implements ITeamService {
     if (newNumber <= 0 || newNumber > 999) {
       throw Exception('Forma numarası 1 ile 999 arasında olmalı.');
     }
-
-    final dup = await _client
-        .from('season_team_players')
-        .select('player_id')
-        .eq('season_id', league)
-        .eq('team_id', team)
-        .eq('jersey_number', newNumber)
-        .eq('is_active', true)
-        .limit(1);
-    if (dup.isNotEmpty) {
-      final row = (dup.first as Map).cast<String, dynamic>();
-      final otherPid = (row['player_id'] ?? '').toString().trim();
-      if (otherPid.isNotEmpty && otherPid != pid) {
-        throw Exception('Bu forma numarası bu takımda zaten kullanılıyor.');
-      }
-    }
-
+    // Yetki ve aynı numara kontrolü veritabanında: kurucu/bölge sorumlusu
+    // ve takım sorumlusu (yalnız kendi takımı) değiştirebilir.
     try {
-      await _client
-          .from('season_team_players')
-          .update({'jersey_number': newNumber})
-          .eq('season_id', league)
-          .eq('team_id', team)
-          .eq('player_id', pid)
-          .eq('is_active', true);
+      await _client.rpc(
+        'set_jersey_number',
+        params: {
+          'p_season_id': league,
+          'p_team_id': team,
+          'p_player_id': pid,
+          'p_number': newNumber,
+        },
+      );
     } on PostgrestException catch (e) {
-      if (e.code == 'PGRST204') {
-        throw Exception(
-          "season_team_players.jersey_number kolonu bulunamadı (PGRST204). "
-          "Önce şunu çalıştır:\n"
-          "alter table public.season_team_players add column if not exists jersey_number smallint;",
-        );
-      }
-      rethrow;
+      throw Exception(e.message);
     }
   }
 
