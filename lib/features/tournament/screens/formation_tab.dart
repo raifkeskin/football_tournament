@@ -293,7 +293,12 @@ class FormationTab extends StatefulWidget {
     required this.canEditHome,
     required this.canEditAway,
     this.initialTeam = 0,
+    this.onShare,
   });
+
+  /// Diziliş afişini paylaşır (takım kimliğiyle); düzenleme yetkisi olana
+  /// görünür.
+  final ValueChanged<String>? onShare;
 
   final MatchModel match;
   final String homeName;
@@ -570,6 +575,34 @@ class _FormationTabState extends State<FormationTab>
                         // Gösterim tercihi diziliş afişine de uygulanır.
                         // Kaydet butonu da varsa yer açmak için yalnız ikon.
                         PitchTokenStyleToggle(compact: _canEdit),
+                        if (_canEdit && widget.onShare != null)
+                          IconButton(
+                            tooltip: 'Diziliş afişini paylaş',
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                              minWidth: 34,
+                              minHeight: 34,
+                            ),
+                            icon: const Icon(
+                              Icons.ios_share_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                            onPressed: () {
+                              if (dirty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Önce dizilişi kaydedin, sonra paylaşın.',
+                                    ),
+                                  ),
+                                );
+                                return;
+                              }
+                              widget.onShare!(_teamId);
+                            },
+                          ),
                         if (_canEdit) ...[
                           const SizedBox(width: 8),
                           _SaveLayoutButton(

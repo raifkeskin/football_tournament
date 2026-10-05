@@ -1085,6 +1085,14 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                       canEditHome: isSuperAdmin || managesHome,
                                       canEditAway: isSuperAdmin || managesAway,
                                       // Sorumlu kendi takımıyla açar.
+                                      onShare: (teamId) => shareLineupPoster(
+                                        context,
+                                        match: m,
+                                        homeName: homeName,
+                                        awayName: awayName,
+                                        teamId: teamId,
+                                        kind: 'Diziliş',
+                                      ),
                                       initialTeam:
                                           !isSuperAdmin &&
                                               managesAway &&
@@ -2627,8 +2635,7 @@ class _LineupTabState extends State<_LineupTab>
     // Paylaşım: yalnızca o takımın sorumlusu ve lig yöneticileri.
     final session = AppSession.of(context).value;
     final canShare =
-        session.canManageLeague(widget.match.leagueId) ||
-        (session.teamId != null && session.teamId == teamId);
+        session.canManageLeague(widget.match.leagueId) || _managesTeam(teamId);
     final share = canShare
         ? IconButton(
             tooltip: 'Kadroyu paylaş',
@@ -2658,119 +2665,13 @@ class _LineupTabState extends State<_LineupTab>
     );
   }
 
-  /// Esame veya diziliş afişini hazırlayıp önizleme/paylaşım popup'ını açar.
-  Future<void> _shareLineup(String teamId) async {
-    final kind = await showAdminOptionPicker<String>(
-      context: context,
-      title: 'Kadroyu Paylaş',
-      items: const ['Esame', 'Diziliş'],
-      labelBuilder: (k) => k == 'Esame'
-          ? 'Esame (ilk 11 ve yedekler)'
-          : 'Diziliş (sahada ilk 11)',
-      emptyText: '',
-    );
-    if (kind == null || !mounted) return;
-    await PitchTokenStylePref.load();
-    if (!mounted) return;
-    final m = widget.match;
-    final isHome = teamId == m.homeTeamId;
-    final opponentId = isHome ? m.awayTeamId : m.homeTeamId;
-    final messenger = ScaffoldMessenger.of(context);
-
-    final LineupPosterData data;
-    try {
-      final db = Supabase.instance.client;
-      final results = await Future.wait([
-        ServiceLocator.teamService
-            .watchPlayers(teamId: teamId, tournamentId: m.seasonId)
-            .first,
-        ServiceLocator.matchService.watchMatchRosters(m.id, teamId).first,
-        db
-            .from('teams')
-            .select('id, name, logo_url, first_color, second_color')
-            .inFilter('id', [teamId, opponentId]),
-        db.from('leagues').select('name, logo_url').eq('id', m.leagueId),
-      ]);
-      final players = {
-        for (final p in results[0] as List<PlayerModel>) p.id: p,
-      };
-      final rosters = results[1] as List<MatchRosterModel>;
-      final teams = {
-        for (final r in results[2] as List) (r as Map)['id'].toString(): r,
-      };
-      final leagueRows = results[3] as List;
-      final league = leagueRows.isEmpty ? null : leagueRows.first as Map;
-
-      final starters = rosters.where((r) => r.isStarting).toList();
-      if (starters.isEmpty) {
-        messenger.showSnackBar(
-          const SnackBar(content: Text('Önce ilk 11 girilmelidir.')),
-        );
-        return;
-      }
-      String jersey(MatchRosterModel r) =>
-          (r.jerseyNumber ?? players[r.playerId]?.number ?? '').trim();
-      PosterPlayer toPoster(MatchRosterModel r) => PosterPlayer.fromFullName(
-        players[r.playerId]?.name ?? '-',
-        number: jersey(r),
-        isCaptain: r.isCaptain,
-      );
-      final byId = {for (final r in rosters) r.playerId: r};
-      final layout = formationLinesFor(
-        starters: starters,
-        players: players,
-        formation: isHome ? m.homeFormation : m.awayFormation,
-      );
-      final subs = rosters.where((r) => !r.isStarting).toList()
-        ..sort(
-          (a, b) => _jerseyValue(jersey(a)).compareTo(_jerseyValue(jersey(b))),
-        );
-      final team = teams[teamId];
-      final opp = teams[opponentId];
-      data = LineupPosterData(
-        teamName: isHome ? widget.homeName : widget.awayName,
-        teamLogo: (team?['logo_url'] ?? '').toString().trim(),
-        opponentName: isHome ? widget.awayName : widget.homeName,
-        opponentLogo: (opp?['logo_url'] ?? '').toString().trim(),
-        isHome: isHome,
-        leagueName: (league?['name'] ?? '').toString(),
-        leagueLogo: (league?['logo_url'] ?? '').toString().trim(),
-        week: m.week,
-        matchDate: m.matchDate ?? '',
-        timeText: (m.matchTime ?? '').trim(),
-        pitchName: (m.pitchName ?? '').trim(),
-        palette: TeamPalette.of(
-          team?['first_color']?.toString(),
-          team?['second_color']?.toString(),
-        ),
-        formation: layout?.formation ?? '',
-        lines: [
-          for (final line in layout?.lines ?? const <List<String>>[])
-            [
-              for (final id in line)
-                if (byId[id] != null) toPoster(byId[id]!),
-            ],
-        ],
-        subs: [for (final r in subs) toPoster(r)],
-        tokenStyle: PitchTokenStylePref.notifier.value,
-      );
-    } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('Kadro bilgisi okunamadı: $e')),
-      );
-      return;
-    }
-    if (!mounted) return;
-    final slug = data.teamName.replaceAll(RegExp(r'\s+'), '_');
-    await showPosterPreview(
-      context: context,
-      fileName: kind == 'Esame' ? 'esame_$slug' : 'dizilis_$slug',
-      imageUrls: [data.teamLogo, data.opponentLogo, data.leagueLogo],
-      poster: kind == 'Esame'
-          ? LineupListPoster(data: data)
-          : LineupPitchPoster(data: data),
-    );
-  }
+  Future<void> _shareLineup(String teamId) => shareLineupPoster(
+    context,
+    match: widget.match,
+    homeName: widget.homeName,
+    awayName: widget.awayName,
+    teamId: teamId,
+  );
 
   void _showRosterEditSheet(BuildContext context, String teamId) {
     showModalBottomSheet(
@@ -4350,4 +4251,123 @@ class _MatchHeaderPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_MatchHeaderPainter old) => old.sides != sides;
+}
+
+/// Esame veya diziliş afişini hazırlayıp önizleme/paylaşım popup'ını açar.
+/// [kind] verilmezse ('Esame' / 'Diziliş') kullanıcıya sorulur.
+Future<void> shareLineupPoster(
+  BuildContext context, {
+  required MatchModel match,
+  required String homeName,
+  required String awayName,
+  required String teamId,
+  String? kind,
+}) async {
+  kind ??= await showAdminOptionPicker<String>(
+    context: context,
+    title: 'Kadroyu Paylaş',
+    items: const ['Esame', 'Diziliş'],
+    labelBuilder: (k) =>
+        k == 'Esame' ? 'Esame (ilk 11 ve yedekler)' : 'Diziliş (sahada ilk 11)',
+    emptyText: '',
+  );
+  if (kind == null || !context.mounted) return;
+  await PitchTokenStylePref.load();
+  if (!context.mounted) return;
+  final m = match;
+  final isHome = teamId == m.homeTeamId;
+  final opponentId = isHome ? m.awayTeamId : m.homeTeamId;
+  final messenger = ScaffoldMessenger.of(context);
+
+  final LineupPosterData data;
+  try {
+    final db = Supabase.instance.client;
+    final results = await Future.wait([
+      ServiceLocator.teamService
+          .watchPlayers(teamId: teamId, tournamentId: m.seasonId)
+          .first,
+      ServiceLocator.matchService.watchMatchRosters(m.id, teamId).first,
+      db
+          .from('teams')
+          .select('id, name, logo_url, first_color, second_color')
+          .inFilter('id', [teamId, opponentId]),
+      db.from('leagues').select('name, logo_url').eq('id', m.leagueId),
+    ]);
+    final players = {for (final p in results[0] as List<PlayerModel>) p.id: p};
+    final rosters = results[1] as List<MatchRosterModel>;
+    final teams = {
+      for (final r in results[2] as List) (r as Map)['id'].toString(): r,
+    };
+    final leagueRows = results[3] as List;
+    final league = leagueRows.isEmpty ? null : leagueRows.first as Map;
+
+    final starters = rosters.where((r) => r.isStarting).toList();
+    if (starters.isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Önce ilk 11 girilmelidir.')),
+      );
+      return;
+    }
+    String jersey(MatchRosterModel r) =>
+        (r.jerseyNumber ?? players[r.playerId]?.number ?? '').trim();
+    PosterPlayer toPoster(MatchRosterModel r) => PosterPlayer.fromFullName(
+      players[r.playerId]?.name ?? '-',
+      number: jersey(r),
+      isCaptain: r.isCaptain,
+    );
+    final byId = {for (final r in rosters) r.playerId: r};
+    final layout = formationLinesFor(
+      starters: starters,
+      players: players,
+      formation: isHome ? m.homeFormation : m.awayFormation,
+    );
+    final subs = rosters.where((r) => !r.isStarting).toList()
+      ..sort(
+        (a, b) => _jerseyValue(jersey(a)).compareTo(_jerseyValue(jersey(b))),
+      );
+    final team = teams[teamId];
+    final opp = teams[opponentId];
+    data = LineupPosterData(
+      teamName: isHome ? homeName : awayName,
+      teamLogo: (team?['logo_url'] ?? '').toString().trim(),
+      opponentName: isHome ? awayName : homeName,
+      opponentLogo: (opp?['logo_url'] ?? '').toString().trim(),
+      isHome: isHome,
+      leagueName: (league?['name'] ?? '').toString(),
+      leagueLogo: (league?['logo_url'] ?? '').toString().trim(),
+      week: m.week,
+      matchDate: m.matchDate ?? '',
+      timeText: (m.matchTime ?? '').trim(),
+      pitchName: (m.pitchName ?? '').trim(),
+      palette: TeamPalette.of(
+        team?['first_color']?.toString(),
+        team?['second_color']?.toString(),
+      ),
+      formation: layout?.formation ?? '',
+      lines: [
+        for (final line in layout?.lines ?? const <List<String>>[])
+          [
+            for (final id in line)
+              if (byId[id] != null) toPoster(byId[id]!),
+          ],
+      ],
+      subs: [for (final r in subs) toPoster(r)],
+      tokenStyle: PitchTokenStylePref.notifier.value,
+    );
+  } catch (e) {
+    messenger.showSnackBar(
+      SnackBar(content: Text('Kadro bilgisi okunamadı: $e')),
+    );
+    return;
+  }
+  if (!context.mounted) return;
+  final slug = data.teamName.replaceAll(RegExp(r'\s+'), '_');
+  await showPosterPreview(
+    context: context,
+    fileName: kind == 'Esame' ? 'esame_$slug' : 'dizilis_$slug',
+    imageUrls: [data.teamLogo, data.opponentLogo, data.leagueLogo],
+    poster: kind == 'Esame'
+        ? LineupListPoster(data: data)
+        : LineupPitchPoster(data: data),
+  );
 }
