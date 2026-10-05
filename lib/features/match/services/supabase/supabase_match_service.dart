@@ -839,6 +839,7 @@ class SupabaseMatchService implements IMatchService {
           'is_starting': r.isStarting,
           'jersey_number': r.jerseyNumber,
           if (withCaptain) 'is_captain': r.isCaptain,
+          if (r.slot != null) 'pos_x': r.slot,
         };
       }).toList();
     }

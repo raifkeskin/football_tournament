@@ -154,13 +154,25 @@ _Layout? _computeLayout(
   String? formation,
   List<String>? order,
 }) {
+  // Esamede ilk seçilen oyuncu kaleci olarak kaydedilir (pos_x = 0); saha
+  // sırası henüz kaydedilmemişse mevkisi ne olursa olsun kaleye geçer.
+  final fullySlotted =
+      starterRosters.every((r) => r.slot != null) &&
+      starterRosters.map((r) => r.slot).toSet().length == starterRosters.length;
+  final keepers = starterRosters.where((r) => r.slot == 0).toList();
+  final chosenGk = !fullySlotted && keepers.length == 1
+      ? keepers.first.playerId
+      : null;
   final starters = starterRosters.map((r) {
     final p = players[r.playerId];
+    final natural = positionLineOf(p?.mainPosition, p?.position);
     return _PitchPlayer(
       id: r.playerId,
       name: (p?.name ?? '').trim().isEmpty ? '-' : p!.name,
       number: (r.jerseyNumber ?? p?.number ?? '').trim(),
-      line: positionLineOf(p?.mainPosition, p?.position),
+      line: chosenGk == null
+          ? natural
+          : (r.playerId == chosenGk ? 0 : (natural == 0 ? 1 : natural)),
       wide: _isWide(p?.mainPosition, p?.position),
       isCaptain: r.isCaptain,
     );
@@ -213,10 +225,7 @@ _Layout? _computeLayout(
   final baseIds = [for (final l in baseLines) ...l.map((e) => e.id)];
   bool sameSet(List<String> ids) =>
       ids.length == baseIds.length && ids.toSet().containsAll(baseIds);
-  final slotted =
-      starterRosters.every((r) => r.slot != null) &&
-          starterRosters.map((r) => r.slot).toSet().length ==
-              starterRosters.length
+  final slotted = fullySlotted
       ? ([...starterRosters]..sort((a, b) => a.slot!.compareTo(b.slot!)))
             .map((r) => r.playerId)
             .toList()
@@ -281,29 +290,23 @@ class FormationTab extends StatefulWidget {
     required this.match,
     required this.homeName,
     required this.awayName,
-    required this.canEdit,
+    required this.canEditHome,
+    required this.canEditAway,
+    this.initialTeam = 0,
   });
-
-  factory FormationTab.fromMatch({
-    Key? key,
-    required MatchModel match,
-    required bool isTeamManager,
-    required String homeName,
-    required String awayName,
-  }) {
-    return FormationTab(
-      key: key,
-      match: match,
-      homeName: homeName,
-      awayName: awayName,
-      canEdit: isTeamManager,
-    );
-  }
 
   final MatchModel match;
   final String homeName;
   final String awayName;
-  final bool canEdit;
+
+  /// Takım başına düzenleme yetkisi: sorumlu yalnızca kendi takımını,
+  /// yöneticiler ikisini de düzenler.
+  final bool canEditHome;
+  final bool canEditAway;
+
+  /// Açılışta seçili takım (0: ev sahibi, 1: deplasman); sorumlu kendi
+  /// takımıyla açar.
+  final int initialTeam;
 
   @override
   State<FormationTab> createState() => _FormationTabState();
@@ -343,7 +346,9 @@ class _FormationTabState extends State<FormationTab>
     }
   }
 
-  int _selected = 0; // 0: ev sahibi, 1: deplasman
+  late int _selected = widget.initialTeam; // 0: ev sahibi, 1: deplasman
+
+  bool get _canEdit => _selected == 0 ? widget.canEditHome : widget.canEditAway;
 
   /// Kullanıcının bu oturumda seçtiği dizilişler (teamIndex -> "4-4-2").
   final Map<int, String> _chosen = {};
@@ -376,12 +381,15 @@ class _FormationTabState extends State<FormationTab>
     final team = _selected;
     setState(() => _saving = true);
     try {
-      final m = await sb
-          .from('matches')
-          .update({team == 0 ? 'home_formation' : 'away_formation': formation})
-          .eq('id', widget.match.id)
-          .select('id');
-      if (m.isEmpty) throw Exception('Diziliş kaydedilemedi (yetki yok).');
+      // Yetki kontrolü sunucuda: sorumlu yalnızca kendi takımını yazar.
+      await sb.rpc(
+        'set_match_formation',
+        params: {
+          'p_match_id': widget.match.id,
+          'p_team_id': _teamId,
+          'p_formation': formation,
+        },
+      );
       for (var i = 0; i < ids.length; i++) {
         final r = await sb
             .from('match_rosters')
@@ -555,14 +563,14 @@ class _FormationTabState extends State<FormationTab>
                         _FormationPicker(
                           value: formation,
                           options: options,
-                          enabled: widget.canEdit && options.length > 1,
+                          enabled: _canEdit && options.length > 1,
                           onChanged: _changeFormation,
                         ),
                         const Spacer(),
                         // Gösterim tercihi diziliş afişine de uygulanır.
                         // Kaydet butonu da varsa yer açmak için yalnız ikon.
-                        PitchTokenStyleToggle(compact: widget.canEdit),
-                        if (widget.canEdit) ...[
+                        PitchTokenStyleToggle(compact: _canEdit),
+                        if (_canEdit) ...[
                           const SizedBox(width: 8),
                           _SaveLayoutButton(
                             dirty: dirty,
@@ -582,13 +590,13 @@ class _FormationTabState extends State<FormationTab>
                           lines: pitchLines,
                           teamColor: teamColor,
                           style: style,
-                          onSwap: widget.canEdit
+                          onSwap: _canEdit
                               ? (from, to) => _swap(currentIds, from, to)
                               : null,
                         ),
                       ),
                     ),
-                    if (widget.canEdit)
+                    if (_canEdit)
                       const Padding(
                         padding: EdgeInsets.only(top: 8),
                         child: Text(

@@ -697,9 +697,12 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
         final bool isSuperAdmin =
             canManageLeague ||
             (m.observerId != null && m.observerId == session.user?.id);
-        final bool isTeamManager =
-            session.teamId == m.homeTeamId || session.teamId == m.awayTeamId;
-        final bool isAdminAccess = isSuperAdmin || isTeamManager;
+        final bool managesHome =
+            session.managesTeam(m.seasonId, m.homeTeamId) ||
+            session.teamId == m.homeTeamId;
+        final bool managesAway =
+            session.managesTeam(m.seasonId, m.awayTeamId) ||
+            session.teamId == m.awayTeamId;
 
         return StreamBuilder<List<Team>>(
           stream: _teamsStream,
@@ -1075,11 +1078,19 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                       homeName: homeName,
                                       awayName: awayName,
                                     ),
-                                    FormationTab.fromMatch(
+                                    FormationTab(
                                       match: m,
-                                      isTeamManager: isAdminAccess,
                                       homeName: homeName,
                                       awayName: awayName,
+                                      canEditHome: isSuperAdmin || managesHome,
+                                      canEditAway: isSuperAdmin || managesAway,
+                                      // Sorumlu kendi takımıyla açar.
+                                      initialTeam:
+                                          !isSuperAdmin &&
+                                              managesAway &&
+                                              !managesHome
+                                          ? 1
+                                          : 0,
                                     ),
                                   ],
                                 ),
@@ -3122,6 +3133,12 @@ class _RosterEditSheetState extends State<_RosterEditSheet> {
         _subLimit = subCount;
         _teamPlayers = players;
         _penalized = penalties;
+        // Kayıtlı kaleci (pos_x = 0) ilk sırada: yeniden kaydedince kaleci
+        // olarak kalır.
+        final gk = rosters
+            .where((x) => x.isStarting && x.slot == 0)
+            .firstOrNull;
+        if (gk != null) _starterIds.add(gk.playerId);
         for (final p in _teamPlayers) {
           final pid = p.id;
           final r = rosters.where((x) => x.playerId == pid).firstOrNull;
@@ -3268,6 +3285,8 @@ class _RosterEditSheetState extends State<_RosterEditSheet> {
             isStarting: isStarter,
             jerseyNumber: _jerseyControllers[pid]?.text.trim(),
             isCaptain: isStarter && pid == _captainId,
+            // İlk seçilen ilk 11 oyuncusu kaleci olarak kaydedilir.
+            slot: isStarter && pid == _starterIds.first ? 0 : null,
           ),
         );
       }
@@ -3401,6 +3420,19 @@ class _RosterEditSheetState extends State<_RosterEditSheet> {
                     fontSize: 13.5,
                   ),
                   children: [
+                    if (starterTab &&
+                        selected &&
+                        _starterIds.isNotEmpty &&
+                        _starterIds.first == pid)
+                      const TextSpan(
+                        text: '  KALECİ',
+                        style: TextStyle(
+                          color: Color(0xFFFBBF24),
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.6,
+                        ),
+                      ),
                     if (sub.isNotEmpty)
                       TextSpan(
                         text: '  $sub',
