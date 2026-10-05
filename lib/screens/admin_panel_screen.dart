@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:football_tournament/core/services/app_session.dart';
 import 'package:football_tournament/core/services/app_settings.dart';
-import 'package:football_tournament/core/services/active_tournament.dart';
 import 'package:football_tournament/features/team/screens/admin_manage_teams_screen.dart';
 import 'package:football_tournament/features/team/screens/team_squad_screen.dart';
 import 'package:football_tournament/features/tournament/screens/admin_manage_leagues_screen.dart';
@@ -28,6 +27,7 @@ class AdminPanelWidget extends StatelessWidget {
     final List<_AdminMenuData> menuItems = [
       _AdminMenuData(
         baslik: 'Turnuva Yönetimi',
+        renkler: const [Color(0xFFFCD34D), Color(0xFFD97706)],
         ikon: Icons.emoji_events_rounded,
         resimYolu: 'assets/images/admin_tournament.jpg',
         onPressed: () {
@@ -39,6 +39,7 @@ class AdminPanelWidget extends StatelessWidget {
       ),
       _AdminMenuData(
         baslik: 'Takım Yönetimi',
+        renkler: const [Color(0xFF2DD4BF), Color(0xFF0D9488)],
         ikon: Icons.shield_rounded,
         resimYolu: 'assets/images/admin_team.jpg',
         onPressed: () {
@@ -50,6 +51,7 @@ class AdminPanelWidget extends StatelessWidget {
       ),
       _AdminMenuData(
         baslik: 'Futbolcu Lisans',
+        renkler: const [Color(0xFF818CF8), Color(0xFF4F46E5)],
         ikon: Icons.assignment_ind_rounded,
         resimYolu: 'assets/images/admin_license.jpg',
         onPressed: () {
@@ -61,6 +63,7 @@ class AdminPanelWidget extends StatelessWidget {
       ),
       _AdminMenuData(
         baslik: 'Fikstür Planlama',
+        renkler: const [Color(0xFF60A5FA), Color(0xFF2563EB)],
         ikon: Icons.calendar_month_rounded,
         resimYolu: 'assets/images/admin_fixture.jpg',
         onPressed: () {
@@ -72,6 +75,7 @@ class AdminPanelWidget extends StatelessWidget {
       ),
       _AdminMenuData(
         baslik: 'Ceza Yönetimi',
+        renkler: const [Color(0xFFF87171), Color(0xFFDC2626)],
         ikon: Icons.gavel_rounded,
         resimYolu: 'assets/images/admin_penalty.jpg',
         onPressed: () {
@@ -85,6 +89,7 @@ class AdminPanelWidget extends StatelessWidget {
       ),
       _AdminMenuData(
         baslik: 'Haber Yönetimi',
+        renkler: const [Color(0xFFFB7185), Color(0xFFE11D48)],
         ikon: Icons.newspaper_rounded,
         resimYolu: 'assets/admin/news_bg.jpg',
         onPressed: () {
@@ -97,6 +102,7 @@ class AdminPanelWidget extends StatelessWidget {
       if (isAdmin)
         _AdminMenuData(
           baslik: 'Saha Yönetimi',
+          renkler: const [Color(0xFF4ADE80), Color(0xFF16A34A)],
           ikon: Icons.stadium_rounded,
           resimYolu: 'assets/admin/pitch_bg.jpg',
           onPressed: () {
@@ -186,7 +192,19 @@ class AdminPanelWidget extends StatelessWidget {
   ) {
     return ListTile(
       onTap: onTap,
-      leading: Icon(icon, color: Colors.white70),
+      leading: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF38BDF8), Color(0xFF0284C7)],
+          ),
+        ),
+        child: Icon(icon, color: Colors.white, size: 20),
+      ),
       title: Text(
         title,
         style: const TextStyle(
@@ -265,27 +283,29 @@ class _PrivateLeaguesSwitchState extends State<_PrivateLeaguesSwitch> {
 class _AdminMenuData {
   final String baslik;
   final IconData ikon;
+
+  /// İkon kutusunun renk geçişi (yan menüdeki gibi her bölümün kendi rengi).
+  final List<Color> renkler;
   final String resimYolu;
   final VoidCallback onPressed;
 
   _AdminMenuData({
     required this.baslik,
     required this.ikon,
+    required this.renkler,
     required this.resimYolu,
     required this.onPressed,
   });
 }
 
 /// Panel kartı: yeni tasarımın düz kartı (yüzey rengi, köşe 16); solda
-/// turnuva vurgu renginde ikon kutusu. Arka plan fotoğrafı yok.
+/// bölümün kendi renginde geçişli ikon kutusu. Arka plan fotoğrafı yok.
 class _ModernImageMenuCard extends StatelessWidget {
   final _AdminMenuData data;
   const _ModernImageMenuCard({required this.data});
 
   @override
   Widget build(BuildContext context) {
-    final accent =
-        ActiveTournament.theme.value?.secondary ?? const Color(0xFF10B981);
     return Material(
       color: const Color(0xFF1E293B),
       borderRadius: BorderRadius.circular(16),
@@ -304,10 +324,14 @@ class _ModernImageMenuCard extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(12),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: data.renkler,
+                  ),
                 ),
-                child: Icon(data.ikon, color: accent, size: 22),
+                child: Icon(data.ikon, color: Colors.white, size: 22),
               ),
               const SizedBox(width: 14),
               Expanded(
