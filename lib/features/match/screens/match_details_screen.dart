@@ -798,103 +798,103 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                     ),
               body: Column(
                 children: [
-                  Stack(
-                    children: [
-                      // Takım renkleriyle çapraz bölünmüş zemin + alt şerit.
-                      Positioned.fill(
-                        child: CustomPaint(painter: _SplitHeaderPainter(sides)),
+                  // Alt köşeleri yuvarlak, gölgeli bant: içerikten net ayrılır.
+                  Container(
+                    clipBehavior: Clip.antiAlias,
+                    decoration: const BoxDecoration(
+                      borderRadius: BorderRadius.vertical(
+                        bottom: Radius.circular(26),
                       ),
-                      Padding(
-                        padding: EdgeInsets.only(
-                          // Takım bloğu üst çubuktaki turnuva bandının
-                          // (44px) hemen altından başlar.
-                          top: MediaQuery.of(context).padding.top + 50,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black54,
+                          blurRadius: 18,
+                          offset: Offset(0, 8),
                         ),
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
-                          child: Column(
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                // Üstten hizalı: isimler kaç satır olursa olsun
-                                // skor logolarla aynı hizada kalır.
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    child: _TeamInfo(
-                                      name: homeName,
-                                      logoUrl: homeLogo,
+                      ],
+                    ),
+                    child: Stack(
+                      children: [
+                        // Takım renkleri kenarlardan ortaya koyulaşır; saha çizgileri + alt şerit.
+                        Positioned.fill(
+                          child: CustomPaint(
+                            painter: _MatchHeaderPainter(sides),
+                          ),
+                        ),
+                        Padding(
+                          padding: EdgeInsets.only(
+                            // Takım bloğu üst çubuktaki turnuva bandının
+                            // (44px) hemen altından başlar.
+                            top: MediaQuery.of(context).padding.top + 50,
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+                            child: Column(
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  // Üstten hizalı: isimler kaç satır olursa olsun
+                                  // skor logolarla aynı hizada kalır.
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      child: _TeamInfo(
+                                        name: homeName,
+                                        logoUrl: homeLogo,
+                                      ),
                                     ),
-                                  ),
-                                  Padding(
-                                    // Skor, büyütülen logoların ortasına
-                                    // denk gelir.
-                                    padding: const EdgeInsets.fromLTRB(
-                                      10,
-                                      12,
-                                      10,
-                                      0,
-                                    ),
-                                    child: Column(
-                                      children: [
-                                        Text(
-                                          "${m.homeScore} - ${m.awayScore}",
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w900,
-                                            fontSize: 30,
-                                            shadows: [
-                                              Shadow(
-                                                color: Colors.black,
-                                                blurRadius: 10,
-                                                offset: Offset(0, 2),
-                                              ),
-                                            ],
+                                    Padding(
+                                      // Skor, büyütülen logoların ortasına
+                                      // denk gelir.
+                                      padding: const EdgeInsets.fromLTRB(
+                                        10,
+                                        12,
+                                        10,
+                                        0,
+                                      ),
+                                      child: Column(
+                                        children: [
+                                          Text(
+                                            "${m.homeScore} - ${m.awayScore}",
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w900,
+                                              fontSize: 30,
+                                              shadows: [
+                                                Shadow(
+                                                  color: Colors.black,
+                                                  blurRadius: 10,
+                                                  offset: Offset(0, 2),
+                                                ),
+                                              ],
+                                            ),
                                           ),
-                                        ),
-                                        _MatchPhaseLabel(match: m),
-                                      ],
+                                          _MatchPhaseLabel(match: m),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                  Expanded(
-                                    child: _TeamInfo(
-                                      name: awayName,
-                                      logoUrl: awayLogo,
+                                    Expanded(
+                                      child: _TeamInfo(
+                                        name: awayName,
+                                        logoUrl: awayLogo,
+                                      ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 10),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.access_time_filled_rounded,
-                                    size: 14,
-                                    color: Colors.white70,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    "${_formatDate(m.matchDate ?? '')}  |  ${m.matchTime}",
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w700,
-                                      shadows: [
-                                        Shadow(
-                                          color: Colors.black,
-                                          blurRadius: 10,
-                                          offset: Offset(0, 2),
-                                        ),
-                                      ],
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.access_time_filled_rounded,
+                                      size: 14,
+                                      color: Colors.white70,
                                     ),
-                                  ),
-                                  if ((m.pitchId ?? '').isNotEmpty) ...[
-                                    const SizedBox(width: 12),
-                                    const Text(
-                                      "|",
-                                      style: TextStyle(
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      "${_formatDate(m.matchDate ?? '')}  |  ${m.matchTime}",
+                                      style: const TextStyle(
                                         color: Colors.white,
                                         fontSize: 11,
                                         fontWeight: FontWeight.w700,
@@ -907,70 +907,89 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                         ],
                                       ),
                                     ),
-                                    const SizedBox(width: 12),
-                                    const Icon(
-                                      Icons.location_on_rounded,
-                                      size: 14,
-                                      color: Colors.white70,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Flexible(
-                                      child: StreamBuilder<List<Pitch>>(
-                                        stream: _pitchesStream,
-                                        builder: (context, pitchSnap) {
-                                          final pitchId = (m.pitchId ?? '')
-                                              .trim();
-                                          final pitches =
-                                              pitchSnap.data ?? const <Pitch>[];
-
-                                          // pitchId ile eşleşen stadı bul
-                                          String displayPitchName =
-                                              'Bilinmeyen Saha';
-                                          String location = '';
-
-                                          for (final p in pitches) {
-                                            if (p.id == pitchId) {
-                                              displayPitchName = p.name;
-                                              location = p.location;
-                                              break;
-                                            }
-                                          }
-
-                                          return InkWell(
-                                            onTap: location.isEmpty
-                                                ? null
-                                                : () => _openPitchLocation(
-                                                    context,
-                                                    location,
-                                                  ),
-                                            child: Text(
-                                              displayPitchName,
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.w700,
-                                                shadows: [
-                                                  Shadow(
-                                                    color: Colors.black,
-                                                    blurRadius: 10,
-                                                    offset: Offset(0, 2),
-                                                  ),
-                                                ],
-                                              ),
-                                              overflow: TextOverflow.ellipsis,
+                                    if ((m.pitchId ?? '').isNotEmpty) ...[
+                                      const SizedBox(width: 12),
+                                      const Text(
+                                        "|",
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          shadows: [
+                                            Shadow(
+                                              color: Colors.black,
+                                              blurRadius: 10,
+                                              offset: Offset(0, 2),
                                             ),
-                                          );
-                                        },
+                                          ],
+                                        ),
                                       ),
-                                    ),
+                                      const SizedBox(width: 12),
+                                      const Icon(
+                                        Icons.location_on_rounded,
+                                        size: 14,
+                                        color: Colors.white70,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Flexible(
+                                        child: StreamBuilder<List<Pitch>>(
+                                          stream: _pitchesStream,
+                                          builder: (context, pitchSnap) {
+                                            final pitchId = (m.pitchId ?? '')
+                                                .trim();
+                                            final pitches =
+                                                pitchSnap.data ??
+                                                const <Pitch>[];
+
+                                            // pitchId ile eşleşen stadı bul
+                                            String displayPitchName =
+                                                'Bilinmeyen Saha';
+                                            String location = '';
+
+                                            for (final p in pitches) {
+                                              if (p.id == pitchId) {
+                                                displayPitchName = p.name;
+                                                location = p.location;
+                                                break;
+                                              }
+                                            }
+
+                                            return InkWell(
+                                              onTap: location.isEmpty
+                                                  ? null
+                                                  : () => _openPitchLocation(
+                                                      context,
+                                                      location,
+                                                    ),
+                                              child: Text(
+                                                displayPitchName,
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w700,
+                                                  shadows: [
+                                                    Shadow(
+                                                      color: Colors.black,
+                                                      blurRadius: 10,
+                                                      offset: Offset(0, 2),
+                                                    ),
+                                                  ],
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                    ],
                                   ],
-                                ],
-                              ),
-                            ],
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                   Expanded(
                     child: Stack(
@@ -991,6 +1010,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                             // ayrı bir şerit, seçili sekmenin altı çizili.
                             Container(
                               height: 46,
+                              margin: const EdgeInsets.only(top: 10),
                               decoration: BoxDecoration(
                                 color: const Color(0xFF111A2E),
                                 border: Border(
@@ -4203,42 +4223,38 @@ class _DetailEventTile extends StatelessWidget {
   }
 }
 
-/// Maç başlığının zemini: sol ev sahibi, sağ deplasman rengi; ortada hafif
-/// eğik beyaz kesik, okunurluk için koyu perde ve altta iki takımın diğer
-/// renklerinden ince şerit.
-class _SplitHeaderPainter extends CustomPainter {
-  const _SplitHeaderPainter(this.sides);
+/// Maç başlığının zemini: sol kenar ev sahibi, sağ kenar deplasman rengi,
+/// ortaya doğru koyu zemine geçer. Üstte silik saha çizgileri, okunurluk için
+/// koyu perde ve altta iki takımın diğer renklerinden ince şerit.
+class _MatchHeaderPainter extends CustomPainter {
+  const _MatchHeaderPainter(this.sides);
 
   final MatchSideColors sides;
 
   static const _stripe = 4.0;
+  static const _dark = Color(0xFF0F172A);
 
   @override
   void paint(Canvas canvas, Size size) {
     final w = size.width, h = size.height - _stripe;
-    final tilt = h * 0.13;
-    final left = Path()
-      ..moveTo(0, 0)
-      ..lineTo(w / 2 + tilt, 0)
-      ..lineTo(w / 2 - tilt, h)
-      ..lineTo(0, h)
-      ..close();
-    final right = Path()
-      ..moveTo(w / 2 + tilt, 0)
-      ..lineTo(w, 0)
-      ..lineTo(w, h)
-      ..lineTo(w / 2 - tilt, h)
-      ..close();
-    canvas.drawPath(left, Paint()..color = sides.home);
-    canvas.drawPath(right, Paint()..color = sides.away);
-    canvas.drawLine(
-      Offset(w / 2 + tilt, 0),
-      Offset(w / 2 - tilt, h),
-      Paint()
-        ..color = Colors.white.withValues(alpha: 0.85)
-        ..strokeWidth = 3,
-    );
     final rect = Rect.fromLTWH(0, 0, w, h);
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = LinearGradient(
+          // Hafif eğik geçiş (yaklaşık 15°).
+          begin: const Alignment(-1, -0.27),
+          end: const Alignment(1, 0.27),
+          colors: [
+            sides.home,
+            Color.lerp(sides.home, _dark, 0.55)!,
+            _dark,
+            Color.lerp(sides.away, _dark, 0.55)!,
+            sides.away,
+          ],
+          stops: const [0.0, 0.3, 0.5, 0.7, 1.0],
+        ).createShader(rect),
+    );
     canvas.drawRect(
       rect,
       Paint()
@@ -4246,13 +4262,50 @@ class _SplitHeaderPainter extends CustomPainter {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            Colors.black.withValues(alpha: 0.45),
-            Colors.black.withValues(alpha: 0.18),
-            Colors.black.withValues(alpha: 0.55),
+            Colors.black.withValues(alpha: 0.35),
+            Colors.transparent,
+            Colors.black.withValues(alpha: 0.35),
           ],
-          stops: const [0.0, 0.45, 1.0],
+          stops: const [0.0, 0.4, 1.0],
         ).createShader(rect),
     );
+
+    // Saha çizgileri: orta çizgi, orta yuvarlak, iki ceza sahası ve yayları.
+    final line = Paint()
+      ..color = Colors.white.withValues(alpha: 0.09)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+    final cy = h * 0.55;
+    final r = h * 0.22;
+    canvas.drawLine(Offset(w / 2, 0), Offset(w / 2, h), line);
+    canvas.drawCircle(Offset(w / 2, cy), r, line);
+    canvas.drawCircle(
+      Offset(w / 2, cy),
+      3,
+      Paint()..color = Colors.white.withValues(alpha: 0.12),
+    );
+    final boxW = w * 0.17, boxH = h * 0.56;
+    canvas.drawRect(Rect.fromLTWH(-2, cy - boxH / 2, boxW, boxH), line);
+    canvas.drawRect(
+      Rect.fromLTWH(w - boxW + 2, cy - boxH / 2, boxW, boxH),
+      line,
+    );
+    final arc = r * 0.65;
+    canvas.drawArc(
+      Rect.fromCircle(center: Offset(boxW - arc * 0.6, cy), radius: arc),
+      -1.0,
+      2.0,
+      false,
+      line,
+    );
+    canvas.drawArc(
+      Rect.fromCircle(center: Offset(w - boxW + arc * 0.6, cy), radius: arc),
+      2.14,
+      2.0,
+      false,
+      line,
+    );
+
     canvas.drawRect(
       Rect.fromLTWH(0, h, w / 2, _stripe),
       Paint()..color = sides.homeStripe,
@@ -4264,5 +4317,5 @@ class _SplitHeaderPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_SplitHeaderPainter old) => old.sides != sides;
+  bool shouldRepaint(_MatchHeaderPainter old) => old.sides != sides;
 }
