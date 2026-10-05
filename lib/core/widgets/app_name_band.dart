@@ -104,14 +104,6 @@ class AppNameBand extends StatelessWidget {
                     ],
                   ),
                 ),
-                // Kişinin birden fazla turnuvası varsa (teması olmayan
-                // turnuvadayken de) sağda seçici.
-                Positioned(
-                  right: 10,
-                  top: 0,
-                  bottom: 0,
-                  child: Center(child: LeagueSwitchButton()),
-                ),
               ],
             ),
           ),
