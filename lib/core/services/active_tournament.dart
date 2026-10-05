@@ -37,17 +37,22 @@ class TournamentTheme {
   static String _toHex(Color c) =>
       '#${(c.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
 
-  /// `leagues` satırından; tema rengi tanımlı değilse null.
+  /// `leagues` satırından. Tema rengi girilmemiş turnuva da aynı bant
+  /// tasarımıyla (adı + seçici) görünür; renk olarak varsayılan yeşil.
   static TournamentTheme? fromRow(Map<String, dynamic> r) {
-    final p = _hex(r['theme_primary']);
-    if (p == null) return null;
+    if ((r['id'] ?? '').toString().isEmpty) return null;
+    final p = _hex(r['theme_primary']) ?? const Color(0xFF064E3B);
     final short = (r['short_name'] ?? '').toString().trim();
     return TournamentTheme(
       leagueId: (r['id'] ?? '').toString(),
       name: short.isNotEmpty ? short : (r['name'] ?? '').toString().trim(),
       logoUrl: (r['logo_url'] ?? '').toString().trim(),
       primary: p,
-      secondary: _hex(r['theme_secondary']) ?? Colors.white,
+      secondary:
+          _hex(r['theme_secondary']) ??
+          (_hex(r['theme_primary']) == null
+              ? const Color(0xFF10B981)
+              : Colors.white),
     );
   }
 
@@ -147,7 +152,22 @@ class ActiveTournament {
             ? await _loadMyLeagues(guest: true)
             : const <LeagueChoice>[];
         if (gen == _generation) myLeagues.value = choices;
-        if (guest) id = prefs.getString(_kGuestLeague);
+        if (guest) {
+          id = prefs.getString(_kGuestLeague);
+          // Henüz seçmediyse varsayılan sezonu olan turnuva (yoksa ilki):
+          // bant giriş yapmış kişidekiyle aynı görünür.
+          if (id == null || id.isEmpty) {
+            final def = await _sb
+                .from('seasons')
+                .select('league_id')
+                .eq('is_default', true)
+                .limit(1);
+            final defId = def.isEmpty ? null : def.first['league_id'];
+            id = choices.any((c) => c.id == defId)
+                ? defId.toString()
+                : (choices.isEmpty ? null : choices.first.id);
+          }
+        }
       }
       await _apply(id, gen: gen);
     } catch (e) {
