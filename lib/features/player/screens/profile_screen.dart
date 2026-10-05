@@ -25,22 +25,50 @@ class _ProfileScreenState extends State<ProfileScreen> {
   /// Yönetim paneli görünürken bantta menü + çıkış (paneli bu ekran açtı mı).
   bool _bandOwned = false;
 
+  /// Bu ekranın banda koyduğu düğmeler (başka ekranınkini silmemek için).
+  BandActions? _myActions;
+
   void _syncBand(bool on, VoidCallback onLogout) {
     if (on == _bandOwned && !on) return;
     _bandOwned = on;
     // Çizim sırasında bant yeniden çizilemez; ertelenir.
     Future.microtask(() {
-      AppNameBand.panelActions.value = on
-          ? BandActions(onMenu: MainNavigator.openMenu, onLogout: onLogout)
-          : null;
+      if (on) {
+        _myActions = BandActions(
+          onMenu: MainNavigator.openMenu,
+          onLogout: onLogout,
+        );
+        AppNameBand.panelActions.value = _myActions;
+      } else {
+        _clearBand();
+      }
     });
+  }
+
+  /// Bantta hâlâ bu ekranın düğmeleri varsa kaldırır. Ekran yeniden
+  /// kurulduğunda eskisinin kapanışı yenisinin düğmelerini silmez.
+  void _clearBand() {
+    if (_myActions != null &&
+        identical(AppNameBand.panelActions.value, _myActions)) {
+      AppNameBand.panelActions.value = null;
+    }
+    _myActions = null;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    LoginScreen.redirecting.addListener(_onRedirecting);
+  }
+
+  void _onRedirecting() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
-    if (_bandOwned) {
-      Future.microtask(() => AppNameBand.panelActions.value = null);
-    }
+    LoginScreen.redirecting.removeListener(_onRedirecting);
+    if (_bandOwned) Future.microtask(_clearBand);
     super.dispose();
   }
 
@@ -102,6 +130,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     const bgDark = Color(0xFF0F172A);
+
+    // Giriş yeni yapıldı, profil (rol, oyuncu kaydı) henüz yüklenmedi: ara
+    // yazı ("eşleşmedi" vb.) yerine yalnızca bekleme göstergesi.
+    if (isRealUser &&
+        (sessionData.isLoading || LoginScreen.redirecting.value)) {
+      return const Scaffold(
+        backgroundColor: bgDark,
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
 
     // Profil bilgisi oturumdan gelir (app_users + players üzerinden
     // AppSessionController tarafından yüklenir).

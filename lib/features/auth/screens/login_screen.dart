@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' show AuthException;
+import 'package:supabase_flutter/supabase_flutter.dart' show AuthException, Supabase;
 
 import '../../../core/services/active_tournament.dart';
 import '../../../core/services/app_session.dart';
@@ -45,6 +45,10 @@ class LoginScreen extends StatefulWidget {
   /// Uygulama açılışındaki giriş kapısı: menü yok, girişten sonra ana
   /// sayfa, altta "Misafir olarak devam et".
   final bool gate;
+
+  /// Giriş yapıldı, ana sayfaya yönlendirme bekleniyor: profil sekmesi bu
+  /// arada paneli/profili göstermez (bir an görünüp kaybolmasın).
+  static final redirecting = ValueNotifier<bool>(false);
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -195,22 +199,34 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     setState(() => _loading = true);
+    // Profil sekmesindeki giriş formu, oturum açılınca ekrandan kalkar;
+    // yönlendirme yine de yapılsın diye gezginler önceden alınır.
+    final nav = Navigator.of(context);
+    final rootNav = Navigator.of(context, rootNavigator: true);
+    final rememberMe = _rememberMe;
+    LoginScreen.redirecting.value = true;
     try {
       await session.signInWithPhonePassword(
         phoneInput: phone,
         password: password,
-        rememberMe: _rememberMe,
+        rememberMe: rememberMe,
       );
-      if (!mounted) return;
       if (session.mustChangePassword) {
-        Navigator.of(context).push(
+        nav.push(
           MaterialPageRoute<void>(
-            builder: (_) => ResetPasswordScreen(rememberMe: _rememberMe),
+            builder: (_) => ResetPasswordScreen(rememberMe: rememberMe),
           ),
         );
         return;
       }
-      Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+      // Ana sayfa kişinin turnuvası ve rolüyle tek seferde açılsın (bant ve
+      // içerik arada değişmesin).
+      final uid = Supabase.instance.client.auth.currentUser?.id ?? '';
+      await Future.wait([
+        ActiveTournament.refresh(),
+        if (uid.isNotEmpty) session.waitForProfile(uid),
+      ]);
+      rootNav.pushAndRemoveUntil(
         MaterialPageRoute<void>(
           // Girişten sonra her zaman ana sayfa (kişinin turnuvasıyla).
           builder: (_) => const MainNavigator(initialTabIndex: 0),
@@ -225,6 +241,7 @@ class _LoginScreenState extends State<LoginScreen> {
         message: _loginErrorMessage(e),
       );
     } finally {
+      LoginScreen.redirecting.value = false;
       if (mounted) setState(() => _loading = false);
     }
   }

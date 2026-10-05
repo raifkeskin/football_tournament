@@ -1217,13 +1217,21 @@ class LiveDrawNewsCard extends StatefulWidget {
 }
 
 class _LiveDrawNewsCardState extends State<LiveDrawNewsCard> {
+  /// Son bilinen durumlar: kart yeniden kurulunca (sekme, yenileme) eski
+  /// "YAKINDA" görünümü bir an bile çıkmasın.
+  static final _known = <String, LiveDrawState>{};
+
   LiveDrawState? _s;
   Timer? _tick;
   int _sinceFetch = 0;
 
+  /// Durum henüz alınamadı (ağ hatası): kart haber metniyle gösterilir.
+  bool _failed = false;
+
   @override
   void initState() {
     super.initState();
+    _s = _known[widget.drawId];
     _fetch();
     _tick = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
@@ -1250,8 +1258,16 @@ class _LiveDrawNewsCardState extends State<LiveDrawNewsCard> {
     _sinceFetch = 0;
     try {
       final s = await LiveDrawService.instance.fetch(widget.drawId);
-      if (mounted && s != null) setState(() => _s = s);
-    } catch (_) {}
+      if (s != null) _known[widget.drawId] = s;
+      if (mounted) {
+        setState(() {
+          if (s != null) _s = s;
+          _failed = s == null;
+        });
+      }
+    } catch (_) {
+      if (mounted && _s == null) setState(() => _failed = true);
+    }
   }
 
   void _open() {
@@ -1265,6 +1281,17 @@ class _LiveDrawNewsCardState extends State<LiveDrawNewsCard> {
   @override
   Widget build(BuildContext context) {
     final s = _s;
+    // Durum gelmeden yazı yok (yanlış "YAKINDA" görünmesin): boş çerçeve.
+    if (s == null && !_failed) {
+      return Container(
+        height: 290,
+        decoration: BoxDecoration(
+          color: _card,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+      );
+    }
     final lines = widget.content.trim().split('\n');
     final title = lines.first.trim();
     final body = lines.skip(1).join('\n').trim();

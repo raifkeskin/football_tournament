@@ -257,6 +257,25 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
     await setRememberMe(rememberMe && !mustChangePassword);
   }
 
+  /// Girişten sonra: kişinin profili (rol, oyuncu kaydı) yüklenene kadar
+  /// bekler; ekranlar ara içerik göstermeden doğrudan açılsın.
+  Future<void> waitForProfile(
+    String uid, {
+    Duration timeout = const Duration(seconds: 8),
+  }) {
+    bool ready() => value.user?.id == uid && !value.isLoading;
+    if (ready()) return Future.value();
+    final done = Completer<void>();
+    void check() {
+      if (ready() && !done.isCompleted) done.complete();
+    }
+
+    addListener(check);
+    return done.future
+        .timeout(timeout, onTimeout: () {})
+        .whenComplete(() => removeListener(check));
+  }
+
   /// Admin onayıyla verilen geçici şifreyle giriş yapıldıysa true.
   bool get mustChangePassword =>
       _supabase.auth.currentUser?.userMetadata?['must_change_password'] == true;
@@ -303,6 +322,11 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
       final first = _lastAuthId == '';
       _lastAuthId = authUser?.id;
       if (!first) LeagueAccess.bump();
+      // Yeni giriş: profil yüklenene kadar ekranlar eski (misafir) bilgiyle
+      // ara içerik göstermesin.
+      if (!first && authUser != null && !authUser.isAnonymous) {
+        value = value.copyWith(user: authUser, isLoading: true);
+      }
       // Uygulama kişinin turnuvasının kimliğine bürünür (giriş/çıkışta).
       ActiveTournament.refresh();
       // Çıkışta cihazdaki kodlarla isimsiz takip; girişte hesaba taşınır.
