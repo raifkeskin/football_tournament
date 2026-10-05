@@ -56,3 +56,10 @@ _Eklendi: 2026-10-03_
 - Şu an bildirime dokununca uygulamanın ana sayfası açılıyor; uygulamada sayfa adresleri (route) tanımlı değil.
 - Yapılacak: maç bildirimi → ilgili maç detayı, haber bildirimi → haber, saat/hatırlatma → maç detayı.
 - Gerekenler: uygulamaya adres yapısı (ör. `/mac/<id>`, `/haber/<id>`), push-sw.js'te tıklamada adresin açılması, veritabanındaki push tetikleyicilerinde `url` alanının doldurulması.
+
+## 6. Champions Master tanıtım sayfasını kendi alan adımızda yayınlamak
+_Eklendi: 2026-10-06_
+
+- Tanıtım sayfası hazır: `docs/tanitim/champions-master-tanitim.html` (görseller içine gömülü, tek dosya). Kaynak şablon: `docs/tanitim/champions-master-tanitim.src.html`. Şu an claude.ai'de de duruyor: https://claude.ai/artifact/MWikmZChsDdT2FmW7a8u3n
+- Yapılacak: sayfayı Firebase hosting'e koymak (ör. `/tanitim/champions`), turnuva sahiplerine uygulamanın kendi adresiyle bağlantı göndermek. Hareketli haber galerisi aynen çalışır.
+- PDF sürümü şimdilik gerekmiyor; istenirse galeri bölümü 5 küçük kare olarak basılacak.
