@@ -1,3 +1,4 @@
+import '../../../core/widgets/app_name_band.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -21,6 +22,28 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  /// Yönetim paneli görünürken bantta menü + çıkış (paneli bu ekran açtı mı).
+  bool _bandOwned = false;
+
+  void _syncBand(bool on, VoidCallback onLogout) {
+    if (on == _bandOwned && !on) return;
+    _bandOwned = on;
+    // Çizim sırasında bant yeniden çizilemez; ertelenir.
+    Future.microtask(() {
+      AppNameBand.panelActions.value = on
+          ? BandActions(onMenu: MainNavigator.openMenu, onLogout: onLogout)
+          : null;
+    });
+  }
+
+  @override
+  void dispose() {
+    if (_bandOwned) {
+      Future.microtask(() => AppNameBand.panelActions.value = null);
+    }
+    super.dispose();
+  }
+
   bool _isLoading = false;
 
   Future<void> _logout(dynamic session) async {
@@ -69,6 +92,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     final isAdminPanelVisible = sessionData.isAdmin;
 
+    // Yönetim paneli (admin, kurucu, bölge sorumlusu): başlık çubuğu yok;
+    // menü ve çıkış üst bantta, sayfa arka planı düz.
+    final panelMode =
+        isRealUser && (isAdminPanelVisible || sessionData.hasManagementPanel);
+    final panelOn = panelMode && TickerMode.of(context);
+    if (panelOn != _bandOwned) {
+      _syncBand(panelOn, () => _logout(session));
+    }
+
     const bgDark = Color(0xFF0F172A);
 
     // Profil bilgisi oturumdan gelir (app_users + players üzerinden
@@ -83,7 +115,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           isLoading: sessionData.isLoading,
         );
 
-        final showAppBar = isRealUser || isAdminPanelVisible;
+        final showAppBar = !panelMode && (isRealUser || isAdminPanelVisible);
 
         return PopScope(
           canPop: !isAdminPanelVisible,
@@ -162,16 +194,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
               // ... geri kalanı aynı
               children: [
                 // Fikstür/Gruplar ekranlarındaki ortak top görselli arka plan
-                Positioned.fill(
-                  child: Opacity(
-                    opacity: 0.15,
-                    child: Image.asset(
-                      'assets/images/background_ball.jpg',
-                      fit: BoxFit.cover,
-                      alignment: Alignment.center,
+                // (yönetim panelinde yok: yeni tasarımın düz zemini).
+                if (!panelMode)
+                  Positioned.fill(
+                    child: Opacity(
+                      opacity: 0.15,
+                      child: Image.asset(
+                        'assets/images/background_ball.jpg',
+                        fit: BoxFit.cover,
+                        alignment: Alignment.center,
+                      ),
                     ),
                   ),
-                ),
                 SafeArea(
                   child: isAdminPanelVisible
                       ? Column(children: [Expanded(child: AdminPanelWidget())])

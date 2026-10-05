@@ -25,6 +25,13 @@ class MainNavigator extends StatefulWidget {
   /// Profil sekmesinin sırası (girişten sonra doğrudan açılır).
   static const int profileTab = 5;
 
+  /// Ana gezginin Scaffold'u: yan menü bant gibi gezgin dışındaki
+  /// parçalardan da açılabilsin.
+  static final scaffoldKey = GlobalKey<ScaffoldState>();
+
+  /// Yan menüyü açar (ör. yönetim panelinde bantaki ☰).
+  static void openMenu() => scaffoldKey.currentState?.openDrawer();
+
   final int initialTabIndex;
 
   @override
@@ -57,7 +64,7 @@ class _MainNavigatorState extends State<MainNavigator> {
   late int _aktifSekme = widget.initialTabIndex;
 
   /// Yan menüyü kaydırma hareketinden açmak için.
-  final _scaffoldKey = GlobalKey<ScaffoldState>();
+  GlobalKey<ScaffoldState> get _scaffoldKey => MainNavigator.scaffoldKey;
 
   void _sekmeDegistir(int index) {
     setState(() {
@@ -139,7 +146,12 @@ class _MainNavigatorState extends State<MainNavigator> {
     return Scaffold(
       key: _scaffoldKey,
       extendBody: !kNewHomeDesign,
-      bottomNavigationBar: kNewHomeDesign
+      // Yönetim paneli (Profil sekmesi, yetkili) açıkken alt çubuk yok;
+      // gezinme bantaki menüden.
+      bottomNavigationBar:
+          kNewHomeDesign &&
+              !(_aktifSekme == MainNavigator.profileTab &&
+                  session.value.hasManagementPanel)
           ? _BottomBar(
               index: _aktifSekme,
               onTap: (i) => setState(() => _aktifSekme = i),

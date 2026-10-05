@@ -24,6 +24,10 @@ class AppNameBand extends StatelessWidget {
   /// büyükse bantta turnuva kimliği gösterilmez.
   static final genericScreens = ValueNotifier<int>(0);
 
+  /// Yönetim paneli açıkken bantta solda menü, sağda çıkış düğmesi
+  /// (panelin ayrı başlık çubuğu yok). null: düğme yok.
+  static final panelActions = ValueNotifier<BandActions?>(null);
+
   @override
   Widget build(BuildContext context) {
     final top = MediaQuery.paddingOf(context).top;
@@ -38,12 +42,33 @@ class AppNameBand extends StatelessWidget {
               listenable: Listenable.merge([
                 ActiveTournament.theme,
                 genericScreens,
+                panelActions,
               ]),
               builder: (context, tvlBand) {
                 final t = ActiveTournament.theme.value;
-                return t == null || genericScreens.value > 0
-                    ? tvlBand!
-                    : _TournamentBand(theme: t, top: top);
+                final actions = genericScreens.value > 0
+                    ? null
+                    : panelActions.value;
+                if (t == null || genericScreens.value > 0) {
+                  return actions == null
+                      ? tvlBand!
+                      : Stack(
+                          children: [
+                            tvlBand!,
+                            Positioned(
+                              left: 4,
+                              bottom: 3,
+                              child: actions.menuButton(Colors.white),
+                            ),
+                            Positioned(
+                              right: 4,
+                              bottom: 3,
+                              child: actions.logoutButton(),
+                            ),
+                          ],
+                        );
+                }
+                return _TournamentBand(theme: t, top: top, actions: actions);
               },
               child: _tvlBand(top),
             ),
@@ -342,10 +367,11 @@ class _LeagueRow extends StatelessWidget {
 /// Turnuva kimliğiyle bant: turnuvanın renkleri, solda logosu, yanında adı;
 /// sağda küçük TVL işareti (uygulama markası kaybolmaz).
 class _TournamentBand extends StatelessWidget {
-  const _TournamentBand({required this.theme, required this.top});
+  const _TournamentBand({required this.theme, required this.top, this.actions});
 
   final TournamentTheme theme;
   final double top;
+  final BandActions? actions;
 
   @override
   Widget build(BuildContext context) {
@@ -361,7 +387,10 @@ class _TournamentBand extends StatelessWidget {
         height: 50,
         child: Row(
           children: [
-            const SizedBox(width: 12),
+            if (actions != null)
+              actions!.menuButton(Colors.white)
+            else
+              const SizedBox(width: 12),
             if (theme.logoUrl.isNotEmpty)
               WebSafeImage(
                 url: theme.logoUrl,
@@ -415,7 +444,10 @@ class _TournamentBand extends StatelessWidget {
                 child: const TvlLogo(size: 26, ringText: false),
               ),
             ),
-            const SizedBox(width: 12),
+            if (actions != null)
+              actions!.logoutButton()
+            else
+              const SizedBox(width: 12),
           ],
         ),
       ),
@@ -426,3 +458,34 @@ class _TournamentBand extends StatelessWidget {
 /// Türkçe büyük harf (Dart'ın toUpperCase'i i → I yapar, İ değil).
 String _trUpper(String s) =>
     s.replaceAll('i', 'İ').replaceAll('ı', 'I').toUpperCase();
+
+/// Bantta yönetim paneli düğmeleri.
+@immutable
+class BandActions {
+  const BandActions({required this.onMenu, required this.onLogout});
+
+  final VoidCallback onMenu;
+  final VoidCallback onLogout;
+
+  // Bant gezginin dışında: düğmeler için şeffaf Material gerekir.
+  Widget menuButton(Color color) => Material(
+    type: MaterialType.transparency,
+    child: IconButton(
+      // Tooltip yok: bant Overlay'in dışında.
+      onPressed: onMenu,
+      icon: Icon(Icons.menu_rounded, color: color, semanticLabel: 'Menü'),
+    ),
+  );
+
+  Widget logoutButton() => Material(
+    type: MaterialType.transparency,
+    child: IconButton(
+      onPressed: onLogout,
+      icon: const Icon(
+        Icons.logout_rounded,
+        color: Color(0xFFF87171),
+        semanticLabel: 'Çıkış Yap',
+      ),
+    ),
+  );
+}

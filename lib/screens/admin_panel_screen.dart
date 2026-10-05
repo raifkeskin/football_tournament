@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:football_tournament/core/services/app_session.dart';
 import 'package:football_tournament/core/services/app_settings.dart';
+import 'package:football_tournament/core/services/active_tournament.dart';
 import 'package:football_tournament/features/team/screens/admin_manage_teams_screen.dart';
 import 'package:football_tournament/features/team/screens/team_squad_screen.dart';
 import 'package:football_tournament/features/tournament/screens/admin_manage_leagues_screen.dart';
@@ -126,7 +127,7 @@ class AdminPanelWidget extends StatelessWidget {
                   bottom: 10.0,
                 ), // Kartlar arası boşluk 12'den 10'a düştü
                 child: SizedBox(
-                  height: 80, // KİLİT NOKTA: Yükseklik 100'den 80'e düşürüldü
+                  height: 68,
                   child: _ModernImageMenuCard(data: menuItems[index]),
                 ),
               ),
@@ -195,8 +196,8 @@ class AdminPanelWidget extends StatelessWidget {
         ),
       ),
       trailing: const Icon(Icons.chevron_right, color: Colors.white24),
-      tileColor: Colors.white.withValues(alpha: 0.05),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      tileColor: const Color(0xFF1E293B),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
     );
   }
 }
@@ -275,86 +276,56 @@ class _AdminMenuData {
   });
 }
 
+/// Panel kartı: yeni tasarımın düz kartı (yüzey rengi, köşe 16); solda
+/// turnuva vurgu renginde ikon kutusu. Arka plan fotoğrafı yok.
 class _ModernImageMenuCard extends StatelessWidget {
   final _AdminMenuData data;
   const _ModernImageMenuCard({required this.data});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16), // Daha zarif bir kavis
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-        boxShadow: const [
-          BoxShadow(color: Colors.black45, blurRadius: 8, offset: Offset(0, 4)),
-        ],
-        image: DecorationImage(
-          image: AssetImage(data.resimYolu),
-          fit: BoxFit.cover,
-          colorFilter: ColorFilter.mode(
-            Colors.black.withValues(
-              alpha: 0.75,
-            ), // Resmi biraz daha karartarak yazıyı patlattık
-            BlendMode.darken,
+    final accent =
+        ActiveTournament.theme.value?.secondary ?? const Color(0xFF10B981);
+    return Material(
+      color: const Color(0xFF1E293B),
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: data.onPressed,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
           ),
-        ),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: data.onPressed,
-          borderRadius: BorderRadius.circular(16),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 12,
-            ), // Padding ufaldı
-            child: Row(
-              children: [
-                // Sol taraftaki şeffaf arka planlı ikon kutusu
-                Container(
-                  padding: const EdgeInsets.all(10), // Padding ufaldı
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.2),
-                    ),
-                  ),
-                  child: Icon(
-                    data.ikon,
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(data.ikon, color: accent, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(
+                  data.baslik,
+                  style: const TextStyle(
                     color: Colors.white,
-                    size: 22,
-                  ), // İkon 28'den 22'ye düştü
-                ),
-                const SizedBox(width: 14),
-                // Orta alan: Menü Başlığı
-                Expanded(
-                  child: Text(
-                    data.baslik,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 16, // Font 18'den 16'ya düştü
-                      letterSpacing: 0.3,
-                    ),
+                    fontWeight: FontWeight.w800,
+                    fontSize: 16,
                   ),
                 ),
-                // Sağ alan: Ok İkonu
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.05),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.arrow_forward_ios_rounded,
-                    color: Colors.white70,
-                    size: 14,
-                  ),
-                ),
-              ],
-            ),
+              ),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: Colors.white38,
+                size: 24,
+              ),
+            ],
           ),
         ),
       ),
