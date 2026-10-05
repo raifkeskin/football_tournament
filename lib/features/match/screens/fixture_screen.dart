@@ -658,7 +658,11 @@ class _FixtureScreenState extends State<FixtureScreen> {
                                       ),
                                       cardColor: cardBg,
                                       outlineColor: outline,
-                                      onDataChanged: () => setState(() {}),
+                                      // Akış önbellekli; kayıttan sonra
+                                      // hafta listesi yeniden okunsun.
+                                      onDataChanged: () => setState(
+                                        () => _fixtureMatchesStream = null,
+                                      ),
                                     );
                                   },
                                 );

@@ -675,19 +675,28 @@ class SupabaseMatchService implements IMatchService {
       try {
         AppConfig.sqlLogStart(
           table: 'matches',
-          operation: 'UPSERT',
-          filters: 'onConflict=id | id=$id',
+          operation: 'UPDATE',
+          filters: 'id=$id',
         );
-        await _client.from('matches').upsert({
-          'id': id,
-          'home_score': homeScore,
-          'away_score': awayScore,
-          'is_completed': true,
-          'status': 'finished',
-        }, onConflict: 'id');
-        AppConfig.sqlLogResult(table: 'matches', operation: 'UPSERT', count: 1);
+        // upsert değil update: upsert'in ekleme kontrolü (RLS) turnuva
+        // sahibini reddeder. Hiç satır güncellenmezse yetki yok demektir.
+        final rows = await _client
+            .from('matches')
+            .update({
+              'home_score': homeScore,
+              'away_score': awayScore,
+              'is_completed': true,
+              'status': 'finished',
+            })
+            .eq('id', id)
+            .select('id');
+        if (rows.isEmpty) {
+          throw Exception('Skor kaydedilemedi: bu maçı düzenleme yetkiniz yok.');
+        }
+        AppConfig.sqlLogResult(table: 'matches', operation: 'UPDATE', count: 1);
       } catch (e) {
-        AppConfig.sqlLogResult(table: 'matches', operation: 'UPSERT', error: e);
+        AppConfig.sqlLogResult(table: 'matches', operation: 'UPDATE', error: e);
+        rethrow;
       }
 
       // "Maç Başladı / İlk Yarı / Maç Bitti" satırları veritabanına yazılmaz;
