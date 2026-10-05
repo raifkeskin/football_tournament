@@ -52,6 +52,9 @@ class _FixtureScreenState extends State<FixtureScreen> {
   /// o grubun güncel haftası açılır.
   String? _weekKey;
 
+  /// Başlık çubuğundaki paylaş düğmesinin işlevi (yetki ve veri varsa).
+  final _shareAction = ValueNotifier<VoidCallback?>(null);
+
   /// Filtre (turnuva|sezon|grup) başına hafta bilgisi önbelleği.
   final Map<String, Future<({int? maxWeek, int? nextWeek})>> _weekInfo = {};
 
@@ -144,6 +147,7 @@ class _FixtureScreenState extends State<FixtureScreen> {
     GlobalFilter.leagueId.removeListener(_onGlobalFilterChanged);
     GlobalFilter.seasonId.removeListener(_onGlobalFilterChanged);
     GlobalFilter.groupId.removeListener(_onGlobalFilterChanged);
+    _shareAction.dispose();
     super.dispose();
   }
 
@@ -359,24 +363,20 @@ class _FixtureScreenState extends State<FixtureScreen> {
         matches.isNotEmpty &&
         AppSession.of(context).value.canManageLeague(_leagueId);
 
-    final shareButton = !canShare
+    // Paylaş düğmesi başlık çubuğunda (sağda); seçili haftanın afişi.
+    final VoidCallback? share = !canShare
         ? null
-        : Material(
-            color: const Color(0xFF10B981),
-            shape: const CircleBorder(),
-            child: IconButton(
-              tooltip: 'Afişi paylaş',
-              icon: const Icon(Icons.ios_share_rounded, color: Colors.white),
-              onPressed: () => _shareFixturePoster(
-                league: league,
-                groupName: groups.length > 1 ? currentGroupName : '',
-                week: week,
-                matches: matches,
-                teamNameById: teamNameById,
-                teamLogoById: teamLogoById,
-              ),
-            ),
+        : () => _shareFixturePoster(
+            league: league,
+            groupName: groups.length > 1 ? currentGroupName : '',
+            week: week,
+            matches: matches,
+            teamNameById: teamNameById,
+            teamLogoById: teamLogoById,
           );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _shareAction.value = share;
+    });
     // Turnuva üst bantta duruyor; sezon/grup filtresi yalnızca seçilecek
     // birden fazla sezon ya da grup varsa görünür.
     final hasFilter = seasons.length > 1 || groups.length > 1;
@@ -392,24 +392,13 @@ class _FixtureScreenState extends State<FixtureScreen> {
               detail: groups.length > 1 ? currentGroupName : null,
               onTap: () =>
                   _showFilterDialog(context, leagues, week, selectedGroupId),
-              trailing: shareButton,
             ),
             const SizedBox(height: 8),
           ],
-          Row(
-            children: [
-              Expanded(
-                child: _WeekStrip(
-                  weeks: weeks,
-                  week: week,
-                  onSelect: (w) => setState(() => _week = w),
-                ),
-              ),
-              if (!hasFilter && shareButton != null) ...[
-                const SizedBox(width: 8),
-                shareButton,
-              ],
-            ],
+          _WeekStrip(
+            weeks: weeks,
+            week: week,
+            onSelect: (w) => setState(() => _week = w),
           ),
         ],
       ),
@@ -427,7 +416,24 @@ class _FixtureScreenState extends State<FixtureScreen> {
     return Scaffold(
       backgroundColor: bgDark,
       extendBodyBehindAppBar: true,
-      appBar: const MasterClassAppBar(title: 'Fikstür'),
+      appBar: MasterClassAppBar(
+        title: 'Fikstür',
+        actions: [
+          ValueListenableBuilder<VoidCallback?>(
+            valueListenable: _shareAction,
+            builder: (context, share, _) => share == null
+                ? const SizedBox.shrink()
+                : IconButton(
+                    tooltip: 'Afişi paylaş',
+                    onPressed: share,
+                    icon: const Icon(
+                      Icons.ios_share_rounded,
+                      color: Colors.white70,
+                    ),
+                  ),
+          ),
+        ],
+      ),
       body: Stack(
         children: [
           SafeArea(
