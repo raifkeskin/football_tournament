@@ -2081,8 +2081,14 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
     } catch (e) {
       if (!mounted) return;
       final msg = e.toString();
-      final uniq = 'Bu futbolcu zaten sistemde kayıtlı!';
-      final text = msg.contains(uniq) ? uniq : 'Hata: $msg';
+      // Düzenlemede ad/soyad/doğum tarihi başka bir kayıtla çakışırsa da.
+      final text =
+          msg.contains(kPlayerAlreadyRegistered) ||
+              msg.contains('players_identity_uq')
+          ? kPlayerAlreadyRegistered
+          : msg.contains('players_phone_uq')
+          ? 'Bu telefon numarası başka bir futbolcuya kayıtlı.'
+          : 'Hata: $msg';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(text), backgroundColor: Colors.red),
       );

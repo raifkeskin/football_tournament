@@ -7,6 +7,12 @@ import '../../../tournament/models/league.dart';
 import '../../../match/models/match.dart';
 import '../../models/team.dart';
 
+
+/// Aynı kişi (ad + soyad + doğum tarihi) ikinci kez kaydedilmek istendiğinde.
+const kPlayerAlreadyRegistered =
+    'Bu futbolcu zaten sistemde kayıtlı! Aynı ad, soyad ve doğum tarihiyle '
+    'bir kayıt var; yeni kayıt yerine kadroya mevcut futbolcuyu ekleyin.';
+
 class SupabaseTeamService implements ITeamService {
   SupabaseTeamService({SupabaseClient? client})
     : _client = client ?? Supabase.instance.client;
@@ -1093,7 +1099,14 @@ class SupabaseTeamService implements ITeamService {
           count: 1,
         );
       } catch (e) {
-        if (e is PostgrestException && e.code == '23505') return;
+        if (e is PostgrestException && e.code == '23505') {
+          // Aynı ad + soyad + doğum tarihiyle başka kayıt var (telefon
+          // farklı ya da yok): ikinci kayıt açılmaz.
+          if (e.message.contains('players_identity_uq')) {
+            throw Exception(kPlayerAlreadyRegistered);
+          }
+          return; // aynı telefon: mevcut oyuncu kullanılır
+        }
         AppConfig.sqlLogResult(
           table: 'players',
           operation: 'INSERT',
