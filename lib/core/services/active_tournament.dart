@@ -72,6 +72,12 @@ class ActiveTournament {
   static const _kTheme = 'active_tournament_theme';
   static const _kGuestLeague = 'guest_last_league';
 
+  /// Misafir modu seçildi mi (GuestMode ile aynı anahtar).
+  static const _kGuestChosen = 'guest_mode_chosen';
+
+  /// Üst üste gelen refresh çağrılarında yalnızca sonuncusu uygulanır.
+  static int _generation = 0;
+
   static SupabaseClient get _sb => Supabase.instance.client;
 
   static bool get _isRealUser {
@@ -99,18 +105,22 @@ class ActiveTournament {
   }
 
   /// Kişiye göre turnuvayı belirler (açılışta ve giriş/çıkışta).
+  /// Giriş yapılmamış ve misafir modu seçilmemişse (giriş kapısı) tema
+  /// boştur: kapıda hiçbir turnuvanın adı görünmez.
   static Future<void> refresh() async {
+    final gen = ++_generation;
     try {
       String? leagueId;
       if (_isRealUser) {
         final res = await _sb.rpc('my_preferred_league');
         leagueId = res?.toString();
-      }
-      if (leagueId == null || leagueId.isEmpty) {
+      } else {
         final prefs = await SharedPreferences.getInstance();
-        leagueId = _isRealUser ? null : prefs.getString(_kGuestLeague);
+        if (prefs.getBool(_kGuestChosen) ?? false) {
+          leagueId = prefs.getString(_kGuestLeague);
+        }
       }
-      await _apply(leagueId);
+      await _apply(leagueId, gen: gen);
     } catch (e) {
       debugPrint('Turnuva teması belirlenemedi: $e');
     }
@@ -128,7 +138,7 @@ class ActiveTournament {
     } catch (_) {}
   }
 
-  static Future<void> _apply(String? leagueId) async {
+  static Future<void> _apply(String? leagueId, {int? gen}) async {
     TournamentTheme? next;
     if ((leagueId ?? '').isNotEmpty) {
       final row = await _sb
@@ -140,6 +150,8 @@ class ActiveTournament {
           .maybeSingle();
       if (row != null) next = TournamentTheme.fromRow(row);
     }
+    // Bu arada daha yeni bir refresh başladıysa onun sonucu geçerli.
+    if (gen != null && gen != _generation) return;
     theme.value = next;
     final prefs = await SharedPreferences.getInstance();
     if (next == null) {
