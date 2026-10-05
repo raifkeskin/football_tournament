@@ -32,18 +32,21 @@ class AppNameBand extends StatelessWidget {
       child: Column(
         children: [
           // Kişinin turnuvası temalıysa bant o turnuvanın kimliğiyle.
-          ListenableBuilder(
-            listenable: Listenable.merge([
-              ActiveTournament.theme,
-              genericScreens,
-            ]),
-            builder: (context, tvlBand) {
-              final t = ActiveTournament.theme.value;
-              return t == null || genericScreens.value > 0
-                  ? tvlBand!
-                  : _TournamentBand(theme: t, top: top);
-            },
-            child: _tvlBand(top),
+          KeyedSubtree(
+            key: _bandKey,
+            child: ListenableBuilder(
+              listenable: Listenable.merge([
+                ActiveTournament.theme,
+                genericScreens,
+              ]),
+              builder: (context, tvlBand) {
+                final t = ActiveTournament.theme.value;
+                return t == null || genericScreens.value > 0
+                    ? tvlBand!
+                    : _TournamentBand(theme: t, top: top);
+              },
+              child: _tvlBand(top),
+            ),
           ),
           Expanded(
             child: MediaQuery.removePadding(
@@ -118,8 +121,14 @@ class AppNameBand extends StatelessWidget {
   }
 }
 
+/// Bandın konumu (açılır liste bandın hemen altına yerleşir).
+final _bandKey = GlobalKey();
+
+/// Açılır liste açıkken ok yukarı döner.
+final _switcherOpen = ValueNotifier<bool>(false);
+
 /// Bant seçicisi: kişinin birden fazla turnuvası varsa ▾ düğmesi; dokununca
-/// turnuva listesi açılır. Tek turnuvada hiçbir şey çizmez.
+/// bandın altında turnuva listesi açılır. Tek turnuvada hiçbir şey çizmez.
 class LeagueSwitchButton extends StatelessWidget {
   const LeagueSwitchButton({super.key, this.color = Colors.white});
 
@@ -136,11 +145,18 @@ class LeagueSwitchButton extends StatelessWidget {
           onTap: () => showLeagueSwitcher(),
           child: Padding(
             padding: const EdgeInsets.all(6),
-            child: Icon(
-              Icons.keyboard_arrow_down_rounded,
-              color: color,
-              size: 26,
-              semanticLabel: 'Turnuva değiştir',
+            child: ValueListenableBuilder<bool>(
+              valueListenable: _switcherOpen,
+              builder: (context, open, _) => AnimatedRotation(
+                turns: open ? 0.5 : 0,
+                duration: const Duration(milliseconds: 200),
+                child: Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  color: color,
+                  size: 26,
+                  semanticLabel: 'Turnuva değiştir',
+                ),
+              ),
             ),
           ),
         );
@@ -149,73 +165,184 @@ class LeagueSwitchButton extends StatelessWidget {
   }
 }
 
-/// Turnuva listesi (bant ve menü kullanır). Seçim: tema, ortak filtre ve
-/// cihazdaki tercih birlikte değişir.
+/// Turnuva listesi: bandın hemen altında, sağa yaslı açılır kart. Seçim:
+/// tema, ortak filtre ve cihazdaki tercih birlikte değişir.
 Future<void> showLeagueSwitcher() async {
-  final ctx = appNavigatorKey.currentContext;
-  if (ctx == null) return;
-  final leagues = ActiveTournament.myLeagues.value;
-  final current = ActiveTournament.currentLeagueId.value;
-  final picked = await showModalBottomSheet<String>(
-    context: ctx,
-    backgroundColor: const Color(0xFF1E293B),
-    showDragHandle: true,
-    isScrollControlled: true,
-    builder: (sheet) => SafeArea(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(sheet).size.height * 0.7,
-        ),
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
-              child: Text(
-                'Turnuva seç',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
+  final nav = appNavigatorKey.currentState;
+  final box = _bandKey.currentContext?.findRenderObject() as RenderBox?;
+  if (nav == null || box == null || _switcherOpen.value) return;
+  final band = box.localToGlobal(Offset.zero) & box.size;
+  _switcherOpen.value = true;
+  final picked = await nav.push<String>(_LeagueDropdownRoute(band: band));
+  _switcherOpen.value = false;
+  if (picked == null || picked == ActiveTournament.currentLeagueId.value) {
+    return;
+  }
+  await ActiveTournament.choose(picked);
+}
+
+class _LeagueDropdownRoute extends PopupRoute<String> {
+  _LeagueDropdownRoute({required this.band});
+
+  final Rect band;
+
+  @override
+  Color? get barrierColor => Colors.black45;
+
+  @override
+  bool get barrierDismissible => true;
+
+  @override
+  String? get barrierLabel => 'Kapat';
+
+  @override
+  Duration get transitionDuration => const Duration(milliseconds: 180);
+
+  @override
+  Widget buildPage(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+  ) {
+    final leagues = ActiveTournament.myLeagues.value;
+    final current = ActiveTournament.currentLeagueId.value;
+    final accent =
+        ActiveTournament.theme.value?.secondary ?? const Color(0xFF10B981);
+    final width = (band.width - 24).clamp(0.0, 340.0);
+    final maxHeight = MediaQuery.sizeOf(context).height - band.bottom - 24;
+    return Stack(
+      children: [
+        Positioned(
+          top: band.bottom + 6,
+          right: MediaQuery.sizeOf(context).width - band.right + 12,
+          width: width,
+          child: FadeTransition(
+            opacity: animation,
+            child: ScaleTransition(
+              alignment: Alignment.topRight,
+              scale: Tween<double>(begin: 0.92, end: 1).animate(
+                CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+              ),
+              child: Material(
+                color: const Color(0xFF1E293B),
+                elevation: 12,
+                shadowColor: Colors.black,
+                borderRadius: BorderRadius.circular(16),
+                clipBehavior: Clip.antiAlias,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: maxHeight),
+                  child: ListView(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(16, 6, 16, 6),
+                        child: Text(
+                          'TURNUVALARIM',
+                          style: TextStyle(
+                            color: Color(0xFF94A3B8),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.6,
+                          ),
+                        ),
+                      ),
+                      for (final l in leagues)
+                        _LeagueRow(
+                          league: l,
+                          selected: l.id == current,
+                          accent: accent,
+                          onTap: () => Navigator.pop(context, l.id),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
-            for (final l in leagues)
-              ListTile(
-                leading: SizedBox(
-                  width: 40,
-                  height: 40,
-                  child: l.logoUrl.isEmpty
-                      ? const Icon(
-                          Icons.emoji_events_outlined,
-                          color: Colors.white70,
-                        )
-                      : WebSafeImage(
-                          url: l.logoUrl,
-                          width: 40,
-                          height: 40,
-                          fit: BoxFit.contain,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _LeagueRow extends StatelessWidget {
+  const _LeagueRow({
+    required this.league,
+    required this.selected,
+    required this.accent,
+    required this.onTap,
+  });
+
+  final LeagueChoice league;
+  final bool selected;
+  final Color accent;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final initials = league.name.trim().isEmpty
+        ? '?'
+        : _trUpper(
+            league.name.trim().split(RegExp(r'\s+')).first,
+          ).characters.take(2).toString();
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? accent.withValues(alpha: 0.14) : null,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 36,
+              height: 36,
+              child: league.logoUrl.isNotEmpty
+                  ? WebSafeImage(
+                      url: league.logoUrl,
+                      width: 36,
+                      height: 36,
+                      fit: BoxFit.contain,
+                    )
+                  : Container(
+                      alignment: Alignment.center,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Color(0xFF475569),
+                      ),
+                      child: Text(
+                        initials,
+                        style: const TextStyle(
+                          fontFamily: 'BarlowCondensed',
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          fontSize: 14,
                         ),
+                      ),
+                    ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                league.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
                 ),
-                title: Text(
-                  l.name,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                trailing: l.id == current
-                    ? const Icon(Icons.check_rounded, color: Color(0xFF10B981))
-                    : null,
-                onTap: () => Navigator.pop(sheet, l.id),
               ),
+            ),
+            if (selected) Icon(Icons.check_rounded, color: accent, size: 20),
           ],
         ),
       ),
-    ),
-  );
-  if (picked == null || picked == current) return;
-  await ActiveTournament.choose(picked);
+    );
+  }
 }
 
 /// Turnuva kimliğiyle bant: turnuvanın renkleri, solda logosu, yanında adı;
