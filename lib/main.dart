@@ -1,7 +1,7 @@
 import 'core/app_navigator.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/config/app_config.dart';
@@ -293,9 +293,23 @@ class _MyAppState extends State<MyApp> {
           colorScheme: colorScheme,
           useMaterial3: true,
           brightness: Brightness.dark,
+          // iPhone gibi: detay sayfalarında sol kenardan sağa çekince geri.
+          pageTransitionsTheme: const PageTransitionsTheme(
+            builders: {
+              TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+              TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+              TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+              TargetPlatform.windows: CupertinoPageTransitionsBuilder(),
+              TargetPlatform.linux: CupertinoPageTransitionsBuilder(),
+              TargetPlatform.fuchsia: CupertinoPageTransitionsBuilder(),
+            },
+          ),
           scaffoldBackgroundColor: _bgDark,
           textTheme: (() {
-            final base = GoogleFonts.interTextTheme().apply(
+            // Barlow uygulamaya gömülü (pubspec fonts): açılışta internetten
+            // yazı tipi inmez, metinler ilk karede doğru yazı tipiyle çizilir.
+            final base = ThemeData.dark().textTheme.apply(
+              fontFamily: 'Barlow',
               bodyColor: _text,
               displayColor: _text,
             );

@@ -1,7 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -11,6 +11,7 @@ import '../../../core/services/app_session.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../match/models/match.dart';
 import '../../match/screens/match_details_screen.dart';
+import '../../player/widgets/player_card.dart';
 import '../../team/models/team.dart';
 import '../../team/utils/standings.dart';
 import '../../tournament/models/league.dart';
@@ -52,7 +53,8 @@ TextStyle _barlow({
   Color color = DashColors.text,
   double? spacing,
   double? height,
-}) => GoogleFonts.barlow(
+}) => TextStyle(
+  fontFamily: 'Barlow',
   fontSize: size,
   fontWeight: weight,
   color: color,
@@ -157,10 +159,13 @@ class _TeamInfo {
   }
 }
 
+/// Gol / asist listesindeki oyuncu.
 class _Scorer {
-  _Scorer(this.name, this.teamId);
+  _Scorer(this.playerId, this.name, this.teamId, this.photoUrl);
+  final String playerId;
   final String name;
   final String teamId;
+  final String photoUrl;
   int goals = 0;
 }
 
@@ -176,6 +181,7 @@ class _DashData {
     required this.matches,
     required this.myTeamIds,
     required this.scorers,
+    required this.assisters,
     required this.totalGoals,
     required this.activePenaltyMatches,
     required this.pendingPenalties,
@@ -190,6 +196,7 @@ class _DashData {
   final List<MatchModel> matches;
   final Set<String> myTeamIds;
   final List<_Scorer> scorers;
+  final List<_Scorer> assisters;
   final int totalGoals;
 
   /// Oyuncunun süren cezası (kalan maç); yoksa 0.
@@ -225,7 +232,16 @@ class HomeDashboard extends StatefulWidget {
 class _HomeDashboardState extends State<HomeDashboard> {
   static SupabaseClient get _sb => Supabase.instance.client;
 
-  Future<_DashData?>? _future;
+  /// Pano verisinin ham hali (sorgu sonuçları) bellekte ve cihazda
+  /// saklanır: ekran açılınca önce saklanan hal anında görünür, taze veri
+  /// arkadan gelip sessizce yerine geçer (bekleme ekranı / boş yazı yok).
+  static final Map<String, Map<String, dynamic>> _memCache = {};
+
+  _DashData? _data;
+  bool _failed = false;
+
+  /// Sunucudan en az bir kez yanıt geldi mi (boş durum yazısı ancak o zaman).
+  bool _loadedOnce = false;
   String? _loadedFor;
   String? _followedTeamId;
   Timer? _tick;
@@ -247,20 +263,69 @@ class _HomeDashboardState extends State<HomeDashboard> {
 
   String get _followKey => 'followed_team_${widget.league.id}';
 
+  String _cacheKey(AppSessionState session) =>
+      'dash_cache_${widget.league.id}_${session.user?.id ?? 'guest'}';
+
   void _ensureLoaded(AppSessionState session) {
-    final key = '${widget.league.id}|${session.user?.id}|${session.playerId}';
-    if (_loadedFor == key && _future != null) return;
+    final key = _cacheKey(session);
+    if (_loadedFor == key) return;
     _loadedFor = key;
-    _future = _load(session);
+    final mem = _memCache[key];
+    _data = mem == null ? null : _build(mem, session);
+    // Çizim bittikten sonra (build içinde setState olmasın).
+    scheduleMicrotask(() => _revalidate(session, key, fromDisk: mem == null));
   }
 
   Future<void> _refresh() async {
     final session = AppSession.of(context).value;
-    setState(() => _future = _load(session));
-    await _future;
+    await _revalidate(session, _cacheKey(session), fromDisk: false);
   }
 
-  Future<_DashData?> _load(AppSessionState session) async {
+  Future<void> _revalidate(
+    AppSessionState session,
+    String key, {
+    required bool fromDisk,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    _followedTeamId = prefs.getString(_followKey);
+    if (fromDisk && _data == null) {
+      try {
+        final raw = prefs.getString(key);
+        if (raw != null) {
+          final cached = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+          _memCache[key] = cached;
+          if (mounted && _loadedFor == key) {
+            setState(() => _data = _build(cached, session));
+          }
+        }
+      } catch (_) {}
+    }
+    try {
+      final raw = await _fetchRaw(session);
+      _memCache[key] = raw;
+      if (mounted && _loadedFor == key) {
+        setState(() {
+          _data = _build(raw, session);
+          _failed = false;
+          _loadedOnce = true;
+        });
+      }
+      try {
+        await prefs.setString(key, jsonEncode(raw));
+      } catch (_) {}
+    } catch (e) {
+      debugPrint('Pano yüklenemedi: $e');
+      if (mounted) {
+        setState(() {
+          _failed = true;
+          _loadedOnce = true;
+        });
+      }
+    }
+  }
+
+  /// Sorgular: sezon (1 tur), ardından geri kalan her şey paralel (1 tur).
+  Future<Map<String, dynamic>> _fetchRaw(AppSessionState session) async {
     final leagueId = widget.league.id;
     final seasons = await _sb
         .from('seasons')
@@ -269,11 +334,15 @@ class _HomeDashboardState extends State<HomeDashboard> {
         .order('is_active', ascending: false)
         .order('start_date', ascending: false)
         .limit(1);
-    if (seasons.isEmpty) return null;
+    if (seasons.isEmpty) return {'season': null};
     final season = seasons.first;
     final seasonId = season['id'].toString();
+    final playerId = session.playerId ?? '';
+    final isOwner =
+        session.isAdmin || session.ownedLeagueIds.contains(leagueId);
 
-    final results = await Future.wait<dynamic>([
+    Future<List<dynamic>> none() async => const [];
+    final r = await Future.wait<dynamic>([
       _sb
           .from('season_teams')
           .select('team_id, group_id, teams(id, name, logo_url, first_color)')
@@ -286,21 +355,63 @@ class _HomeDashboardState extends State<HomeDashboard> {
       _sb
           .from('match_events')
           .select(
-            'player_id, team_id, players!match_events_player_id_fkey(name, surname)',
+            'player_id, assist_player_id, team_id, is_own_goal, '
+            'scorer:players!match_events_player_id_fkey(name, surname, photo_url), '
+            'assister:players!match_events_assist_player_id_fkey(name, surname, photo_url)',
           )
           .eq('season_id', seasonId)
-          .eq('event_type', 'goal')
-          .or('is_own_goal.is.null,is_own_goal.eq.false'),
+          .eq('event_type', 'goal'),
       _sb
           .from('leagues')
           .select('roster_open_hours')
           .eq('id', leagueId)
           .maybeSingle(),
-      SharedPreferences.getInstance(),
+      playerId.isEmpty
+          ? none()
+          : _sb
+                .from('season_team_players')
+                .select('team_id')
+                .eq('season_id', seasonId)
+                .eq('player_id', playerId)
+                .eq('is_active', true),
+      playerId.isEmpty
+          ? none()
+          : _sb
+                .from('player_penalties')
+                .select('remaining_matches, match_count')
+                .eq('season_id', seasonId)
+                .eq('player_id', playerId)
+                .eq('status', 'approved')
+                .eq('is_active', true),
+      isOwner
+          ? _sb
+                .from('player_penalties')
+                .select('id')
+                .eq('season_id', seasonId)
+                .eq('status', 'pending')
+          : none(),
     ]);
+    return {
+      'season': season,
+      'season_teams': r[0],
+      'groups': r[1],
+      'matches': r[2],
+      'events': r[3],
+      'open_hours': (r[4] as Map?)?['roster_open_hours'],
+      'my_player_teams': r[5],
+      'my_penalties': r[6],
+      'pending': (r[7] as List).length,
+    };
+  }
+
+  /// Ham veriden pano modeli (önbellekten de aynı yol).
+  _DashData? _build(Map<String, dynamic> raw, AppSessionState session) {
+    final season = raw['season'] as Map?;
+    if (season == null) return null;
+    final seasonId = season['id'].toString();
 
     final teams = <String, _TeamInfo>{};
-    for (final r in results[0] as List) {
+    for (final r in (raw['season_teams'] as List? ?? const [])) {
       final t = (r['teams'] as Map?) ?? const {};
       final id = (r['team_id'] ?? '').toString();
       if (id.isEmpty) continue;
@@ -315,7 +426,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
 
     final groups = <String, String>{};
     final groupRegion = <String, String>{};
-    for (final g in results[1] as List) {
+    for (final g in (raw['groups'] as List? ?? const [])) {
       final id = g['id'].toString();
       groups[id] = (g['name'] ?? '').toString();
       final region = (g['season_regions'] as Map?)?['name'];
@@ -323,7 +434,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
     }
 
     final matches = <MatchModel>[
-      for (final m in results[2] as List)
+      for (final m in (raw['matches'] as List? ?? const []))
         MatchModel.fromMap(
           Map<String, dynamic>.from(m as Map)
             ..['pitch_name'] = (m['pitches'] as Map?)?['name'],
@@ -332,31 +443,40 @@ class _HomeDashboardState extends State<HomeDashboard> {
     ];
 
     final scorerMap = <String, _Scorer>{};
+    final assistMap = <String, _Scorer>{};
     var totalGoals = 0;
-    for (final e in results[3] as List) {
-      totalGoals++;
-      final pid = (e['player_id'] ?? '').toString();
-      if (pid.isEmpty) continue;
-      final p = (e['players'] as Map?) ?? const {};
-      scorerMap
+    void bump(Map<String, _Scorer> into, String pid, Map? p, String teamId) {
+      if (pid.isEmpty) return;
+      into
           .putIfAbsent(
             pid,
             () => _Scorer(
-              '${p['name'] ?? ''} ${p['surname'] ?? ''}'.trim(),
-              (e['team_id'] ?? '').toString(),
+              pid,
+              '${p?['name'] ?? ''} ${p?['surname'] ?? ''}'.trim(),
+              teamId,
+              (p?['photo_url'] ?? '').toString(),
             ),
           )
           .goals++;
     }
-    final scorers = scorerMap.values.toList()
-      ..sort((a, b) {
-        final c = b.goals.compareTo(a.goals);
-        return c != 0 ? c : a.name.compareTo(b.name);
-      });
 
-    final openHours =
-        ((results[4] as Map?)?['roster_open_hours'] as num?)?.toInt() ?? 1;
-    final prefs = results[5] as SharedPreferences;
+    for (final e in (raw['events'] as List? ?? const [])) {
+      totalGoals++;
+      if (e['is_own_goal'] == true) continue;
+      final team = (e['team_id'] ?? '').toString();
+      bump(scorerMap, (e['player_id'] ?? '').toString(), e['scorer'], team);
+      bump(
+        assistMap,
+        (e['assist_player_id'] ?? '').toString(),
+        e['assister'],
+        team,
+      );
+    }
+    List<_Scorer> ranked(Map<String, _Scorer> m) =>
+        m.values.toList()..sort((a, b) {
+          final c = b.goals.compareTo(a.goals);
+          return c != 0 ? c : a.name.compareTo(b.name);
+        });
 
     // Kişinin bu sezondaki takım(lar)ı: oyuncu kaydı + sorumlusu olduğu.
     final myTeams = <String>{
@@ -364,58 +484,29 @@ class _HomeDashboardState extends State<HomeDashboard> {
         if (m.seasonId == seasonId) m.teamId,
       if (session.teamId != null && teams.containsKey(session.teamId))
         session.teamId!,
+      for (final r in (raw['my_player_teams'] as List? ?? const []))
+        r['team_id'].toString(),
     };
     var activePenalty = 0;
-    final playerId = session.playerId;
-    if (playerId != null && playerId.isNotEmpty) {
-      final rows = await _sb
-          .from('season_team_players')
-          .select('team_id')
-          .eq('season_id', seasonId)
-          .eq('player_id', playerId)
-          .eq('is_active', true);
-      for (final r in rows) {
-        myTeams.add(r['team_id'].toString());
-      }
-      final pens = await _sb
-          .from('player_penalties')
-          .select('remaining_matches, match_count')
-          .eq('season_id', seasonId)
-          .eq('player_id', playerId)
-          .eq('status', 'approved')
-          .eq('is_active', true);
-      for (final p in pens) {
-        activePenalty +=
-            ((p['remaining_matches'] ?? p['match_count']) as num?)?.toInt() ??
-            0;
-      }
+    for (final p in (raw['my_penalties'] as List? ?? const [])) {
+      activePenalty +=
+          ((p['remaining_matches'] ?? p['match_count']) as num?)?.toInt() ?? 0;
     }
-
-    var pending = 0;
-    if (session.isAdmin || session.ownedLeagueIds.contains(leagueId)) {
-      final rows = await _sb
-          .from('player_penalties')
-          .select('id')
-          .eq('season_id', seasonId)
-          .eq('status', 'pending');
-      pending = rows.length;
-    }
-
-    _followedTeamId = prefs.getString(_followKey);
 
     return _DashData(
       seasonId: seasonId,
       seasonName: (season['name'] ?? '').toString(),
-      openHours: openHours,
+      openHours: (raw['open_hours'] as num?)?.toInt() ?? 1,
       teams: teams,
       groups: groups,
       groupRegion: groupRegion,
       matches: matches,
       myTeamIds: myTeams,
-      scorers: scorers,
+      scorers: ranked(scorerMap),
+      assisters: ranked(assistMap),
       totalGoals: totalGoals,
       activePenaltyMatches: activePenalty,
-      pendingPenalties: pending,
+      pendingPenalties: (raw['pending'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -538,36 +629,46 @@ class _HomeDashboardState extends State<HomeDashboard> {
   Widget build(BuildContext context) {
     final session = AppSession.of(context).value;
     _ensureLoaded(session);
-    return FutureBuilder<_DashData?>(
-      future: _future,
-      builder: (context, snap) {
-        final data = snap.data;
-        final top = MediaQuery.paddingOf(context).top;
-        return RefreshIndicator(
-          color: DashColors.accent(),
-          onRefresh: _refresh,
-          child: ListView(
-            padding: EdgeInsets.fromLTRB(0, top, 0, 24),
-            children: [
-              _greeting(session, data),
-              if (snap.connectionState != ConnectionState.done && data == null)
-                const Padding(
-                  padding: EdgeInsets.only(top: 80),
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (snap.hasError)
-                _message('Veriler yüklenemedi. Aşağı çekip yenileyin.')
-              else if (data == null)
-                _message('Bu turnuvada henüz sezon yok.')
-              else
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 0),
-                  child: _body(session, data),
-                ),
-            ],
-          ),
-        );
-      },
+    final data = _data;
+    final top = MediaQuery.paddingOf(context).top;
+    final Widget content;
+    if (data != null) {
+      content = Padding(
+        padding: const EdgeInsets.fromLTRB(14, 0, 14, 0),
+        child: _body(session, data),
+      );
+    } else if (!_loadedOnce) {
+      // İlk yükleme: yazı yerine iskelet (sonradan değişen metin yok).
+      content = _skeleton();
+    } else if (_failed) {
+      content = _message('Veriler yüklenemedi. Aşağı çekip yenileyin.');
+    } else {
+      content = _message('Bu turnuvada henüz sezon yok.');
+    }
+    return RefreshIndicator(
+      color: DashColors.accent(),
+      onRefresh: _refresh,
+      child: ListView(
+        padding: EdgeInsets.fromLTRB(0, top, 0, 24),
+        children: [_greeting(session, data), content],
+      ),
+    );
+  }
+
+  Widget _skeleton() {
+    Widget block(double h) => Container(
+      height: h,
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: DashColors.surface,
+        borderRadius: BorderRadius.circular(16),
+      ),
+    );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 0),
+      child: Column(
+        children: [block(190), block(84), block(56), block(56), block(150)],
+      ),
     );
   }
 
@@ -750,7 +851,15 @@ class _HomeDashboardState extends State<HomeDashboard> {
             'İstatistik',
             () => widget.onOpenTab(4),
           ),
-          _topScorers(d),
+          _leaders(d, d.scorers, 'gol'),
+        ],
+        if (d.assisters.isNotEmpty) ...[
+          _sectionHeader(
+            'ASİST KRALLIĞI',
+            'İstatistik',
+            () => widget.onOpenTab(4),
+          ),
+          _leaders(d, d.assisters, 'asist'),
         ],
         if (lastWeekMatches.isNotEmpty) ...[
           _sectionHeader(
@@ -1390,74 +1499,97 @@ class _HomeDashboardState extends State<HomeDashboard> {
     );
   }
 
-  Widget _topScorers(_DashData d) {
-    final top = d.scorers.take(3).toList();
+  /// İlk 3 oyuncu: fotoğrafı varsa fotoğraf, yoksa baş harf; dokununca
+  /// oyuncu kartı.
+  Widget _leaders(_DashData d, List<_Scorer> list, String unit) {
+    final top = list.take(3).toList();
     return _card(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+      padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
       child: Column(
         children: [
           for (var i = 0; i < top.length; i++)
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              decoration: i == 0
-                  ? null
-                  : BoxDecoration(
-                      border: Border(
-                        top: BorderSide(
-                          color: Colors.white.withValues(alpha: 0.06),
+            InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => showPlayerCard(context, playerKey: top[i].playerId),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                decoration: i == 0
+                    ? null
+                    : BoxDecoration(
+                        border: Border(
+                          top: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.06),
+                          ),
                         ),
                       ),
-                    ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 34,
-                    height: 34,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: i == 0
-                          ? DashColors.accent()
-                          : Colors.white.withValues(alpha: 0.1),
-                    ),
-                    child: Text(
-                      top[i].name.isEmpty ? '?' : _trUpper(top[i].name[0]),
-                      style: _condensed(
-                        size: 16,
-                        color: i == 0 ? DashColors.onAccent() : Colors.white,
+                child: Row(
+                  children: [
+                    _avatar(top[i], highlight: i == 0),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            top[i].name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: _barlow(size: 14, weight: FontWeight.w700),
+                          ),
+                          Text(
+                            d.teams[top[i].teamId]?.name ?? '',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: _barlow(size: 12, color: DashColors.muted),
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          top[i].name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: _barlow(size: 14, weight: FontWeight.w700),
-                        ),
-                        Text(
-                          d.teams[top[i].teamId]?.name ?? '',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: _barlow(size: 12, color: DashColors.muted),
-                        ),
-                      ],
+                    Text('${top[i].goals}', style: _condensed(size: 24)),
+                    const SizedBox(width: 4),
+                    SizedBox(
+                      width: 30,
+                      child: Text(
+                        unit,
+                        style: _barlow(size: 11, color: DashColors.muted),
+                      ),
                     ),
-                  ),
-                  Text('${top[i].goals}', style: _condensed(size: 24)),
-                  const SizedBox(width: 4),
-                  Text(
-                    'gol',
-                    style: _barlow(size: 11, color: DashColors.muted),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _avatar(_Scorer p, {required bool highlight}) {
+    final ring = highlight ? DashColors.accent() : Colors.white24;
+    final initial = Container(
+      alignment: Alignment.center,
+      color: highlight ? DashColors.accent() : const Color(0xFF334155),
+      child: Text(
+        p.name.isEmpty ? '?' : _trUpper(p.name[0]),
+        style: _condensed(
+          size: 16,
+          color: highlight ? DashColors.onAccent() : Colors.white,
+        ),
+      ),
+    );
+    return Container(
+      width: 38,
+      height: 38,
+      padding: const EdgeInsets.all(1.5),
+      decoration: BoxDecoration(shape: BoxShape.circle, color: ring),
+      child: ClipOval(
+        child: p.photoUrl.isEmpty
+            ? initial
+            : WebSafeImage(
+                url: p.photoUrl,
+                width: 35,
+                height: 35,
+                fit: BoxFit.cover,
+              ),
       ),
     );
   }

@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:image/image.dart' as img;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../utils/logo_background.dart';
@@ -66,8 +67,41 @@ class SupabaseImageUploadService implements ImageUploadService {
   /// Kenarı en fazla [_maxSide] piksel olacak şekilde küçültür ve sıkıştırır.
   /// PNG'ler şeffaflık kaybolmasın diye PNG kalır, diğerleri JPEG olur.
   /// Telefon kamerasından gelen 5-10 MB'lık resimler ~200-500 KB'a iner.
-  /// Web'de sıkıştırma eklentisi yok; resim olduğu gibi yüklenir.
+  /// Web'de eklenti yok; aynı işlem saf Dart `image` paketiyle yapılır.
   static const _maxSide = 1600;
+
+  /// Oyuncu / profil / yönetici fotoğrafları küçük yuvarlaklarda ve kartta
+  /// görünür: 512 piksel yeterli (~30-60 KB).
+  static const _maxSidePortrait = 512;
+
+  static int _maxSideFor(MediaFolder f) => switch (f) {
+    MediaFolder.players ||
+    MediaFolder.profileRequests ||
+    MediaFolder.staff => _maxSidePortrait,
+    _ => _maxSide,
+  };
+
+  /// Web: decode → kenarı [maxSide]'a indir → JPEG (PNG şeffafsa PNG).
+  static (Uint8List, String)? _shrinkPure(
+    Uint8List bytes,
+    String srcExt,
+    int maxSide,
+  ) {
+    final decoded = img.decodeImage(bytes);
+    if (decoded == null) return null;
+    var im = img.bakeOrientation(decoded);
+    if (im.width > maxSide || im.height > maxSide) {
+      im = im.width >= im.height
+          ? img.copyResize(im, width: maxSide)
+          : img.copyResize(im, height: maxSide);
+    }
+    if (srcExt == 'png' && im.hasAlpha) {
+      final png = img.encodePng(im, level: 6);
+      if (png.length <= _maxPngBytes) return (png, 'png');
+    }
+    return (img.encodeJpg(im, quality: 82), 'jpg');
+  }
+
   static const _maxPngBytes = 1536 * 1024;
 
   static String _extOf(String name) {
@@ -77,14 +111,27 @@ class SupabaseImageUploadService implements ImageUploadService {
     return const ['jpg', 'png', 'webp', 'gif'].contains(ext) ? ext : 'jpg';
   }
 
-  Future<(Uint8List, String)> _shrink(Uint8List bytes, String srcExt) async {
-    if (kIsWeb) return (bytes, srcExt);
+  Future<(Uint8List, String)> _shrink(
+    Uint8List bytes,
+    String srcExt, {
+    int maxSide = _maxSide,
+  }) async {
+    if (kIsWeb) {
+      try {
+        final out = _shrinkPure(bytes, srcExt, maxSide);
+        // Küçültme dosyayı büyütürse (zaten küçük resim) orijinal kalır.
+        if (out != null && out.$1.length < bytes.length) return out;
+      } catch (e) {
+        debugPrint('Resim küçültülemedi, orijinal yükleniyor: $e');
+      }
+      return (bytes, srcExt);
+    }
     try {
       Future<Uint8List> compress(CompressFormat format) =>
           FlutterImageCompress.compressWithList(
             bytes,
-            minWidth: _maxSide,
-            minHeight: _maxSide,
+            minWidth: maxSide,
+            minHeight: maxSide,
             quality: 82,
             format: format,
           );
@@ -123,7 +170,11 @@ class SupabaseImageUploadService implements ImageUploadService {
     final logoPng = isLogo ? await _logoWithoutBackground(original) : null;
     final (bytes, ext) = logoPng != null
         ? (logoPng, 'png')
-        : await _shrink(original, _extOf(image.name));
+        : await _shrink(
+            original,
+            _extOf(image.name),
+            maxSide: _maxSideFor(folder),
+          );
 
     // Web'de (JS) `1 << 32` sıfır olur ve nextInt hata verir; 31 bit yeterli.
     final rand = Random().nextInt(0x7fffffff).toRadixString(16);
