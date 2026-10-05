@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/app_session.dart';
+import '../../../core/services/global_filter.dart';
 import '../../../core/utils/team_colors.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/web_safe_image.dart';
@@ -284,6 +285,31 @@ class _LiveDrawScreenState extends State<LiveDrawScreen> {
     );
   }
 
+  /// Fikstürü kuranın turnuva / sezon / grubuyla (bölgesiyle) açar.
+  Future<void> _openFixture(LiveDrawState s) async {
+    String? groupId;
+    final first = s.revealed.isEmpty ? null : s.revealed.first;
+    if (first != null && first.away != null) {
+      try {
+        final r = await Supabase.instance.client
+            .from('matches')
+            .select('group_id')
+            .eq('season_id', s.seasonId)
+            .eq('home_team_id', first.home)
+            .eq('away_team_id', first.away!)
+            .order('created_at', ascending: false)
+            .limit(1);
+        if (r.isNotEmpty) groupId = r.first['group_id']?.toString();
+      } catch (_) {}
+    }
+    if (!mounted) return;
+    GlobalFilter.setLeague(s.leagueId);
+    if (s.seasonId.isNotEmpty) GlobalFilter.setSeason(s.seasonId);
+    if (groupId != null) GlobalFilter.setGroup(groupId);
+    Navigator.of(context).popUntil((r) => r.isFirst);
+    MainNavigator.tabRequest.value = MainNavigator.fixtureTab;
+  }
+
   Future<void> _cancel(LiveDrawState s) async {
     final ok = await showAdminConfirmDialog(
       context: context,
@@ -528,10 +554,7 @@ class _LiveDrawScreenState extends State<LiveDrawScreen> {
                     borderRadius: BorderRadius.circular(14),
                   ),
                 ),
-                onPressed: () {
-                  Navigator.of(context).popUntil((r) => r.isFirst);
-                  MainNavigator.tabRequest.value = MainNavigator.fixtureTab;
-                },
+                onPressed: () => _openFixture(s),
                 child: const Text(
                   'FİKSTÜRE GİT',
                   style: TextStyle(

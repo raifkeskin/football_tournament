@@ -10,6 +10,7 @@ class LiveDrawState {
   const LiveDrawState({
     required this.id,
     required this.leagueId,
+    required this.seasonId,
     required this.title,
     required this.startWeek,
     required this.teamIds,
@@ -26,6 +27,7 @@ class LiveDrawState {
 
   final String id;
   final String leagueId;
+  final String seasonId;
   final String title;
   final int startWeek;
   final List<String> teamIds;
@@ -67,6 +69,7 @@ class LiveDrawState {
     return LiveDrawState(
       id: j['id'].toString(),
       leagueId: j['league_id'].toString(),
+      seasonId: (j['season_id'] ?? '').toString(),
       title: (j['title'] ?? '').toString(),
       startWeek: (j['start_week'] as num?)?.toInt() ?? 1,
       teamIds: [for (final x in (j['team_ids'] as List? ?? const [])) '$x'],

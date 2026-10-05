@@ -48,6 +48,10 @@ class _FixtureScreenState extends State<FixtureScreen> {
   String? _groupId;
   int? _week;
 
+  /// [_week] hangi turnuva|sezon|grup için seçildi; grup (bölge) değişince
+  /// o grubun güncel haftası açılır.
+  String? _weekKey;
+
   /// Filtre (turnuva|sezon|grup) başına hafta bilgisi önbelleği.
   final Map<String, Future<({int? maxWeek, int? nextWeek})>> _weekInfo = {};
 
@@ -61,10 +65,9 @@ class _FixtureScreenState extends State<FixtureScreen> {
     String? seasonId,
     String? groupId,
   ) async {
-    final maxWeek = await _matchService.getFixtureMaxWeek(
-      leagueId,
-      groupId: groupId,
-    );
+    // Son hafta seçili sezon/grubun (bölgenin) kendi maçlarından: bölgelerin
+    // hafta sayısı farklı olabilir; olmayan hafta listede görünmez.
+    int? maxWeek;
     int? nextWeek;
     try {
       var q = Supabase.instance.client
@@ -83,6 +86,7 @@ class _FixtureScreenState extends State<FixtureScreen> {
         final week = w is num ? w.toInt() : int.tryParse('${w ?? ''}');
         if (week == null) continue;
         if (firstAny == null || week < firstAny) firstAny = week;
+        if (maxWeek == null || week > maxWeek) maxWeek = week;
         final status = (r['status'] ?? '').toString().trim();
         if (status == MatchStatus.finished.name) {
           if (lastPlayed == null || week > lastPlayed) lastPlayed = week;
@@ -129,6 +133,9 @@ class _FixtureScreenState extends State<FixtureScreen> {
       _leagueId = GlobalFilter.leagueId.value ?? _leagueId;
       _seasonId = GlobalFilter.seasonId.value ?? _seasonId;
       _groupId = GlobalFilter.groupId.value ?? _groupId;
+      // Dışarıdan gelen seçim (ör. canlı kura sonucu) yeni maçlar getirmiş
+      // olabilir; hafta bilgisi yeniden okunur.
+      _weekInfo.clear();
     });
   }
 
@@ -320,6 +327,7 @@ class _FixtureScreenState extends State<FixtureScreen> {
       _seasonId = result.seasonId;
       _groupId = result.groupId;
       _week = result.week;
+      _weekKey = '${result.leagueId}|${result.seasonId}|${result.groupId}';
     });
   }
 
@@ -568,7 +576,7 @@ class _FixtureScreenState extends State<FixtureScreen> {
                                   );
                                 }
                                 final info = weekSnap.data!;
-                                final maxWeek = info.maxWeek ?? 30;
+                                final maxWeek = info.maxWeek ?? 1;
 
                                 final safeMaxWeek = maxWeek > 0 ? maxWeek : 1;
                                 final weeks = <int>[
@@ -581,16 +589,23 @@ class _FixtureScreenState extends State<FixtureScreen> {
                                     weeks.contains(info.nextWeek)
                                     ? info.nextWeek
                                     : weeks.first;
-                                final displayWeek = weeks.contains(_week)
+                                final userWeek = _weekKey == weekKey
                                     ? _week
+                                    : null;
+                                final displayWeek = weeks.contains(userWeek)
+                                    ? userWeek
                                     : defaultWeek;
 
-                                if (_week != displayWeek) {
+                                if (_week != displayWeek ||
+                                    _weekKey != weekKey) {
                                   WidgetsBinding.instance.addPostFrameCallback((
                                     _,
                                   ) {
                                     if (mounted) {
-                                      setState(() => _week = displayWeek);
+                                      setState(() {
+                                        _week = displayWeek;
+                                        _weekKey = weekKey;
+                                      });
                                     }
                                   });
                                 }

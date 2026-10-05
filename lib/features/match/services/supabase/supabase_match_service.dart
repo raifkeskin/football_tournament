@@ -154,23 +154,23 @@ class SupabaseMatchService implements IMatchService {
           operation: 'SELECT',
           filters: 'columns=week,league_id',
         );
-        final res = await _client.from('matches').select('week, league_id');
+        // Yalnız en büyük hafta okunur (önceden tüm maç tablosu iniyordu).
+        var q = _client
+            .from('matches')
+            .select('week')
+            .eq('league_id', id)
+            .not('week', 'is', null);
+        final gid = (groupId ?? '').trim();
+        if (gid.isNotEmpty) q = q.eq('group_id', gid);
+        final res = await q.order('week', ascending: false).limit(1);
         AppConfig.sqlLogResult(
           table: 'matches',
           operation: 'SELECT',
           count: res.length,
         );
-        int? maxWeek;
-        for (final rowAny in res) {
-          final row = (rowAny as Map).cast<String, dynamic>();
-          final tid = (row['league_id'] ?? '').toString().trim();
-          if (tid != id) continue;
-          final w = row['week'];
-          final ww = w is num ? w.toInt() : int.tryParse(w?.toString() ?? '');
-          if (ww == null) continue;
-          maxWeek = maxWeek == null ? ww : (ww > maxWeek ? ww : maxWeek);
-        }
-        return maxWeek;
+        if (res.isEmpty) return null;
+        final w = res.first['week'];
+        return w is num ? w.toInt() : int.tryParse(w?.toString() ?? '');
       } catch (e) {
         AppConfig.sqlLogResult(table: 'matches', operation: 'SELECT', error: e);
         return null;
