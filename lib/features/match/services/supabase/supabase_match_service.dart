@@ -181,6 +181,31 @@ class SupabaseMatchService implements IMatchService {
   /// Maç önbelleği (matchId → son bilinen maç).
   final Map<String, MatchModel> _matchCache = {};
 
+  /// Maçın veritabanındaki durumu ('scheduled', 'live', 'halftime',
+  /// 'finished' ...). Önbellekte yoksa tek sütun okunur.
+  Future<String> _matchStatus(String matchId) async {
+    try {
+      final row = await _client
+          .from('matches')
+          .select('status')
+          .eq('id', matchId)
+          .maybeSingle();
+      return (row?['status'] ?? '').toString().trim();
+    } catch (_) {
+      return '';
+    }
+  }
+
+  static const _startedStatuses = {'live', 'halftime', 'finished'};
+
+  /// Bu cihazdan yapılan esame/olay değişiklikleri (maç kimliği). Canlı
+  /// bağlantısı açılmayan (başlamış/bitmiş) maçlarda da kendi düzeltmemiz
+  /// ekrana hemen yansısın.
+  static final _localChanges = StreamController<String>.broadcast();
+
+  static void notifyLocalChange(String matchId) =>
+      _localChanges.add(matchId.trim());
+
   @override
   Stream<MatchModel> watchMatch(String matchId) {
     final id = matchId.trim();
@@ -259,12 +284,24 @@ class SupabaseMatchService implements IMatchService {
     Stream<List<Map<String, dynamic>>> feed() async* {
       final cached = _eventsCache[id];
       if (cached != null) yield cached;
-      yield await _fetchInlineMatchEvents(id);
+      // Bitmiş maçın olayları değişmez: bir kez okunur, canlı bağlantı
+      // açılmaz (arka plandan dönüşte de yeniden okunmaz).
+      final finished = await _matchStatus(id) == 'finished';
+      if (!finished || cached == null) yield await _fetchInlineMatchEvents(id);
+      if (finished) {
+        await for (final _ in _localChanges.stream.where((m) => m == id)) {
+          yield await _fetchInlineMatchEvents(id);
+        }
+        return;
+      }
       await for (final _ in realtimeChangeSignal(
         _client,
         table: 'match_events',
         column: 'match_id',
         value: id,
+        knownIds: () => {
+          for (final e in _eventsCache[id] ?? const []) e['id'].toString(),
+        },
       )) {
         yield await _fetchInlineMatchEvents(id);
       }
@@ -319,6 +356,7 @@ class SupabaseMatchService implements IMatchService {
         final payload = event.toMap(snakeCase: true);
         payload['created_at'] = DateTime.now().toIso8601String();
         await _client.from('match_events').insert(payload);
+        notifyLocalChange(event.matchId);
         AppConfig.sqlLogResult(
           table: 'match_events',
           operation: 'INSERT',
@@ -532,6 +570,7 @@ class SupabaseMatchService implements IMatchService {
         table: 'match_media',
         column: 'match_id',
         value: id,
+        knownIds: () => {for (final m in _mediaCache[id] ?? const []) m.id},
       )) {
         yield await _fetchMatchMedia(id);
       }
@@ -741,6 +780,7 @@ class SupabaseMatchService implements IMatchService {
           'player_name': 'Maç Sonucu',
         },
       ]);
+      notifyLocalChange(id);
       AppConfig.sqlLogResult(
         table: 'match_events',
         operation: 'INSERT',
@@ -781,12 +821,22 @@ class SupabaseMatchService implements IMatchService {
   Stream<List<MatchRosterModel>> _matchRosterChanges(String matchId) async* {
     final cached = _rosterCache[matchId];
     if (cached != null) yield cached;
-    yield await _fetchMatchRosters(matchId);
+    // Maç başladıktan sonra esame değişmez: bir kez okunur, canlı bağlantı
+    // açılmaz (arka plandan dönüşte de yeniden okunmaz).
+    final started = _startedStatuses.contains(await _matchStatus(matchId));
+    if (!started || cached == null) yield await _fetchMatchRosters(matchId);
+    if (started) {
+      await for (final _ in _localChanges.stream.where((m) => m == matchId)) {
+        yield await _fetchMatchRosters(matchId);
+      }
+      return;
+    }
     await for (final _ in realtimeChangeSignal(
       _client,
       table: 'match_rosters',
       column: 'match_id',
       value: matchId,
+      knownIds: () => {for (final r in _rosterCache[matchId] ?? const []) r.id},
     )) {
       yield await _fetchMatchRosters(matchId);
     }
@@ -822,7 +872,10 @@ class SupabaseMatchService implements IMatchService {
         .eq('team_id', teamId);
 
     // 2. Insert new ones
-    if (rosters.isEmpty) return;
+    if (rosters.isEmpty) {
+      notifyLocalChange(matchId);
+      return;
+    }
 
     // is_captain yalnızca kaptan seçildiyse gönderilir; böylece kolon henüz
     // eklenmemiş veritabanında kaptansız kayıt çalışmaya devam eder.
@@ -846,11 +899,13 @@ class SupabaseMatchService implements IMatchService {
 
     try {
       await _client.from('match_rosters').insert(rows(withCaptain: hasCaptain));
+      notifyLocalChange(matchId);
     } on PostgrestException catch (e) {
       // Eski kayıtlar yukarıda silindi; kaptan kolonu yoksa kadroyu kaptansız
       // yine de kaydet ki kadro kaybolmasın, sonra kullanıcıyı bilgilendir.
       if (hasCaptain && e.code == 'PGRST204') {
         await _client.from('match_rosters').insert(rows(withCaptain: false));
+        notifyLocalChange(matchId);
         throw Exception(
           'Kadro kaydedildi ancak kaptan kaydedilemedi: match_rosters '
           'tablosunda is_captain kolonu yok.',
@@ -915,9 +970,19 @@ class SupabaseMatchService implements IMatchService {
       final cached = _statsCache[seasonId];
       if (cached != null) yield cached;
       yield await _loadSeasonStats(seasonId);
+      // Yalnızca bu sezonun maçlarındaki olaylar yeniden hesaplatır (başka
+      // turnuvadaki gol bu listeyi yeniden okutmaz); art arda gelen olaylar
+      // tek hesaplamada birleşir.
       await for (final _ in realtimeChangeSignal(
         _client,
         table: 'match_events',
+        knownIds: () => _seasonEventIds[seasonId] ?? const {},
+        relevant: (c) =>
+            c.type == PostgresChangeEvent.delete ||
+            (_seasonMatchIds[seasonId] ?? const {}).contains(
+              c.newRow['match_id']?.toString(),
+            ),
+        debounce: const Duration(seconds: 2),
       )) {
         yield await _loadSeasonStats(seasonId);
       }
@@ -928,6 +993,11 @@ class SupabaseMatchService implements IMatchService {
 
   /// Sezon istatistikleri önbelleği ve sezon başına ortak akış.
   final Map<String, List<PlayerStats>> _statsCache = {};
+
+  /// Sezonun maç ve olay kimlikleri (realtime olayının bu sezonu ilgilendirip
+  /// ilgilendirmediğine bakmak için).
+  final Map<String, Set<String>> _seasonMatchIds = {};
+  final Map<String, Set<String>> _seasonEventIds = {};
   final Map<String, Stream<List<PlayerStats>>> _statsFeeds = {};
 
   Future<List<PlayerStats>> _loadSeasonStats(String seasonId) async {
@@ -969,6 +1039,10 @@ class SupabaseMatchService implements IMatchService {
                             r.map((e) => Map<String, dynamic>.from(e)).toList(),
                       ),
           ]);
+    _seasonMatchIds[seasonId] = matchIds.toSet();
+    _seasonEventIds[seasonId] = {
+      for (final e in results[0]) (e['id'] ?? '').toString(),
+    };
     final stats = await _aggregateSeasonStats(
       seasonId,
       results[0],

@@ -11,7 +11,7 @@ const _hard = 40;
 const _soft = 110;
 
 /// Logolar en fazla bu kenar uzunluğunda saklanır.
-const _maxSide = 512;
+const _maxSide = 384;
 
 /// Logonun kenarlarındaki tek renk arka planı (beyaz, siyah, renkli kare)
 /// şeffaf yapar, boş kenarları kırpar ve PNG döner.

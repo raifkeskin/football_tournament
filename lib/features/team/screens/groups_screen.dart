@@ -10,8 +10,6 @@ import '../../../core/services/service_locator.dart';
 import '../../../core/services/global_filter.dart';
 import '../../../core/services/active_tournament.dart';
 import '../../../core/utils/team_name.dart';
-import '../../../core/utils/realtime_signal.dart';
-import '../../../core/utils/resilient_stream.dart';
 import '../../../core/utils/table_feed.dart';
 import 'team_squad_screen.dart';
 
@@ -532,9 +530,19 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
     if (id.isEmpty || sId.isEmpty) {
       return const Stream<List<Map<String, dynamic>>>.empty();
     }
-    final feed = _seasonMatchFeeds.putIfAbsent(
-      '$id|$sId',
-      () => resilientStream(() => _seasonMatchesFeed(id, sId)),
+    // Sezonun maçları tek akışta; gol vb. değişiklikte yalnızca değişen
+    // satır işlenir (bkz. watchTableRows). Tüm grup tabloları aynı akışı
+    // paylaşır.
+    final feed = watchTableRows(
+      Supabase.instance.client,
+      table: 'matches',
+      column: 'season_id',
+      value: sId,
+      orderBy: 'match_date',
+    ).map(
+      (rows) => rows
+          .where((r) => (r['league_id'] ?? '').toString().trim() == id)
+          .toList(),
     );
     if (fetchGroupId == null) return feed;
     return feed.map(
@@ -542,46 +550,6 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
           .where((r) => (r['group_id'] ?? '').toString().trim() == fetchGroupId)
           .toList(),
     );
-  }
-
-  /// Sezon maçları: tüm grup tabloları aynı akışı paylaşır ve son liste
-  /// önbellekte tutulur ("leagueId|seasonId" anahtarıyla).
-  static final Map<String, Stream<List<Map<String, dynamic>>>>
-  _seasonMatchFeeds = {};
-  static final Map<String, List<Map<String, dynamic>>> _seasonMatchCache = {};
-
-  /// Önce önbellek, sonra yalnızca bu sezonun maçları; realtime yalnızca
-  /// "değişti" sinyali verir (önceden tüm matches tablosu indiriliyordu).
-  static Stream<List<Map<String, dynamic>>> _seasonMatchesFeed(
-    String leagueId,
-    String seasonId,
-  ) async* {
-    final key = '$leagueId|$seasonId';
-    final client = Supabase.instance.client;
-
-    Future<List<Map<String, dynamic>>> fetch() async {
-      final rows = await client
-          .from('matches')
-          .select()
-          .eq('league_id', leagueId)
-          .eq('season_id', seasonId)
-          .order('match_date', ascending: true);
-      final list = rows.map((e) => Map<String, dynamic>.from(e)).toList();
-      _seasonMatchCache[key] = list;
-      return list;
-    }
-
-    final cached = _seasonMatchCache[key];
-    if (cached != null) yield cached;
-    yield await fetch();
-    await for (final _ in realtimeChangeSignal(
-      client,
-      table: 'matches',
-      column: 'season_id',
-      value: seasonId,
-    )) {
-      yield await fetch();
-    }
   }
 
   @override

@@ -755,6 +755,32 @@ class SupabaseLeagueService implements ILeagueService {
 
   final Map<String, Stream<List<NewsItem>>> _newsFeeds = {};
 
+  /// Bu oturumda kullanıcının beğendiği/vazgeçtiği haberler: realtime ile
+  /// gelen sayı güncellemesinde "beğendim mi" bilgisi doğru kalsın.
+  final Map<String, bool> _myNewsLikes = {};
+
+  /// Haber satırında beğeni sayısı dışında görünen bir alan değişti mi?
+  static bool _onlyLikeCountChanged(
+    Map<String, dynamic> old,
+    Map<String, dynamic> next,
+  ) {
+    const watched = [
+      'content',
+      'image_url',
+      'image_urls',
+      'is_published',
+      'publish_until',
+      'region_id',
+      'league_id',
+      'live_draw_id',
+    ];
+    for (final k in watched) {
+      if (!next.containsKey(k)) continue;
+      if (jsonEncode(old[k]) != jsonEncode(next[k])) return false;
+    }
+    return true;
+  }
+
   @override
   Stream<List<NewsItem>> watchNewsFeed({String? leagueId}) {
     final id = (leagueId ?? '').trim();
@@ -768,7 +794,7 @@ class SupabaseLeagueService implements ILeagueService {
                 'season_regions(name)'
           : '$_newsColumns, leagues(name, logo_url, is_private), '
                 'season_regions(name), news_likes(user_id)';
-      Future<List<NewsItem>> fetch() async {
+      Future<List<Map<String, dynamic>>> fetch() async {
         AppConfig.sqlLogStart(
           table: 'news',
           operation: 'SELECT',
@@ -793,17 +819,44 @@ class SupabaseLeagueService implements ILeagueService {
           operation: 'SELECT',
           count: rows.length,
         );
-        return rows
-            .map((r) => _newsFromRow(Map<String, dynamic>.from(r)))
-            .toList();
+        return rows.map((r) => Map<String, dynamic>.from(r)).toList();
       }
 
-      // Realtime yalnızca "değişti" sinyali verir (beğeni sayısı dahil);
-      // liste her seferinde yeniden okunur.
+      List<NewsItem> items(List<Map<String, dynamic>> rows) =>
+          rows.map(_newsFromRow).toList();
+
+      // Yalnızca beğeni sayısı değiştiyse (en sık değişiklik) satır yerinde
+      // güncellenir; liste yeniden indirilmez. Diğer değişikliklerde
+      // (yeni/silinen haber, metin, görsel, yayın durumu) liste yeniden okunur.
       return resilientStream(() async* {
-        yield await fetch();
-        await for (final _ in realtimeChangeSignal(_client, table: 'news')) {
-          yield await fetch();
+        var rows = await fetch();
+        yield items(rows);
+        await for (final c in realtimeRowChanges(_client, table: 'news')) {
+          final i = rows.indexWhere((r) => r['id']?.toString() == c.id);
+          if (c.type == PostgresChangeEvent.delete && i < 0) continue;
+          if (c.type == PostgresChangeEvent.update &&
+              i >= 0 &&
+              _onlyLikeCountChanged(rows[i], c.newRow)) {
+            final merged = {...rows[i], ...c.newRow};
+            final mine = _myNewsLikes[c.id];
+            if (mine != null && uid != null) {
+              merged['news_likes'] = mine
+                  ? [
+                      {'user_id': uid},
+                    ]
+                  : const [];
+            }
+            rows = [...rows]..[i] = merged;
+          } else {
+            if (c.type == PostgresChangeEvent.update &&
+                i < 0 &&
+                id.isNotEmpty &&
+                c.newRow['league_id']?.toString() != id) {
+              continue; // başka turnuvanın haberi
+            }
+            rows = await fetch();
+          }
+          yield items(rows);
         }
       });
     });
@@ -818,6 +871,7 @@ class SupabaseLeagueService implements ILeagueService {
     if (uid == null) throw Exception('Beğenmek için giriş yapın.');
     final id = newsId.trim();
     if (id.isEmpty) return;
+    _myNewsLikes[id] = liked;
     try {
       AppConfig.sqlLogStart(
         table: 'news_likes',
@@ -846,6 +900,7 @@ class SupabaseLeagueService implements ILeagueService {
         count: 1,
       );
     } catch (e) {
+      _myNewsLikes.remove(id);
       AppConfig.sqlLogResult(
         table: 'news_likes',
         operation: liked ? 'INSERT' : 'DELETE',

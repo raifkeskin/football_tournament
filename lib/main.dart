@@ -14,6 +14,7 @@ import 'core/widgets/app_name_band.dart';
 import 'core/widgets/tvl_logo.dart';
 import 'core/widgets/web_safe_image.dart';
 import 'core/widgets/web_responsive_frame.dart';
+import 'core/utils/app_activity.dart';
 
 bool _showLoginGate() {
   final user = Supabase.instance.client.auth.currentUser;
@@ -28,17 +29,8 @@ void main() async {
     url: AppConfig.supabaseUrl,
     anonKey: AppConfig.supabaseAnonKey,
   );
-  try {
-    final res = await Supabase.instance.client
-        .from('pitches')
-        .select('id')
-        .limit(1);
-    // ignore: unnecessary_type_check
-    final n = (res is List) ? res.length : 0;
-    debugPrint('Supabase bağlantı kontrolü OK (pitches örnek kayıt: $n)');
-  } catch (e) {
-    debugPrint('Supabase bağlantı kontrolü HATA: $e');
-  }
+  // Arka planda canlı bağlantılar kapansın (eşzamanlı bağlantı sınırı).
+  AppActivity.start();
 
   // "Beni Hatırla" işaretlenmediyse önceki oturumu kapat: uygulama giriş
   // ekranıyla açılır.

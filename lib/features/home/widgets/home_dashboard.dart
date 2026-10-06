@@ -239,6 +239,12 @@ class _HomeDashboardState extends State<HomeDashboard> {
   /// arkadan gelip sessizce yerine geçer (bekleme ekranı / boş yazı yok).
   static final Map<String, Map<String, dynamic>> _memCache = {};
 
+  /// Son sunucu okumasının zamanı: ana sayfaya kısa süre içinde dönülünce
+  /// (sekme değişimi vb.) tüm sezon verisi yeniden indirilmez. Aşağı çekip
+  /// yenileme her zaman sunucudan okur.
+  static final Map<String, DateTime> _fetchedAt = {};
+  static const _freshFor = Duration(minutes: 2);
+
   _DashData? _data;
   bool _failed = false;
 
@@ -274,6 +280,20 @@ class _HomeDashboardState extends State<HomeDashboard> {
     _loadedFor = key;
     final mem = _memCache[key];
     _data = mem == null ? null : _build(mem, session);
+    final at = _fetchedAt[key];
+    if (mem != null &&
+        at != null &&
+        DateTime.now().difference(at) < _freshFor) {
+      _loadedOnce = true;
+      scheduleMicrotask(() async {
+        final prefs = await SharedPreferences.getInstance();
+        final followed = prefs.getString(_followKey);
+        if (mounted && followed != _followedTeamId) {
+          setState(() => _followedTeamId = followed);
+        }
+      });
+      return;
+    }
     // Çizim bittikten sonra (build içinde setState olmasın).
     scheduleMicrotask(() => _revalidate(session, key, fromDisk: mem == null));
   }
@@ -305,6 +325,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
     try {
       final raw = await _fetchRaw(session);
       _memCache[key] = raw;
+      _fetchedAt[key] = DateTime.now();
       if (mounted && _loadedFor == key) {
         setState(() {
           _data = _build(raw, session);

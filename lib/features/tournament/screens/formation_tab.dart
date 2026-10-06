@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../match/models/match.dart';
 import '../../../core/services/service_locator.dart';
+import '../../match/services/supabase/supabase_match_service.dart';
 
 const _accent = Color(0xFF10B981);
 const _midText = Color(0xFF94A3B8);
@@ -407,6 +408,7 @@ class _FormationTabState extends State<FormationTab>
           throw Exception('Oyuncu yerleşimi kaydedilemedi (yetki yok).');
         }
       }
+      SupabaseMatchService.notifyLocalChange(widget.match.id);
       if (!mounted) return;
       setState(() {
         _chosen[team] = formation;

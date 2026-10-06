@@ -74,10 +74,15 @@ class SupabaseImageUploadService implements ImageUploadService {
   /// görünür: 512 piksel yeterli (~30-60 KB).
   static const _maxSidePortrait = 512;
 
+  /// Takım/turnuva logoları en büyük açılış ekranında ~170 px görünür;
+  /// 384 piksel keskin kalır, dosya 512'ye göre ~%45 küçük olur.
+  static const _maxSideLogo = 384;
+
   static int _maxSideFor(MediaFolder f) => switch (f) {
     MediaFolder.players ||
     MediaFolder.profileRequests ||
     MediaFolder.staff => _maxSidePortrait,
+    MediaFolder.teams || MediaFolder.leagues => _maxSideLogo,
     _ => _maxSide,
   };
 
