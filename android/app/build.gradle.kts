@@ -8,7 +8,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.football_tournament"
+    namespace = "com.ligmasasi.app"
     // permission_handler 13+ en az 37 ister.
     compileSdk = maxOf(flutter.compileSdkVersion, 37)
     ndkVersion = flutter.ndkVersion
@@ -20,7 +20,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.football_tournament"
+        applicationId = "com.ligmasasi.app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

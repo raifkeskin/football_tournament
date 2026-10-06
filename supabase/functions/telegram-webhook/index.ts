@@ -82,7 +82,7 @@ Deno.serve(async (req) => {
     const phone = String(result.phone ?? "");
     const password = String(result.password ?? "");
     const text =
-      `Master Lig Platformuna giriş için geçici şifreniz: ${password}\n\n` +
+      `Lig Masası uygulamasına giriş için geçici şifreniz: ${password}\n\n` +
       `Giriş: ${LOGIN_URL}\n` +
       "İlk girişte kendi şifrenizi belirlemeniz istenecek.";
     footer += `\nGeçici şifre: ${password}`;

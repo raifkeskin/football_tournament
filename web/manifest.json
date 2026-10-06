@@ -1,11 +1,11 @@
 {
-    "name": "Türk Veteranlar Ligi",
-    "short_name": "Veteranlar Ligi",
+    "name": "Lig Masası",
+    "short_name": "Lig Masası",
     "start_url": "/",
     "display": "standalone",
     "background_color": "#0F172A",
     "theme_color": "#064E3B",
-    "description": "Türk Veteranlar Ligi — fikstür, kadro, sonuçlar ve istatistikler.",
+    "description": "Lig Masası — fikstür, kadro, sonuçlar ve istatistikler.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

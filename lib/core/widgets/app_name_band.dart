@@ -6,7 +6,7 @@ import 'tvl_logo.dart';
 import 'web_safe_image.dart';
 
 /// Uygulama adı.
-const kAppName = 'Türk Veteranlar Ligi';
+const kAppName = 'Lig Masası';
 
 /// Uygulama adı ekranlarda (bant, menü, açılış, logo halkası, afiş) görünsün
 /// mü? Geçici olarak kapalı; açmak için true yapmak yeterli.
@@ -123,7 +123,7 @@ class AppNameBand extends StatelessWidget {
                       if (kShowAppName) SizedBox(width: 12),
                       if (kShowAppName)
                         Text(
-                          'TÜRK VETERANLAR LİGİ',
+                          'LİG MASASI',
                           maxLines: 1,
                           style: TextStyle(
                             fontFamily: 'BarlowCondensed',

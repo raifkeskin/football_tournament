@@ -18,7 +18,7 @@
         </intent>
     </queries>
     <application
-        android:label="football_tournament"
+        android:label="Lig Masası"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

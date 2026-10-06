@@ -291,7 +291,7 @@ class MatchPoster extends StatelessWidget {
                   if (kShowAppName) const SizedBox(width: 6),
                   if (kShowAppName)
                     Text(
-                      'TÜRK VETERANLAR LİGİ',
+                      'LİG MASASI',
                       style: _cond(
                         12,
                         italic: true,

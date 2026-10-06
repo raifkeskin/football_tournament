@@ -48,7 +48,7 @@ class _AdminOtpMonitorScreenState extends State<AdminOtpMonitorScreen> {
 
   // Kişi uygulamadan kayıt olduğu için adres tekrar gönderilmez.
   static String _message(TempPasswordGrant g) =>
-      'Türk Veteranları Lig Uygulaması\'na giriş için geçici şifreniz: '
+      'Lig Masası uygulamasına giriş için geçici şifreniz: '
       '${g.password}\n\n'
       'İlk girişte kendi şifrenizi belirlemeniz istenecek.';
 

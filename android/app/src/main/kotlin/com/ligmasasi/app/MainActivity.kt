@@ -1,4 +1,4 @@
-package com.example.football_tournament
+package com.ligmasasi.app
 
 import android.content.Intent
 import android.os.Bundle

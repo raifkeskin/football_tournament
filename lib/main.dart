@@ -143,7 +143,7 @@ class _SplashScreenState extends State<SplashScreen>
                 children: [
                   const Spacer(flex: 3),
                   // Kişinin turnuvası temalıysa açılış o turnuvanın logosu
-                  // ve adıyla; altında küçük "Türk Veteranlar Ligi".
+                  // ve adıyla; altında küçük uygulama adı.
                   _reveal(
                     start: 0,
                     child: theme == null

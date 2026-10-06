@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Türk Veteranları Lig Uygulaması – Teklif Oluşturucu</title>
+<title>Lig Masası – Teklif Oluşturucu</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Barlow:wght@400;500;600;700&display=swap">
 <style>
 /* Solda form, sağda canlı teklif önizlemesi; yazdırırken yalnızca teklif (A4) çıkar. */
@@ -249,7 +249,7 @@ function render() {
   $('page').innerHTML = `
     <header>
       <div class="eyebrow">${esc(season)} Sezonu · Teklif</div>
-      <div class="big-title">${esc(name)} için Türk Veteranları Lig Uygulaması</div>
+      <div class="big-title">${esc(name)} için Lig Masası</div>
       <p class="lead">${multi ? esc(gList.join(' ve ')) + ' turnuvalarının' : 'Turnuvanın'} fikstürü, puan durumu, kadroları, canlı maç akışı ve paylaşılabilir afişleri tek uygulamada. Ücret oynanan maç başına hesaplanır ve turnuvanın mevcut maç bütçesine tek bir kalem olarak eklenir.</p>
     </header>
     <section><div class="figures">
@@ -287,7 +287,7 @@ function render() {
       </div>
     </section>
     ${terms.length ? `<section><h2>Ödeme ve koşullar</h2><ol class="terms">${terms.join('')}</ol></section>` : ''}
-    <footer>Türk Veteranları Lig Uygulaması · Teklif ${esc(season)} sezonu için geçerlidir.</footer>`;
+    <footer>Lig Masası · Teklif ${esc(season)} sezonu için geçerlidir.</footer>`;
   document.title = `${name} – Teklif ${season}`;
 }
 
