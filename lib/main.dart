@@ -11,7 +11,7 @@ import 'core/services/app_session.dart';
 import 'core/services/active_tournament.dart';
 import 'core/services/app_settings.dart';
 import 'core/widgets/app_name_band.dart';
-import 'core/widgets/tvl_logo.dart';
+import 'core/widgets/app_logo.dart';
 import 'core/widgets/web_safe_image.dart';
 import 'core/widgets/web_responsive_frame.dart';
 import 'core/utils/app_activity.dart';
@@ -139,7 +139,7 @@ class _SplashScreenState extends State<SplashScreen>
                   _reveal(
                     start: 0,
                     child: theme == null
-                        ? const TvlLogo(size: 150, ringText: true)
+                        ? const AppLogo(size: 150, tile: false)
                         : WebSafeImage(
                             url: theme.logoUrl,
                             width: 170,

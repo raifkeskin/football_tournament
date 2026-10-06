@@ -8,6 +8,7 @@ import '../../home/screens/main_navigator.dart';
 import '../../../core/services/app_session.dart';
 import '../../auth/screens/login_screen.dart';
 import '../../../core/widgets/admin_page.dart';
+import '../../../core/widgets/admin_form.dart';
 import 'my_profile_view.dart';
 import '../../../core/services/image_upload_service.dart';
 import '../../../core/widgets/web_safe_image.dart';
@@ -74,27 +75,159 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   bool _isLoading = false;
 
+  /// Hesap menüsü: çıkış ya da hesabı silme (mağaza şartı: hesap silme
+  /// uygulama içinden kolayca bulunabilmeli).
   Future<void> _logout(dynamic session) async {
-    final confirmed = await showAdminConfirmDialog(
+    final choice = await showDialog<String>(
       context: context,
-      title: 'Çıkış Yap',
-      message: 'Oturumunuzu kapatmak istediğinize emin misiniz?',
-      confirmLabel: 'ÇIKIŞ YAP',
-      icon: Icons.logout_rounded,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+        child: AdminDialogCloseOverlay(
+          onClose: () => Navigator.pop(ctx),
+          child: Container(
+            padding: const EdgeInsets.all(22),
+            decoration: adminDialogDecoration(),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.logout_rounded, color: kAdminDanger, size: 22),
+                    SizedBox(width: 8),
+                    Text(
+                      'Çıkış Yap',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                const Divider(color: Colors.white24, height: 1),
+                const SizedBox(height: 16),
+                const Text(
+                  'Oturumunuzu kapatmak istediğinize emin misiniz?',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white70, height: 1.4),
+                ),
+                const SizedBox(height: 22),
+                SizedBox(
+                  height: 48,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFDC2626),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onPressed: () => Navigator.pop(ctx, 'logout'),
+                    child: const Text(
+                      'ÇIKIŞ YAP',
+                      style: TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, 'delete'),
+                  child: const Text(
+                    'Hesabımı Sil',
+                    style: TextStyle(
+                      color: Colors.white54,
+                      decoration: TextDecoration.underline,
+                      decorationColor: Colors.white54,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
-
-    if (confirmed == true) {
+    if (choice == 'logout') {
       setState(() => _isLoading = true);
       await session.signOut();
       if (mounted) setState(() => _isLoading = false);
-      // Çıkıştan sonra uygulama açılışındaki giriş ekranı (misafir seçeneğiyle).
-      await GuestMode.set(false);
-      if (!mounted) return;
-      Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
-        MaterialPageRoute<void>(builder: (_) => const LoginScreen(gate: true)),
-        (route) => false,
-      );
+      await _toLoginGate();
+    } else if (choice == 'delete') {
+      await _deleteAccount(session);
     }
+  }
+
+  /// Çıkıştan / silmeden sonra uygulama açılışındaki giriş ekranı (misafir
+  /// seçeneğiyle).
+  Future<void> _toLoginGate() async {
+    await GuestMode.set(false);
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+      MaterialPageRoute<void>(builder: (_) => const LoginScreen(gate: true)),
+      (route) => false,
+    );
+  }
+
+  Future<void> _deleteAccount(dynamic session) async {
+    final confirmed = await showAdminConfirmDialog(
+      context: context,
+      title: 'Hesabımı Sil',
+      message:
+          'Hesabınız kalıcı olarak silinir ve tekrar giriş yapamazsınız. '
+          'Telefon, TC kimlik no, fotoğraf, boy-kilo bilgileriniz ve '
+          'yönetici yetkileriniz silinir.\n\n'
+          'Katıldığınız turnuvaların kayıtlarında (kadro, gol, istatistik) '
+          'adınız-soyadınız ve doğum tarihiniz kalır.\n\n'
+          'Bu işlem geri alınamaz.',
+      confirmLabel: 'HESABIMI SİL',
+      icon: Icons.person_remove_rounded,
+    );
+    if (!confirmed || !mounted) return;
+    setState(() => _isLoading = true);
+    try {
+      await Supabase.instance.client.rpc('delete_my_account');
+    } on PostgrestException catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      final msg = e.message.startsWith('SOLE_OWNER:')
+          ? 'Şu turnuvaların tek kurucu başkanısınız: '
+                '${e.message.substring('SOLE_OWNER:'.length).trim()}. '
+                'Hesabınızı silmeden önce turnuvaya başka bir kurucu başkan '
+                'ekleyin.'
+          : 'Hesap silinemedi: ${e.message}';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(msg),
+          backgroundColor: Colors.redAccent,
+          duration: const Duration(seconds: 6),
+        ),
+      );
+      return;
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Hesap silinemedi: $e'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+    // Hesap sunucuda silindi; cihazdaki oturum da kapatılır.
+    try {
+      await session.signOut();
+    } catch (_) {}
+    if (mounted) setState(() => _isLoading = false);
+    final messenger = ScaffoldMessenger.of(context);
+    await _toLoginGate();
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Hesabınız silindi.')),
+    );
   }
 
   @override

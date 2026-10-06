@@ -1,7 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+    <!-- Mağaza sürümünde de gerekli (Flutter yalnız debug/profile'a ekler). -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Fotoğraflar sistemin fotoğraf seçicisiyle seçilir; depolama/medya
+         izni istenmez (Google Play fotoğraf izni politikası). -->
     <queries>
         <intent>
             <action android:name="android.intent.action.VIEW" />

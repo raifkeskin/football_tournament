@@ -48,8 +48,6 @@ dependencies:
   share_plus: ^13.3.0
   archive: ^3.6.1
   google_fonts: ^8.2.1
-  image_gallery_saver2_fixed: ^2.0.9
-  permission_handler: ^13.0.2
   shared_preferences: ^2.5.3
   youtube_player_iframe: ^6.0.2
   video_player: ^2.9.2
@@ -66,25 +64,33 @@ dev_dependencies:
   flutter_lints: ^6.0.0
 
 flutter_launcher_icons:
+  # Görseller AppLogo çiziminden üretilir: flutter test tool/render_app_icons_test.dart
   android: true
   ios: true
-  image_path: "design/app_logo.png" # iOS için kullanılmaya devam eder
-  adaptive_icon_background: "#FFFFFF" # İkonun arkasında kalacak renk (Veya görsel: "assets/bg.png")
-  adaptive_icon_foreground: "design/app_logo.png" # Sadece logonun olduğu şeffaf görsel
+  image_path: "design/app_icon_ios.png"
+  remove_alpha_ios: true
+  adaptive_icon_background: "#0F172A"
+  adaptive_icon_foreground: "design/app_icon_android_fg.png"
 
 flutter_native_splash:
-  # Uygulama içi açılış ekranıyla aynı koyu zemin (geçişte görsel sıçraması olmasın).
+  # Uygulama içi açılış ekranıyla aynı koyu zemin ve logo (geçişte sıçrama olmasın).
   color: "#0F172A"
+  image: design/splash_logo.png
   android: true
   ios: true
+  web: false
   android_12:
     color: "#0F172A"
+    image: design/splash_android12.png
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
 # The following section is specific to Flutter packages.
 flutter:
+  # iOS'ta CocoaPods kullanılır: flutter_native_splash 2.4.4 SPM ile çözülemiyor
+  config:
+    enable-swift-package-manager: false
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
