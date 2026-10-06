@@ -21,7 +21,7 @@ import '../../match/screens/match_details_screen.dart';
 import '../../match/widgets/match_score_line.dart';
 import '../../../core/widgets/league_logo.dart';
 import '../../../core/widgets/admin_form.dart';
-import '../../../core/widgets/tvl_logo.dart';
+import '../../../core/widgets/app_logo.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../../core/widgets/youtube_player_page.dart';
 import '../widgets/home_news_card.dart';
@@ -473,7 +473,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: AspectRatio(
                   aspectRatio: 1,
                   child: (ActiveTournament.theme.value?.logoUrl ?? '').isEmpty
-                      ? const FittedBox(child: TvlLogo(size: 200))
+                      ? const FittedBox(child: AppLogo(size: 200))
                       : WebSafeImage(
                           url: ActiveTournament.theme.value!.logoUrl,
                           fit: BoxFit.contain,

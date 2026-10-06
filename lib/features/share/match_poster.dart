@@ -4,7 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/utils/string_utils.dart';
 import '../../core/utils/team_name.dart';
 import '../../core/widgets/app_name_band.dart' show kShowAppName;
-import '../../core/widgets/tvl_logo.dart';
+import '../../core/widgets/app_logo.dart';
 import 'poster_share.dart';
 
 /// Tek maç afişi ("2. Hafta Maçı"). Zemin sabittir (stadyum fotoğrafı);
@@ -287,7 +287,7 @@ class MatchPoster extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const TvlLogo(size: 22),
+                  const AppLogo(size: 22),
                   if (kShowAppName) const SizedBox(width: 6),
                   if (kShowAppName)
                     Text(
