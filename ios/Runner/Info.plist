@@ -43,9 +43,9 @@
 			<string>tomtomgo</string>
 		</array>
 		<key>NSPhotoLibraryUsageDescription</key>
-		<string>Önemli anlar fotoğraflarını seçmek ve görüntülemek için fotoğraf arşivinize erişim gerekir.</string>
-		<key>NSPhotoLibraryAddUsageDescription</key>
-		<string>Önemli anlar fotoğraflarını galeriye kaydetmek için izin gerekir.</string>
+		<string>Takım logosu, oyuncu fotoğrafı ve maç fotoğrafı eklemek için fotoğraflarınızdan seçim yapabilmeniz gerekir.</string>
+		<key>ITSAppUsesNonExemptEncryption</key>
+		<false/>
 		<key>UIApplicationSceneManifest</key>
 		<dict>
 			<key>UIApplicationSupportsMultipleScenes</key>
