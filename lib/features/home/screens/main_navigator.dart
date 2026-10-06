@@ -14,7 +14,7 @@ import 'home_screen.dart';
 import '../../player/screens/profile_screen.dart';
 import '../../player/screens/stats_screen.dart';
 import '../../../core/widgets/app_name_band.dart';
-import '../../../core/widgets/tvl_logo.dart';
+import '../../../core/widgets/app_logo.dart';
 import '../../../core/design_flags.dart';
 
 /// Sol yan menü (Drawer) ile ana ekranlar arasında geçiş.
@@ -564,7 +564,7 @@ class _MenuDrawer extends StatelessWidget {
           if (logo.isNotEmpty)
             WebSafeImage(url: logo, width: 54, height: 54, fit: BoxFit.contain)
           else
-            const TvlLogo(size: 52, ringText: true),
+            const AppLogo(size: 52),
           const SizedBox(width: 12),
           Expanded(
             child: Column(

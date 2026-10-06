@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:football_tournament/core/widgets/master_class_app_bar.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'dart:ui';
 
 import '../../../core/utils/resilient_stream.dart';
 import '../../../core/utils/table_feed.dart';

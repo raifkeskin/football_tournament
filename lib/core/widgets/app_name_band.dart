@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app_navigator.dart';
 import '../services/active_tournament.dart';
-import 'tvl_logo.dart';
+import 'app_logo.dart';
 import 'web_safe_image.dart';
 
 /// Uygulama adı.
@@ -119,7 +119,7 @@ class AppNameBand extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      TvlLogo(size: 46, ringText: true),
+                      AppLogo(size: 40),
                       if (kShowAppName) SizedBox(width: 12),
                       if (kShowAppName)
                         Text(
@@ -377,7 +377,7 @@ class _LeagueRow extends StatelessWidget {
 }
 
 /// Turnuva kimliğiyle bant: turnuvanın renkleri, solda logosu, yanında adı;
-/// sağda küçük TVL işareti (uygulama markası kaybolmaz).
+/// sağda küçük Lig Masası işareti (uygulama markası kaybolmaz).
 class _TournamentBand extends StatelessWidget {
   const _TournamentBand({required this.theme, required this.top, this.actions});
 
@@ -453,7 +453,7 @@ class _TournamentBand extends StatelessWidget {
                   shape: BoxShape.circle,
                   border: Border.all(color: theme.secondary, width: 1.5),
                 ),
-                child: const TvlLogo(size: 26, ringText: false),
+                child: const AppLogo(size: 26),
               ),
             ),
             if (actions != null)

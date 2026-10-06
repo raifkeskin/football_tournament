@@ -9,7 +9,6 @@ import '../../auth/widgets/phone_input.dart';
 import '../../player/consent/consent_service.dart';
 import '../../player/consent/consent_widgets.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:football_tournament/core/widgets/custom_bottom_sheet_dropdown.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
