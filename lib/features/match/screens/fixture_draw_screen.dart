@@ -40,6 +40,10 @@ class _FixtureDrawScreenState extends State<FixtureDrawScreen> {
   late final Map<String, Team> _teamById = {
     for (final t in widget.teams) t.id: t,
   };
+
+  /// Açılış maçı (isteğe bağlı): kurada 1. haftanın ilk maçı olur.
+  String? _openingHome;
+  String? _openingAway;
   late List<DrawWeek> _weeks = _draw();
   late int _startWeek = widget.startWeek;
   bool _saving = false;
@@ -50,9 +54,46 @@ class _FixtureDrawScreenState extends State<FixtureDrawScreen> {
   /// Canlı kuranın başlangıcı; null: hemen.
   DateTime? _liveAt;
 
-  List<DrawWeek> _draw() => drawLeagueFixture([
-    for (final t in widget.teams) t.id,
-  ], doubleRound: widget.doubleRound);
+  DrawPair? get _opening {
+    final h = _openingHome, a = _openingAway;
+    return h == null || a == null || h == a ? null : (home: h, away: a);
+  }
+
+  List<DrawWeek> _draw() => drawLeagueFixture(
+    [for (final t in widget.teams) t.id],
+    doubleRound: widget.doubleRound,
+    opening: _opening,
+  );
+
+  /// Açılış maçının bir tarafını seçer; diğer tarafta seçili takım listede
+  /// yer almaz. "Seçme" ile kaldırılır. Seçim değişince kura yenilenir.
+  Future<void> _pickOpening({required bool home}) async {
+    const none = '';
+    final other = home ? _openingAway : _openingHome;
+    final current = home ? _openingHome : _openingAway;
+    final choice = await showAdminOptionPicker<String>(
+      context: context,
+      title: home ? 'Açılış maçı · Ev sahibi' : 'Açılış maçı · Deplasman',
+      items: [
+        none,
+        for (final t in widget.teams)
+          if (t.id != other) t.id,
+      ],
+      labelBuilder: (id) =>
+          id == none ? 'Seçme (rastgele)' : (_teamById[id]?.name ?? ''),
+      selected: current ?? none,
+    );
+    if (choice == null || !mounted) return;
+    setState(() {
+      final v = choice == none ? null : choice;
+      if (home) {
+        _openingHome = v;
+      } else {
+        _openingAway = v;
+      }
+      _weeks = _draw();
+    });
+  }
 
   int get _matchCount => _weeks.fold(0, (sum, w) => sum + w.pairs.length);
 
@@ -256,6 +297,48 @@ class _FixtureDrawScreenState extends State<FixtureDrawScreen> {
                     ],
                   ),
                 ),
+                AdminFormSection(
+                  title: 'Açılış maçı',
+                  child: AdminFieldGroup(
+                    children: [
+                      AdminSelectRow(
+                        icon: Icons.home_rounded,
+                        label: 'Ev sahibi',
+                        value: _teamById[_openingHome]?.name,
+                        placeholder: 'Rastgele',
+                        onTap: _saving ? null : () => _pickOpening(home: true),
+                        onClear: _saving || _openingHome == null
+                            ? null
+                            : () => setState(() {
+                                _openingHome = null;
+                                _weeks = _draw();
+                              }),
+                      ),
+                      AdminSelectRow(
+                        icon: Icons.flight_takeoff_rounded,
+                        label: 'Deplasman',
+                        value: _teamById[_openingAway]?.name,
+                        placeholder: 'Rastgele',
+                        onTap: _saving ? null : () => _pickOpening(home: false),
+                        onClear: _saving || _openingAway == null
+                            ? null
+                            : () => setState(() {
+                                _openingAway = null;
+                                _weeks = _draw();
+                              }),
+                      ),
+                    ],
+                  ),
+                ),
+                if ((_openingHome == null) != (_openingAway == null))
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(4, 0, 4, 8),
+                    child: Text(
+                      'Açılış maçı için iki takımı da seç; seçilmezse kura '
+                      'tamamen rastgele çekilir.',
+                      style: TextStyle(color: kAdminAmber, fontSize: 12.5),
+                    ),
+                  ),
                 AdminFormSection(
                   title: 'Canlı yayın',
                   child: AdminFieldGroup(
