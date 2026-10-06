@@ -5,6 +5,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:football_tournament/core/widgets/app_logo.dart';
 
@@ -52,6 +53,70 @@ void main() {
       await _render('web/icons/Icon-maskable-512.png', 512, maskable);
       await _render('web/icons/Icon-180-apple.png', 180, full);
       await _render('web/favicon.png', 64, rounded);
+      // Play Store ikonu: tam kare (köşeleri Play yuvarlar).
+      await _render('design/store/play_icon_512.png', 512, full);
+    });
+  });
+
+  testWidgets('Play tanıtım görseli', (tester) async {
+    await tester.runAsync(() async {
+      final loader = FontLoader('BarlowCondensed')
+        ..addFont(
+          rootBundle.load('assets/fonts/BarlowCondensed-ExtraBoldItalic.ttf'),
+        );
+      await loader.load();
+      final barlow = FontLoader('Barlow')
+        ..addFont(rootBundle.load('assets/fonts/Barlow-SemiBold.ttf'));
+      await barlow.load();
+
+      const w = 1024.0, h = 500.0;
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+      canvas.drawRect(
+        const Rect.fromLTWH(0, 0, w, h),
+        Paint()..color = AppLogoPainter.navy,
+      );
+      canvas.save();
+      canvas.translate(90, 110);
+      const AppLogoPainter(tile: false).paint(canvas, const Size.square(280));
+      canvas.restore();
+      void text(String s, double x, double y, TextStyle style) {
+        final tp = TextPainter(
+          text: TextSpan(text: s, style: style),
+          textDirection: TextDirection.ltr,
+        )..layout(maxWidth: w - x - 40);
+        tp.paint(canvas, Offset(x, y));
+      }
+
+      text(
+        'LİG MASASI',
+        430,
+        165,
+        const TextStyle(
+          fontFamily: 'BarlowCondensed',
+          fontSize: 96,
+          fontStyle: FontStyle.italic,
+          fontWeight: FontWeight.w800,
+          color: Colors.white,
+          letterSpacing: 2,
+        ),
+      );
+      text(
+        'Fikstür · Kadro · Canlı skor · Puan durumu',
+        434,
+        285,
+        const TextStyle(
+          fontFamily: 'Barlow',
+          fontSize: 28,
+          fontWeight: FontWeight.w600,
+          color: AppLogoPainter.green,
+        ),
+      );
+      final image = await recorder.endRecording().toImage(w.toInt(), h.toInt());
+      final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+      File('design/store/play_feature_1024x500.png')
+        ..createSync(recursive: true)
+        ..writeAsBytesSync(bytes!.buffer.asUint8List());
     });
   });
 }
