@@ -68,9 +68,9 @@ dev_dependencies:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/app_logo.png" # iOS için kullanılmaya devam eder
+  image_path: "design/app_logo.png" # iOS için kullanılmaya devam eder
   adaptive_icon_background: "#FFFFFF" # İkonun arkasında kalacak renk (Veya görsel: "assets/bg.png")
-  adaptive_icon_foreground: "assets/app_logo.png" # Sadece logonun olduğu şeffaf görsel
+  adaptive_icon_foreground: "design/app_logo.png" # Sadece logonun olduğu şeffaf görsel
 
 flutter_native_splash:
   # Uygulama içi açılış ekranıyla aynı koyu zemin (geçişte görsel sıçraması olmasın).
