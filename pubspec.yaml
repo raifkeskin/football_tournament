@@ -48,8 +48,6 @@ dependencies:
   share_plus: ^13.3.0
   archive: ^3.6.1
   google_fonts: ^8.2.1
-  image_gallery_saver2_fixed: ^2.0.9
-  permission_handler: ^13.0.2
   shared_preferences: ^2.5.3
   youtube_player_iframe: ^6.0.2
   video_player: ^2.9.2
