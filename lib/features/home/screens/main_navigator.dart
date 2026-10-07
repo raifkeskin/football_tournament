@@ -351,14 +351,31 @@ class _TabPagerState extends State<_TabPager> {
   /// Bir sürükleme boyunca menü yalnızca bir kez açılsın.
   bool _drawerFired = false;
 
+  /// Kod ile sayfa atlatılıyor (alt çubuk / menü): PageView bunu sayfa
+  /// değişikliği olarak bildirir, ama sekme zaten seçili; çizim sırasında
+  /// üst gezgine setState yaptırmamak için bildirim yutulur.
+  bool _jumping = false;
+
   @override
   void didUpdateWidget(covariant _TabPager oldWidget) {
     super.didUpdateWidget(oldWidget);
     final i = widget.index;
     if (i != null && _controller.hasClients) {
       final current = _controller.page?.round();
-      if (current != i) _controller.jumpToPage(i);
+      if (current != i) {
+        _jumping = true;
+        try {
+          _controller.jumpToPage(i);
+        } finally {
+          _jumping = false;
+        }
+      }
     }
+  }
+
+  void _onPageChanged(int i) {
+    if (_jumping) return;
+    widget.onChanged(i);
   }
 
   @override
@@ -390,7 +407,7 @@ class _TabPagerState extends State<_TabPager> {
         physics: const ClampingScrollPhysics(),
         // Yandaki sekme önceden hazırlanır: kaydırınca boş ekran görünmez.
         allowImplicitScrolling: true,
-        onPageChanged: widget.onChanged,
+        onPageChanged: _onPageChanged,
         children: [for (final c in widget.children) _KeepAlive(child: c)],
       ),
     );

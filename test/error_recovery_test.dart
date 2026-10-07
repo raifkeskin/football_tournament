@@ -38,11 +38,20 @@ void main() {
     expect(size.height, 550);
   });
 
-  testWidgets('kart açılır, Yenile ağacı baştan kurar', (tester) async {
-    await tester.pumpWidget(
-      const MaterialApp(home: ErrorRecoveryOverlay(child: _Counter())),
+  testWidgets('kart açılır, Yenile başlangıç sayfasını açar', (tester) async {
+    final nav = GlobalKey<NavigatorState>();
+    ErrorReporter.restartHandler = () => nav.currentState!.pushAndRemoveUntil(
+      MaterialPageRoute<void>(builder: (_) => const Text('yeni ana sayfa')),
+      (_) => false,
     );
-    expect(_Counter.created, 1);
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: nav,
+        builder: (context, child) => ErrorRecoveryOverlay(child: child!),
+        home: const _Counter(),
+      ),
+    );
+    expect(find.text('içerik'), findsOneWidget);
     expect(find.text('Bir sorun oluştu'), findsNothing);
 
     ErrorReporter.broken.value = true;
@@ -50,15 +59,17 @@ void main() {
     expect(find.text('Bir sorun oluştu'), findsOneWidget);
 
     await tester.tap(find.text('YENİLE'));
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(find.text('Bir sorun oluştu'), findsNothing);
-    expect(_Counter.created, 2);
+    expect(find.text('yeni ana sayfa'), findsOneWidget);
+    expect(find.text('içerik'), findsNothing);
+    expect(tester.takeException(), isNull);
 
     ErrorReporter.broken.value = true;
     await tester.pump();
     await tester.tap(find.text('Kapat'));
     await tester.pump();
     expect(find.text('Bir sorun oluştu'), findsNothing);
-    expect(_Counter.created, 2);
+    expect(find.text('yeni ana sayfa'), findsOneWidget);
   });
 }

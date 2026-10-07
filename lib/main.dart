@@ -258,12 +258,17 @@ class _MyAppState extends State<MyApp> {
       ];
       return roles.isEmpty ? s.role : roles.join('+');
     };
-    // Yenile: başlangıç ekranı (giriş kapısı / açılış) güncel oturuma göre.
-    ErrorReporter.epoch.addListener(_onRestart);
-  }
-
-  void _onRestart() {
-    if (mounted) setState(() {});
+    // Yenile: tüm sayfalar kapanır; oturum varsa ana sayfa, yoksa giriş.
+    ErrorReporter.restartHandler = () {
+      appNavigatorKey.currentState?.pushAndRemoveUntil(
+        MaterialPageRoute<void>(
+          builder: (_) => _showLoginGate()
+              ? const LoginScreen(gate: true)
+              : const MainNavigator(),
+        ),
+        (_) => false,
+      );
+    };
   }
 
   static const Color _headerForest = Color(0xFF064E3B);
@@ -293,9 +298,7 @@ class _MyAppState extends State<MyApp> {
       controller: _sessionController,
       child: MaterialApp(
         navigatorKey: appNavigatorKey,
-        navigatorObservers: [
-          LeagueSwitchScope.observerFor(ErrorReporter.epoch.value),
-        ],
+        navigatorObservers: [LeagueSwitchScope.observer],
         title: kAppName,
         debugShowCheckedModeBanner: false,
         localizationsDelegates: const [
@@ -447,7 +450,6 @@ class _MyAppState extends State<MyApp> {
 
   @override
   void dispose() {
-    ErrorReporter.epoch.removeListener(_onRestart);
     _sessionController.dispose();
     super.dispose();
   }
