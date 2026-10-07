@@ -28,6 +28,9 @@ abstract class IMatchService {
 
   Future<void> addMatchEvent(MatchEvent event);
 
+  /// Olayı siler; canlı maçta silinen gol skordan da düşülür.
+  Future<void> deleteMatchEvent(String eventId);
+
   /// Maç akışını ilerletir: start | end_first_half | start_second_half |
   /// finish | undo. Saat sunucuda tutulur (advance_match_phase).
   Future<void> advanceMatchPhase({
