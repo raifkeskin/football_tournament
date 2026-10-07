@@ -394,12 +394,13 @@ class PlayerProfileService {
           .eq('season_id', seasonId),
       _client
           .from('match_events')
-          .select('event_type, player_id, assist_player_id, is_own_goal')
+          .select('event_type, match_id, player_id, assist_player_id, is_own_goal')
           .eq('season_id', seasonId)
           .or('player_id.eq.$playerId,assist_player_id.eq.$playerId'),
     ]);
     final matchIds = results[0].map((r) => r['match_id']).toSet();
     var goals = 0, assists = 0, yellow = 0, red = 0;
+    final yellowMatches = <String>{};
     for (final e in results[1]) {
       final type = (e['event_type'] ?? '').toString();
       final mine = e['player_id']?.toString() == playerId;
@@ -407,7 +408,13 @@ class PlayerProfileService {
         if (mine && e['is_own_goal'] != true) goals++;
         if (e['assist_player_id']?.toString() == playerId) assists++;
       } else if (mine && type == 'yellow_card') {
-        yellow++;
+        // Aynı maçta ikinci sarı: iki sarı yerine bir kırmızı sayılır.
+        if (yellowMatches.add(e['match_id']?.toString() ?? '')) {
+          yellow++;
+        } else {
+          yellow--;
+          red++;
+        }
       } else if (mine && type == 'red_card') {
         red++;
       }

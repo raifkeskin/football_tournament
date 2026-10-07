@@ -1084,6 +1084,7 @@ class SupabaseMatchService implements IMatchService {
       if (tid.isNotEmpty) teamByPlayer.putIfAbsent(pid, () => tid);
     }
 
+    final yellowSeen = <String>{};
     for (final e in events) {
       final type = (e['event_type'] ?? '').toString().trim();
       final pid = (e['player_id'] ?? '').toString().trim();
@@ -1108,7 +1109,13 @@ class SupabaseMatchService implements IMatchService {
           bump(assists, pid);
           break;
         case 'yellow_card':
-          bump(yellows, pid);
+          // Aynı maçta ikinci sarı: iki sarı yerine bir kırmızı sayılır.
+          if (yellowSeen.add('$pid|$mid')) {
+            bump(yellows, pid);
+          } else {
+            yellows[pid] = (yellows[pid] ?? 1) - 1;
+            bump(reds, pid);
+          }
           break;
         case 'red_card':
           bump(reds, pid);
@@ -1311,6 +1318,7 @@ class SupabaseMatchService implements IMatchService {
           operation: 'SELECT',
           count: eventsRes.length,
         );
+        final yellowSeen = <String>{};
         for (final rowAny in eventsRes) {
           final e = (rowAny as Map).cast<String, dynamic>();
           final eventType = (e['event_type'] ?? '').toString().trim();
@@ -1344,7 +1352,13 @@ class SupabaseMatchService implements IMatchService {
               bump(playerPhone, 'assists');
               break;
             case 'yellow_card':
-              bump(playerPhone, 'yellow_cards');
+              // Aynı maçta ikinci sarı: iki sarı yerine bir kırmızı sayılır.
+              if (yellowSeen.add(playerPhone)) {
+                bump(playerPhone, 'yellow_cards');
+              } else {
+                bump(playerPhone, 'yellow_cards', by: -1);
+                bump(playerPhone, 'red_cards');
+              }
               break;
             case 'red_card':
               bump(playerPhone, 'red_cards');
