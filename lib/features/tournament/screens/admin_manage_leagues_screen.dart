@@ -134,7 +134,7 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
           'name': name,
           'is_private': isPrivate,
           'access_code': isPrivate ? access : null,
-          if (newLogoUrl != null) 'logo_url': newLogoUrl,
+          'logo_url': ?newLogoUrl,
           if (newLogoUrl == null && removedLogo) 'logo_url': null,
           'theme_primary': themePrimary,
           'theme_secondary': themePrimary == null ? null : themeSecondary,
@@ -652,8 +652,9 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                                             accessCodeController.text =
                                                 _newAccessCode();
                                           }
-                                          if (!isPrivate)
+                                          if (!isPrivate) {
                                             accessCodeController.clear();
+                                          }
                                         }),
                                   trailing: Switch.adaptive(
                                     value: isPrivate,
@@ -669,8 +670,9 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                                               accessCodeController.text =
                                                   _newAccessCode();
                                             }
-                                            if (!isPrivate)
+                                            if (!isPrivate) {
                                               accessCodeController.clear();
+                                            }
                                           }),
                                   ),
                                   child: Text(

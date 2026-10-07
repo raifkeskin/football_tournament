@@ -1505,7 +1505,7 @@ class _PendingPenaltiesCardState extends State<_PendingPenaltiesCard> {
                     ),
                     Text(
                       [
-                        if (team != null) team,
+                        ?team,
                         isRed ? 'Kırmızı kart' : 'İkinci sarı kart',
                       ].join(' · '),
                       style: const TextStyle(
