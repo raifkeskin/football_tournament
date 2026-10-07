@@ -16,6 +16,7 @@ import '../../team/models/team.dart';
 import '../../team/utils/standings.dart';
 import '../../tournament/models/league.dart';
 import 'home_news_card.dart';
+import '../../sponsors/sponsor_strip.dart';
 
 /// Yeni tasarımın renk sistemi: temel renkler sabit, turnuva yalnızca ana ve
 /// vurgu rengini getirir, durum renkleri her turnuvada aynı.
@@ -687,7 +688,12 @@ class _HomeDashboardState extends State<HomeDashboard> {
       onRefresh: _refresh,
       child: ListView(
         padding: EdgeInsets.fromLTRB(0, top, 0, 24),
-        children: [_greeting(session, data), content],
+        children: [
+          // Bandın hemen altında dönen sponsor şeridi (sponsor yoksa boş).
+          SponsorStrip(leagueId: widget.league.id),
+          _greeting(session, data),
+          content,
+        ],
       ),
     );
   }

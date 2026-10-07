@@ -7,6 +7,7 @@ import 'package:football_tournament/features/tournament/screens/admin_manage_lea
 import 'package:football_tournament/features/tournament/screens/admin_pitch_management_screen.dart';
 import '../features/match/screens/admin_fixture_entry_screen.dart';
 import '../features/news/screens/admin_manage_news_screen.dart';
+import '../features/sponsors/admin_sponsors_screen.dart';
 import '../features/tournament/screens/admin_penalty_management_screen.dart';
 import 'admin_pending_actions_screen.dart';
 import '../features/auth/screens/admin_otp_monitor_screen.dart';
@@ -21,7 +22,8 @@ class AdminPanelWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isAdmin = AppSession.of(context).value.isAdmin;
+    final session = AppSession.of(context).value;
+    final isAdmin = session.isAdmin;
     // Mevcut buton verilerini modern yapıya uygun şekilde listeliyoruz
     // admin_panel_screen.dart içindeki menü listeni buna göre güncelle:
     final List<_AdminMenuData> menuItems = [
@@ -99,6 +101,20 @@ class AdminPanelWidget extends StatelessWidget {
           );
         },
       ),
+      // Sponsorlar: yalnızca admin ve kurucu başkan (bölge sorumlusu değil).
+      if (isAdmin || session.isLeagueOwner)
+        _AdminMenuData(
+          baslik: 'Sponsor Yönetimi',
+          renkler: const [Color(0xFFFDE68A), Color(0xFFCA8A04)],
+          ikon: Icons.handshake_rounded,
+          resimYolu: 'assets/images/admin_tournament.jpg',
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AdminSponsorsScreen()),
+            );
+          },
+        ),
       if (isAdmin)
         _AdminMenuData(
           baslik: 'Saha Yönetimi',

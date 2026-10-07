@@ -64,7 +64,7 @@ _Eklendi: 2026-10-06_
 - Yapılacak: sayfayı Firebase hosting'e koymak (ör. `/tanitim/champions`), turnuva sahiplerine uygulamanın kendi adresiyle bağlantı göndermek. Hareketli haber galerisi aynen çalışır.
 - PDF sürümü şimdilik gerekmiyor; istenirse galeri bölümü 5 küçük kare olarak basılacak.
 
-## 7. Sponsor bölümü (haftalık limit sıfırlanınca — Cuma gecesinden sonra)
+## 7. Sponsor bölümü — YAPILDI (2026-10-07)
 _Eklendi: 2026-10-07_
 
 - **Kararlar:** Sponsorlar **turnuvaya** bağlı (sezona değil). İki tür: **ana sponsor** ve **alt sponsor**. Alanlar: ad, logo, (isteğe bağlı) link, sıra, aktif/pasif.
