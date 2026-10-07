@@ -611,18 +611,27 @@ String _trUpper(String s) =>
 /// Bantta yönetim paneli düğmeleri.
 @immutable
 class BandActions {
-  const BandActions({required this.onMenu, required this.onLogout});
+  const BandActions({
+    required this.onMenu,
+    required this.onLogout,
+    this.onHome,
+  });
 
   final VoidCallback onMenu;
   final VoidCallback onLogout;
+
+  /// Verilirse soldaki düğme ev ikonu olur ve ana sayfaya döner.
+  final VoidCallback? onHome;
 
   // Bant gezginin dışında: düğmeler için şeffaf Material gerekir.
   Widget menuButton(Color color) => Material(
     type: MaterialType.transparency,
     child: IconButton(
       // Tooltip yok: bant Overlay'in dışında.
-      onPressed: onMenu,
-      icon: Icon(Icons.menu_rounded, color: color, semanticLabel: 'Menü'),
+      onPressed: onHome ?? onMenu,
+      icon: onHome != null
+          ? Icon(Icons.home_rounded, color: color, semanticLabel: 'Ana Sayfa')
+          : Icon(Icons.menu_rounded, color: color, semanticLabel: 'Menü'),
     ),
   );
 

@@ -1,6 +1,8 @@
 import '../../../core/widgets/app_name_band.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
+
+import '../../../core/app_navigator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'; // Supabase kontrolü için
 import 'package:football_tournament/screens/admin_panel_screen.dart';
@@ -38,6 +40,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _myActions = BandActions(
           onMenu: MainNavigator.openMenu,
           onLogout: onLogout,
+          // Ev: panelden açılan alt ekranlar kapanır, Ana Sayfa sekmesi açılır.
+          onHome: () {
+            appNavigatorKey.currentState?.popUntil((r) => r.isFirst);
+            widget.onRequestHomeTab();
+          },
         );
         AppNameBand.panelActions.value = _myActions;
       } else {
