@@ -39,6 +39,26 @@ import '../../player/services/penalty_service.dart';
 // --- YARDIMCI WIDGETLAR ---
 
 /// Çift sarıdan ihraç: arkada sarı, önde kırmızı kart.
+/// Kaçan penaltı: soluk top, üzerinde kırmızı çarpı.
+class _MissedPenaltyIcon extends StatelessWidget {
+  const _MissedPenaltyIcon();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox(
+      width: 20,
+      height: 20,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Icon(Icons.sports_soccer, size: 18, color: Color(0xFF64748B)),
+          Icon(Icons.close_rounded, size: 20, color: Colors.redAccent),
+        ],
+      ),
+    );
+  }
+}
+
 /// Penaltı golü: top, altında "P" rozeti.
 class _PenaltyGoalIcon extends StatelessWidget {
   const _PenaltyGoalIcon();
@@ -3758,7 +3778,12 @@ class _DetailTabView extends StatelessWidget {
         return <Map<String, dynamic>>[
           {'minute': 0, 'type': 'status', 'title': 'Maç Başladı'},
           {'minute': period, 'type': 'status', 'title': 'İlk Yarı Bitti'},
-          {'minute': period * 2, 'type': 'status', 'title': 'Maç Bitti'},
+          // Uzatma golleri ve maçın adamından sonra, akışın en sonunda.
+          {
+            'minute': 100000,
+            'type': 'status',
+            'title': 'Maç Sonucu  ${match.homeScore} - ${match.awayScore}',
+          },
         ];
     }
   }
@@ -3884,17 +3909,10 @@ class _DetailTabView extends StatelessWidget {
 
         return ListView.separated(
           padding: const EdgeInsets.all(16),
-          itemCount: normalized.length + 1,
-          separatorBuilder: (_, _) => const SizedBox(height: 6),
+          itemCount: normalized.length,
+          separatorBuilder: (_, _) => const SizedBox(height: 2),
           itemBuilder: (context, i) {
-            if (i == 0) {
-              return const Text(
-                'Maç Detayı',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
-              );
-            }
-            final e = normalized[i - 1];
+            final e = normalized[i];
             final type = secondYellows.contains(e)
                 ? 'second_yellow'
                 : pickType(e);
@@ -3942,6 +3960,7 @@ class _DetailTabView extends StatelessWidget {
             return _DetailEventTile(
               eventId: system ? '' : _readString(e['id']),
               isPenalty: type == 'goal' && isPenalty,
+              isOwnGoal: type == 'goal' && isOwnGoal,
               match: match,
               minute: minute,
               fullTime: period * 2,
@@ -3952,6 +3971,8 @@ class _DetailTabView extends StatelessWidget {
                   ? 'Asist: $assist'
                   : type == 'second_yellow'
                   ? 'Çift sarıdan ihraç'
+                  : type == 'penalty_missed'
+                  ? 'Penaltı kaçtı'
                   : null,
               subInName: type == 'substitution' ? subIn : '',
               teamId: sideTeamId,
@@ -3973,6 +3994,9 @@ class _DetailEventTile extends StatelessWidget {
 
   /// Penaltı golü: top yerine penaltı noktası ikonu.
   final bool isPenalty;
+
+  /// Kendi kalesine gol: kırmızı top ikonu.
+  final bool isOwnGoal;
   final int minute;
 
   /// Normal maç süresi (2 devre); aşan dakika "60+4'" gösterilir.
@@ -3993,6 +4017,7 @@ class _DetailEventTile extends StatelessWidget {
     required this.eventId,
     required this.match,
     this.isPenalty = false,
+    this.isOwnGoal = false,
     required this.minute,
     required this.fullTime,
     required this.type,
@@ -4013,7 +4038,7 @@ class _DetailEventTile extends StatelessWidget {
     if (t.contains('devre') || t.contains('yarı')) {
       return const Icon(Icons.timelapse_rounded);
     }
-    if (t.contains('bitti') || t.contains('son')) {
+    if (t.contains('bitti') || t.contains('son') || t.contains('sonuç')) {
       return const Icon(Icons.flag_rounded);
     }
     return const Icon(Icons.info_outline);
@@ -4109,7 +4134,13 @@ class _DetailEventTile extends StatelessWidget {
     } else {
       switch (type) {
         case 'goal':
-          icon = isPenalty
+          icon = isOwnGoal
+              ? const Icon(
+                  Icons.sports_soccer,
+                  size: 18,
+                  color: Colors.redAccent,
+                )
+              : isPenalty
               ? const _PenaltyGoalIcon()
               : const Icon(Icons.sports_soccer, size: 18, color: Colors.white);
           break;
@@ -4126,6 +4157,9 @@ class _DetailEventTile extends StatelessWidget {
           // Giren/çıkan okları yeterli; ayrıca ikon gösterilmez.
           icon = const SizedBox.shrink();
           break;
+        case 'penalty_missed':
+          icon = const _MissedPenaltyIcon();
+          break;
         case 'man_of_the_match':
           icon = const Icon(Icons.star_rounded, size: 18, color: Colors.amber);
           break;
@@ -4135,7 +4169,7 @@ class _DetailEventTile extends StatelessWidget {
     }
 
     final tile = Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: system
           ? Row(
               children: [
@@ -4160,16 +4194,8 @@ class _DetailEventTile extends StatelessWidget {
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
+                    // Durum satırlarında (başladı, ilk yarı, sonuç) dakika yok.
                     children: [
-                      Text(
-                        min,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.amber,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
                       IconTheme(
                         data: const IconThemeData(
                           size: 13,
