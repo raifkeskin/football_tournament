@@ -24,8 +24,8 @@
 		<string>????</string>
 		<key>CFBundleVersion</key>
 		<string>$(FLUTTER_BUILD_NUMBER)</string>
-		<key>LSRequiresIPhoneOS</key>
-		<true/>
+		<key>ITSAppUsesNonExemptEncryption</key>
+		<false/>
 		<key>LSApplicationQueriesSchemes</key>
 		<array>
 			<string>comgooglemaps</string>
@@ -42,10 +42,10 @@
 			<string>here-route</string>
 			<string>tomtomgo</string>
 		</array>
+		<key>LSRequiresIPhoneOS</key>
+		<true/>
 		<key>NSPhotoLibraryUsageDescription</key>
 		<string>Takım logosu, oyuncu fotoğrafı ve maç fotoğrafı eklemek için fotoğraflarınızdan seçim yapabilmeniz gerekir.</string>
-		<key>ITSAppUsesNonExemptEncryption</key>
-		<false/>
 		<key>UIApplicationSceneManifest</key>
 		<dict>
 			<key>UIApplicationSupportsMultipleScenes</key>
@@ -73,6 +73,8 @@
 		<string>LaunchScreen</string>
 		<key>UIMainStoryboardFile</key>
 		<string>Main</string>
+		<key>UIStatusBarHidden</key>
+		<false/>
 		<key>UISupportedInterfaceOrientations</key>
 		<array>
 			<string>UIInterfaceOrientationPortrait</string>
@@ -86,8 +88,6 @@
 			<string>UIInterfaceOrientationLandscapeLeft</string>
 			<string>UIInterfaceOrientationLandscapeRight</string>
 		</array>
-		<key>UIStatusBarHidden</key>
-		<false/>
 		<key>UIViewControllerBasedStatusBarAppearance</key>
 		<false/>
 	</dict>
