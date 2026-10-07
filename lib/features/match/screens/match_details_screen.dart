@@ -595,6 +595,14 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     }
   }
 
+  /// "12/10/2026  |  20:00"; saat yoksa yalnızca tarih ("Tarih Belirlenmedi").
+  String _dateTimeText(MatchModel m) {
+    final date = _formatDate(m.matchDate ?? '');
+    final time = (m.matchTime ?? '').trim();
+    if (time.isEmpty || time == 'null') return date;
+    return '$date  |  $time';
+  }
+
   String _formatDate(String dateStr) {
     if (dateStr.isEmpty || dateStr == '__NO_DATE__') {
       return 'Tarih Belirlenmedi';
@@ -896,7 +904,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                     ),
                                     const SizedBox(width: 8),
                                     Text(
-                                      "${_formatDate(m.matchDate ?? '')}  |  ${m.matchTime}",
+                                      _dateTimeText(m),
                                       style: const TextStyle(
                                         color: Colors.white,
                                         fontSize: 11,
