@@ -344,6 +344,41 @@ class SupabaseMatchService implements IMatchService {
     });
   }
 
+  /// Bitmiş maçta olay eklenip silinince skor gol olaylarından 0-0'dan
+  /// yeniden hesaplanır. Maçta hiç gol olayı yoksa Hızlı Skor Girişi'yle
+  /// girilen skor korunur; son gol silindiyse ([goalRemoved]) skor 0-0 olur.
+  /// [row]: home/away_team_id ve home/away_score.
+  Future<void> _syncFinishedScore(
+    String matchId,
+    Map<String, dynamic> row, {
+    bool goalRemoved = false,
+  }) async {
+    final homeTeamId = (row['home_team_id'] ?? '').toString().trim();
+    final awayTeamId = (row['away_team_id'] ?? '').toString().trim();
+    final goals = await _client
+        .from('match_events')
+        .select('team_id, is_own_goal')
+        .eq('match_id', matchId)
+        .eq('event_type', 'goal');
+    var home = 0, away = 0;
+    for (final g in goals) {
+      final tid = (g['team_id'] ?? '').toString().trim();
+      final scorer = g['is_own_goal'] == true
+          ? (tid == homeTeamId ? awayTeamId : homeTeamId)
+          : tid;
+      if (scorer == homeTeamId) home++;
+      if (scorer == awayTeamId) away++;
+    }
+    if (goals.isEmpty && !goalRemoved) return;
+    final curHome = _readInt(row['home_score'], fallback: 0);
+    final curAway = _readInt(row['away_score'], fallback: 0);
+    if (curHome == home && curAway == away) return;
+    await _client
+        .from('matches')
+        .update({'home_score': home, 'away_score': away})
+        .eq('id', matchId);
+  }
+
   @override
   Future<void> deleteMatchEvent(String eventId) async {
     final res = await _client
@@ -363,9 +398,8 @@ class SupabaseMatchService implements IMatchService {
     if (deleted.isEmpty) throw Exception('Olay silinemedi (yetki yok).');
     notifyLocalChange(matchId);
 
-    if ((e['event_type'] ?? '').toString() != 'goal') return;
-    // Gol eklenince skor artırılmıştı; bitmiş maçta skor elle girildiği için
-    // dokunulmaz (bkz. addMatchEvent).
+    final isGoal = (e['event_type'] ?? '').toString() == 'goal';
+    // Gol eklenince skor artırılmıştı; bitmiş maçta bkz. _syncFinishedScore.
     try {
       final rows = await _client
           .from('matches')
@@ -376,8 +410,10 @@ class SupabaseMatchService implements IMatchService {
       final row = (rows.first as Map).cast<String, dynamic>();
       if ((row['status'] ?? '').toString().trim() ==
           MatchStatus.finished.name) {
+        await _syncFinishedScore(matchId, row, goalRemoved: isGoal);
         return;
       }
+      if (!isGoal) return;
       final homeTeamId = (row['home_team_id'] ?? '').toString().trim();
       final awayTeamId = (row['away_team_id'] ?? '').toString().trim();
       final teamId = (e['team_id'] ?? '').toString().trim();
@@ -430,8 +466,6 @@ class SupabaseMatchService implements IMatchService {
         rethrow;
       }
 
-      if (event.eventType != 'goal') return;
-
       try {
         AppConfig.sqlLogStart(
           table: 'matches',
@@ -456,12 +490,13 @@ class SupabaseMatchService implements IMatchService {
         }
         AppConfig.sqlLogResult(table: 'matches', operation: 'SELECT', count: 1);
         final row = (res.first as Map).cast<String, dynamic>();
-        // Bitmiş maçın skoru zaten girilmiştir (ör. Hızlı Skor Girişi);
-        // sonradan gol atanları eklemek skoru ikinci kez artırmamalı.
         if ((row['status'] ?? '').toString().trim() ==
             MatchStatus.finished.name) {
+          // Bitmiş maçta her olay girişinde skor gollerle eşitlenir.
+          await _syncFinishedScore(event.matchId, row);
           return;
         }
+        if (event.eventType != 'goal') return;
         final homeTeamId = (row['home_team_id'] ?? '').toString().trim();
         final awayTeamId = (row['away_team_id'] ?? '').toString().trim();
         final scoringTeamId = event.isOwnGoal
