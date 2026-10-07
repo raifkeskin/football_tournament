@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show SystemNavigator;
 
 import '../../../core/services/app_session.dart';
 import '../../auth/screens/login_screen.dart';
@@ -16,6 +18,7 @@ import '../../player/screens/stats_screen.dart';
 import '../../../core/widgets/app_name_band.dart';
 import '../../../core/widgets/app_logo.dart';
 import '../../../core/design_flags.dart';
+import '../../../core/widgets/admin_page.dart';
 
 /// Sol yan menü (Drawer) ile ana ekranlar arasında geçiş.
 class MainNavigator extends StatefulWidget {
@@ -88,6 +91,26 @@ class _MainNavigatorState extends State<MainNavigator> {
     );
   }
 
+  /// Geri (Android'de kenardan kaydırma dahil): başka sekmedeyken Ana
+  /// Sayfa'ya döner; Ana Sayfa'da yanlışlıkla çıkılmasın diye onay sorar.
+  /// Bu kapsam, Profil'deki geri dinleyicisinden önce kayıtlı olduğu için
+  /// önce çalışır.
+  Future<void> _onBack() async {
+    if (_aktifSekme != 0) {
+      setState(() => _aktifSekme = 0);
+      return;
+    }
+    if (kIsWeb) return;
+    final exit = await showAdminConfirmDialog(
+      context: context,
+      title: 'Uygulamadan Çık',
+      message: 'Uygulamadan çıkmak istiyor musunuz?',
+      confirmLabel: 'ÇIKIŞ',
+      icon: Icons.exit_to_app_rounded,
+    );
+    if (exit) await SystemNavigator.pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     final session = AppSession.of(context);
@@ -111,56 +134,63 @@ class _MainNavigatorState extends State<MainNavigator> {
       ),
     ];
 
-    return Scaffold(
-      key: _scaffoldKey,
-      extendBody: !kNewHomeDesign,
-      // Yönetim paneli (Profil sekmesi, yetkili) açıkken alt çubuk yok;
-      // gezinme bantaki menüden.
-      bottomNavigationBar:
-          kNewHomeDesign &&
-              !(_aktifSekme == MainNavigator.profileTab &&
-                  session.value.hasManagementPanel)
-          ? _BottomBar(
-              index: _aktifSekme,
-              onTap: (i) => setState(() => _aktifSekme = i),
-            )
-          : null,
-      drawer: _MenuDrawer(
-        activeIndex: _aktifSekme,
-        session: session.value,
-        loggedIn: loggedIn,
-        onSelect: _sekmeDegistir,
-        onLogout: () => _cikisYap(session),
-        onEnterCode: () {
-          Navigator.of(context).pop(); // çekmeceyi kapat
-          showLeagueCodeDialog(this.context);
-        },
-      ),
-      // Görülebilen turnuvalar değişince (giriş/çıkış, kod) ekranlar
-      // baştan kurulur ve verilerini yeniden okur.
-      body: ValueListenableBuilder<int>(
-        valueListenable: LeagueAccess.dataEpoch,
-        builder: (context, epoch, _) => KeyedSubtree(
-          key: ValueKey('data_$epoch'),
-          // Ana sekmeler parmakla kaydırılır (Ana Sayfa → Haberler →
-          // Fikstür → Puan Durumu → İstatistik); Profil menüden açılır ve
-          // sekmelerin üstünde durur.
-          child: Stack(
-            children: [
-              _TabPager(
-                index: _aktifSekme < 5 ? _aktifSekme : null,
-                onChanged: (i) => setState(() => _aktifSekme = i),
-                onSwipePastFirst: () => _scaffoldKey.currentState?.openDrawer(),
-                children: ekranlar.take(5).toList(),
-              ),
-              Offstage(
-                offstage: _aktifSekme != 5,
-                child: TickerMode(
-                  enabled: _aktifSekme == 5,
-                  child: ekranlar[5],
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _onBack();
+      },
+      child: Scaffold(
+        key: _scaffoldKey,
+        extendBody: !kNewHomeDesign,
+        // Yönetim paneli (Profil sekmesi, yetkili) açıkken alt çubuk yok;
+        // gezinme bantaki menüden.
+        bottomNavigationBar:
+            kNewHomeDesign &&
+                !(_aktifSekme == MainNavigator.profileTab &&
+                    session.value.hasManagementPanel)
+            ? _BottomBar(
+                index: _aktifSekme,
+                onTap: (i) => setState(() => _aktifSekme = i),
+              )
+            : null,
+        drawer: _MenuDrawer(
+          activeIndex: _aktifSekme,
+          session: session.value,
+          loggedIn: loggedIn,
+          onSelect: _sekmeDegistir,
+          onLogout: () => _cikisYap(session),
+          onEnterCode: () {
+            Navigator.of(context).pop(); // çekmeceyi kapat
+            showLeagueCodeDialog(this.context);
+          },
+        ),
+        // Görülebilen turnuvalar değişince (giriş/çıkış, kod) ekranlar
+        // baştan kurulur ve verilerini yeniden okur.
+        body: ValueListenableBuilder<int>(
+          valueListenable: LeagueAccess.dataEpoch,
+          builder: (context, epoch, _) => KeyedSubtree(
+            key: ValueKey('data_$epoch'),
+            // Ana sekmeler parmakla kaydırılır (Ana Sayfa → Haberler →
+            // Fikstür → Puan Durumu → İstatistik); Profil menüden açılır ve
+            // sekmelerin üstünde durur.
+            child: Stack(
+              children: [
+                _TabPager(
+                  index: _aktifSekme < 5 ? _aktifSekme : null,
+                  onChanged: (i) => setState(() => _aktifSekme = i),
+                  onSwipePastFirst: () =>
+                      _scaffoldKey.currentState?.openDrawer(),
+                  children: ekranlar.take(5).toList(),
                 ),
-              ),
-            ],
+                Offstage(
+                  offstage: _aktifSekme != 5,
+                  child: TickerMode(
+                    enabled: _aktifSekme == 5,
+                    child: ekranlar[5],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
