@@ -55,9 +55,14 @@ class _MainNavigatorState extends State<MainNavigator> {
     MainNavigator.tabRequest.addListener(_onTabRequest);
   }
 
+  /// Bu gezginin sayfası (bant turnuva seçicisini yalnızca bu sayfa en
+  /// üstteyken gösterir).
+  ModalRoute<dynamic>? _route;
+
   @override
   void dispose() {
     MainNavigator.tabRequest.removeListener(_onTabRequest);
+    LeagueSwitchScope.clearHome(_route);
     super.dispose();
   }
 
@@ -114,6 +119,10 @@ class _MainNavigatorState extends State<MainNavigator> {
   @override
   Widget build(BuildContext context) {
     final session = AppSession.of(context);
+    _route = ModalRoute.of(context);
+    // Turnuva seçicisi yalnızca ana sekmelerde (Profil / yönetim panelinde
+    // değil).
+    LeagueSwitchScope.setHome(_route, mainTab: _aktifSekme < 5);
     final user = session.value.user;
     final loggedIn = user != null && !user.isAnonymous;
     final ekranlar = <Widget>[

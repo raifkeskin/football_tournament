@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
 import '../app_navigator.dart';
 import '../services/active_tournament.dart';
@@ -163,6 +164,104 @@ class AppNameBand extends StatelessWidget {
   }
 }
 
+/// Turnuva seçicisi yalnızca ana sekmelerde (Ana Sayfa, Haberler, Fikstür,
+/// Puan Durumu, İstatistik) görünür. Üstüne açılan sayfalarda (takım kadrosu,
+/// maç detayı, yönetim ekranları) ve Profil / yönetim panelinde turnuva
+/// değiştirmek ekrandakini değiştirmediği için gizlenir.
+class LeagueSwitchScope {
+  LeagueSwitchScope._();
+
+  static final enabled = ValueNotifier<bool>(false);
+
+  static Route<dynamic>? _homeRoute;
+  static var _mainTab = false;
+  static _TopPageObserver? _observer;
+  static int? _observerEpoch;
+
+  /// Kök gezginin gözlemcisi. Uygulama baştan kurulunca (yeni gezgin) yenisi
+  /// verilir: bir gözlemci aynı anda tek gezgine bağlanabilir.
+  static NavigatorObserver observerFor(int epoch) {
+    if (_observer == null || _observerEpoch != epoch) {
+      _observer = _TopPageObserver();
+      _observerEpoch = epoch;
+    }
+    return _observer!;
+  }
+
+  /// Ana gezgin: kendi sayfası ve açık sekmenin ana sekme olup olmadığı.
+  static void setHome(Route<dynamic>? route, {required bool mainTab}) {
+    _homeRoute = route;
+    _mainTab = mainTab;
+    _update();
+  }
+
+  static void clearHome(Route<dynamic>? route) {
+    if (route != null && _homeRoute == route) {
+      _homeRoute = null;
+      _update();
+    }
+  }
+
+  static void _update() {
+    final home = _homeRoute;
+    final v = home != null && _mainTab && _observer?.topPage == home;
+    if (enabled.value == v) return;
+    // Gezinme ya da çizim sırasında bandı yeniden kurmak hata verir: çerçeve
+    // bitince uygula.
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      SchedulerBinding.instance.addPostFrameCallback((_) => _update());
+      return;
+    }
+    enabled.value = v;
+  }
+}
+
+/// En üstteki tam sayfayı izler (açılır pencereler / diyaloglar sayılmaz).
+class _TopPageObserver extends NavigatorObserver {
+  final _stack = <Route<dynamic>>[];
+
+  Route<dynamic>? get topPage {
+    for (var i = _stack.length - 1; i >= 0; i--) {
+      if (_stack[i] is PageRoute) return _stack[i];
+    }
+    return null;
+  }
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _stack.add(route);
+    LeagueSwitchScope._update();
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _stack.remove(route);
+    LeagueSwitchScope._update();
+  }
+
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _stack.remove(route);
+    LeagueSwitchScope._update();
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    final i = oldRoute == null ? -1 : _stack.indexOf(oldRoute);
+    if (newRoute != null) {
+      if (i >= 0) {
+        _stack[i] = newRoute;
+      } else {
+        _stack.add(newRoute);
+      }
+    } else if (i >= 0) {
+      _stack.removeAt(i);
+    }
+    LeagueSwitchScope._update();
+  }
+}
+
 /// Bandın konumu (açılır liste bandın hemen altına yerleşir).
 final _bandKey = GlobalKey();
 
@@ -178,10 +277,16 @@ class LeagueSwitchButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<List<LeagueChoice>>(
-      valueListenable: ActiveTournament.myLeagues,
-      builder: (context, leagues, _) {
-        if (leagues.length < 2) return const SizedBox.shrink();
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        ActiveTournament.myLeagues,
+        LeagueSwitchScope.enabled,
+      ]),
+      builder: (context, _) {
+        if (ActiveTournament.myLeagues.value.length < 2 ||
+            !LeagueSwitchScope.enabled.value) {
+          return const SizedBox.shrink();
+        }
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () => showLeagueSwitcher(),
@@ -212,7 +317,12 @@ class LeagueSwitchButton extends StatelessWidget {
 Future<void> showLeagueSwitcher() async {
   final nav = appNavigatorKey.currentState;
   final box = _bandKey.currentContext?.findRenderObject() as RenderBox?;
-  if (nav == null || box == null || _switcherOpen.value) return;
+  if (nav == null ||
+      box == null ||
+      _switcherOpen.value ||
+      !LeagueSwitchScope.enabled.value) {
+    return;
+  }
   final band = box.localToGlobal(Offset.zero) & box.size;
   _switcherOpen.value = true;
   final picked = await nav.push<String>(_LeagueDropdownRoute(band: band));
