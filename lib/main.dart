@@ -15,6 +15,7 @@ import 'core/widgets/app_logo.dart';
 import 'core/widgets/web_safe_image.dart';
 import 'core/widgets/web_responsive_frame.dart';
 import 'core/utils/app_activity.dart';
+import 'core/services/error_reporter.dart';
 
 bool _showLoginGate() {
   final user = Supabase.instance.client.auth.currentUser;
@@ -25,6 +26,8 @@ bool _showLoginGate() {
 /// Uygulama giriş noktası.
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Hatalar kaydedilir; ekran yerleşemezse "Bir sorun oluştu" kartı.
+  ErrorReporter.init();
   await Supabase.initialize(
     url: AppConfig.supabaseUrl,
     anonKey: AppConfig.supabaseAnonKey,
@@ -237,6 +240,29 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   late final AppSessionController _sessionController = AppSessionController();
 
+  @override
+  void initState() {
+    super.initState();
+    ErrorReporter.roleProvider = () {
+      final s = _sessionController.value;
+      if (s.user == null || s.user!.isAnonymous) return null;
+      final roles = [
+        if (s.isAdmin) 'admin',
+        if (s.isLeagueOwner) 'owner',
+        if (s.isRegionOwner) 'region',
+        if (s.isManager || s.managedTeams.isNotEmpty) 'manager',
+        if (s.playerId != null) 'player',
+      ];
+      return roles.isEmpty ? s.role : roles.join('+');
+    };
+    // Yenile: başlangıç ekranı (giriş kapısı / açılış) güncel oturuma göre.
+    ErrorReporter.epoch.addListener(_onRestart);
+  }
+
+  void _onRestart() {
+    if (mounted) setState(() {});
+  }
+
   static const Color _headerForest = Color(0xFF064E3B);
   static const Color _bgDark = Color(0xFF0F172A);
   static const Color _cardDark = Color(0xFF1E293B);
@@ -400,7 +426,9 @@ class _MyAppState extends State<MyApp> {
         ),
         builder: (context, child) {
           if (child == null) return const SizedBox.shrink();
-          return WebResponsiveFrame(child: AppNameBand(child: child));
+          return WebResponsiveFrame(
+            child: AppNameBand(child: ErrorRecoveryOverlay(child: child)),
+          );
         },
         // Oturum yoksa ve misafir seçimi yapılmadıysa uygulama doğrudan giriş
         // ekranıyla açılır; aksi halde (kişinin turnuvasıyla) açılış ekranı.
@@ -413,6 +441,7 @@ class _MyAppState extends State<MyApp> {
 
   @override
   void dispose() {
+    ErrorReporter.epoch.removeListener(_onRestart);
     _sessionController.dispose();
     super.dispose();
   }
