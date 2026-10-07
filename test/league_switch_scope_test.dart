@@ -16,7 +16,11 @@ class _HomeState extends State<_Home> {
     return ValueListenableBuilder<bool>(
       valueListenable: _mainTab,
       builder: (context, main, _) {
-        LeagueSwitchScope.setHome(ModalRoute.of(context), mainTab: main);
+        LeagueSwitchScope.setHome(
+          ModalRoute.of(context),
+          mainTab: main,
+          panelTab: !main,
+        );
         return const Text('ana');
       },
     );
@@ -60,5 +64,20 @@ void main() {
     _mainTab.value = false;
     await tester.pumpAndSettle();
     expect(LeagueSwitchScope.enabled.value, isFalse);
+    expect(LeagueSwitchScope.panel.value, isTrue);
+
+    // Panelden açılan yönetim ekranında da turnuva bandı yok.
+    nav.currentState!.push(
+      MaterialPageRoute<void>(builder: (_) => const Text('takım yönetimi')),
+    );
+    await tester.pumpAndSettle();
+    expect(LeagueSwitchScope.panel.value, isTrue);
+    nav.currentState!.pop();
+    await tester.pumpAndSettle();
+
+    _mainTab.value = true;
+    await tester.pumpAndSettle();
+    expect(LeagueSwitchScope.panel.value, isFalse);
+    expect(LeagueSwitchScope.enabled.value, isTrue);
   });
 }

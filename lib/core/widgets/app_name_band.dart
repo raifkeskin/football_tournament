@@ -45,9 +45,13 @@ class AppNameBand extends StatelessWidget {
                 ActiveTournament.theme,
                 genericScreens,
                 panelActions,
+                LeagueSwitchScope.panel,
               ]),
               builder: (context, tvlBand) {
-                final t = ActiveTournament.theme.value;
+                // Yönetim panelinde turnuva kimliği yok: uygulama bandı.
+                final t = LeagueSwitchScope.panel.value
+                    ? null
+                    : ActiveTournament.theme.value;
                 final actions = genericScreens.value > 0
                     ? null
                     : panelActions.value;
@@ -173,6 +177,10 @@ class LeagueSwitchScope {
 
   static final enabled = ValueNotifier<bool>(false);
 
+  /// Yönetim paneli (ve üstüne açılan yönetim ekranları): bant turnuva
+  /// kimliği yerine uygulama bandını gösterir; panel tüm turnuvaları yönetir.
+  static final panel = ValueNotifier<bool>(false);
+
   static Route<dynamic>? _homeRoute;
   static var _mainTab = false;
   static _TopPageObserver? _observer;
@@ -189,23 +197,32 @@ class LeagueSwitchScope {
   }
 
   /// Ana gezgin: kendi sayfası ve açık sekmenin ana sekme olup olmadığı.
-  static void setHome(Route<dynamic>? route, {required bool mainTab}) {
+  static void setHome(
+    Route<dynamic>? route, {
+    required bool mainTab,
+    bool panelTab = false,
+  }) {
     _homeRoute = route;
     _mainTab = mainTab;
+    _panelTab = panelTab;
     _update();
   }
 
   static void clearHome(Route<dynamic>? route) {
     if (route != null && _homeRoute == route) {
       _homeRoute = null;
+      _panelTab = false;
       _update();
     }
   }
 
+  static var _panelTab = false;
+
   static void _update() {
     final home = _homeRoute;
     final v = home != null && _mainTab && _observer?.topPage == home;
-    if (enabled.value == v) return;
+    final p = home != null && _panelTab;
+    if (enabled.value == v && panel.value == p) return;
     // Gezinme ya da çizim sırasında bandı yeniden kurmak hata verir: çerçeve
     // bitince uygula.
     if (SchedulerBinding.instance.schedulerPhase ==
@@ -214,6 +231,7 @@ class LeagueSwitchScope {
       return;
     }
     enabled.value = v;
+    panel.value = p;
   }
 }
 

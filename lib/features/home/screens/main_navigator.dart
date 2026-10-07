@@ -122,7 +122,13 @@ class _MainNavigatorState extends State<MainNavigator> {
     _route = ModalRoute.of(context);
     // Turnuva seçicisi yalnızca ana sekmelerde (Profil / yönetim panelinde
     // değil).
-    LeagueSwitchScope.setHome(_route, mainTab: _aktifSekme < 5);
+    LeagueSwitchScope.setHome(
+      _route,
+      mainTab: _aktifSekme < 5,
+      panelTab:
+          _aktifSekme == MainNavigator.profileTab &&
+          session.value.hasManagementPanel,
+    );
     final user = session.value.user;
     final loggedIn = user != null && !user.isAnonymous;
     final ekranlar = <Widget>[
