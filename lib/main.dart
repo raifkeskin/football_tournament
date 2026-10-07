@@ -293,6 +293,9 @@ class _MyAppState extends State<MyApp> {
       controller: _sessionController,
       child: MaterialApp(
         navigatorKey: appNavigatorKey,
+        navigatorObservers: [
+          LeagueSwitchScope.observerFor(ErrorReporter.epoch.value),
+        ],
         title: kAppName,
         debugShowCheckedModeBanner: false,
         localizationsDelegates: const [
