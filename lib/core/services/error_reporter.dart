@@ -149,16 +149,16 @@ class ErrorRecoveryOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     return ValueListenableBuilder<int>(
       valueListenable: ErrorReporter.epoch,
+      // Tüm alanı kaplar: üstteki sütun genişliği gevşek verir; yığın
+      // boyutunu çocuklarından alırsa uygulama sıfır genişlikte kalır.
       builder: (context, epoch, _) => Stack(
+        fit: StackFit.expand,
         children: [
-          Positioned.fill(
-            child: KeyedSubtree(key: ValueKey('app_$epoch'), child: child),
-          ),
+          KeyedSubtree(key: ValueKey('app_$epoch'), child: child),
           ValueListenableBuilder<bool>(
             valueListenable: ErrorReporter.broken,
-            builder: (context, broken, _) => broken
-                ? const Positioned.fill(child: _ErrorCard())
-                : const SizedBox.shrink(),
+            builder: (context, broken, _) =>
+                broken ? const _ErrorCard() : const SizedBox.shrink(),
           ),
         ],
       ),

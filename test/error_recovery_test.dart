@@ -18,6 +18,26 @@ class _CounterState extends State<_Counter> {
 }
 
 void main() {
+  testWidgets('gevşek genişlikte (bantlı sütun) tüm alanı kaplar', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Column(
+          children: [
+            SizedBox(height: 50),
+            Expanded(
+              child: ErrorRecoveryOverlay(child: ColoredBox(color: Colors.red)),
+            ),
+          ],
+        ),
+      ),
+    );
+    final size = tester.getSize(find.byType(ColoredBox).last);
+    expect(size.width, 800);
+    expect(size.height, 550);
+  });
+
   testWidgets('kart açılır, Yenile ağacı baştan kurar', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(home: ErrorRecoveryOverlay(child: _Counter())),
