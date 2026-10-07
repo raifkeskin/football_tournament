@@ -691,7 +691,8 @@ class _LeaderCard extends StatelessWidget {
     return GestureDetector(
       onTap: () => showPlayerCard(context, playerKey: s.playerPhone),
       child: Container(
-        height: 156,
+        // En az 156: takım satırı da olunca içerik taşmasın, kart uzasın.
+        constraints: const BoxConstraints(minHeight: 156),
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(22),
