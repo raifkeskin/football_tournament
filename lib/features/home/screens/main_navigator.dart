@@ -53,6 +53,11 @@ class _MainNavigatorState extends State<MainNavigator> {
   void initState() {
     super.initState();
     MainNavigator.tabRequest.addListener(_onTabRequest);
+    AppSettings.bottomNavEnabled.addListener(_onSettings);
+  }
+
+  void _onSettings() {
+    if (mounted) setState(() {});
   }
 
   /// Bu gezginin sayfası (bant turnuva seçicisini yalnızca bu sayfa en
@@ -62,6 +67,7 @@ class _MainNavigatorState extends State<MainNavigator> {
   @override
   void dispose() {
     MainNavigator.tabRequest.removeListener(_onTabRequest);
+    AppSettings.bottomNavEnabled.removeListener(_onSettings);
     LeagueSwitchScope.clearHome(_route);
     super.dispose();
   }
@@ -157,12 +163,13 @@ class _MainNavigatorState extends State<MainNavigator> {
       child: Scaffold(
         key: _scaffoldKey,
         extendBody: !kNewHomeDesign,
-        // Yönetim paneli (Profil sekmesi, yetkili) açıkken alt çubuk yok;
-        // gezinme bantaki menüden.
+        // Alt çubuk yok: admin ayarı kapalıysa ya da Profil sekmesinde yönetim
+        // paneli / giriş formu açıkken (gezinme bantaki ya da yan menüden).
         bottomNavigationBar:
             kNewHomeDesign &&
+                AppSettings.bottomNavEnabled.value &&
                 !(_aktifSekme == MainNavigator.profileTab &&
-                    session.value.hasManagementPanel)
+                    (session.value.hasManagementPanel || !loggedIn))
             ? _BottomBar(
                 index: _aktifSekme,
                 onTap: (i) => setState(() => _aktifSekme = i),
