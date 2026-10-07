@@ -183,18 +183,9 @@ class LeagueSwitchScope {
 
   static Route<dynamic>? _homeRoute;
   static var _mainTab = false;
-  static _TopPageObserver? _observer;
-  static int? _observerEpoch;
 
-  /// Kök gezginin gözlemcisi. Uygulama baştan kurulunca (yeni gezgin) yenisi
-  /// verilir: bir gözlemci aynı anda tek gezgine bağlanabilir.
-  static NavigatorObserver observerFor(int epoch) {
-    if (_observer == null || _observerEpoch != epoch) {
-      _observer = _TopPageObserver();
-      _observerEpoch = epoch;
-    }
-    return _observer!;
-  }
+  /// Kök gezginin gözlemcisi (MaterialApp.navigatorObservers).
+  static final NavigatorObserver observer = _TopPageObserver();
 
   /// Ana gezgin: kendi sayfası ve açık sekmenin ana sekme olup olmadığı.
   static void setHome(
@@ -220,7 +211,10 @@ class LeagueSwitchScope {
 
   static void _update() {
     final home = _homeRoute;
-    final v = home != null && _mainTab && _observer?.topPage == home;
+    final v =
+        home != null &&
+        _mainTab &&
+        (observer as _TopPageObserver).topPage == home;
     final p = home != null && _panelTab;
     if (enabled.value == v && panel.value == p) return;
     // Gezinme ya da çizim sırasında bandı yeniden kurmak hata verir: çerçeve

@@ -14,8 +14,10 @@ class ErrorReporter {
   /// Ekran çizilemedi (yerleşim/çizim hatası): kök kart gösterilir.
   static final broken = ValueNotifier<bool>(false);
 
-  /// Yenile: uygulama ağacı bu sayı değişince baştan kurulur.
-  static final epoch = ValueNotifier<int>(0);
+  /// Yenile: gezgindeki tüm sayfaları kapatıp başlangıç sayfasını (ana
+  /// sayfa ya da giriş) temiz açar. Uygulama ağacı yeniden kurulmaz: genel
+  /// anahtarlar (gezgin, ana gezginin Scaffold'u) iki ağaçta birden olamaz.
+  static VoidCallback? restartHandler;
 
   /// Hatanın kimde olduğu (rol) — oturum denetleyicisi verir.
   static String? Function()? roleProvider;
@@ -70,7 +72,11 @@ class ErrorReporter {
   /// Uygulamayı baştan kurar (oturum korunur).
   static void restart() {
     broken.value = false;
-    epoch.value++;
+    try {
+      restartHandler?.call();
+    } catch (e, st) {
+      report(e, st, context: 'restart');
+    }
   }
 
   static void dismiss() => broken.value = false;
@@ -147,21 +153,18 @@ class ErrorRecoveryOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<int>(
-      valueListenable: ErrorReporter.epoch,
-      // Tüm alanı kaplar: üstteki sütun genişliği gevşek verir; yığın
-      // boyutunu çocuklarından alırsa uygulama sıfır genişlikte kalır.
-      builder: (context, epoch, _) => Stack(
-        fit: StackFit.expand,
-        children: [
-          KeyedSubtree(key: ValueKey('app_$epoch'), child: child),
-          ValueListenableBuilder<bool>(
-            valueListenable: ErrorReporter.broken,
-            builder: (context, broken, _) =>
-                broken ? const _ErrorCard() : const SizedBox.shrink(),
-          ),
-        ],
-      ),
+    // Tüm alanı kaplar: üstteki sütun genişliği gevşek verir; yığın
+    // boyutunu çocuklarından alırsa uygulama sıfır genişlikte kalır.
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        child,
+        ValueListenableBuilder<bool>(
+          valueListenable: ErrorReporter.broken,
+          builder: (context, broken, _) =>
+              broken ? const _ErrorCard() : const SizedBox.shrink(),
+        ),
+      ],
     );
   }
 }

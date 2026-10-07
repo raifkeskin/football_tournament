@@ -28,14 +28,17 @@ class _HomeState extends State<_Home> {
 }
 
 void main() {
-  testWidgets('seçici yalnızca ana sekmede ve ana sayfa üstteyken',
-      (tester) async {
+  testWidgets('seçici yalnızca ana sekmede ve ana sayfa üstteyken', (
+    tester,
+  ) async {
     final nav = GlobalKey<NavigatorState>();
-    await tester.pumpWidget(MaterialApp(
-      navigatorKey: nav,
-      navigatorObservers: [LeagueSwitchScope.observerFor(0)],
-      home: const _Home(),
-    ));
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: nav,
+        navigatorObservers: [LeagueSwitchScope.observer],
+        home: const _Home(),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(LeagueSwitchScope.enabled.value, isTrue);
 
