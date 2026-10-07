@@ -16,6 +16,7 @@ import 'core/widgets/web_safe_image.dart';
 import 'core/widgets/web_responsive_frame.dart';
 import 'core/utils/app_activity.dart';
 import 'core/services/error_reporter.dart';
+import 'core/services/notification_center.dart';
 
 bool _showLoginGate() {
   final user = Supabase.instance.client.auth.currentUser;
@@ -34,6 +35,8 @@ void main() async {
   );
   // Arka planda canlı bağlantılar kapansın (eşzamanlı bağlantı sınırı).
   AppActivity.start();
+  // Zildeki okunmamış bildirim sayısı.
+  NotificationCenter.start();
 
   // "Beni Hatırla" işaretlenmediyse önceki oturumu kapat: uygulama giriş
   // ekranıyla açılır.
