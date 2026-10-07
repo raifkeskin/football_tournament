@@ -296,6 +296,7 @@ class _PlayerCardState extends State<PlayerCard> {
       add(mid, const _StatTotals(matches: 1));
     }
 
+    final yellowMatches = <String>{};
     for (final e in events) {
       final mid = (e['match_id'] ?? '').toString();
       final type = (e['event_type'] ?? '').toString();
@@ -311,7 +312,13 @@ class _PlayerCardState extends State<PlayerCard> {
           case 'assist':
             add(mid, const _StatTotals(assists: 1));
           case 'yellow_card':
-            add(mid, const _StatTotals(yellow: 1));
+            // Aynı maçta ikinci sarı: iki sarı yerine bir kırmızı sayılır.
+            add(
+              mid,
+              yellowMatches.add(mid)
+                  ? const _StatTotals(yellow: 1)
+                  : const _StatTotals(yellow: -1, red: 1),
+            );
           case 'red_card':
             add(mid, const _StatTotals(red: 1));
           case 'man_of_the_match':
