@@ -3886,7 +3886,15 @@ class _DetailTabView extends StatelessWidget {
               return title;
             }
 
+            // Kendi kalesine gol, golün yazıldığı (rakip) takım tarafında.
+            final sideTeamId = type == 'goal' && isOwnGoal
+                ? (teamId == match.homeTeamId
+                      ? match.awayTeamId
+                      : match.homeTeamId)
+                : teamId;
             return _DetailEventTile(
+              eventId: system ? '' : _readString(e['id']),
+              match: match,
               minute: minute,
               fullTime: period * 2,
               type: type,
@@ -3898,7 +3906,7 @@ class _DetailTabView extends StatelessWidget {
                   ? 'Çift sarıdan ihraç'
                   : null,
               subInName: type == 'substitution' ? subIn : '',
-              teamId: teamId,
+              teamId: sideTeamId,
               homeTeamId: match.homeTeamId,
               system: system,
               playerId: pickPlayerId(e),
@@ -3911,6 +3919,9 @@ class _DetailTabView extends StatelessWidget {
 }
 
 class _DetailEventTile extends StatelessWidget {
+  /// Dolu ise yetkili kullanıcı uzun basarak olayı silebilir.
+  final String eventId;
+  final MatchModel match;
   final int minute;
 
   /// Normal maç süresi (2 devre); aşan dakika "60+4'" gösterilir.
@@ -3928,6 +3939,8 @@ class _DetailEventTile extends StatelessWidget {
   /// Dolu ise satıra dokununca oyuncu kartı açılır.
   final String playerId;
   const _DetailEventTile({
+    required this.eventId,
+    required this.match,
     required this.minute,
     required this.fullTime,
     required this.type,
@@ -4164,12 +4177,52 @@ class _DetailEventTile extends StatelessWidget {
                     ],
             ),
     );
-    if (playerId.isEmpty) return tile;
+    final session = AppSession.of(context).value;
+    // Olay girebilenler (admin, turnuva sahibi, gözlemci) silebilir.
+    final canDelete =
+        eventId.isNotEmpty &&
+        (session.canManageLeague(match.leagueId) ||
+            (match.observerId != null &&
+                match.observerId == session.user?.id));
+    if (playerId.isEmpty && !canDelete) return tile;
     return InkWell(
       borderRadius: BorderRadius.circular(12),
-      onTap: () => showPlayerCard(context, playerKey: playerId),
+      onTap: playerId.isEmpty
+          ? null
+          : () => showPlayerCard(context, playerKey: playerId),
+      onLongPress: canDelete ? () => _confirmDelete(context) : null,
       child: tile,
     );
+  }
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Olayı sil'),
+        content: Text(
+          '$minute\' ${title.isEmpty ? 'olay' : title} kaydı silinsin mi?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Vazgeç'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Sil', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await ServiceLocator.matchService.deleteMatchEvent(eventId);
+      messenger.showSnackBar(const SnackBar(content: Text('Olay silindi.')));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Silinemedi: $e')));
+    }
   }
 }
 
