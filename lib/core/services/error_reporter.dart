@@ -31,6 +31,9 @@ class ErrorReporter {
 
     FlutterError.onError = (details) {
       FlutterError.presentError(details);
+      // Taşma (overflow) yalnızca görsel bir uyarıdır (release'de hiç
+      // bildirilmez): ekranı bozmaz, kart açılmaz.
+      final overflow = details.exception.toString().contains('overflowed');
       report(
         details.exception,
         details.stack,
@@ -38,9 +41,12 @@ class ErrorReporter {
           details.library,
           details.context?.toDescription(),
         ].whereType<String>().join(' · '),
+        // Yığını olmayan hatalarda (taşma) ayrıntı, hangi widget'ın taştığını
+        // söyler ("The relevant error-causing widget was ...").
+        detail: details.stack == null ? details.toString() : null,
       );
       // Yerleşim/çizim hatası ağacın bir kısmını çizilmez bırakır (boş ekran).
-      if (details.library == 'rendering library') _markBroken();
+      if (details.library == 'rendering library' && !overflow) _markBroken();
     };
 
     PlatformDispatcher.instance.onError = (error, stack) {
@@ -85,7 +91,12 @@ class ErrorReporter {
       kIsWeb ? 'web' : defaultTargetPlatform.name.toLowerCase();
 
   /// Hatayı bir kez (oturum başına parmak izi) sunucuya yazar.
-  static void report(Object error, StackTrace? stack, {String? context}) {
+  static void report(
+    Object error,
+    StackTrace? stack, {
+    String? context,
+    String? detail,
+  }) {
     try {
       final message = error.toString();
       final stackText = stack?.toString() ?? '';
@@ -102,7 +113,9 @@ class ErrorReporter {
               params: {
                 'p_fingerprint': fp,
                 'p_message': message,
-                'p_stack': _trimStack(stackText),
+                'p_stack': _trimStack(
+                  stackText.isEmpty ? (detail ?? '') : stackText,
+                ),
                 'p_context': context,
                 'p_platform': _platform,
                 'p_app_version': _version,

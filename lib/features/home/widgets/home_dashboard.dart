@@ -572,6 +572,20 @@ class _HomeDashboardState extends State<HomeDashboard> {
       m.status == MatchStatus.live || m.status == MatchStatus.halftime;
 
   static const _days = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
+  static const _monthsLong = [
+    'Ocak',
+    'Şubat',
+    'Mart',
+    'Nisan',
+    'Mayıs',
+    'Haziran',
+    'Temmuz',
+    'Ağustos',
+    'Eylül',
+    'Ekim',
+    'Kasım',
+    'Aralık',
+  ];
   static const _daysLong = [
     'Pazartesi',
     'Salı',
@@ -1221,6 +1235,20 @@ class _HomeDashboardState extends State<HomeDashboard> {
                       kTr == null ? 'Tarih yok' : _daysLong[kTr.weekday - 1],
                       style: _barlow(size: 12, color: DashColors.muted),
                     ),
+                    // Tarih (ör. 6 Ekim 2026): hafta numarası tarihi söylemez.
+                    if (kTr != null)
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          '${kTr.day} ${_monthsLong[kTr.month - 1]} ${kTr.year}',
+                          maxLines: 1,
+                          style: _barlow(
+                            size: 12,
+                            weight: FontWeight.w700,
+                            color: DashColors.muted,
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
