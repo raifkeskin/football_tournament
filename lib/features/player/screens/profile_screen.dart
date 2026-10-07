@@ -152,10 +152,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
     if (choice == 'logout') {
-      setState(() => _isLoading = true);
-      await session.signOut();
-      if (mounted) setState(() => _isLoading = false);
+      // Önce giriş ekranı, sonra oturum kapanır: kapanış anında ekranların
+      // misafir olarak yeniden çizildiği ara görüntü kullanıcıya görünmez.
       await _toLoginGate();
+      await session.signOut();
     } else if (choice == 'delete') {
       await _deleteAccount(session);
     }
