@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../app_navigator.dart';
 import '../services/active_tournament.dart';
 import 'app_logo.dart';
+import 'notification_bell.dart';
 import 'web_safe_image.dart';
 
 /// Uygulama adı.
@@ -57,7 +58,13 @@ class AppNameBand extends StatelessWidget {
                       : const Positioned(
                           right: 4,
                           bottom: 3,
-                          child: LeagueSwitchButton(),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              LeagueSwitchButton(),
+                              NotificationBell(),
+                            ],
+                          ),
                         );
                   if (actions == null) {
                     return switcher == null
@@ -75,7 +82,13 @@ class AppNameBand extends StatelessWidget {
                       Positioned(
                         right: 4,
                         bottom: 3,
-                        child: actions.logoutButton(),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const NotificationBell(),
+                            actions.logoutButton(),
+                          ],
+                        ),
                       ),
                     ],
                   );
@@ -456,10 +469,12 @@ class _TournamentBand extends StatelessWidget {
                 child: const AppLogo(size: 26),
               ),
             ),
+            const SizedBox(width: 2),
+            const NotificationBell(),
             if (actions != null)
               actions!.logoutButton()
             else
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
           ],
         ),
       ),
