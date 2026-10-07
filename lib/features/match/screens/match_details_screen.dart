@@ -3888,6 +3888,7 @@ class _DetailTabView extends StatelessWidget {
 
             return _DetailEventTile(
               minute: minute,
+              fullTime: period * 2,
               type: type,
               title: displayTitle(),
               // Asist, gol atanın altında daha küçük ve soluk gösterilir.
@@ -3911,6 +3912,9 @@ class _DetailTabView extends StatelessWidget {
 
 class _DetailEventTile extends StatelessWidget {
   final int minute;
+
+  /// Normal maç süresi (2 devre); aşan dakika "60+4'" gösterilir.
+  final int fullTime;
   final String type;
   final String title;
   final String? subtitle;
@@ -3925,6 +3929,7 @@ class _DetailEventTile extends StatelessWidget {
   final String playerId;
   const _DetailEventTile({
     required this.minute,
+    required this.fullTime,
     required this.type,
     required this.title,
     this.subtitle,
@@ -4027,7 +4032,11 @@ class _DetailEventTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final bool isHome = teamId == homeTeamId;
     // Maçın adamının dakikası yoktur.
-    final String min = type == 'man_of_the_match' ? '' : "$minute'";
+    final String min = type == 'man_of_the_match'
+        ? ''
+        : minute > fullTime
+        ? "$fullTime+${minute - fullTime}'"
+        : "$minute'";
 
     Widget icon;
     if (system) {

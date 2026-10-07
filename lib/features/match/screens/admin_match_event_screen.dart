@@ -500,13 +500,63 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
     );
   }
 
+  /// Formda girilmiş ama kaydedilmemiş bir şey var mı?
+  bool get _isDirty =>
+      _minuteController.text.trim().isNotEmpty ||
+      _selectedPlayer != null ||
+      _selectedAssist != null ||
+      _selectedSubIn != null ||
+      _isOwnGoal ||
+      _eventType != 'goal' ||
+      _teamId != widget.match.homeTeamId;
+
+  /// Boşluğa dokunma, geri tuşu ya da kapat: kaydedilmemiş değişiklik
+  /// varsa önce onay ister.
+  Future<void> _confirmClose() async {
+    if (_isLoading) return;
+    if (!_isDirty) {
+      Navigator.pop(context);
+      return;
+    }
+    final leave = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Değişiklik kaydedilmedi'),
+        content: const Text(
+          'Girdiğiniz bilgiler kaydedilmedi. Çıkmak istiyor musunuz?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Vazgeç'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Çık'),
+          ),
+        ],
+      ),
+    );
+    if (leave == true && mounted) Navigator.pop(context);
+  }
+
   /// Ortak popup çerçevesi; klavye açılınca içerik kaydırılabilir.
   Widget _frame({required List<Widget> children}) {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _confirmClose();
+      },
+      child: _dialog(children),
+    );
+  }
+
+  Widget _dialog(List<Widget> children) {
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       child: AdminDialogCloseOverlay(
-        onClose: _isLoading ? null : () => Navigator.pop(context),
+        onClose: _isLoading ? null : _confirmClose,
         child: Container(
           decoration: adminDialogDecoration(),
           child: SingleChildScrollView(
