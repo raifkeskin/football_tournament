@@ -39,6 +39,45 @@ import '../../player/services/penalty_service.dart';
 // --- YARDIMCI WIDGETLAR ---
 
 /// Çift sarıdan ihraç: arkada sarı, önde kırmızı kart.
+/// Penaltı golü: top, altında "P" rozeti.
+class _PenaltyGoalIcon extends StatelessWidget {
+  const _PenaltyGoalIcon();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 20,
+      height: 20,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          const Icon(Icons.sports_soccer, size: 18, color: Colors.white),
+          Positioned(
+            right: -3,
+            bottom: -3,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 2.5),
+              decoration: BoxDecoration(
+                color: Colors.amber,
+                borderRadius: BorderRadius.circular(3),
+              ),
+              child: const Text(
+                'P',
+                style: TextStyle(
+                  color: Colors.black,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w900,
+                  height: 1.2,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _SecondYellowCardIcon extends StatelessWidget {
   const _SecondYellowCardIcon();
 
@@ -3874,13 +3913,21 @@ class _DetailTabView extends StatelessWidget {
                 (e['isOwnGoal'] as bool?) ??
                 (e['is_own_goal'] as bool?) ??
                 false;
+            final isPenalty =
+                (e['isPenalty'] as bool?) ??
+                (e['is_penalty'] as bool?) ??
+                false;
 
             String displayTitle() {
               if (type == 'substitution') {
                 return title.isEmpty ? 'Değişiklik' : title;
               }
               if (type == 'goal') {
-                final suffix = isOwnGoal ? ' (KK)' : '';
+                final suffix = isOwnGoal
+                    ? ' (KK)'
+                    : isPenalty
+                    ? ' (P)'
+                    : '';
                 return '${title.isEmpty ? 'Gol' : title}$suffix';
               }
               return title;
@@ -3894,6 +3941,7 @@ class _DetailTabView extends StatelessWidget {
                 : teamId;
             return _DetailEventTile(
               eventId: system ? '' : _readString(e['id']),
+              isPenalty: type == 'goal' && isPenalty,
               match: match,
               minute: minute,
               fullTime: period * 2,
@@ -3922,6 +3970,9 @@ class _DetailEventTile extends StatelessWidget {
   /// Dolu ise yetkili kullanıcı uzun basarak olayı silebilir.
   final String eventId;
   final MatchModel match;
+
+  /// Penaltı golü: top yerine penaltı noktası ikonu.
+  final bool isPenalty;
   final int minute;
 
   /// Normal maç süresi (2 devre); aşan dakika "60+4'" gösterilir.
@@ -3941,6 +3992,7 @@ class _DetailEventTile extends StatelessWidget {
   const _DetailEventTile({
     required this.eventId,
     required this.match,
+    this.isPenalty = false,
     required this.minute,
     required this.fullTime,
     required this.type,
@@ -4057,7 +4109,9 @@ class _DetailEventTile extends StatelessWidget {
     } else {
       switch (type) {
         case 'goal':
-          icon = const Icon(Icons.sports_soccer, size: 18, color: Colors.white);
+          icon = isPenalty
+              ? const _PenaltyGoalIcon()
+              : const Icon(Icons.sports_soccer, size: 18, color: Colors.white);
           break;
         case 'yellow_card':
           icon = const Icon(Icons.rectangle, color: Colors.yellow, size: 18);
