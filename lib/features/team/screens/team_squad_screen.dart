@@ -1049,21 +1049,32 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     }
   }
 
+  /// Kadroyu düzenleyebilir mi: bu takımın sorumlusu (team_managers), ya da
+  /// sezonun kurucu başkanı / takımın bölgesinin sorumlusu (veritabanındaki
+  /// kadro yazma kuralıyla aynı: owns_season_team). Başka takımın sorumlusu
+  /// ya da oyuncusu düzenleyemez. Admin ayrıca [build]'de.
   Future<void> _checkIfTeamManagerForTournament(String tournamentId) async {
     final session = AppSession.of(context).value;
-    if (session.isAdmin) {
+    final seasonId = tournamentId.trim();
+    if (session.isAdmin || seasonId.isEmpty) {
       if (_isTeamManager) setState(() => _isTeamManager = false);
       return;
     }
-
-    final isManager = await _teamService.isTeamManagerForTournament(
-      tournamentId: tournamentId,
-      teamId: widget.teamId,
-      playerPhone: session.phone,
-    );
-
+    var allowed = session.managesTeam(seasonId, widget.teamId);
+    if (!allowed && session.hasManagementPanel) {
+      try {
+        allowed =
+            await Supabase.instance.client.rpc(
+              'owns_season_team',
+              params: {'p_season_id': seasonId, 'p_team_id': widget.teamId},
+            ) ==
+            true;
+      } catch (_) {
+        allowed = false;
+      }
+    }
     if (!mounted) return;
-    setState(() => _isTeamManager = isManager);
+    setState(() => _isTeamManager = allowed);
   }
 
   Future<String?> _ensureSelectedTournament() async {
