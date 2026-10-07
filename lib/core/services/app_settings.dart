@@ -8,10 +8,15 @@ class AppSettings {
   AppSettings._();
 
   static const _kPrivateLeagues = 'private_leagues_enabled';
+  static const _kBottomNav = 'bottom_nav_enabled';
 
   /// Gizli turnuva özelliği. Kapalıyken "Turnuva Kodu Gir" ve "Gizli turnuva"
   /// alanları gizlenir; veritabanı da tüm turnuvaları herkese açar.
   static final privateLeaguesEnabled = ValueNotifier<bool>(false);
+
+  /// Ana ekranlardaki alt gezinme çubuğu. Kapalıyken gezinme yan menü ve
+  /// kaydırma ile (kayıt yoksa açık).
+  static final bottomNavEnabled = ValueNotifier<bool>(true);
 
   static SupabaseClient get _sb => Supabase.instance.client;
 
@@ -21,6 +26,8 @@ class AppSettings {
       for (final r in rows) {
         if (r['key'] == _kPrivateLeagues) {
           privateLeaguesEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kBottomNav) {
+          bottomNavEnabled.value = r['value'] != false;
         }
       }
     } catch (e) {
@@ -37,5 +44,15 @@ class AppSettings {
     });
     privateLeaguesEnabled.value = enabled;
     LeagueAccess.bump();
+  }
+
+  /// Yalnızca admin.
+  static Future<void> setBottomNavEnabled(bool enabled) async {
+    await _sb.from('app_settings').upsert({
+      'key': _kBottomNav,
+      'value': enabled,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    });
+    bottomNavEnabled.value = enabled;
   }
 }
