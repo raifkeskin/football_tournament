@@ -29,10 +29,14 @@ class MainNavigator extends StatefulWidget {
 
   /// Ana gezginin Scaffold'u: yan menü bant gibi gezgin dışındaki
   /// parçalardan da açılabilsin.
-  static final scaffoldKey = GlobalKey<ScaffoldState>();
+  ///
+  /// Anahtar her gezginin kendisine aittir: girişten sonra yeni gezgin açılırken
+  /// eskisi geçiş bitene kadar ağaçta kalır; ortak (static) anahtar iki
+  /// Scaffold'a birden verilince yeni sayfa boş kalıyordu.
+  static GlobalKey<ScaffoldState>? _activeScaffoldKey;
 
   /// Yan menüyü açar (ör. yönetim panelinde bantaki ☰).
-  static void openMenu() => scaffoldKey.currentState?.openDrawer();
+  static void openMenu() => _activeScaffoldKey?.currentState?.openDrawer();
 
   /// Gezgin dışından sekme değiştirme isteği (ör. canlı kura → Fikstür).
   static final tabRequest = ValueNotifier<int?>(null);
@@ -52,6 +56,7 @@ class _MainNavigatorState extends State<MainNavigator> {
   @override
   void initState() {
     super.initState();
+    MainNavigator._activeScaffoldKey = _scaffoldKey;
     MainNavigator.tabRequest.addListener(_onTabRequest);
     AppSettings.bottomNavEnabled.addListener(_onSettings);
   }
@@ -66,6 +71,9 @@ class _MainNavigatorState extends State<MainNavigator> {
 
   @override
   void dispose() {
+    if (MainNavigator._activeScaffoldKey == _scaffoldKey) {
+      MainNavigator._activeScaffoldKey = null;
+    }
     MainNavigator.tabRequest.removeListener(_onTabRequest);
     AppSettings.bottomNavEnabled.removeListener(_onSettings);
     LeagueSwitchScope.clearHome(_route);
@@ -80,7 +88,7 @@ class _MainNavigatorState extends State<MainNavigator> {
   }
 
   /// Yan menüyü kaydırma hareketinden açmak için.
-  GlobalKey<ScaffoldState> get _scaffoldKey => MainNavigator.scaffoldKey;
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
 
   void _sekmeDegistir(int index) {
     setState(() {
