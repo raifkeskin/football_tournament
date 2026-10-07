@@ -99,7 +99,6 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
 
   static const _eventTypes = [
     _PickerOption('goal', 'Gol'),
-    _PickerOption('assist', 'Asist'),
     _PickerOption('yellow_card', 'Sarı Kart'),
     _PickerOption('red_card', 'Kırmızı Kart'),
     _PickerOption('man_of_the_match', 'Maçın Adamı'),
