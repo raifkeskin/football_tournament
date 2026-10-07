@@ -23,12 +23,22 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
   final IMatchService _matchService = ServiceLocator.matchService;
   final ITeamService _teamService = ServiceLocator.teamService;
   String _eventType = 'goal';
+
+  /// Golden yararlanan takım (kendi kalesine golde de skor bu takıma yazılır).
   String? _teamId;
   LineupPlayer? _selectedPlayer;
   LineupPlayer? _selectedAssist;
   LineupPlayer? _selectedSubIn;
   bool _isOwnGoal = false;
   bool _isLoading = false;
+
+  /// Olayı yapan oyuncunun takımı: kendi kalesine golde rakip takım.
+  /// match_events.team_id oyuncunun takımıdır; skor rakibe yazılır.
+  String? get _playerTeamId {
+    if (_eventType != 'goal' || !_isOwnGoal) return _teamId;
+    final m = widget.match;
+    return _teamId == m.homeTeamId ? m.awayTeamId : m.homeTeamId;
+  }
 
   @override
   void initState() {
@@ -139,7 +149,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
         id: '',
         matchId: widget.match.id,
         leagueId: widget.match.leagueId,
-        teamId: _teamId!,
+        teamId: _playerTeamId!,
         eventType: _eventType,
         minute: minute,
         eventName: player.name.trim(),
@@ -220,9 +230,12 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
             : (nameById[widget.match.awayTeamId] ?? '').trim();
 
         return StreamBuilder<List<MatchRosterModel>>(
-          stream: (_teamId ?? '').trim().isEmpty
+          stream: (_playerTeamId ?? '').trim().isEmpty
               ? const Stream<List<MatchRosterModel>>.empty()
-              : _matchService.watchMatchRosters(widget.match.id, _teamId!),
+              : _matchService.watchMatchRosters(
+                  widget.match.id,
+                  _playerTeamId!,
+                ),
           builder: (context, rosterSnap) {
             final rosters = rosterSnap.data ?? [];
             final rosterPlayerIds = rosters.map((r) => r.playerId).toSet();
@@ -236,10 +249,10 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                 .toSet();
 
             return StreamBuilder<List<PlayerModel>>(
-              stream: (_teamId ?? '').trim().isEmpty
+              stream: (_playerTeamId ?? '').trim().isEmpty
                   ? const Stream<List<PlayerModel>>.empty()
                   : _teamService.watchPlayers(
-                      teamId: _teamId!,
+                      teamId: _playerTeamId!,
                       tournamentId: widget.match.seasonId,
                     ),
               builder: (context, playersSnap) {
@@ -321,7 +334,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                         ),
                         AdminSelectRow(
                           icon: Icons.shield_outlined,
-                          label: 'Takım',
+                          label: isGoal ? 'Golü Atan Takım' : 'Takım',
                           value: _teamId == widget.match.homeTeamId
                               ? homeName
                               : awayName,
@@ -433,7 +446,9 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                                 ? null
                                 : () => setState(() {
                                     _isOwnGoal = !_isOwnGoal;
-                                    if (_isOwnGoal) _selectedAssist = null;
+                                    // Oyuncu listesi rakip takıma geçer.
+                                    _selectedPlayer = null;
+                                    _selectedAssist = null;
                                   }),
                             trailing: Switch(
                               value: _isOwnGoal,
@@ -442,7 +457,8 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                                   ? null
                                   : (v) => setState(() {
                                       _isOwnGoal = v;
-                                      if (v) _selectedAssist = null;
+                                      _selectedPlayer = null;
+                                      _selectedAssist = null;
                                     }),
                             ),
                             child: Text(

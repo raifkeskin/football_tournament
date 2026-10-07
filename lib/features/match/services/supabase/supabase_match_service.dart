@@ -345,6 +345,64 @@ class SupabaseMatchService implements IMatchService {
   }
 
   @override
+  Future<void> deleteMatchEvent(String eventId) async {
+    final res = await _client
+        .from('match_events')
+        .select('match_id, team_id, event_type, is_own_goal')
+        .eq('id', eventId)
+        .limit(1);
+    if (res.isEmpty) return;
+    final e = (res.first as Map).cast<String, dynamic>();
+    final matchId = (e['match_id'] ?? '').toString();
+    // Hata yutulmaz: silinemezse ekran bunu bildirmeli.
+    final deleted = await _client
+        .from('match_events')
+        .delete()
+        .eq('id', eventId)
+        .select('id');
+    if (deleted.isEmpty) throw Exception('Olay silinemedi (yetki yok).');
+    notifyLocalChange(matchId);
+
+    if ((e['event_type'] ?? '').toString() != 'goal') return;
+    // Gol eklenince skor artırılmıştı; bitmiş maçta skor elle girildiği için
+    // dokunulmaz (bkz. addMatchEvent).
+    try {
+      final rows = await _client
+          .from('matches')
+          .select('home_team_id, away_team_id, home_score, away_score, status')
+          .eq('id', matchId)
+          .limit(1);
+      if (rows.isEmpty) return;
+      final row = (rows.first as Map).cast<String, dynamic>();
+      if ((row['status'] ?? '').toString().trim() ==
+          MatchStatus.finished.name) {
+        return;
+      }
+      final homeTeamId = (row['home_team_id'] ?? '').toString().trim();
+      final awayTeamId = (row['away_team_id'] ?? '').toString().trim();
+      final teamId = (e['team_id'] ?? '').toString().trim();
+      final scoringTeamId = e['is_own_goal'] == true
+          ? (teamId == homeTeamId ? awayTeamId : homeTeamId)
+          : teamId;
+      final home = _readInt(row['home_score'], fallback: 0);
+      final away = _readInt(row['away_score'], fallback: 0);
+      if (scoringTeamId == homeTeamId && home > 0) {
+        await _client
+            .from('matches')
+            .update({'home_score': home - 1})
+            .eq('id', matchId);
+      } else if (scoringTeamId == awayTeamId && away > 0) {
+        await _client
+            .from('matches')
+            .update({'away_score': away - 1})
+            .eq('id', matchId);
+      }
+    } catch (err) {
+      AppConfig.sqlLogResult(table: 'matches', operation: 'UPDATE', error: err);
+    }
+  }
+
+  @override
   Future<void> addMatchEvent(MatchEvent event) {
     return Future(() async {
       try {

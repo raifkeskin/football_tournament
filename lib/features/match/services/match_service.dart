@@ -214,6 +214,11 @@ class SupabaseMatchService implements IMatchService {
   }
 
   @override
+  Future<void> deleteMatchEvent(String eventId) async {
+    await _supabase.from('match_events').delete().eq('id', eventId);
+  }
+
+  @override
   Future<void> addMatchEvent(MatchEvent event) async {
     await _supabase.from('match_events').insert(event.toMap(snakeCase: true));
   }
