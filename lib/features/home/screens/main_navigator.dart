@@ -100,14 +100,16 @@ class _MainNavigatorState extends State<MainNavigator> {
 
   Future<void> _cikisYap(AppSessionController session) async {
     Navigator.of(context).pop(); // çekmeceyi kapat
-    await session.signOut();
-    // Çıkıştan sonra uygulama açılışındaki giriş ekranı (misafir seçeneğiyle).
+    // Önce giriş ekranı (misafir seçeneğiyle), sonra oturum kapanır: kapanış
+    // anında ana sayfanın misafir olarak yeniden çizildiği ara görüntü
+    // kullanıcıya görünmez.
+    final nav = Navigator.of(context, rootNavigator: true);
     await GuestMode.set(false);
-    if (!mounted) return;
-    Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+    nav.pushAndRemoveUntil(
       MaterialPageRoute<void>(builder: (_) => const LoginScreen(gate: true)),
       (route) => false,
     );
+    await session.signOut();
   }
 
   /// Geri (Android'de kenardan kaydırma dahil): başka sekmedeyken Ana
