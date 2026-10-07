@@ -7,6 +7,7 @@ import 'package:football_tournament/features/tournament/screens/admin_manage_lea
 import 'package:football_tournament/features/tournament/screens/admin_pitch_management_screen.dart';
 import '../features/match/screens/admin_fixture_entry_screen.dart';
 import '../features/news/screens/admin_manage_news_screen.dart';
+import '../features/sponsors/admin_sponsors_screen.dart';
 import '../features/tournament/screens/admin_penalty_management_screen.dart';
 import 'admin_pending_actions_screen.dart';
 import '../features/auth/screens/admin_otp_monitor_screen.dart';
@@ -21,7 +22,8 @@ class AdminPanelWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isAdmin = AppSession.of(context).value.isAdmin;
+    final session = AppSession.of(context).value;
+    final isAdmin = session.isAdmin;
     // Mevcut buton verilerini modern yapıya uygun şekilde listeliyoruz
     // admin_panel_screen.dart içindeki menü listeni buna göre güncelle:
     final List<_AdminMenuData> menuItems = [
@@ -99,6 +101,20 @@ class AdminPanelWidget extends StatelessWidget {
           );
         },
       ),
+      // Sponsorlar: yalnızca admin ve kurucu başkan (bölge sorumlusu değil).
+      if (isAdmin || session.isLeagueOwner)
+        _AdminMenuData(
+          baslik: 'Sponsor Yönetimi',
+          renkler: const [Color(0xFFFDE68A), Color(0xFFCA8A04)],
+          ikon: Icons.handshake_rounded,
+          resimYolu: 'assets/images/admin_tournament.jpg',
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AdminSponsorsScreen()),
+            );
+          },
+        ),
       if (isAdmin)
         _AdminMenuData(
           baslik: 'Saha Yönetimi',
@@ -173,7 +189,27 @@ class AdminPanelWidget extends StatelessWidget {
                 ),
                 if (isAdmin) ...[
                   const SizedBox(height: 8),
-                  const _PrivateLeaguesSwitch(),
+                  _SettingSwitch(
+                    setting: AppSettings.privateLeaguesEnabled,
+                    save: AppSettings.setPrivateLeaguesEnabled,
+                    title: 'Gizli Turnuva Özelliği',
+                    onIcon: Icons.lock_outline_rounded,
+                    offIcon: Icons.public_rounded,
+                    onText:
+                        'Açık · "Turnuva Kodu Gir" ve gizli turnuva seçimi '
+                        'görünür',
+                    offText: 'Kapalı · tüm turnuvalar herkese açık',
+                  ),
+                  const SizedBox(height: 8),
+                  _SettingSwitch(
+                    setting: AppSettings.bottomNavEnabled,
+                    save: AppSettings.setBottomNavEnabled,
+                    title: 'Alt Menü',
+                    onIcon: Icons.space_bar_rounded,
+                    offIcon: Icons.menu_rounded,
+                    onText: 'Açık · ana ekranlarda alt gezinme çubuğu görünür',
+                    offText: 'Kapalı · gezinme yan menü ve kaydırma ile',
+                  ),
                 ],
                 const SizedBox(height: 40),
               ],
@@ -220,22 +256,37 @@ class AdminPanelWidget extends StatelessWidget {
   }
 }
 
-/// Gizli turnuva özelliği: kapalıyken "Turnuva Kodu Gir" ve turnuva
-/// formundaki "Gizli turnuva" alanı gizlenir, tüm turnuvalar herkese açılır.
-class _PrivateLeaguesSwitch extends StatefulWidget {
-  const _PrivateLeaguesSwitch();
+/// Uygulama geneli bir ayarın açma/kapama satırı (yalnızca admin).
+class _SettingSwitch extends StatefulWidget {
+  const _SettingSwitch({
+    required this.setting,
+    required this.save,
+    required this.title,
+    required this.onIcon,
+    required this.offIcon,
+    required this.onText,
+    required this.offText,
+  });
+
+  final ValueNotifier<bool> setting;
+  final Future<void> Function(bool) save;
+  final String title;
+  final IconData onIcon;
+  final IconData offIcon;
+  final String onText;
+  final String offText;
 
   @override
-  State<_PrivateLeaguesSwitch> createState() => _PrivateLeaguesSwitchState();
+  State<_SettingSwitch> createState() => _SettingSwitchState();
 }
 
-class _PrivateLeaguesSwitchState extends State<_PrivateLeaguesSwitch> {
+class _SettingSwitchState extends State<_SettingSwitch> {
   bool _saving = false;
 
   Future<void> _set(bool v) async {
     setState(() => _saving = true);
     try {
-      await AppSettings.setPrivateLeaguesEnabled(v);
+      await widget.save(v);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -250,26 +301,24 @@ class _PrivateLeaguesSwitchState extends State<_PrivateLeaguesSwitch> {
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<bool>(
-      valueListenable: AppSettings.privateLeaguesEnabled,
+      valueListenable: widget.setting,
       builder: (context, on, _) => SwitchListTile.adaptive(
         value: on,
         onChanged: _saving ? null : _set,
         secondary: Icon(
-          on ? Icons.lock_outline_rounded : Icons.public_rounded,
+          on ? widget.onIcon : widget.offIcon,
           color: Colors.white70,
         ),
-        title: const Text(
-          'Gizli Turnuva Özelliği',
-          style: TextStyle(
+        title: Text(
+          widget.title,
+          style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,
             fontSize: 14,
           ),
         ),
         subtitle: Text(
-          on
-              ? 'Açık · "Turnuva Kodu Gir" ve gizli turnuva seçimi görünür'
-              : 'Kapalı · tüm turnuvalar herkese açık',
+          on ? widget.onText : widget.offText,
           style: const TextStyle(color: Colors.white54, fontSize: 12),
         ),
         activeTrackColor: const Color(0xFF10B981),

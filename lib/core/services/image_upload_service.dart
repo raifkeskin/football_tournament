@@ -16,6 +16,9 @@ enum MediaFolder {
   news('news'),
   matches('matches'),
 
+  /// Turnuva sponsorlarının logoları.
+  sponsors('sponsors'),
+
   /// Futbolcunun onay bekleyen profil fotoğrafları:
   /// `profile_requests/<auth uid>/` (yalnızca kendi klasörüne yükleyebilir).
   profileRequests('profile_requests'),
@@ -82,7 +85,9 @@ class SupabaseImageUploadService implements ImageUploadService {
     MediaFolder.players ||
     MediaFolder.profileRequests ||
     MediaFolder.staff => _maxSidePortrait,
-    MediaFolder.teams || MediaFolder.leagues => _maxSideLogo,
+    MediaFolder.teams ||
+    MediaFolder.leagues ||
+    MediaFolder.sponsors => _maxSideLogo,
     _ => _maxSide,
   };
 
@@ -176,7 +181,10 @@ class SupabaseImageUploadService implements ImageUploadService {
     String? subfolder,
   }) async {
     final original = await image.readAsBytes();
-    final isLogo = folder == MediaFolder.teams || folder == MediaFolder.leagues;
+    final isLogo =
+        folder == MediaFolder.teams ||
+        folder == MediaFolder.leagues ||
+        folder == MediaFolder.sponsors;
     final logoPng = isLogo ? await _logoWithoutBackground(original) : null;
     final (bytes, ext) = logoPng != null
         ? (logoPng, 'png')

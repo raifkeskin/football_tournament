@@ -63,3 +63,22 @@ _Eklendi: 2026-10-06_
 - Tanıtım sayfası hazır: `docs/tanitim/champions-master-tanitim.html` (görseller içine gömülü, tek dosya). Kaynak şablon: `docs/tanitim/champions-master-tanitim.src.html`. Şu an claude.ai'de de duruyor: https://claude.ai/artifact/MWikmZChsDdT2FmW7a8u3n
 - Yapılacak: sayfayı Firebase hosting'e koymak (ör. `/tanitim/champions`), turnuva sahiplerine uygulamanın kendi adresiyle bağlantı göndermek. Hareketli haber galerisi aynen çalışır.
 - PDF sürümü şimdilik gerekmiyor; istenirse galeri bölümü 5 küçük kare olarak basılacak.
+
+## 7. Sponsor bölümü — YAPILDI (2026-10-07)
+_Eklendi: 2026-10-07_
+
+- **Kararlar:** Sponsorlar **turnuvaya** bağlı (sezona değil). İki tür: **ana sponsor** ve **alt sponsor**. Alanlar: ad, logo, (isteğe bağlı) link, sıra, aktif/pasif.
+- **Yetki:** Yalnızca admin ve o turnuvanın kurucu başkanları ekler/düzenler. "Sponsor Yönetimi" kartı başkalarına (bölge sorumlusu dahil) görünmez.
+- **Gösterim:** Şimdilik **yalnızca ana sayfada**, turnuva bandının hemen altında ince beyaz şerit (taslaktaki 2. seçenek). Şerit sırayla döner: önce ana sponsorlar (birden fazla olabilir, sıralarına göre), ardından alt sponsorlar.
+- **Süreler turnuva ayarında:** Turnuva Ekle/Düzenle popup'ına "Sponsor gösterim süresi" alanı: **ana sponsor** (öneri varsayılan 8 sn) ve **alt sponsor** (öneri 4 sn) ayrı ayrı.
+- **Ayrıntılar:** Sponsor yoksa şerit hiç çıkmaz; logoya dokununca link açılır; şeritte "ANA SPONSOR" / "SPONSOR" etiketi; ekran arka plandayken dönüş durur.
+- Yan menüdeki ayrı "Sponsorlar" sayfası şimdilik **yok** (ileride istenirse taslağı hazır).
+- Mağaza beyanı değişmez (yeni kullanıcı verisi yok).
+
+## 8. Yetkisiz ekran koruması (ortak yetki kapısı)
+_Eklendi: 2026-10-07_
+
+- Tek ortak bileşen: her yönetim ekranı hangi rollerin girebileceğini söyler (ör. admin + kurucu başkan). Yetkisiz kişi ekranı görmez; "Bu ekrana erişim yetkiniz yok" kartı + Geri.
+- Deneme `app_errors` tablosuna ve Telegram'a "yetkisiz ekran denemesi: ekran, rol" diye düşer (gözden kaçan menü/düğme hemen fark edilir).
+- Veritabanı "yetkiniz yok" (RLS) dediğinde teknik mesaj yerine anlaşılır uyarı.
+- Kapsam: ~15 yönetim ekranı, tahmini yarım gün. Sponsor ekranı bu yapıyla kurulabilir.

@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show SystemNavigator;
 
 import '../../../core/services/app_session.dart';
 import '../../auth/screens/login_screen.dart';
@@ -16,6 +18,7 @@ import '../../player/screens/stats_screen.dart';
 import '../../../core/widgets/app_name_band.dart';
 import '../../../core/widgets/app_logo.dart';
 import '../../../core/design_flags.dart';
+import '../../../core/widgets/admin_page.dart';
 
 /// Sol yan menü (Drawer) ile ana ekranlar arasında geçiş.
 class MainNavigator extends StatefulWidget {
@@ -26,10 +29,14 @@ class MainNavigator extends StatefulWidget {
 
   /// Ana gezginin Scaffold'u: yan menü bant gibi gezgin dışındaki
   /// parçalardan da açılabilsin.
-  static final scaffoldKey = GlobalKey<ScaffoldState>();
+  ///
+  /// Anahtar her gezginin kendisine aittir: girişten sonra yeni gezgin açılırken
+  /// eskisi geçiş bitene kadar ağaçta kalır; ortak (static) anahtar iki
+  /// Scaffold'a birden verilince yeni sayfa boş kalıyordu.
+  static GlobalKey<ScaffoldState>? _activeScaffoldKey;
 
   /// Yan menüyü açar (ör. yönetim panelinde bantaki ☰).
-  static void openMenu() => scaffoldKey.currentState?.openDrawer();
+  static void openMenu() => _activeScaffoldKey?.currentState?.openDrawer();
 
   /// Gezgin dışından sekme değiştirme isteği (ör. canlı kura → Fikstür).
   static final tabRequest = ValueNotifier<int?>(null);
@@ -49,12 +56,27 @@ class _MainNavigatorState extends State<MainNavigator> {
   @override
   void initState() {
     super.initState();
+    MainNavigator._activeScaffoldKey = _scaffoldKey;
     MainNavigator.tabRequest.addListener(_onTabRequest);
+    AppSettings.bottomNavEnabled.addListener(_onSettings);
   }
+
+  void _onSettings() {
+    if (mounted) setState(() {});
+  }
+
+  /// Bu gezginin sayfası (bant turnuva seçicisini yalnızca bu sayfa en
+  /// üstteyken gösterir).
+  ModalRoute<dynamic>? _route;
 
   @override
   void dispose() {
+    if (MainNavigator._activeScaffoldKey == _scaffoldKey) {
+      MainNavigator._activeScaffoldKey = null;
+    }
     MainNavigator.tabRequest.removeListener(_onTabRequest);
+    AppSettings.bottomNavEnabled.removeListener(_onSettings);
+    LeagueSwitchScope.clearHome(_route);
     super.dispose();
   }
 
@@ -66,7 +88,7 @@ class _MainNavigatorState extends State<MainNavigator> {
   }
 
   /// Yan menüyü kaydırma hareketinden açmak için.
-  GlobalKey<ScaffoldState> get _scaffoldKey => MainNavigator.scaffoldKey;
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
 
   void _sekmeDegistir(int index) {
     setState(() {
@@ -78,19 +100,51 @@ class _MainNavigatorState extends State<MainNavigator> {
 
   Future<void> _cikisYap(AppSessionController session) async {
     Navigator.of(context).pop(); // çekmeceyi kapat
-    await session.signOut();
-    // Çıkıştan sonra uygulama açılışındaki giriş ekranı (misafir seçeneğiyle).
+    // Önce giriş ekranı (misafir seçeneğiyle), sonra oturum kapanır: kapanış
+    // anında ana sayfanın misafir olarak yeniden çizildiği ara görüntü
+    // kullanıcıya görünmez.
+    final nav = Navigator.of(context, rootNavigator: true);
     await GuestMode.set(false);
-    if (!mounted) return;
-    Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+    nav.pushAndRemoveUntil(
       MaterialPageRoute<void>(builder: (_) => const LoginScreen(gate: true)),
       (route) => false,
     );
+    await session.signOut();
+  }
+
+  /// Geri (Android'de kenardan kaydırma dahil): başka sekmedeyken Ana
+  /// Sayfa'ya döner; Ana Sayfa'da yanlışlıkla çıkılmasın diye onay sorar.
+  /// Bu kapsam, Profil'deki geri dinleyicisinden önce kayıtlı olduğu için
+  /// önce çalışır.
+  Future<void> _onBack() async {
+    if (_aktifSekme != 0) {
+      setState(() => _aktifSekme = 0);
+      return;
+    }
+    if (kIsWeb) return;
+    final exit = await showAdminConfirmDialog(
+      context: context,
+      title: 'Uygulamadan Çık',
+      message: 'Uygulamadan çıkmak istiyor musunuz?',
+      confirmLabel: 'ÇIKIŞ',
+      icon: Icons.exit_to_app_rounded,
+    );
+    if (exit) await SystemNavigator.pop();
   }
 
   @override
   Widget build(BuildContext context) {
     final session = AppSession.of(context);
+    _route = ModalRoute.of(context);
+    // Turnuva seçicisi yalnızca ana sekmelerde (Profil / yönetim panelinde
+    // değil).
+    LeagueSwitchScope.setHome(
+      _route,
+      mainTab: _aktifSekme < 5,
+      panelTab:
+          _aktifSekme == MainNavigator.profileTab &&
+          session.value.hasManagementPanel,
+    );
     final user = session.value.user;
     final loggedIn = user != null && !user.isAnonymous;
     final ekranlar = <Widget>[
@@ -111,56 +165,64 @@ class _MainNavigatorState extends State<MainNavigator> {
       ),
     ];
 
-    return Scaffold(
-      key: _scaffoldKey,
-      extendBody: !kNewHomeDesign,
-      // Yönetim paneli (Profil sekmesi, yetkili) açıkken alt çubuk yok;
-      // gezinme bantaki menüden.
-      bottomNavigationBar:
-          kNewHomeDesign &&
-              !(_aktifSekme == MainNavigator.profileTab &&
-                  session.value.hasManagementPanel)
-          ? _BottomBar(
-              index: _aktifSekme,
-              onTap: (i) => setState(() => _aktifSekme = i),
-            )
-          : null,
-      drawer: _MenuDrawer(
-        activeIndex: _aktifSekme,
-        session: session.value,
-        loggedIn: loggedIn,
-        onSelect: _sekmeDegistir,
-        onLogout: () => _cikisYap(session),
-        onEnterCode: () {
-          Navigator.of(context).pop(); // çekmeceyi kapat
-          showLeagueCodeDialog(this.context);
-        },
-      ),
-      // Görülebilen turnuvalar değişince (giriş/çıkış, kod) ekranlar
-      // baştan kurulur ve verilerini yeniden okur.
-      body: ValueListenableBuilder<int>(
-        valueListenable: LeagueAccess.dataEpoch,
-        builder: (context, epoch, _) => KeyedSubtree(
-          key: ValueKey('data_$epoch'),
-          // Ana sekmeler parmakla kaydırılır (Ana Sayfa → Haberler →
-          // Fikstür → Puan Durumu → İstatistik); Profil menüden açılır ve
-          // sekmelerin üstünde durur.
-          child: Stack(
-            children: [
-              _TabPager(
-                index: _aktifSekme < 5 ? _aktifSekme : null,
-                onChanged: (i) => setState(() => _aktifSekme = i),
-                onSwipePastFirst: () => _scaffoldKey.currentState?.openDrawer(),
-                children: ekranlar.take(5).toList(),
-              ),
-              Offstage(
-                offstage: _aktifSekme != 5,
-                child: TickerMode(
-                  enabled: _aktifSekme == 5,
-                  child: ekranlar[5],
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _onBack();
+      },
+      child: Scaffold(
+        key: _scaffoldKey,
+        extendBody: !kNewHomeDesign,
+        // Alt çubuk yok: admin ayarı kapalıysa ya da Profil sekmesinde yönetim
+        // paneli / giriş formu açıkken (gezinme bantaki ya da yan menüden).
+        bottomNavigationBar:
+            kNewHomeDesign &&
+                AppSettings.bottomNavEnabled.value &&
+                !(_aktifSekme == MainNavigator.profileTab &&
+                    (session.value.hasManagementPanel || !loggedIn))
+            ? _BottomBar(
+                index: _aktifSekme,
+                onTap: (i) => setState(() => _aktifSekme = i),
+              )
+            : null,
+        drawer: _MenuDrawer(
+          activeIndex: _aktifSekme,
+          session: session.value,
+          loggedIn: loggedIn,
+          onSelect: _sekmeDegistir,
+          onLogout: () => _cikisYap(session),
+          onEnterCode: () {
+            Navigator.of(context).pop(); // çekmeceyi kapat
+            showLeagueCodeDialog(this.context);
+          },
+        ),
+        // Görülebilen turnuvalar değişince (giriş/çıkış, kod) ekranlar
+        // baştan kurulur ve verilerini yeniden okur.
+        body: ValueListenableBuilder<int>(
+          valueListenable: LeagueAccess.dataEpoch,
+          builder: (context, epoch, _) => KeyedSubtree(
+            key: ValueKey('data_$epoch'),
+            // Ana sekmeler parmakla kaydırılır (Ana Sayfa → Haberler →
+            // Fikstür → Puan Durumu → İstatistik); Profil menüden açılır ve
+            // sekmelerin üstünde durur.
+            child: Stack(
+              children: [
+                _TabPager(
+                  index: _aktifSekme < 5 ? _aktifSekme : null,
+                  onChanged: (i) => setState(() => _aktifSekme = i),
+                  onSwipePastFirst: () =>
+                      _scaffoldKey.currentState?.openDrawer(),
+                  children: ekranlar.take(5).toList(),
                 ),
-              ),
-            ],
+                Offstage(
+                  offstage: _aktifSekme != 5,
+                  child: TickerMode(
+                    enabled: _aktifSekme == 5,
+                    child: ekranlar[5],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -306,14 +368,31 @@ class _TabPagerState extends State<_TabPager> {
   /// Bir sürükleme boyunca menü yalnızca bir kez açılsın.
   bool _drawerFired = false;
 
+  /// Kod ile sayfa atlatılıyor (alt çubuk / menü): PageView bunu sayfa
+  /// değişikliği olarak bildirir, ama sekme zaten seçili; çizim sırasında
+  /// üst gezgine setState yaptırmamak için bildirim yutulur.
+  bool _jumping = false;
+
   @override
   void didUpdateWidget(covariant _TabPager oldWidget) {
     super.didUpdateWidget(oldWidget);
     final i = widget.index;
     if (i != null && _controller.hasClients) {
       final current = _controller.page?.round();
-      if (current != i) _controller.jumpToPage(i);
+      if (current != i) {
+        _jumping = true;
+        try {
+          _controller.jumpToPage(i);
+        } finally {
+          _jumping = false;
+        }
+      }
     }
+  }
+
+  void _onPageChanged(int i) {
+    if (_jumping) return;
+    widget.onChanged(i);
   }
 
   @override
@@ -345,7 +424,7 @@ class _TabPagerState extends State<_TabPager> {
         physics: const ClampingScrollPhysics(),
         // Yandaki sekme önceden hazırlanır: kaydırınca boş ekran görünmez.
         allowImplicitScrolling: true,
-        onPageChanged: widget.onChanged,
+        onPageChanged: _onPageChanged,
         children: [for (final c in widget.children) _KeepAlive(child: c)],
       ),
     );

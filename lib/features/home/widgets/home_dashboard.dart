@@ -16,6 +16,7 @@ import '../../team/models/team.dart';
 import '../../team/utils/standings.dart';
 import '../../tournament/models/league.dart';
 import 'home_news_card.dart';
+import '../../sponsors/sponsor_strip.dart';
 
 /// Yeni tasarımın renk sistemi: temel renkler sabit, turnuva yalnızca ana ve
 /// vurgu rengini getirir, durum renkleri her turnuvada aynı.
@@ -571,6 +572,20 @@ class _HomeDashboardState extends State<HomeDashboard> {
       m.status == MatchStatus.live || m.status == MatchStatus.halftime;
 
   static const _days = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
+  static const _monthsLong = [
+    'Ocak',
+    'Şubat',
+    'Mart',
+    'Nisan',
+    'Mayıs',
+    'Haziran',
+    'Temmuz',
+    'Ağustos',
+    'Eylül',
+    'Ekim',
+    'Kasım',
+    'Aralık',
+  ];
   static const _daysLong = [
     'Pazartesi',
     'Salı',
@@ -687,7 +702,12 @@ class _HomeDashboardState extends State<HomeDashboard> {
       onRefresh: _refresh,
       child: ListView(
         padding: EdgeInsets.fromLTRB(0, top, 0, 24),
-        children: [_greeting(session, data), content],
+        children: [
+          // Bandın hemen altında dönen sponsor şeridi (sponsor yoksa boş).
+          SponsorStrip(leagueId: widget.league.id),
+          _greeting(session, data),
+          content,
+        ],
       ),
     );
   }
@@ -1215,6 +1235,20 @@ class _HomeDashboardState extends State<HomeDashboard> {
                       kTr == null ? 'Tarih yok' : _daysLong[kTr.weekday - 1],
                       style: _barlow(size: 12, color: DashColors.muted),
                     ),
+                    // Tarih (ör. 6 Ekim 2026): hafta numarası tarihi söylemez.
+                    if (kTr != null)
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          '${kTr.day} ${_monthsLong[kTr.month - 1]} ${kTr.year}',
+                          maxLines: 1,
+                          style: _barlow(
+                            size: 12,
+                            weight: FontWeight.w700,
+                            color: DashColors.muted,
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),

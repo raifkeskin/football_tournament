@@ -23,6 +23,12 @@ Future<void> _render(String path, int px, AppLogoPainter painter) async {
 void main() {
   testWidgets('ikonları üret', (tester) async {
     await tester.runAsync(() async {
+      // Pazubanttaki "C" için yazı tipi (testte varsayılan yazı tipi kutu
+      // çizer).
+      await (FontLoader('BarlowCondensed')..addFont(
+            rootBundle.load('assets/fonts/BarlowCondensed-ExtraBoldItalic.ttf'),
+          ))
+          .load();
       // iOS: tam kare lacivert (köşeleri iOS yuvarlar), saydamlık yok.
       const full = AppLogoPainter(tileRadius: 0);
       await _render('design/app_icon_ios.png', 1024, full);
@@ -60,11 +66,6 @@ void main() {
 
   testWidgets('Play tanıtım görseli', (tester) async {
     await tester.runAsync(() async {
-      final loader = FontLoader('BarlowCondensed')
-        ..addFont(
-          rootBundle.load('assets/fonts/BarlowCondensed-ExtraBoldItalic.ttf'),
-        );
-      await loader.load();
       final barlow = FontLoader('Barlow')
         ..addFont(rootBundle.load('assets/fonts/Barlow-SemiBold.ttf'));
       await barlow.load();

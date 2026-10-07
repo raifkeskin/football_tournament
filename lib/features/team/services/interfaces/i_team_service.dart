@@ -76,7 +76,6 @@ abstract class ITeamService {
     required String playerPhone,
     required String playerName,
     String? jerseyNumber,
-    required String role,
     String? caller,
   });
 
@@ -84,20 +83,6 @@ abstract class ITeamService {
     required String tournamentId,
     required String teamId,
     required String playerPhone,
-    String? caller,
-  });
-
-  Future<bool> isTeamManagerForTournament({
-    required String tournamentId,
-    required String teamId,
-    required String playerPhone,
-    String? caller,
-  });
-
-  Future<bool> managerExistsForTeamTournament({
-    required String tournamentId,
-    required String teamId,
-    String? excludePlayerPhone,
     String? caller,
   });
 

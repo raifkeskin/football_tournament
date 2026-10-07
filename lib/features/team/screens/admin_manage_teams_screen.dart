@@ -225,15 +225,14 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
     );
   }
 
-  /// Takım sorumlusu seçimi (Takım Sorumlusu / Her İkisi rolündekiler).
+  /// Takım sorumlusu seçimi: tüm futbolcular arasından (aramayla).
   Future<Map<String, String>?> _pickManager() async {
     // Controller ve sorgu builder dışında bir kez oluşturulur; klavye
     // açılıp popup yeniden build edildiğinde sıfırlanmaz / tekrar çekilmez.
     final searchController = TextEditingController();
     final future = Supabase.instance.client
         .from('players')
-        .select('id, name, surname, role, photo_url')
-        .inFilter('role', const ['Takım Sorumlusu', 'Her İkisi'])
+        .select('id, name, surname, photo_url')
         .order('name', ascending: true);
     final picked = await showAdminPopup<Map<String, String>>(
       context: context,
@@ -313,7 +312,6 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                               final r = filtered[index];
                               final id = (r['id'] ?? '').toString().trim();
                               final n = _fullName(r);
-                              final role = (r['role'] ?? '').toString().trim();
                               final photo = (r['photo_url'] ?? '')
                                   .toString()
                                   .trim();
@@ -379,14 +377,6 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                                                   fontWeight: FontWeight.w800,
                                                 ),
                                               ),
-                                              if (role.isNotEmpty)
-                                                Text(
-                                                  role,
-                                                  style: const TextStyle(
-                                                    color: kAdminMuted,
-                                                    fontSize: 12,
-                                                  ),
-                                                ),
                                             ],
                                           ),
                                         ),

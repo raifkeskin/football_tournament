@@ -31,6 +31,8 @@ class League {
     this.themeSecondary,
     this.shortName,
     this.rosterOpenHours = 1,
+    this.sponsorMainSeconds = 8,
+    this.sponsorSubSeconds = 4,
     this.facebookUrl,
     this.websiteUrl,
   });
@@ -70,6 +72,11 @@ class League {
 
   /// Takım sorumlusunun esameyi maçtan kaç saat önce girebileceği.
   final int rosterOpenHours;
+
+  /// Ana sayfadaki sponsor şeridinde ana / alt sponsorun ekranda kalma
+  /// süresi (saniye).
+  final int sponsorMainSeconds;
+  final int sponsorSubSeconds;
 
   /// Sosyal medya / web (instagramUrl ve youtubeUrl yukarıda).
   final String? facebookUrl;
@@ -169,6 +176,14 @@ class League {
       rosterOpenHours: intFrom(
         v('rosterOpenHours', 'roster_open_hours'),
         fallback: 1,
+      ),
+      sponsorMainSeconds: intFrom(
+        v('sponsorMainSeconds', 'sponsor_main_seconds'),
+        fallback: 8,
+      ),
+      sponsorSubSeconds: intFrom(
+        v('sponsorSubSeconds', 'sponsor_sub_seconds'),
+        fallback: 4,
       ),
     );
   }

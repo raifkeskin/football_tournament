@@ -76,6 +76,8 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
     String? themeSecondary = league?.themeSecondary;
     // Esame: takım sorumlusu kadroyu maçtan kaç saat önce girebilir.
     var rosterOpenHours = league?.rosterOpenHours ?? 1;
+    var sponsorMainSeconds = league?.sponsorMainSeconds ?? 8;
+    var sponsorSubSeconds = league?.sponsorSubSeconds ?? 4;
     // Sosyal medya / web: yan menüde turnuva adının altında simge olur.
     final igController = TextEditingController(
       text: league?.instagramUrl ?? '',
@@ -132,7 +134,7 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
           'name': name,
           'is_private': isPrivate,
           'access_code': isPrivate ? access : null,
-          if (newLogoUrl != null) 'logo_url': newLogoUrl,
+          'logo_url': ?newLogoUrl,
           if (newLogoUrl == null && removedLogo) 'logo_url': null,
           'theme_primary': themePrimary,
           'theme_secondary': themePrimary == null ? null : themeSecondary,
@@ -140,6 +142,8 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
               ? null
               : shortNameController.text.trim(),
           'roster_open_hours': rosterOpenHours,
+          'sponsor_main_seconds': sponsorMainSeconds,
+          'sponsor_sub_seconds': sponsorSubSeconds,
           'instagram_url': link(igController),
           'facebook_url': link(fbController),
           'youtube_url': link(ytController),
@@ -502,6 +506,90 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                               ),
                             ),
                           ),
+                          const SizedBox(height: 12),
+                          AdminFieldGroup(
+                            children: [
+                              for (final (label, isMain) in const [
+                                ('Ana sponsor süresi', true),
+                                ('Alt sponsor süresi', false),
+                              ])
+                                AdminFieldRow(
+                                  icon: isMain
+                                      ? Icons.workspace_premium_rounded
+                                      : Icons.handshake_rounded,
+                                  label: label,
+                                  enabled: !saving,
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        tooltip: 'Azalt',
+                                        icon: const Icon(
+                                          Icons.remove_circle_outline_rounded,
+                                          color: kAdminAccent,
+                                        ),
+                                        onPressed:
+                                            saving ||
+                                                (isMain
+                                                        ? sponsorMainSeconds
+                                                        : sponsorSubSeconds) <=
+                                                    2
+                                            ? null
+                                            : () => setPopupState(() {
+                                                if (isMain) {
+                                                  sponsorMainSeconds--;
+                                                } else {
+                                                  sponsorSubSeconds--;
+                                                }
+                                              }),
+                                      ),
+                                      IconButton(
+                                        tooltip: 'Artır',
+                                        icon: const Icon(
+                                          Icons.add_circle_outline_rounded,
+                                          color: kAdminAccent,
+                                        ),
+                                        onPressed:
+                                            saving ||
+                                                (isMain
+                                                        ? sponsorMainSeconds
+                                                        : sponsorSubSeconds) >=
+                                                    60
+                                            ? null
+                                            : () => setPopupState(() {
+                                                if (isMain) {
+                                                  sponsorMainSeconds++;
+                                                } else {
+                                                  sponsorSubSeconds++;
+                                                }
+                                              }),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Text(
+                                    '${isMain ? sponsorMainSeconds : sponsorSubSeconds} saniye',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const Padding(
+                            padding: EdgeInsets.fromLTRB(4, 6, 4, 0),
+                            child: Text(
+                              'Ana sayfadaki sponsor şeridinde her logonun ekranda '
+                              'kalma süresi. Sponsorlar Yönetim Paneli › Sponsor '
+                              'Yönetimi\'nden eklenir.',
+                              style: TextStyle(
+                                color: kAdminMuted,
+                                fontSize: 12,
+                                height: 1.35,
+                              ),
+                            ),
+                          ),
                           AdminFormSection(
                             title: 'Sosyal Medya',
                             child: Column(
@@ -564,8 +652,9 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                                             accessCodeController.text =
                                                 _newAccessCode();
                                           }
-                                          if (!isPrivate)
+                                          if (!isPrivate) {
                                             accessCodeController.clear();
+                                          }
                                         }),
                                   trailing: Switch.adaptive(
                                     value: isPrivate,
@@ -581,8 +670,9 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                                               accessCodeController.text =
                                                   _newAccessCode();
                                             }
-                                            if (!isPrivate)
+                                            if (!isPrivate) {
                                               accessCodeController.clear();
+                                            }
                                           }),
                                   ),
                                   child: Text(

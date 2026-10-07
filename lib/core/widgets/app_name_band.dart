@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
 import '../app_navigator.dart';
 import '../services/active_tournament.dart';
 import 'app_logo.dart';
+import 'notification_bell.dart';
 import 'web_safe_image.dart';
 
 /// Uygulama adı.
@@ -43,9 +45,13 @@ class AppNameBand extends StatelessWidget {
                 ActiveTournament.theme,
                 genericScreens,
                 panelActions,
+                LeagueSwitchScope.panel,
               ]),
               builder: (context, tvlBand) {
-                final t = ActiveTournament.theme.value;
+                // Yönetim panelinde turnuva kimliği yok: uygulama bandı.
+                final t = LeagueSwitchScope.panel.value
+                    ? null
+                    : ActiveTournament.theme.value;
                 final actions = genericScreens.value > 0
                     ? null
                     : panelActions.value;
@@ -57,7 +63,13 @@ class AppNameBand extends StatelessWidget {
                       : const Positioned(
                           right: 4,
                           bottom: 3,
-                          child: LeagueSwitchButton(),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              LeagueSwitchButton(),
+                              NotificationBell(),
+                            ],
+                          ),
                         );
                   if (actions == null) {
                     return switcher == null
@@ -75,7 +87,13 @@ class AppNameBand extends StatelessWidget {
                       Positioned(
                         right: 4,
                         bottom: 3,
-                        child: actions.logoutButton(),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const NotificationBell(),
+                            actions.logoutButton(),
+                          ],
+                        ),
                       ),
                     ],
                   );
@@ -150,6 +168,112 @@ class AppNameBand extends StatelessWidget {
   }
 }
 
+/// Turnuva seçicisi yalnızca ana sekmelerde (Ana Sayfa, Haberler, Fikstür,
+/// Puan Durumu, İstatistik) görünür. Üstüne açılan sayfalarda (takım kadrosu,
+/// maç detayı, yönetim ekranları) ve Profil / yönetim panelinde turnuva
+/// değiştirmek ekrandakini değiştirmediği için gizlenir.
+class LeagueSwitchScope {
+  LeagueSwitchScope._();
+
+  static final enabled = ValueNotifier<bool>(false);
+
+  /// Yönetim paneli (ve üstüne açılan yönetim ekranları): bant turnuva
+  /// kimliği yerine uygulama bandını gösterir; panel tüm turnuvaları yönetir.
+  static final panel = ValueNotifier<bool>(false);
+
+  static Route<dynamic>? _homeRoute;
+  static var _mainTab = false;
+
+  /// Kök gezginin gözlemcisi (MaterialApp.navigatorObservers).
+  static final NavigatorObserver observer = _TopPageObserver();
+
+  /// Ana gezgin: kendi sayfası ve açık sekmenin ana sekme olup olmadığı.
+  static void setHome(
+    Route<dynamic>? route, {
+    required bool mainTab,
+    bool panelTab = false,
+  }) {
+    _homeRoute = route;
+    _mainTab = mainTab;
+    _panelTab = panelTab;
+    _update();
+  }
+
+  static void clearHome(Route<dynamic>? route) {
+    if (route != null && _homeRoute == route) {
+      _homeRoute = null;
+      _panelTab = false;
+      _update();
+    }
+  }
+
+  static var _panelTab = false;
+
+  static void _update() {
+    final home = _homeRoute;
+    final v =
+        home != null &&
+        _mainTab &&
+        (observer as _TopPageObserver).topPage == home;
+    final p = home != null && _panelTab;
+    if (enabled.value == v && panel.value == p) return;
+    // Gezinme ya da çizim sırasında bandı yeniden kurmak hata verir: çerçeve
+    // bitince uygula.
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      SchedulerBinding.instance.addPostFrameCallback((_) => _update());
+      return;
+    }
+    enabled.value = v;
+    panel.value = p;
+  }
+}
+
+/// En üstteki tam sayfayı izler (açılır pencereler / diyaloglar sayılmaz).
+class _TopPageObserver extends NavigatorObserver {
+  final _stack = <Route<dynamic>>[];
+
+  Route<dynamic>? get topPage {
+    for (var i = _stack.length - 1; i >= 0; i--) {
+      if (_stack[i] is PageRoute) return _stack[i];
+    }
+    return null;
+  }
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _stack.add(route);
+    LeagueSwitchScope._update();
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _stack.remove(route);
+    LeagueSwitchScope._update();
+  }
+
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _stack.remove(route);
+    LeagueSwitchScope._update();
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    final i = oldRoute == null ? -1 : _stack.indexOf(oldRoute);
+    if (newRoute != null) {
+      if (i >= 0) {
+        _stack[i] = newRoute;
+      } else {
+        _stack.add(newRoute);
+      }
+    } else if (i >= 0) {
+      _stack.removeAt(i);
+    }
+    LeagueSwitchScope._update();
+  }
+}
+
 /// Bandın konumu (açılır liste bandın hemen altına yerleşir).
 final _bandKey = GlobalKey();
 
@@ -165,10 +289,16 @@ class LeagueSwitchButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<List<LeagueChoice>>(
-      valueListenable: ActiveTournament.myLeagues,
-      builder: (context, leagues, _) {
-        if (leagues.length < 2) return const SizedBox.shrink();
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        ActiveTournament.myLeagues,
+        LeagueSwitchScope.enabled,
+      ]),
+      builder: (context, _) {
+        if (ActiveTournament.myLeagues.value.length < 2 ||
+            !LeagueSwitchScope.enabled.value) {
+          return const SizedBox.shrink();
+        }
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () => showLeagueSwitcher(),
@@ -199,7 +329,12 @@ class LeagueSwitchButton extends StatelessWidget {
 Future<void> showLeagueSwitcher() async {
   final nav = appNavigatorKey.currentState;
   final box = _bandKey.currentContext?.findRenderObject() as RenderBox?;
-  if (nav == null || box == null || _switcherOpen.value) return;
+  if (nav == null ||
+      box == null ||
+      _switcherOpen.value ||
+      !LeagueSwitchScope.enabled.value) {
+    return;
+  }
   final band = box.localToGlobal(Offset.zero) & box.size;
   _switcherOpen.value = true;
   final picked = await nav.push<String>(_LeagueDropdownRoute(band: band));
@@ -456,10 +591,12 @@ class _TournamentBand extends StatelessWidget {
                 child: const AppLogo(size: 26),
               ),
             ),
+            const SizedBox(width: 2),
+            const NotificationBell(),
             if (actions != null)
               actions!.logoutButton()
             else
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
           ],
         ),
       ),
@@ -474,18 +611,27 @@ String _trUpper(String s) =>
 /// Bantta yönetim paneli düğmeleri.
 @immutable
 class BandActions {
-  const BandActions({required this.onMenu, required this.onLogout});
+  const BandActions({
+    required this.onMenu,
+    required this.onLogout,
+    this.onHome,
+  });
 
   final VoidCallback onMenu;
   final VoidCallback onLogout;
+
+  /// Verilirse soldaki düğme ev ikonu olur ve ana sayfaya döner.
+  final VoidCallback? onHome;
 
   // Bant gezginin dışında: düğmeler için şeffaf Material gerekir.
   Widget menuButton(Color color) => Material(
     type: MaterialType.transparency,
     child: IconButton(
       // Tooltip yok: bant Overlay'in dışında.
-      onPressed: onMenu,
-      icon: Icon(Icons.menu_rounded, color: color, semanticLabel: 'Menü'),
+      onPressed: onHome ?? onMenu,
+      icon: onHome != null
+          ? Icon(Icons.home_rounded, color: color, semanticLabel: 'Ana Sayfa')
+          : Icon(Icons.menu_rounded, color: color, semanticLabel: 'Menü'),
     ),
   );
 

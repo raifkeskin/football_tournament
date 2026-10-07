@@ -2032,12 +2032,13 @@ Future<_SeasonOverview> _loadSeasonOverview(String seasonId) async {
   for (final any in results[0]) {
     final r = any as Map;
     final id = s(r['id']);
-    if (id.isNotEmpty)
+    if (id.isNotEmpty) {
       groupsById[id] = _GroupOverview(
         id: id,
         name: s(r['name']),
         regionId: s(r['region_id']).isEmpty ? null : s(r['region_id']),
       );
+    }
   }
 
   final teamsById = <String, _TeamStanding>{};
