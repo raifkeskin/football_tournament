@@ -16,9 +16,7 @@ class PlayerService {
         rows,
       ) {
         final list = <PlayerModel>[];
-        for (final r in rows.where(
-          (r) => const ['Futbolcu', 'Her İkisi'].contains(r['role']),
-        )) {
+        for (final r in rows) {
           final row = Map<String, dynamic>.from(r);
           final id = (row['id'] ?? row['phone'] ?? '').toString().trim();
           if (id.isEmpty) continue;
@@ -45,7 +43,6 @@ class PlayerService {
 
     final payload = <String, dynamic>{
       'name': name,
-      'role': 'Futbolcu',
       'phone': phone,
       'phone_raw10': phone,
       'team_id': 'free_agent_pool',

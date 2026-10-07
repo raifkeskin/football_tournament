@@ -1671,12 +1671,10 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
     'Orta Saha': ['Defansif', 'Merkez', 'Ofansif', 'Kanat'],
     'Forvet': ['Santrfor', 'Kanat Forvet'],
   };
-  static const _roles = <String>['Her İkisi', 'Takım Sorumlusu', 'Futbolcu'];
   static const _feet = <String>['Sağ', 'Sol', 'Her İkisi'];
 
   String _mainPosition = _unsetOption;
   String _subPosition = _unsetOption;
-  String _role = 'Futbolcu';
   String _preferredFoot = '';
   String? _activePlayerId;
   String? _existingPhotoUrl;
@@ -1684,13 +1682,9 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
   XFile? _pickedPhoto;
   bool _removePhoto = false;
   bool _saving = false;
-  bool _managerExists = false;
 
   bool get _isMainPositionSelected =>
       _mainPosition.trim().isNotEmpty && _mainPosition != _unsetOption;
-
-  bool _isManagerRole(String role) =>
-      role == 'Takım Sorumlusu' || role == 'Her İkisi';
 
   String _birthDateToDisplay(String? raw) => birthDateDbToUi(raw);
 
@@ -1779,9 +1773,6 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
       _preferredFoot = _feet.contains(pf) ? pf : '';
       _heightController.text = (e.height ?? '').toString();
       _weightController.text = (e.weight ?? '').toString();
-      final r = e.role.trim();
-      _role = r.isEmpty ? 'Futbolcu' : r;
-      if (!_roles.contains(_role)) _role = 'Futbolcu';
       final phoneRaw = (e.phone ?? '').toString();
       if (phoneRaw.startsWith('no_phone_')) {
         _implicitPhoneKey = phoneRaw;
@@ -1791,9 +1782,6 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
         _phoneController.text = PhoneMaskFormatter.formatFromRaw(phoneRaw);
       }
       _existingPhotoUrl = (e.photoUrl ?? '').trim().isEmpty ? null : e.photoUrl;
-    }
-    if (!widget.standalone) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _loadManagerState());
     }
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _hydrateExistingPhotoFromIdentity(),
@@ -1825,20 +1813,6 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
     _heightController.dispose();
     _weightController.dispose();
     super.dispose();
-  }
-
-  Future<void> _loadManagerState() async {
-    if (widget.standalone) return;
-    final tournamentId = (widget.tournamentId ?? '').trim();
-    final teamId = (widget.teamId ?? '').trim();
-    if (tournamentId.isEmpty || teamId.isEmpty) return;
-    final exists = await _teamService.managerExistsForTeamTournament(
-      tournamentId: tournamentId,
-      teamId: teamId,
-      excludePlayerPhone: _activePlayerId,
-    );
-    if (!mounted) return;
-    setState(() => _managerExists = exists);
   }
 
   // Sıkıştırma yükleme servisinde yapılır; burada yalnızca seçilir. Dosya
@@ -1948,19 +1922,6 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
         : (_implicitPhoneKey ??= _generateNoPhoneKey());
     final phoneToStore = editingWithoutPhone ? null : keyPhone;
 
-    if (!widget.standalone) {
-      if (_managerExists &&
-          _isManagerRole(_role) &&
-          !(widget.editing != null && _isManagerRole(widget.editing!.role))) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Bu takımda zaten takım sorumlusu var.'),
-          ),
-        );
-        return;
-      }
-    }
-
     setState(() => _saving = true);
     try {
       final sbTeamService = _teamService is SupabaseTeamService
@@ -2035,7 +1996,6 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
             _weightController.text.replaceAll(RegExp(r'\D'), '').trim(),
           ),
           'national_id': nationalId.isEmpty ? null : nationalId,
-          'role': _role,
         },
       );
       if (!widget.standalone) {
@@ -2048,7 +2008,6 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
             playerPhone: keyPhone,
             playerName: fullName,
             jerseyNumber: sbTeamService == null ? number : null,
-            role: _role,
           );
 
           if (sbTeamService != null) {
@@ -2261,10 +2220,6 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
   @override
   Widget build(BuildContext context) {
     final editing = widget.editing != null;
-    final allowManagerOptions = !_managerExists || _isManagerRole(_role);
-    final roles = _roles
-        .where((r) => !(_isManagerRole(r) && !allowManagerOptions))
-        .toList();
     String? valueOrNull(String v) =>
         v.trim().isEmpty || v == _unsetOption ? null : v;
 
@@ -2341,25 +2296,13 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                 ],
               ),
             ),
-            AdminFormSection(
-              title: 'Takım',
-              child: AdminFieldGroup(
-                children: [
-                  AdminSelectRow(
-                    icon: Icons.manage_accounts_outlined,
-                    label: 'Rolü',
-                    value: _role,
-                    placeholder: 'Seçin',
-                    onTap: _saving
-                        ? null
-                        : () => _pickOption(
-                            title: 'Rolü',
-                            items: roles,
-                            selected: _role,
-                            onPicked: (v) => _role = v,
-                          ),
-                  ),
-                  if (!widget.standalone)
+            // Takım bilgisi yalnızca kadrodan açılınca (lisansta takım yok).
+            // Takım sorumlusu Takım Yönetimi'nden seçilir.
+            if (!widget.standalone)
+              AdminFormSection(
+                title: 'Takım',
+                child: AdminFieldGroup(
+                  children: [
                     _textRow(
                       icon: Icons.numbers_rounded,
                       label: 'Forma No',
@@ -2371,9 +2314,9 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                       ],
                       hint: 'Örn. 10',
                     ),
-                ],
+                  ],
+                ),
               ),
-            ),
             AdminFormSection(
               title: 'Oyun',
               child: AdminFieldGroup(
@@ -2797,21 +2740,6 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
     return 'https://$url';
   }
 
-  /// Uygulama rolleri Türkçe yazar ('Futbolcu', 'Her İkisi'); dışarıdan
-  /// eklenen kayıtlarda İngilizce kodlar ('player', 'both') veya boş rol
-  /// olabiliyor. Takım sorumlusu olmayan herkes futbolcu kabul edilir.
-  bool _isFootballerRole(String role) {
-    final r = role.trim().toLowerCase();
-    if (r.isEmpty) return true;
-    return const {
-      'futbolcu',
-      'her i̇kisi',
-      'her ikisi',
-      'player',
-      'both',
-    }.contains(r);
-  }
-
   String _positionsBirthLine(PlayerModel p) {
     final main = (p.mainPosition ?? '').trim();
     final sub = (p.position ?? '').trim();
@@ -3188,7 +3116,6 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
                                             allowed == null ||
                                             allowed.contains(p.id),
                                       )
-                                      .where((p) => _isFootballerRole(p.role))
                                       .where(
                                         (p) =>
                                             q.isEmpty ||
@@ -3217,7 +3144,6 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
                                         allowed == null ||
                                         allowed.contains(p.id),
                                   )
-                                  .where((p) => _isFootballerRole(p.role))
                                   .map((p) => p.id);
                               return FutureBuilder(
                                 future: _consentCache.of(all),

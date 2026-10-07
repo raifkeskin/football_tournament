@@ -922,7 +922,6 @@ class _PenaltyEditorSheetState extends State<_PenaltyEditorSheet> {
       for (final p in players) {
         final id = p.id.trim();
         if (id.isEmpty) continue;
-        if (p.role != 'Futbolcu' && p.role != 'Her İkisi') continue;
         byId.putIfAbsent(
           id,
           () => (

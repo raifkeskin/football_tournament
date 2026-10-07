@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:football_tournament/features/auth/widgets/phone_input.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 

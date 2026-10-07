@@ -40,24 +40,6 @@ class SupabaseTeamService implements ITeamService {
     return {...row, 'name': display};
   }
 
-  Future<void> _bestEffortUpdatePlayerIdentityFields({
-    required String playerId,
-    String? role,
-  }) async {
-    final pid = playerId.trim();
-    if (pid.isEmpty) return;
-    final r = (role ?? '').trim();
-    if (r.isEmpty) return;
-
-    if (r.isNotEmpty) {
-      try {
-        await _client.from('players').update({'role': r}).eq('id', pid);
-      } on PostgrestException catch (e) {
-        if (e.code != 'PGRST204') rethrow;
-      }
-    }
-  }
-
   /// Postgres her 8-4-4-4-12 onaltılık değeri uuid kabul eder; sürüm/varyant
   /// hanesi kontrol edilmez (ör. 66666666-aaaa-0000-0000-000000000001).
   bool _isUuid(String input) {
@@ -603,11 +585,6 @@ class SupabaseTeamService implements ITeamService {
         }
 
         list.sort((a, b) {
-          bool isManager(PlayerModel p) =>
-              p.role == 'Takım Sorumlusu' || p.role == 'Her İkisi';
-          final aM = isManager(a);
-          final bM = isManager(b);
-          if (aM != bM) return aM ? -1 : 1;
           final an = int.tryParse((a.number ?? '').trim()) ?? 9999;
           final bn = int.tryParse((b.number ?? '').trim()) ?? 9999;
           final cmp = an.compareTo(bn);
@@ -948,7 +925,7 @@ class SupabaseTeamService implements ITeamService {
           .from('season_team_players')
           // players içindeki gerçek UUID olan 'id'yi mutlaka çekiyoruz[cite: 2]
           .select(
-            'player_id, jersey_number, players!inner(id, name, surname, main_position, role)',
+            'player_id, jersey_number, players!inner(id, name, surname, main_position)',
           )
           .eq('team_id', team)
           .eq('season_id', tId)
@@ -981,11 +958,6 @@ class SupabaseTeamService implements ITeamService {
       }
 
       list.sort((a, b) {
-        bool isManager(PlayerModel p) =>
-            p.role == 'Takım Sorumlusu' || p.role == 'Her İkisi';
-        final aM = isManager(a);
-        final bM = isManager(b);
-        if (aM != bM) return aM ? -1 : 1;
         final an = int.tryParse((a.number ?? '').trim()) ?? 9999;
         final bn = int.tryParse((b.number ?? '').trim()) ?? 9999;
         final cmp = an.compareTo(bn);
@@ -1142,7 +1114,6 @@ class SupabaseTeamService implements ITeamService {
           'height',
           'weight',
           'national_id',
-          'role',
         ];
         final hasFullPayload = fullKeys.every(data.containsKey);
 
@@ -1180,7 +1151,6 @@ class SupabaseTeamService implements ITeamService {
             'height': cleanInt(data['height']),
             'weight': cleanInt(data['weight']),
             'national_id': cleanStr(data['national_id']),
-            'role': cleanStr(data['role']),
           };
         } else {
           String mapKey(String k) {
@@ -1214,6 +1184,8 @@ class SupabaseTeamService implements ITeamService {
 
           payload = <String, dynamic>{};
           for (final e in data.entries) {
+            // Rol alanı kaldırıldı (sorumlu Takım Yönetimi'nden seçilir).
+            if (e.key == 'role') continue;
             payload[mapKey(e.key)] = e.value;
           }
         }
@@ -1503,7 +1475,6 @@ class SupabaseTeamService implements ITeamService {
     required String playerPhone,
     required String playerName,
     String? jerseyNumber,
-    required String role,
     String? caller,
   }) {
     final t = tournamentId.trim();
@@ -1651,10 +1622,6 @@ class SupabaseTeamService implements ITeamService {
         if (!didUpdate) {
           await _client.from('season_team_players').insert(base);
         }
-        await _bestEffortUpdatePlayerIdentityFields(
-          playerId: pid,
-          role: role.trim().isEmpty ? null : role.trim(),
-        );
         AppConfig.sqlLogResult(
           table: 'season_team_players',
           operation: 'INSERT',
@@ -1778,176 +1745,6 @@ class SupabaseTeamService implements ITeamService {
         );
         _sbResult(rows: 0, error: e);
         rethrow;
-      }
-    });
-  }
-
-  @override
-  Future<bool> isTeamManagerForTournament({
-    required String tournamentId,
-    required String teamId,
-    required String playerPhone,
-    String? caller,
-  }) {
-    final t = tournamentId.trim();
-    final team = teamId.trim();
-    final phone = playerPhone.trim();
-    if (t.isEmpty || team.isEmpty || phone.isEmpty) return Future.value(false);
-    return Future(() async {
-      final pid =
-          (await _resolvePlayerId(
-            phone,
-            caller: caller,
-            method: 'isTeamManagerForTournament',
-          ))?.trim() ??
-          '';
-      if (pid.isEmpty) return false;
-      try {
-        _sbLog(
-          table: 'season_team_players',
-          query:
-              'SELECT id | season_id=$t, team_id=$team, player_id=$pid | limit=1',
-          trace: StackTrace.current,
-        );
-        AppConfig.sqlLogStart(
-          table: 'season_team_players',
-          operation: 'SELECT',
-          caller: caller,
-          service: _serviceName,
-          method: 'isTeamManagerForTournament',
-          filters: 'season_id=$t, team_id=$team, player_id=$pid | limit=1',
-        );
-        final linkRes = await _client
-            .from('season_team_players')
-            .select('id')
-            .eq('season_id', t)
-            .eq('team_id', team)
-            .eq('player_id', pid)
-            .eq('is_active', true)
-            .limit(1);
-        if (linkRes.isEmpty) {
-          AppConfig.sqlLogResult(
-            table: 'season_team_players',
-            operation: 'SELECT',
-            caller: caller,
-            service: _serviceName,
-            method: 'isTeamManagerForTournament',
-            count: 0,
-          );
-          _sbResult(rows: 0);
-          return false;
-        }
-        AppConfig.sqlLogResult(
-          table: 'season_team_players',
-          operation: 'SELECT',
-          caller: caller,
-          service: _serviceName,
-          method: 'isTeamManagerForTournament',
-          count: 1,
-        );
-        _sbResult(rows: 1);
-        final pr = await _client
-            .from('players')
-            .select('role')
-            .eq('id', pid)
-            .limit(1);
-        if (pr.isEmpty) return false;
-        final role = ((pr.first as Map)['role'] ?? '').toString().trim();
-        return role == 'Takım Sorumlusu' || role == 'Her İkisi';
-      } catch (e) {
-        AppConfig.sqlLogResult(
-          table: 'season_team_players',
-          operation: 'SELECT',
-          caller: caller,
-          service: _serviceName,
-          method: 'isTeamManagerForTournament',
-          error: e,
-        );
-        _sbResult(rows: 0, error: e);
-        return false;
-      }
-    });
-  }
-
-  @override
-  Future<bool> managerExistsForTeamTournament({
-    required String tournamentId,
-    required String teamId,
-    String? excludePlayerPhone,
-    String? caller,
-  }) {
-    final t = tournamentId.trim();
-    final team = teamId.trim();
-    if (t.isEmpty || team.isEmpty) return Future.value(false);
-    final exclude = excludePlayerPhone?.trim();
-    return Future(() async {
-      try {
-        _sbLog(
-          table: 'season_team_players',
-          query: 'SELECT player_id | season_id=$t, team_id=$team',
-          trace: StackTrace.current,
-        );
-        AppConfig.sqlLogStart(
-          table: 'season_team_players',
-          operation: 'SELECT',
-          caller: caller,
-          service: _serviceName,
-          method: 'managerExistsForTeamTournament',
-          filters: 'season_id=$t, team_id=$team',
-        );
-        final res = await _client
-            .from('season_team_players')
-            .select('player_id')
-            .eq('season_id', t)
-            .eq('team_id', team)
-            .eq('is_active', true);
-        AppConfig.sqlLogResult(
-          table: 'season_team_players',
-          operation: 'SELECT',
-          caller: caller,
-          service: _serviceName,
-          method: 'managerExistsForTeamTournament',
-          count: res.length,
-        );
-        _sbResult(rows: res.length);
-        final excludeId = (exclude == null || exclude.isEmpty)
-            ? ''
-            : ((await _resolvePlayerId(
-                        exclude,
-                        caller: caller,
-                        method: 'managerExistsForTeamTournament',
-                      )) ??
-                      '')
-                  .trim();
-        final ids = <String>{};
-        for (final rowAny in res) {
-          final row = (rowAny as Map).cast<String, dynamic>();
-          final pid = (row['player_id'] ?? '').toString().trim();
-          if (excludeId.isNotEmpty && pid == excludeId) continue;
-          if (pid.isNotEmpty) ids.add(pid);
-        }
-        if (ids.isEmpty) return false;
-
-        final pr = await _client
-            .from('players')
-            .select('id, role')
-            .inFilter('id', ids.toList());
-        for (final any in pr) {
-          final role = (any['role'] ?? '').toString().trim();
-          if (role == 'Takım Sorumlusu' || role == 'Her İkisi') return true;
-        }
-        return false;
-      } catch (e) {
-        AppConfig.sqlLogResult(
-          table: 'season_team_players',
-          operation: 'SELECT',
-          caller: caller,
-          service: _serviceName,
-          method: 'managerExistsForTeamTournament',
-          error: e,
-        );
-        _sbResult(rows: 0, error: e);
-        return false;
       }
     });
   }

@@ -509,7 +509,6 @@ class PlayerModel {
     this.weight,
     this.photoUrl,
     this.number,
-    this.role = 'Futbolcu',
     this.teamId,
     this.tournamentId,
     this.suspendedMatches = 0,
@@ -527,7 +526,6 @@ class PlayerModel {
   final int? weight;
   final String? photoUrl;
   final String? number;
-  final String role;
   final String? teamId;
   final String? tournamentId;
   final int suspendedMatches;
@@ -578,8 +576,6 @@ class PlayerModel {
     final name = (v('playerName', 'player_name') ?? v('name', 'name') ?? '')
         .toString()
         .trim();
-    final roleRaw = (v('role', 'role') ?? '').toString().trim();
-    final role = roleRaw.isEmpty ? 'Futbolcu' : roleRaw;
     final birthDate = normalizeBirthDate(v('birthDate', 'birth_date'));
     final mainPosition = (v('mainPosition', 'main_position') as String?)
         ?.trim();
@@ -635,7 +631,6 @@ class PlayerModel {
         height: height,
         weight: weight,
         photoUrl: photoUrl,
-        role: role,
         teamId: teamId.isEmpty ? null : teamId,
         tournamentId: tournamentId.isEmpty ? null : tournamentId,
         suspendedMatches: suspendedMatches,
@@ -654,7 +649,6 @@ class PlayerModel {
       height: height,
       weight: weight,
       photoUrl: photoUrl,
-      role: role,
       suspendedMatches: suspendedMatches,
     );
   }
@@ -688,7 +682,6 @@ class PlayerModel {
         'playerPhone': phone,
         'playerName': name,
         'jerseyNumber': number,
-        'role': role,
       };
     }
     return {
@@ -697,7 +690,6 @@ class PlayerModel {
       'player_phone': phone,
       'player_name': name,
       'jersey_number': number,
-      'role': role,
     };
   }
 }
