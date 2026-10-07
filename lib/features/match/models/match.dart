@@ -386,6 +386,7 @@ class MatchEvent {
   final String? assistPlayerId;
   final String? subInPlayerId;
   final bool isOwnGoal;
+  final bool isPenalty;
 
   MatchEvent({
     required this.id,
@@ -400,6 +401,7 @@ class MatchEvent {
     this.assistPlayerId,
     this.subInPlayerId,
     this.isOwnGoal = false,
+    this.isPenalty = false,
   });
 
   factory MatchEvent.fromMap(Map<String, dynamic> map, String id) {
@@ -430,6 +432,7 @@ class MatchEvent {
       minute: minute,
       teamId: (v('teamId', 'team_id') ?? '').toString(),
       isOwnGoal: (v('isOwnGoal', 'is_own_goal') as bool?) ?? false,
+      isPenalty: (v('isPenalty', 'is_penalty') as bool?) ?? false,
     );
   }
 
@@ -445,6 +448,7 @@ class MatchEvent {
         'subInPlayerId': subInPlayerId,
         'minute': minute,
         'isOwnGoal': isOwnGoal,
+        'isPenalty': isPenalty,
       };
     }
     return {
@@ -458,6 +462,8 @@ class MatchEvent {
       // player_id üzerinden players tablosundan bulunur.
       'minute': minute,
       'is_own_goal': isOwnGoal,
+      // Yalnız penaltıda gönderilir; kolon yokken diğer olaylar etkilenmez.
+      if (isPenalty) 'is_penalty': true,
     };
   }
 }

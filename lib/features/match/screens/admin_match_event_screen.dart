@@ -30,6 +30,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
   LineupPlayer? _selectedAssist;
   LineupPlayer? _selectedSubIn;
   bool _isOwnGoal = false;
+  bool _isPenalty = false;
   bool _isLoading = false;
 
   /// Olayı yapan oyuncunun takımı: kendi kalesine golde rakip takım.
@@ -156,7 +157,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
         playerId: player.playerId.trim().isEmpty
             ? null
             : player.playerId.trim(),
-        assistPlayerId: _eventType == 'goal' && !_isOwnGoal
+        assistPlayerId: _eventType == 'goal' && !_isOwnGoal && !_isPenalty
             ? _selectedAssist?.playerId.trim().toString()
             : null,
         subInPlayerId: _eventType == 'substitution'
@@ -165,6 +166,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                   : _selectedSubIn!.playerId.trim())
             : null,
         isOwnGoal: _eventType == 'goal' ? _isOwnGoal : false,
+        isPenalty: _eventType == 'goal' ? _isPenalty : false,
       );
 
       await _matchService.addMatchEvent(event);
@@ -325,6 +327,8 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                                     if (picked != 'goal') {
                                       _selectedAssist = null;
                                       _isOwnGoal = false;
+                                    _isPenalty = false;
+                                      _isPenalty = false;
                                     }
                                     if (picked != 'substitution') {
                                       _selectedSubIn = null;
@@ -363,6 +367,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                                     _selectedAssist = null;
                                     _selectedSubIn = null;
                                     _isOwnGoal = false;
+                                    _isPenalty = false;
                                   });
                                 },
                         ),
@@ -446,6 +451,8 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                                 ? null
                                 : () => setState(() {
                                     _isOwnGoal = !_isOwnGoal;
+                                    // Penaltı ile birlikte işaretlenemez.
+                                    if (_isOwnGoal) _isPenalty = false;
                                     // Oyuncu listesi rakip takıma geçer.
                                     _selectedPlayer = null;
                                     _selectedAssist = null;
@@ -457,6 +464,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                                   ? null
                                   : (v) => setState(() {
                                       _isOwnGoal = v;
+                                      if (v) _isPenalty = false;
                                       _selectedPlayer = null;
                                       _selectedAssist = null;
                                     }),
@@ -470,7 +478,28 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                               ),
                             ),
                           ),
-                        if (isGoal && !_isOwnGoal)
+                        if (isGoal)
+                          AdminFieldRow(
+                            icon: Icons.adjust_rounded,
+                            label: 'Penaltı',
+                            onTap: _isLoading
+                                ? null
+                                : () => _setPenalty(!_isPenalty),
+                            trailing: Switch(
+                              value: _isPenalty,
+                              activeThumbColor: kAdminAccent,
+                              onChanged: _isLoading ? null : _setPenalty,
+                            ),
+                            child: Text(
+                              _isPenalty ? 'Evet' : 'Hayır',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        if (isGoal && !_isOwnGoal && !_isPenalty)
                           AdminSelectRow(
                             icon: Icons.handshake_outlined,
                             label: 'Asist (İsteğe Bağlı)',
@@ -516,6 +545,19 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
     );
   }
 
+  /// Penaltı golünde asist olmaz; kendi kalesine ile birlikte seçilemez.
+  void _setPenalty(bool v) {
+    setState(() {
+      _isPenalty = v;
+      if (!v) return;
+      _selectedAssist = null;
+      if (_isOwnGoal) {
+        _isOwnGoal = false;
+        _selectedPlayer = null; // oyuncu listesi kendi takımına döner
+      }
+    });
+  }
+
   /// Formda girilmiş ama kaydedilmemiş bir şey var mı?
   bool get _isDirty =>
       _minuteController.text.trim().isNotEmpty ||
@@ -523,6 +565,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
       _selectedAssist != null ||
       _selectedSubIn != null ||
       _isOwnGoal ||
+      _isPenalty ||
       _eventType != 'goal' ||
       _teamId != widget.match.homeTeamId;
 
