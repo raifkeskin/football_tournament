@@ -125,6 +125,8 @@ class SupabaseMatchService implements IMatchService {
     }
 
     // Önce önbellekteki hafta gösterilir, taze liste arkadan gelir.
+    // Sonra yalnız bu cihazdan bu haftanın bir maçı değişince (skor, olay)
+    // yeniden okunur; canlı bağlantı açılmaz.
     Stream<List<MatchModel>> feed() async* {
       final cached = _fixtureCache[key];
       if (cached != null) yield cached;
@@ -137,6 +139,13 @@ class SupabaseMatchService implements IMatchService {
           error: e,
         );
         if (cached == null) rethrow;
+      }
+      await for (final mid in _localChanges.stream) {
+        final week = _fixtureCache[key] ?? const <MatchModel>[];
+        if (!week.any((m) => m.id == mid)) continue;
+        try {
+          yield await fetch();
+        } catch (_) {}
       }
     }
 
@@ -377,6 +386,7 @@ class SupabaseMatchService implements IMatchService {
         .from('matches')
         .update({'home_score': home, 'away_score': away})
         .eq('id', matchId);
+    notifyLocalChange(matchId);
   }
 
   @override
@@ -427,11 +437,13 @@ class SupabaseMatchService implements IMatchService {
             .from('matches')
             .update({'home_score': home - 1})
             .eq('id', matchId);
+        notifyLocalChange(matchId);
       } else if (scoringTeamId == awayTeamId && away > 0) {
         await _client
             .from('matches')
             .update({'away_score': away - 1})
             .eq('id', matchId);
+        notifyLocalChange(matchId);
       }
     } catch (err) {
       AppConfig.sqlLogResult(table: 'matches', operation: 'UPDATE', error: err);
@@ -521,6 +533,7 @@ class SupabaseMatchService implements IMatchService {
             .from('matches')
             .update({'home_score': nextHome, 'away_score': nextAway})
             .eq('id', event.matchId);
+        notifyLocalChange(event.matchId);
         AppConfig.sqlLogResult(table: 'matches', operation: 'UPDATE', count: 1);
       } catch (e) {
         AppConfig.sqlLogResult(table: 'matches', operation: 'UPDATE', error: e);
@@ -828,6 +841,7 @@ class SupabaseMatchService implements IMatchService {
           );
         }
         AppConfig.sqlLogResult(table: 'matches', operation: 'UPDATE', count: 1);
+        notifyLocalChange(id);
       } catch (e) {
         AppConfig.sqlLogResult(table: 'matches', operation: 'UPDATE', error: e);
         rethrow;
