@@ -1839,7 +1839,7 @@ class _SheetHeader extends StatelessWidget {
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 18,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
@@ -1895,7 +1895,7 @@ class _SaveButton extends StatelessWidget {
           : Text(
               label,
               style: const TextStyle(
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w800,
                 letterSpacing: 1.2,
               ),
             ),

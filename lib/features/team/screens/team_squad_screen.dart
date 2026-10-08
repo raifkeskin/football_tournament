@@ -1630,7 +1630,7 @@ class _CardRow extends StatelessWidget {
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: Colors.white,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w800,
             ),
           ),
         ],
@@ -2595,7 +2595,7 @@ class _PlayerPickerSheetState extends State<_PlayerPickerSheet> {
                                             ? '?'
                                             : p.name.trim()[0].trUpper,
                                         style: const TextStyle(
-                                          fontWeight: FontWeight.w900,
+                                          fontWeight: FontWeight.w800,
                                         ),
                                       ),
                                     )
@@ -2611,7 +2611,7 @@ class _PlayerPickerSheetState extends State<_PlayerPickerSheet> {
                           ),
                           title: Text(
                             p.name,
-                            style: const TextStyle(fontWeight: FontWeight.w900),
+                            style: const TextStyle(fontWeight: FontWeight.w800),
                           ),
                           trailing: Text(
                             birth.isEmpty ? '-' : birth,
@@ -2984,7 +2984,7 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
                                     }),
                               child: const Text(
                                 'Devam Et',
-                                style: TextStyle(fontWeight: FontWeight.w900),
+                                style: TextStyle(fontWeight: FontWeight.w800),
                               ),
                             ),
                           ),
@@ -3503,7 +3503,7 @@ class _SquadSummaryCard extends StatelessWidget {
             style: const TextStyle(
               color: Colors.white,
               fontSize: 20,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w800,
             ),
           ),
           Text(
@@ -3581,7 +3581,7 @@ class _SquadSummaryCard extends StatelessWidget {
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 32,
-                                    fontWeight: FontWeight.w900,
+                                    fontWeight: FontWeight.w800,
                                   ),
                                 ),
                               ),
@@ -3596,7 +3596,7 @@ class _SquadSummaryCard extends StatelessWidget {
                           color: Colors.white,
                           fontSize: 26,
                           height: 1.05,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w800,
                           fontStyle: FontStyle.italic,
                           letterSpacing: 0.5,
                         ),
@@ -3734,7 +3734,7 @@ class _JerseyBadge extends StatelessWidget {
           style: TextStyle(
             color: has ? _squadAccent : _squadMuted,
             fontSize: 16,
-            fontWeight: has ? FontWeight.w900 : FontWeight.w700,
+            fontWeight: has ? FontWeight.w800 : FontWeight.w700,
           ),
         ),
       ),
@@ -3908,7 +3908,7 @@ class _SeasonPlayerPickerState extends State<_SeasonPlayerPicker> {
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 18,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
                       SizedBox(height: 2),
@@ -4035,7 +4035,7 @@ class _SeasonPlayerPickerState extends State<_SeasonPlayerPicker> {
                             ? 'KADROYA EKLE'
                             : 'KADROYA EKLE (${_selected.length})',
                         style: const TextStyle(
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w800,
                           letterSpacing: 0.5,
                         ),
                       ),

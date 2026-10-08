@@ -632,7 +632,7 @@ class _AdminPenaltyManagementScreenState
                                                               : pNum,
                                                           style: TextStyle(
                                                             fontWeight:
-                                                                FontWeight.w900,
+                                                                FontWeight.w800,
                                                             color: cs.primary,
                                                           ),
                                                         ),
@@ -655,7 +655,7 @@ class _AdminPenaltyManagementScreenState
                                                       TextOverflow.ellipsis,
                                                   style: const TextStyle(
                                                     color: Colors.white,
-                                                    fontWeight: FontWeight.w900,
+                                                    fontWeight: FontWeight.w800,
                                                     fontSize: 14,
                                                   ),
                                                 ),
@@ -711,7 +711,7 @@ class _AdminPenaltyManagementScreenState
                                                         '${pen.matchCount} maç',
                                                         style: const TextStyle(
                                                           fontWeight:
-                                                              FontWeight.w900,
+                                                              FontWeight.w800,
                                                           color: Colors.red,
                                                           fontSize: 12,
                                                         ),

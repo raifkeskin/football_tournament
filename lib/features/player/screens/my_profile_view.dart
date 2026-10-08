@@ -578,7 +578,7 @@ class _MyProfileViewState extends State<MyProfileView> {
               style: TextStyle(
                 color: color,
                 fontSize: 22,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w800,
               ),
             ),
             Text(
@@ -879,7 +879,7 @@ class _MyProfileViewState extends State<MyProfileView> {
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 26,
-                            fontWeight: FontWeight.w900,
+                            fontWeight: FontWeight.w800,
                           ),
                         ),
                         if (at != null)

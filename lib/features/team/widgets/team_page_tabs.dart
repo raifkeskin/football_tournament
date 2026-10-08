@@ -294,7 +294,7 @@ class _TeamFixtureTabState extends State<TeamFixtureTab> {
                     result.$1,
                     style: TextStyle(
                       color: result.$2,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w800,
                       fontSize: 13,
                       fontFeatures: const [FontFeature.tabularFigures()],
                     ),
@@ -475,7 +475,7 @@ class TeamStatsTab extends StatelessWidget {
             style: TextStyle(
               color: color,
               fontSize: 20,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w800,
             ),
           ),
           Text(label, style: const TextStyle(color: _muted, fontSize: 11)),

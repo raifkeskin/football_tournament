@@ -242,7 +242,7 @@ class _Tile extends StatelessWidget {
                               color: Colors.white,
                               fontSize: 15,
                               fontWeight: item.unread
-                                  ? FontWeight.w900
+                                  ? FontWeight.w800
                                   : FontWeight.w700,
                             ),
                           ),

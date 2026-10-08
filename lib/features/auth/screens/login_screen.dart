@@ -269,7 +269,7 @@ class _LoginScreenState extends State<LoginScreen> {
             'Giriş Yap',
             style: TextStyle(
               color: Colors.white,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w800,
               fontSize: 20,
             ),
           ),
@@ -495,7 +495,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   'GİRİŞ YAP',
                                   style: TextStyle(
                                     color: Colors.white,
-                                    fontWeight: FontWeight.w900,
+                                    fontWeight: FontWeight.w800,
                                     fontSize: 16,
                                     letterSpacing: 1.2,
                                   ),

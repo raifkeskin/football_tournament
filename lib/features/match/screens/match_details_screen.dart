@@ -31,6 +31,7 @@ import '../../../core/utils/team_colors.dart';
 import '../../../core/widgets/pitch_token_style.dart';
 import 'package:football_tournament/core/widgets/picked_image.dart';
 import '../utils/match_clock.dart';
+import '../../team/screens/team_squad_screen.dart';
 import '../../../core/widgets/league_logo.dart';
 import 'package:football_tournament/core/widgets/admin_page.dart';
 import 'package:football_tournament/core/widgets/admin_form.dart';
@@ -97,7 +98,7 @@ class _PenaltyGoalIcon extends StatelessWidget {
                 style: TextStyle(
                   color: Colors.black,
                   fontSize: 9,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w800,
                   height: 1.2,
                 ),
               ),
@@ -149,11 +150,38 @@ class _SecondYellowCardIcon extends StatelessWidget {
 class _TeamInfo extends StatelessWidget {
   final String name;
   final String logoUrl;
+  final String teamId;
+  final String seasonId;
 
-  const _TeamInfo({required this.name, required this.logoUrl});
+  const _TeamInfo({
+    required this.name,
+    required this.logoUrl,
+    required this.teamId,
+    required this.seasonId,
+  });
 
   @override
   Widget build(BuildContext context) {
+    // Logoya / ada dokununca takımın sayfası (kadro, fikstür, istatistik).
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: teamId.isEmpty
+          ? null
+          : () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => TeamSquadScreen(
+                  teamId: teamId,
+                  tournamentId: seasonId,
+                  teamName: name,
+                  teamLogoUrl: logoUrl,
+                ),
+              ),
+            ),
+      child: _content(),
+    );
+  }
+
+  Widget _content() {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -173,7 +201,8 @@ class _TeamInfo extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
             color: Colors.white,
-            fontWeight: FontWeight.w900,
+            // 700: uzun adlar da okunur kalsın.
+            fontWeight: FontWeight.w700,
             fontSize: 15,
             height: 1.15,
             letterSpacing: 0.2,
@@ -315,7 +344,7 @@ class _MatchPhaseLabel extends StatelessWidget {
           text,
           style: TextStyle(
             color: color,
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w800,
             fontSize: 13,
             shadows: const [
               Shadow(color: Colors.black, blurRadius: 10, offset: Offset(0, 2)),
@@ -416,7 +445,7 @@ class _MatchFlowBarState extends State<_MatchFlowBar> {
                 label: Text(
                   next.label,
                   style: const TextStyle(
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w800,
                     letterSpacing: 0.3,
                   ),
                 ),
@@ -923,6 +952,8 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                       child: _TeamInfo(
                                         name: homeName,
                                         logoUrl: homeLogo,
+                                        teamId: m.homeTeamId,
+                                        seasonId: m.seasonId,
                                       ),
                                     ),
                                     Padding(
@@ -940,7 +971,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                             "${m.homeScore} - ${m.awayScore}",
                                             style: const TextStyle(
                                               color: Colors.white,
-                                              fontWeight: FontWeight.w900,
+                                              fontWeight: FontWeight.w800,
                                               fontSize: 30,
                                               shadows: [
                                                 Shadow(
@@ -959,6 +990,8 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                       child: _TeamInfo(
                                         name: awayName,
                                         logoUrl: awayLogo,
+                                        teamId: m.awayTeamId,
+                                        seasonId: m.seasonId,
                                       ),
                                     ),
                                   ],
@@ -1117,7 +1150,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                 ),
                                 labelStyle: const TextStyle(
                                   fontFamily: 'Batangas',
-                                  fontWeight: FontWeight.w900,
+                                  fontWeight: FontWeight.w800,
                                   fontSize: 13.5,
                                 ),
                                 unselectedLabelStyle: const TextStyle(
@@ -2656,7 +2689,7 @@ class _LineupTabState extends State<_LineupTab>
                 'VS',
                 style: TextStyle(
                   color: Colors.white,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w800,
                   fontSize: 11,
                   letterSpacing: 0.5,
                 ),
@@ -2717,7 +2750,7 @@ class _LineupTabState extends State<_LineupTab>
       textAlign: alignEnd ? TextAlign.right : TextAlign.left,
       style: const TextStyle(
         color: Colors.white,
-        fontWeight: FontWeight.w900,
+        fontWeight: FontWeight.w800,
         fontSize: 14,
       ),
     );
@@ -3026,7 +3059,7 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
         textAlign: TextAlign.center,
         style: const TextStyle(
           color: Colors.white,
-          fontWeight: FontWeight.w900,
+          fontWeight: FontWeight.w800,
           fontSize: 14,
           letterSpacing: 0.3,
         ),
@@ -3073,7 +3106,7 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
               jersey.isEmpty ? '-' : jersey,
               style: TextStyle(
                 color: badge,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w800,
                 fontSize: 12,
               ),
             ),
@@ -3404,7 +3437,7 @@ class _RosterEditSheetState extends State<_RosterEditSheet> {
                 '$value / $limit',
                 style: TextStyle(
                   color: on ? c : Colors.white54,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w800,
                   fontSize: 13,
                 ),
               ),
@@ -3454,7 +3487,7 @@ class _RosterEditSheetState extends State<_RosterEditSheet> {
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   color: Colors.white,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w800,
                   fontSize: 14,
                 ),
                 decoration: InputDecoration(
@@ -3494,7 +3527,7 @@ class _RosterEditSheetState extends State<_RosterEditSheet> {
                         style: TextStyle(
                           color: Color(0xFFFBBF24),
                           fontSize: 10.5,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w800,
                           letterSpacing: 0.6,
                         ),
                       ),
@@ -3598,7 +3631,7 @@ class _RosterEditSheetState extends State<_RosterEditSheet> {
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 19,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w800,
                         ),
                         children: [
                           TextSpan(
@@ -3730,7 +3763,7 @@ class _RosterEditSheetState extends State<_RosterEditSheet> {
                             'KAYDET',
                             style: TextStyle(
                               fontSize: 16,
-                              fontWeight: FontWeight.w900,
+                              fontWeight: FontWeight.w800,
                             ),
                           ),
                   ),
@@ -4388,8 +4421,10 @@ class _DetailEventTile extends StatelessWidget {
   /// dakikası dolu yeşil zeminde beyaz yazılır.
   Widget _minuteBadge(String min) {
     final goal = type == 'goal';
+    // Sabit boy: 2 haneli dakika sığar, satır genişliğine yayılmaz;
+    // 60+4' gibi uzatma dakikası için biraz genişleyebilir.
     return Container(
-      constraints: const BoxConstraints(minWidth: 32),
+      constraints: const BoxConstraints(minWidth: 34, minHeight: 22),
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
         color: goal ? const Color(0xFF10B981) : const Color(0xFF0F172A),
@@ -4400,17 +4435,21 @@ class _DetailEventTile extends StatelessWidget {
               : Colors.amber.withValues(alpha: 0.45),
         ),
       ),
-      alignment: Alignment.center,
       child: min.isEmpty
           ? const Icon(Icons.star_rounded, size: 12, color: Colors.amber)
-          : Text(
-              min,
-              maxLines: 1,
-              style: TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w800,
-                color: goal ? Colors.white : Colors.amber,
-                fontFeatures: const [FontFeature.tabularFigures()],
+          // widthFactor 1: rozet yazı kadar (en az minWidth), yazı ortada.
+          : Center(
+              widthFactor: 1,
+              heightFactor: 1,
+              child: Text(
+                min,
+                maxLines: 1,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w800,
+                  color: goal ? Colors.white : Colors.amber,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
               ),
             ),
     );

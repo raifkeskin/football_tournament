@@ -26,7 +26,7 @@ class FootballScaffold extends StatelessWidget {
           ? AppBar(
               title: Text(
                 title!,
-                style: const TextStyle(fontWeight: FontWeight.w900),
+                style: const TextStyle(fontWeight: FontWeight.w800),
               ),
               centerTitle: true,
               backgroundColor: Colors.transparent,

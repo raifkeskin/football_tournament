@@ -76,7 +76,7 @@ class CaptainBadge extends StatelessWidget {
         'C',
         style: TextStyle(
           color: Colors.white,
-          fontWeight: FontWeight.w900,
+          fontWeight: FontWeight.w800,
           fontSize: size * 0.68,
           height: 1,
         ),
@@ -734,7 +734,7 @@ class _FormationPicker extends StatelessWidget {
             value,
             style: const TextStyle(
               color: _accent,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w800,
               fontSize: 13,
             ),
           ),
@@ -758,7 +758,7 @@ class _FormationPicker extends StatelessWidget {
               f,
               style: TextStyle(
                 color: f == value ? _accent : Colors.white,
-                fontWeight: f == value ? FontWeight.w900 : FontWeight.w600,
+                fontWeight: f == value ? FontWeight.w800 : FontWeight.w600,
               ),
             ),
           ),
@@ -803,7 +803,7 @@ class _TeamSwitch extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: on ? Colors.white : Colors.white60,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w800,
                 fontSize: 13,
               ),
             ),
@@ -945,7 +945,7 @@ class _PlayerToken extends StatelessWidget {
                     player.number.isEmpty ? '-' : player.number,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w800,
                       fontSize: 13,
                     ),
                   ),
@@ -971,7 +971,7 @@ class _PlayerToken extends StatelessWidget {
                     player.number.isEmpty ? '-' : player.number,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w800,
                       fontSize: 13,
                     ),
                   ),

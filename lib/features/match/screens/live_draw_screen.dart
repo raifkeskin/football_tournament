@@ -199,7 +199,7 @@ class _LiveDrawScreenState extends State<LiveDrawScreen> {
         foregroundColor: Colors.white,
         title: const Text(
           'Canlı Kura',
-          style: TextStyle(fontWeight: FontWeight.w900),
+          style: TextStyle(fontWeight: FontWeight.w800),
         ),
         actions: [
           if (s != null && s.live)
@@ -252,7 +252,7 @@ class _LiveDrawScreenState extends State<LiveDrawScreen> {
           style: const TextStyle(
             color: Colors.white,
             fontSize: 20,
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w800,
           ),
         ),
         const SizedBox(height: 6),
@@ -395,7 +395,7 @@ class _LiveDrawScreenState extends State<LiveDrawScreen> {
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 22,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w800,
                   letterSpacing: 0.5,
                 ),
               ),
@@ -417,7 +417,7 @@ class _LiveDrawScreenState extends State<LiveDrawScreen> {
                       style: TextStyle(
                         color: _gold,
                         fontSize: 20,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w800,
                         fontStyle: FontStyle.italic,
                       ),
                     ),
@@ -512,7 +512,7 @@ class _LiveDrawScreenState extends State<LiveDrawScreen> {
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 21,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
               const SizedBox(height: 4),
@@ -558,7 +558,7 @@ class _LiveDrawScreenState extends State<LiveDrawScreen> {
                 child: const Text(
                   'FİKSTÜRE GİT',
                   style: TextStyle(
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w800,
                     letterSpacing: 1,
                   ),
                 ),
@@ -630,7 +630,7 @@ class _Slot extends StatelessWidget {
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.18),
                       fontSize: 40,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w800,
                     ),
                   )
                 : Column(
@@ -694,7 +694,7 @@ class _Crest extends StatelessWidget {
           color: team.color.computeLuminance() > 0.5
               ? const Color(0xFF1F2937)
               : Colors.white,
-          fontWeight: FontWeight.w900,
+          fontWeight: FontWeight.w800,
           fontSize: size * 0.32,
         ),
       ),
@@ -876,7 +876,7 @@ class _Stat extends StatelessWidget {
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 22,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w800,
               ),
             ),
             Text(label, style: const TextStyle(color: _muted, fontSize: 11)),
@@ -918,7 +918,7 @@ class _CountdownBoxes extends StatelessWidget {
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 22,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w800,
                       fontFeatures: [FontFeature.tabularFigures()],
                     ),
                   ),
@@ -1123,7 +1123,7 @@ class _LiveBadgeState extends State<LiveBadge>
             style: TextStyle(
               color: Colors.white,
               fontSize: 11,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w800,
               letterSpacing: 1,
             ),
           ),
@@ -1163,7 +1163,7 @@ class _SoonBadge extends StatelessWidget {
             style: const TextStyle(
               color: Colors.white,
               fontSize: 11,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w800,
               letterSpacing: 0.6,
             ),
           ),
@@ -1189,7 +1189,7 @@ class _DoneBadge extends StatelessWidget {
         style: TextStyle(
           color: Colors.white,
           fontSize: 11,
-          fontWeight: FontWeight.w900,
+          fontWeight: FontWeight.w800,
           letterSpacing: 1,
         ),
       ),
@@ -1363,7 +1363,7 @@ class _LiveDrawNewsCardState extends State<LiveDrawNewsCard> {
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 18,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                     if (sub.isNotEmpty) ...[
@@ -1398,7 +1398,7 @@ class _LiveDrawNewsCardState extends State<LiveDrawNewsCard> {
                         cta,
                         style: const TextStyle(
                           color: Colors.white,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w800,
                           fontSize: 13.5,
                           letterSpacing: 0.5,
                         ),

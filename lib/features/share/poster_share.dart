@@ -214,7 +214,7 @@ class PosterLogo extends StatelessWidget {
         _initials,
         style: TextStyle(
           color: badgeTextColor,
-          fontWeight: FontWeight.w900,
+          fontWeight: FontWeight.w800,
           fontSize: size * 0.36,
         ),
       ),

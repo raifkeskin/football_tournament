@@ -879,7 +879,7 @@ class _StandingsRow extends StatelessWidget {
                   '${index + 1}',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w800,
                     color: isLeader ? _kAccent : teamText,
                     fontSize: 13,
                     fontFeatures: _tabular,
@@ -924,7 +924,7 @@ class _StandingsRow extends StatelessWidget {
                   '${entry.points}',
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w800,
                     color: _kAccent,
                     fontSize: 15,
                     fontFeatures: _tabular,

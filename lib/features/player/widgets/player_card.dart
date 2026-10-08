@@ -652,7 +652,7 @@ class _PlayerCardState extends State<PlayerCard> {
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 56,
-                                    fontWeight: FontWeight.w900,
+                                    fontWeight: FontWeight.w800,
                                   ),
                                 ),
                               )
@@ -690,7 +690,7 @@ class _PlayerCardState extends State<PlayerCard> {
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 19,
-                                  fontWeight: FontWeight.w900,
+                                  fontWeight: FontWeight.w800,
                                   height: 1.1,
                                   shadows: [
                                     Shadow(
@@ -742,7 +742,7 @@ class _PlayerCardState extends State<PlayerCard> {
                               '#$number',
                               style: const TextStyle(
                                 color: Colors.white,
-                                fontWeight: FontWeight.w900,
+                                fontWeight: FontWeight.w800,
                                 fontSize: 15,
                               ),
                             ),
@@ -818,7 +818,7 @@ class _PlayerCardState extends State<PlayerCard> {
               '$value',
               style: const TextStyle(
                 color: Colors.white,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w800,
                 fontSize: 24,
                 height: 1.1,
               ),
@@ -869,7 +869,7 @@ class _PlayerCardState extends State<PlayerCard> {
             style: TextStyle(
               color: color,
               fontSize: 13,
-              fontWeight: bold ? FontWeight.w900 : FontWeight.w600,
+              fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
             ),
           ),
         );

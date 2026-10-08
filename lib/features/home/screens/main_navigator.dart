@@ -656,7 +656,7 @@ class _MenuDrawer extends StatelessWidget {
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 18,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w800,
                     height: 1.15,
                   ),
                 ),
@@ -798,7 +798,7 @@ class _MenuDrawer extends StatelessWidget {
                                   ? const Color(0xFF0B1220)
                                   : Colors.white,
                               fontSize: 18,
-                              fontWeight: FontWeight.w900,
+                              fontWeight: FontWeight.w800,
                             ),
                           ),
                   ),
