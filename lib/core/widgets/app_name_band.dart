@@ -46,6 +46,7 @@ class AppNameBand extends StatelessWidget {
                 genericScreens,
                 panelActions,
                 LeagueSwitchScope.panel,
+                LeagueSwitchScope.homeTab,
               ]),
               builder: (context, tvlBand) {
                 // Yönetim panelinde turnuva kimliği yok: uygulama bandı.
@@ -74,9 +75,18 @@ class AppNameBand extends StatelessWidget {
                           ),
                         );
                   if (actions == null) {
-                    return switcher == null
-                        ? tvlBand!
-                        : Stack(children: [tvlBand!, switcher]);
+                    return Stack(
+                      children: [
+                        tvlBand!,
+                        ?switcher,
+                        if (LeagueSwitchScope.homeTab.value)
+                          const Positioned(
+                            left: 8,
+                            bottom: 8,
+                            child: BandMenuButton(),
+                          ),
+                      ],
+                    );
                   }
                   return Stack(
                     children: [
@@ -241,10 +251,18 @@ class LeagueSwitchScope {
   /// kimliği yerine uygulama bandını gösterir; panel tüm turnuvaları yönetir.
   static final panel = ValueNotifier<bool>(false);
 
+  /// Ana Sayfa sekmesi en üstte: bantta solda menü düğmesi (diğer sekmelerin
+  /// kendi başlıklarında menü var).
+  static final homeTab = ValueNotifier<bool>(false);
+
+  /// Bantdaki menü düğmesinin açtığı yan menü (ana gezgin verir).
+  static VoidCallback? openMenu;
+
   /// Kayıtlı ana gezgin sayfaları ve durumları. Girişten sonra bir an iki
   /// ana gezgin birlikte bulunabilir; eskisi kapanırken yenisinin kaydını
   /// silmesin diye her sayfa kendi kaydını tutar. Geçerli olan en üstteki.
-  static final _homes = <Route<dynamic>, ({bool mainTab, bool panelTab})>{};
+  static final _homes =
+      <Route<dynamic>, ({bool mainTab, bool panelTab, bool homeTab})>{};
 
   /// Kök gezginin gözlemcisi (MaterialApp.navigatorObservers).
   static final NavigatorObserver observer = _TopPageObserver();
@@ -254,9 +272,10 @@ class LeagueSwitchScope {
     Route<dynamic>? route, {
     required bool mainTab,
     bool panelTab = false,
+    bool homeTab = false,
   }) {
     if (route == null) return;
-    _homes[route] = (mainTab: mainTab, panelTab: panelTab);
+    _homes[route] = (mainTab: mainTab, panelTab: panelTab, homeTab: homeTab);
     _update();
   }
 
@@ -269,7 +288,8 @@ class LeagueSwitchScope {
     final home = top == null ? null : _homes[top];
     final v = home != null && home.mainTab;
     final p = home != null && home.panelTab;
-    if (enabled.value == v && panel.value == p) return;
+    final h = home != null && home.homeTab;
+    if (enabled.value == v && panel.value == p && homeTab.value == h) return;
     // Gezinme ya da çizim sırasında bandı yeniden kurmak hata verir: çerçeve
     // bitince uygula.
     if (SchedulerBinding.instance.schedulerPhase ==
@@ -279,6 +299,7 @@ class LeagueSwitchScope {
     }
     enabled.value = v;
     panel.value = p;
+    homeTab.value = h;
   }
 }
 
@@ -404,7 +425,7 @@ class _LeagueDropdownRoute extends PopupRoute<String> {
   final Rect band;
 
   @override
-  Color? get barrierColor => Colors.black45;
+  Color? get barrierColor => Colors.black38;
 
   @override
   bool get barrierDismissible => true;
@@ -425,56 +446,43 @@ class _LeagueDropdownRoute extends PopupRoute<String> {
     final current = ActiveTournament.currentLeagueId.value;
     final accent =
         ActiveTournament.theme.value?.secondary ?? const Color(0xFF10B981);
-    final width = (band.width - 24).clamp(0.0, 340.0);
     final maxHeight = MediaQuery.sizeOf(context).height - band.bottom - 24;
+    // Bandın hemen altına yapışık, bant genişliğinde aşağı açılan liste.
     return Stack(
       children: [
         Positioned(
-          top: band.bottom + 6,
-          right: MediaQuery.sizeOf(context).width - band.right + 12,
-          width: width,
-          child: FadeTransition(
-            opacity: animation,
-            child: ScaleTransition(
-              alignment: Alignment.topRight,
-              scale: Tween<double>(begin: 0.92, end: 1).animate(
-                CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+          top: band.bottom,
+          left: band.left,
+          width: band.width,
+          child: SizeTransition(
+            sizeFactor: CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOutCubic,
+            ),
+            alignment: Alignment.topCenter,
+            child: Material(
+              color: const Color(0xFF1E293B),
+              elevation: 12,
+              shadowColor: Colors.black,
+              borderRadius: const BorderRadius.vertical(
+                bottom: Radius.circular(16),
               ),
-              child: Material(
-                color: const Color(0xFF1E293B),
-                elevation: 12,
-                shadowColor: Colors.black,
-                borderRadius: BorderRadius.circular(16),
-                clipBehavior: Clip.antiAlias,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(maxHeight: maxHeight),
-                  child: ListView(
-                    shrinkWrap: true,
-                    padding: const EdgeInsets.symmetric(vertical: 6),
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
-                        child: Text(
-                          ActiveTournament.isRealUser
-                              ? 'TURNUVALARIM'
-                              : 'TURNUVALAR',
-                          style: TextStyle(
-                            color: Color(0xFF94A3B8),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.6,
-                          ),
-                        ),
+              clipBehavior: Clip.antiAlias,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: maxHeight),
+                child: ListView(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  children: [
+                    for (final l in leagues)
+                      _LeagueRow(
+                        league: l,
+                        selected: l.id == current,
+                        accent: accent,
+                        // Seçince liste kapanır, turnuva değişir.
+                        onTap: () => Navigator.pop(context, l.id),
                       ),
-                      for (final l in leagues)
-                        _LeagueRow(
-                          league: l,
-                          selected: l.id == current,
-                          accent: accent,
-                          onTap: () => Navigator.pop(context, l.id),
-                        ),
-                    ],
-                  ),
+                  ],
                 ),
               ),
             ),
@@ -509,7 +517,7 @@ class _LeagueRow extends StatelessWidget {
       onTap: onTap,
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           color: selected ? accent.withValues(alpha: 0.14) : null,
           borderRadius: BorderRadius.circular(12),
@@ -517,13 +525,13 @@ class _LeagueRow extends StatelessWidget {
         child: Row(
           children: [
             SizedBox(
-              width: 36,
-              height: 36,
+              width: 30,
+              height: 30,
               child: league.logoUrl.isNotEmpty
                   ? WebSafeImage(
                       url: league.logoUrl,
-                      width: 36,
-                      height: 36,
+                      width: 30,
+                      height: 30,
                       fit: BoxFit.contain,
                     )
                   : Container(
@@ -589,16 +597,24 @@ class _TournamentBand extends StatelessWidget {
           children: [
             if (actions != null)
               actions!.menuButton(Colors.white)
+            else if (LeagueSwitchScope.homeTab.value)
+              Padding(
+                padding: const EdgeInsets.only(left: 8, right: 8),
+                child: BandMenuButton(
+                  background: theme.secondary,
+                  foreground: theme.primaryDark,
+                ),
+              )
             else
               const SizedBox(width: 12),
             if (theme.logoUrl.isNotEmpty)
               WebSafeImage(
                 url: theme.logoUrl,
-                width: 44,
-                height: 44,
+                width: 36,
+                height: 36,
                 fit: BoxFit.contain,
               ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
             Expanded(
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
@@ -619,8 +635,8 @@ class _TournamentBand extends StatelessWidget {
                           fontStyle: FontStyle.italic,
                           fontWeight: FontWeight.w800,
                           color: Colors.white,
-                          fontSize: 19,
-                          letterSpacing: 1.8,
+                          fontSize: 16,
+                          letterSpacing: 1.2,
                           decoration: TextDecoration.none,
                           shadows: const [
                             Shadow(color: Color(0x66000000), blurRadius: 4),
@@ -640,6 +656,42 @@ class _TournamentBand extends StatelessWidget {
             else
               const SizedBox(width: 8),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Bantta canlı renkli menü düğmesi (Ana Sayfa'da): turnuva renginde kutu.
+class BandMenuButton extends StatelessWidget {
+  const BandMenuButton({
+    super.key,
+    this.background = const Color(0xFF10B981),
+    this.foreground = const Color(0xFF0F172A),
+  });
+
+  final Color background;
+  final Color foreground;
+
+  @override
+  Widget build(BuildContext context) {
+    // Bant gezginin dışında: dokunma efekti için şeffaf Material.
+    return Material(
+      color: background,
+      borderRadius: BorderRadius.circular(10),
+      elevation: 2,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () => LeagueSwitchScope.openMenu?.call(),
+        child: SizedBox(
+          width: 34,
+          height: 34,
+          child: Icon(
+            Icons.menu_rounded,
+            color: foreground,
+            size: 24,
+            semanticLabel: 'Menü',
+          ),
         ),
       ),
     );

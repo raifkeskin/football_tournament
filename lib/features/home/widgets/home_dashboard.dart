@@ -704,7 +704,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
     } else {
       content = _message('Bu turnuvada henüz sezon yok.');
     }
-    // Sponsor şeridi, menü ve selamlama sayfanın üstünde sabit; altı kayar.
+    // Sponsor şeridi sabit (menü bantta); selamlama içerikle kayar.
     return Column(
       children: [
         Padding(
@@ -712,14 +712,13 @@ class _HomeDashboardState extends State<HomeDashboard> {
           // Bandın hemen altında dönen sponsor şeridi (sponsor yoksa boş).
           child: SponsorStrip(leagueId: widget.league.id),
         ),
-        _greeting(session, data),
         Expanded(
           child: RefreshIndicator(
             color: DashColors.accent(),
             onRefresh: _refresh,
             child: ListView(
               padding: const EdgeInsets.only(bottom: 24),
-              children: [content],
+              children: [_greeting(session, data), content],
             ),
           ),
         ),
@@ -765,23 +764,19 @@ class _HomeDashboardState extends State<HomeDashboard> {
               data!.groupRegion[myGroup] ?? data.groups[myGroup] ?? '',
           ].where((s) => s.isNotEmpty).join(' · ');
     return Container(
-      padding: const EdgeInsets.fromLTRB(4, 10, 8, 14),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          // Sabit satır: altından kayan içerik görünmesin diye zemine
-          // opak geçiş.
-          colors: [DashColors.primary(), DashColors.ground],
+          colors: [
+            DashColors.primary(),
+            DashColors.ground.withValues(alpha: 0),
+          ],
         ),
       ),
       child: Row(
         children: [
-          IconButton(
-            tooltip: 'Menü',
-            onPressed: widget.onOpenMenu,
-            icon: const Icon(Icons.menu_rounded, color: Colors.white),
-          ),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

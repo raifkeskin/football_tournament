@@ -57,6 +57,7 @@ class _MainNavigatorState extends State<MainNavigator> {
   void initState() {
     super.initState();
     MainNavigator._activeScaffoldKey = _scaffoldKey;
+    LeagueSwitchScope.openMenu = MainNavigator.openMenu;
     MainNavigator.tabRequest.addListener(_onTabRequest);
     AppSettings.bottomNavEnabled.addListener(_onSettings);
   }
@@ -144,6 +145,7 @@ class _MainNavigatorState extends State<MainNavigator> {
       panelTab:
           _aktifSekme == MainNavigator.profileTab &&
           session.value.hasManagementPanel,
+      homeTab: _aktifSekme == 0,
     );
     final user = session.value.user;
     final loggedIn = user != null && !user.isAnonymous;
