@@ -704,25 +704,22 @@ class _HomeDashboardState extends State<HomeDashboard> {
     } else {
       content = _message('Bu turnuvada henüz sezon yok.');
     }
-    // Menü ve selamlama satırı sayfanın üstünde sabit; altı kayar.
+    // Sponsor şeridi, menü ve selamlama sayfanın üstünde sabit; altı kayar.
     return Column(
       children: [
         Padding(
           padding: EdgeInsets.only(top: top),
-          child: _greeting(session, data),
+          // Bandın hemen altında dönen sponsor şeridi (sponsor yoksa boş).
+          child: SponsorStrip(leagueId: widget.league.id),
         ),
+        _greeting(session, data),
         Expanded(
           child: RefreshIndicator(
             color: DashColors.accent(),
             onRefresh: _refresh,
             child: ListView(
               padding: const EdgeInsets.only(bottom: 24),
-              children: [
-                // Selamlamanın hemen altında dönen sponsor şeridi (sponsor
-                // yoksa boş).
-                SponsorStrip(leagueId: widget.league.id),
-                content,
-              ],
+              children: [content],
             ),
           ),
         ),
@@ -758,7 +755,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
 
   Widget _greeting(AppSessionState session, _DashData? data) {
     final loggedIn = session.user != null && !session.user!.isAnonymous;
-    final first = (session.displayName ?? '').trim().split(' ').first;
+    final fullName = (session.displayName ?? '').trim();
     final myGroup = data == null ? null : _myGroupId(data);
     final sub = !loggedIn
         ? 'Misafir girişi'
@@ -790,9 +787,11 @@ class _HomeDashboardState extends State<HomeDashboard> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  loggedIn && first.isNotEmpty
-                      ? 'Merhaba, $first'
+                  loggedIn && fullName.isNotEmpty
+                      ? 'Merhaba, $fullName'
                       : 'Hoş geldin',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: _barlow(size: 18, weight: FontWeight.w800),
                 ),
                 if (sub.isNotEmpty)

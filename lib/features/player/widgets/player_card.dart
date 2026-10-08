@@ -403,7 +403,8 @@ class _PlayerCardState extends State<PlayerCard> {
       }
     } catch (_) {}
 
-    final seasonIds = totalsBySeason.keys.toList();
+    // Maçı / esamesi olmasa da kayıtlı olduğu aktif sezonlar da listelenir.
+    final seasonIds = {...totalsBySeason.keys, ...teamsBySeason.keys}.toList();
 
     final seasonById = <String, Map<String, dynamic>>{};
     final leagueById = <String, Map<String, dynamic>>{};
@@ -411,7 +412,7 @@ class _PlayerCardState extends State<PlayerCard> {
       try {
         final res = await _sb
             .from('seasons')
-            .select('id, name, league_id, start_date')
+            .select('id, name, league_id, start_date, is_active')
             .inFilter('id', seasonIds);
         for (final row in res) {
           final id = (row['id'] ?? '').toString().trim();
@@ -439,9 +440,13 @@ class _PlayerCardState extends State<PlayerCard> {
 
     final byLeague = <String, _TournamentNode>{};
     var overall = const _StatTotals();
-    for (final entry in totalsBySeason.entries) {
+    for (final sid in seasonIds) {
+      final totals = totalsBySeason[sid];
+      final seasonRow = seasonById[sid];
+      // İstatistiği olmayan kayıt: yalnız aktif sezondaysa gösterilir.
+      if (totals == null && seasonRow?['is_active'] != true) continue;
+      final entry = MapEntry(sid, totals ?? const _StatTotals());
       overall = overall + entry.value;
-      final seasonRow = seasonById[entry.key];
       final leagueId = (seasonRow?['league_id'] ?? '').toString().trim();
       final leagueName = (leagueById[leagueId]?['name'] ?? '')
           .toString()

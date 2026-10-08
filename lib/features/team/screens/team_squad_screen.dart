@@ -2813,7 +2813,11 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
   final ILeagueService _leagueService = ServiceLocator.leagueService;
 
   final _searchController = TextEditingController();
+  final _searchFocus = FocusNode();
   String _q = '';
+
+  /// Arama alanı yalnız sağ alttaki büyüteçle açılır (kadro ekranındaki gibi).
+  bool _searchOpen = false;
 
   String _norm(String input) {
     return input.replaceAll('İ', 'i').replaceAll('I', 'ı').toLowerCase().trim();
@@ -3068,6 +3072,7 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
   @override
   void dispose() {
     _searchController.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
@@ -3098,56 +3103,42 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
       appBar: MasterClassAppBar(
         title: 'Futbolcu Lisans Yönetimi',
         actions: [
+          // Toplu yükleme yalnız admin; futbolcu ekleme bölge sorumlusu ve
+          // üstü (yönetim paneli olanlar).
+          if (isAdmin)
+            IconButton(
+              tooltip: 'Toplu Yükle (Excel)',
+              onPressed: _openBulkUploadFlow,
+              icon: const Icon(
+                Icons.upload_file_rounded,
+                color: Colors.white,
+                size: 24,
+              ),
+            ),
           if (session.hasManagementPanel)
-            PopupMenuButton<String>(
-              tooltip: 'Futbolcu ekle',
+            IconButton(
+              tooltip: 'Futbolcu Ekle',
+              onPressed: _openPlayerForm,
               icon: const Icon(
                 Icons.person_add_alt_1_rounded,
                 color: Colors.white,
                 size: 26,
               ),
-              color: const Color(0xFF1E293B),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-              onSelected: (v) {
-                if (v == 'create') _openPlayerForm();
-                if (v == 'bulk') _openBulkUploadFlow();
-              },
-              itemBuilder: (_) => [
-                const PopupMenuItem(
-                  value: 'create',
-                  child: ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(
-                      Icons.person_add_alt_1_rounded,
-                      color: accent,
-                    ),
-                    title: Text(
-                      'Futbolcu Ekle',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                  ),
-                ),
-                // Toplu yükleme yalnızca admin.
-                if (isAdmin)
-                  const PopupMenuItem(
-                    value: 'bulk',
-                    child: ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(Icons.upload_file_rounded, color: accent),
-                      title: Text(
-                        'Toplu Yükle (Excel)',
-                        style: TextStyle(color: Colors.white),
-                      ),
-                    ),
-                  ),
-              ],
             ),
         ],
       ),
+      floatingActionButton: _searchOpen
+          ? null
+          : FloatingActionButton.small(
+              tooltip: 'Oyuncu ara',
+              backgroundColor: accent,
+              foregroundColor: Colors.white,
+              onPressed: () {
+                setState(() => _searchOpen = true);
+                _searchFocus.requestFocus();
+              },
+              child: const Icon(Icons.search_rounded, size: 20),
+            ),
       body: Stack(
         children: [
           SafeArea(
@@ -3155,28 +3146,52 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
               child: Column(
                 children: [
-                  TextField(
-                    controller: _searchController,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      hintText: 'Oyuncu ara',
-                      prefixIcon: const Icon(Icons.search, color: accent),
-                      filled: true,
-                      fillColor: Colors.black.withValues(alpha: 0.3),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: BorderSide(
-                          color: Colors.white.withValues(alpha: 0.1),
+                  if (_searchOpen) ...[
+                    SizedBox(
+                      height: 44,
+                      child: TextField(
+                        controller: _searchController,
+                        focusNode: _searchFocus,
+                        style: const TextStyle(color: Colors.white),
+                        textInputAction: TextInputAction.search,
+                        decoration: InputDecoration(
+                          isDense: true,
+                          hintText: 'Oyuncu ara',
+                          hintStyle: const TextStyle(color: Colors.white54),
+                          prefixIcon: const Icon(Icons.search, color: accent),
+                          suffixIcon: IconButton(
+                            tooltip: 'Aramayı kapat',
+                            icon: const Icon(
+                              Icons.close_rounded,
+                              color: Colors.white54,
+                            ),
+                            onPressed: () {
+                              _searchController.clear();
+                              _searchFocus.unfocus();
+                              setState(() {
+                                _q = '';
+                                _searchOpen = false;
+                              });
+                            },
+                          ),
+                          filled: true,
+                          fillColor: Colors.black.withValues(alpha: 0.3),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(
+                              color: Colors.white.withValues(alpha: 0.1),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: const BorderSide(color: accent),
+                          ),
                         ),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: const BorderSide(color: accent),
+                        onChanged: (v) => setState(() => _q = v),
                       ),
                     ),
-                    onChanged: (v) => setState(() => _q = v),
-                  ),
-                  const SizedBox(height: 12),
+                    const SizedBox(height: 12),
+                  ],
                   Expanded(
                     child: FutureBuilder<Set<String>?>(
                       future: _allowedPlayers,
