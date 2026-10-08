@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show Supabase;
 
 import '../app_navigator.dart';
 import '../services/active_tournament.dart';
@@ -127,63 +129,7 @@ class AppNameBand extends StatelessWidget {
     );
   }
 
-  Widget _loginBand(double top) {
-    return Container(
-      padding: EdgeInsets.fromLTRB(18, top + 14, 18, 14),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xFF064E3B), Color(0xFF0F172A)],
-        ),
-      ),
-      child: Row(
-        children: [
-          const AppLogo(size: 52),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (kShowAppName) ...[
-                  const Text(
-                    'LİG MASASI',
-                    maxLines: 1,
-                    style: TextStyle(
-                      fontFamily: 'BarlowCondensed',
-                      fontStyle: FontStyle.italic,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
-                      fontSize: 26,
-                      height: 1,
-                      letterSpacing: 1.5,
-                      decoration: TextDecoration.none,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                ],
-                Text(
-                  'Turnuvaların skor, fikstür ve kadro merkezi',
-                  style: TextStyle(
-                    color: kShowAppName
-                        ? const Color(0xFF94A3B8)
-                        : Colors.white,
-                    fontSize: kShowAppName ? 12.5 : 15,
-                    fontWeight: kShowAppName
-                        ? FontWeight.w500
-                        : FontWeight.w700,
-                    height: 1.25,
-                    decoration: TextDecoration.none,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _loginBand(double top) => _LoginBand(top: top);
 
   Widget _tvlBand(double top) {
     return Column(
@@ -234,6 +180,129 @@ class AppNameBand extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Giriş ekranı bandı: logo, uygulama adı ve altında aktif turnuvalar.
+/// Turnuva satırı cihazda saklanır; açılışta önce o gösterilir (titreme yok).
+class _LoginBand extends StatefulWidget {
+  const _LoginBand({required this.top});
+
+  final double top;
+
+  @override
+  State<_LoginBand> createState() => _LoginBandState();
+}
+
+class _LoginBandState extends State<_LoginBand> {
+  static const _kLeagues = 'login_band_leagues';
+  static String? _cached;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (_cached == null) {
+        final saved = prefs.getString(_kLeagues);
+        if (saved != null && mounted) setState(() => _cached = saved);
+      }
+      final rows = await Supabase.instance.client
+          .from('leagues')
+          .select('name, short_name')
+          .eq('status', 'active')
+          .order('created_at');
+      final names = [
+        for (final r in rows)
+          ((r['short_name'] ?? '').toString().trim().isNotEmpty
+                  ? r['short_name']
+                  : r['name'] ?? '')
+              .toString()
+              .trim()
+              .split(RegExp(r'\s+'))
+              .first,
+      ].where((n) => n.isNotEmpty).take(4).join(' · ');
+      await prefs.setString(_kLeagues, names);
+      if (mounted && names != _cached) setState(() => _cached = names);
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final leagues = _cached ?? '';
+    return Container(
+      padding: EdgeInsets.fromLTRB(18, widget.top + 16, 18, 16),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF0B3D24), Color(0xFF0F172A)],
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              color: Colors.white.withValues(alpha: 0.15),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(13),
+              child: Image.asset(
+                'assets/images/app_logo_sample.png',
+                width: 56,
+                height: 56,
+                fit: BoxFit.cover,
+              ),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _trUpper(kAppName),
+                  maxLines: 1,
+                  style: const TextStyle(
+                    fontFamily: 'BarlowCondensed',
+                    fontStyle: FontStyle.italic,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                    fontSize: 30,
+                    height: 1,
+                    letterSpacing: 0.8,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                // Yükseklik sabit: satır sonradan gelince bant zıplamasın.
+                SizedBox(
+                  height: 18,
+                  child: Text(
+                    leagues,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFF94A3B8),
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w500,
+                      decoration: TextDecoration.none,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
