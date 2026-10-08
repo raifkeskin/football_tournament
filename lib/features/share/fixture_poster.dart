@@ -63,6 +63,14 @@ class FixturePoster extends StatelessWidget {
   static const _goldHi = Color(0xFFF6D77A);
   static const _navy = Color(0xFF0D1A4A);
 
+  /// Doygunluk ×1.25, kontrast ×1.1, hafif parlaklık (+8).
+  static const List<double> _vivid = [
+    1.249, -0.183, -0.019, 0, 8, //
+    -0.054, 1.178, -0.019, 0, 8, //
+    -0.054, -0.183, 1.290, 0, 8, //
+    0, 0, 0, 1, 0, //
+  ];
+
   TextStyle _cond(
     double size, {
     Color color = Colors.white,
@@ -239,24 +247,20 @@ class FixturePoster extends StatelessWidget {
         ),
         child: Stack(
           children: [
-            // Logonun arkasında altın, altta yeşil hafif ışıma.
-            Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: RadialGradient(
-                    center: const Alignment(0, -0.85),
-                    radius: 0.75,
-                    colors: [
-                      _gold.withValues(alpha: 0.28),
-                      _gold.withValues(alpha: 0),
-                    ],
-                  ),
-                ),
-              ),
-            ),
             Column(
               children: [
-                PosterLogo(url: leagueLogo, name: leagueName, size: 104),
+                // Logo canlı ve parlak: hafif doygunluk/parlaklık artışı ve
+                // şeklini izleyen gölge. (Arkasındaki altın ışıma, logoyu
+                // soluk gösteren gri bir kutu oluşturduğu için kaldırıldı.)
+                ColorFiltered(
+                  colorFilter: const ColorFilter.matrix(_vivid),
+                  child: PosterLogo(
+                    url: leagueLogo,
+                    name: leagueName,
+                    size: 104,
+                    shadow: true,
+                  ),
+                ),
                 const SizedBox(height: 4),
                 Text(
                   leagueName.trUpper,
