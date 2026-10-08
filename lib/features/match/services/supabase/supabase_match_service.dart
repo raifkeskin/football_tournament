@@ -1278,8 +1278,11 @@ class SupabaseMatchService implements IMatchService {
 
     final playerIds = events.isEmpty
         ? {for (final r in fallbackRows) (r['player_id'] ?? '').toString()}
-        // Yalnız kadroda olup hiç olayı olmayan oyuncular listelenmez.
+        // Kadroda olup olayı olmayanlar da (yalnız maç sayısıyla) listelenir;
+        // takım istatistik sekmesi oynanan maçı gösterebilsin. Genel
+        // istatistik ekranı bunları zaten süzer.
         : {
+            ...matchesByPlayer.keys,
             ...goals.keys,
             ...assists.keys,
             ...yellows.keys,

@@ -325,7 +325,13 @@ class TeamStatsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final byId = {for (final p in players) p.id: p};
+    // İstatistik anahtarı oyuncunun telefonu (yoksa id'si); ikisini de
+    // oyuncu id'sine çevir.
+    final idByKey = <String, String>{
+      for (final p in players) p.id: p.id,
+      for (final p in players)
+        if ((p.phone ?? '').trim().isNotEmpty) p.phone!.trim(): p.id,
+    };
     return StreamBuilder<List<PlayerStats>>(
       stream: ServiceLocator.matchService.watchPlayerStats(
         tournamentId: seasonId,
@@ -338,10 +344,11 @@ class TeamStatsTab extends StatelessWidget {
           );
         }
         // Kadrodaki oyuncular; istatistiği olmayan da 0 ile listelenir.
-        final stats = {
-          for (final s in snap.data!)
-            if (byId.containsKey(s.playerPhone)) s.playerPhone: s,
-        };
+        final stats = <String, PlayerStats>{};
+        for (final s in snap.data!) {
+          final id = idByKey[s.playerPhone.trim()];
+          if (id != null) stats[id] = s;
+        }
         final rows = players.toList()
           ..sort((a, b) {
             final x = stats[a.id], y = stats[b.id];
