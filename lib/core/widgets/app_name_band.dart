@@ -718,63 +718,6 @@ class BandMenuButton extends StatelessWidget {
   }
 }
 
-/// Üstüne açıldığı ekran banttaki düğmeleri kaldırdığında (arkada kalınca)
-/// bu sayfa için bandın solunda ev düğmesi gösterir; kapanınca kaldırır.
-class BandHomeScope extends StatefulWidget {
-  const BandHomeScope({super.key, required this.onHome, required this.child});
-
-  final VoidCallback onHome;
-  final Widget child;
-
-  @override
-  State<BandHomeScope> createState() => _BandHomeScopeState();
-}
-
-class _BandHomeScopeState extends State<BandHomeScope> {
-  BandActions? _mine;
-
-  void _sync(bool on) {
-    // Çizim sırasında bant yeniden çizilemez; ertelenir.
-    Future.microtask(() {
-      if (on) {
-        _mine = BandActions(onMenu: widget.onHome, onHome: widget.onHome);
-        AppNameBand.panelActions.value = _mine;
-      } else {
-        _clear();
-      }
-    });
-  }
-
-  void _clear() {
-    if (_mine != null && identical(AppNameBand.panelActions.value, _mine)) {
-      AppNameBand.panelActions.value = null;
-    }
-    _mine = null;
-  }
-
-  bool _on = false;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // ignore: deprecated_member_use
-    final on = TickerMode.of(context);
-    if (on != _on) {
-      _on = on;
-      _sync(on);
-    }
-  }
-
-  @override
-  void dispose() {
-    _clear();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => widget.child;
-}
-
 /// Türkçe büyük harf (Dart'ın toUpperCase'i i → I yapar, İ değil).
 String _trUpper(String s) =>
     s.replaceAll('i', 'İ').replaceAll('ı', 'I').toUpperCase();

@@ -15,6 +15,7 @@ import '../../player/widgets/player_card.dart';
 import '../../team/models/team.dart';
 import '../../team/utils/standings.dart';
 import '../../tournament/models/league.dart';
+import '../../tournament/screens/admin_penalty_management_screen.dart';
 import 'home_news_card.dart';
 import '../../sponsors/sponsor_strip.dart';
 
@@ -893,9 +894,15 @@ class _HomeDashboardState extends State<HomeDashboard> {
           const SizedBox(height: 12),
         ],
         if (isOwner && d.pendingPenalties > 0) ...[
+          // Dokununca doğrudan ceza onayları ekranı.
           _alert(
-            '${d.pendingPenalties} kart cezası onayını bekliyor '
-            '(Yönetim › Cezalar).',
+            '${d.pendingPenalties} kart cezası onayını bekliyor. '
+            'Onaylamak için dokun.',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const AdminPenaltyManagementScreen(),
+              ),
+            ),
           ),
           const SizedBox(height: 12),
         ],
@@ -993,8 +1000,8 @@ class _HomeDashboardState extends State<HomeDashboard> {
     );
   }
 
-  Widget _alert(String text) {
-    return Container(
+  Widget _alert(String text, {VoidCallback? onTap}) {
+    final box = Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       decoration: BoxDecoration(
         color: DashColors.live.withValues(alpha: 0.12),
@@ -1018,7 +1025,18 @@ class _HomeDashboardState extends State<HomeDashboard> {
               style: _barlow(size: 13, weight: FontWeight.w700, height: 1.3),
             ),
           ),
+          if (onTap != null)
+            const Icon(Icons.chevron_right_rounded, color: Colors.white70),
         ],
+      ),
+    );
+    if (onTap == null) return box;
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: box,
       ),
     );
   }

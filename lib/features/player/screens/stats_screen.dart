@@ -483,13 +483,6 @@ final _categories = <_Category>[
     value: (s) => s.assists,
   ),
   _Category(
-    label: 'Gol + Asist',
-    unit: 'G+A',
-    crown: 'SKOR KATKISI LİDERİ',
-    icon: Icons.bolt_rounded,
-    value: (s) => s.goals + s.assists,
-  ),
-  _Category(
     label: 'Maçın Adamı',
     unit: 'kez',
     crown: 'EN ÇOK MAÇIN ADAMI',
@@ -948,7 +941,7 @@ class _RankRow extends StatelessWidget {
                         ],
                         Expanded(
                           child: Text(
-                            isMe ? '$name · Sen' : name,
+                            name,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(

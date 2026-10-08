@@ -1948,8 +1948,12 @@ class _WeekStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     final sorted = [...weeks]..sort();
     final i = sorted.indexOf(week);
-    final prev = i > 0 ? sorted[i - 1] : null;
-    final next = i >= 0 && i < sorted.length - 1 ? sorted[i + 1] : null;
+    // Seçili haftanın iki öncesi ve iki sonrası (toplam 5 hafta).
+    int? at(int k) => i >= 0 && k >= 0 && k < sorted.length ? sorted[k] : null;
+    final prev2 = at(i - 2);
+    final prev = at(i - 1);
+    final next = at(i + 1);
+    final next2 = at(i + 2);
 
     Widget arrow(IconData icon, int? target) => IconButton(
       onPressed: target == null ? null : () => onSelect(target),
@@ -1969,20 +1973,25 @@ class _WeekStrip extends StatelessWidget {
                 duration: const Duration(milliseconds: 180),
                 height: 38,
                 alignment: Alignment.center,
-                margin: const EdgeInsets.symmetric(horizontal: 3),
+                margin: const EdgeInsets.symmetric(horizontal: 2),
                 decoration: BoxDecoration(
                   color: current
                       ? _accent
                       : Colors.white.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Text(
-                  '$w. Hafta',
-                  maxLines: 1,
-                  style: TextStyle(
-                    color: current ? Colors.white : Colors.white60,
-                    fontSize: current ? 15 : 13,
-                    fontWeight: current ? FontWeight.w800 : FontWeight.w600,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                // Dar ekranda yazı kutuya sığacak kadar küçülür.
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    '$w. Hafta',
+                    maxLines: 1,
+                    style: TextStyle(
+                      color: current ? Colors.white : Colors.white60,
+                      fontSize: current ? 15 : 13,
+                      fontWeight: current ? FontWeight.w800 : FontWeight.w600,
+                    ),
                   ),
                 ),
               ),
@@ -1999,9 +2008,11 @@ class _WeekStrip extends StatelessWidget {
       child: Row(
         children: [
           arrow(Icons.chevron_left_rounded, prev),
+          cell(prev2),
           cell(prev),
           cell(week, current: true),
           cell(next),
+          cell(next2),
           arrow(Icons.chevron_right_rounded, next),
         ],
       ),

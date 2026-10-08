@@ -498,18 +498,6 @@ class _MenuDrawer extends StatelessWidget {
     ),
   ];
 
-  static String _roleLabel(AppSessionState s) {
-    if (s.isAdmin) return 'Admin';
-    if (s.isLeagueOwner) return 'Kurucu Başkan';
-    if (s.isRegionOwner) return 'Bölge Sorumlusu';
-    final manager = s.isManager || s.managedTeams.isNotEmpty;
-    // Hem futbolcu hem takım sorumlusu olan kişide iki rol birlikte yazılır.
-    if (manager && s.playerId != null) return 'Futbolcu · Takım Sorumlusu';
-    if (manager) return 'Takım Sorumlusu';
-    if (s.playerId != null) return 'Futbolcu';
-    return 'Üye';
-  }
-
   Future<void> _open(String url) async {
     final uri = Uri.tryParse(url);
     if (uri == null) return;
@@ -817,14 +805,6 @@ class _MenuDrawer extends StatelessWidget {
                             color: Colors.white,
                             fontWeight: FontWeight.w800,
                             fontSize: 15,
-                          ),
-                        ),
-                        Text(
-                          _roleLabel(session),
-                          style: TextStyle(
-                            color: accent,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 12,
                           ),
                         ),
                       ],

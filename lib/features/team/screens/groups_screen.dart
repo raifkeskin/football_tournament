@@ -605,9 +605,17 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
               // 4'ten az takımda bölge şeritleri anlamsız (hepsi yeşil olur).
               final showZones = rows.length > 4;
 
+              // Kenarlardan boşluklu, yuvarlak köşeli kart.
               return Container(
-                // Ekranı kenardan kenara kaplar; sekmelerle tek parça görünür.
-                color: Colors.black.withValues(alpha: 0.45),
+                margin: const EdgeInsets.fromLTRB(10, 10, 10, 0),
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.45),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.08),
+                  ),
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
