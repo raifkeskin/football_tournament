@@ -5,6 +5,7 @@ import '../../player/widgets/player_card.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
@@ -39,6 +40,16 @@ import '../../player/services/penalty_service.dart';
 // --- YARDIMCI WIDGETLAR ---
 
 /// Çift sarıdan ihraç: arkada sarı, önde kırmızı kart.
+/// Maç akışının ortasındaki dikey çizgi parçası.
+class _TimelineLine extends StatelessWidget {
+  const _TimelineLine();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(width: 2, color: Colors.white.withValues(alpha: 0.1));
+  }
+}
+
 /// Kaçan penaltı: soluk top, üzerinde kırmızı çarpı.
 class _MissedPenaltyIcon extends StatelessWidget {
   const _MissedPenaltyIcon();
@@ -2157,6 +2168,17 @@ class _YoutubeVideoViewState extends State<_YoutubeVideoView> {
       _openYoutubeExternally(context, widget.url);
       return;
     }
+    // Telefon uygulamasında oynatıcı, açılır panel/kaydırma alanı içinde
+    // (WebView) donuk kalıyordu: tam ekran ayrı sayfada açılır.
+    if (!kIsWeb) {
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          fullscreenDialog: true,
+          builder: (_) => _NativeYoutubeScreen(videoId: id, url: widget.url),
+        ),
+      );
+      return;
+    }
     setState(() {
       _controller = YoutubePlayerController.fromVideoId(
         videoId: id,
@@ -2253,6 +2275,80 @@ class _YoutubeVideoViewState extends State<_YoutubeVideoView> {
                 ],
               ),
             ),
+    );
+  }
+}
+
+/// Telefon uygulamasında YouTube oynatıcısı: siyah zeminli ayrı sayfa.
+/// YouTube gömülü oynatıcı için geçerli bir https kaynağı (origin) ister;
+/// verilmezse "oynatıcı yapılandırma hatası" verip boş kalabiliyor.
+class _NativeYoutubeScreen extends StatefulWidget {
+  const _NativeYoutubeScreen({required this.videoId, required this.url});
+
+  final String videoId;
+  final String url;
+
+  @override
+  State<_NativeYoutubeScreen> createState() => _NativeYoutubeScreenState();
+}
+
+class _NativeYoutubeScreenState extends State<_NativeYoutubeScreen> {
+  late final YoutubePlayerController _controller =
+      YoutubePlayerController.fromVideoId(
+        videoId: widget.videoId,
+        autoPlay: true,
+        params: const YoutubePlayerParams(
+          showFullscreenButton: true,
+          strictRelatedVideos: true,
+          origin: 'https://masterfutbol.web.app',
+        ),
+      );
+
+  @override
+  void dispose() {
+    _controller.close();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: const Text('Maç Yayını'),
+        actions: [
+          TextButton.icon(
+            onPressed: () => _openYoutubeExternally(context, widget.url),
+            icon: const Icon(Icons.open_in_new_rounded, color: Colors.white70),
+            label: const Text(
+              "YouTube'da aç",
+              style: TextStyle(color: Colors.white70),
+            ),
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            const Spacer(),
+            AspectRatio(
+              aspectRatio: 16 / 9,
+              child: YoutubePlayer(controller: _controller),
+            ),
+            const Spacer(),
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                "Yayın açılmazsa sağ üstten YouTube'da açabilirsiniz.",
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -3912,7 +4008,8 @@ class _DetailTabView extends StatelessWidget {
           // Altta sağdaki menü düğmesi son satırları örtmesin.
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 104),
           itemCount: normalized.length,
-          separatorBuilder: (_, _) => const SizedBox(height: 2),
+          separatorBuilder: (_, _) =>
+              const SizedBox(height: 2, child: Center(child: _TimelineLine())),
           itemBuilder: (context, i) {
             final e = normalized[i];
             final type = secondYellows.contains(e)
@@ -4170,7 +4267,7 @@ class _DetailEventTile extends StatelessWidget {
       }
     }
 
-    final tile = Padding(
+    final content = Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: system
           ? Row(
@@ -4188,7 +4285,8 @@ class _DetailEventTile extends StatelessWidget {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.06),
+                    // Opak: ortadaki çizgi rozetin içinden görünmesin.
+                    color: const Color(0xFF1A2335),
                     borderRadius: BorderRadius.circular(999),
                     border: Border.all(
                       color: Colors.white.withValues(alpha: 0.12),
@@ -4226,46 +4324,54 @@ class _DetailEventTile extends StatelessWidget {
                 ),
               ],
             )
+          // Ortada dakika rozeti; ev sahibi olayları solda (dakikaya
+          // yaslı), deplasman olayları sağda.
           : Row(
-              mainAxisAlignment: isHome
-                  ? MainAxisAlignment.start
-                  : MainAxisAlignment.end,
-              children: isHome
-                  ? [
-                      Text(
-                        min,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.amber,
+              children: [
+                Expanded(
+                  child: isHome
+                      ? Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Flexible(
+                              child: _titleBlock(CrossAxisAlignment.end),
+                            ),
+                            const SizedBox(width: 8),
+                            icon,
+                          ],
+                        )
+                      : const SizedBox.shrink(),
+                ),
+                SizedBox(width: 64, child: Center(child: _minuteBadge(min))),
+                Expanded(
+                  child: isHome
+                      ? const SizedBox.shrink()
+                      : Row(
+                          children: [
+                            icon,
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: _titleBlock(CrossAxisAlignment.start),
+                            ),
+                          ],
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      icon,
-                      const SizedBox(width: 8),
-                      Flexible(child: _titleBlock(CrossAxisAlignment.start)),
-                    ]
-                  : [
-                      Flexible(child: _titleBlock(CrossAxisAlignment.end)),
-                      const SizedBox(width: 8),
-                      icon,
-                      const SizedBox(width: 8),
-                      Text(
-                        min,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.amber,
-                        ),
-                      ),
-                    ],
+                ),
+              ],
             ),
+    );
+    // Akışın ortasından geçen dikey çizgi (rozetler üstünde durur).
+    final tile = Stack(
+      children: [
+        const Positioned.fill(child: Center(child: _TimelineLine())),
+        content,
+      ],
     );
     final session = AppSession.of(context).value;
     // Olay girebilenler (admin, turnuva sahibi, gözlemci) silebilir.
     final canDelete =
         eventId.isNotEmpty &&
         (session.canManageLeague(match.leagueId) ||
-            (match.observerId != null &&
-                match.observerId == session.user?.id));
+            (match.observerId != null && match.observerId == session.user?.id));
     if (playerId.isEmpty && !canDelete) return tile;
     return InkWell(
       borderRadius: BorderRadius.circular(12),
@@ -4274,6 +4380,32 @@ class _DetailEventTile extends StatelessWidget {
           : () => showPlayerCard(context, playerKey: playerId),
       onLongPress: canDelete ? () => _confirmDelete(context) : null,
       child: tile,
+    );
+  }
+
+  /// Ortadaki dakika rozeti; maçın adamında dakika yerine yıldız.
+  Widget _minuteBadge(String min) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 40),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F172A),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.amber.withValues(alpha: 0.45)),
+      ),
+      alignment: Alignment.center,
+      child: min.isEmpty
+          ? const Icon(Icons.star_rounded, size: 14, color: Colors.amber)
+          : Text(
+              min,
+              maxLines: 1,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: Colors.amber,
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
+            ),
     );
   }
 
