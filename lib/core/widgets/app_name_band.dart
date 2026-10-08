@@ -241,8 +241,10 @@ class LeagueSwitchScope {
   /// kimliği yerine uygulama bandını gösterir; panel tüm turnuvaları yönetir.
   static final panel = ValueNotifier<bool>(false);
 
-  static Route<dynamic>? _homeRoute;
-  static var _mainTab = false;
+  /// Kayıtlı ana gezgin sayfaları ve durumları. Girişten sonra bir an iki
+  /// ana gezgin birlikte bulunabilir; eskisi kapanırken yenisinin kaydını
+  /// silmesin diye her sayfa kendi kaydını tutar. Geçerli olan en üstteki.
+  static final _homes = <Route<dynamic>, ({bool mainTab, bool panelTab})>{};
 
   /// Kök gezginin gözlemcisi (MaterialApp.navigatorObservers).
   static final NavigatorObserver observer = _TopPageObserver();
@@ -253,29 +255,20 @@ class LeagueSwitchScope {
     required bool mainTab,
     bool panelTab = false,
   }) {
-    _homeRoute = route;
-    _mainTab = mainTab;
-    _panelTab = panelTab;
+    if (route == null) return;
+    _homes[route] = (mainTab: mainTab, panelTab: panelTab);
     _update();
   }
 
   static void clearHome(Route<dynamic>? route) {
-    if (route != null && _homeRoute == route) {
-      _homeRoute = null;
-      _panelTab = false;
-      _update();
-    }
+    if (route != null && _homes.remove(route) != null) _update();
   }
 
-  static var _panelTab = false;
-
   static void _update() {
-    final home = _homeRoute;
-    final v =
-        home != null &&
-        _mainTab &&
-        (observer as _TopPageObserver).topPage == home;
-    final p = home != null && _panelTab;
+    final top = (observer as _TopPageObserver).topPage;
+    final home = top == null ? null : _homes[top];
+    final v = home != null && home.mainTab;
+    final p = home != null && home.panelTab;
     if (enabled.value == v && panel.value == p) return;
     // Gezinme ya da çizim sırasında bandı yeniden kurmak hata verir: çerçeve
     // bitince uygula.
@@ -572,7 +565,7 @@ class _LeagueRow extends StatelessWidget {
 }
 
 /// Turnuva kimliğiyle bant: turnuvanın renkleri, solda logosu, yanında adı;
-/// sağda küçük Lig Masası işareti (uygulama markası kaybolmaz).
+/// sağda bildirim zili.
 class _TournamentBand extends StatelessWidget {
   const _TournamentBand({required this.theme, required this.top, this.actions});
 
@@ -638,17 +631,6 @@ class _TournamentBand extends StatelessWidget {
                     LeagueSwitchButton(color: theme.secondary),
                   ],
                 ),
-              ),
-            ),
-            Opacity(
-              opacity: 0.85,
-              child: Container(
-                padding: const EdgeInsets.all(2),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: theme.secondary, width: 1.5),
-                ),
-                child: const AppLogo(size: 26),
               ),
             ),
             const SizedBox(width: 2),

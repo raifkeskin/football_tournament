@@ -704,18 +704,29 @@ class _HomeDashboardState extends State<HomeDashboard> {
     } else {
       content = _message('Bu turnuvada henüz sezon yok.');
     }
-    return RefreshIndicator(
-      color: DashColors.accent(),
-      onRefresh: _refresh,
-      child: ListView(
-        padding: EdgeInsets.fromLTRB(0, top, 0, 24),
-        children: [
-          // Bandın hemen altında dönen sponsor şeridi (sponsor yoksa boş).
-          SponsorStrip(leagueId: widget.league.id),
-          _greeting(session, data),
-          content,
-        ],
-      ),
+    // Menü ve selamlama satırı sayfanın üstünde sabit; altı kayar.
+    return Column(
+      children: [
+        Padding(
+          padding: EdgeInsets.only(top: top),
+          child: _greeting(session, data),
+        ),
+        Expanded(
+          child: RefreshIndicator(
+            color: DashColors.accent(),
+            onRefresh: _refresh,
+            child: ListView(
+              padding: const EdgeInsets.only(bottom: 24),
+              children: [
+                // Selamlamanın hemen altında dönen sponsor şeridi (sponsor
+                // yoksa boş).
+                SponsorStrip(leagueId: widget.league.id),
+                content,
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -762,10 +773,9 @@ class _HomeDashboardState extends State<HomeDashboard> {
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [
-            DashColors.primary(),
-            DashColors.ground.withValues(alpha: 0),
-          ],
+          // Sabit satır: altından kayan içerik görünmesin diye zemine
+          // opak geçiş.
+          colors: [DashColors.primary(), DashColors.ground],
         ),
       ),
       child: Row(
