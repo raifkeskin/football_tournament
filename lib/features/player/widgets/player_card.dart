@@ -473,6 +473,9 @@ class _PlayerCardState extends State<PlayerCard> {
   Widget build(BuildContext context) {
     return Material(
       color: _bgDark,
+      // Dialog şeffaf olduğundan köşeleri kart kendisi yuvarlar.
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+      clipBehavior: Clip.antiAlias,
       child: FutureBuilder<_PlayerCardData>(
         future: _future,
         builder: (context, snap) {
@@ -603,7 +606,8 @@ class _PlayerCardState extends State<PlayerCard> {
           end: Alignment.bottomRight,
           colors: [_surface, _forest],
         ),
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
+        // Üst köşeler de oval: popup çerçevesiyle aynı yarıçap.
+        borderRadius: BorderRadius.all(Radius.circular(28)),
       ),
       padding: const EdgeInsets.fromLTRB(16, 44, 16, 16),
       child: Column(
