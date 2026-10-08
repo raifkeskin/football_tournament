@@ -73,6 +73,41 @@ enum AccountRequestOutcome {
   invalidPhone,
 }
 
+/// SMS doğrulama kodu gönderme sonucu (`sms_otp_send`).
+enum SmsOtpSendOutcome {
+  /// Yeni hesap için kod gönderildi.
+  sent,
+
+  /// Numarada hesap var; şifre sıfırlama kodu gönderildi.
+  sentReset,
+
+  /// SMS doğrulama kapalı (eski akış kullanılmalı).
+  disabled,
+  invalidPhone,
+  notRegistered,
+  unknownPhone,
+
+  /// Son koddan bu yana 60 sn geçmedi.
+  tooSoon,
+
+  /// Saatlik kod sınırı doldu.
+  tooMany,
+
+  /// SMS sağlayıcı bilgileri girilmemiş.
+  notConfigured,
+}
+
+/// SMS kodunu doğrulayıp şifre belirleme sonucu (`sms_otp_verify`).
+enum SmsOtpVerifyOutcome {
+  ok,
+  disabled,
+  invalidPhone,
+  weakPassword,
+  expired,
+  wrongCode,
+  tooManyAttempts,
+}
+
 /// Onaylanan talebin geçici şifresi (yalnızca onay anında döner).
 class TempPasswordGrant {
   const TempPasswordGrant({

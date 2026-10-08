@@ -189,6 +189,79 @@ class SupabaseAuthService implements IAuthService {
   }
 
   @override
+  Future<SmsOtpSendOutcome> sendSmsOtp({
+    required String phoneRaw10,
+    bool isReset = false,
+  }) async {
+    final raw10 = phoneRaw10.trim();
+    _sbLog(
+      table: 'sms_otp_codes',
+      query: 'RPC sms_otp_send phone=$raw10 | reset=$isReset',
+      trace: StackTrace.current,
+    );
+    final String result;
+    try {
+      result = (await _client.rpc(
+        'sms_otp_send',
+        params: {'p_phone': raw10, 'p_reset': isReset},
+      )).toString();
+      _sbResult(rows: 1);
+    } catch (e) {
+      _sbResult(rows: 0, error: e);
+      rethrow;
+    }
+    return switch (result) {
+      'sent' => SmsOtpSendOutcome.sent,
+      'sent_reset' => SmsOtpSendOutcome.sentReset,
+      'disabled' => SmsOtpSendOutcome.disabled,
+      'not_registered' => SmsOtpSendOutcome.notRegistered,
+      'unknown_phone' => SmsOtpSendOutcome.unknownPhone,
+      'too_soon' => SmsOtpSendOutcome.tooSoon,
+      'too_many' => SmsOtpSendOutcome.tooMany,
+      'not_configured' => SmsOtpSendOutcome.notConfigured,
+      _ => SmsOtpSendOutcome.invalidPhone,
+    };
+  }
+
+  @override
+  Future<SmsOtpVerifyOutcome> verifySmsOtp({
+    required String phoneRaw10,
+    required String code,
+    required String password,
+  }) async {
+    final raw10 = phoneRaw10.trim();
+    _sbLog(
+      table: 'sms_otp_codes',
+      query: 'RPC sms_otp_verify phone=$raw10',
+      trace: StackTrace.current,
+    );
+    final String result;
+    try {
+      result = (await _client.rpc(
+        'sms_otp_verify',
+        params: {
+          'p_phone': raw10,
+          'p_code': code.trim(),
+          'p_password': password,
+        },
+      )).toString();
+      _sbResult(rows: 1);
+    } catch (e) {
+      _sbResult(rows: 0, error: e);
+      rethrow;
+    }
+    return switch (result) {
+      'ok' => SmsOtpVerifyOutcome.ok,
+      'disabled' => SmsOtpVerifyOutcome.disabled,
+      'weak_password' => SmsOtpVerifyOutcome.weakPassword,
+      'expired' => SmsOtpVerifyOutcome.expired,
+      'wrong_code' => SmsOtpVerifyOutcome.wrongCode,
+      'too_many_attempts' => SmsOtpVerifyOutcome.tooManyAttempts,
+      _ => SmsOtpVerifyOutcome.invalidPhone,
+    };
+  }
+
+  @override
   Stream<List<AccountRequestEntry>> watchAccountRequests({
     bool includeClosed = false,
   }) {
