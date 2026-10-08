@@ -232,9 +232,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (mounted) setState(() => _isLoading = false);
     final messenger = ScaffoldMessenger.of(context);
     await _toLoginGate();
-    messenger.showSnackBar(
-      const SnackBar(content: Text('Hesabınız silindi.')),
-    );
+    messenger.showSnackBar(const SnackBar(content: Text('Hesabınız silindi.')));
   }
 
   @override
@@ -671,15 +669,21 @@ class _StaffHeaderCardState extends State<_StaffHeaderCard> {
             InkWell(
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
-                  builder: (_) => Scaffold(
-                    backgroundColor: const Color(0xFF0F172A),
-                    // Başlık çubuğu yok: ana sayfaya dönüş bandın solundaki
-                    // ev ikonuyla (yönetim paneli düğmeleri).
-                    body: SafeArea(
-                      child: MyProfileView(
-                        playerId: session.playerId,
-                        displayName: widget.name,
-                        phone: widget.phone,
+                  builder: (ctx) => BandHomeScope(
+                    onHome: () {
+                      Navigator.of(ctx).popUntil((r) => r.isFirst);
+                      MainNavigator.tabRequest.value = 0;
+                    },
+                    child: Scaffold(
+                      backgroundColor: const Color(0xFF0F172A),
+                      // Başlık çubuğu yok: ana sayfaya dönüş bandın solundaki
+                      // ev ikonuyla (yönetim paneli düğmeleri).
+                      body: SafeArea(
+                        child: MyProfileView(
+                          playerId: session.playerId,
+                          displayName: widget.name,
+                          phone: widget.phone,
+                        ),
                       ),
                     ),
                   ),
