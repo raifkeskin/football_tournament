@@ -1237,37 +1237,23 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
       extendBodyBehindAppBar: true,
-      appBar: MasterClassAppBar(
-        // Takım adı aşağıdaki renkli bantta; başlık boş kalır.
-        title: '',
-        actions: [
-          if (canAdd)
-            IconButton(
-              icon: const Icon(
-                Icons.add_rounded,
-                color: Colors.white,
-                size: 28,
-              ),
-              tooltip: 'Futbolcu Seç',
-              onPressed: () async {
-                final tId = effectiveTournamentId;
-                if (tId.trim().isEmpty) {
-                  if (!context.mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Lütfen turnuva seçin.')),
-                  );
-                  return;
-                }
-                await _openExistingPlayerPicker(
-                  leagueId: tId,
-                  teamId: widget.teamId,
-                );
-              },
-            ),
-        ],
-      ),
       body: Stack(
         children: [
+          // Turnuva seçilmeden bant çizilmez; geri düğmesi yine görünsün.
+          if (effectiveTournamentId == null)
+            SafeArea(
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: IconButton(
+                  tooltip: 'Geri',
+                  icon: const Icon(
+                    Icons.arrow_back_rounded,
+                    color: Colors.white,
+                  ),
+                  onPressed: () => Navigator.of(context).maybePop(),
+                ),
+              ),
+            ),
           SafeArea(
             child: Column(
               children: [
@@ -1297,11 +1283,6 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                             }
                             final allPlayers =
                                 snapshot.data ?? const <PlayerModel>[];
-                            if (allPlayers.isEmpty) {
-                              return const Center(
-                                child: Text('Henüz kadro girişi yapılmamış.'),
-                              );
-                            }
                             _prefetchPlayerPhotos(allPlayers);
                             final q = _rosterQuery;
                             final players = q.isEmpty
@@ -1328,6 +1309,15 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                                         secondColor: colorSnap.data?.$2,
                                         teamName: titleTeam,
                                         logoUrl: widget.teamLogoUrl,
+                                        // Üst satır yerine bandın köşelerinde.
+                                        onBack: () =>
+                                            Navigator.of(context).maybePop(),
+                                        onAdd: !canAdd
+                                            ? null
+                                            : () => _openExistingPlayerPicker(
+                                                leagueId: effectiveTournamentId,
+                                                teamId: widget.teamId,
+                                              ),
                                         subtitle: _tournamentNameById(
                                           effectiveTournamentId,
                                         ),
@@ -1423,10 +1413,12 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                                   ),
                                   const SizedBox(height: 4),
                                   if (players.isEmpty)
-                                    const Padding(
-                                      padding: EdgeInsets.only(top: 32),
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 32),
                                       child: Text(
-                                        'Aramanıza uygun futbolcu bulunamadı.',
+                                        allPlayers.isEmpty
+                                            ? 'Henüz kadro girişi yapılmamış.'
+                                            : 'Aramanıza uygun futbolcu bulunamadı.',
                                         textAlign: TextAlign.center,
                                         style: TextStyle(color: _squadMuted),
                                       ),
@@ -3458,7 +3450,30 @@ class _SquadSummaryCard extends StatelessWidget {
     this.firstColor,
     this.secondColor,
     this.onShare,
+    this.onBack,
+    this.onAdd,
   });
+
+  /// Bandın sol üstündeki geri düğmesi.
+  final VoidCallback? onBack;
+
+  /// Sağ üstte "Futbolcu ekle" (yalnız yetkililere).
+  final VoidCallback? onAdd;
+
+  /// Bandın köşesindeki yarı saydam yuvarlak düğme.
+  Widget _cornerButton(IconData icon, String tooltip, VoidCallback onTap) {
+    return IconButton(
+      tooltip: tooltip,
+      onPressed: onTap,
+      style: IconButton.styleFrom(
+        backgroundColor: Colors.black.withValues(alpha: 0.28),
+        minimumSize: const Size(38, 38),
+        fixedSize: const Size(38, 38),
+        padding: EdgeInsets.zero,
+      ),
+      icon: Icon(icon, size: 20, color: Colors.white),
+    );
+  }
 
   final String teamName;
   final String logoUrl;
@@ -3640,23 +3655,38 @@ class _SquadSummaryCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (onShare != null)
+                if (onBack != null)
                   Positioned(
                     top: 10,
-                    right: 10,
-                    child: IconButton(
-                      tooltip: 'Kadro afişini paylaş',
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.black.withValues(alpha: 0.25),
-                      ),
-                      icon: const Icon(
-                        Icons.ios_share_rounded,
-                        size: 18,
-                        color: Colors.white,
-                      ),
-                      onPressed: onShare,
+                    left: 10,
+                    child: _cornerButton(
+                      Icons.arrow_back_rounded,
+                      'Geri',
+                      onBack!,
                     ),
                   ),
+                Positioned(
+                  top: 10,
+                  right: 10,
+                  child: Row(
+                    children: [
+                      if (onShare != null)
+                        _cornerButton(
+                          Icons.ios_share_rounded,
+                          'Kadro afişini paylaş',
+                          onShare!,
+                        ),
+                      if (onShare != null && onAdd != null)
+                        const SizedBox(width: 8),
+                      if (onAdd != null)
+                        _cornerButton(
+                          Icons.person_add_alt_1_rounded,
+                          'Futbolcu ekle',
+                          onAdd!,
+                        ),
+                    ],
+                  ),
+                ),
               ],
             ),
             SizedBox(
