@@ -76,6 +76,17 @@ class FixturePoster extends StatelessWidget {
     fontStyle: italic ? FontStyle.italic : FontStyle.normal,
     letterSpacing: spacing,
     height: 1,
+    // Zemin görseli artık daha canlı: açık renkli yazılar gölgeyle okunur
+    // kalır (beyaz kutulardaki koyu takım adlarına gölge verilmez).
+    shadows: color.computeLuminance() > 0.4
+        ? const [
+            Shadow(
+              color: Color(0xCC000000),
+              blurRadius: 8,
+              offset: Offset(0, 2),
+            ),
+          ]
+        : null,
   );
 
   Widget _match(PosterMatch m) {
@@ -215,12 +226,15 @@ class FixturePoster extends StatelessWidget {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
+            // Zemin görseli ön planda: üstte başlık, altta boşluk için hafif
+            // karartma; ortadaki maç satırları kendi beyaz kutularında.
             colors: [
-              const Color(0xFF0B1440).withValues(alpha: 0.9),
-              _navy.withValues(alpha: 0.72),
-              const Color(0xFF08102E).withValues(alpha: 0.88),
+              const Color(0xFF0B1440).withValues(alpha: 0.55),
+              _navy.withValues(alpha: 0.18),
+              _navy.withValues(alpha: 0.18),
+              const Color(0xFF08102E).withValues(alpha: 0.5),
             ],
-            stops: const [0, 0.45, 1],
+            stops: const [0, 0.32, 0.75, 1],
           ),
         ),
         child: Stack(
