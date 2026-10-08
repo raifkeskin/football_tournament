@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/utils/string_utils.dart';
 import '../../core/utils/team_colors.dart';
 import 'poster_share.dart';
+import 'poster_background.dart';
 
 /// Afişteki oyuncu.
 class PosterPlayer {
@@ -162,15 +163,9 @@ class SquadPoster extends StatelessWidget {
       );
     }
 
-    return Container(
+    return PosterBackdrop(
       padding: const EdgeInsets.fromLTRB(16, 18, 16, 12),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [p.background, p.backgroundDeep],
-        ),
-      ),
+      colors: [p.background, p.backgroundDeep],
       child: Stack(
         children: [
           // Sağ üstte takımın ikinci renginde hafif ışıma.

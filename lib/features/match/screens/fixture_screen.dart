@@ -286,6 +286,7 @@ class _FixtureScreenState extends State<FixtureScreen> {
       context: context,
       fileName: 'fikstur_${week}_hafta',
       imageUrls: logos,
+      leagueId: league.id,
       poster: FixturePoster(
         leagueName: league.name,
         leagueLogo: league.logoUrl,

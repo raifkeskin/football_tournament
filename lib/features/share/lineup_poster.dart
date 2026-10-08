@@ -7,6 +7,7 @@ import '../../core/widgets/pitch_token_style.dart';
 import '../tournament/utils/pitch_layout.dart';
 import 'poster_share.dart';
 import 'squad_poster.dart';
+import 'poster_background.dart';
 
 /// Maç kadrosu afişlerinin ortak verisi (paylaşan takım + rakip + maç).
 class LineupPosterData {
@@ -115,14 +116,8 @@ class _PosterFrame extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = data.palette;
     final wm = watermark;
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [p.background, p.backgroundDeep],
-        ),
-      ),
+    return PosterBackdrop(
+      colors: [p.background, p.backgroundDeep],
       child: Stack(
         clipBehavior: Clip.hardEdge,
         children: [

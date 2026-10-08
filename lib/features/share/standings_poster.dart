@@ -5,6 +5,7 @@ import '../../core/utils/string_utils.dart';
 import '../../core/utils/team_name.dart';
 import '../team/utils/standings.dart';
 import 'poster_share.dart';
+import 'poster_background.dart';
 
 /// Grup puan durumu afişi (fikstür afişiyle aynı dil): turnuva logosu,
 /// başlık, "PUAN DURUMU" bandı ve tablo. Boyut [kPosterSize]; takım sayısı
@@ -122,16 +123,10 @@ class StandingsPoster extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return PosterBackdrop(
       padding: const EdgeInsets.fromLTRB(14, 16, 14, 12),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xFF0B1440), _navy, Color(0xFF08102E)],
-          stops: [0, 0.4, 1],
-        ),
-      ),
+      colors: const [Color(0xFF0B1440), _navy, Color(0xFF08102E)],
+      stops: const [0, 0.4, 1],
       child: Stack(
         children: [
           Positioned.fill(

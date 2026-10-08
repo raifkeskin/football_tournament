@@ -814,6 +814,8 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
       context: context,
       fileName: 'kadro_${teamName.replaceAll(RegExp(r'\s+'), '_')}',
       imageUrls: [teamLogo, leagueLogo],
+      // Sekmedeki "turnuva" sezon id'sidir.
+      seasonId: tournamentId,
       poster: SquadPoster(
         teamName: teamName,
         teamLogo: teamLogo,
