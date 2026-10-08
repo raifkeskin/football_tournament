@@ -410,6 +410,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         playerId: sessionValue.playerId,
         displayName: state.displayName,
         phone: phone,
+        roleLabels: [
+          'Futbolcu',
+          if (sessionValue.managedTeams.isNotEmpty) 'Takım Sorumlusu',
+        ],
       );
     }
 

@@ -487,13 +487,13 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
     try {
       var res = await _supabase
           .from('players')
-          .select('id, name, surname, role')
+          .select('id, name, surname')
           .eq('auth_uid', user.id)
           .limit(1);
       if (res.isEmpty && phone.isNotEmpty) {
         res = await _supabase
             .from('players')
-            .select('id, name, surname, role')
+            .select('id, name, surname')
             .eq('phone', phone)
             .limit(1);
       }

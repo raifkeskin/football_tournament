@@ -56,7 +56,11 @@ class MyProfileView extends StatefulWidget {
     required this.playerId,
     required this.displayName,
     required this.phone,
+    this.roleLabels = const [],
   });
+
+  /// Kartta adın altında gösterilen roller (ör. Futbolcu, Takım Sorumlusu).
+  final List<String> roleLabels;
 
   /// Hesaba bağlı oyuncu kaydı; yoksa "eşleşmedi" görünümü açılır.
   final String? playerId;
@@ -444,6 +448,37 @@ class _MyProfileViewState extends State<MyProfileView> {
                             fontSize: 13.5,
                             fontWeight: FontWeight.w600,
                           ),
+                        ),
+                      ],
+                      if (widget.roleLabels.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: [
+                            for (final r in widget.roleLabels)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 9,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: kAdminAccent.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: kAdminAccent.withValues(alpha: 0.4),
+                                  ),
+                                ),
+                                child: Text(
+                                  r,
+                                  style: const TextStyle(
+                                    color: kAdminAccent,
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ],
                       if (team != null) ...[
