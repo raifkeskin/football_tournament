@@ -4073,11 +4073,8 @@ class _DetailTabView extends StatelessWidget {
                 return title.isEmpty ? 'Değişiklik' : title;
               }
               if (type == 'goal') {
-                final suffix = isOwnGoal
-                    ? ' (KK)'
-                    : isPenalty
-                    ? ' (P)'
-                    : '';
+                // Kendi kalesine: adın altında soluk alt satırda yazılır.
+                final suffix = isPenalty && !isOwnGoal ? ' (P)' : '';
                 return '${title.isEmpty ? 'Gol' : title}$suffix';
               }
               return title;
@@ -4099,7 +4096,9 @@ class _DetailTabView extends StatelessWidget {
               type: type,
               title: displayTitle(),
               // Asist, gol atanın altında daha küçük ve soluk gösterilir.
-              subtitle: type == 'goal' && assist.isNotEmpty
+              subtitle: type == 'goal' && isOwnGoal
+                  ? 'Kendi Kalesine'
+                  : type == 'goal' && assist.isNotEmpty
                   ? 'Asist: $assist'
                   : type == 'second_yellow'
                   ? 'Çift sarıdan ihraç'
