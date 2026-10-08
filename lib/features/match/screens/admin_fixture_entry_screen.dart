@@ -534,7 +534,7 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 18,
-                                  fontWeight: FontWeight.w900,
+                                  fontWeight: FontWeight.w800,
                                 ),
                                 decoration: const InputDecoration(
                                   isDense: true,
@@ -690,7 +690,7 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 18,
-                                      fontWeight: FontWeight.w900,
+                                      fontWeight: FontWeight.w800,
                                     ),
                                   ),
                                 ),

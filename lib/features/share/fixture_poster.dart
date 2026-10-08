@@ -246,7 +246,7 @@ class FixturePoster extends StatelessWidget {
                   leagueName.trUpper,
                   textAlign: TextAlign.center,
                   maxLines: 2,
-                  style: _cond(28, w: FontWeight.w900, italic: true),
+                  style: _cond(28, w: FontWeight.w800, italic: true),
                 ),
                 if (subtitle.isNotEmpty) ...[
                   const SizedBox(height: 3),

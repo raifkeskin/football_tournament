@@ -1040,7 +1040,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                     style: const TextStyle(
                       color: kAdminAccent,
                       fontSize: 13,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w800,
                       letterSpacing: 1,
                     ),
                   ),

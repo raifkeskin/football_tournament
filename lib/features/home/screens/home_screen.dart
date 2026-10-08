@@ -743,7 +743,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     //               currentLeague.name,
                     //               style: TextStyle(
                     //                 color: cs.onPrimaryContainer,
-                    //                 fontWeight: FontWeight.w900,
+                    //                 fontWeight: FontWeight.w800,
                     //                 fontSize: 20,
                     //               ),
                     //               overflow: TextOverflow.ellipsis,
@@ -1155,7 +1155,7 @@ class _TarihSeridi extends StatelessWidget {
                         style: const TextStyle(
                           fontSize: 13,
                           color: Colors.white,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w800,
                           shadows: [
                             Shadow(
                               color: Colors.black87,

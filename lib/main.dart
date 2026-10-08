@@ -165,7 +165,7 @@ class _SplashScreenState extends State<SplashScreen>
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 34,
-                            fontWeight: FontWeight.w900,
+                            fontWeight: FontWeight.w800,
                             letterSpacing: 0.5,
                           ),
                         ),
@@ -336,7 +336,7 @@ class _MyAppState extends State<MyApp> {
               if (s == null) return null;
               return s.copyWith(
                 fontFamily: 'Batangas',
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w800,
               );
             }
 
@@ -357,7 +357,7 @@ class _MyAppState extends State<MyApp> {
             titleTextStyle: const TextStyle(
               color: _text,
               fontFamily: 'Batangas',
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w800,
               fontSize: 18,
             ),
           ),

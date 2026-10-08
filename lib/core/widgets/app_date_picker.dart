@@ -126,7 +126,7 @@ Future<DateTime?> showAppDatePicker({
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 18,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -222,7 +222,7 @@ Future<DateTime?> showAppDatePicker({
                                           ? Colors.white
                                           : Colors.white70,
                                       fontWeight: isSelected
-                                          ? FontWeight.w900
+                                          ? FontWeight.w800
                                           : FontWeight.w600,
                                       fontSize: 14,
                                     ),

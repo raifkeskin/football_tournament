@@ -154,7 +154,7 @@ Future<bool> showAdminConfirmDialog({
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 18,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
                     ),
@@ -185,7 +185,7 @@ Future<bool> showAdminConfirmDialog({
                   onPressed: () => Navigator.pop(ctx, true),
                   child: Text(
                     confirmLabel,
-                    style: const TextStyle(fontWeight: FontWeight.w900),
+                    style: const TextStyle(fontWeight: FontWeight.w800),
                   ),
                 ),
               ),

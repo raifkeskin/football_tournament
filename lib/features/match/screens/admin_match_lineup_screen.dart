@@ -257,7 +257,7 @@ class _AdminMatchLineupScreenState extends State<AdminMatchLineupScreen>
                   child: Text(
                     'Oyuncu Listesi',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
@@ -265,7 +265,7 @@ class _AdminMatchLineupScreenState extends State<AdminMatchLineupScreen>
                   'Seçilen: ${selectedIds.length}/${isStartingTab ? 11 : 7}',
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w800,
                     fontSize: 12,
                   ),
                 ),
@@ -359,7 +359,7 @@ class _AdminMatchLineupScreenState extends State<AdminMatchLineupScreen>
                                       ),
                                     ),
                                     style: const TextStyle(
-                                      fontWeight: FontWeight.w900,
+                                      fontWeight: FontWeight.w800,
                                       fontSize: 13,
                                       color: Colors.white,
                                     ),

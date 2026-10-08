@@ -370,7 +370,7 @@ Widget _captainMark(TeamPalette p) => Container(
     style: TextStyle(
       color: p.onAccent,
       fontSize: 8.5,
-      fontWeight: FontWeight.w900,
+      fontWeight: FontWeight.w800,
     ),
   ),
 );

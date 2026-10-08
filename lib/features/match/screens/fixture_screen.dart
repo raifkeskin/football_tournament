@@ -818,7 +818,7 @@ class _FixtureList extends StatelessWidget {
               groupLabel(gId).trUpper,
               style: TextStyle(
                 color: Colors.amberAccent.withValues(alpha: 0.8),
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w800,
                 fontSize: 10,
                 letterSpacing: 1.2,
               ),
@@ -1080,7 +1080,7 @@ class _MatchCard extends StatelessWidget {
                         status.text,
                         style: TextStyle(
                           color: status.color,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w800,
                           fontSize: 10,
                         ),
                       ),
@@ -1235,7 +1235,7 @@ class _MatchCard extends StatelessWidget {
               color: isLive
                   ? const Color(0xFFF87171)
                   : (strong ? Colors.white : Colors.white60),
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w800,
               fontSize: 14,
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
@@ -1284,7 +1284,7 @@ class _MatchCard extends StatelessWidget {
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 32,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w800,
               ),
               decoration: InputDecoration(
                 filled: true,
@@ -1377,7 +1377,7 @@ class _MatchCard extends StatelessWidget {
                             'Hızlı Skor Girişi',
                             style: TextStyle(
                               color: Colors.white,
-                              fontWeight: FontWeight.w900,
+                              fontWeight: FontWeight.w800,
                               fontSize: 18,
                             ),
                           ),
@@ -1400,7 +1400,7 @@ class _MatchCard extends StatelessWidget {
                               style: TextStyle(
                                 color: Colors.white70,
                                 fontSize: 28,
-                                fontWeight: FontWeight.w900,
+                                fontWeight: FontWeight.w800,
                               ),
                             ),
                           ),
@@ -1446,7 +1446,7 @@ class _MatchCard extends StatelessWidget {
                                   'KAYDET',
                                   style: TextStyle(
                                     color: Colors.white,
-                                    fontWeight: FontWeight.w900,
+                                    fontWeight: FontWeight.w800,
                                   ),
                                 ),
                         ),
@@ -1628,7 +1628,7 @@ class _MatchCard extends StatelessWidget {
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 18,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                     const SizedBox(height: 14),
@@ -1700,7 +1700,7 @@ class _MatchCard extends StatelessWidget {
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 18,
-                            fontWeight: FontWeight.w900,
+                            fontWeight: FontWeight.w800,
                           ),
                         ),
                       ],
@@ -1860,7 +1860,7 @@ class _MatchCard extends StatelessWidget {
                           'GÜNCELLE',
                           style: TextStyle(
                             color: Colors.white,
-                            fontWeight: FontWeight.w900,
+                            fontWeight: FontWeight.w800,
                           ),
                         ),
                       ),
@@ -1981,7 +1981,7 @@ class _WeekStrip extends StatelessWidget {
                   style: TextStyle(
                     color: current ? Colors.white : Colors.white60,
                     fontSize: current ? 15 : 13,
-                    fontWeight: current ? FontWeight.w900 : FontWeight.w600,
+                    fontWeight: current ? FontWeight.w800 : FontWeight.w600,
                   ),
                 ),
               ),

@@ -277,7 +277,7 @@ class _FixtureDrawScreenState extends State<FixtureDrawScreen> {
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 18,
-                                  fontWeight: FontWeight.w900,
+                                  fontWeight: FontWeight.w800,
                                 ),
                               ),
                             ),
@@ -475,7 +475,7 @@ class _FixtureDrawScreenState extends State<FixtureDrawScreen> {
               style: TextStyle(
                 color: kAdminMuted,
                 fontSize: 15,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w800,
               ),
             ),
           ),

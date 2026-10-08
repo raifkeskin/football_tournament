@@ -215,7 +215,7 @@ class _ErrorCard extends StatelessWidget {
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 19,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w800,
                   decoration: TextDecoration.none,
                 ),
               ),
@@ -247,7 +247,7 @@ class _ErrorCard extends StatelessWidget {
                   icon: const Icon(Icons.refresh_rounded),
                   label: const Text(
                     'YENİLE',
-                    style: TextStyle(fontWeight: FontWeight.w900),
+                    style: TextStyle(fontWeight: FontWeight.w800),
                   ),
                 ),
               ),

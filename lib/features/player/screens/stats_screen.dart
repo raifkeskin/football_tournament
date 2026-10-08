@@ -778,7 +778,7 @@ class _LeaderCard extends StatelessWidget {
                           style: const TextStyle(
                             color: _gold,
                             fontSize: 11.5,
-                            fontWeight: FontWeight.w900,
+                            fontWeight: FontWeight.w800,
                             letterSpacing: 1.3,
                           ),
                         ),
@@ -790,7 +790,7 @@ class _LeaderCard extends StatelessWidget {
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 21,
-                            fontWeight: FontWeight.w900,
+                            fontWeight: FontWeight.w800,
                           ),
                         ),
                         if (team != null)
@@ -826,7 +826,7 @@ class _LeaderCard extends StatelessWidget {
                                 color: Colors.white,
                                 fontSize: 40,
                                 height: 1,
-                                fontWeight: FontWeight.w900,
+                                fontWeight: FontWeight.w800,
                               ),
                             ),
                             const SizedBox(width: 6),
@@ -922,7 +922,7 @@ class _RankRow extends StatelessWidget {
                   style: const TextStyle(
                     color: _muted,
                     fontSize: 14,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
               ),
@@ -992,7 +992,7 @@ class _RankRow extends StatelessWidget {
                       color: Colors.white,
                       fontSize: 19,
                       height: 1,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                   if (sub != null) ...[

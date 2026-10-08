@@ -125,7 +125,7 @@ class MatchScoreLine extends StatelessWidget {
                   status.text,
                   style: TextStyle(
                     color: status.color,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w800,
                     fontSize: 10,
                   ),
                 ),
@@ -161,7 +161,7 @@ class MatchScoreLine extends StatelessWidget {
               showScore ? '$hs - $as' : '-',
               style: TextStyle(
                 color: isLive ? _live : Colors.white,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w800,
                 fontSize: 14,
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
