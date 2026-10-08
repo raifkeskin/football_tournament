@@ -4342,7 +4342,8 @@ class _DetailEventTile extends StatelessWidget {
                         )
                       : const SizedBox.shrink(),
                 ),
-                SizedBox(width: 64, child: Center(child: _minuteBadge(min))),
+                // Rozetle iki yandaki yazı arasında nefes payı.
+                SizedBox(width: 80, child: Center(child: _minuteBadge(min))),
                 Expanded(
                   child: isHome
                       ? const SizedBox.shrink()
@@ -4383,27 +4384,33 @@ class _DetailEventTile extends StatelessWidget {
     );
   }
 
-  /// Ortadaki dakika rozeti; maçın adamında dakika yerine yıldız.
+  /// Ortadaki dakika rozeti; maçın adamında dakika yerine yıldız. Gol
+  /// dakikası dolu yeşil zeminde beyaz yazılır.
   Widget _minuteBadge(String min) {
+    final goal = type == 'goal';
     return Container(
-      constraints: const BoxConstraints(minWidth: 40),
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+      constraints: const BoxConstraints(minWidth: 32),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
-        color: const Color(0xFF0F172A),
+        color: goal ? const Color(0xFF10B981) : const Color(0xFF0F172A),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.amber.withValues(alpha: 0.45)),
+        border: Border.all(
+          color: goal
+              ? const Color(0xFF10B981)
+              : Colors.amber.withValues(alpha: 0.45),
+        ),
       ),
       alignment: Alignment.center,
       child: min.isEmpty
-          ? const Icon(Icons.star_rounded, size: 14, color: Colors.amber)
+          ? const Icon(Icons.star_rounded, size: 12, color: Colors.amber)
           : Text(
               min,
               maxLines: 1,
-              style: const TextStyle(
-                fontSize: 12,
+              style: TextStyle(
+                fontSize: 10.5,
                 fontWeight: FontWeight.w800,
-                color: Colors.amber,
-                fontFeatures: [FontFeature.tabularFigures()],
+                color: goal ? Colors.white : Colors.amber,
+                fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
     );
