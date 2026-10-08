@@ -3909,7 +3909,8 @@ class _DetailTabView extends StatelessWidget {
         }
 
         return ListView.separated(
-          padding: const EdgeInsets.all(16),
+          // Altta sağdaki menü düğmesi son satırları örtmesin.
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 104),
           itemCount: normalized.length,
           separatorBuilder: (_, _) => const SizedBox(height: 2),
           itemBuilder: (context, i) {
