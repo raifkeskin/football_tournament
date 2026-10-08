@@ -537,6 +537,10 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
   final _rosterSearchController = TextEditingController();
   String _rosterQuery = '';
 
+  /// Arama alanı yalnız sağ alttaki büyüteçle açılır.
+  bool _rosterSearchOpen = false;
+  final _rosterSearchFocus = FocusNode();
+
   final Map<String, String> _playerPhotoUrlByPhone = {};
   final Set<String> _playerPhotoFetchInFlight = {};
 
@@ -993,6 +997,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
   @override
   void dispose() {
     _rosterSearchController.dispose();
+    _rosterSearchFocus.dispose();
     super.dispose();
   }
 
@@ -1237,6 +1242,20 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
       extendBodyBehindAppBar: true,
+      // Kadro sekmesinde küçük yüzen büyüteç; arama alanı yalnız istenince.
+      floatingActionButton:
+          effectiveTournamentId == null || _tab != 0 || _rosterSearchOpen
+          ? null
+          : FloatingActionButton.small(
+              tooltip: 'Futbolcu ara',
+              backgroundColor: _squadAccent,
+              foregroundColor: Colors.white,
+              onPressed: () {
+                setState(() => _rosterSearchOpen = true);
+                _rosterSearchFocus.requestFocus();
+              },
+              child: const Icon(Icons.search_rounded, size: 20),
+            ),
       body: Stack(
         children: [
           // Turnuva seçilmeden bant çizilmez; geri düğmesi yine görünsün.
@@ -1298,7 +1317,8 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                                 16,
                                 12,
                                 16,
-                                24,
+                                // Yüzen büyüteç son satırı örtmesin.
+                                72,
                               ),
                               children: [
                                 FutureBuilder<(String?, String?)>(
@@ -1377,40 +1397,10 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                                       );
                                     },
                                   ),
-                                  const SizedBox(height: 12),
-                                  TextField(
-                                    controller: _rosterSearchController,
-                                    style: const TextStyle(color: Colors.white),
-                                    onChanged: (v) => setState(
-                                      () =>
-                                          _rosterQuery = v.trim().toLowerCase(),
-                                    ),
-                                    decoration: InputDecoration(
-                                      hintText: 'Futbolcu ara',
-                                      prefixIcon: const Icon(
-                                        Icons.search,
-                                        color: _squadMuted,
-                                      ),
-                                      filled: true,
-                                      fillColor: const Color(
-                                        0xFF1E293B,
-                                      ).withValues(alpha: 0.9),
-                                      enabledBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(14),
-                                        borderSide: BorderSide(
-                                          color: Colors.white.withValues(
-                                            alpha: 0.12,
-                                          ),
-                                        ),
-                                      ),
-                                      focusedBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(14),
-                                        borderSide: const BorderSide(
-                                          color: _squadAccent,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
+                                  if (_rosterSearchOpen) ...[
+                                    const SizedBox(height: 10),
+                                    _rosterSearchField(),
+                                  ],
                                   const SizedBox(height: 4),
                                   if (players.isEmpty)
                                     Padding(
@@ -1459,6 +1449,54 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     );
   }
 
+  /// Büyüteçle açılan ince arama alanı; kapatınca arama da temizlenir.
+  Widget _rosterSearchField() {
+    return SizedBox(
+      height: 40,
+      child: TextField(
+        controller: _rosterSearchController,
+        focusNode: _rosterSearchFocus,
+        style: const TextStyle(color: Colors.white, fontSize: 14),
+        textInputAction: TextInputAction.search,
+        onChanged: (v) =>
+            setState(() => _rosterQuery = v.trim().toLowerCase()),
+        decoration: InputDecoration(
+          isDense: true,
+          hintText: 'Futbolcu ara',
+          hintStyle: const TextStyle(color: _squadMuted, fontSize: 14),
+          contentPadding: const EdgeInsets.symmetric(vertical: 10),
+          prefixIcon: const Icon(
+            Icons.search_rounded,
+            color: _squadMuted,
+            size: 20,
+          ),
+          suffixIcon: IconButton(
+            tooltip: 'Aramayı kapat',
+            icon: const Icon(Icons.close_rounded, color: _squadMuted, size: 20),
+            onPressed: () {
+              _rosterSearchController.clear();
+              _rosterSearchFocus.unfocus();
+              setState(() {
+                _rosterQuery = '';
+                _rosterSearchOpen = false;
+              });
+            },
+          ),
+          filled: true,
+          fillColor: const Color(0xFF1E293B).withValues(alpha: 0.9),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: _squadAccent),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _squadRow(
     PlayerModel p, {
     required bool first,
@@ -1482,8 +1520,8 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     return InkWell(
       onTap: () => _openPlayerCard(p),
       child: Container(
-        constraints: const BoxConstraints(minHeight: 64),
-        padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+        constraints: const BoxConstraints(minHeight: 50),
+        padding: const EdgeInsets.fromLTRB(10, 4, 0, 4),
         decoration: BoxDecoration(
           border: first
               ? null
@@ -1494,26 +1532,28 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
         child: Row(
           children: [
             _JerseyBadge(number: number, onTap: canAdd ? editJersey : null),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     p.name,
-                    maxLines: 2,
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 15,
+                      fontSize: 14,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                   if (sub.isNotEmpty) ...[
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 1),
                     Text(
                       sub,
-                      style: const TextStyle(color: _squadMuted, fontSize: 12),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: _squadMuted, fontSize: 11),
                     ),
                   ],
                 ],
@@ -3719,12 +3759,12 @@ class _JerseyBadge extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Container(
-        width: 44,
-        height: 44,
+        width: 36,
+        height: 36,
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: has ? _squadAccent.withValues(alpha: 0.16) : null,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(10),
           border: has
               ? null
               : Border.all(color: _squadMuted.withValues(alpha: 0.45)),
@@ -3733,7 +3773,7 @@ class _JerseyBadge extends StatelessWidget {
           has ? number : '—',
           style: TextStyle(
             color: has ? _squadAccent : _squadMuted,
-            fontSize: 16,
+            fontSize: 14,
             fontWeight: has ? FontWeight.w800 : FontWeight.w700,
           ),
         ),
