@@ -895,7 +895,123 @@ class _MatchCard extends StatelessWidget {
       );
       return;
     }
-    _showQuickScoreDialog(context);
+    _showMatchActions(context);
+  }
+
+  /// Yönetici menüsü: hızlı skor, ertele, iptal et, yeniden oynanacak yap.
+  Future<void> _showMatchActions(BuildContext context) async {
+    final unplayed =
+        match.status == MatchStatus.postponed ||
+        match.status == MatchStatus.cancelled;
+    final actions = <(String, String)>[
+      ('score', 'Hızlı Skor Girişi'),
+      ('postpone', 'Ertelendi (ERT)'),
+      if (match.status != MatchStatus.cancelled) ('cancel', 'İptal Edildi (İPT)'),
+      if (unplayed) ('restore', 'Oynanacak (Erteleme/İptali Kaldır)'),
+    ];
+    final picked = await showAdminOptionPicker<(String, String)>(
+      context: context,
+      title: 'Maç İşlemleri',
+      items: actions,
+      labelBuilder: (a) => a.$2,
+      emptyText: 'İşlem yok.',
+    );
+    if (picked == null || !context.mounted) return;
+    switch (picked.$1) {
+      case 'score':
+        _showQuickScoreDialog(context);
+      case 'postpone':
+        await _postpone(context);
+      case 'cancel':
+        await _setStatus(
+          context,
+          MatchStatus.cancelled,
+          confirm:
+              'Maç iptal edilsin mi? Oynanmamış sayılır; puan durumuna ve '
+              'istatistiğe yansımaz.',
+        );
+      case 'restore':
+        await _setStatus(context, MatchStatus.notStarted);
+    }
+  }
+
+  /// Erteleme: yeni tarih (isteğe bağlı saat) sorulur; tarih seçilmezse
+  /// maç tarihsiz ertelenmiş kalır.
+  Future<void> _postpone(BuildContext context) async {
+    final current = DateTime.tryParse((match.matchDate ?? '').trim());
+    final date = await showAppDatePicker(
+      context: context,
+      initialDate: current ?? DateTime.now(),
+      title: 'Ertelenen Tarih',
+    );
+    if (!context.mounted) return;
+    TimeOfDay? time;
+    if (date != null) {
+      final raw = (match.matchTime ?? '').trim();
+      final parts = raw.split(':');
+      time = await showTimePicker(
+        context: context,
+        helpText: 'Maç Saati',
+        initialTime: parts.length >= 2
+            ? TimeOfDay(
+                hour: int.tryParse(parts[0]) ?? 20,
+                minute: int.tryParse(parts[1]) ?? 0,
+              )
+            : const TimeOfDay(hour: 20, minute: 0),
+      );
+      if (!context.mounted) return;
+    }
+    String two(int v) => v.toString().padLeft(2, '0');
+    await _setStatus(
+      context,
+      MatchStatus.postponed,
+      matchDate: date == null
+          ? null
+          : '${date.year}-${two(date.month)}-${two(date.day)}',
+      matchTime: time == null ? null : '${two(time.hour)}:${two(time.minute)}',
+    );
+  }
+
+  Future<void> _setStatus(
+    BuildContext context,
+    MatchStatus status, {
+    String? confirm,
+    String? matchDate,
+    String? matchTime,
+  }) async {
+    final messenger = ScaffoldMessenger.of(context);
+    if (confirm != null) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          content: Text(confirm),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('Vazgeç'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(c, true),
+              child: const Text('Evet'),
+            ),
+          ],
+        ),
+      );
+      if (ok != true) return;
+    }
+    try {
+      await ServiceLocator.matchService.setMatchSchedulingStatus(
+        matchId: match.id,
+        status: status,
+        matchDate: matchDate,
+        matchTime: matchTime,
+      );
+      onDataChanged();
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.redAccent),
+      );
+    }
   }
 
   // Zaman çizelgesi satırı: solda saat/durum, ortada çizgi ve nokta, sağda
@@ -929,8 +1045,13 @@ class _MatchCard extends StatelessWidget {
 
     final hs = match.homeScore;
     final as = match.awayScore;
+    // Ertelenen / iptal maçta skor yerine ERT / İPT yazar.
+    final unplayed =
+        match.status == MatchStatus.postponed ||
+        match.status == MatchStatus.cancelled;
     final showScore =
-        match.status == MatchStatus.finished || isLive || hs != 0 || as != 0;
+        !unplayed &&
+        (match.status == MatchStatus.finished || isLive || hs != 0 || as != 0);
 
     return IntrinsicHeight(
       child: Row(

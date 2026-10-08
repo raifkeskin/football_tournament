@@ -44,6 +44,8 @@ String _awayId(Map<String, dynamic> m) =>
 
 bool _isCompleted(Map<String, dynamic> m) {
   final status = (m['status'] ?? '').toString().trim().toLowerCase();
+  // Ertelenen / iptal edilen maç oynanmamıştır; puana sayılmaz.
+  if (status == 'cancelled' || status == 'postponed') return false;
   return m['is_completed'] == true ||
       m['isCompleted'] == true ||
       status == 'finished' ||

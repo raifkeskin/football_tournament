@@ -809,6 +809,29 @@ class SupabaseMatchService implements IMatchService {
   }
 
   @override
+  Future<void> setMatchSchedulingStatus({
+    required String matchId,
+    required MatchStatus status,
+    String? matchDate,
+    String? matchTime,
+  }) async {
+    final rows = await _client
+        .from('matches')
+        .update({
+          'status': status.name,
+          'is_completed': false,
+          if (matchDate != null) 'match_date': matchDate,
+          if (matchTime != null) 'match_time': matchTime,
+        })
+        .eq('id', matchId)
+        .select('id');
+    if (rows.isEmpty) {
+      throw Exception('Maç güncellenemedi: bu maçı düzenleme yetkiniz yok.');
+    }
+    notifyLocalChange(matchId);
+  }
+
+  @override
   Future<void> completeMatchWithScoreAndDefaultEvents({
     required String matchId,
     required int homeScore,
@@ -1116,6 +1139,7 @@ class SupabaseMatchService implements IMatchService {
     // Oynanmış (bitmiş / sürüyor) maçlar: maç sayısı yalnız bunlardan sayılır;
     // önceden girilmiş kadro oynanmamış maçı saydırmasın.
     final played = <String>{};
+    final unplayed = <String>{};
     for (final any in matchesRes) {
       final m = any as Map;
       final id = (m['id'] ?? '').toString().trim();
@@ -1123,6 +1147,7 @@ class SupabaseMatchService implements IMatchService {
       matchIds.add(id);
       final st = (m['status'] ?? '').toString().trim();
       if (st == 'finished' || st == 'live' || st == 'halftime') played.add(id);
+      if (st == 'cancelled' || st == 'postponed') unplayed.add(id);
     }
 
     final results = matchIds.isEmpty
@@ -1131,7 +1156,11 @@ class SupabaseMatchService implements IMatchService {
             _client
                 .from('match_events')
                 .select()
-                .inFilter('match_id', matchIds)
+                // Ertelenen / iptal maçın olayları istatistiğe sayılmaz.
+                .inFilter(
+                  'match_id',
+                  matchIds.where((id) => !unplayed.contains(id)).toList(),
+                )
                 .then(
                   (r) => r.map((e) => Map<String, dynamic>.from(e)).toList(),
                 ),
