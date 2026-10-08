@@ -227,6 +227,37 @@ class AdminPanelWidget extends StatelessWidget {
                     onText: 'Açık · ana ekranlarda alt gezinme çubuğu görünür',
                     offText: 'Kapalı · gezinme yan menü ve kaydırma ile',
                   ),
+                  const SizedBox(height: 8),
+                  _SettingSwitch(
+                    setting: AppSettings.smsOtpEnabled,
+                    save: AppSettings.setSmsOtpEnabled,
+                    title: 'SMS Doğrulama',
+                    onIcon: Icons.sms_outlined,
+                    offIcon: Icons.send_rounded,
+                    onText:
+                        'Açık · Kayıt ve şifre sıfırlama SMS koduyla, '
+                        'onaysız',
+                    offText:
+                        'Kapalı · talep Telegram\'a düşer, şifre WhatsApp\'tan',
+                  ),
+                  ValueListenableBuilder<bool>(
+                    valueListenable: AppSettings.smsOtpEnabled,
+                    builder: (context, on, _) => !on
+                        ? const SizedBox.shrink()
+                        : Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: _SettingSwitch(
+                              setting: AppSettings.smsOtpTestMode,
+                              save: AppSettings.setSmsOtpTestMode,
+                              title: 'SMS Test Modu',
+                              onIcon: Icons.science_outlined,
+                              offIcon: Icons.cell_tower_rounded,
+                              onText:
+                                  'Açık · kodlar SMS yerine Telegram\'a gelir',
+                              offText: 'Kapalı · kodlar İletiMerkezi ile SMS',
+                            ),
+                          ),
+                  ),
                 ],
                 const SizedBox(height: 40),
               ],
