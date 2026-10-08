@@ -35,6 +35,7 @@ import '../../../core/utils/string_utils.dart';
 import '../../share/poster_share.dart';
 import '../../share/squad_poster.dart';
 import '../../../core/utils/team_colors.dart';
+import '../widgets/team_page_tabs.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show Supabase;
 
 class TeamSquadScreen extends StatefulWidget {
@@ -541,6 +542,23 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
 
   bool _isTeamManager = false;
   bool _isLoadingTournaments = true;
+
+  /// Üst bant altındaki sekme: 0 Kadro, 1 Fikstür, 2 İstatistik.
+  int _tab = 0;
+
+  /// Takım renkleri (üst bandın zemini); bir kez okunur.
+  late final Future<(String?, String?)> _teamColors = () async {
+    try {
+      final r = await Supabase.instance.client
+          .from('teams')
+          .select('first_color, second_color')
+          .eq('id', widget.teamId)
+          .maybeSingle();
+      return (r?['first_color'] as String?, r?['second_color'] as String?);
+    } catch (_) {
+      return (null, null);
+    }
+  }();
   List<League> _teamTournaments = [];
   String? _selectedTournamentId;
   Stream<List<PlayerModel>>? _playersStream;
@@ -1220,7 +1238,8 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
       backgroundColor: const Color(0xFF0F172A),
       extendBodyBehindAppBar: true,
       appBar: MasterClassAppBar(
-        title: titleTeam.isEmpty ? 'Takım Kadrosu' : '$titleTeam Kadrosu',
+        // Takım adı aşağıdaki renkli bantta; başlık boş kalır.
+        title: '',
         actions: [
           if (canAdd)
             IconButton(
@@ -1301,109 +1320,140 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                                 24,
                               ),
                               children: [
-                                _SquadSummaryCard(
-                                  teamName: titleTeam,
-                                  logoUrl: widget.teamLogoUrl,
-                                  subtitle: _tournamentNameById(
-                                    effectiveTournamentId,
-                                  ),
-                                  players: allPlayers,
-                                  ageOf: (p) => _ageFromBirthDate(p.birthDate),
-                                  // Paylaş şimdilik yalnızca admin ve
-                                  // turnuva sahibine açık.
-                                  onShare:
-                                      allPlayers.isEmpty ||
-                                          !AppSession.of(
-                                            context,
-                                          ).value.canManageLeague(
-                                            effectiveTournamentId,
-                                          )
-                                      ? null
-                                      : () => _shareSquadPoster(
-                                          teamName: titleTeam,
-                                          tournamentId: effectiveTournamentId,
-                                          players: allPlayers,
+                                FutureBuilder<(String?, String?)>(
+                                  future: _teamColors,
+                                  builder: (context, colorSnap) =>
+                                      _SquadSummaryCard(
+                                        firstColor: colorSnap.data?.$1,
+                                        secondColor: colorSnap.data?.$2,
+                                        teamName: titleTeam,
+                                        logoUrl: widget.teamLogoUrl,
+                                        subtitle: _tournamentNameById(
+                                          effectiveTournamentId,
                                         ),
+                                        players: allPlayers,
+                                        ageOf: (p) =>
+                                            _ageFromBirthDate(p.birthDate),
+                                        // Paylaş şimdilik yalnızca admin ve
+                                        // turnuva sahibine açık.
+                                        onShare:
+                                            allPlayers.isEmpty ||
+                                                !AppSession.of(
+                                                  context,
+                                                ).value.canManageLeague(
+                                                  effectiveTournamentId,
+                                                )
+                                            ? null
+                                            : () => _shareSquadPoster(
+                                                teamName: titleTeam,
+                                                tournamentId:
+                                                    effectiveTournamentId,
+                                                players: allPlayers,
+                                              ),
+                                      ),
                                 ),
-                                FutureBuilder(
-                                  future: _consentCache.of(
-                                    allPlayers.map((p) => p.id),
-                                  ),
-                                  builder: (context, snap) {
-                                    final st = snap.data ?? const {};
-                                    if (st.values.every((s) => s.complete)) {
-                                      return const SizedBox.shrink();
-                                    }
-                                    return Padding(
-                                      padding: const EdgeInsets.only(top: 12),
-                                      child: ConsentSummaryBanner(statuses: st),
-                                    );
-                                  },
+                                const SizedBox(height: 8),
+                                TeamPageTabBar(
+                                  index: _tab,
+                                  onChanged: (i) => setState(() => _tab = i),
                                 ),
-                                const SizedBox(height: 12),
-                                TextField(
-                                  controller: _rosterSearchController,
-                                  style: const TextStyle(color: Colors.white),
-                                  onChanged: (v) => setState(
-                                    () => _rosterQuery = v.trim().toLowerCase(),
+                                if (_tab == 1)
+                                  TeamFixtureTab(
+                                    seasonId: effectiveTournamentId,
+                                    teamId: widget.teamId,
+                                    teamName: titleTeam,
                                   ),
-                                  decoration: InputDecoration(
-                                    hintText: 'Futbolcu ara',
-                                    prefixIcon: const Icon(
-                                      Icons.search,
-                                      color: _squadMuted,
+                                if (_tab == 2)
+                                  TeamStatsTab(
+                                    seasonId: effectiveTournamentId,
+                                    teamId: widget.teamId,
+                                    players: allPlayers,
+                                  ),
+                                if (_tab == 0) ...[
+                                  FutureBuilder(
+                                    future: _consentCache.of(
+                                      allPlayers.map((p) => p.id),
                                     ),
-                                    filled: true,
-                                    fillColor: const Color(
-                                      0xFF1E293B,
-                                    ).withValues(alpha: 0.9),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(14),
-                                      borderSide: BorderSide(
-                                        color: Colors.white.withValues(
-                                          alpha: 0.12,
+                                    builder: (context, snap) {
+                                      final st = snap.data ?? const {};
+                                      if (st.values.every((s) => s.complete)) {
+                                        return const SizedBox.shrink();
+                                      }
+                                      return Padding(
+                                        padding: const EdgeInsets.only(top: 12),
+                                        child: ConsentSummaryBanner(
+                                          statuses: st,
                                         ),
-                                      ),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(14),
-                                      borderSide: const BorderSide(
-                                        color: _squadAccent,
-                                      ),
-                                    ),
+                                      );
+                                    },
                                   ),
-                                ),
-                                const SizedBox(height: 4),
-                                if (players.isEmpty)
-                                  const Padding(
-                                    padding: EdgeInsets.only(top: 32),
-                                    child: Text(
-                                      'Aramanıza uygun futbolcu bulunamadı.',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(color: _squadMuted),
+                                  const SizedBox(height: 12),
+                                  TextField(
+                                    controller: _rosterSearchController,
+                                    style: const TextStyle(color: Colors.white),
+                                    onChanged: (v) => setState(
+                                      () =>
+                                          _rosterQuery = v.trim().toLowerCase(),
                                     ),
-                                  )
-                                else
-                                  for (final section in _positionSections(
-                                    players,
-                                  ))
-                                    _SquadSection(
-                                      title: section.key,
-                                      count: section.value.length,
-                                      children: [
-                                        for (
-                                          var i = 0;
-                                          i < section.value.length;
-                                          i++
-                                        )
-                                          _squadRow(
-                                            section.value[i],
-                                            first: i == 0,
-                                            canAdd: canAdd,
-                                            tournamentId: effectiveTournamentId,
+                                    decoration: InputDecoration(
+                                      hintText: 'Futbolcu ara',
+                                      prefixIcon: const Icon(
+                                        Icons.search,
+                                        color: _squadMuted,
+                                      ),
+                                      filled: true,
+                                      fillColor: const Color(
+                                        0xFF1E293B,
+                                      ).withValues(alpha: 0.9),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                        borderSide: BorderSide(
+                                          color: Colors.white.withValues(
+                                            alpha: 0.12,
                                           ),
-                                      ],
+                                        ),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                        borderSide: const BorderSide(
+                                          color: _squadAccent,
+                                        ),
+                                      ),
                                     ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  if (players.isEmpty)
+                                    const Padding(
+                                      padding: EdgeInsets.only(top: 32),
+                                      child: Text(
+                                        'Aramanıza uygun futbolcu bulunamadı.',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(color: _squadMuted),
+                                      ),
+                                    )
+                                  else
+                                    for (final section in _positionSections(
+                                      players,
+                                    ))
+                                      _SquadSection(
+                                        title: section.key,
+                                        count: section.value.length,
+                                        children: [
+                                          for (
+                                            var i = 0;
+                                            i < section.value.length;
+                                            i++
+                                          )
+                                            _squadRow(
+                                              section.value[i],
+                                              first: i == 0,
+                                              canAdd: canAdd,
+                                              tournamentId:
+                                                  effectiveTournamentId,
+                                            ),
+                                        ],
+                                      ),
+                                ],
                               ],
                             );
                           },
@@ -3405,6 +3455,8 @@ class _SquadSummaryCard extends StatelessWidget {
     required this.subtitle,
     required this.players,
     required this.ageOf,
+    this.firstColor,
+    this.secondColor,
     this.onShare,
   });
 
@@ -3414,35 +3466,39 @@ class _SquadSummaryCard extends StatelessWidget {
   final List<PlayerModel> players;
   final int? Function(PlayerModel) ageOf;
 
+  /// Takım renkleri (teams.first_color / second_color); yoksa yeşil tema.
+  final String? firstColor;
+  final String? secondColor;
+
   /// Kadro afişini paylaşır (sağ üstteki düğme).
   final VoidCallback? onShare;
 
-  Widget _stat(String value, String label, {Color color = Colors.white}) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: const Color(0xFF0F172A).withValues(alpha: 0.6),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              value,
-              style: TextStyle(
-                color: color,
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-              ),
+  Widget _stat(String value, String label) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 84),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F172A).withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
             ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: const TextStyle(color: _squadMuted, fontSize: 12),
+          ),
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.7),
+              fontSize: 11,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -3453,9 +3509,6 @@ class _SquadSummaryCard extends StatelessWidget {
     final avgAge = ages.isEmpty
         ? '–'
         : (ages.reduce((a, b) => a + b) / ages.length).round().toString();
-    final missingNumbers = players
-        .where((p) => (p.number ?? '').trim().isEmpty)
-        .length;
     final counts = <String, int>{};
     for (final p in players) {
       final g = _positionGroup(p);
@@ -3468,126 +3521,150 @@ class _SquadSummaryCard extends StatelessWidget {
         .map((w) => w.characters.first)
         .join()
         .trUpper;
+    final palette = TeamPalette.of(firstColor, secondColor);
+    final primary = palette.primary;
+    final secondary = palette.secondary;
 
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: _squadCard.withValues(alpha: 0.94),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      // Sol: kartın tüm yüksekliği boyunca büyük logo. Sağ: ad, turnuva,
-      // istatistikler ve mevki dağılımı.
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+    // Takım renkli üst bant: soldan takımın ana rengi koyu zemine geçer
+    // (maç detayı başlığıyla aynı dil); altta iki renkli ince şerit.
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(22),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color.lerp(primary, const Color(0xFF0F172A), 0.35)!,
+              palette.background,
+              const Color(0xFF0F172A),
+            ],
+            stops: const [0, 0.5, 1],
+          ),
+        ),
+        child: Column(
           children: [
-            Container(
-              width: 104,
-              constraints: const BoxConstraints(minHeight: 104),
-              alignment: Alignment.center,
-              // Çerçevesiz: şeffaf logo doğrudan kartın üzerinde durur.
-              child: logoUrl.trim().isNotEmpty
-                  ? WebSafeImage(
-                      url: logoUrl,
-                      width: 100,
-                      height: 100,
-                      fit: BoxFit.contain,
-                    )
-                  : Text(
-                      initials,
-                      style: const TextStyle(
-                        color: Color(0xFF6EE7B7),
-                        fontSize: 28,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+            Stack(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
+                  child: Column(
                     children: [
-                      Expanded(
-                        child: Text(
-                          teamName,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 17,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                      if (onShare != null)
-                        SizedBox(
-                          width: 34,
-                          height: 34,
-                          child: IconButton(
-                            tooltip: 'Kadro afişini paylaş',
-                            padding: EdgeInsets.zero,
-                            style: IconButton.styleFrom(
-                              backgroundColor: const Color(
-                                0xFF10B981,
-                              ).withValues(alpha: 0.18),
-                            ),
-                            icon: const Icon(
-                              Icons.ios_share_rounded,
-                              size: 18,
-                              color: Color(0xFF6EE7B7),
-                            ),
-                            onPressed: onShare,
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: _squadMuted, fontSize: 12),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      _stat('${players.length}', 'Oyuncu'),
-                      const SizedBox(width: 8),
-                      _stat(avgAge, 'Ort. yaş'),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      for (final g in _positionOrder)
-                        if ((counts[g] ?? 0) > 0)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 9,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.06),
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                            child: Text(
-                              '${counts[g]} $g',
-                              style: const TextStyle(
-                                color: Color(0xFFCBD5E1),
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w700,
+                      SizedBox(
+                        width: 92,
+                        height: 92,
+                        child: logoUrl.trim().isNotEmpty
+                            ? WebSafeImage(
+                                url: logoUrl,
+                                width: 92,
+                                height: 92,
+                                fit: BoxFit.contain,
+                              )
+                            : Center(
+                                child: Text(
+                                  initials,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 32,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        teamName.trUpper,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 26,
+                          height: 1.05,
+                          fontWeight: FontWeight.w900,
+                          fontStyle: FontStyle.italic,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle.isEmpty ? 'KADRO' : 'KADRO · $subtitle',
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.75),
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _stat('${players.length}', 'Oyuncu'),
+                          _stat(avgAge, 'Ort. yaş'),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          for (final g in _positionOrder)
+                            if ((counts[g] ?? 0) > 0)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 9,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Text(
+                                  '${counts[g]} $g',
+                                  style: const TextStyle(
+                                    color: Color(0xFFE2E8F0),
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                        ],
+                      ),
                     ],
                   ),
+                ),
+                if (onShare != null)
+                  Positioned(
+                    top: 10,
+                    right: 10,
+                    child: IconButton(
+                      tooltip: 'Kadro afişini paylaş',
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.black.withValues(alpha: 0.25),
+                      ),
+                      icon: const Icon(
+                        Icons.ios_share_rounded,
+                        size: 18,
+                        color: Colors.white,
+                      ),
+                      onPressed: onShare,
+                    ),
+                  ),
+              ],
+            ),
+            SizedBox(
+              height: 4,
+              child: Row(
+                children: [
+                  Expanded(child: ColoredBox(color: primary)),
+                  Expanded(child: ColoredBox(color: secondary)),
                 ],
               ),
             ),
