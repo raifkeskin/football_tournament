@@ -478,7 +478,15 @@ Future<void> showLeagueSwitcher() async {
       !LeagueSwitchScope.enabled.value) {
     return;
   }
-  final band = box.localToGlobal(Offset.zero) & box.size;
+  // Liste gezginin katmanında çizilir; gezgin bandın altından başladığı
+  // için bandın konumu o katmana göre hesaplanır (yoksa bant yüksekliği iki
+  // kez sayılır ve liste aşağıda açılır).
+  final overlayBox = nav.overlay?.context.findRenderObject() as RenderBox?;
+  final topLeft = overlayBox == null
+      ? box.localToGlobal(Offset.zero)
+      : box.localToGlobal(Offset.zero) -
+            overlayBox.localToGlobal(Offset.zero);
+  final band = topLeft & box.size;
   _switcherOpen.value = true;
   final picked = await nav.push<String>(_LeagueDropdownRoute(band: band));
   _switcherOpen.value = false;
