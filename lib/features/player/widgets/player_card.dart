@@ -272,6 +272,9 @@ class _PlayerCardState extends State<PlayerCard> {
           final id = (m['id'] ?? '').toString();
           final sid = (m['season_id'] ?? '').toString();
           if (id.isEmpty || sid.isEmpty) continue;
+          // Ertelenen / iptal maç oynanmadı: hiçbir sayıya katılmaz.
+          final st = (m['status'] ?? '').toString();
+          if (st == 'cancelled' || st == 'postponed') continue;
           seasonByMatch[id] = sid;
           if ((m['status'] ?? '').toString() == 'finished') finished.add(id);
         }
