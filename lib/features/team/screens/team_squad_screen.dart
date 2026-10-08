@@ -1477,29 +1477,31 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                 ],
               ),
             ),
-            PopupMenuButton<String>(
-              tooltip: 'Diğer işlemler',
-              icon: const Icon(Icons.menu_rounded, color: _squadMuted),
-              color: const Color(0xFF1E293B),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-              onSelected: (v) {
-                switch (v) {
-                  case 'edit':
-                    _openPlayerForm(editing: p);
-                  case 'jersey':
-                    editJersey();
-                  case 'remove':
-                    _confirmAndRemovePlayer(p, tournamentId);
-                }
-              },
-              itemBuilder: (_) => [
-                const PopupMenuItem(
-                  value: 'edit',
-                  child: _MenuRow(icon: Icons.edit_outlined, text: 'Düzenle'),
+            // Düzenleme menüsü yalnız admin ve kadroyu yönetebilenlere
+            // (takım sorumlusu, kurucu başkan, bölge sorumlusu).
+            if (canAdd)
+              PopupMenuButton<String>(
+                tooltip: 'Diğer işlemler',
+                icon: const Icon(Icons.menu_rounded, color: _squadMuted),
+                color: const Color(0xFF1E293B),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
                 ),
-                if (canAdd)
+                onSelected: (v) {
+                  switch (v) {
+                    case 'edit':
+                      _openPlayerForm(editing: p);
+                    case 'jersey':
+                      editJersey();
+                    case 'remove':
+                      _confirmAndRemovePlayer(p, tournamentId);
+                  }
+                },
+                itemBuilder: (_) => [
+                  const PopupMenuItem(
+                    value: 'edit',
+                    child: _MenuRow(icon: Icons.edit_outlined, text: 'Düzenle'),
+                  ),
                   const PopupMenuItem(
                     value: 'jersey',
                     child: _MenuRow(
@@ -1507,16 +1509,16 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                       text: 'Forma no değiştir',
                     ),
                   ),
-                const PopupMenuItem(
-                  value: 'remove',
-                  child: _MenuRow(
-                    icon: Icons.person_remove_outlined,
-                    text: 'Kadrodan çıkar',
-                    color: Color(0xFFF87171),
+                  const PopupMenuItem(
+                    value: 'remove',
+                    child: _MenuRow(
+                      icon: Icons.person_remove_outlined,
+                      text: 'Kadrodan çıkar',
+                      color: Color(0xFFF87171),
+                    ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
           ],
         ),
       ),
