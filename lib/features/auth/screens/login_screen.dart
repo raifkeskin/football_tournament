@@ -70,6 +70,12 @@ class _LoginScreenState extends State<LoginScreen> {
   void _syncBand(bool visible) {
     if (visible == _bandGeneric) return;
     _bandGeneric = visible;
+    // Bandın adına üç dokunuş: gizli admin girişi (görünen giriş formu).
+    if (visible) {
+      AppNameBand.onLoginTitleTap = _onBandTitleTap;
+    } else if (AppNameBand.onLoginTitleTap == _onBandTitleTap) {
+      AppNameBand.onLoginTitleTap = null;
+    }
     // (Kurulum/kaldırma sırasında bant yeniden çizilemez; ertelenir.)
     Future.microtask(
       () => AppNameBand.genericScreens.value += visible ? 1 : -1,
@@ -89,6 +95,10 @@ class _LoginScreenState extends State<LoginScreen> {
     _phoneController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  void _onBandTitleTap() {
+    if (mounted) _handleAdminTitleTap(AppSession.of(context));
   }
 
   Future<String?> _showBackdoorPasswordDialog() async {
@@ -309,32 +319,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
     return Scaffold(
       backgroundColor: bgDark,
-      // Başlık yok (üstte uygulama bandı var); kapı dışında yalnız menü.
-      appBar: widget.gate
-          ? null
-          : AppBar(
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              toolbarHeight: 44,
-              automaticallyImplyLeading: false,
-              leading: Builder(
-                builder: (ctx) => IconButton(
-                  icon: const Icon(Icons.menu, color: Colors.white, size: 28),
-                  onPressed: () {
-                    // En üstteki root Scaffold'un menüsü; yoksa ana sekme.
-                    final scaffoldState = ctx
-                        .findRootAncestorStateOfType<ScaffoldState>();
-                    if (scaffoldState != null && scaffoldState.hasDrawer) {
-                      scaffoldState.openDrawer();
-                    } else {
-                      Navigator.of(context).popUntil((route) => route.isFirst);
-                    }
-                  },
-                ),
-              ),
-            ),
+      // Başlık ve menü yok (üstte uygulama bandı var): giriş ekranında
+      // hiçbir durumda menü düğmesi gösterilmez.
       body: SafeArea(
-        top: !widget.gate,
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
@@ -343,21 +330,6 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Gizli admin girişi: soruya üç kez dokunmak.
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => _handleAdminTitleTap(session),
-                    child: const Text(
-                      'Bugün nerede olacaksın?',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 17,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
                   IntrinsicHeight(
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,

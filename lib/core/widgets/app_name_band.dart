@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' show Supabase;
 
 import '../app_navigator.dart';
 import '../services/active_tournament.dart';
@@ -27,6 +25,10 @@ class AppNameBand extends StatelessWidget {
   /// Açık olan "genel bant" ekranlarının sayısı (giriş ekranı). Sıfırdan
   /// büyükse bantta turnuva kimliği gösterilmez.
   static final genericScreens = ValueNotifier<int>(0);
+
+  /// Giriş ekranı bandındaki ada dokunuş (gizli admin girişi için giriş
+  /// ekranı verir).
+  static VoidCallback? onLoginTitleTap;
 
   /// Yönetim paneli açıkken bantta solda menü, sağda çıkış düğmesi
   /// (panelin ayrı başlık çubuğu yok). null: düğme yok.
@@ -184,59 +186,16 @@ class AppNameBand extends StatelessWidget {
   }
 }
 
-/// Giriş ekranı bandı: logo, uygulama adı ve altında aktif turnuvalar.
-/// Turnuva satırı cihazda saklanır; açılışta önce o gösterilir (titreme yok).
-class _LoginBand extends StatefulWidget {
+/// Giriş ekranı bandı: logo ve uygulama adı.
+class _LoginBand extends StatelessWidget {
   const _LoginBand({required this.top});
 
   final double top;
 
   @override
-  State<_LoginBand> createState() => _LoginBandState();
-}
-
-class _LoginBandState extends State<_LoginBand> {
-  static const _kLeagues = 'login_band_leagues';
-  static String? _cached;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      if (_cached == null) {
-        final saved = prefs.getString(_kLeagues);
-        if (saved != null && mounted) setState(() => _cached = saved);
-      }
-      final rows = await Supabase.instance.client
-          .from('leagues')
-          .select('name, short_name')
-          .eq('status', 'active')
-          .order('created_at');
-      final names = [
-        for (final r in rows)
-          ((r['short_name'] ?? '').toString().trim().isNotEmpty
-                  ? r['short_name']
-                  : r['name'] ?? '')
-              .toString()
-              .trim()
-              .split(RegExp(r'\s+'))
-              .first,
-      ].where((n) => n.isNotEmpty).take(4).join(' · ');
-      await prefs.setString(_kLeagues, names);
-      if (mounted && names != _cached) setState(() => _cached = names);
-    } catch (_) {}
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final leagues = _cached ?? '';
     return Container(
-      padding: EdgeInsets.fromLTRB(18, widget.top + 16, 18, 16),
+      padding: EdgeInsets.fromLTRB(18, top + 16, 18, 16),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
@@ -264,41 +223,24 @@ class _LoginBandState extends State<_LoginBand> {
           ),
           const SizedBox(width: 14),
           Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _trUpper(kAppName),
-                  maxLines: 1,
-                  style: const TextStyle(
-                    fontFamily: 'BarlowCondensed',
-                    fontStyle: FontStyle.italic,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                    fontSize: 30,
-                    height: 1,
-                    letterSpacing: 0.8,
-                    decoration: TextDecoration.none,
-                  ),
+            // Gizli admin girişi: ada üç kez dokunmak.
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => AppNameBand.onLoginTitleTap?.call(),
+              child: Text(
+                _trUpper(kAppName),
+                maxLines: 1,
+                style: const TextStyle(
+                  fontFamily: 'BarlowCondensed',
+                  fontStyle: FontStyle.italic,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                  fontSize: 30,
+                  height: 1,
+                  letterSpacing: 0.8,
+                  decoration: TextDecoration.none,
                 ),
-                const SizedBox(height: 5),
-                // Yükseklik sabit: satır sonradan gelince bant zıplamasın.
-                SizedBox(
-                  height: 18,
-                  child: Text(
-                    leagues,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xFF94A3B8),
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w500,
-                      decoration: TextDecoration.none,
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ],
