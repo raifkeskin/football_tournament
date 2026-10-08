@@ -345,7 +345,8 @@ class _MatchFlowBarState extends State<_MatchFlowBar> {
     final m = widget.match;
     final ({String action, String label, IconData icon, Color color})? next =
         switch (m.status) {
-          MatchStatus.notStarted => (
+          // Ertelenen maç yeni tarihinde doğrudan başlatılır.
+          MatchStatus.notStarted || MatchStatus.postponed => (
             action: 'start',
             label: 'Başlama Düdüğü',
             icon: Icons.sports_rounded,

@@ -397,11 +397,22 @@ class PlayerProfileService {
           .select('event_type, match_id, player_id, assist_player_id, is_own_goal')
           .eq('season_id', seasonId)
           .or('player_id.eq.$playerId,assist_player_id.eq.$playerId'),
+      // Ertelenen / iptal maçlar oynanmadı: sayılara katılmaz.
+      _client
+          .from('matches')
+          .select('id')
+          .eq('season_id', seasonId)
+          .inFilter('status', ['cancelled', 'postponed']),
     ]);
-    final matchIds = results[0].map((r) => r['match_id']).toSet();
+    final unplayed = results[2].map((r) => r['id'].toString()).toSet();
+    final matchIds = results[0]
+        .map((r) => r['match_id'].toString())
+        .where((id) => !unplayed.contains(id))
+        .toSet();
     var goals = 0, assists = 0, yellow = 0, red = 0;
     final yellowMatches = <String>{};
     for (final e in results[1]) {
+      if (unplayed.contains(e['match_id']?.toString())) continue;
       final type = (e['event_type'] ?? '').toString();
       final mine = e['player_id']?.toString() == playerId;
       if (type == 'goal') {

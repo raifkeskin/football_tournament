@@ -379,7 +379,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
       _sb
           .from('match_events')
           .select(
-            'player_id, assist_player_id, team_id, is_own_goal, '
+            'match_id, player_id, assist_player_id, team_id, is_own_goal, '
             'scorer:players!match_events_player_id_fkey(name, surname, photo_url), '
             'assister:players!match_events_assist_player_id_fkey(name, surname, photo_url)',
           )
@@ -487,7 +487,14 @@ class _HomeDashboardState extends State<HomeDashboard> {
           .goals++;
     }
 
+    // Ertelenen / iptal maçların golleri sayılmaz.
+    final unplayed = {
+      for (final m in (raw['matches'] as List? ?? const []))
+        if (m['status'] == 'cancelled' || m['status'] == 'postponed')
+          (m['id'] ?? '').toString(),
+    };
     for (final e in (raw['events'] as List? ?? const [])) {
+      if (unplayed.contains((e['match_id'] ?? '').toString())) continue;
       totalGoals++;
       if (e['is_own_goal'] == true) continue;
       final team = (e['team_id'] ?? '').toString();
