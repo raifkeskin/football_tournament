@@ -49,6 +49,8 @@ class AppNameBand extends StatelessWidget {
               ]),
               builder: (context, tvlBand) {
                 // Yönetim panelinde turnuva kimliği yok: uygulama bandı.
+                // Giriş ekranı: rol kartlarının üstünde logo ve kısa tanıtım.
+                if (genericScreens.value > 0) return _loginBand(top);
                 final t = LeagueSwitchScope.panel.value
                     ? null
                     : ActiveTournament.theme.value;
@@ -108,6 +110,64 @@ class AppNameBand extends StatelessWidget {
               context: context,
               removeTop: true,
               child: child,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _loginBand(double top) {
+    return Container(
+      padding: EdgeInsets.fromLTRB(18, top + 14, 18, 14),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF064E3B), Color(0xFF0F172A)],
+        ),
+      ),
+      child: Row(
+        children: [
+          const AppLogo(size: 52),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (kShowAppName) ...[
+                  const Text(
+                    'LİG MASASI',
+                    maxLines: 1,
+                    style: TextStyle(
+                      fontFamily: 'BarlowCondensed',
+                      fontStyle: FontStyle.italic,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      fontSize: 26,
+                      height: 1,
+                      letterSpacing: 1.5,
+                      decoration: TextDecoration.none,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                ],
+                Text(
+                  'Turnuvaların skor, fikstür ve kadro merkezi',
+                  style: TextStyle(
+                    color: kShowAppName
+                        ? const Color(0xFF94A3B8)
+                        : Colors.white,
+                    fontSize: kShowAppName ? 12.5 : 15,
+                    fontWeight: kShowAppName
+                        ? FontWeight.w500
+                        : FontWeight.w700,
+                    height: 1.25,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
