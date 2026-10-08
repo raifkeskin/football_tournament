@@ -673,22 +673,8 @@ class _StaffHeaderCardState extends State<_StaffHeaderCard> {
                 MaterialPageRoute<void>(
                   builder: (_) => Scaffold(
                     backgroundColor: const Color(0xFF0F172A),
-                    // Başlık yok; solda ev: ana sayfaya döner.
-                    appBar: AppBar(
-                      backgroundColor: Colors.transparent,
-                      foregroundColor: Colors.white,
-                      automaticallyImplyLeading: false,
-                      leading: Builder(
-                        builder: (ctx) => IconButton(
-                          tooltip: 'Ana Sayfa',
-                          icon: const Icon(Icons.home_rounded),
-                          onPressed: () {
-                            Navigator.of(ctx).pop();
-                            MainNavigator.tabRequest.value = 0;
-                          },
-                        ),
-                      ),
-                    ),
+                    // Başlık çubuğu yok: ana sayfaya dönüş bandın solundaki
+                    // ev ikonuyla (yönetim paneli düğmeleri).
                     body: SafeArea(
                       child: MyProfileView(
                         playerId: session.playerId,
