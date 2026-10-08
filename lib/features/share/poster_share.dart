@@ -7,6 +7,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../core/widgets/admin_form.dart';
 import '../../core/widgets/admin_page.dart';
+import 'poster_background.dart';
 
 /// Afişlerin mantıksal boyutu; paylaşırken 3x çizilir → 1080×1920
 /// (Instagram hikaye boyutu).
@@ -18,12 +19,17 @@ const _kPixelRatio = 3.0;
 ///
 /// [imageUrls]: afişteki ağ resimleri; çizimden önce yüklenir ki PNG'de
 /// eksik kalmasın.
+///
+/// [leagueId] ya da [seasonId] verilirse turnuvanın afiş arka planı
+/// (`leagues.poster_bg_url`) zemin olarak kullanılır.
 Future<void> showPosterPreview({
   required BuildContext context,
   required Widget poster,
   required String fileName,
   List<String> imageUrls = const [],
   String? shareText,
+  String? leagueId,
+  String? seasonId,
 }) {
   return showDialog<void>(
     context: context,
@@ -32,6 +38,8 @@ Future<void> showPosterPreview({
       fileName: fileName,
       imageUrls: imageUrls,
       shareText: shareText,
+      leagueId: leagueId,
+      seasonId: seasonId,
     ),
   );
 }
@@ -42,12 +50,16 @@ class _PosterPreviewDialog extends StatefulWidget {
     required this.fileName,
     required this.imageUrls,
     this.shareText,
+    this.leagueId,
+    this.seasonId,
   });
 
   final Widget poster;
   final String fileName;
   final List<String> imageUrls;
   final String? shareText;
+  final String? leagueId;
+  final String? seasonId;
 
   @override
   State<_PosterPreviewDialog> createState() => _PosterPreviewDialogState();
@@ -58,15 +70,29 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
   late final Future<void> _ready = _prepare();
   bool _sharing = false;
 
+  /// Turnuvanın afiş arka planı; yoksa afiş kendi zeminini çizer.
+  ImageProvider? _background;
+
   Future<void> _prepare() async {
-    await GoogleFonts.pendingFonts();
+    final (_, bgUrl) = await (
+      GoogleFonts.pendingFonts(),
+      PosterBackgrounds.resolve(
+        leagueId: widget.leagueId,
+        seasonId: widget.seasonId,
+      ),
+    ).wait;
     if (!mounted) return;
+    var ok = true;
+    final bg = bgUrl == null ? null : NetworkImage(bgUrl);
     await Future.wait([
-      // Afiş zemini (stadyum fotoğrafı) PNG'ye çizilmeden önce hazır olsun.
-      precacheImage(const AssetImage('assets/anasayfa.jpg'), context),
+      // Afiş zemini PNG'ye çizilmeden önce hazır olsun.
+      precacheImage(kDefaultPosterPhoto, context),
+      if (bg != null) precacheImage(bg, context, onError: (_, _) => ok = false),
       for (final u in widget.imageUrls.where((u) => u.trim().isNotEmpty))
         precacheImage(NetworkImage(u), context, onError: (_, _) {}),
     ]);
+    // Görsel inmezse varsayılan zemin kullanılır.
+    if (bg != null && ok) _background = bg;
   }
 
   Future<void> _share() async {
@@ -146,7 +172,10 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
                                   key: _boundaryKey,
                                   child: SizedBox.fromSize(
                                     size: kPosterSize,
-                                    child: widget.poster,
+                                    child: PosterBackground(
+                                      image: _background,
+                                      child: widget.poster,
+                                    ),
                                   ),
                                 ),
                               ),

@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/utils/string_utils.dart';
 import 'poster_share.dart';
+import 'poster_background.dart';
 
 /// Afişteki tek maç.
 class PosterMatch {
@@ -198,12 +199,13 @@ class FixturePoster extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Zemin: stadyum fotoğrafı; üstünde okunurluk için lacivert geçiş.
+    // Zemin: turnuvanın afiş görseli (yoksa stadyum fotoğrafı); üstünde
+    // okunurluk için lacivert geçiş.
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: _navy,
         image: DecorationImage(
-          image: AssetImage('assets/anasayfa.jpg'),
+          image: PosterBackground.photoOf(context),
           fit: BoxFit.cover,
         ),
       ),

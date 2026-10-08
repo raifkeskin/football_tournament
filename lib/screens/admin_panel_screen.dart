@@ -7,6 +7,7 @@ import 'package:football_tournament/features/tournament/screens/admin_manage_lea
 import 'package:football_tournament/features/tournament/screens/admin_pitch_management_screen.dart';
 import '../features/match/screens/admin_fixture_entry_screen.dart';
 import '../features/news/screens/admin_manage_news_screen.dart';
+import '../features/share/admin_poster_background_screen.dart';
 import '../features/sponsors/admin_sponsors_screen.dart';
 import '../features/tournament/screens/admin_penalty_management_screen.dart';
 import 'admin_pending_actions_screen.dart';
@@ -112,6 +113,22 @@ class AdminPanelWidget extends StatelessWidget {
             Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const AdminSponsorsScreen()),
+            );
+          },
+        ),
+      // Afiş arka planı: şimdilik yalnız admin.
+      if (isAdmin)
+        _AdminMenuData(
+          baslik: 'Afiş Arka Planı',
+          renkler: const [Color(0xFFC4B5FD), Color(0xFF7C3AED)],
+          ikon: Icons.wallpaper_rounded,
+          resimYolu: 'assets/anasayfa.jpg',
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const AdminPosterBackgroundScreen(),
+              ),
             );
           },
         ),

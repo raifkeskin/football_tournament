@@ -579,6 +579,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
       context: context,
       fileName: 'mac_${homeName}_$awayName'.replaceAll(RegExp(r'\s+'), '_'),
       imageUrls: [leagueLogo, homeLogo, awayLogo],
+      leagueId: m.leagueId,
       poster: MatchPoster(
         leagueName: leagueName,
         leagueLogo: leagueLogo,
@@ -4695,6 +4696,7 @@ Future<void> shareLineupPoster(
     context: context,
     fileName: kind == 'Esame' ? 'esame_$slug' : 'dizilis_$slug',
     imageUrls: [data.teamLogo, data.opponentLogo, data.leagueLogo],
+    leagueId: match.leagueId,
     poster: kind == 'Esame'
         ? LineupListPoster(data: data)
         : LineupPitchPoster(data: data),

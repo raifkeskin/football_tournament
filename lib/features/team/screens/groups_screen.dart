@@ -404,6 +404,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
       await showPosterPreview(
         context: context,
         fileName: 'puan_durumu_${group.name}'.replaceAll(' ', '_'),
+        leagueId: leagueId,
         imageUrls: [
           leagueLogo,
           for (final r in rows) r.logo,
