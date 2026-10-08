@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../../team/widgets/team_page_tabs.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../tournament/models/league.dart';
@@ -134,6 +136,17 @@ class PlayerCard extends StatefulWidget {
 
 class _PlayerCardState extends State<PlayerCard> {
   late final Future<_PlayerCardData> _future = _load();
+
+  /// Alt bölüm sekmesi: 0 Özet, 1 Turnuvalar (ileride yenileri eklenir).
+  int _tab = 0;
+  static const _tabs = ['Özet', 'Turnuvalar'];
+
+  /// Alt çizgili sekme çubuğu (takım sayfası ve maç detayıyla aynı).
+  Widget _tabBar() => TeamPageTabBar(
+    index: _tab,
+    labels: _tabs,
+    onChanged: (i) => setState(() => _tab = i),
+  );
 
   SupabaseClient get _sb => Supabase.instance.client;
 
@@ -486,29 +499,21 @@ class _PlayerCardState extends State<PlayerCard> {
             children: [
               _hero(context),
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+                // Üst kart ile sekmeler arası dar tutulur.
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const _SectionTitle(
-                      icon: Icons.insights_rounded,
-                      title: 'Kariyer Özeti',
-                    ),
+                    _tabBar(),
                     const SizedBox(height: 10),
                     if (loading)
                       const Padding(
                         padding: EdgeInsets.all(24),
                         child: Center(child: CircularProgressIndicator()),
                       )
-                    else
-                      _summaryGrid(data.overall),
-                    const SizedBox(height: 22),
-                    const _SectionTitle(
-                      icon: Icons.emoji_events_outlined,
-                      title: 'Turnuva Geçmişi',
-                    ),
-                    const SizedBox(height: 10),
-                    if (!loading && data.tournaments.isEmpty)
+                    else if (_tab == 0)
+                      _summaryGrid(data.overall)
+                    else if (data.tournaments.isEmpty)
                       Container(
                         padding: const EdgeInsets.all(18),
                         decoration: _panel(),
@@ -518,7 +523,7 @@ class _PlayerCardState extends State<PlayerCard> {
                           style: TextStyle(color: _mid),
                         ),
                       )
-                    else if (!loading)
+                    else
                       _historyTable(data.tournaments),
                   ],
                 ),
@@ -1033,31 +1038,6 @@ class _PlayerCardState extends State<PlayerCard> {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({required this.icon, required this.title});
-
-  final IconData icon;
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, color: _accent, size: 18),
-        const SizedBox(width: 8),
-        Text(
-          title,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w900,
-            fontSize: 16,
-          ),
-        ),
-      ],
     );
   }
 }
