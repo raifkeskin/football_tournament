@@ -78,6 +78,16 @@ abstract class IMatchService {
     List<String>? awayOrder,
   });
 
+  /// Maçı ertelenmiş / iptal ya da yeniden oynanacak (notStarted) yapar.
+  /// Ertelemede yeni tarih ([matchDate] YYYY-MM-DD, [matchTime] HH:mm)
+  /// girilebilir. Oynanmayan maç puan durumuna ve istatistiğe sayılmaz.
+  Future<void> setMatchSchedulingStatus({
+    required String matchId,
+    required MatchStatus status,
+    String? matchDate,
+    String? matchTime,
+  });
+
   Future<void> completeMatchWithScoreAndDefaultEvents({
     required String matchId,
     required int homeScore,

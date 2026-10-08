@@ -139,6 +139,28 @@ class SupabaseMatchService implements IMatchService {
   }
 
   @override
+  Future<void> setMatchSchedulingStatus({
+    required String matchId,
+    required MatchStatus status,
+    String? matchDate,
+    String? matchTime,
+  }) async {
+    final rows = await _supabase
+        .from('matches')
+        .update({
+          'status': status.name,
+          'is_completed': false,
+          if (matchDate != null) 'match_date': matchDate,
+          if (matchTime != null) 'match_time': matchTime,
+        })
+        .eq('id', matchId)
+        .select('id');
+    if (rows.isEmpty) {
+      throw Exception('Maç güncellenemedi: bu maçı düzenleme yetkiniz yok.');
+    }
+  }
+
+  @override
   Future<void> completeMatchWithScoreAndDefaultEvents({
     required String matchId,
     required int homeScore,
