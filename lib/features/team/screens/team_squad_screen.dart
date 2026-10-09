@@ -1843,6 +1843,34 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
   bool _removePhoto = false;
   bool _saving = false;
 
+  /// Düzenlemede açılıştaki kişisel bilgiler; yalnızca forma no değiştiyse
+  /// oyuncu kaydına dokunulmaz (takım sorumlusu kişisel bilgileri
+  /// değiştiremez, yalnızca forma numarasını değiştirebilir).
+  String? _initialIdentity;
+
+  String _identitySnapshot() => [
+    _nameController.text.trim(),
+    _surnameController.text.trim(),
+    _identityNoController.text.trim(),
+    _birthDateController.text.trim(),
+    _phoneController.text.trim(),
+    _heightController.text.trim(),
+    _weightController.text.trim(),
+    _mainPosition,
+    _subPosition,
+    _preferredFoot,
+  ].join('|');
+
+  /// Hata popup'ın üstünde gösterilir (SnackBar popup'ın arkasında kalıyordu).
+  void _showError(String message) {
+    if (!mounted) return;
+    showAdminInfoDialog(
+      context: context,
+      title: 'Kaydedilemedi',
+      message: message,
+    );
+  }
+
   bool get _isMainPositionSelected =>
       _mainPosition.trim().isNotEmpty && _mainPosition != _unsetOption;
 
@@ -1942,6 +1970,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
         _phoneController.text = PhoneMaskFormatter.formatFromRaw(phoneRaw);
       }
       _existingPhotoUrl = (e.photoUrl ?? '').trim().isEmpty ? null : e.photoUrl;
+      _initialIdentity = _identitySnapshot();
     }
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _hydrateExistingPhotoFromIdentity(),
@@ -1982,13 +2011,8 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
     if (picked == null) return;
     if (await picked.length() > 10 * 1024 * 1024) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Dosya boyutu çok yüksek (Max 10MB). Lütfen daha düşük boyutlu bir görsel seçiniz.',
-          ),
-          backgroundColor: Colors.red,
-        ),
+      _showError(
+        'Dosya boyutu çok yüksek (Max 10MB). Lütfen daha düşük boyutlu bir görsel seçiniz.',
       );
       return;
     }
@@ -2028,18 +2052,14 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
         .replaceAll(RegExp(r'\D'), '')
         .trim();
     if (nationalId.isNotEmpty && nationalId.length != 11) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kimlik no 11 haneli olmalı.')),
-      );
+      _showError('Kimlik no 11 haneli olmalı.');
       return;
     }
 
     final firstName = _nameController.text.trim();
     final surname = _surnameController.text.trim();
     if (firstName.isEmpty || surname.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Lütfen ad soyad girin.')));
+      _showError('Lütfen ad soyad girin.');
       return;
     }
     final fullName = '$firstName $surname'.trim();
@@ -2047,30 +2067,27 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
     final number = _numberController.text.trim();
     final jerseyInt = number.isEmpty ? null : int.tryParse(number);
     if (number.isNotEmpty && jerseyInt == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Forma no sadece sayı olmalı.')),
-      );
+      _showError('Forma no sadece sayı olmalı.');
       return;
     }
 
     final birthDate = _birthDateController.text.trim();
     if (!_isValidBirthDate(birthDate)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Doğum tarihi DD-MM-YYYY formatında olmalı.'),
-        ),
-      );
+      _showError('Doğum tarihi DD-MM-YYYY formatında olmalı.');
       return;
     }
 
     final rawPhone = _rawPhone();
     if (!_isValidPhoneRaw(rawPhone)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Telefon no 10 haneli olmalı.')),
-      );
+      _showError('Telefon no 10 haneli olmalı.');
       return;
     }
     final isEditing = widget.editing != null;
+    final identityChanged =
+        !isEditing ||
+        _pickedPhoto != null ||
+        _removePhoto ||
+        _identitySnapshot() != _initialIdentity;
     // Telefonu olmayan mevcut oyuncu düzenlenirken sahte "no_phone_" anahtarı
     // üretilip telefon alanına yazılmaz; oyuncu id'si ile işlem yapılır.
     final editingWithoutPhone =
@@ -2136,39 +2153,45 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
           ),
         );
       }
-      await _teamService.updatePlayer(
-        playerId: updateKey,
-        data: {
-          'name': firstName,
-          'surname': surname,
-          'birth_date': resolvedBirthDate,
-          'preferred_foot': _preferredFoot.trim().isEmpty
-              ? null
-              : _preferredFoot.trim(),
-          'main_position': resolvedMainPosition,
-          'sub_position': resolvedSubPosition,
-          'photo_url': finalPhotoUrl,
-          'phone': phoneToStore,
-          'height': int.tryParse(
-            _heightController.text.replaceAll(RegExp(r'\D'), '').trim(),
-          ),
-          'weight': int.tryParse(
-            _weightController.text.replaceAll(RegExp(r'\D'), '').trim(),
-          ),
-          'national_id': nationalId.isEmpty ? null : nationalId,
-        },
-      );
+      if (identityChanged) {
+        await _teamService.updatePlayer(
+          playerId: updateKey,
+          data: {
+            'name': firstName,
+            'surname': surname,
+            'birth_date': resolvedBirthDate,
+            'preferred_foot': _preferredFoot.trim().isEmpty
+                ? null
+                : _preferredFoot.trim(),
+            'main_position': resolvedMainPosition,
+            'sub_position': resolvedSubPosition,
+            'photo_url': finalPhotoUrl,
+            'phone': phoneToStore,
+            'height': int.tryParse(
+              _heightController.text.replaceAll(RegExp(r'\D'), '').trim(),
+            ),
+            'weight': int.tryParse(
+              _weightController.text.replaceAll(RegExp(r'\D'), '').trim(),
+            ),
+            'national_id': nationalId.isEmpty ? null : nationalId,
+          },
+        );
+      }
       if (!widget.standalone) {
         final teamId = (widget.teamId ?? '').trim();
         final tournamentId = (widget.tournamentId ?? '').trim();
         if (teamId.isNotEmpty && tournamentId.isNotEmpty) {
-          await _teamService.upsertRosterEntry(
-            tournamentId: tournamentId,
-            teamId: teamId,
-            playerPhone: keyPhone,
-            playerName: fullName,
-            jerseyNumber: sbTeamService == null ? number : null,
-          );
+          // Düzenlenen oyuncu zaten kadroda; kadro kaydı yeniden yazılmaz
+          // (takım sorumlusunun yetkisi yalnızca forma numarasına yeter).
+          if (!isEditing || sbTeamService == null) {
+            await _teamService.upsertRosterEntry(
+              tournamentId: tournamentId,
+              teamId: teamId,
+              playerPhone: keyPhone,
+              playerName: fullName,
+              jerseyNumber: sbTeamService == null ? number : null,
+            );
+          }
 
           if (sbTeamService != null) {
             final currentText = (widget.editing?.number ?? '')
@@ -2217,10 +2240,12 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
           ? kPlayerAlreadyRegistered
           : msg.contains('players_phone_uq')
           ? 'Bu telefon numarası başka bir futbolcuya kayıtlı.'
-          : 'Hata: $msg';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(text), backgroundColor: Colors.red),
-      );
+          : msg.contains('güncelleme yetkisi')
+          ? 'Futbolcunun kişisel bilgilerini (ad, doğum tarihi, telefon, '
+                'fotoğraf vb.) yalnızca kurucu başkan veya bölge sorumlusu '
+                'değiştirebilir. Forma numarasını değiştirebilirsiniz.'
+          : msg.replaceFirst('Exception: ', '').trim();
+      _showError(text);
       setState(() => _saving = false);
     }
   }
@@ -2991,7 +3016,7 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
             return StreamBuilder<List<League>>(
               stream: _leagueService.watchLeagues(),
               builder: (context, leaguesSnap) {
-                final leagues = leaguesSnap.data ?? const <League>[];
+                final leagues = [...?leaguesSnap.data];
                 leagues.sort(
                   (a, b) =>
                       a.name.toLowerCase().compareTo(b.name.toLowerCase()),

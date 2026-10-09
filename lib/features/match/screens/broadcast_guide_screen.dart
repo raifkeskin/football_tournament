@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/app_navigator.dart';
 import '../../../core/services/app_session.dart';
 import '../../../core/services/service_locator.dart';
+import '../../../core/utils/resilient_stream.dart';
 import '../../../core/utils/table_feed.dart';
 import '../../../core/widgets/app_date_picker.dart';
 import '../../team/models/team.dart';
@@ -92,32 +93,36 @@ class _BroadcastGuideScreenState extends State<BroadcastGuideScreen> {
   /// Günün maçları; yalnızca yayın linki olanlar.
   Stream<List<MatchModel>> _matchesOn(String dayKey) => _byDay.putIfAbsent(
     dayKey,
-    () =>
-        watchTableRows(
-          Supabase.instance.client,
-          table: 'matches',
-          column: 'match_date',
-          value: dayKey,
-        ).asyncMap((rows) async {
-          final matches = [
-            for (final r in rows)
-              MatchModel.fromMap(r, (r['id'] ?? '').toString()),
-          ];
-          if (matches.isEmpty) return matches;
-          final media = await Supabase.instance.client
-              .from('match_media')
-              .select('match_id, url')
-              .eq('media_type', 'Maç Yayın Linki')
-              .inFilter('match_id', [for (final m in matches) m.id]);
-          final withLink = {
-            for (final r in media)
-              if ((r['url'] ?? '').toString().trim().isNotEmpty)
-                (r['match_id'] ?? '').toString(),
-          };
-          return matches.where((m) => withLink.contains(m.id)).toList()..sort(
-            (a, b) => (a.matchTime ?? '99').compareTo(b.matchTime ?? '99'),
-          );
-        }),
+    // asyncMap tek dinleyicili akış üretir; güne geri dönülünce aynı akış
+    // yeniden dinlendiği için çok dinleyicili sarmalayıcıya alınır.
+    () => resilientStream(
+      () =>
+          watchTableRows(
+            Supabase.instance.client,
+            table: 'matches',
+            column: 'match_date',
+            value: dayKey,
+          ).asyncMap((rows) async {
+            final matches = [
+              for (final r in rows)
+                MatchModel.fromMap(r, (r['id'] ?? '').toString()),
+            ];
+            if (matches.isEmpty) return matches;
+            final media = await Supabase.instance.client
+                .from('match_media')
+                .select('match_id, url')
+                .eq('media_type', 'Maç Yayın Linki')
+                .inFilter('match_id', [for (final m in matches) m.id]);
+            final withLink = {
+              for (final r in media)
+                if ((r['url'] ?? '').toString().trim().isNotEmpty)
+                  (r['match_id'] ?? '').toString(),
+            };
+            return matches.where((m) => withLink.contains(m.id)).toList()..sort(
+              (a, b) => (a.matchTime ?? '99').compareTo(b.matchTime ?? '99'),
+            );
+          }),
+    ),
   );
 
   @override
