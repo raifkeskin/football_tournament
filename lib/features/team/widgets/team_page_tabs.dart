@@ -176,7 +176,7 @@ class _TeamFixtureTabState extends State<TeamFixtureTab> {
 
   Widget _row(BuildContext context, TeamMatch tm) {
     final m = tm.match;
-    final isHome = m.homeTeamId == widget.teamId;
+    final isHome = m.homeTeamId.trim() == widget.teamId.trim();
     final opponent = isHome ? tm.awayName : tm.homeName;
     final opponentLogo = isHome ? tm.awayLogo : tm.homeLogo;
     final d = tm.startsAt;
@@ -264,8 +264,8 @@ class _TeamFixtureTabState extends State<TeamFixtureTab> {
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
                         ),
                       ),
                       Text(

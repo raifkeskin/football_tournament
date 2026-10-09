@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="tr">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Takvim Ekranı Tasarım Örneği</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            --ground: #101827;
+            --surface: #182436;
+            --line: #2a394d;
+            --text: #f4f7fb;
+            --muted: #9ba9ba;
+            --green: #23bd83;
+            --gold: #e4bd61;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            margin: 0;
+            min-height: 100%;
+            background: var(--ground);
+        }
+
+        body {
+            color: var(--text);
+            font-family: Barlow, "Avenir Next", sans-serif;
+            background-image: linear-gradient(155deg, #19293c 0%, var(--ground) 48%);
+        }
+
+        .screen {
+            width: 100%;
+            max-width: 430px;
+            min-height: 100vh;
+            margin: 0 auto;
+        }
+
+        .dates {
+            height: 76px;
+            display: grid;
+            grid-template-columns: 28px 22px repeat(5, minmax(0, 1fr)) 22px 28px;
+            align-items: center;
+            gap: 2px;
+            padding: 5px 5px;
+            border-bottom: 1px solid #344154;
+            background: rgba(21, 32, 48, .82);
+        }
+
+        .icon {
+            text-align: center;
+            color: #f3f6fa;
+            font-size: 22px;
+            line-height: 1;
+        }
+
+        .date {
+            text-align: center;
+            padding: 8px 1px;
+            border-radius: 11px;
+            color: #b8c2cf;
+        }
+
+        .date b {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 9px;
+            font-weight: 600;
+        }
+
+        .date strong {
+            display: block;
+            font-size: 10.5px;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .date.selected {
+            color: #fff;
+            background: #ffffff20;
+        }
+
+        .list {
+            padding: 7px 10px 24px;
+        }
+
+        .match {
+            margin-bottom: 5px;
+            padding: 7px 8px 8px;
+            border: 1px solid #ffffff10;
+            border-radius: 10px;
+            background: linear-gradient(110deg, #1c2a3c, #172335);
+            box-shadow: 0 3px 8px #00000020;
+        }
+
+        .competition {
+            min-width: 0;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-bottom: 5px;
+            color: #cbd5e1;
+            font-size: 10px;
+            font-weight: 600;
+            line-height: 1.1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .logo {
+            flex: 0 0 16px;
+            width: 16px;
+            height: 16px;
+            display: grid;
+            place-items: center;
+            border: 1px solid #70d7ad;
+            border-radius: 50%;
+            color: var(--green);
+            font-size: 7px;
+            font-weight: 800;
+        }
+
+        .row {
+            display: grid;
+            grid-template-columns: 34px minmax(0, 1fr) 46px minmax(0, 1fr);
+            align-items: center;
+            gap: 5px;
+        }
+
+        .time {
+            color: var(--muted);
+            font-size: 10px;
+            font-weight: 700;
+            text-align: center;
+        }
+
+        .team {
+            min-width: 0;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .team.home {
+            justify-content: flex-end;
+            text-align: right;
+        }
+
+        .team.away {
+            justify-content: flex-start;
+            text-align: left;
+        }
+
+        .team span:last-child {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .crest {
+            flex: 0 0 17px;
+            width: 17px;
+            height: 17px;
+            display: grid;
+            place-items: center;
+            border-radius: 50%;
+            background: #34465d;
+            color: #d8e1eb;
+            font-size: 7px;
+            font-weight: 800;
+        }
+
+        .score {
+            padding: 5px 2px;
+            border: 1px solid #23bd8340;
+            border-radius: 7px;
+            background: #0c5940;
+            text-align: center;
+            font-size: 11px;
+            font-weight: 800;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .score.upcoming {
+            color: #d6e1eb;
+            border-color: #ffffff14;
+            background: #253449;
+        }
+
+        @media (min-width: 431px) {
+            body {
+                padding: 18px 0;
+            }
+
+            .screen {
+                min-height: 844px;
+                border: 1px solid #3a4657;
+                border-radius: 24px;
+                overflow: hidden;
+                box-shadow: 0 24px 80px #0008;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <main class="screen" aria-label="Takvim ekranı tasarım örneği">
+        <nav class="dates" aria-label="Tarih seçimi">
+            <div class="icon">☰</div>
+            <div class="icon">‹</div>
+            <div class="date"><b>Çar</b><strong>07/10</strong></div>
+            <div class="date"><b>Per</b><strong>08/10</strong></div>
+            <div class="date selected"><b>Bugün</b><strong>09/10</strong></div>
+            <div class="date"><b>Cmt</b><strong>10/10</strong></div>
+            <div class="date"><b>Paz</b><strong>11/10</strong></div>
+            <div class="icon">›</div>
+            <div class="icon">▦</div>
+        </nav>
+        <section class="list" aria-label="Seçili gündeki maçlar">
+            <article class="match">
+                <div class="competition"><span class="logo">CM</span>Champions Master Lig · A Grubu</div>
+                <div class="row"><time class="time">18:30</time>
+                    <div class="team home"><span>Northside United</span><span class="crest">NU</span></div>
+                    <div class="score upcoming">-</div>
+                    <div class="team away"><span class="crest">AC</span><span>Atletico City</span></div>
+                </div>
+            </article>
+            <article class="match">
+                <div class="row"><time class="time">19:15</time>
+                    <div class="team home"><span>Harbor Athletic</span><span class="crest">HA</span></div>
+                    <div class="score">2 - 1</div>
+                    <div class="team away"><span class="crest">RW</span><span>Redwood FC</span></div>
+                </div>
+            </article>
+            <article class="match">
+                <div class="competition"><span class="logo">HY</span>Hürriyet Gençlik Ligi · 1. Grup</div>
+                <div class="row"><time class="time">20:00</time>
+                    <div class="team home"><span>Yıldız Spor</span><span class="crest">YS</span></div>
+                    <div class="score upcoming">-</div>
+                    <div class="team away"><span class="crest">GK</span><span>Güneykent</span></div>
+                </div>
+            </article>
+            <article class="match">
+                <div class="row"><time class="time">20:45</time>
+                    <div class="team home"><span>Merkez FK</span><span class="crest">MF</span></div>
+                    <div class="score upcoming">-</div>
+                    <div class="team away"><span class="crest">SK</span><span>Sahil Kulübü</span></div>
+                </div>
+            </article>
+            <article class="match">
+                <div class="competition"><span class="logo">DM</span>Demo Masterlar Ligi</div>
+                <div class="row"><time class="time">21:30</time>
+                    <div class="team home"><span>Vadi Gençlik</span><span class="crest">VG</span></div>
+                    <div class="score upcoming">-</div>
+                    <div class="team away"><span class="crest">BK</span><span>Batı Kartalları</span></div>
+                </div>
+            </article>
+        </section>
+    </main>
+</body>
+
+</html>

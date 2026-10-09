@@ -84,6 +84,14 @@ class _HomeScreenState extends State<HomeScreen> {
   Set<String> _visibleLeagueIds = const <String>{};
   Map<String, String> _leagueNameById = const <String, String>{};
   Map<String, String> _leagueLogoById = const <String, String>{};
+  Map<String, Color> _leaguePrimaryById = const <String, Color>{};
+  Map<String, Color> _leagueSecondaryById = const <String, Color>{};
+
+  static Color _themeColor(String? value, Color fallback) {
+    final hex = (value ?? '').trim();
+    if (!RegExp(r'^#[0-9A-Fa-f]{6}$').hasMatch(hex)) return fallback;
+    return Color(int.parse('FF${hex.substring(1)}', radix: 16));
+  }
 
   static String _dateKey(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-'
@@ -277,16 +285,18 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _shiftDateWindow(int days) {
+    final shifted = _tarihler
+        .map((date) => date.add(Duration(days: days)))
+        .toList();
+    final selectedIndex = shifted.indexWhere(
+      (date) =>
+          date.year == _selectedDate.year &&
+          date.month == _selectedDate.month &&
+          date.day == _selectedDate.day,
+    );
     setState(() {
-      _tarihler = _tarihler
-          .map((date) => date.add(Duration(days: days)))
-          .toList();
-      _seciliIndeks = _tarihler.indexWhere(
-        (date) =>
-            date.year == _selectedDate.year &&
-            date.month == _selectedDate.month &&
-            date.day == _selectedDate.day,
-      );
+      _tarihler = shifted;
+      _seciliIndeks = selectedIndex;
     });
   }
 
@@ -586,6 +596,17 @@ class _HomeScreenState extends State<HomeScreen> {
                       };
                 _leagueNameById = {for (final l in allLeagues) l.id: l.name};
                 _leagueLogoById = {for (final l in allLeagues) l.id: l.logoUrl};
+                _leaguePrimaryById = {
+                  for (final l in allLeagues)
+                    l.id: _themeColor(l.themePrimary, const Color(0xFF064E3B)),
+                };
+                _leagueSecondaryById = {
+                  for (final l in allLeagues)
+                    l.id: _themeColor(
+                      l.themeSecondary,
+                      const Color(0xFF10B981),
+                    ),
+                };
 
                 if (kNewHomeDesign && !widget.showCalendar) {
                   return HomeDashboard(
@@ -598,6 +619,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 }
 
                 if (widget.showCalendar) {
+                  final toolbarPrimary =
+                      ActiveTournament.theme.value?.primary ??
+                      const Color(0xFF064E3B);
+                  final toolbarAccent =
+                      ActiveTournament.theme.value?.secondary ??
+                      const Color(0xFF10B981);
                   return Column(
                     children: [
                       SizedBox(
@@ -607,10 +634,14 @@ class _HomeScreenState extends State<HomeScreen> {
                             Builder(
                               builder: (ctx) => IconButton(
                                 tooltip: 'Menü',
-                                icon: const Icon(
-                                  Icons.menu,
-                                  color: Colors.white,
-                                  size: 26,
+                                icon: const Icon(Icons.menu_rounded, size: 23),
+                                style: IconButton.styleFrom(
+                                  foregroundColor: toolbarPrimary,
+                                  backgroundColor: toolbarAccent,
+                                  fixedSize: const Size(38, 38),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
                                 ),
                                 onPressed: () {
                                   ScaffoldState? scaffold = Scaffold.maybeOf(
@@ -659,9 +690,14 @@ class _HomeScreenState extends State<HomeScreen> {
                             IconButton(
                               tooltip: 'Takvim',
                               onPressed: _openModernCalendar,
-                              icon: const Icon(
-                                Icons.calendar_month_outlined,
-                                color: Colors.white,
+                              icon: const Icon(Icons.calendar_month_rounded),
+                              style: IconButton.styleFrom(
+                                foregroundColor: toolbarPrimary,
+                                backgroundColor: toolbarAccent,
+                                fixedSize: const Size(38, 38),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
                               ),
                             ),
                           ],
@@ -807,7 +843,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                             ),
                             IconButton(
-                              tooltip: 'Maç Takvim',
+                              tooltip: 'Maç Takvimi',
                               onPressed: _openModernCalendar,
                               icon: Icon(
                                 Icons.calendar_month_outlined,
@@ -974,9 +1010,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     final groupRows =
                         groupsSnap.data ?? const <Map<String, dynamic>>[];
                     final groupNameById = <String, String>{};
+                    final groupCountBySeason = <String, int>{};
                     for (final g in groupRows) {
                       final gid = (g['id'] ?? '').toString();
+                      final sid = (g['season_id'] ?? '').toString();
                       groupNameById[gid] = (g['name'] ?? '').toString().trim();
+                      groupCountBySeason[sid] =
+                          (groupCountBySeason[sid] ?? 0) + 1;
                     }
 
                     // Bölümler grup varsa sezon+grup, yoksa yalnızca sezondur.
@@ -1001,7 +1041,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     // Sezonda tek grup varsa boş döner.
                     String groupNameOf(String key) {
                       final parts = key.split('|');
-                      if (parts.length < 2) return '';
+                      if (parts.length < 2 ||
+                          (groupCountBySeason[parts.first] ?? 0) <= 1) {
+                        return '';
+                      }
                       return groupNameById[parts[1]] ?? '';
                     }
 
@@ -1026,39 +1069,40 @@ class _HomeScreenState extends State<HomeScreen> {
                             sectionMap[key]!.first.leagueId;
                         final leagueText = leagueNameOf(key);
                         final groupText = groupNameOf(key);
+                        void openSection() {
+                          GlobalFilter.setLeague(sectionLeagueId);
+                          GlobalFilter.setSeason(sId);
+                          ActiveTournament.noteViewed(sectionLeagueId);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => GroupsScreen(
+                                initialLeagueId: sectionLeagueId,
+                                initialSeasonId: sId,
+                                initialGroupId: key.contains('|')
+                                    ? key.split('|').last
+                                    : null,
+                              ),
+                            ),
+                          );
+                        }
 
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            InkWell(
-                              onTap: () {
-                                GlobalFilter.setLeague(sectionLeagueId);
-                                GlobalFilter.setSeason(sId);
-                                ActiveTournament.noteViewed(sectionLeagueId);
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => GroupsScreen(
-                                      initialLeagueId: sectionLeagueId,
-                                      initialSeasonId: sId,
-                                      initialGroupId: key.contains('|')
-                                          ? key.split('|').last
-                                          : null,
-                                    ),
-                                  ),
-                                );
-                              },
-                              borderRadius: BorderRadius.circular(12),
-                              // Başlık şeridi: kartlardan koyu zemin ve
-                              // belirgin yeşil tonlu kenarlık.
-                              child: _LeagueSectionHeader(
-                                logoUrl: _leagueLogoById[sectionLeagueId],
-                                title: leagueText,
-                                subtitle: groupText,
+                            if (!widget.showCalendar)
+                              InkWell(
+                                onTap: openSection,
+                                borderRadius: BorderRadius.circular(12),
+                                child: _LeagueSectionHeader(
+                                  logoUrl: _leagueLogoById[sectionLeagueId],
+                                  title: leagueText,
+                                  subtitle: groupText,
+                                ),
                               ),
-                            ),
-                            ...sectionMap[key]!.map(
-                              (m) => _MatchCard(
+                            ...sectionMap[key]!.asMap().entries.map((entry) {
+                              final m = entry.value;
+                              return _MatchCard(
                                 match: m,
                                 homeLogo: logoMap[m.homeTeamId] ?? '',
                                 awayLogo: logoMap[m.awayTeamId] ?? '',
@@ -1070,8 +1114,23 @@ class _HomeScreenState extends State<HomeScreen> {
                                     (nameMap[m.awayTeamId] ?? '').trim().isEmpty
                                     ? 'Deplasman'
                                     : (nameMap[m.awayTeamId] ?? '').trim(),
-                              ),
-                            ),
+                                sectionTitle:
+                                    widget.showCalendar && entry.key == 0
+                                    ? leagueText
+                                    : null,
+                                sectionLogoUrl:
+                                    _leagueLogoById[sectionLeagueId],
+                                sectionSubtitle: groupText,
+                                sectionPrimary:
+                                    _leaguePrimaryById[sectionLeagueId] ??
+                                    const Color(0xFF064E3B),
+                                sectionAccent:
+                                    _leagueSecondaryById[sectionLeagueId] ??
+                                    const Color(0xFF10B981),
+                                compact: widget.showCalendar,
+                                onTapSection: openSection,
+                              );
+                            }),
                           ],
                         );
                       }).toList(),
@@ -1093,12 +1152,26 @@ class _MatchCard extends StatefulWidget {
   final String awayLogo;
   final String homeName;
   final String awayName;
+  final String? sectionTitle;
+  final String? sectionLogoUrl;
+  final String sectionSubtitle;
+  final Color sectionPrimary;
+  final Color sectionAccent;
+  final bool compact;
+  final VoidCallback? onTapSection;
   const _MatchCard({
     required this.match,
     required this.homeLogo,
     required this.awayLogo,
     required this.homeName,
     required this.awayName,
+    this.sectionTitle,
+    this.sectionLogoUrl,
+    this.sectionSubtitle = '',
+    this.sectionPrimary = const Color(0xFF064E3B),
+    this.sectionAccent = const Color(0xFF10B981),
+    this.compact = false,
+    this.onTapSection,
   });
 
   @override
@@ -1137,8 +1210,10 @@ class _MatchCardState extends State<_MatchCard> {
     final isAdmin = AppSession.of(context).value.isAdmin;
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      margin: EdgeInsets.only(bottom: widget.compact ? 5 : 10),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(widget.compact ? 10 : 16),
+      ),
       color: const Color(0xFF1E293B).withValues(alpha: 0.78),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
@@ -1153,25 +1228,112 @@ class _MatchCardState extends State<_MatchCard> {
           _checkBroadcast(); // Geri dönüldüğünde ikonu güncelle
         },
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-          child: MatchScoreLine(
-            match: widget.match,
-            homeName: widget.homeName,
-            awayName: widget.awayName,
-            homeLogo: widget.homeLogo,
-            awayLogo: widget.awayLogo,
-            showLogos: false,
-            leading: _broadcastUrl == null
-                ? null
-                : InkWell(
-                    // Yayın uygulamanın içinde, tam ekran oynar.
-                    onTap: () => openYoutubeInApp(context, _broadcastUrl!),
-                    child: const Icon(
-                      Icons.play_circle_fill,
-                      color: Colors.redAccent,
-                      size: 20,
+          padding: EdgeInsets.symmetric(
+            horizontal: widget.compact ? 7 : 8,
+            vertical: widget.compact ? 6 : 12,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (widget.sectionTitle != null) ...[
+                InkWell(
+                  onTap: widget.onTapSection,
+                  borderRadius: BorderRadius.circular(7),
+                  child: Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: widget.compact ? 7 : 8,
+                      vertical: widget.compact ? 5 : 7,
+                    ),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Color.lerp(
+                            widget.sectionPrimary,
+                            Colors.black,
+                            0.58,
+                          )!,
+                          Color.lerp(
+                            widget.sectionPrimary,
+                            const Color(0xFF0B1220),
+                            0.76,
+                          )!,
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(7),
+                      border: Border.all(
+                        color: widget.sectionAccent.withValues(alpha: 0.42),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        if (widget.compact)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: LeagueLogo(
+                              url: widget.sectionLogoUrl ?? '',
+                              size: 18,
+                              fallbackColor: widget.sectionAccent,
+                            ),
+                          ),
+                        Expanded(
+                          child: Text(
+                            widget.sectionTitle!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: widget.compact ? 12 : 13,
+                              fontWeight: FontWeight.w700,
+                              fontFamily: 'Barlow',
+                            ),
+                          ),
+                        ),
+                        if (widget.sectionSubtitle.trim().isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 96),
+                            child: Text(
+                              widget.sectionSubtitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.right,
+                              style: TextStyle(
+                                color: Color.lerp(
+                                  Colors.white,
+                                  widget.sectionAccent,
+                                  0.56,
+                                ),
+                                fontSize: widget.compact ? 9.5 : 11,
+                                fontWeight: FontWeight.w500,
+                                fontFamily: 'Barlow',
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
+                ),
+                SizedBox(height: widget.compact ? 4 : 8),
+              ],
+              MatchScoreLine(
+                match: widget.match,
+                homeName: widget.homeName,
+                awayName: widget.awayName,
+                homeLogo: widget.homeLogo,
+                awayLogo: widget.awayLogo,
+                showLogos: widget.compact,
+                compact: widget.compact,
+                leading:
+                    _broadcastUrl == null ||
+                        widget.match.status == MatchStatus.finished
+                    ? null
+                    : InkWell(
+                        onTap: () => openYoutubeInApp(context, _broadcastUrl!),
+                        child: const YoutubeBrandIcon(size: 18),
+                      ),
+              ),
+            ],
           ),
         ),
       ),

@@ -174,6 +174,7 @@ class _MainNavigatorState extends State<MainNavigator> {
       },
       child: Scaffold(
         key: _scaffoldKey,
+        onDrawerChanged: LeagueSwitchScope.setDrawerOpen,
         extendBody: !kNewHomeDesign,
         // Alt çubuk yok: admin ayarı kapalıysa ya da Profil sekmesinde yönetim
         // paneli / giriş formu açıkken (gezinme bantaki ya da yan menüden).

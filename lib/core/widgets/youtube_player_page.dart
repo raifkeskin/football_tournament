@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
+const youtubePlayerOrigin = 'https://masterfutbol.web.app';
+
 /// YouTube linkinden 11 karakterlik video kimliği (watch, youtu.be, embed,
 /// shorts, live); YouTube'a ait değilse null.
 String? youtubeVideoId(String url) {
   final u = url.trim();
   if (RegExp(r'^[_\-a-zA-Z0-9]{11}$').hasMatch(u)) return u;
-  final uri = Uri.tryParse(u);
+  final normalized = u.contains('://') ? u : 'https://$u';
+  final uri = Uri.tryParse(normalized);
   if (uri == null) return null;
   final host = uri.host.toLowerCase();
   String? id;
@@ -70,6 +73,7 @@ class _YoutubePlayerPageState extends State<_YoutubePlayerPage> {
     params: const YoutubePlayerParams(
       showFullscreenButton: true,
       strictRelatedVideos: true,
+      origin: youtubePlayerOrigin,
     ),
   );
 

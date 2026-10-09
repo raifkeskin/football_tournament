@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="tr">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Ana Sayfa Menü İkonu Önizlemesi</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            --ink: #f5f8fb;
+            --muted: #9eacb9;
+            --green: #31d59a;
+            --deep: #071321;
+            --panel: #101e30;
+            --line: #ffffff18;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            margin: 0;
+            min-height: 100%;
+        }
+
+        body {
+            color: var(--ink);
+            background: #080f1a;
+            font-family: "Avenir Next", "Segoe UI", sans-serif;
+        }
+
+        .app {
+            width: 100%;
+            max-width: 430px;
+            min-height: 100vh;
+            margin: 0 auto;
+            overflow: hidden;
+            background:
+                radial-gradient(ellipse at 50% 12%, #1d3441 0, transparent 42%),
+                linear-gradient(180deg, #142333 0%, #0e1928 52%, #09131f 100%);
+            box-shadow: 0 18px 60px #0009;
+        }
+
+        .status {
+            height: 30px;
+            padding: 7px 18px 0;
+            color: #e7eef4;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .band {
+            height: 62px;
+            display: flex;
+            align-items: center;
+            gap: 11px;
+            padding: 0 15px 0 10px;
+            background: linear-gradient(100deg, #092d27, #086545 54%, #09372e);
+            border-bottom: 2px solid #22bf83;
+            box-shadow: 0 5px 24px #0005;
+        }
+
+        .menu-button {
+            position: relative;
+            flex: 0 0 44px;
+            width: 44px;
+            height: 44px;
+            display: grid;
+            place-items: center;
+            padding: 0;
+            border: 1px solid #8af0c633;
+            border-radius: 13px;
+            background: linear-gradient(145deg, #30d99b, #0ea36d);
+            color: #07291e;
+            box-shadow: 0 4px 15px #00d78b36, inset 0 1px #ffffff5c;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .menu-button:focus-visible {
+            outline: 2px solid #e7fff6;
+            outline-offset: 3px;
+        }
+
+        .identity {
+            min-width: 0;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 9px;
+        }
+
+        .league-badge {
+            width: 37px;
+            height: 37px;
+            flex: 0 0 37px;
+            border-radius: 50%;
+            display: grid;
+            place-items: center;
+            border: 1px solid #ffffff70;
+            background: radial-gradient(circle at 38% 30%, #fafcfb, #a9bbc1 68%, #284951);
+            color: #172a30;
+            font-weight: 900;
+            font-size: 11px;
+        }
+
+        .league-name {
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            font-size: 15px;
+            font-weight: 800;
+            font-style: italic;
+            letter-spacing: .5px;
+        }
+
+        .bell {
+            flex: 0 0 28px;
+            text-align: center;
+            font-size: 21px;
+        }
+
+        .ball-wrap,
+        .ball,
+        .slice,
+        .tile,
+        .bar {
+            position: absolute;
+        }
+
+        .ball-wrap {
+            inset: 0;
+            display: grid;
+            place-items: center;
+        }
+
+        .ball {
+            width: 34px;
+            height: 34px;
+            overflow: hidden;
+            border-radius: 50%;
+            background: radial-gradient(circle at 32% 23%, #ffffff 0 10%, #e4ece9 45%, #a6c6bd 80%, #477767 100%);
+            border: 1px solid #f3fff5;
+            box-shadow: inset -3px -4px 6px #07251c70, 0 0 8px #c9ffed9c;
+            transition: opacity .12s ease, transform .24s cubic-bezier(.2, .75, .25, 1);
+        }
+
+        .ball:before {
+            content: "";
+            position: absolute;
+            width: 13px;
+            height: 13px;
+            left: 10px;
+            top: 10px;
+            background: linear-gradient(145deg, #1c2929, #050c11);
+            clip-path: polygon(50% 0, 96% 34%, 80% 89%, 21% 100%, 0 39%);
+            filter: drop-shadow(0 1px 1px #0008);
+        }
+
+        .tile {
+            width: 8px;
+            height: 8px;
+            background: #111d20;
+            transition: transform .24s cubic-bezier(.2, .75, .25, 1), opacity .12s;
+        }
+
+        .tile.tl {
+            left: 5px;
+            top: 6px;
+            clip-path: polygon(0 0, 100% 12%, 78% 100%, 18% 76%);
+        }
+
+        .tile.tr {
+            right: 5px;
+            top: 6px;
+            clip-path: polygon(0 12%, 100% 0, 82% 76%, 22% 100%);
+        }
+
+        .tile.bl {
+            left: 6px;
+            bottom: 5px;
+            clip-path: polygon(18% 0, 78% 0, 100% 88%, 0 100%);
+        }
+
+        .tile.br {
+            right: 6px;
+            bottom: 5px;
+            clip-path: polygon(22% 0, 82% 0, 100% 100%, 0 88%);
+        }
+
+        .slice {
+            left: 5px;
+            right: 5px;
+            height: 7px;
+            opacity: 0;
+            background: linear-gradient(90deg, #dcfff1, #ffffff, #b6d5ca);
+            box-shadow: 0 0 8px #54f0b6;
+            transition: opacity .14s, transform .22s ease;
+        }
+
+        .slice.top {
+            top: 8px;
+        }
+
+        .slice.bottom {
+            bottom: 8px;
+        }
+
+        .bar {
+            left: 10px;
+            width: 24px;
+            height: 3px;
+            border-radius: 3px;
+            opacity: 0;
+            transform: scaleX(.3);
+            background: #073525;
+            box-shadow: 0 0 5px #b7ffdc7a;
+            transition: opacity .14s, transform .2s cubic-bezier(.2, .75, .25, 1);
+        }
+
+        .bar.one {
+            top: 14px;
+        }
+
+        .bar.two {
+            top: 20px;
+        }
+
+        .bar.three {
+            top: 26px;
+        }
+
+        .phase-2 .ball {
+            transform: scaleY(.82);
+        }
+
+        .phase-2 .slice {
+            opacity: 1;
+        }
+
+        .phase-2 .slice.top {
+            transform: translateY(-8px);
+        }
+
+        .phase-2 .slice.bottom {
+            transform: translateY(8px);
+        }
+
+        .phase-2 .tile.tl {
+            transform: translate(-4px, -4px) rotate(-10deg);
+        }
+
+        .phase-2 .tile.tr {
+            transform: translate(4px, -4px) rotate(10deg);
+        }
+
+        .phase-2 .tile.bl {
+            transform: translate(-4px, 4px) rotate(10deg);
+        }
+
+        .phase-2 .tile.br {
+            transform: translate(4px, 4px) rotate(-10deg);
+        }
+
+        .phase-3 .ball {
+            opacity: .13;
+            transform: scale(.78);
+        }
+
+        .phase-3 .tile {
+            opacity: 0;
+        }
+
+        .phase-3 .slice {
+            opacity: 0;
+            transform: translateY(0);
+        }
+
+        .phase-3 .bar {
+            opacity: 1;
+            transform: scaleX(1);
+        }
+
+        .phase-3 .bar.one {
+            transition-delay: .02s;
+        }
+
+        .phase-3 .bar.two {
+            transition-delay: .07s;
+        }
+
+        .phase-3 .bar.three {
+            transition-delay: .12s;
+        }
+
+        .content {
+            padding: 20px 16px;
+        }
+
+        .eyebrow {
+            color: #75dbb1;
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 1px;
+        }
+
+        h1 {
+            margin: 5px 0 17px;
+            font-size: 22px;
+            letter-spacing: 0;
+        }
+
+        .feature {
+            padding: 15px;
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            background: linear-gradient(135deg, #1a2a3c, #111e2d);
+        }
+
+        .feature-top {
+            display: flex;
+            justify-content: space-between;
+            color: #a9bac8;
+            font-size: 11px;
+        }
+
+        .match {
+            display: grid;
+            grid-template-columns: 1fr 52px 1fr;
+            align-items: center;
+            gap: 7px;
+            margin-top: 15px;
+        }
+
+        .team {
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .team:last-child {
+            text-align: right;
+        }
+
+        .score {
+            padding: 7px 3px;
+            border-radius: 8px;
+            background: #0b6548;
+            text-align: center;
+            font-weight: 900;
+            font-size: 13px;
+        }
+
+        .feed {
+            margin-top: 11px;
+            padding: 16px;
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            background: #132233;
+            color: #d7e1e8;
+        }
+
+        .feed small {
+            color: var(--muted);
+        }
+
+        .hint {
+            margin-top: 16px;
+            padding: 11px 12px;
+            border-radius: 10px;
+            border: 1px solid #49dba243;
+            background: #0b3026;
+            color: #c9f7e4;
+            font-size: 12px;
+            line-height: 1.45;
+        }
+
+        @media (min-width: 431px) {
+            body {
+                padding: 24px 0;
+            }
+
+            .app {
+                min-height: 844px;
+                border: 1px solid #ffffff24;
+                border-radius: 26px;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+
+            *,
+            *:before,
+            *:after {
+                transition-duration: .01ms !important;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <main class="app">
+        <div class="status">12:35 <span style="float:right">Wi-Fi&nbsp;&nbsp; ▰ 82%</span></div>
+        <header class="band">
+            <button id="menu" class="menu-button phase-1" aria-label="Menüyü aç" aria-expanded="false">
+                <span class="ball-wrap" aria-hidden="true">
+                    <span class="ball"></span><span class="tile tl"></span><span class="tile tr"></span><span
+                        class="tile bl"></span><span class="tile br"></span>
+                    <span class="slice top"></span><span class="slice bottom"></span>
+                    <span class="bar one"></span><span class="bar two"></span><span class="bar three"></span>
+                </span>
+            </button>
+            <div class="identity">
+                <div class="league-badge">HG</div>
+                <div class="league-name">HÜRRİYET GENÇLİK LİGİ</div>
+            </div>
+            <div class="bell" aria-label="Bildirimler">♧</div>
+        </header>
+        <section class="content">
+            <div class="eyebrow">9 EKİM 2026 · ANA SAYFA</div>
+            <h1>Günün özeti</h1>
+            <article class="feature">
+                <div class="feature-top"><span>BUGÜNÜN MAÇI</span><span>18:30</span></div>
+                <div class="match">
+                    <div class="team">Kuzey Yıldızı</div>
+                    <div class="score">VS</div>
+                    <div class="team">Şehir Spor</div>
+                </div>
+            </article>
+            <article class="feed"><strong>Son dakika</strong><br><small>5. hafta programı açıklandı</small></article>
+            <div class="hint">Menü kapalıyken top görünür. Dokun: <b>1 → 2 → 3</b>. Kapat: <b>3 → 2 → 1</b>.</div>
+        </section>
+    </main>
+    <script>
+        const button = document.getElementById('menu');
+        let open = false;
+        let timer;
+        function setPhase(phase) {
+            button.classList.remove('phase-1', 'phase-2', 'phase-3');
+            button.classList.add(`phase-${phase}`);
+        }
+        button.addEventListener('click', () => {
+            clearTimeout(timer);
+            if (!open) {
+                open = true;
+                button.setAttribute('aria-expanded', 'true');
+                button.setAttribute('aria-label', 'Menüyü kapat');
+                setPhase(2);
+                timer = setTimeout(() => setPhase(3), 230);
+            } else {
+                open = false;
+                button.setAttribute('aria-expanded', 'false');
+                button.setAttribute('aria-label', 'Menüyü aç');
+                setPhase(2);
+                timer = setTimeout(() => setPhase(1), 230);
+            }
+        });
+    </script>
+</body>
+
+</html>

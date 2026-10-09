@@ -697,6 +697,13 @@ class _MyProfileViewState extends State<MyProfileView> {
         final all = snap.data ?? const <TeamMatch>[];
         final upcoming = all.where((m) => !m.isPlayed).toList()
           ..sort((a, b) {
+            final weekA = a.match.week;
+            final weekB = b.match.week;
+            if (weekA != null && weekB != null && weekA != weekB) {
+              return weekA.compareTo(weekB);
+            }
+            if (weekA != null && weekB == null) return -1;
+            if (weekA == null && weekB != null) return 1;
             final x = a.startsAt, y = b.startsAt;
             if (x == null) return 1;
             if (y == null) return -1;
@@ -825,8 +832,8 @@ class _MyProfileViewState extends State<MyProfileView> {
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: Colors.white,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
               height: 1.2,
             ),
           ),

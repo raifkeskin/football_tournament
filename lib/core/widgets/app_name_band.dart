@@ -1,4 +1,7 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter/scheduler.dart';
 
 import '../app_navigator.dart';
@@ -52,14 +55,15 @@ class AppNameBand extends StatelessWidget {
                 LeagueSwitchScope.panel,
                 LeagueSwitchScope.homeTab,
                 LeagueSwitchScope.calendarTab,
+                LeagueSwitchScope.bandHidden,
               ]),
               builder: (context, tvlBand) {
-                if (LeagueSwitchScope.calendarTab.value) {
-                  return SizedBox(height: top);
-                }
                 // Yönetim panelinde turnuva kimliği yok: uygulama bandı.
                 // Giriş ekranı: rol kartlarının üstünde logo ve kısa tanıtım.
                 if (genericScreens.value > 0) return _loginBand(top);
+                if (LeagueSwitchScope.bandHidden.value) {
+                  return SizedBox(height: top);
+                }
                 final t = LeagueSwitchScope.panel.value
                     ? null
                     : ActiveTournament.theme.value;
@@ -274,6 +278,27 @@ class LeagueSwitchScope {
   /// Takvim sekmesi en üstte: turnuva bandı tamamen gizlenir.
   static final calendarTab = ValueNotifier<bool>(false);
 
+  /// Ana gezgin çekmecesinin gerçek açılma durumu.
+  static final drawerOpen = ValueNotifier<bool>(false);
+
+  static void setDrawerOpen(bool open) {
+    if (drawerOpen.value != open) drawerOpen.value = open;
+  }
+
+  /// Tam ekran detay gibi sayfalar için ortak bandı gizler.
+  static final bandHidden = ValueNotifier<bool>(false);
+  static final _bandHiddenRoutes = <Route<dynamic>>{};
+
+  static void setBandHidden(Route<dynamic>? route, bool hidden) {
+    if (route == null) return;
+    if (hidden) {
+      _bandHiddenRoutes.add(route);
+    } else {
+      _bandHiddenRoutes.remove(route);
+    }
+    _update();
+  }
+
   /// Bantdaki menü düğmesinin açtığı yan menü (ana gezgin verir).
   static VoidCallback? openMenu;
 
@@ -326,10 +351,12 @@ class LeagueSwitchScope {
     final p = home != null && home.panelTab;
     final h = isHomeTop && home != null && home.homeTab;
     final c = isHomeTop && home != null && home.calendarTab;
+    final hidden = c || (top != null && _bandHiddenRoutes.contains(top));
     if (enabled.value == v &&
         panel.value == p &&
         homeTab.value == h &&
-        calendarTab.value == c) {
+        calendarTab.value == c &&
+        bandHidden.value == hidden) {
       return;
     }
     // Gezinme ya da çizim sırasında bandı yeniden kurmak hata verir: çerçeve
@@ -343,6 +370,7 @@ class LeagueSwitchScope {
     panel.value = p;
     homeTab.value = h;
     calendarTab.value = c;
+    bandHidden.value = hidden;
   }
 }
 
@@ -713,7 +741,7 @@ class _TournamentBand extends StatelessWidget {
 }
 
 /// Bantta canlı renkli menü düğmesi (Ana Sayfa'da): turnuva renginde kutu.
-class BandMenuButton extends StatelessWidget {
+class BandMenuButton extends StatefulWidget {
   const BandMenuButton({
     super.key,
     this.background = const Color(0xFF10B981),
@@ -724,10 +752,60 @@ class BandMenuButton extends StatelessWidget {
   final Color foreground;
 
   @override
+  State<BandMenuButton> createState() => _BandMenuButtonState();
+}
+
+class _BandMenuButtonState extends State<BandMenuButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    duration: const Duration(milliseconds: 520),
+    vsync: this,
+  );
+  ui.Image? _ballImage;
+
+  @override
+  void initState() {
+    super.initState();
+    LeagueSwitchScope.drawerOpen.addListener(_syncDrawerState);
+    _syncDrawerState();
+    _loadBallImage();
+  }
+
+  Future<void> _loadBallImage() async {
+    try {
+      final data = await rootBundle.load('assets/images/menu_soccer_ball.png');
+      final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
+      final frame = await codec.getNextFrame();
+      codec.dispose();
+      if (!mounted) {
+        frame.image.dispose();
+        return;
+      }
+      setState(() => _ballImage = frame.image);
+    } catch (_) {}
+  }
+
+  void _syncDrawerState() {
+    if (LeagueSwitchScope.drawerOpen.value) {
+      _controller.forward();
+    } else {
+      _controller.reverse();
+    }
+  }
+
+  @override
+  void dispose() {
+    LeagueSwitchScope.drawerOpen.removeListener(_syncDrawerState);
+    _controller.dispose();
+    _ballImage?.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // Bant gezginin dışında: dokunma efekti için şeffaf Material.
+    final isOpen = LeagueSwitchScope.drawerOpen.value;
     return Material(
-      color: background,
+      color: widget.background,
       borderRadius: BorderRadius.circular(10),
       elevation: 2,
       child: InkWell(
@@ -736,16 +814,133 @@ class BandMenuButton extends StatelessWidget {
         child: SizedBox(
           width: 34,
           height: 34,
-          child: Icon(
-            Icons.menu_rounded,
-            color: foreground,
-            size: 24,
-            semanticLabel: 'Menü',
+          child: Semantics(
+            button: true,
+            label: isOpen ? 'Menüyü kapat' : 'Menüyü aç',
+            child: AnimatedBuilder(
+              animation: _controller,
+              builder: (context, _) => CustomPaint(
+                painter: _BallMenuPainter(
+                  progress: _controller.value,
+                  ballImage: _ballImage,
+                  foreground: widget.foreground,
+                  accent: widget.background,
+                ),
+              ),
+            ),
           ),
         ),
       ),
     );
   }
+}
+
+class _BallMenuPainter extends CustomPainter {
+  const _BallMenuPainter({
+    required this.progress,
+    required this.ballImage,
+    required this.foreground,
+    required this.accent,
+  });
+
+  final double progress;
+  final ui.Image? ballImage;
+  final Color foreground;
+  final Color accent;
+
+  double _ease(double value) {
+    final t = value.clamp(0.0, 1.0);
+    return t * t * (3 - 2 * t);
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final ball = ballImage;
+    final centerX = size.width / 2;
+    final centerY = size.height / 2;
+    final ballSize = size.shortestSide * 0.84;
+    final left = centerX - ballSize / 2;
+    final top = centerY - ballSize / 2;
+
+    if (ball != null) {
+      final split = _ease((progress - 0.18) / 0.48);
+      final fade = 1 - _ease((progress - 0.65) / 0.22);
+      final imagePaint = Paint()
+        ..filterQuality = FilterQuality.high
+        ..color = Colors.white.withValues(alpha: fade);
+      final sourceTop = Rect.fromLTWH(
+        0,
+        0,
+        ball.width.toDouble(),
+        ball.height / 2,
+      );
+      final sourceBottom = Rect.fromLTWH(
+        0,
+        ball.height / 2,
+        ball.width.toDouble(),
+        ball.height / 2,
+      );
+      final half = ballSize / 2;
+      canvas.drawImageRect(
+        ball,
+        sourceTop,
+        Rect.fromLTWH(left, top - split * 7, ballSize, half),
+        imagePaint,
+      );
+      canvas.drawImageRect(
+        ball,
+        sourceBottom,
+        Rect.fromLTWH(left, centerY + split * 7, ballSize, half),
+        imagePaint,
+      );
+
+      final seamAlpha = (split * (1 - _ease((progress - 0.63) / 0.16))).clamp(
+        0.0,
+        1.0,
+      );
+      if (seamAlpha > 0) {
+        final seamPaint = Paint()
+          ..color = accent.withValues(alpha: seamAlpha * 0.9)
+          ..strokeWidth = 1.2
+          ..strokeCap = StrokeCap.round;
+        final seamY = centerY;
+        canvas.drawLine(
+          Offset(left - split * 2, seamY - split * 4),
+          Offset(left + ballSize + split * 2, seamY - split * 4),
+          seamPaint,
+        );
+        canvas.drawLine(
+          Offset(left - split * 2, seamY + split * 4),
+          Offset(left + ballSize + split * 2, seamY + split * 4),
+          seamPaint,
+        );
+      }
+    }
+
+    final barsProgress = _ease((progress - 0.58) / 0.30);
+    if (barsProgress <= 0) return;
+    final barPaint = Paint()
+      ..color = foreground.withValues(alpha: barsProgress)
+      ..strokeWidth = size.width * 0.085
+      ..strokeCap = StrokeCap.round;
+    final halfWidth = size.width * 0.31 * barsProgress;
+    final gap = size.height * 0.22;
+    for (var i = -1; i <= 1; i++) {
+      final y = centerY + gap * i;
+      canvas.drawLine(
+        Offset(centerX - halfWidth, y),
+        Offset(centerX + halfWidth, y),
+        barPaint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _BallMenuPainter oldDelegate) =>
+      progress != oldDelegate.progress ||
+      ballImage != oldDelegate.ballImage ||
+      foreground != oldDelegate.foreground ||
+      accent != oldDelegate.accent;
 }
 
 /// Türkçe büyük harf (Dart'ın toUpperCase'i i → I yapar, İ değil).
