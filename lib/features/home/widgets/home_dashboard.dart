@@ -19,6 +19,7 @@ import '../../tournament/screens/admin_penalty_management_screen.dart';
 import '../../tournament/screens/tournament_hub_screen.dart';
 import 'home_news_card.dart';
 import '../../sponsors/sponsor_strip.dart';
+import '../../../core/utils/team_name.dart';
 
 /// Yeni tasarımın renk sistemi: temel renkler sabit, turnuva yalnızca ana ve
 /// vurgu rengini getirir, durum renkleri her turnuvada aynı.
@@ -434,11 +435,15 @@ class _HomeDashboardState extends State<HomeDashboard> {
     if (season == null) return null;
     final seasonId = season['id'].toString();
 
+    // Gruplu sezonda gruba atanmamış takım (sezona kayıtlı ama oynamıyor)
+    // sayılmaz.
+    final hasGroups = (raw['groups'] as List? ?? const []).isNotEmpty;
     final teams = <String, _TeamInfo>{};
     for (final r in (raw['season_teams'] as List? ?? const [])) {
       final t = (r['teams'] as Map?) ?? const {};
       final id = (r['team_id'] ?? '').toString();
       if (id.isEmpty) continue;
+      if (hasGroups && r['group_id'] == null) continue;
       teams[id] = _TeamInfo(
         id: id,
         name: (t['name'] ?? '').toString(),
@@ -1214,13 +1219,12 @@ class _HomeDashboardState extends State<HomeDashboard> {
                       widget.league.name,
                       style: _barlow(size: 16, weight: FontWeight.w800),
                     ),
-                    Text(
-                      [
+                    // Hafta yazılmaz: gruplar farklı haftada olabilir.
+                    if (d.seasonName.isNotEmpty)
+                      Text(
                         d.seasonName,
-                        if (week != null) '$week. Hafta oynanıyor',
-                      ].where((s) => s.isNotEmpty).join(' · '),
-                      style: _barlow(size: 12, color: Colors.white70),
-                    ),
+                        style: _barlow(size: 12, color: Colors.white70),
+                      ),
                   ],
                 ),
               ),
@@ -1557,13 +1561,18 @@ class _HomeDashboardState extends State<HomeDashboard> {
             ),
             const SizedBox(width: 8),
           ],
+          // Maç Takvimi'ndeki kural: "Master(lar)" atılır, SK/FK kısaltılır;
+          // uzun ad iki satıra iner.
           Flexible(
             child: Text(
-              t?.name ?? '-',
-              maxLines: 1,
+              t == null ? '-' : shortTeamName(t.name),
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
               textAlign: end ? TextAlign.right : TextAlign.left,
-              style: _barlow(size: 13, weight: FontWeight.w700),
+              style: _barlow(
+                size: 12,
+                weight: FontWeight.w700,
+              ).copyWith(height: 1.15),
             ),
           ),
           if (end) ...[

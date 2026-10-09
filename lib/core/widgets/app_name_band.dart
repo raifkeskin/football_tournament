@@ -794,8 +794,13 @@ class _TournamentBand extends StatelessWidget {
               const SizedBox(width: 4),
           ],
         );
-    // İki yan eşit genişlikte: turnuva kimliği tam ortada kalır.
-    final side = trailing != null ? 112.0 : 96.0;
+    // İki yan eşit genişlikte: turnuva kimliği tam ortada kalır. Yan
+    // genişlik sağdaki içeriğe göre (zil tek başına daha dar).
+    final side = trailing != null || actions?.onLogout != null
+        ? 104.0
+        : LeagueSwitchScope.tabAction.value != null
+        ? 88.0
+        : 54.0;
     return Container(
       padding: EdgeInsets.only(top: top),
       decoration: BoxDecoration(
@@ -833,25 +838,7 @@ class _TournamentBand extends StatelessWidget {
                       ),
                       const SizedBox(width: 8),
                     ],
-                    Flexible(
-                      child: Text(
-                        _trUpper(theme.name),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontFamily: 'BarlowCondensed',
-                          fontStyle: FontStyle.italic,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                          fontSize: 16,
-                          letterSpacing: 1.2,
-                          decoration: TextDecoration.none,
-                          shadows: [
-                            Shadow(color: Color(0x66000000), blurRadius: 4),
-                          ],
-                        ),
-                      ),
-                    ),
+                    Flexible(child: _BandTitle(_trUpper(theme.name))),
                     if (leading == null)
                       LeagueSwitchButton(color: theme.secondary),
                   ],
@@ -865,6 +852,51 @@ class _TournamentBand extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Bant ortasındaki turnuva adı: tek satıra sığarsa 16 punto; sığmazsa
+/// 13 puntoya iner ve iki satıra bölünür (son kelimeler alt satırda).
+class _BandTitle extends StatelessWidget {
+  const _BandTitle(this.text);
+
+  final String text;
+
+  static const _style = TextStyle(
+    fontFamily: 'BarlowCondensed',
+    fontStyle: FontStyle.italic,
+    fontWeight: FontWeight.w800,
+    color: Colors.white,
+    fontSize: 16,
+    letterSpacing: 1.2,
+    decoration: TextDecoration.none,
+    shadows: [Shadow(color: Color(0x66000000), blurRadius: 4)],
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, c) {
+        final painter = TextPainter(
+          text: TextSpan(text: text, style: _style),
+          maxLines: 1,
+          textDirection: TextDirection.ltr,
+          textScaler: MediaQuery.textScalerOf(context),
+        )..layout(maxWidth: c.maxWidth);
+        final fits = !painter.didExceedMaxLines;
+        painter.dispose();
+        if (fits) {
+          return Text(text, maxLines: 1, style: _style);
+        }
+        return Text(
+          text,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: _style.copyWith(fontSize: 13, letterSpacing: 0.8, height: 1),
+        );
+      },
     );
   }
 }
