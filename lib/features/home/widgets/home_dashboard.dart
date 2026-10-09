@@ -20,6 +20,7 @@ import '../../tournament/screens/tournament_hub_screen.dart';
 import 'home_news_card.dart';
 import '../../sponsors/sponsor_strip.dart';
 import '../../../core/utils/team_name.dart';
+import '../../../core/push/notification_prefs.dart';
 
 /// Yeni tasarımın renk sistemi: temel renkler sabit, turnuva yalnızca ana ve
 /// vurgu rengini getirir, durum renkleri her turnuvada aynı.
@@ -254,6 +255,9 @@ class _HomeDashboardState extends State<HomeDashboard> {
   /// Birden fazla gruplu sezonda karşılamanın sağındaki seçiciyle seçilen
   /// grup (null: kişinin grubu, o da yoksa ilk grup).
   String? _pickedGroupId;
+
+  /// Cihazdaki takip DB'ye taşındı mı (bu ekranda bir kez).
+  bool _followSynced = false;
   Timer? _tick;
 
   @override
@@ -312,6 +316,17 @@ class _HomeDashboardState extends State<HomeDashboard> {
   }) async {
     final prefs = await SharedPreferences.getInstance();
     _followedTeamId = prefs.getString(_followKey);
+    // Cihazda kalmış eski takip bir kez DB'ye taşınır (bildirim gitsin).
+    final followed = _followedTeamId;
+    if (followed != null && !_followSynced) {
+      _followSynced = true;
+      unawaited(
+        NotificationPrefsService.setFollowedTeam(
+          widget.league.id,
+          followed,
+        ).catchError((Object _) {}),
+      );
+    }
     if (fromDisk && _data == null) {
       try {
         final raw = prefs.getString(key);
@@ -685,6 +700,14 @@ class _HomeDashboardState extends State<HomeDashboard> {
       await prefs.setString(_followKey, picked);
     } catch (_) {}
     if (mounted) setState(() => _followedTeamId = picked);
+    // Bildirim için DB'ye de (misafire cihaza bağlı isimsiz oturum açılır).
+    unawaited(
+      NotificationPrefsService.setFollowedTeam(
+        widget.league.id,
+        picked,
+        ensureSession: true,
+      ).catchError((Object _) {}),
+    );
   }
 
   // ---- Görünüm --------------------------------------------------------

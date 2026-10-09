@@ -17,6 +17,7 @@ import 'core/widgets/web_responsive_frame.dart';
 import 'core/utils/app_activity.dart';
 import 'core/services/error_reporter.dart';
 import 'core/services/notification_center.dart';
+import 'features/notifications/notification_router.dart';
 
 bool _showLoginGate() {
   final user = Supabase.instance.client.auth.currentUser;
@@ -46,6 +47,8 @@ void main() async {
   // Son turnuva teması hemen; kişiye göre güncel tema arkadan.
   await ActiveTournament.init(guestChosen: GuestMode.chosen);
 
+  // Telefon bildiriminden açıldıysa hedef ekran (ana ekran hazır olunca).
+  NotificationRouter.init();
   runApp(const MyApp());
 }
 

@@ -6,3 +6,4 @@ Future<String> pushSubscribe(String vapidKey) async =>
 Future<String> pushCurrent() async => '';
 Future<String> pushUnsubscribe() async => '';
 bool pushIsIos() => false;
+void pushOnOpen(void Function(String url) onOpen) {}

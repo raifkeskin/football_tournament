@@ -1,14 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../core/services/app_session.dart';
 import '../../core/services/notification_center.dart';
 import '../../core/widgets/admin_page.dart';
-import '../match/models/match.dart';
-import '../match/screens/match_details_screen.dart';
-import '../news/screens/news_feed_screen.dart';
-import '../tournament/screens/admin_penalty_management_screen.dart';
-import '../tournament/screens/tournament_hub_screen.dart';
+import 'notification_router.dart';
 
 class _Item {
   _Item(Map<String, dynamic> r)
@@ -72,77 +67,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
-  Future<void> _open(_Item item) async {
-    final ref = item.refId;
-    switch (item.kind) {
-      case 'result':
-      case 'schedule':
-      case 'reminder':
-        if (ref == null) return;
-        await _openMatch(ref);
-      case 'news':
-        if (ref == null) return;
-        await _openNews(ref);
-      case 'penalty':
-        await Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => const AdminPenaltyManagementScreen(),
-          ),
-        );
-    }
-  }
-
-  /// Haberin turnuva sayfası, Haberler sekmesi; haber açık gelir.
-  Future<void> _openNews(String id) async {
-    final row = await Supabase.instance.client
-        .from('news')
-        .select('season_id, seasons(league_id)')
-        .eq('id', id)
-        .maybeSingle();
-    final leagueId = ((row?['seasons'] as Map?)?['league_id'] ?? '')
-        .toString();
-    if (!mounted || leagueId.isEmpty) return;
-    NewsView.focusNewsId.value = id;
-    await TournamentHubScreen.open(
-      context,
-      leagueId: leagueId,
-      seasonId: row?['season_id']?.toString(),
-      initialTab: TournamentHubTab.news,
-    );
-  }
-
-  Future<void> _openMatch(String id) async {
-    final isAdmin = AppSession.of(context).value.isAdmin;
-    final nav = Navigator.of(context);
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      final row = await Supabase.instance.client
-          .from('matches')
-          .select('*, pitches(name)')
-          .eq('id', id)
-          .maybeSingle();
-      if (row == null) {
-        messenger.showSnackBar(
-          const SnackBar(content: Text('Bu maç artık bulunamadı.')),
-        );
-        return;
-      }
-      final match = MatchModel.fromMap(
-        Map<String, dynamic>.from(row)
-          ..['pitch_name'] = (row['pitches'] as Map?)?['name'],
-        id,
-      );
-      await nav.push(
-        MaterialPageRoute<void>(
-          builder: (_) => MatchDetailsScreen(match: match, isAdmin: isAdmin),
-        ),
-      );
-    } catch (_) {
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Maç açılamadı. Lütfen tekrar deneyin.')),
-      );
-    }
-  }
+  Future<void> _open(_Item item) =>
+      NotificationRouter.open(context, item.kind, item.refId);
 
   @override
   Widget build(BuildContext context) {
@@ -201,6 +127,9 @@ class _Tile extends StatelessWidget {
     'reminder' => (Icons.alarm_rounded, const Color(0xFFF59E0B)),
     'news' => (Icons.article_rounded, const Color(0xFFE11D48)),
     'penalty' => (Icons.gavel_rounded, const Color(0xFFEF4444)),
+    'penaltyok' => (Icons.gavel_rounded, const Color(0xFFEF4444)),
+    'goal' => (Icons.bolt_rounded, const Color(0xFF10B981)),
+    'live' => (Icons.play_circle_outline_rounded, const Color(0xFFF87171)),
     _ => (Icons.notifications_rounded, const Color(0xFF64748B)),
   };
 

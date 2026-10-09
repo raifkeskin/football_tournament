@@ -10,6 +10,8 @@ import '../../../core/widgets/web_safe_image.dart';
 import '../../../core/services/app_settings.dart';
 import '../../../core/services/league_access.dart';
 import '../../match/screens/broadcast_guide_screen.dart';
+import '../../notifications/notification_router.dart';
+import '../../notifications/notification_settings_screen.dart';
 import '../../team/screens/standings_list_screen.dart';
 import 'home_screen.dart';
 import '../../player/screens/profile_screen.dart';
@@ -64,6 +66,9 @@ class _MainNavigatorState extends State<MainNavigator> {
     LeagueSwitchScope.openMenu = MainNavigator.openMenu;
     LeagueSwitchScope.closeMenu = MainNavigator.closeMenu;
     MainNavigator.tabRequest.addListener(_onTabRequest);
+    NotificationRouter.pending.addListener(_onPushOpen);
+    // Uygulama bir bildirimden açıldıysa ekran kurulunca hedefe git.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _onPushOpen());
     AppSettings.bottomNavEnabled.addListener(_onSettings);
   }
 
@@ -81,9 +86,18 @@ class _MainNavigatorState extends State<MainNavigator> {
       MainNavigator._activeScaffoldKey = null;
     }
     MainNavigator.tabRequest.removeListener(_onTabRequest);
+    NotificationRouter.pending.removeListener(_onPushOpen);
     AppSettings.bottomNavEnabled.removeListener(_onSettings);
     LeagueSwitchScope.clearHome(_route);
     super.dispose();
+  }
+
+  /// Telefon bildirimine basıldı: ilgili maç / haber açılır.
+  void _onPushOpen() {
+    final target = NotificationRouter.pending.value;
+    if (target == null || !mounted) return;
+    NotificationRouter.pending.value = null;
+    NotificationRouter.open(context, target.kind, target.ref);
   }
 
   void _onTabRequest() {
@@ -584,6 +598,27 @@ class _MenuDrawer extends StatelessWidget {
                             ),
                         ],
                       ),
+                    ),
+                    // Bildirim ayarları (misafir dahil herkes).
+                    TextButton.icon(
+                      style: TextButton.styleFrom(foregroundColor: accent),
+                      icon: const Icon(
+                        Icons.notifications_active_outlined,
+                        size: 20,
+                      ),
+                      label: const Text(
+                        'Bildirim Ayarları',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      onPressed: () {
+                        final nav = Navigator.of(context);
+                        nav.pop(); // çekmeceyi kapat
+                        nav.push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const NotificationSettingsScreen(),
+                          ),
+                        );
+                      },
                     ),
                     if (AppSettings.privateLeaguesEnabled.value)
                       TextButton.icon(
