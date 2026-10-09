@@ -56,6 +56,7 @@ class AppNameBand extends StatelessWidget {
                 LeagueSwitchScope.homeTab,
                 LeagueSwitchScope.calendarTab,
                 LeagueSwitchScope.bandHidden,
+                LeagueSwitchScope.pageBand,
               ]),
               builder: (context, tvlBand) {
                 // Yönetim panelinde turnuva kimliği yok: uygulama bandı.
@@ -63,6 +64,16 @@ class AppNameBand extends StatelessWidget {
                 if (genericScreens.value > 0) return _loginBand(top);
                 if (LeagueSwitchScope.bandHidden.value) {
                   return SizedBox(height: top);
+                }
+                // Sayfa banda kendi içeriğini verdiyse (ör. Turnuva Sayfası).
+                final page = LeagueSwitchScope.pageBand.value;
+                if (page != null) {
+                  return _TournamentBand(
+                    theme: page.theme,
+                    top: top,
+                    leading: _BandBackButton(onTap: page.onBack),
+                    trailing: page.trailing,
+                  );
                 }
                 final t = LeagueSwitchScope.panel.value
                     ? null
@@ -93,8 +104,8 @@ class AppNameBand extends StatelessWidget {
                         ?switcher,
                         if (LeagueSwitchScope.homeTab.value)
                           const Positioned(
-                            left: 8,
-                            bottom: 8,
+                            left: 6,
+                            bottom: 6,
                             child: BandMenuButton(),
                           ),
                       ],
@@ -271,9 +282,25 @@ class LeagueSwitchScope {
   /// kimliği yerine uygulama bandını gösterir; panel tüm turnuvaları yönetir.
   static final panel = ValueNotifier<bool>(false);
 
-  /// Ana Sayfa sekmesi en üstte: bantta solda menü düğmesi (diğer sekmelerin
-  /// kendi başlıklarında menü var).
+  /// Menülü ana sekme en üstte (Ana Sayfa, Puan Durumu, Yayın Rehberi):
+  /// bantta solda menü düğmesi.
   static final homeTab = ValueNotifier<bool>(false);
+
+  /// En üstteki sayfanın banda verdiği içerik (ör. Turnuva Sayfası: geri,
+  /// turnuva kimliği, sezon seçici). null: olağan bant.
+  static final pageBand = ValueNotifier<PageBand?>(null);
+  static final _pageBands = <Route<dynamic>, PageBand>{};
+
+  /// Sayfa kendi bant içeriğini verir (null: kaldırır).
+  static void setPageBand(Route<dynamic>? route, PageBand? band) {
+    if (route == null) return;
+    if (band == null) {
+      _pageBands.remove(route);
+    } else {
+      _pageBands[route] = band;
+    }
+    _update();
+  }
 
   /// Takvim sekmesi en üstte: turnuva bandı tamamen gizlenir.
   static final calendarTab = ValueNotifier<bool>(false);
@@ -299,8 +326,13 @@ class LeagueSwitchScope {
     _update();
   }
 
-  /// Bantdaki menü düğmesinin açtığı yan menü (ana gezgin verir).
+  /// Bantdaki menü düğmesinin açtığı / kapattığı yan menü (ana gezgin verir).
   static VoidCallback? openMenu;
+  static VoidCallback? closeMenu;
+
+  /// Menü açıksa kapatır, kapalıysa açar.
+  static void toggleMenu() =>
+      drawerOpen.value ? closeMenu?.call() : openMenu?.call();
 
   /// Kayıtlı ana gezgin sayfaları ve durumları. Girişten sonra bir an iki
   /// ana gezgin birlikte bulunabilir; eskisi kapanırken yenisinin kaydını
@@ -352,11 +384,13 @@ class LeagueSwitchScope {
     final h = isHomeTop && home != null && home.homeTab;
     final c = isHomeTop && home != null && home.calendarTab;
     final hidden = c || (top != null && _bandHiddenRoutes.contains(top));
+    final pb = top == null ? null : _pageBands[top];
     if (enabled.value == v &&
         panel.value == p &&
         homeTab.value == h &&
         calendarTab.value == c &&
-        bandHidden.value == hidden) {
+        bandHidden.value == hidden &&
+        pageBand.value == pb) {
       return;
     }
     // Gezinme ya da çizim sırasında bandı yeniden kurmak hata verir: çerçeve
@@ -371,6 +405,54 @@ class LeagueSwitchScope {
     homeTab.value = h;
     calendarTab.value = c;
     bandHidden.value = hidden;
+    pageBand.value = pb;
+  }
+}
+
+/// Sayfanın banda verdiği içerik: solda geri düğmesi, ortada [theme]
+/// turnuvasının logosu ve adı, sağda [trailing].
+@immutable
+class PageBand {
+  const PageBand({required this.theme, required this.onBack, this.trailing});
+
+  final TournamentTheme theme;
+  final VoidCallback onBack;
+  final Widget? trailing;
+}
+
+/// Bandın kök gezgin katmanındaki konumu (bandın altında açılan listeler
+/// için).
+Rect? bandRectInOverlay() {
+  final nav = appNavigatorKey.currentState;
+  final box = _bandKey.currentContext?.findRenderObject() as RenderBox?;
+  if (nav == null || box == null) return null;
+  final overlayBox = nav.overlay?.context.findRenderObject() as RenderBox?;
+  final topLeft = overlayBox == null
+      ? box.localToGlobal(Offset.zero)
+      : box.localToGlobal(Offset.zero) - overlayBox.localToGlobal(Offset.zero);
+  return topLeft & box.size;
+}
+
+/// Bantta geri düğmesi (en solda).
+class _BandBackButton extends StatelessWidget {
+  const _BandBackButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      type: MaterialType.transparency,
+      child: IconButton(
+        onPressed: onTap,
+        icon: const Icon(
+          Icons.arrow_back_ios_new_rounded,
+          color: Colors.white,
+          size: 22,
+          semanticLabel: 'Geri',
+        ),
+      ),
+    );
   }
 }
 
@@ -653,14 +735,50 @@ class _LeagueRow extends StatelessWidget {
 /// Turnuva kimliğiyle bant: turnuvanın renkleri, solda logosu, yanında adı;
 /// sağda bildirim zili.
 class _TournamentBand extends StatelessWidget {
-  const _TournamentBand({required this.theme, required this.top, this.actions});
+  const _TournamentBand({
+    required this.theme,
+    required this.top,
+    this.actions,
+    this.leading,
+    this.trailing,
+  });
 
   final TournamentTheme theme;
   final double top;
   final BandActions? actions;
 
+  /// Verilirse soldaki düğme (ör. geri); yoksa menü / panel düğmesi.
+  final Widget? leading;
+
+  /// Verilirse sağdaki içerik (ör. sezon seçici); yoksa bildirim zili.
+  final Widget? trailing;
+
   @override
   Widget build(BuildContext context) {
+    final Widget left =
+        leading ??
+        (actions != null
+            ? actions!.menuButton(Colors.white)
+            : LeagueSwitchScope.homeTab.value
+            ? const Padding(
+                padding: EdgeInsets.only(left: 6),
+                child: BandMenuButton(),
+              )
+            : const SizedBox.shrink());
+    final Widget right =
+        trailing ??
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const NotificationBell(),
+            if (actions?.onLogout != null)
+              actions!.logoutButton()
+            else
+              const SizedBox(width: 4),
+          ],
+        );
+    // İki yan eşit genişlikte: turnuva kimliği tam ortada kalır.
+    final side = trailing != null ? 112.0 : 96.0;
     return Container(
       padding: EdgeInsets.only(top: top),
       decoration: BoxDecoration(
@@ -673,42 +791,37 @@ class _TournamentBand extends StatelessWidget {
         height: 50,
         child: Row(
           children: [
-            if (actions != null)
-              actions!.menuButton(Colors.white)
-            else if (LeagueSwitchScope.homeTab.value)
-              Padding(
-                padding: const EdgeInsets.only(left: 8, right: 8),
-                child: BandMenuButton(
-                  background: theme.secondary,
-                  foreground: theme.primaryDark,
-                ),
-              )
-            else
-              const SizedBox(width: 12),
-            if (theme.logoUrl.isNotEmpty)
-              WebSafeImage(
-                url: theme.logoUrl,
-                width: 36,
-                height: 36,
-                fit: BoxFit.contain,
-              ),
-            const SizedBox(width: 8),
+            SizedBox(
+              width: side,
+              child: Align(alignment: Alignment.centerLeft, child: left),
+            ),
             Expanded(
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: () {
-                  if (ActiveTournament.myLeagues.value.length > 1) {
+                  if (leading == null &&
+                      ActiveTournament.myLeagues.value.length > 1) {
                     showLeagueSwitcher();
                   }
                 },
                 child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
+                    if (theme.logoUrl.isNotEmpty) ...[
+                      WebSafeImage(
+                        url: theme.logoUrl,
+                        width: 34,
+                        height: 34,
+                        fit: BoxFit.contain,
+                      ),
+                      const SizedBox(width: 8),
+                    ],
                     Flexible(
                       child: Text(
                         _trUpper(theme.name),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontFamily: 'BarlowCondensed',
                           fontStyle: FontStyle.italic,
                           fontWeight: FontWeight.w800,
@@ -716,23 +829,22 @@ class _TournamentBand extends StatelessWidget {
                           fontSize: 16,
                           letterSpacing: 1.2,
                           decoration: TextDecoration.none,
-                          shadows: const [
+                          shadows: [
                             Shadow(color: Color(0x66000000), blurRadius: 4),
                           ],
                         ),
                       ),
                     ),
-                    LeagueSwitchButton(color: theme.secondary),
+                    if (leading == null)
+                      LeagueSwitchButton(color: theme.secondary),
                   ],
                 ),
               ),
             ),
-            const SizedBox(width: 2),
-            const NotificationBell(),
-            if (actions?.onLogout != null)
-              actions!.logoutButton()
-            else
-              const SizedBox(width: 8),
+            SizedBox(
+              width: side,
+              child: Align(alignment: Alignment.centerRight, child: right),
+            ),
           ],
         ),
       ),
@@ -740,16 +852,13 @@ class _TournamentBand extends StatelessWidget {
   }
 }
 
-/// Bantta canlı renkli menü düğmesi (Ana Sayfa'da): turnuva renginde kutu.
+/// Menü düğmesi: futbol topu. Menü açılırken top dilimlere ayrılır
+/// (hamburger), sonra dilimler X olur; X'e basınca menü kapanır ve top
+/// yeniden birleşir.
 class BandMenuButton extends StatefulWidget {
-  const BandMenuButton({
-    super.key,
-    this.background = const Color(0xFF10B981),
-    this.foreground = const Color(0xFF0F172A),
-  });
+  const BandMenuButton({super.key, this.size = 40});
 
-  final Color background;
-  final Color foreground;
+  final double size;
 
   @override
   State<BandMenuButton> createState() => _BandMenuButtonState();
@@ -758,17 +867,17 @@ class BandMenuButton extends StatefulWidget {
 class _BandMenuButtonState extends State<BandMenuButton>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
-    duration: const Duration(milliseconds: 520),
+    duration: const Duration(milliseconds: 560),
     vsync: this,
   );
-  ui.Image? _ballImage;
+  static ui.Image? _ballImage;
 
   @override
   void initState() {
     super.initState();
     LeagueSwitchScope.drawerOpen.addListener(_syncDrawerState);
-    _syncDrawerState();
-    _loadBallImage();
+    _controller.value = LeagueSwitchScope.drawerOpen.value ? 1 : 0;
+    if (_ballImage == null) _loadBallImage();
   }
 
   Future<void> _loadBallImage() async {
@@ -777,11 +886,8 @@ class _BandMenuButtonState extends State<BandMenuButton>
       final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
       final frame = await codec.getNextFrame();
       codec.dispose();
-      if (!mounted) {
-        frame.image.dispose();
-        return;
-      }
-      setState(() => _ballImage = frame.image);
+      _ballImage ??= frame.image;
+      if (mounted) setState(() {});
     } catch (_) {}
   }
 
@@ -797,7 +903,6 @@ class _BandMenuButtonState extends State<BandMenuButton>
   void dispose() {
     LeagueSwitchScope.drawerOpen.removeListener(_syncDrawerState);
     _controller.dispose();
-    _ballImage?.dispose();
     super.dispose();
   }
 
@@ -805,15 +910,13 @@ class _BandMenuButtonState extends State<BandMenuButton>
   Widget build(BuildContext context) {
     final isOpen = LeagueSwitchScope.drawerOpen.value;
     return Material(
-      color: widget.background,
-      borderRadius: BorderRadius.circular(10),
-      elevation: 2,
+      type: MaterialType.transparency,
       child: InkWell(
-        borderRadius: BorderRadius.circular(10),
-        onTap: () => LeagueSwitchScope.openMenu?.call(),
+        customBorder: const CircleBorder(),
+        onTap: LeagueSwitchScope.toggleMenu,
         child: SizedBox(
-          width: 34,
-          height: 34,
+          width: widget.size,
+          height: widget.size,
           child: Semantics(
             button: true,
             label: isOpen ? 'Menüyü kapat' : 'Menüyü aç',
@@ -823,8 +926,6 @@ class _BandMenuButtonState extends State<BandMenuButton>
                 painter: _BallMenuPainter(
                   progress: _controller.value,
                   ballImage: _ballImage,
-                  foreground: widget.foreground,
-                  accent: widget.background,
                 ),
               ),
             ),
@@ -835,112 +936,190 @@ class _BandMenuButtonState extends State<BandMenuButton>
   }
 }
 
-class _BallMenuPainter extends CustomPainter {
-  const _BallMenuPainter({
-    required this.progress,
-    required this.ballImage,
-    required this.foreground,
-    required this.accent,
+/// Uygulamanın yuvarlak üst çubuk düğmesi (menü topuyla aynı görünüm):
+/// yarı saydam zemin, yeşil ince kenar, beyaz ikon.
+class BandIconButton extends StatelessWidget {
+  const BandIconButton({
+    super.key,
+    required this.icon,
+    required this.onTap,
+    this.tooltip,
+    this.size = 40,
   });
+
+  final IconData icon;
+  final VoidCallback onTap;
+  final String? tooltip;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final button = Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: Container(
+          width: size,
+          height: size,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.white.withValues(alpha: 0.08),
+            border: Border.all(
+              color: _BallMenuPainter.glow.withValues(alpha: 0.55),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: _BallMenuPainter.glow.withValues(alpha: 0.25),
+                blurRadius: 8,
+              ),
+            ],
+          ),
+          child: Icon(icon, color: Colors.white, size: size * 0.5),
+        ),
+      ),
+    );
+    return tooltip == null ? button : Tooltip(message: tooltip, child: button);
+  }
+}
+
+/// Topun dilimleri: üst kapak, orta kuşak, alt kapak. [progress] 0: top
+/// (ince kesik çizgilerle), ~0.45: dilimler ayrık (hamburger), 1: üst ve alt
+/// dilim çapraz çubuklara dönüşüp X olur, orta dilim kaybolur.
+class _BallMenuPainter extends CustomPainter {
+  const _BallMenuPainter({required this.progress, required this.ballImage});
 
   final double progress;
   final ui.Image? ballImage;
-  final Color foreground;
-  final Color accent;
 
-  double _ease(double value) {
-    final t = value.clamp(0.0, 1.0);
+  static const glow = Color(0xFF34D399);
+  static const _gold = Color(0xFFFBBF24);
+
+  static double _ease(double v) {
+    final t = v.clamp(0.0, 1.0);
     return t * t * (3 - 2 * t);
   }
 
+  static double _lerp(double a, double b, double t) => a + (b - a) * t;
+
   @override
   void paint(Canvas canvas, Size size) {
-    final ball = ballImage;
-    final centerX = size.width / 2;
-    final centerY = size.height / 2;
-    final ballSize = size.shortestSide * 0.84;
-    final left = centerX - ballSize / 2;
-    final top = centerY - ballSize / 2;
+    final c = size.center(Offset.zero);
+    final r = size.shortestSide * 0.42;
+    final split = _ease(progress / 0.45);
+    final morph = _ease((progress - 0.45) / 0.55);
+    // Dilim aralığı: dururken ince kesik, açılırken belirgin.
+    final gap = _lerp(0.7, r * 0.2, split);
 
-    if (ball != null) {
-      final split = _ease((progress - 0.18) / 0.48);
-      final fade = 1 - _ease((progress - 0.65) / 0.22);
-      final imagePaint = Paint()
-        ..filterQuality = FilterQuality.high
-        ..color = Colors.white.withValues(alpha: fade);
-      final sourceTop = Rect.fromLTWH(
-        0,
-        0,
-        ball.width.toDouble(),
-        ball.height / 2,
-      );
-      final sourceBottom = Rect.fromLTWH(
-        0,
-        ball.height / 2,
-        ball.width.toDouble(),
-        ball.height / 2,
-      );
-      final half = ballSize / 2;
-      canvas.drawImageRect(
-        ball,
-        sourceTop,
-        Rect.fromLTWH(left, top - split * 7, ballSize, half),
-        imagePaint,
-      );
-      canvas.drawImageRect(
-        ball,
-        sourceBottom,
-        Rect.fromLTWH(left, centerY + split * 7, ballSize, half),
-        imagePaint,
-      );
-
-      final seamAlpha = (split * (1 - _ease((progress - 0.63) / 0.16))).clamp(
-        0.0,
-        1.0,
-      );
-      if (seamAlpha > 0) {
-        final seamPaint = Paint()
-          ..color = accent.withValues(alpha: seamAlpha * 0.9)
-          ..strokeWidth = 1.2
-          ..strokeCap = StrokeCap.round;
-        final seamY = centerY;
-        canvas.drawLine(
-          Offset(left - split * 2, seamY - split * 4),
-          Offset(left + ballSize + split * 2, seamY - split * 4),
-          seamPaint,
+    void piece({
+      required double sliceTop,
+      required double sliceBottom,
+      required double shift,
+      required double angle,
+      required double alpha,
+      required double barScale,
+    }) {
+      if (alpha <= 0) return;
+      final sliceCenter = (sliceTop + sliceBottom) / 2;
+      final sliceH = sliceBottom - sliceTop;
+      // Dilimden çubuğa: merkez, boy, en ve açı birlikte değişir.
+      final cy = _lerp(c.dy + sliceCenter + shift, c.dy, morph);
+      final w = _lerp(r * 2, r * 2.25, morph) * barScale;
+      final h = _lerp(sliceH, r * 0.52, morph);
+      canvas.save();
+      canvas.translate(c.dx, cy);
+      canvas.rotate(angle * morph);
+      final rect = Rect.fromCenter(center: Offset.zero, width: w, height: h);
+      final bar = Path()
+        ..addRRect(RRect.fromRectAndRadius(rect, Radius.circular(2 * morph)));
+      // Topun yuvarlağı: çubuğa dönerken büyüyerek kaybolur.
+      final ballCenter = Offset(0, _lerp(-sliceCenter, 0, morph));
+      final circle = Path()
+        ..addOval(
+          Rect.fromCircle(center: ballCenter, radius: _lerp(r, r * 4, morph)),
         );
-        canvas.drawLine(
-          Offset(left - split * 2, seamY + split * 4),
-          Offset(left + ballSize + split * 2, seamY + split * 4),
-          seamPaint,
+      final shape = Path.combine(PathOperation.intersect, bar, circle);
+
+      // Dış parıltı.
+      canvas.drawPath(
+        shape,
+        Paint()
+          ..color = glow.withValues(alpha: 0.55 * alpha)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.outer, 2.2),
+      );
+      canvas.save();
+      canvas.clipPath(shape);
+      final img = ballImage;
+      final imgSize = _lerp(r * 2, r * 2.4, morph);
+      final dst = Rect.fromCenter(
+        center: ballCenter,
+        width: imgSize,
+        height: imgSize,
+      );
+      if (img != null) {
+        canvas.drawImageRect(
+          img,
+          Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
+          dst,
+          Paint()
+            ..filterQuality = FilterQuality.high
+            ..color = Colors.white.withValues(alpha: alpha),
+        );
+      } else {
+        canvas.drawRect(
+          rect.inflate(r),
+          Paint()..color = Colors.white.withValues(alpha: alpha),
         );
       }
+      canvas.restore();
+      // Kenar: yeşil, açılırken kesik yüzeylerde altın parıltı.
+      canvas.drawPath(
+        shape,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.1
+          ..color = Color.lerp(
+            glow,
+            _gold,
+            split * (1 - morph) * 0.7,
+          )!.withValues(alpha: 0.9 * alpha),
+      );
+      canvas.restore();
     }
 
-    final barsProgress = _ease((progress - 0.58) / 0.30);
-    if (barsProgress <= 0) return;
-    final barPaint = Paint()
-      ..color = foreground.withValues(alpha: barsProgress)
-      ..strokeWidth = size.width * 0.085
-      ..strokeCap = StrokeCap.round;
-    final halfWidth = size.width * 0.31 * barsProgress;
-    final gap = size.height * 0.22;
-    for (var i = -1; i <= 1; i++) {
-      final y = centerY + gap * i;
-      canvas.drawLine(
-        Offset(centerX - halfWidth, y),
-        Offset(centerX + halfWidth, y),
-        barPaint,
-      );
-    }
+    // Orta kuşak (X olurken kaybolur ve daralır).
+    piece(
+      sliceTop: -r / 3 + gap / 2,
+      sliceBottom: r / 3 - gap / 2,
+      shift: 0,
+      angle: 0,
+      alpha: 1 - morph,
+      barScale: 1 - morph * 0.6,
+    );
+    // Üst kapak → "\" çubuğu, alt kapak → "/" çubuğu.
+    piece(
+      sliceTop: -r,
+      sliceBottom: -r / 3 - gap / 2,
+      shift: -gap * 0.6,
+      angle: 0.785398,
+      alpha: 1,
+      barScale: 1,
+    );
+    piece(
+      sliceTop: r / 3 + gap / 2,
+      sliceBottom: r,
+      shift: gap * 0.6,
+      angle: -0.785398,
+      alpha: 1,
+      barScale: 1,
+    );
   }
 
   @override
   bool shouldRepaint(covariant _BallMenuPainter oldDelegate) =>
-      progress != oldDelegate.progress ||
-      ballImage != oldDelegate.ballImage ||
-      foreground != oldDelegate.foreground ||
-      accent != oldDelegate.accent;
+      progress != oldDelegate.progress || ballImage != oldDelegate.ballImage;
 }
 
 /// Türkçe büyük harf (Dart'ın toUpperCase'i i → I yapar, İ değil).

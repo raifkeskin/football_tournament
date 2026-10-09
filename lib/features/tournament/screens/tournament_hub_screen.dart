@@ -5,7 +5,8 @@ import '../../../core/services/app_session.dart';
 import '../../../core/services/global_filter.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/utils/table_feed.dart';
-import '../../../core/widgets/master_class_app_bar.dart';
+import '../../../core/services/active_tournament.dart';
+import '../../../core/widgets/app_name_band.dart';
 import '../../match/models/match.dart';
 import '../../match/screens/fixture_screen.dart';
 import '../../news/screens/news_feed_screen.dart';
@@ -99,11 +100,50 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
     }
   }
 
+  /// Bu sayfanın rotası: bant içeriği (geri, turnuva kimliği, sezon) ona
+  /// bağlanır.
+  ModalRoute<dynamic>? _route;
+
   @override
   void dispose() {
+    LeagueSwitchScope.setPageBand(_route, null);
     _tabs.dispose();
     _fixtureShare.dispose();
     super.dispose();
+  }
+
+  /// Bant: solda geri, ortada turnuvanın logosu ve adı, sağda sezon.
+  void _syncBand(
+    League? league,
+    Season? season,
+    List<Season> seasons,
+    List<GroupModel> groups,
+  ) {
+    _route = ModalRoute.of(context);
+    if (league == null) return;
+    final theme = TournamentTheme.fromRow({
+      'id': league.id,
+      'name': league.name,
+      'short_name': league.shortName,
+      'logo_url': league.logoUrl,
+      'theme_primary': league.themePrimary,
+      'theme_secondary': league.themeSecondary,
+    });
+    if (theme == null) return;
+    LeagueSwitchScope.setPageBand(
+      _route,
+      PageBand(
+        theme: theme,
+        onBack: () => Navigator.of(context).maybePop(),
+        trailing: season == null
+            ? null
+            : _BandSeasonButton(
+                text: season.name,
+                canPick: seasons.length > 1,
+                onTap: () => _pickSeason(seasons, groups),
+              ),
+      ),
+    );
   }
 
   void _onTab() {
@@ -137,58 +177,50 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
     });
   }
 
+  /// Sezon listesi: bandın altında, sağa yaslı açılır.
   Future<void> _pickSeason(
     List<Season> seasons,
     List<GroupModel> groups,
   ) async {
-    final picked = await showModalBottomSheet<String>(
+    final band = bandRectInOverlay();
+    final overlay =
+        Navigator.of(context).overlay?.context.findRenderObject() as RenderBox?;
+    if (band == null || overlay == null) return;
+    final picked = await showMenu<String>(
       context: context,
-      backgroundColor: const Color(0xFF1E293B),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      color: const Color(0xFF1E293B),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      position: RelativeRect.fromRect(
+        Rect.fromLTWH(band.right - 8, band.bottom, 0, 0),
+        Offset.zero & overlay.size,
       ),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 14),
-            const Text(
-              'Sezon Seç',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 8),
-            for (final s in seasons)
-              ListTile(
-                leading: Icon(
+      items: [
+        for (final s in seasons)
+          PopupMenuItem<String>(
+            value: s.id,
+            child: Row(
+              children: [
+                Icon(
                   s.id == _seasonId
                       ? Icons.radio_button_checked_rounded
                       : Icons.radio_button_off_rounded,
+                  size: 18,
                   color: s.id == _seasonId ? Colors.white : Colors.white38,
                 ),
-                title: Text(
-                  _seasonLabel(s),
+                const SizedBox(width: 10),
+                Text(
+                  s.name,
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                onTap: () => Navigator.of(ctx).pop(s.id),
-              ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
+              ],
+            ),
+          ),
+      ],
     );
     if (picked != null) await _changeSeason(picked, groups);
-  }
-
-  static String _seasonLabel(Season s) {
-    final sub = (s.subtitle ?? '').trim();
-    return sub.isEmpty ? s.name : '${s.name} · $sub';
   }
 
   static Color _color(String? hex, Color fallback) {
@@ -225,28 +257,27 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
                 final season = seasons
                     .where((s) => s.id == _seasonId)
                     .firstOrNull;
+                _syncBand(league, season, seasons, groups);
+                // Başlık çubuğu yok: sekmeler doğrudan bandın altında.
                 return Scaffold(
                   backgroundColor: _bgDark,
-                  extendBodyBehindAppBar: true,
-                  appBar: MasterClassAppBar(
-                    title: league?.name ?? '',
-                    actions: [_shareButton(group)],
-                  ),
                   body: SafeArea(
+                    top: false,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        _SeasonBar(
-                          seasonText: season == null
-                              ? ''
-                              : _seasonLabel(season),
-                          groupText: groups.length > 1
-                              ? (group?.name ?? '')
-                              : '',
-                          canPick: seasons.length > 1,
-                          onTap: () => _pickSeason(seasons, groups),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _HubTabBar(
+                                controller: _tabs,
+                                accent: accent,
+                              ),
+                            ),
+                            _shareButton(group),
+                          ],
                         ),
-                        _HubTabBar(controller: _tabs, accent: accent),
                         Expanded(
                           child: season == null || group == null
                               ? Center(
@@ -353,79 +384,52 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
   }
 }
 
-/// Sekmelerin üstünde sezon (dokununca sezon seçimi) ve grup adı.
-class _SeasonBar extends StatelessWidget {
-  const _SeasonBar({
-    required this.seasonText,
-    required this.groupText,
+/// Bantta sağda sezon: birden fazla sezon varsa ▾ ile liste açılır.
+class _BandSeasonButton extends StatelessWidget {
+  const _BandSeasonButton({
+    required this.text,
     required this.canPick,
     required this.onTap,
   });
 
-  final String seasonText;
-  final String groupText;
+  final String text;
   final bool canPick;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
-      child: Row(
-        children: [
-          Material(
-            color: Colors.white.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(20),
-            child: InkWell(
-              onTap: canPick ? onTap : null,
-              borderRadius: BorderRadius.circular(20),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 7, 10, 7),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.calendar_month_rounded,
-                      size: 16,
-                      color: Colors.white70,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      seasonText,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    if (canPick) ...[
-                      const SizedBox(width: 2),
-                      const Icon(
-                        Icons.expand_more_rounded,
-                        size: 18,
-                        color: Colors.white70,
-                      ),
-                    ],
-                  ],
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        onTap: canPick ? onTap : null,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 6, 6, 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  text,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w800,
+                    decoration: TextDecoration.none,
+                  ),
                 ),
               ),
-            ),
+              if (canPick)
+                const Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+            ],
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              groupText,
-              textAlign: TextAlign.right,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

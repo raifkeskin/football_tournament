@@ -3,7 +3,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/global_filter.dart';
 import '../../../core/services/service_locator.dart';
-import '../../../core/widgets/master_class_app_bar.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../tournament/models/league.dart';
 import '../../tournament/models/season.dart';
@@ -46,16 +45,19 @@ class _StandingsListScreenState extends State<StandingsListScreen> {
   Future<List<_Row>> _load(List<League> leagues) async {
     final sb = Supabase.instance.client;
     final ids = [for (final l in leagues) l.id];
-    final seasons = (await sb.from('seasons').select().inFilter('league_id', ids))
-        .map((r) => Season.fromMap(r))
-        .toList();
+    final seasons =
+        (await sb.from('seasons').select().inFilter('league_id', ids))
+            .map((r) => Season.fromMap(r))
+            .toList();
     // Her turnuvanın varsayılan (aktif) sezonu.
     final seasonOf = <String, String>{};
     for (final l in leagues) {
       final own = seasons.where((s) => s.leagueId == l.id).toList()
-        ..sort((a, b) => (b.startDate ?? DateTime(0)).compareTo(
-          a.startDate ?? DateTime(0),
-        ));
+        ..sort(
+          (a, b) => (b.startDate ?? DateTime(0)).compareTo(
+            a.startDate ?? DateTime(0),
+          ),
+        );
       if (own.isNotEmpty) seasonOf[l.id] = pickDefaultSeasonId(own);
     }
     final groups = seasonOf.isEmpty
@@ -90,11 +92,11 @@ class _StandingsListScreenState extends State<StandingsListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Başlık yok: menü düğmesi ve turnuva kimliği üst bantta.
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
-      extendBodyBehindAppBar: true,
-      appBar: const MasterClassAppBar(title: 'Puan Durumu'),
       body: SafeArea(
+        top: false,
         child: StreamBuilder<List<League>>(
           stream: _leagues,
           builder: (context, snap) {
@@ -123,7 +125,7 @@ class _StandingsListScreenState extends State<StandingsListScreen> {
                   );
                 }
                 return ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
+                  padding: const EdgeInsets.fromLTRB(14, 14, 14, 120),
                   itemCount: rows.length,
                   itemBuilder: (context, i) => _RowCard(row: rows[i]),
                 );
@@ -136,68 +138,97 @@ class _StandingsListScreenState extends State<StandingsListScreen> {
   }
 }
 
+/// Liste satırı: ince koyu şerit; turnuva logosu şeridin solundan taşar
+/// (büyük), satırlar arasındaki boşluk logonun alttaki satıra değmemesi
+/// için yeterli.
 class _RowCard extends StatelessWidget {
   const _RowCard({required this.row});
 
   final _Row row;
 
+  static const _logo = 54.0;
+  static const _rowHeight = 46.0;
+
   @override
   Widget build(BuildContext context) {
     final logo = row.league.logoUrl.trim();
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Material(
-        color: Colors.black.withValues(alpha: 0.3),
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () => TournamentHubScreen.open(
-            context,
-            leagueId: row.league.id,
-            seasonId: row.seasonId,
-            groupId: row.groupId,
-          ),
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-            ),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 40,
-                  height: 40,
-                  child: logo.isNotEmpty
-                      ? WebSafeImage(
-                          url: logo,
-                          width: 40,
-                          height: 40,
-                          borderRadius: BorderRadius.circular(10),
-                          fallbackIconSize: 20,
-                        )
-                      : const Icon(
-                          Icons.emoji_events_outlined,
-                          color: Color(0xFFF59E0B),
+      padding: const EdgeInsets.only(bottom: 12),
+      child: SizedBox(
+        height: _logo,
+        child: Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.centerLeft,
+          children: [
+            Positioned(
+              left: _logo / 2,
+              right: 0,
+              height: _rowHeight,
+              child: Material(
+                color: const Color(0xFF1E293B).withValues(alpha: 0.85),
+                borderRadius: BorderRadius.circular(12),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => TournamentHubScreen.open(
+                    context,
+                    leagueId: row.league.id,
+                    seasonId: row.seasonId,
+                    groupId: row.groupId,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: _logo / 2 + 12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            row.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                         ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    row.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
+                        const Icon(
+                          Icons.chevron_right_rounded,
+                          color: Colors.white38,
+                        ),
+                        const SizedBox(width: 6),
+                      ],
                     ),
                   ),
                 ),
-                const Icon(Icons.chevron_right_rounded, color: Colors.white38),
-              ],
+              ),
             ),
-          ),
+            // Logo şeridin dışına taşar; dokunuş satıra gider.
+            IgnorePointer(
+              child: SizedBox(
+                width: _logo,
+                height: _logo,
+                child: logo.isNotEmpty
+                    ? WebSafeImage(
+                        url: logo,
+                        width: _logo,
+                        height: _logo,
+                        fit: BoxFit.contain,
+                        fallbackIconSize: 26,
+                      )
+                    : Container(
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Color(0xFF1E293B),
+                        ),
+                        child: const Icon(
+                          Icons.emoji_events_outlined,
+                          color: Color(0xFFF59E0B),
+                          size: 28,
+                        ),
+                      ),
+              ),
+            ),
+          ],
         ),
       ),
     );

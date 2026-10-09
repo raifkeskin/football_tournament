@@ -27,29 +27,22 @@ import '../../../core/widgets/youtube_player_page.dart';
 import '../widgets/home_news_card.dart';
 import '../widgets/home_dashboard.dart';
 import '../../../core/design_flags.dart';
+import '../../../core/widgets/app_name_band.dart';
 
 /// Ana sayfa — günün maçları, tarih şeridi ve maç kartları.
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({
-    super.key,
-    this.showCalendar = false,
-    this.broadcastOnly = false,
-  });
+  const HomeScreen({super.key, this.showCalendar = false});
 
   /// Ana gezinmede eski takvimli maç ekranını göstermek için.
   final bool showCalendar;
-
-  /// Yayın Rehberi: takvim görünümü, yalnızca yayın linki eklenmiş maçlar;
-  /// bitmiş (MS) maçlar gri.
-  final bool broadcastOnly;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  /// Takvim görünümü (Maç Takvimi ve Yayın Rehberi).
-  bool get _calendar => widget.showCalendar || widget.broadcastOnly;
+  /// Takvim görünümü (Maç Takvimi).
+  bool get _calendar => widget.showCalendar;
 
   static const int _yaricap = 2;
 
@@ -110,7 +103,7 @@ class _HomeScreenState extends State<HomeScreen> {
       column: 'match_date',
       value: key,
     );
-    final day = feed.map(
+    return feed.map(
       (rows) => rows
           .where(
             (r) =>
@@ -119,26 +112,6 @@ class _HomeScreenState extends State<HomeScreen> {
           .map((r) => MatchModel.fromMap(r, (r['id'] ?? '').toString()))
           .toList(),
     );
-    if (!widget.broadcastOnly) return day;
-    // Yayın Rehberi: yalnızca yayın linki eklenmiş maçlar.
-    return day.asyncMap((matches) async {
-      if (matches.isEmpty) return matches;
-      try {
-        final rows = await Supabase.instance.client
-            .from('match_media')
-            .select('match_id, url')
-            .eq('media_type', 'Maç Yayın Linki')
-            .inFilter('match_id', [for (final m in matches) m.id]);
-        final withLink = {
-          for (final r in rows)
-            if ((r['url'] ?? '').toString().trim().isNotEmpty)
-              (r['match_id'] ?? '').toString(),
-        };
-        return matches.where((m) => withLink.contains(m.id)).toList();
-      } catch (_) {
-        return const <MatchModel>[];
-      }
-    });
   }
 
   // Build içinde her seferinde yeniden kurulmasınlar diye saklanır.
@@ -635,43 +608,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 }
 
                 if (_calendar) {
-                  final toolbarPrimary =
-                      ActiveTournament.theme.value?.primary ??
-                      const Color(0xFF064E3B);
-                  final toolbarAccent =
-                      ActiveTournament.theme.value?.secondary ??
-                      const Color(0xFF10B981);
                   return Column(
                     children: [
                       SizedBox(
                         height: 68,
                         child: Row(
                           children: [
-                            Builder(
-                              builder: (ctx) => IconButton(
-                                tooltip: 'Menü',
-                                icon: const Icon(Icons.menu_rounded, size: 23),
-                                style: IconButton.styleFrom(
-                                  foregroundColor: toolbarPrimary,
-                                  backgroundColor: toolbarAccent,
-                                  fixedSize: const Size(38, 38),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                ),
-                                onPressed: () {
-                                  ScaffoldState? scaffold = Scaffold.maybeOf(
-                                    ctx,
-                                  );
-                                  if (scaffold != null && !scaffold.hasDrawer) {
-                                    scaffold = scaffold.context
-                                        .findAncestorStateOfType<
-                                          ScaffoldState
-                                        >();
-                                  }
-                                  scaffold?.openDrawer();
-                                },
-                              ),
+                            // Menü: bantla aynı futbol topu düğmesi.
+                            const Padding(
+                              padding: EdgeInsets.only(left: 4),
+                              child: BandMenuButton(),
                             ),
                             IconButton(
                               visualDensity: VisualDensity.compact,
@@ -703,17 +649,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                 color: Colors.white,
                               ),
                             ),
-                            IconButton(
-                              tooltip: 'Takvim',
-                              onPressed: _openModernCalendar,
-                              icon: const Icon(Icons.calendar_month_rounded),
-                              style: IconButton.styleFrom(
-                                foregroundColor: toolbarPrimary,
-                                backgroundColor: toolbarAccent,
-                                fixedSize: const Size(38, 38),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
+                            Padding(
+                              padding: const EdgeInsets.only(right: 4),
+                              child: BandIconButton(
+                                icon: Icons.calendar_month_rounded,
+                                tooltip: 'Takvim',
+                                onTap: _openModernCalendar,
                               ),
                             ),
                           ],
@@ -1002,18 +943,14 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          widget.broadcastOnly
-                              ? Icons.live_tv_rounded
-                              : Icons.event_busy_rounded,
+                        const Icon(
+                          Icons.event_busy_rounded,
                           size: 64,
                           color: Colors.white24,
                         ),
                         const SizedBox(height: 16),
-                        Text(
-                          widget.broadcastOnly
-                              ? 'Bu tarihte yayını olan maç yok.'
-                              : 'Bu tarihte maç bulunamadı.',
+                        const Text(
+                          'Bu tarihte maç bulunamadı.',
                           style: const TextStyle(
                             color: Colors.white24,
                             fontSize: 16,
@@ -1143,9 +1080,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                     _leagueSecondaryById[sectionLeagueId] ??
                                     const Color(0xFF10B981),
                                 compact: _calendar,
-                                dimmed:
-                                    widget.broadcastOnly &&
-                                    m.status == MatchStatus.finished,
                                 onTapSection: openSection,
                               );
                             }),
@@ -1177,8 +1111,6 @@ class _MatchCard extends StatefulWidget {
   final Color sectionAccent;
   final bool compact;
 
-  /// Yayın Rehberi'nde bitmiş maç: skor satırı gri.
-  final bool dimmed;
   final VoidCallback? onTapSection;
   const _MatchCard({
     required this.match,
@@ -1192,7 +1124,6 @@ class _MatchCard extends StatefulWidget {
     this.sectionPrimary = const Color(0xFF064E3B),
     this.sectionAccent = const Color(0xFF10B981),
     this.compact = false,
-    this.dimmed = false,
     this.onTapSection,
   });
 
@@ -1226,18 +1157,6 @@ class _MatchCardState extends State<_MatchCard> {
       _checkBroadcast();
     }
   }
-
-  /// Gri tonlama (renkler siyah-beyaz, soluk).
-  static const _greyscale = ColorFilter.matrix(<double>[
-    0.2126, 0.7152, 0.0722, 0, 0, //
-    0.2126, 0.7152, 0.0722, 0, 0, //
-    0.2126, 0.7152, 0.0722, 0, 0, //
-    0, 0, 0, 0.45, 0,
-  ]);
-
-  Widget _dim(Widget child) => widget.dimmed
-      ? ColorFiltered(colorFilter: _greyscale, child: child)
-      : child;
 
   @override
   Widget build(BuildContext context) {
@@ -1350,25 +1269,22 @@ class _MatchCardState extends State<_MatchCard> {
                 ),
                 SizedBox(height: widget.compact ? 4 : 8),
               ],
-              _dim(
-                MatchScoreLine(
-                  match: widget.match,
-                  homeName: widget.homeName,
-                  awayName: widget.awayName,
-                  homeLogo: widget.homeLogo,
-                  awayLogo: widget.awayLogo,
-                  showLogos: widget.compact,
-                  compact: widget.compact,
-                  leading:
-                      _broadcastUrl == null ||
-                          widget.match.status == MatchStatus.finished
-                      ? null
-                      : InkWell(
-                          onTap: () =>
-                              openYoutubeInApp(context, _broadcastUrl!),
-                          child: const YoutubeBrandIcon(size: 18),
-                        ),
-                ),
+              MatchScoreLine(
+                match: widget.match,
+                homeName: widget.homeName,
+                awayName: widget.awayName,
+                homeLogo: widget.homeLogo,
+                awayLogo: widget.awayLogo,
+                showLogos: widget.compact,
+                compact: widget.compact,
+                leading:
+                    _broadcastUrl == null ||
+                        widget.match.status == MatchStatus.finished
+                    ? null
+                    : InkWell(
+                        onTap: () => openYoutubeInApp(context, _broadcastUrl!),
+                        child: const YoutubeBrandIcon(size: 18),
+                      ),
               ),
             ],
           ),

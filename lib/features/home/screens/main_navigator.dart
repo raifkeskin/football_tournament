@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../../core/services/app_settings.dart';
 import '../../../core/services/league_access.dart';
+import '../../match/screens/broadcast_guide_screen.dart';
 import '../../team/screens/standings_list_screen.dart';
 import 'home_screen.dart';
 import '../../player/screens/profile_screen.dart';
@@ -35,6 +36,9 @@ class MainNavigator extends StatefulWidget {
   /// Yan menüyü açar (ör. yönetim panelinde bantaki ☰).
   static void openMenu() => _activeScaffoldKey?.currentState?.openDrawer();
 
+  /// Yan menüyü kapatır (bantaki X).
+  static void closeMenu() => _activeScaffoldKey?.currentState?.closeDrawer();
+
   /// Gezgin dışından sekme değiştirme isteği (ör. canlı kura → Fikstür).
   static final tabRequest = ValueNotifier<int?>(null);
 
@@ -58,6 +62,7 @@ class _MainNavigatorState extends State<MainNavigator> {
     super.initState();
     MainNavigator._activeScaffoldKey = _scaffoldKey;
     LeagueSwitchScope.openMenu = MainNavigator.openMenu;
+    LeagueSwitchScope.closeMenu = MainNavigator.closeMenu;
     MainNavigator.tabRequest.addListener(_onTabRequest);
     AppSettings.bottomNavEnabled.addListener(_onSettings);
   }
@@ -146,7 +151,11 @@ class _MainNavigatorState extends State<MainNavigator> {
       panelTab:
           _aktifSekme == MainNavigator.profileTab &&
           session.value.hasManagementPanel,
-      homeTab: _aktifSekme == 0,
+      // Bantta menü düğmesi: Ana Sayfa, Puan Durumu, Yayın Rehberi.
+      homeTab:
+          _aktifSekme == 0 ||
+          _aktifSekme == 2 ||
+          _aktifSekme == MainNavigator.broadcastTab,
       calendarTab:
           _aktifSekme == MainNavigator.fixtureTab ||
           _aktifSekme == MainNavigator.broadcastTab,
@@ -157,7 +166,7 @@ class _MainNavigatorState extends State<MainNavigator> {
       const HomeScreen(),
       const HomeScreen(showCalendar: true),
       const StandingsListScreen(),
-      const HomeScreen(broadcastOnly: true),
+      const BroadcastGuideScreen(),
       ProfileScreen(
         onRequestHomeTab: () {
           setState(() {
