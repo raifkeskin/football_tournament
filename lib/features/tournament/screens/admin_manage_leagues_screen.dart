@@ -921,32 +921,6 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
     }
   }
 
-  Future<void> _softDeleteLeague(League league) async {
-    final ok = await showAdminConfirmDialog(
-      context: context,
-      title: 'Turnuvayı Kaldır',
-      message: '"${league.name}" pasife alınacak. Devam edilsin mi?',
-      confirmLabel: 'KALDIR',
-    );
-    if (!ok) return;
-
-    try {
-      await _sb
-          .from('leagues')
-          .update({'status': 'passive'})
-          .eq('id', league.id);
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Turnuva pasife alındı.')));
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Hata: $e')));
-    }
-  }
-
   void _openSeasons(League league) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -1040,114 +1014,129 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
               final league = leagues[index];
               // Ink: renkli zemin Material üstüne boyanır, ListTile dokunma
               // efekti görünür (renkli kutu içinde ListTile uyarısı).
+              // Satır: düzenleme popup'ı (yetki yoksa sezonlar); sağdaki ayrı
+              // kare kutu: sezonlar.
+              final canEdit = session.canManageLeague(league.id);
               return Padding(
                 padding: const EdgeInsets.only(bottom: 8),
-                child: Ink(
-                  decoration: adminCardDecoration(),
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.fromLTRB(12, 4, 10, 4),
-                    leading: SizedBox(
-                      width: 40,
-                      height: 40,
-                      child: league.logoUrl.isNotEmpty
-                          ? WebSafeImage(
-                              url: league.logoUrl,
+                child: IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: Ink(
+                          decoration: adminCardDecoration(),
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.fromLTRB(
+                              12,
+                              4,
+                              10,
+                              4,
+                            ),
+                            leading: SizedBox(
                               width: 40,
                               height: 40,
-                              borderRadius: BorderRadius.circular(10),
-                              fallbackIconSize: 20,
-                            )
-                          : Container(
-                              decoration: BoxDecoration(
-                                color: const Color(
-                                  0xFFF59E0B,
-                                ).withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: const Icon(
-                                Icons.emoji_events_outlined,
-                                color: Color(0xFFF59E0B),
-                                size: 22,
-                              ),
+                              child: league.logoUrl.isNotEmpty
+                                  ? WebSafeImage(
+                                      url: league.logoUrl,
+                                      width: 40,
+                                      height: 40,
+                                      borderRadius: BorderRadius.circular(10),
+                                      fallbackIconSize: 20,
+                                    )
+                                  : Container(
+                                      decoration: BoxDecoration(
+                                        color: const Color(
+                                          0xFFF59E0B,
+                                        ).withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: const Icon(
+                                        Icons.emoji_events_outlined,
+                                        color: Color(0xFFF59E0B),
+                                        size: 22,
+                                      ),
+                                    ),
                             ),
-                    ),
-                    title: Text(
-                      league.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      softWrap: true,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    subtitle: () {
-                      final private =
-                          league.isPrivate &&
-                          AppSettings.privateLeaguesEnabled.value;
-                      if (league.isActive && !private) return null;
-                      return Row(
-                        children: [
-                          if (!league.isActive) ...[
-                            const Icon(
-                              Icons.pause_circle_outline_rounded,
-                              size: 12,
-                              color: kAdminDanger,
-                            ),
-                            const SizedBox(width: 4),
-                            const Text(
-                              'Pasif',
-                              style: TextStyle(
-                                color: kAdminDanger,
-                                fontSize: 12,
+                            title: Text(
+                              league.name,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              softWrap: true,
+                              style: const TextStyle(
+                                color: Colors.white,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
-                            if (private) const SizedBox(width: 10),
-                          ],
-                          if (private) ...[
-                            const Icon(
-                              Icons.lock_outline_rounded,
-                              size: 12,
-                              color: Colors.white38,
-                            ),
-                            const SizedBox(width: 4),
-                            const Text(
-                              'Gizli',
-                              style: TextStyle(
-                                color: Colors.white38,
-                                fontSize: 12,
+                            subtitle: () {
+                              final private =
+                                  league.isPrivate &&
+                                  AppSettings.privateLeaguesEnabled.value;
+                              if (league.isActive && !private) return null;
+                              return Row(
+                                children: [
+                                  if (!league.isActive) ...[
+                                    const Icon(
+                                      Icons.pause_circle_outline_rounded,
+                                      size: 12,
+                                      color: kAdminDanger,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    const Text(
+                                      'Pasif',
+                                      style: TextStyle(
+                                        color: kAdminDanger,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    if (private) const SizedBox(width: 10),
+                                  ],
+                                  if (private) ...[
+                                    const Icon(
+                                      Icons.lock_outline_rounded,
+                                      size: 12,
+                                      color: Colors.white38,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    const Text(
+                                      'Gizli',
+                                      style: TextStyle(
+                                        color: Colors.white38,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              );
+                            }(),
+                            onTap: canEdit
+                                ? () => _openLeagueForm(league: league)
+                                : () => _openSeasons(league),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Tooltip(
+                        message: 'Sezonlar',
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () => _openSeasons(league),
+                            borderRadius: BorderRadius.circular(16),
+                            child: Ink(
+                              width: 52,
+                              decoration: adminCardDecoration(),
+                              child: const Icon(
+                                Icons.chevron_right_rounded,
+                                color: Colors.white70,
+                                size: 26,
                               ),
                             ),
-                          ],
-                        ],
-                      );
-                    }(),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (session.canManageLeague(league.id)) ...[
-                          AdminSmallAction(
-                            icon: Icons.edit_outlined,
-                            tooltip: 'Düzenle',
-                            color: Colors.white70,
-                            onTap: () => _openLeagueForm(league: league),
                           ),
-                          const SizedBox(width: 6),
-                        ],
-                        if (isAdmin && league.isActive) ...[
-                          AdminSmallAction(
-                            icon: Icons.delete_outline_rounded,
-                            tooltip: 'Kaldır',
-                            color: kAdminDanger,
-                            onTap: () => _softDeleteLeague(league),
-                          ),
-                          const SizedBox(width: 2),
-                        ],
-                        const Icon(Icons.chevron_right, color: Colors.white24),
-                      ],
-                    ),
-                    onTap: () => _openSeasons(league),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               );
