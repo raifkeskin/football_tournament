@@ -524,6 +524,36 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     }
   }
 
+  /// Medya sekmesindeki menüde "Canlı Yayını Kaldır" için.
+  late final Stream<List<MatchMediaModel>> _fabMediaStream = ServiceLocator
+      .matchService
+      .watchMatchMedia(widget.match.id);
+
+  /// Maçın canlı yayın linkini (linklerini) onayla kaldırır.
+  Future<void> _removeLiveStream(List<MatchMediaModel> links) async {
+    final ok = await showAdminConfirmDialog(
+      context: context,
+      title: 'Canlı Yayını Kaldır',
+      message: 'Maçın canlı yayın linki kaldırılacak. Onaylıyor musunuz?',
+      confirmLabel: 'KALDIR',
+      destructive: true,
+      icon: Icons.live_tv_rounded,
+    );
+    if (!ok || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      for (final l in links) {
+        await ServiceLocator.matchService.deleteMatchMedia(l.id);
+      }
+      _triggerRefresh();
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Canlı yayın linki kaldırıldı.')),
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Kaldırılamadı: $e')));
+    }
+  }
+
   @override
   void dispose() {
     LeagueSwitchScope.setBandHidden(_bandRoute, false);
@@ -682,15 +712,30 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     }
 
     if (tabIndex == 2) {
-      return _SpeedDialFab(
-        key: const ValueKey('fab_highlights'),
-        actions: [
-          _SpeedDialAction(
-            label: 'Medya Ekle',
-            icon: Icons.perm_media_rounded,
-            onTap: () => _openHighlightMediaAdder(match, _triggerRefresh),
-          ),
-        ],
+      return StreamBuilder<List<MatchMediaModel>>(
+        stream: _fabMediaStream,
+        builder: (context, snap) {
+          final links = [
+            for (final m in snap.data ?? const <MatchMediaModel>[])
+              if (m.mediaType == 'Maç Yayın Linki') m,
+          ];
+          return _SpeedDialFab(
+            key: const ValueKey('fab_highlights'),
+            actions: [
+              _SpeedDialAction(
+                label: 'Medya Ekle',
+                icon: Icons.perm_media_rounded,
+                onTap: () => _openHighlightMediaAdder(match, _triggerRefresh),
+              ),
+              if (links.isNotEmpty)
+                _SpeedDialAction(
+                  label: 'Canlı Yayını Kaldır',
+                  icon: Icons.tv_off_rounded,
+                  onTap: () => _removeLiveStream(links),
+                ),
+            ],
+          );
+        },
       );
     }
 

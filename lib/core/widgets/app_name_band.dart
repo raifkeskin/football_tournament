@@ -57,6 +57,7 @@ class AppNameBand extends StatelessWidget {
                 LeagueSwitchScope.calendarTab,
                 LeagueSwitchScope.bandHidden,
                 LeagueSwitchScope.pageBand,
+                LeagueSwitchScope.tabAction,
               ]),
               builder: (context, tvlBand) {
                 // Yönetim panelinde turnuva kimliği yok: uygulama bandı.
@@ -86,14 +87,15 @@ class AppNameBand extends StatelessWidget {
                   // geçiş yapılabilsin (giriş ekranında değil).
                   final switcher = genericScreens.value > 0
                       ? null
-                      : const Positioned(
+                      : Positioned(
                           right: 4,
                           bottom: 3,
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              LeagueSwitchButton(),
-                              NotificationBell(),
+                              const LeagueSwitchButton(),
+                              ?LeagueSwitchScope.tabAction.value,
+                              const NotificationBell(),
                             ],
                           ),
                         );
@@ -286,6 +288,9 @@ class LeagueSwitchScope {
   /// bantta solda menü düğmesi.
   static final homeTab = ValueNotifier<bool>(false);
 
+  /// Açık ana sekmenin bantta sağdaki düğmesi (ör. Yayın Rehberi: takvim).
+  static final tabAction = ValueNotifier<Widget?>(null);
+
   /// En üstteki sayfanın banda verdiği içerik (ör. Turnuva Sayfası: geri,
   /// turnuva kimliği, sezon seçici). null: olağan bant.
   static final pageBand = ValueNotifier<PageBand?>(null);
@@ -340,7 +345,13 @@ class LeagueSwitchScope {
   static final _homes =
       <
         Route<dynamic>,
-        ({bool mainTab, bool panelTab, bool homeTab, bool calendarTab})
+        ({
+          bool mainTab,
+          bool panelTab,
+          bool homeTab,
+          bool calendarTab,
+          Widget? action,
+        })
       >{};
 
   /// Kök gezginin gözlemcisi (MaterialApp.navigatorObservers).
@@ -353,6 +364,7 @@ class LeagueSwitchScope {
     bool panelTab = false,
     bool homeTab = false,
     bool calendarTab = false,
+    Widget? action,
   }) {
     if (route == null) return;
     _homes[route] = (
@@ -360,6 +372,7 @@ class LeagueSwitchScope {
       panelTab: panelTab,
       homeTab: homeTab,
       calendarTab: calendarTab,
+      action: action,
     );
     _update();
   }
@@ -385,12 +398,14 @@ class LeagueSwitchScope {
     final c = isHomeTop && home != null && home.calendarTab;
     final hidden = c || (top != null && _bandHiddenRoutes.contains(top));
     final pb = top == null ? null : _pageBands[top];
+    final a = isHomeTop ? home?.action : null;
     if (enabled.value == v &&
         panel.value == p &&
         homeTab.value == h &&
         calendarTab.value == c &&
         bandHidden.value == hidden &&
-        pageBand.value == pb) {
+        pageBand.value == pb &&
+        tabAction.value == a) {
       return;
     }
     // Gezinme ya da çizim sırasında bandı yeniden kurmak hata verir: çerçeve
@@ -406,6 +421,7 @@ class LeagueSwitchScope {
     calendarTab.value = c;
     bandHidden.value = hidden;
     pageBand.value = pb;
+    tabAction.value = a;
   }
 }
 
@@ -770,6 +786,7 @@ class _TournamentBand extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            ?LeagueSwitchScope.tabAction.value,
             const NotificationBell(),
             if (actions?.onLogout != null)
               actions!.logoutButton()

@@ -156,9 +156,15 @@ class _MainNavigatorState extends State<MainNavigator> {
           _aktifSekme == 0 ||
           _aktifSekme == 2 ||
           _aktifSekme == MainNavigator.broadcastTab,
-      calendarTab:
-          _aktifSekme == MainNavigator.fixtureTab ||
-          _aktifSekme == MainNavigator.broadcastTab,
+      calendarTab: _aktifSekme == MainNavigator.fixtureTab,
+      // Yayın Rehberi: bantta sağda takvim (gün seçimi).
+      action: _aktifSekme == MainNavigator.broadcastTab
+          ? const BandIconButton(
+              icon: Icons.calendar_month_rounded,
+              size: 36,
+              onTap: BroadcastGuideScreen.pickDate,
+            )
+          : null,
     );
     final user = session.value.user;
     final loggedIn = user != null && !user.isAnonymous;
