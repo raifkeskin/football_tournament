@@ -51,8 +51,12 @@ class AppNameBand extends StatelessWidget {
                 panelActions,
                 LeagueSwitchScope.panel,
                 LeagueSwitchScope.homeTab,
+                LeagueSwitchScope.calendarTab,
               ]),
               builder: (context, tvlBand) {
+                if (LeagueSwitchScope.calendarTab.value) {
+                  return SizedBox(height: top);
+                }
                 // Yönetim panelinde turnuva kimliği yok: uygulama bandı.
                 // Giriş ekranı: rol kartlarının üstünde logo ve kısa tanıtım.
                 if (genericScreens.value > 0) return _loginBand(top);
@@ -267,6 +271,9 @@ class LeagueSwitchScope {
   /// kendi başlıklarında menü var).
   static final homeTab = ValueNotifier<bool>(false);
 
+  /// Takvim sekmesi en üstte: turnuva bandı tamamen gizlenir.
+  static final calendarTab = ValueNotifier<bool>(false);
+
   /// Bantdaki menü düğmesinin açtığı yan menü (ana gezgin verir).
   static VoidCallback? openMenu;
 
@@ -274,7 +281,10 @@ class LeagueSwitchScope {
   /// ana gezgin birlikte bulunabilir; eskisi kapanırken yenisinin kaydını
   /// silmesin diye her sayfa kendi kaydını tutar. Geçerli olan en üstteki.
   static final _homes =
-      <Route<dynamic>, ({bool mainTab, bool panelTab, bool homeTab})>{};
+      <
+        Route<dynamic>,
+        ({bool mainTab, bool panelTab, bool homeTab, bool calendarTab})
+      >{};
 
   /// Kök gezginin gözlemcisi (MaterialApp.navigatorObservers).
   static final NavigatorObserver observer = _TopPageObserver();
@@ -285,9 +295,15 @@ class LeagueSwitchScope {
     required bool mainTab,
     bool panelTab = false,
     bool homeTab = false,
+    bool calendarTab = false,
   }) {
     if (route == null) return;
-    _homes[route] = (mainTab: mainTab, panelTab: panelTab, homeTab: homeTab);
+    _homes[route] = (
+      mainTab: mainTab,
+      panelTab: panelTab,
+      homeTab: homeTab,
+      calendarTab: calendarTab,
+    );
     _update();
   }
 
@@ -296,12 +312,26 @@ class LeagueSwitchScope {
   }
 
   static void _update() {
-    final top = (observer as _TopPageObserver).topPage;
-    final home = top == null ? null : _homes[top];
-    final v = home != null && home.mainTab;
+    final pageObserver = observer as _TopPageObserver;
+    final top = pageObserver.topPage;
+    final homeRoute = pageObserver._stack.reversed
+        .cast<Route<dynamic>?>()
+        .firstWhere(
+          (route) => route != null && _homes.containsKey(route),
+          orElse: () => null,
+        );
+    final home = homeRoute == null ? null : _homes[homeRoute];
+    final isHomeTop = top != null && top == homeRoute;
+    final v = isHomeTop && home != null && home.mainTab;
     final p = home != null && home.panelTab;
-    final h = home != null && home.homeTab;
-    if (enabled.value == v && panel.value == p && homeTab.value == h) return;
+    final h = isHomeTop && home != null && home.homeTab;
+    final c = isHomeTop && home != null && home.calendarTab;
+    if (enabled.value == v &&
+        panel.value == p &&
+        homeTab.value == h &&
+        calendarTab.value == c) {
+      return;
+    }
     // Gezinme ya da çizim sırasında bandı yeniden kurmak hata verir: çerçeve
     // bitince uygula.
     if (SchedulerBinding.instance.schedulerPhase ==
@@ -312,6 +342,7 @@ class LeagueSwitchScope {
     enabled.value = v;
     panel.value = p;
     homeTab.value = h;
+    calendarTab.value = c;
   }
 }
 
@@ -427,8 +458,7 @@ Future<void> showLeagueSwitcher() async {
   final overlayBox = nav.overlay?.context.findRenderObject() as RenderBox?;
   final topLeft = overlayBox == null
       ? box.localToGlobal(Offset.zero)
-      : box.localToGlobal(Offset.zero) -
-            overlayBox.localToGlobal(Offset.zero);
+      : box.localToGlobal(Offset.zero) - overlayBox.localToGlobal(Offset.zero);
   final band = topLeft & box.size;
   _switcherOpen.value = true;
   final picked = await nav.push<String>(_LeagueDropdownRoute(band: band));
@@ -725,13 +755,10 @@ String _trUpper(String s) =>
 /// Bantta yönetim paneli düğmeleri.
 @immutable
 class BandActions {
-  const BandActions({
-    required this.onMenu,
-    this.onLogout,
-    this.onHome,
-  });
+  const BandActions({required this.onMenu, this.onLogout, this.onHome});
 
   final VoidCallback onMenu;
+
   /// null: çıkış düğmesi yok (yalnız ev düğmesi isteyen alt sayfalar).
   final VoidCallback? onLogout;
 

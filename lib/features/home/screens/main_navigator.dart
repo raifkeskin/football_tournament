@@ -9,7 +9,6 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../../core/services/app_settings.dart';
 import '../../../core/services/league_access.dart';
-import '../../match/screens/fixture_screen.dart';
 import '../../news/screens/news_feed_screen.dart';
 import '../../team/screens/groups_screen.dart';
 import 'home_screen.dart';
@@ -41,7 +40,7 @@ class MainNavigator extends StatefulWidget {
   /// Gezgin dışından sekme değiştirme isteği (ör. canlı kura → Fikstür).
   static final tabRequest = ValueNotifier<int?>(null);
 
-  /// Fikstür sekmesinin sırası.
+  /// Takvimli maçlar sekmesinin sırası.
   static const int fixtureTab = 2;
 
   final int initialTabIndex;
@@ -146,6 +145,7 @@ class _MainNavigatorState extends State<MainNavigator> {
           _aktifSekme == MainNavigator.profileTab &&
           session.value.hasManagementPanel,
       homeTab: _aktifSekme == 0,
+      calendarTab: _aktifSekme == MainNavigator.fixtureTab,
     );
     final user = session.value.user;
     final loggedIn = user != null && !user.isAnonymous;
@@ -155,7 +155,7 @@ class _MainNavigatorState extends State<MainNavigator> {
         onOpenTab: (i) => setState(() => _aktifSekme = i),
       ),
       const NewsFeedScreen(),
-      const FixtureScreen(),
+      const HomeScreen(showCalendar: true),
       const GroupsScreen(),
       const StatsScreen(),
       ProfileScreen(
@@ -483,7 +483,7 @@ class _MenuDrawer extends StatelessWidget {
     (Icons.article_rounded, 'Haberler', [Color(0xFFFB7185), Color(0xFFE11D48)]),
     (
       Icons.calendar_month_rounded,
-      'Fikstür',
+      'Maç Takvimi',
       [Color(0xFF60A5FA), Color(0xFF2563EB)],
     ),
     (

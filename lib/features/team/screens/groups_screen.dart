@@ -662,6 +662,18 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
                               label: 'Klasman',
                             ),
                           ],
+                          const _LegendDot(
+                            color: accentGreen,
+                            label: 'Galibiyet',
+                          ),
+                          const _LegendDot(
+                            color: Color(0xFF64748B),
+                            label: 'Beraberlik',
+                          ),
+                          const _LegendDot(
+                            color: Color(0xFFF87171),
+                            label: 'Mağlubiyet',
+                          ),
                           Text(
                             'O: Oynanan  G: Galibiyet  B: Beraberlik  '
                             'M: Mağlubiyet  A: Atılan  Y: Yenilen  AV: Averaj',
@@ -871,27 +883,48 @@ class _StandingsRow extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Container(
-          height: 40,
-          padding: const EdgeInsets.only(right: 10),
+          constraints: const BoxConstraints(minHeight: 44),
+          padding: const EdgeInsets.fromLTRB(0, 5, 10, 5),
           decoration: BoxDecoration(
             border: Border(
-              left: BorderSide(color: zoneColor, width: 3),
               top: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
             ),
           ),
           child: Row(
             children: [
               const SizedBox(width: 3),
+              // Sıra yuvarlak içinde: üst tur dolu yeşil, klasman turuncu.
               SizedBox(
                 width: c.rank,
-                child: Text(
-                  '${index + 1}',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    color: isLeader ? _kAccent : teamText,
-                    fontSize: 13,
-                    fontFeatures: _tabular,
+                child: Center(
+                  child: Container(
+                    width: 22,
+                    height: 22,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: zoneColor == _kAccent
+                          ? _kAccent
+                          : zoneColor == classOrange
+                          ? classOrange.withValues(alpha: 0.18)
+                          : const Color(0xFF334155),
+                      border: zoneColor == classOrange
+                          ? Border.all(color: classOrange, width: 1.5)
+                          : null,
+                    ),
+                    child: Text(
+                      '${index + 1}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: zoneColor == _kAccent
+                            ? const Color(0xFF052E20)
+                            : zoneColor == classOrange
+                            ? classOrange
+                            : teamText,
+                        fontSize: 11.5,
+                        fontFeatures: _tabular,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -906,16 +939,45 @@ class _StandingsRow extends StatelessWidget {
               const SizedBox(width: 8),
               // Uzun adlar küçülmek yerine 2 satıra iner.
               Expanded(
-                child: Text(
-                  shortTeamName(entry.name),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: teamText,
-                    fontSize: 12.5,
-                    height: 1.15,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      shortTeamName(entry.name),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: teamText,
+                        fontSize: 12.5,
+                        height: 1.15,
+                      ),
+                    ),
+                    // Son 5 maç: yeşil galibiyet, gri beraberlik, kırmızı
+                    // mağlubiyet.
+                    if (entry.form.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          for (final r in entry.form)
+                            Container(
+                              width: 7,
+                              height: 7,
+                              margin: const EdgeInsets.only(right: 3),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: r == 'G'
+                                    ? _kAccent
+                                    : r == 'B'
+                                    ? const Color(0xFF64748B)
+                                    : negative,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ],
                 ),
               ),
               const SizedBox(width: 4),

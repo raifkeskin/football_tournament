@@ -150,8 +150,8 @@ class SupabaseMatchService implements IMatchService {
         .update({
           'status': status.name,
           'is_completed': false,
-          if (matchDate != null) 'match_date': matchDate,
-          if (matchTime != null) 'match_time': matchTime,
+          'match_date': ?matchDate,
+          'match_time': ?matchTime,
         })
         .eq('id', matchId)
         .select('id');

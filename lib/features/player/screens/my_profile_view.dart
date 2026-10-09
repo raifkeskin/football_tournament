@@ -7,8 +7,8 @@ import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../auth/widgets/phone_input.dart';
+import '../../home/screens/home_screen.dart';
 import '../../match/models/match.dart';
-import '../../match/screens/fixture_screen.dart';
 import '../../match/screens/match_details_screen.dart';
 import '../../match/widgets/match_score_line.dart';
 import '../consent/consent_screen.dart';
@@ -1425,12 +1425,14 @@ class _UnmatchedView extends StatelessWidget {
                 borderRadius: BorderRadius.circular(14),
               ),
             ),
-            onPressed: () => Navigator.of(
-              context,
-            ).push(MaterialPageRoute(builder: (_) => const FixtureScreen())),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const HomeScreen(showCalendar: true),
+              ),
+            ),
             icon: const Icon(Icons.calendar_month_outlined, size: 18),
             label: const Text(
-              'Fikstüre göz at',
+              'Takvime göz at',
               style: TextStyle(fontWeight: FontWeight.w800),
             ),
           ),

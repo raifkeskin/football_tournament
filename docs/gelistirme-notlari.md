@@ -82,3 +82,18 @@ _Eklendi: 2026-10-07_
 - Deneme `app_errors` tablosuna ve Telegram'a "yetkisiz ekran denemesi: ekran, rol" diye düşer (gözden kaçan menü/düğme hemen fark edilir).
 - Veritabanı "yetkiniz yok" (RLS) dediğinde teknik mesaj yerine anlaşılır uyarı.
 - Kapsam: ~15 yönetim ekranı, tahmini yarım gün. Sponsor ekranı bu yapıyla kurulabilir.
+
+## 9. App Store incelemesi: ekran kaydı + bilgi cevabı (iOS 1.0)
+_Eklendi: 2026-10-08_
+
+- Apple 1.0'ı **Guideline 2.1 – Information Needed** ile geri çevirdi (yeni geliştirici hesabı için ek bilgi istiyor). Kod değişikliği gerekmiyor; aynı derleme yeniden incelemeye girer.
+- **Ekran kaydı eşimin iPhone'uyla çekilecek** (gerçek cihaz + güncel iOS şart; uygulama TestFlight'tan kurulacak). Kayıt uygulamanın açılışıyla başlamalı:
+  1. Açılış → giriş ekranı
+  2. "Kayıt Ol" → talep gönderme ve "admin onayından sonra şifre gelir" mesajı
+  3. "Misafir olarak devam et" → puan durumu, fikstür, maç detayı, haberler, oyuncu/takım sayfaları
+  4. Demo hesapla giriş (5000000000 / demo2026) → profil, takım, maç, bildirimler
+  5. **Hesap silme ayrı bir test hesabıyla** (demo hesabı silinmesin!): Profil → Çıkış Yap → Hesabımı Sil → onay → giriş ekranı
+- Silme testi hesabı: **500 000 00 01 / demotest** ("Demo Test", iki demo turnuvasında kurucu başkan). Silindikten sonra tekrar gerekirse Claude aynı kimlikle (`…0000000000ab`) yeniden açabilir. Demo hesabı 2026-10-08'de yanlışlıkla silinmiş, aynı kimlikle geri açıldı.
+- Video + İngilizce cevap metni hem Resolution Center'a cevap olarak hem de App Review Information → Notes alanına eklenecek. Metinde: amaç/kitle, misafir modu + demo hesap, kayıt akışı, hesap silme yeri, herkese açık kullanıcı içeriği olmadığı (haberleri yalnızca admin girer, yorum/sohbet yok), ücretli özellik yok, dış servisler (Supabase, Firebase Hosting, YouTube, Telegram), bölge farkı yok, düzenlemeye tabi alan değil.
+- Göndermeden önce: demo hesabın rolüne bak (Apple her hesap türü için giriş bilgisi istiyor, gerekirse yönetici demo hesabı da ekle); mağazada yalnızca Türkiye seçiliyse 5. maddeyi buna göre düzelt.
+- **2026-10-08 13:43 gönderildi:** kesilmiş video (`~/Downloads/iosVideo_apple.mp4`, açılıştan kayıt talebine 2:34, sessiz) + İngilizce metin Resolution Center'a yazıldı; durum "Ready for Review".

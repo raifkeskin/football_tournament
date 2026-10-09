@@ -30,13 +30,21 @@ import '../../../core/design_flags.dart';
 
 /// Ana sayfa — günün maçları, tarih şeridi ve maç kartları.
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, this.onOpenNews, this.onOpenTab});
+  const HomeScreen({
+    super.key,
+    this.onOpenNews,
+    this.onOpenTab,
+    this.showCalendar = false,
+  });
 
   /// Son dakika haber kartına dokununca (Haberler sekmesine geçiş).
   final VoidCallback? onOpenNews;
 
   /// Yeni tasarımda bölüm bağlantıları (Fikstür, Puan Durumu, İstatistik).
   final ValueChanged<int>? onOpenTab;
+
+  /// Ana gezinmede eski takvimli maç ekranını göstermek için.
+  final bool showCalendar;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -268,6 +276,20 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  void _shiftDateWindow(int days) {
+    setState(() {
+      _tarihler = _tarihler
+          .map((date) => date.add(Duration(days: days)))
+          .toList();
+      _seciliIndeks = _tarihler.indexWhere(
+        (date) =>
+            date.year == _selectedDate.year &&
+            date.month == _selectedDate.month &&
+            date.day == _selectedDate.day,
+      );
+    });
+  }
+
   Future<void> _openModernCalendar() async {
     final picked = await showAppDatePicker(
       context: context,
@@ -463,25 +485,26 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
-          Positioned(
-            left: -40,
-            right: -40,
-            bottom: -60,
-            child: IgnorePointer(
-              child: Opacity(
-                opacity: 0.06,
-                child: AspectRatio(
-                  aspectRatio: 1,
-                  child: (ActiveTournament.theme.value?.logoUrl ?? '').isEmpty
-                      ? const FittedBox(child: AppLogo(size: 200))
-                      : WebSafeImage(
-                          url: ActiveTournament.theme.value!.logoUrl,
-                          fit: BoxFit.contain,
-                        ),
+          if (!widget.showCalendar)
+            Positioned(
+              left: -40,
+              right: -40,
+              bottom: -60,
+              child: IgnorePointer(
+                child: Opacity(
+                  opacity: 0.06,
+                  child: AspectRatio(
+                    aspectRatio: 1,
+                    child: (ActiveTournament.theme.value?.logoUrl ?? '').isEmpty
+                        ? const FittedBox(child: AppLogo(size: 200))
+                        : WebSafeImage(
+                            url: ActiveTournament.theme.value!.logoUrl,
+                            fit: BoxFit.contain,
+                          ),
+                  ),
                 ),
               ),
             ),
-          ),
           Positioned.fill(
             child: StreamBuilder<List<League>>(
               stream: _leagueService.watchLeagues(),
@@ -510,8 +533,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 }
 
-                if (!_didAutoSelectDefaultLeague ||
-                    !allLeagues.any((l) => l.id == _activeLeagueId)) {
+                if (!widget.showCalendar &&
+                    (!_didAutoSelectDefaultLeague ||
+                        !allLeagues.any((l) => l.id == _activeLeagueId))) {
                   // Gizli turnuvalar yalnızca görme yetkisi olana gelir
                   // (veritabanı kuralı); burada ayrıca elenmez.
                   // Uygulamanın büründüğü turnuva (kişinin / misafirin son
@@ -534,7 +558,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 }
 
                 final uid = Supabase.instance.client.auth.currentUser?.id;
-                if (uid != null && uid != _preferredForUid) {
+                if (!widget.showCalendar &&
+                    uid != null &&
+                    uid != _preferredForUid) {
                   WidgetsBinding.instance.addPostFrameCallback(
                     (_) => _applyPreferredLeague(allLeagues),
                   );
@@ -547,7 +573,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 // Seçici gizliyken: kişinin görebildiği tüm aktif turnuvalar
                 // (gizliler yetkisi/kodu olana zaten gelir); admin hepsini.
-                _visibleLeagueIds = _showLeagueFilter
+                _visibleLeagueIds = widget.showCalendar
+                    ? {
+                        for (final l in allLeagues)
+                          if (isAdmin || l.isActive) l.id,
+                      }
+                    : _showLeagueFilter
                     ? {currentLeague.id}
                     : {
                         for (final l in allLeagues)
@@ -556,13 +587,88 @@ class _HomeScreenState extends State<HomeScreen> {
                 _leagueNameById = {for (final l in allLeagues) l.id: l.name};
                 _leagueLogoById = {for (final l in allLeagues) l.id: l.logoUrl};
 
-                if (kNewHomeDesign) {
+                if (kNewHomeDesign && !widget.showCalendar) {
                   return HomeDashboard(
                     key: ValueKey('dash_${currentLeague.id}'),
                     league: currentLeague,
                     onOpenNews: () => widget.onOpenNews?.call(),
                     onOpenTab: (i) => widget.onOpenTab?.call(i),
                     onOpenMenu: () => _openMenu(context),
+                  );
+                }
+
+                if (widget.showCalendar) {
+                  return Column(
+                    children: [
+                      SizedBox(
+                        height: 68,
+                        child: Row(
+                          children: [
+                            Builder(
+                              builder: (ctx) => IconButton(
+                                tooltip: 'Menü',
+                                icon: const Icon(
+                                  Icons.menu,
+                                  color: Colors.white,
+                                  size: 26,
+                                ),
+                                onPressed: () {
+                                  ScaffoldState? scaffold = Scaffold.maybeOf(
+                                    ctx,
+                                  );
+                                  if (scaffold != null && !scaffold.hasDrawer) {
+                                    scaffold = scaffold.context
+                                        .findAncestorStateOfType<
+                                          ScaffoldState
+                                        >();
+                                  }
+                                  scaffold?.openDrawer();
+                                },
+                              ),
+                            ),
+                            IconButton(
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              tooltip: 'Önceki tarihler',
+                              onPressed: () => _shiftDateWindow(-1),
+                              icon: const Icon(
+                                Icons.chevron_left_rounded,
+                                color: Colors.white,
+                              ),
+                            ),
+                            Expanded(
+                              child: _TarihSeridi(
+                                tarihler: _tarihler,
+                                seciliIndeks: _seciliIndeks,
+                                bugunMu: _bugunMu,
+                                onSec: _tarihSec,
+                                vurguRenk: cs.primary,
+                                haftaKisa: _haftaKisa,
+                              ),
+                            ),
+                            IconButton(
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              tooltip: 'Sonraki tarihler',
+                              onPressed: () => _shiftDateWindow(1),
+                              icon: const Icon(
+                                Icons.chevron_right_rounded,
+                                color: Colors.white,
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Takvim',
+                              onPressed: _openModernCalendar,
+                              icon: const Icon(
+                                Icons.calendar_month_outlined,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Expanded(child: _buildMatchList(context, currentLeague)),
+                    ],
                   );
                 }
 
@@ -607,9 +713,10 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                             child: Column(
                               children: [
-                                HomeNewsCard(
-                                  onOpenNews: () => widget.onOpenNews?.call(),
-                                ),
+                                if (!widget.showCalendar)
+                                  HomeNewsCard(
+                                    onOpenNews: () => widget.onOpenNews?.call(),
+                                  ),
                                 Expanded(
                                   child: _buildMatchList(
                                     context,
@@ -700,7 +807,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                             ),
                             IconButton(
-                              tooltip: 'Takvim',
+                              tooltip: 'Maç Takvim',
                               onPressed: _openModernCalendar,
                               icon: Icon(
                                 Icons.calendar_month_outlined,
@@ -867,21 +974,16 @@ class _HomeScreenState extends State<HomeScreen> {
                     final groupRows =
                         groupsSnap.data ?? const <Map<String, dynamic>>[];
                     final groupNameById = <String, String>{};
-                    final groupCountBySeason = <String, int>{};
                     for (final g in groupRows) {
                       final gid = (g['id'] ?? '').toString();
-                      final sid = (g['season_id'] ?? '').toString();
                       groupNameById[gid] = (g['name'] ?? '').toString().trim();
-                      groupCountBySeason[sid] =
-                          (groupCountBySeason[sid] ?? 0) + 1;
                     }
 
-                    // Bölüm: sezon; sezonda birden fazla grup varsa sezon+grup.
+                    // Bölümler grup varsa sezon+grup, yoksa yalnızca sezondur.
                     String sectionKey(MatchModel m) {
                       final sid = m.seasonId;
-                      final multi = (groupCountBySeason[sid] ?? 0) > 1;
                       final gid = (m.groupId ?? '').trim();
-                      return multi && gid.isNotEmpty ? '$sid|$gid' : sid;
+                      return gid.isNotEmpty ? '$sid|$gid' : sid;
                     }
 
                     final Map<String, List<MatchModel>> sectionMap = {};
@@ -924,14 +1026,6 @@ class _HomeScreenState extends State<HomeScreen> {
                             sectionMap[key]!.first.leagueId;
                         final leagueText = leagueNameOf(key);
                         final groupText = groupNameOf(key);
-                        // Bölümdeki maçlar aynı haftadansa "3. Hafta".
-                        final weeks = sectionMap[key]!
-                            .map((m) => m.week)
-                            .whereType<int>()
-                            .toSet();
-                        final weekText = weeks.length == 1
-                            ? '${weeks.first}. Hafta'
-                            : '';
 
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -960,10 +1054,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               child: _LeagueSectionHeader(
                                 logoUrl: _leagueLogoById[sectionLeagueId],
                                 title: leagueText,
-                                subtitle: [
-                                  if (groupText.isNotEmpty) groupText,
-                                  if (weekText.isNotEmpty) weekText,
-                                ].join(' · '),
+                                subtitle: groupText,
                               ),
                             ),
                             ...sectionMap[key]!.map(
