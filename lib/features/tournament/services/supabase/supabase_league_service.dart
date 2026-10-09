@@ -72,7 +72,7 @@ class SupabaseLeagueService implements ILeagueService {
     // Tablo küçük; pasife alınan turnuva da yakalansın diye filtre burada.
     return watchTableRows(_client, table: 'leagues', orderBy: 'name').map(
       (rows) => rows
-          .where((r) => r['is_active'] == true)
+          .where((r) => r['status'] == 'active')
           // Giriş yapan kişi yalnızca kendi turnuvalarını görür.
           .where((r) => LeagueScope.allows(r['id']?.toString()))
           .map((r) => League.fromMap(r))

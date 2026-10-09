@@ -31,7 +31,7 @@ class AdminManageLeaguesScreen extends StatefulWidget {
 
 class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
   final _picker = ImagePicker();
-  late final Stream<List<League>> _leaguesStream = _watchActiveLeagues();
+  late final Stream<List<League>> _leaguesStream = _watchLeagues();
 
   SupabaseClient get _sb => Supabase.instance.client;
 
@@ -47,14 +47,15 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
     return url;
   }
 
-  Stream<List<League>> _watchActiveLeagues() {
+  /// Pasifler de gelir (admin yeniden aktif edebilsin); aktifler önce.
+  Stream<List<League>> _watchLeagues() {
     // Önce normal sorgu, canlı bağlantı arkadan (bkz. watchTableRows).
     return watchTableRows(_sb, table: 'leagues', orderBy: 'name').map((rows) {
-      final list = rows
-          .where((r) => r['is_active'] == true)
-          .map((r) => League.fromJson(r))
-          .toList();
-      list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+      final list = rows.map((r) => League.fromJson(r)).toList();
+      list.sort((a, b) {
+        if (a.isActive != b.isActive) return a.isActive ? -1 : 1;
+        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      });
       return list;
     });
   }
@@ -98,6 +99,9 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
     XFile? selectedLogo;
     var removedLogo = false;
     var isPrivate = league?.isPrivate ?? false;
+    // Aktif/Pasif yalnızca admin'de; pasif turnuva listelerde görünmez.
+    var isActive = league?.isActive ?? true;
+    final isAdmin = AppSession.of(context).value.isAdmin;
     // Gizli turnuva özelliği kapalıyken alan gösterilmez; mevcut değer korunur.
     final privateOn = AppSettings.privateLeaguesEnabled.value;
     var saving = false;
@@ -148,6 +152,7 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
           'facebook_url': link(fbController),
           'youtube_url': link(ytController),
           'website_url': link(webController),
+          if (isAdmin) 'status': isActive ? 'active' : 'passive',
         };
         if (isEdit) {
           await _sb.from('leagues').update(payload).eq('id', league.id);
@@ -157,7 +162,6 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
             );
           }
         } else {
-          payload['is_active'] = true;
           await _sb.from('leagues').insert(payload);
         }
 
@@ -632,6 +636,42 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                               ],
                             ),
                           ),
+                          if (isAdmin) ...[
+                            const SizedBox(height: 12),
+                            AdminFieldGroup(
+                              children: [
+                                AdminFieldRow(
+                                  icon: isActive
+                                      ? Icons.check_circle_outline_rounded
+                                      : Icons.pause_circle_outline_rounded,
+                                  label: 'Durum',
+                                  onTap: saving
+                                      ? null
+                                      : () => setPopupState(
+                                          () => isActive = !isActive,
+                                        ),
+                                  trailing: Switch.adaptive(
+                                    value: isActive,
+                                    activeTrackColor: kAdminAccent,
+                                    onChanged: saving
+                                        ? null
+                                        : (v) =>
+                                              setPopupState(() => isActive = v),
+                                  ),
+                                  child: Text(
+                                    isActive
+                                        ? 'Aktif · uygulamada listelenir'
+                                        : 'Pasif · listelerde görünmez',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                           if (privateOn) const SizedBox(height: 12),
                           if (privateOn)
                             AdminFieldGroup(
@@ -861,7 +901,7 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
     try {
       await _sb
           .from('leagues')
-          .update({'is_active': false})
+          .update({'status': 'passive'})
           .eq('id', league.id);
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -948,7 +988,9 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
           }
           final leagues = [
             for (final l in snapshot.data!)
-              if (panelLeagueIds == null || panelLeagueIds.contains(l.id)) l,
+              if ((isAdmin || l.isActive) &&
+                  (panelLeagueIds == null || panelLeagueIds.contains(l.id)))
+                l,
           ];
           if (leagues.isEmpty) {
             return const Center(
@@ -1007,27 +1049,48 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    subtitle:
-                        league.isPrivate &&
-                            AppSettings.privateLeaguesEnabled.value
-                        ? const Row(
-                            children: [
-                              Icon(
-                                Icons.lock_outline_rounded,
-                                size: 12,
+                    subtitle: () {
+                      final private =
+                          league.isPrivate &&
+                          AppSettings.privateLeaguesEnabled.value;
+                      if (league.isActive && !private) return null;
+                      return Row(
+                        children: [
+                          if (!league.isActive) ...[
+                            const Icon(
+                              Icons.pause_circle_outline_rounded,
+                              size: 12,
+                              color: kAdminDanger,
+                            ),
+                            const SizedBox(width: 4),
+                            const Text(
+                              'Pasif',
+                              style: TextStyle(
+                                color: kAdminDanger,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            if (private) const SizedBox(width: 10),
+                          ],
+                          if (private) ...[
+                            const Icon(
+                              Icons.lock_outline_rounded,
+                              size: 12,
+                              color: Colors.white38,
+                            ),
+                            const SizedBox(width: 4),
+                            const Text(
+                              'Gizli',
+                              style: TextStyle(
                                 color: Colors.white38,
+                                fontSize: 12,
                               ),
-                              SizedBox(width: 4),
-                              Text(
-                                'Gizli',
-                                style: TextStyle(
-                                  color: Colors.white38,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          )
-                        : null,
+                            ),
+                          ],
+                        ],
+                      );
+                    }(),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -1040,7 +1103,7 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                           ),
                           const SizedBox(width: 6),
                         ],
-                        if (isAdmin) ...[
+                        if (isAdmin && league.isActive) ...[
                           AdminSmallAction(
                             icon: Icons.delete_outline_rounded,
                             tooltip: 'Kaldır',

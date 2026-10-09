@@ -133,7 +133,10 @@ class League {
       startDate: _readDate(v('startDate', 'start_date')),
       endDate: _readDate(v('endDate', 'end_date')),
       season: v('season', 'season') as String?,
-      isActive: boolFrom(v('isActive', 'is_active'), fallback: true),
+      // Tek kaynak status; is_active eski kayıtlar için yedek.
+      isActive: v('status', 'status') != null
+          ? v('status', 'status') == 'active'
+          : boolFrom(v('isActive', 'is_active'), fallback: true),
       isDefault: boolFrom(v('isDefault', 'is_default'), fallback: false),
       isPrivate: boolFrom(v('isPrivate', 'is_private'), fallback: false),
       accessCode: nullableTrimmed(v('accessCode', 'access_code')),
@@ -197,7 +200,7 @@ class League {
       'logo_url': logoUrl,
       'access_code': accessCode,
       'is_private': isPrivate,
-      'is_active': isActive,
+      'status': isActive ? 'active' : 'passive',
     };
   }
 
