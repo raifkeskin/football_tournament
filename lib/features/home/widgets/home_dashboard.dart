@@ -249,6 +249,10 @@ class _HomeDashboardState extends State<HomeDashboard> {
   bool _loadedOnce = false;
   String? _loadedFor;
   String? _followedTeamId;
+
+  /// Birden fazla gruplu sezonda karşılamanın sağındaki seçiciyle seçilen
+  /// grup (null: kişinin grubu, o da yoksa ilk grup).
+  String? _pickedGroupId;
   Timer? _tick;
 
   @override
@@ -751,13 +755,15 @@ class _HomeDashboardState extends State<HomeDashboard> {
   Widget _greeting(AppSessionState session, _DashData? data) {
     final loggedIn = session.user != null && !session.user!.isAnonymous;
     final fullName = (session.displayName ?? '').trim();
-    final myGroup = data == null ? null : _myGroupId(data);
+    final group = data == null ? null : _groupId(data);
+    // Birden fazla grup varsa grup sağdaki seçicide; altta yalnız sezon.
+    final multi = data != null && data.groups.length > 1;
     final sub = !loggedIn
         ? 'Misafir girişi'
         : [
             if (data != null && data.seasonName.isNotEmpty) data.seasonName,
-            if (myGroup != null)
-              data!.groupRegion[myGroup] ?? data.groups[myGroup] ?? '',
+            if (group != null && !multi)
+              data!.groupRegion[group] ?? data.groups[group] ?? '',
           ].where((s) => s.isNotEmpty).join(' · ');
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
@@ -772,6 +778,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
         ),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
             child: Column(
@@ -795,9 +802,117 @@ class _HomeDashboardState extends State<HomeDashboard> {
               ],
             ),
           ),
+          if (multi && group != null) ...[
+            const SizedBox(width: 10),
+            _groupPicker(data, group),
+          ],
         ],
       ),
     );
+  }
+
+  /// Grup seçici: dokununca grupların listesi açılır; seçilen grubun özeti
+  /// (bu hafta, puan durumu, geçen hafta) gösterilir.
+  Widget _groupPicker(_DashData d, String current) {
+    final ids = d.groups.keys.toList()
+      ..sort(
+        (a, b) =>
+            d.groups[a]!.toLowerCase().compareTo(d.groups[b]!.toLowerCase()),
+      );
+    return Builder(
+      builder: (ctx) => Material(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () async {
+            final box = ctx.findRenderObject() as RenderBox?;
+            final overlay =
+                Navigator.of(ctx).overlay?.context.findRenderObject()
+                    as RenderBox?;
+            if (box == null || overlay == null) return;
+            final at = box.localToGlobal(
+              box.size.bottomRight(Offset.zero),
+              ancestor: overlay,
+            );
+            final picked = await showMenu<String>(
+              context: ctx,
+              color: DashColors.surface,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              position: RelativeRect.fromRect(
+                Rect.fromLTWH(at.dx, at.dy + 4, 0, 0),
+                Offset.zero & overlay.size,
+              ),
+              items: [
+                for (final id in ids)
+                  PopupMenuItem<String>(
+                    value: id,
+                    child: Row(
+                      children: [
+                        Icon(
+                          id == current
+                              ? Icons.radio_button_checked_rounded
+                              : Icons.radio_button_off_rounded,
+                          size: 18,
+                          color: id == current ? Colors.white : Colors.white38,
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          d.groups[id]!,
+                          style: _barlow(size: 14, weight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            );
+            if (picked != null && mounted) {
+              setState(() => _pickedGroupId = picked);
+            }
+          },
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 140),
+                  child: Text(
+                    d.groups[current] ?? '',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _barlow(size: 13, weight: FontWeight.w800),
+                  ),
+                ),
+                const Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Özetin grubu: seçilen grup, yoksa kişinin grubu, o da yoksa ilk grup
+  /// (gruplar karışmasın; her grubun haftası farklı olabilir).
+  String? _groupId(_DashData d) {
+    final picked = _pickedGroupId;
+    if (picked != null && d.groups.containsKey(picked)) return picked;
+    final mine = _myGroupId(d);
+    if (mine != null) return mine;
+    if (d.groups.isEmpty) return null;
+    final ids = d.groups.keys.toList()
+      ..sort(
+        (a, b) =>
+            d.groups[a]!.toLowerCase().compareTo(d.groups[b]!.toLowerCase()),
+      );
+    return ids.first;
   }
 
   /// Kişinin (ya da takip ettiği takımın) grubu.
@@ -813,9 +928,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
     final focusTeams = d.myTeamIds.isNotEmpty
         ? d.myTeamIds
         : {?_followedTeamId}.where(d.teams.containsKey).toSet();
-    final myGroup = _myGroupId(d);
-    final groupFilter =
-        myGroup ?? (d.groups.length == 1 ? d.groups.keys.first : null);
+    final groupFilter = _groupId(d);
     // Bölüm bağlantıları: Turnuva Sayfası, kişinin grubu (yoksa ilk grup).
     void openHub(TournamentHubTab tab) => TournamentHubScreen.open(
       context,
@@ -913,7 +1026,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
         // Yalnız bu turnuvanın ve kişinin bölgesinin haberleri.
         HomeNewsCard(
           leagueId: widget.league.id,
-          regionId: myGroup == null ? null : d.groupRegionId[myGroup],
+          regionId: groupFilter == null ? null : d.groupRegionId[groupFilter],
         ),
         if (thisWeekMatches.isNotEmpty) ...[
           _sectionHeader(
