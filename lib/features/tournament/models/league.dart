@@ -11,6 +11,7 @@ class League {
     this.endDate,
     this.season,
     this.isActive = true,
+    this.transferEnabled = false,
     this.isDefault = false,
     this.isPrivate = false,
     this.accessCode,
@@ -48,6 +49,7 @@ class League {
   final DateTime? endDate;
   final String? season;
   final bool isActive;
+  final bool transferEnabled;
   final bool isDefault;
   final bool isPrivate;
   final String? accessCode;
@@ -137,6 +139,10 @@ class League {
       isActive: v('status', 'status') != null
           ? v('status', 'status') == 'active'
           : boolFrom(v('isActive', 'is_active'), fallback: true),
+      transferEnabled: boolFrom(
+        v('transferEnabled', 'transfer_enabled'),
+        fallback: false,
+      ),
       isDefault: boolFrom(v('isDefault', 'is_default'), fallback: false),
       isPrivate: boolFrom(v('isPrivate', 'is_private'), fallback: false),
       accessCode: nullableTrimmed(v('accessCode', 'access_code')),

@@ -101,6 +101,8 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
     var isPrivate = league?.isPrivate ?? false;
     // Aktif/Pasif yalnızca admin'de; pasif turnuva listelerde görünmez.
     var isActive = league?.isActive ?? true;
+    // Transfer dönemi: kapalı gelir; tarihleri sezonda, yalnızca admin görür.
+    var transferEnabled = league?.transferEnabled ?? false;
     final isAdmin = AppSession.of(context).value.isAdmin;
     // Gizli turnuva özelliği kapalıyken alan gösterilmez; mevcut değer korunur.
     final privateOn = AppSettings.privateLeaguesEnabled.value;
@@ -153,6 +155,7 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
           'youtube_url': link(ytController),
           'website_url': link(webController),
           if (isAdmin) 'status': isActive ? 'active' : 'passive',
+          if (isAdmin) 'transfer_enabled': transferEnabled,
         };
         if (isEdit) {
           await _sb.from('leagues').update(payload).eq('id', league.id);
@@ -662,6 +665,35 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                                     isActive
                                         ? 'Aktif · uygulamada listelenir'
                                         : 'Pasif · listelerde görünmez',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                                AdminFieldRow(
+                                  icon: Icons.swap_horiz_rounded,
+                                  label: 'Transfer',
+                                  onTap: saving
+                                      ? null
+                                      : () => setPopupState(
+                                          () => transferEnabled =
+                                              !transferEnabled,
+                                        ),
+                                  trailing: Switch.adaptive(
+                                    value: transferEnabled,
+                                    activeTrackColor: kAdminAccent,
+                                    onChanged: saving
+                                        ? null
+                                        : (v) => setPopupState(
+                                            () => transferEnabled = v,
+                                          ),
+                                  ),
+                                  child: Text(
+                                    transferEnabled
+                                        ? 'Aktif · tarihler sezonda girilir'
+                                        : 'Pasif',
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 15,

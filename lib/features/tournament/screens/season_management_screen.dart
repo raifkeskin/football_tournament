@@ -69,6 +69,19 @@ class SeasonManagementScreen extends StatelessWidget {
   Future<void> _openSeasonSheet(BuildContext context, {Season? season}) async {
     final isEdit = season != null;
     final messenger = ScaffoldMessenger.of(context);
+    // Transfer tarihleri yalnızca admin'e ve turnuvada transfer açıksa.
+    var showTransfer = false;
+    if (AppSession.of(context).value.isAdmin) {
+      try {
+        final row = await Supabase.instance.client
+            .from('leagues')
+            .select('transfer_enabled')
+            .eq('id', leagueId)
+            .maybeSingle();
+        showTransfer = row?['transfer_enabled'] == true;
+      } catch (_) {}
+      if (!context.mounted) return;
+    }
     final nameController = TextEditingController(text: season?.name ?? '');
     final subtitleController = TextEditingController(
       text: (season?.subtitle ?? '').trim(),
@@ -417,24 +430,26 @@ class SeasonManagementScreen extends StatelessWidget {
                               isStart: false,
                             ),
                           ),
-                          dateRow(
-                            Icons.swap_horiz_rounded,
-                            'Transfer Başlangıcı',
-                            transferStartController,
-                            () => pickTransferDate(
-                              setSheetState: setSheetState,
-                              isStart: true,
+                          if (showTransfer) ...[
+                            dateRow(
+                              Icons.swap_horiz_rounded,
+                              'Transfer Başlangıcı',
+                              transferStartController,
+                              () => pickTransferDate(
+                                setSheetState: setSheetState,
+                                isStart: true,
+                              ),
                             ),
-                          ),
-                          dateRow(
-                            Icons.event_busy_outlined,
-                            'Transfer Bitişi',
-                            transferEndController,
-                            () => pickTransferDate(
-                              setSheetState: setSheetState,
-                              isStart: false,
+                            dateRow(
+                              Icons.event_busy_outlined,
+                              'Transfer Bitişi',
+                              transferEndController,
+                              () => pickTransferDate(
+                                setSheetState: setSheetState,
+                                isStart: false,
+                              ),
                             ),
-                          ),
+                          ],
                         ],
                       ),
                     ),
