@@ -32,11 +32,12 @@ import '../../../core/widgets/pitch_token_style.dart';
 import 'package:football_tournament/core/widgets/picked_image.dart';
 import '../utils/match_clock.dart';
 import '../../team/screens/team_squad_screen.dart';
-import '../../../core/widgets/league_logo.dart';
 import 'package:football_tournament/core/widgets/admin_page.dart';
 import 'package:football_tournament/core/widgets/admin_form.dart';
-import '../../../core/utils/string_utils.dart';
 import '../../player/services/penalty_service.dart';
+import '../../../core/widgets/app_name_band.dart';
+import '../../../core/widgets/youtube_player_page.dart'
+    show youtubePlayerOrigin, youtubeVideoId;
 
 // --- YARDIMCI WIDGETLAR ---
 
@@ -152,12 +153,18 @@ class _TeamInfo extends StatelessWidget {
   final String logoUrl;
   final String teamId;
   final String seasonId;
+  final bool compact;
+  final String? firstColor;
+  final String? secondColor;
 
   const _TeamInfo({
     required this.name,
     required this.logoUrl,
     required this.teamId,
     required this.seasonId,
+    this.compact = false,
+    this.firstColor,
+    this.secondColor,
   });
 
   @override
@@ -174,6 +181,8 @@ class _TeamInfo extends StatelessWidget {
                   tournamentId: seasonId,
                   teamName: name,
                   teamLogoUrl: logoUrl,
+                  initialFirstColor: firstColor,
+                  initialSecondColor: secondColor,
                 ),
               ),
             ),
@@ -188,22 +197,22 @@ class _TeamInfo extends StatelessWidget {
         // Şeffaf logolar kırpılmadan, çerçevesiz gösterilir.
         WebSafeImage(
           url: logoUrl,
-          width: 64,
-          height: 64,
+          width: compact ? 42 : 64,
+          height: compact ? 42 : 64,
           fit: BoxFit.contain,
-          fallbackIconSize: 26,
+          fallbackIconSize: compact ? 20 : 26,
         ),
-        const SizedBox(height: 4),
+        SizedBox(height: compact ? 1 : 4),
         Text(
           shortTeamName(name),
           textAlign: TextAlign.center,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
+          style: TextStyle(
             color: Colors.white,
             // 700: uzun adlar da okunur kalsın.
             fontWeight: FontWeight.w700,
-            fontSize: 15,
+            fontSize: compact ? 13 : 15,
             height: 1.15,
             letterSpacing: 0.2,
             shadows: [
@@ -213,109 +222,6 @@ class _TeamInfo extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-/// Geri okunun yanında turnuva bandı: logo + ad + hafta.
-class _LeagueStrip extends StatefulWidget {
-  const _LeagueStrip({required this.leagueId, this.week});
-
-  final String leagueId;
-  final int? week;
-
-  @override
-  State<_LeagueStrip> createState() => _LeagueStripState();
-}
-
-class _LeagueStripState extends State<_LeagueStrip> {
-  static final Map<String, Future<({String name, String logo})?>> _cache = {};
-  late Future<({String name, String logo})?> _info;
-
-  @override
-  void initState() {
-    super.initState();
-    _info = _load(widget.leagueId);
-  }
-
-  static Future<({String name, String logo})?> _load(String id) {
-    if (id.trim().isEmpty) return Future.value(null);
-    return _cache.putIfAbsent(id, () async {
-      try {
-        final r = await Supabase.instance.client
-            .from('leagues')
-            .select('name, logo_url')
-            .eq('id', id)
-            .maybeSingle();
-        if (r == null) return null;
-        return (
-          name: (r['name'] ?? '').toString(),
-          logo: (r['logo_url'] ?? '').toString(),
-        );
-      } catch (_) {
-        _cache.remove(id);
-        return null;
-      }
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    const gold = Color(0xFFE2B845);
-    return FutureBuilder<({String name, String logo})?>(
-      future: _info,
-      builder: (context, snap) {
-        final info = snap.data;
-        if (info == null) return const SizedBox.shrink();
-        // Turnuva adı üstte, hafta altında: uzun adlarda hafta kesilmesin.
-        return Center(
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(5, 3, 14, 3),
-            decoration: BoxDecoration(
-              color: const Color(0xFF0F172A).withValues(alpha: 0.6),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: gold.withValues(alpha: 0.5)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                LeagueLogo(url: info.logo, size: 30, fallbackColor: gold),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        info.name.trUpper,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11.5,
-                          height: 1.2,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.8,
-                        ),
-                      ),
-                      if (widget.week != null)
-                        Text(
-                          '${widget.week}. HAFTA',
-                          style: const TextStyle(
-                            color: gold,
-                            fontSize: 10,
-                            height: 1.2,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 1,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
     );
   }
 }
@@ -482,6 +388,19 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
   final ILeagueService _leagueService = ServiceLocator.leagueService;
 
   late final TabController _tabController;
+  ModalRoute<dynamic>? _bandRoute;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route == _bandRoute) return;
+    if (_bandRoute != null) {
+      LeagueSwitchScope.setBandHidden(_bandRoute, false);
+    }
+    _bandRoute = route;
+    LeagueSwitchScope.setBandHidden(route, true);
+  }
 
   @override
   void initState() {
@@ -607,6 +526,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
 
   @override
   void dispose() {
+    LeagueSwitchScope.setBandHidden(_bandRoute, false);
     _tabController.dispose();
     super.dispose();
   }
@@ -859,25 +779,13 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
             final awayName = (nameMap[m.awayTeamId] ?? '').trim().isEmpty
                 ? 'Deplasman'
                 : (nameMap[m.awayTeamId] ?? '').trim();
+            final compactHeader = _tabController.index == 3;
 
             return Scaffold(
               extendBodyBehindAppBar: true,
               backgroundColor: const Color(0xFF0F172A),
               appBar: AppBar(
                 toolbarHeight: 44,
-                // Bant tam genişlikteki katmanda ortalanır; başlık alanı
-                // geri okundan sonra ortaladığı için sağa kayıyordu. İki
-                // yanda geri oku kadar (56px) boşluk bırakılır.
-                flexibleSpace: SafeArea(
-                  bottom: false,
-                  child: SizedBox(
-                    height: 44,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 56),
-                      child: _LeagueStrip(leagueId: m.leagueId, week: m.week),
-                    ),
-                  ),
-                ),
                 backgroundColor: Colors.transparent,
                 surfaceTintColor: Colors.transparent,
                 elevation: 0,
@@ -940,7 +848,12 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                             top: MediaQuery.of(context).padding.top + 50,
                           ),
                           child: Padding(
-                            padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+                            padding: EdgeInsets.fromLTRB(
+                              14,
+                              0,
+                              14,
+                              compactHeader ? 6 : 10,
+                            ),
                             child: Column(
                               children: [
                                 Row(
@@ -955,14 +868,17 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                         logoUrl: homeLogo,
                                         teamId: m.homeTeamId,
                                         seasonId: m.seasonId,
+                                        compact: compactHeader,
+                                        firstColor: homeTeam?.firstColor,
+                                        secondColor: homeTeam?.secondColor,
                                       ),
                                     ),
                                     Padding(
                                       // Skor, büyütülen logoların ortasına
                                       // denk gelir.
-                                      padding: const EdgeInsets.fromLTRB(
+                                      padding: EdgeInsets.fromLTRB(
                                         10,
-                                        12,
+                                        compactHeader ? 5 : 12,
                                         10,
                                         0,
                                       ),
@@ -970,11 +886,11 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                         children: [
                                           Text(
                                             "${m.homeScore} - ${m.awayScore}",
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               color: Colors.white,
                                               fontWeight: FontWeight.w800,
-                                              fontSize: 30,
-                                              shadows: [
+                                              fontSize: compactHeader ? 23 : 30,
+                                              shadows: const [
                                                 Shadow(
                                                   color: Colors.black,
                                                   blurRadius: 10,
@@ -993,28 +909,31 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                         logoUrl: awayLogo,
                                         teamId: m.awayTeamId,
                                         seasonId: m.seasonId,
+                                        compact: compactHeader,
+                                        firstColor: awayTeam?.firstColor,
+                                        secondColor: awayTeam?.secondColor,
                                       ),
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 10),
+                                SizedBox(height: compactHeader ? 4 : 10),
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    const Icon(
+                                    Icon(
                                       Icons.access_time_filled_rounded,
-                                      size: 14,
+                                      size: compactHeader ? 12 : 14,
                                       color: Colors.white70,
                                     ),
-                                    const SizedBox(width: 8),
+                                    SizedBox(width: compactHeader ? 4 : 8),
                                     Text(
                                       _dateTimeText(m),
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         color: Colors.white,
-                                        fontSize: 11,
+                                        fontSize: compactHeader ? 9.5 : 11,
                                         fontWeight: FontWeight.w700,
-                                        shadows: [
+                                        shadows: const [
                                           Shadow(
                                             color: Colors.black,
                                             blurRadius: 10,
@@ -1024,7 +943,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                       ),
                                     ),
                                     if ((m.pitchId ?? '').isNotEmpty) ...[
-                                      const SizedBox(width: 12),
+                                      SizedBox(width: compactHeader ? 6 : 12),
                                       const Text(
                                         "|",
                                         style: TextStyle(
@@ -1040,13 +959,13 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                           ],
                                         ),
                                       ),
-                                      const SizedBox(width: 12),
-                                      const Icon(
+                                      SizedBox(width: compactHeader ? 6 : 12),
+                                      Icon(
                                         Icons.location_on_rounded,
-                                        size: 14,
+                                        size: compactHeader ? 12 : 14,
                                         color: Colors.white70,
                                       ),
-                                      const SizedBox(width: 4),
+                                      const SizedBox(width: 3),
                                       Flexible(
                                         child: StreamBuilder<List<Pitch>>(
                                           stream: _pitchesStream,
@@ -1079,11 +998,13 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                                     ),
                                               child: Text(
                                                 displayPitchName,
-                                                style: const TextStyle(
+                                                style: TextStyle(
                                                   color: Colors.white,
-                                                  fontSize: 11,
+                                                  fontSize: compactHeader
+                                                      ? 9.5
+                                                      : 11,
                                                   fontWeight: FontWeight.w700,
-                                                  shadows: [
+                                                  shadows: const [
                                                     Shadow(
                                                       color: Colors.black,
                                                       blurRadius: 10,
@@ -1126,7 +1047,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                             // ayrı bir şerit, seçili sekmenin altı çizili.
                             Container(
                               height: 46,
-                              margin: const EdgeInsets.only(top: 10),
+                              margin: EdgeInsets.only(
+                                top: compactHeader ? 4 : 10,
+                              ),
                               decoration: BoxDecoration(
                                 color: const Color(0xFF111A2E),
                                 border: Border(
@@ -2141,32 +2064,6 @@ class _PhotoGalleryScreenState extends State<_PhotoGalleryScreen> {
   }
 }
 
-/// YouTube linkinden video id'si çıkarır (watch, youtu.be, embed, shorts, live).
-String? _youtubeVideoId(String url) {
-  final u = url.trim();
-  if (RegExp(r'^[_\-a-zA-Z0-9]{11}$').hasMatch(u)) return u;
-  final uri = Uri.tryParse(u);
-  if (uri == null) return null;
-  final host = uri.host.toLowerCase();
-  String? id;
-  if (host.endsWith('youtu.be')) {
-    id = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : null;
-  } else if (host.contains('youtube.com') ||
-      host.contains('youtube-nocookie.com')) {
-    id = uri.queryParameters['v'];
-    final seg = uri.pathSegments;
-    if (id == null &&
-        seg.length >= 2 &&
-        const {'embed', 'shorts', 'live', 'v'}.contains(seg.first)) {
-      id = seg[1];
-    }
-  }
-  if (id == null || !RegExp(r'^[_\-a-zA-Z0-9]{11}$').hasMatch(id)) {
-    return null;
-  }
-  return id;
-}
-
 Future<void> _openYoutubeExternally(BuildContext context, String url) async {
   final uri = Uri.tryParse(url.trim());
   final ok =
@@ -2220,6 +2117,7 @@ class _YoutubeVideoViewState extends State<_YoutubeVideoView> {
         params: const YoutubePlayerParams(
           showFullscreenButton: true,
           strictRelatedVideos: true,
+          origin: youtubePlayerOrigin,
         ),
       );
     });
@@ -2227,7 +2125,7 @@ class _YoutubeVideoViewState extends State<_YoutubeVideoView> {
 
   @override
   Widget build(BuildContext context) {
-    final id = _youtubeVideoId(widget.url);
+    final id = youtubeVideoId(widget.url);
     return AspectRatio(
       aspectRatio: 16 / 9,
       child: _controller != null
@@ -2334,7 +2232,7 @@ class _NativeYoutubeScreenState extends State<_NativeYoutubeScreen> {
         params: const YoutubePlayerParams(
           showFullscreenButton: true,
           strictRelatedVideos: true,
-          origin: 'https://masterfutbol.web.app',
+          origin: youtubePlayerOrigin,
         ),
       );
 

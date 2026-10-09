@@ -43,6 +43,8 @@ class TeamSquadScreen extends StatefulWidget {
   final String tournamentId;
   final String teamName;
   final String teamLogoUrl;
+  final String? initialFirstColor;
+  final String? initialSecondColor;
 
   const TeamSquadScreen({
     super.key,
@@ -50,6 +52,8 @@ class TeamSquadScreen extends StatefulWidget {
     required this.tournamentId,
     required this.teamName,
     required this.teamLogoUrl,
+    this.initialFirstColor,
+    this.initialSecondColor,
   });
 
   @override
@@ -549,6 +553,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
 
   /// Üst bant altındaki sekme: 0 Kadro, 1 Fikstür, 2 İstatistik.
   int _tab = 0;
+  String? _selectedPosition;
 
   /// Takım renkleri (üst bandın zemini); bir kez okunur.
   late final Future<(String?, String?)> _teamColors = () async {
@@ -1085,7 +1090,9 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
       if (_isTeamManager) setState(() => _isTeamManager = false);
       return;
     }
-    var allowed = session.managesTeam(seasonId, widget.teamId);
+    var allowed =
+        session.managesTeam(seasonId, widget.teamId) ||
+        (session.isManager && session.teamId?.trim() == widget.teamId.trim());
     if (!allowed && session.hasManagementPanel) {
       try {
         allowed =
@@ -1306,11 +1313,20 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                                 snapshot.data ?? const <PlayerModel>[];
                             _prefetchPlayerPhotos(allPlayers);
                             final q = _rosterQuery;
-                            final players = q.isEmpty
+                            final searchedPlayers = q.isEmpty
                                 ? allPlayers
                                 : allPlayers
                                       .where(
                                         (p) => p.name.toLowerCase().contains(q),
+                                      )
+                                      .toList();
+                            final players = _selectedPosition == null
+                                ? searchedPlayers
+                                : searchedPlayers
+                                      .where(
+                                        (p) =>
+                                            _positionGroup(p) ==
+                                            _selectedPosition,
                                       )
                                       .toList();
 
@@ -1327,8 +1343,12 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                                   future: _teamColors,
                                   builder: (context, colorSnap) =>
                                       _SquadSummaryCard(
-                                        firstColor: colorSnap.data?.$1,
-                                        secondColor: colorSnap.data?.$2,
+                                        firstColor:
+                                            widget.initialFirstColor ??
+                                            colorSnap.data?.$1,
+                                        secondColor:
+                                            widget.initialSecondColor ??
+                                            colorSnap.data?.$2,
                                         teamName: titleTeam,
                                         logoUrl: widget.teamLogoUrl,
                                         // Üst satır yerine bandın köşelerinde.
@@ -1369,6 +1389,10 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                                   index: _tab,
                                   onChanged: (i) => setState(() => _tab = i),
                                 ),
+                                if (_tab == 0) ...[
+                                  const SizedBox(height: 8),
+                                  _positionFilter(allPlayers),
+                                ],
                                 if (_tab == 1)
                                   TeamFixtureTab(
                                     seasonId: effectiveTournamentId,
@@ -1460,8 +1484,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
         focusNode: _rosterSearchFocus,
         style: const TextStyle(color: Colors.white, fontSize: 14),
         textInputAction: TextInputAction.search,
-        onChanged: (v) =>
-            setState(() => _rosterQuery = v.trim().toLowerCase()),
+        onChanged: (v) => setState(() => _rosterQuery = v.trim().toLowerCase()),
         decoration: InputDecoration(
           isDense: true,
           hintText: 'Futbolcu ara',
@@ -1495,6 +1518,57 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
             borderSide: const BorderSide(color: _squadAccent),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _positionFilter(List<PlayerModel> players) {
+    final sections = _positionSections(players);
+    return SizedBox(
+      height: 38,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: sections.length + 1,
+        separatorBuilder: (_, _) => const SizedBox(width: 7),
+        itemBuilder: (context, index) {
+          final all = index == 0;
+          final section = all ? null : sections[index - 1];
+          final selected = all
+              ? _selectedPosition == null
+              : _selectedPosition == section!.key;
+          final label = all
+              ? 'Tümü (${players.length})'
+              : '${section!.key} (${section.value.length})';
+          return InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: () =>
+                setState(() => _selectedPosition = all ? null : section!.key),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: selected
+                    ? _squadAccent.withValues(alpha: 0.18)
+                    : _squadCard.withValues(alpha: 0.9),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: selected
+                      ? _squadAccent.withValues(alpha: 0.72)
+                      : Colors.white.withValues(alpha: 0.08),
+                ),
+              ),
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: selected ? const Color(0xFF9BF3CE) : _squadMuted,
+                  fontSize: 12,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -3101,7 +3175,7 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
       backgroundColor: const Color(0xFF0F172A),
       extendBodyBehindAppBar: true,
       appBar: MasterClassAppBar(
-        title: 'Futbolcu Lisans Yönetimi',
+        title: 'Lisans Yönetimi',
         actions: [
           // Toplu yükleme yalnız admin; futbolcu ekleme bölge sorumlusu ve
           // üstü (yönetim paneli olanlar).
@@ -3547,8 +3621,8 @@ class _SquadSummaryCard extends StatelessWidget {
 
   Widget _stat(String value, String label) {
     return Container(
-      constraints: const BoxConstraints(minWidth: 84),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      constraints: const BoxConstraints(minWidth: 78),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
       decoration: BoxDecoration(
         color: const Color(0xFF0F172A).withValues(alpha: 0.45),
         borderRadius: BorderRadius.circular(12),
@@ -3559,7 +3633,7 @@ class _SquadSummaryCard extends StatelessWidget {
             value,
             style: const TextStyle(
               color: Colors.white,
-              fontSize: 20,
+              fontSize: 18,
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -3581,11 +3655,6 @@ class _SquadSummaryCard extends StatelessWidget {
     final avgAge = ages.isEmpty
         ? '–'
         : (ages.reduce((a, b) => a + b) / ages.length).round().toString();
-    final counts = <String, int>{};
-    for (final p in players) {
-      final g = _positionGroup(p);
-      counts[g] = (counts[g] ?? 0) + 1;
-    }
     final words = teamName.trim().split(RegExp(r'\s+'));
     final initials = words
         .where((w) => w.isNotEmpty)
@@ -3619,17 +3688,17 @@ class _SquadSummaryCard extends StatelessWidget {
             Stack(
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 11),
                   child: Column(
                     children: [
                       SizedBox(
-                        width: 92,
-                        height: 92,
+                        width: 68,
+                        height: 68,
                         child: logoUrl.trim().isNotEmpty
                             ? WebSafeImage(
                                 url: logoUrl,
-                                width: 92,
-                                height: 92,
+                                width: 68,
+                                height: 68,
                                 fit: BoxFit.contain,
                               )
                             : Center(
@@ -3637,13 +3706,13 @@ class _SquadSummaryCard extends StatelessWidget {
                                   initials,
                                   style: const TextStyle(
                                     color: Colors.white,
-                                    fontSize: 32,
+                                    fontSize: 26,
                                     fontWeight: FontWeight.w800,
                                   ),
                                 ),
                               ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 5),
                       Text(
                         teamName.trUpper,
                         textAlign: TextAlign.center,
@@ -3651,27 +3720,29 @@ class _SquadSummaryCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 26,
+                          fontSize: 22,
                           height: 1.05,
                           fontWeight: FontWeight.w800,
                           fontStyle: FontStyle.italic,
                           letterSpacing: 0.5,
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        subtitle.isEmpty ? 'KADRO' : 'KADRO · $subtitle',
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.75),
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 1.2,
+                      if (subtitle.trim().isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          subtitle,
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.75),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.6,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 12),
+                      ],
+                      const SizedBox(height: 8),
                       Wrap(
                         alignment: WrapAlignment.center,
                         spacing: 8,
@@ -3679,34 +3750,6 @@ class _SquadSummaryCard extends StatelessWidget {
                         children: [
                           _stat('${players.length}', 'Oyuncu'),
                           _stat(avgAge, 'Ort. yaş'),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Wrap(
-                        alignment: WrapAlignment.center,
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: [
-                          for (final g in _positionOrder)
-                            if ((counts[g] ?? 0) > 0)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 9,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(999),
-                                ),
-                                child: Text(
-                                  '${counts[g]} $g',
-                                  style: const TextStyle(
-                                    color: Color(0xFFE2E8F0),
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
                         ],
                       ),
                     ],

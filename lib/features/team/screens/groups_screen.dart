@@ -380,6 +380,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
             .eq('league_id', leagueId)
             .eq('season_id', seasonId),
         ServiceLocator.teamService.watchAllTeams().first,
+        _leagueService.watchGroups(seasonId).first,
       ]);
       final matches = (results[0] as List)
           .map((e) => Map<String, dynamic>.from(e as Map))
@@ -401,6 +402,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
       final leagueLogo = _leagueLogoById[leagueId] ?? '';
       final leagueName = _leagueNameById[leagueId] ?? '';
       final seasonName = _seasonNameById[seasonId] ?? '';
+      final seasonGroups = results[2] as List<GroupModel>;
       await showPosterPreview(
         context: context,
         fileName: 'puan_durumu_${group.name}'.replaceAll(' ', '_'),
@@ -414,7 +416,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
           leagueLogo: leagueLogo,
           subtitle: [
             seasonName,
-            group.name,
+            if (seasonGroups.length > 1) group.name,
           ].where((e) => e.trim().isNotEmpty).join(' · '),
           rows: rows,
         ),
@@ -534,17 +536,18 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
     // Sezonun maçları tek akışta; gol vb. değişiklikte yalnızca değişen
     // satır işlenir (bkz. watchTableRows). Tüm grup tabloları aynı akışı
     // paylaşır.
-    final feed = watchTableRows(
-      Supabase.instance.client,
-      table: 'matches',
-      column: 'season_id',
-      value: sId,
-      orderBy: 'match_date',
-    ).map(
-      (rows) => rows
-          .where((r) => (r['league_id'] ?? '').toString().trim() == id)
-          .toList(),
-    );
+    final feed =
+        watchTableRows(
+          Supabase.instance.client,
+          table: 'matches',
+          column: 'season_id',
+          value: sId,
+          orderBy: 'match_date',
+        ).map(
+          (rows) => rows
+              .where((r) => (r['league_id'] ?? '').toString().trim() == id)
+              .toList(),
+        );
     if (fetchGroupId == null) return feed;
     return feed.map(
       (rows) => rows
@@ -948,9 +951,9 @@ class _StandingsRow extends StatelessWidget {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w600,
                         color: teamText,
-                        fontSize: 12.5,
+                        fontSize: 12,
                         height: 1.15,
                       ),
                     ),

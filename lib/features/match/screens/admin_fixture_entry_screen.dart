@@ -70,6 +70,7 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
   bool _loadingSeasons = false;
   bool _loadingGroups = false;
   bool _loadingTeams = false;
+  bool _autoSelectingSingleLeague = false;
 
   @override
   void initState() {
@@ -397,6 +398,18 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                               panelLeagueIds.contains(l.id))
                             (id: l.id, name: l.name, isDefault: false),
                       ];
+                      if (session.hasManagementPanel &&
+                          leagueOptions.length == 1 &&
+                          _selectedLeagueId == null &&
+                          !_autoSelectingSingleLeague) {
+                        final onlyLeagueId = leagueOptions.single.id;
+                        _autoSelectingSingleLeague = true;
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted && _selectedLeagueId == null) {
+                            _selectLeague(onlyLeagueId);
+                          }
+                        });
+                      }
                       return AdminFieldGroup(
                         children: [
                           AdminSelectRow(

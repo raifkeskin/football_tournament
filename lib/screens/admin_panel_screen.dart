@@ -53,7 +53,7 @@ class AdminPanelWidget extends StatelessWidget {
         },
       ),
       _AdminMenuData(
-        baslik: 'Futbolcu Lisans',
+        baslik: 'Lisans Yönetimi',
         renkler: const [Color(0xFF818CF8), Color(0xFF4F46E5)],
         ikon: Icons.assignment_ind_rounded,
         resimYolu: 'assets/images/admin_license.jpg',

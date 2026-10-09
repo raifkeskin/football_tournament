@@ -2,7 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' show AuthException, Supabase;
+import 'package:supabase_flutter/supabase_flutter.dart'
+    show AuthException, Supabase;
 
 import '../../../core/services/active_tournament.dart';
 import '../../../core/services/app_session.dart';
@@ -57,7 +58,7 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _rememberMe = true;
+  bool _rememberMe = false;
   bool _loading = false;
   int _adminTapCount = 0;
   Timer? _adminTapTimer;
@@ -339,7 +340,10 @@ class _LoginScreenState extends State<LoginScreen> {
                             title: 'Saha',
                             subtitle: 'Futbolcuyum',
                             icon: Icons.sports_soccer_rounded,
-                            colors: const [Color(0xFF22C55E), Color(0xFF0F6B35)],
+                            colors: const [
+                              Color(0xFF22C55E),
+                              Color(0xFF0F6B35),
+                            ],
                             selected: !_staff,
                             onTap: _loading
                                 ? null
@@ -352,7 +356,10 @@ class _LoginScreenState extends State<LoginScreen> {
                             title: 'Kulübe',
                             subtitle: 'Takım / turnuva sorumlusuyum',
                             icon: Icons.assignment_ind_rounded,
-                            colors: const [Color(0xFFF59E0B), Color(0xFF9A5B06)],
+                            colors: const [
+                              Color(0xFFF59E0B),
+                              Color(0xFF9A5B06),
+                            ],
                             selected: _staff,
                             onTap: _loading
                                 ? null
