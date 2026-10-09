@@ -4,10 +4,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/services/app_session.dart';
 import '../../core/services/notification_center.dart';
 import '../../core/widgets/admin_page.dart';
-import '../home/screens/main_navigator.dart';
 import '../match/models/match.dart';
 import '../match/screens/match_details_screen.dart';
+import '../news/screens/news_feed_screen.dart';
 import '../tournament/screens/admin_penalty_management_screen.dart';
+import '../tournament/screens/tournament_hub_screen.dart';
 
 class _Item {
   _Item(Map<String, dynamic> r)
@@ -80,8 +81,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         if (ref == null) return;
         await _openMatch(ref);
       case 'news':
-        Navigator.of(context).popUntil((r) => r.isFirst);
-        MainNavigator.tabRequest.value = 1;
+        if (ref == null) return;
+        await _openNews(ref);
       case 'penalty':
         await Navigator.of(context).push(
           MaterialPageRoute<void>(
@@ -89,6 +90,25 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           ),
         );
     }
+  }
+
+  /// Haberin turnuva sayfası, Haberler sekmesi; haber açık gelir.
+  Future<void> _openNews(String id) async {
+    final row = await Supabase.instance.client
+        .from('news')
+        .select('season_id, seasons(league_id)')
+        .eq('id', id)
+        .maybeSingle();
+    final leagueId = ((row?['seasons'] as Map?)?['league_id'] ?? '')
+        .toString();
+    if (!mounted || leagueId.isEmpty) return;
+    NewsView.focusNewsId.value = id;
+    await TournamentHubScreen.open(
+      context,
+      leagueId: leagueId,
+      seasonId: row?['season_id']?.toString(),
+      initialTab: TournamentHubTab.news,
+    );
   }
 
   Future<void> _openMatch(String id) async {

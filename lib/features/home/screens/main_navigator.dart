@@ -9,11 +9,9 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../../core/services/app_settings.dart';
 import '../../../core/services/league_access.dart';
-import '../../news/screens/news_feed_screen.dart';
-import '../../team/screens/groups_screen.dart';
+import '../../team/screens/standings_list_screen.dart';
 import 'home_screen.dart';
 import '../../player/screens/profile_screen.dart';
-import '../../player/screens/stats_screen.dart';
 import '../../../core/widgets/app_name_band.dart';
 import '../../../core/widgets/app_logo.dart';
 import '../../../core/design_flags.dart';
@@ -24,7 +22,7 @@ class MainNavigator extends StatefulWidget {
   const MainNavigator({super.key, this.initialTabIndex = 0});
 
   /// Profil sekmesinin sırası (girişten sonra doğrudan açılır).
-  static const int profileTab = 5;
+  static const int profileTab = 4;
 
   /// Ana gezginin Scaffold'u: yan menü bant gibi gezgin dışındaki
   /// parçalardan da açılabilsin.
@@ -41,7 +39,10 @@ class MainNavigator extends StatefulWidget {
   static final tabRequest = ValueNotifier<int?>(null);
 
   /// Takvimli maçlar sekmesinin sırası.
-  static const int fixtureTab = 2;
+  static const int fixtureTab = 1;
+
+  /// Yayın Rehberi sekmesinin sırası.
+  static const int broadcastTab = 3;
 
   final int initialTabIndex;
 
@@ -140,24 +141,23 @@ class _MainNavigatorState extends State<MainNavigator> {
     // değil).
     LeagueSwitchScope.setHome(
       _route,
-      mainTab: _aktifSekme < 5,
+      // Turnuva seçici yalnızca Ana Sayfa'da.
+      mainTab: _aktifSekme == 0,
       panelTab:
           _aktifSekme == MainNavigator.profileTab &&
           session.value.hasManagementPanel,
       homeTab: _aktifSekme == 0,
-      calendarTab: _aktifSekme == MainNavigator.fixtureTab,
+      calendarTab:
+          _aktifSekme == MainNavigator.fixtureTab ||
+          _aktifSekme == MainNavigator.broadcastTab,
     );
     final user = session.value.user;
     final loggedIn = user != null && !user.isAnonymous;
     final ekranlar = <Widget>[
-      HomeScreen(
-        onOpenNews: () => setState(() => _aktifSekme = 1),
-        onOpenTab: (i) => setState(() => _aktifSekme = i),
-      ),
-      const NewsFeedScreen(),
+      const HomeScreen(),
       const HomeScreen(showCalendar: true),
-      const GroupsScreen(),
-      const StatsScreen(),
+      const StandingsListScreen(),
+      const HomeScreen(broadcastOnly: true),
       ProfileScreen(
         onRequestHomeTab: () {
           setState(() {
@@ -205,23 +205,26 @@ class _MainNavigatorState extends State<MainNavigator> {
           valueListenable: LeagueAccess.dataEpoch,
           builder: (context, epoch, _) => KeyedSubtree(
             key: ValueKey('data_$epoch'),
-            // Ana sekmeler parmakla kaydırılır (Ana Sayfa → Haberler →
-            // Fikstür → Puan Durumu → İstatistik); Profil menüden açılır ve
-            // sekmelerin üstünde durur.
+            // Ana sekmeler parmakla kaydırılır (Ana Sayfa → Maç Takvimi →
+            // Puan Durumu → Yayın Rehberi); Profil menüden açılır ve
+            // sekmelerin üstünde durur. Haberler ve İstatistik Turnuva
+            // Sayfası'nda.
             child: Stack(
               children: [
                 _TabPager(
-                  index: _aktifSekme < 5 ? _aktifSekme : null,
+                  index: _aktifSekme < MainNavigator.profileTab
+                      ? _aktifSekme
+                      : null,
                   onChanged: (i) => setState(() => _aktifSekme = i),
                   onSwipePastFirst: () =>
                       _scaffoldKey.currentState?.openDrawer(),
-                  children: ekranlar.take(5).toList(),
+                  children: ekranlar.take(MainNavigator.profileTab).toList(),
                 ),
                 Offstage(
-                  offstage: _aktifSekme != 5,
+                  offstage: _aktifSekme != MainNavigator.profileTab,
                   child: TickerMode(
-                    enabled: _aktifSekme == 5,
-                    child: ekranlar[5],
+                    enabled: _aktifSekme == MainNavigator.profileTab,
+                    child: ekranlar[MainNavigator.profileTab],
                   ),
                 ),
               ],
@@ -481,7 +484,6 @@ class _MenuDrawer extends StatelessWidget {
   /// (ikon, ad, renk geçişi) — her bölümün kendi rengi.
   static const _items = [
     (Icons.home_rounded, 'Ana Sayfa', [Color(0xFF22C55E), Color(0xFF15803D)]),
-    (Icons.article_rounded, 'Haberler', [Color(0xFFFB7185), Color(0xFFE11D48)]),
     (
       Icons.calendar_month_rounded,
       'Maç Takvimi',
@@ -493,10 +495,11 @@ class _MenuDrawer extends StatelessWidget {
       [Color(0xFFFCD34D), Color(0xFFD97706)],
     ),
     (
-      Icons.bar_chart_rounded,
-      'İstatistik',
-      [Color(0xFFC084FC), Color(0xFF7C3AED)],
+      Icons.live_tv_rounded,
+      'Yayın Rehberi',
+      [Color(0xFFFB7185), Color(0xFFE11D48)],
     ),
+    // Haberler ve İstatistik şimdilik menüde yok (Turnuva Sayfası'nda).
   ];
 
   Future<void> _open(String url) async {

@@ -1,15 +1,11 @@
 import 'package:flutter/material.dart';
 import '../../match/screens/live_draw_screen.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/active_tournament.dart';
 import '../../../core/services/app_session.dart';
-import '../../../core/services/global_filter.dart';
 import '../../../core/services/league_scope.dart';
 import '../../../core/services/service_locator.dart';
-import '../../../core/widgets/master_class_app_bar.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../tournament/models/league_extras.dart';
 import '../../tournament/services/interfaces/i_league_service.dart';
@@ -22,46 +18,28 @@ const _heart = Color(0xFFF87171);
 Color _accent() =>
     ActiveTournament.theme.value?.secondary ?? const Color(0xFF10B981);
 
-/// Haberler: bantta seçili turnuvanın yayındaki haberleri, en yeni önce.
-/// Turnuvanın bölgeleri varsa üstte "Tümü · Bölge…" sekmeleri; ekran kişinin
-/// kendi bölgesiyle açılır. Haberler kompakt listelenir, dokununca yerinde
-/// açılır (aynı anda tek haber açık).
-class NewsFeedScreen extends StatefulWidget {
-  const NewsFeedScreen({super.key});
+/// Bir sezonun yayındaki haberleri, en yeni önce: tüm turnuvaya ait olanlar
+/// ve [regionId] verilirse o bölgeninkiler. Başlık çubuğu yok; Turnuva
+/// Sayfası'nın Haberler sekmesinde gösterilir. Haberler kompakt listelenir,
+/// dokununca yerinde açılır (aynı anda tek haber açık).
+class NewsView extends StatefulWidget {
+  const NewsView({super.key, required this.seasonId, this.regionId});
 
-  /// Ana sayfadaki son dakika kartından gelinen haber: açık gösterilir.
+  final String seasonId;
+  final String? regionId;
+
+  /// Açılınca açık gösterilecek haber (ör. bildirimden gelinen).
   static final focusNewsId = ValueNotifier<String?>(null);
 
   @override
-  State<NewsFeedScreen> createState() => _NewsFeedScreenState();
+  State<NewsView> createState() => _NewsViewState();
 }
 
-class _Region {
-  const _Region(this.id, this.name);
-  final String id;
-  final String name;
-}
-
-/// Turnuvanın bölgeleri + kişinin bölgesi.
-class _RegionMeta {
-  const _RegionMeta(this.regions, this.mine);
-  final List<_Region> regions;
-  final String? mine;
-}
-
-class _NewsFeedScreenState extends State<NewsFeedScreen> {
+class _NewsViewState extends State<NewsView> {
   final ILeagueService _leagueService = ServiceLocator.leagueService;
-
-  /// Bölge bilgisi turnuva + kişi başına bir kez okunur.
-  static final Map<String, _RegionMeta> _metaCache = {};
-
-  /// Turnuva başına seçili sekme (null: Tümü).
-  final Map<String, String?> _tabByLeague = {};
-  final Set<String> _tabChosen = {};
 
   String? _openId;
   final Map<String, GlobalKey> _keys = {};
-  List<NewsItem> _visible = const [];
 
   /// Sunucu yanıtı gelene kadar kullanıcının son tercihi (iyimser güncelleme).
   final Map<String, bool> _likeOverride = {};
@@ -70,20 +48,18 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
   @override
   void initState() {
     super.initState();
-    GlobalFilter.leagueId.addListener(_onChanged);
     ActiveTournament.theme.addListener(_onChanged);
-    NewsFeedScreen.focusNewsId.addListener(_onFocus);
+    NewsView.focusNewsId.addListener(_onFocus);
     // Sekme ilk kez kurulurken bekleyen bir haber varsa.
-    if (NewsFeedScreen.focusNewsId.value != null) {
+    if (NewsView.focusNewsId.value != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _onFocus());
     }
   }
 
   @override
   void dispose() {
-    GlobalFilter.leagueId.removeListener(_onChanged);
     ActiveTournament.theme.removeListener(_onChanged);
-    NewsFeedScreen.focusNewsId.removeListener(_onFocus);
+    NewsView.focusNewsId.removeListener(_onFocus);
     super.dispose();
   }
 
@@ -91,112 +67,17 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
     if (mounted) setState(() {});
   }
 
-  String? get _leagueId =>
-      GlobalFilter.leagueId.value ?? ActiveTournament.currentLeagueId.value;
-
   void _snack(String text) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
-  }
-
-  // ---- Bölgeler -------------------------------------------------------
-
-  Future<void> _ensureMeta(String leagueId, AppSessionState session) async {
-    final key = '$leagueId|${session.user?.id}';
-    if (_metaCache.containsKey(key)) return;
-    _metaCache[key] = const _RegionMeta([], null); // tekrar istenmesin
-    try {
-      final sb = Supabase.instance.client;
-      final seasons = await sb
-          .from('seasons')
-          .select('id')
-          .eq('league_id', leagueId)
-          .order('is_active', ascending: false)
-          .order('start_date', ascending: false)
-          .limit(1);
-      if (seasons.isEmpty) return;
-      final seasonId = seasons.first['id'].toString();
-      final rows = await sb
-          .from('season_regions')
-          .select('id, name, sort_order')
-          .eq('season_id', seasonId)
-          .order('sort_order');
-      final regions = [
-        for (final r in rows) _Region(r['id'].toString(), '${r['name']}'),
-      ];
-      String? mine;
-      if (regions.length > 1) {
-        mine = await _myRegion(leagueId, seasonId, session, regions);
-      }
-      _metaCache[key] = _RegionMeta(regions, mine);
-      if (mounted) setState(() {});
-    } catch (_) {
-      _metaCache.remove(key);
-    }
-  }
-
-  /// Kişinin bölgesi: bölge sorumlusu → kendi bölgesi; oyuncu / takım
-  /// sorumlusu / takip edilen takım → takımın grubunun bölgesi.
-  Future<String?> _myRegion(
-    String leagueId,
-    String seasonId,
-    AppSessionState s,
-    List<_Region> regions,
-  ) async {
-    for (final r in s.ownedRegions) {
-      if (r.seasonId == seasonId && regions.any((x) => x.id == r.id)) {
-        return r.id;
-      }
-    }
-    final sb = Supabase.instance.client;
-    final teamIds = <String>{
-      for (final m in s.managedTeams)
-        if (m.seasonId == seasonId) m.teamId,
-      ?s.teamId,
-    };
-    final playerId = s.playerId ?? '';
-    if (playerId.isNotEmpty) {
-      final rows = await sb
-          .from('season_team_players')
-          .select('team_id')
-          .eq('season_id', seasonId)
-          .eq('player_id', playerId)
-          .eq('is_active', true);
-      teamIds.addAll(rows.map((r) => r['team_id'].toString()));
-    }
-    if (teamIds.isEmpty) {
-      final prefs = await SharedPreferences.getInstance();
-      final followed = prefs.getString('followed_team_$leagueId');
-      if (followed != null) teamIds.add(followed);
-    }
-    if (teamIds.isEmpty) return null;
-    final links = await sb
-        .from('season_teams')
-        .select('groups(region_id)')
-        .eq('season_id', seasonId)
-        .inFilter('team_id', teamIds.toList());
-    for (final l in links) {
-      final rid = (l['groups'] as Map?)?['region_id']?.toString();
-      if (rid != null && regions.any((x) => x.id == rid)) return rid;
-    }
-    return null;
   }
 
   // ---- Etkileşim ------------------------------------------------------
 
   void _onFocus() {
-    final id = NewsFeedScreen.focusNewsId.value;
+    final id = NewsView.focusNewsId.value;
     if (id == null || !mounted) return;
-    final leagueId = _leagueId;
-    final item = _visible.where((n) => n.id == id).firstOrNull;
-    setState(() {
-      _openId = id;
-      // Haber seçili sekmede yoksa Tümü'ne geç.
-      if (item == null && leagueId != null) {
-        _tabByLeague[leagueId] = null;
-        _tabChosen.add(leagueId);
-      }
-    });
-    NewsFeedScreen.focusNewsId.value = null;
+    setState(() => _openId = id);
+    NewsView.focusNewsId.value = null;
     _scrollTo(id);
   }
 
@@ -258,48 +139,14 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final session = AppSession.of(context).value;
-    final leagueId = _leagueId;
-    _RegionMeta? meta;
-    if (leagueId != null) {
-      _ensureMeta(leagueId, session);
-      meta = _metaCache['$leagueId|${session.user?.id}'];
-      // Kişinin bölgesi bilinince (kendisi seçmediyse) o sekmeyle açılır.
-      if (meta != null && !_tabChosen.contains(leagueId)) {
-        _tabByLeague[leagueId] = meta.mine;
-      }
-    }
-    final regions = meta?.regions ?? const <_Region>[];
-    final tab = leagueId == null ? null : _tabByLeague[leagueId];
-
-    return Scaffold(
-      backgroundColor: _bgDark,
-      extendBodyBehindAppBar: true,
-      appBar: const MasterClassAppBar(title: 'Haberler'),
-      body: SafeArea(
-        child: Column(
-          children: [
-            if (regions.length > 1)
-              _RegionTabs(
-                regions: regions,
-                selectedId: tab,
-                onSelected: (id) => setState(() {
-                  _tabByLeague[leagueId!] = id;
-                  _tabChosen.add(leagueId);
-                }),
-              ),
-            Expanded(child: _feed(session, leagueId, tab)),
-          ],
-        ),
-      ),
-    );
+    return _feed(AppSession.of(context).value, widget.regionId);
   }
 
-  Widget _feed(AppSessionState session, String? leagueId, String? regionId) {
+  Widget _feed(AppSessionState session, String? regionId) {
     final loggedIn = session.user != null;
     return StreamBuilder<List<NewsItem>>(
-      // Servis aynı kullanıcı + turnuva için tek akış döndürür.
-      stream: _leagueService.watchNewsFeed(leagueId: leagueId),
+      // Servis aynı kullanıcı + sezon için tek akış döndürür.
+      stream: _leagueService.watchNewsFeed(seasonId: widget.seasonId),
       builder: (context, snap) {
         if (snap.hasError && !snap.hasData) {
           return const _Message('Haberler yüklenemedi.');
@@ -307,7 +154,7 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
         if (!snap.hasData) {
           return Center(child: CircularProgressIndicator(color: _accent()));
         }
-        // Bölge sekmesinde: o bölgenin ve tüm turnuvanın haberleri.
+        // Tüm turnuvanın ve (verildiyse) grubun bölgesinin haberleri.
         final items = snap.data!
             .where(
               (n) =>
@@ -317,7 +164,6 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
                       n.regionId == regionId),
             )
             .toList();
-        _visible = items;
 
         // Sunucu verisi kullanıcının tercihine yetiştiyse geçici durumu bırak.
         for (final n in items) {
@@ -388,68 +234,6 @@ class _Message extends StatelessWidget {
   }
 }
 
-class _RegionTabs extends StatelessWidget {
-  const _RegionTabs({
-    required this.regions,
-    required this.selectedId,
-    required this.onSelected,
-  });
-
-  final List<_Region> regions;
-  final String? selectedId;
-  final ValueChanged<String?> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    final entries = <MapEntry<String?, String>>[
-      const MapEntry(null, 'Tümü'),
-      for (final r in regions) MapEntry(r.id, r.name),
-    ];
-    final accent = _accent();
-    final onAccent = accent.computeLuminance() > 0.45
-        ? const Color(0xFF0B1220)
-        : Colors.white;
-    return SizedBox(
-      height: 52,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(14, 6, 14, 10),
-        itemCount: entries.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 8),
-        itemBuilder: (context, i) {
-          final e = entries[i];
-          final active = e.key == selectedId;
-          return InkWell(
-            onTap: () => onSelected(e.key),
-            borderRadius: BorderRadius.circular(999),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: active ? accent : _card,
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(
-                  color: active ? accent : Colors.white.withValues(alpha: 0.12),
-                ),
-              ),
-              child: Text(
-                e.value,
-                style: TextStyle(
-                  color: active ? onAccent : const Color(0xFFCBD5E1),
-                  fontSize: 13,
-                  fontWeight: active ? FontWeight.w800 : FontWeight.w600,
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-/// Kompakt haber kartı: solda kapak, sağda başlık ve bilgi; dokununca
-/// yerinde açılır (tam metin, fotoğraf kaydırıcı, beğen / paylaş).
 class _NewsTile extends StatelessWidget {
   const _NewsTile({
     super.key,

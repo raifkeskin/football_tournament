@@ -8,7 +8,7 @@ import '../../../core/services/global_filter.dart';
 import '../../../core/utils/team_colors.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/web_safe_image.dart';
-import '../../home/screens/main_navigator.dart';
+import '../../tournament/screens/tournament_hub_screen.dart';
 import '../services/live_draw_service.dart';
 
 const _bg = Color(0xFF0F172A);
@@ -306,8 +306,15 @@ class _LiveDrawScreenState extends State<LiveDrawScreen> {
     GlobalFilter.setLeague(s.leagueId);
     if (s.seasonId.isNotEmpty) GlobalFilter.setSeason(s.seasonId);
     if (groupId != null) GlobalFilter.setGroup(groupId);
-    Navigator.of(context).popUntil((r) => r.isFirst);
-    MainNavigator.tabRequest.value = MainNavigator.fixtureTab;
+    // Kuranın fikstürü: Turnuva Sayfası'nın Fikstür sekmesi.
+    final nav = Navigator.of(context)..popUntil((r) => r.isFirst);
+    await TournamentHubScreen.open(
+      nav.context,
+      leagueId: s.leagueId,
+      seasonId: s.seasonId.isEmpty ? null : s.seasonId,
+      groupId: groupId,
+      initialTab: TournamentHubTab.fixture,
+    );
   }
 
   Future<void> _cancel(LiveDrawState s) async {

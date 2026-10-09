@@ -16,6 +16,7 @@ import '../../team/models/team.dart';
 import '../../team/utils/standings.dart';
 import '../../tournament/models/league.dart';
 import '../../tournament/screens/admin_penalty_management_screen.dart';
+import '../../tournament/screens/tournament_hub_screen.dart';
 import 'home_news_card.dart';
 import '../../sponsors/sponsor_strip.dart';
 
@@ -217,16 +218,10 @@ class HomeDashboard extends StatefulWidget {
   const HomeDashboard({
     super.key,
     required this.league,
-    required this.onOpenNews,
-    required this.onOpenTab,
     required this.onOpenMenu,
   });
 
   final League league;
-  final VoidCallback onOpenNews;
-
-  /// Ana gezinme sekmesine geçiş (2 Fikstür, 3 Puan Durumu, 4 İstatistik).
-  final ValueChanged<int> onOpenTab;
   final VoidCallback onOpenMenu;
 
   @override
@@ -821,6 +816,14 @@ class _HomeDashboardState extends State<HomeDashboard> {
     final myGroup = _myGroupId(d);
     final groupFilter =
         myGroup ?? (d.groups.length == 1 ? d.groups.keys.first : null);
+    // Bölüm bağlantıları: Turnuva Sayfası, kişinin grubu (yoksa ilk grup).
+    void openHub(TournamentHubTab tab) => TournamentHubScreen.open(
+      context,
+      leagueId: widget.league.id,
+      seasonId: d.seasonId,
+      groupId: groupFilter ?? d.groups.keys.firstOrNull,
+      initialTab: tab,
+    );
 
     final sorted = [...d.matches]
       ..sort((a, b) {
@@ -909,7 +912,6 @@ class _HomeDashboardState extends State<HomeDashboard> {
         // Son dakika haber kartı (mevcut bileşen).
         // Yalnız bu turnuvanın ve kişinin bölgesinin haberleri.
         HomeNewsCard(
-          onOpenNews: widget.onOpenNews,
           leagueId: widget.league.id,
           regionId: myGroup == null ? null : d.groupRegionId[myGroup],
         ),
@@ -917,19 +919,23 @@ class _HomeDashboardState extends State<HomeDashboard> {
           _sectionHeader(
             'BU HAFTA · $thisWeek. HAFTA',
             'Fikstür',
-            () => widget.onOpenTab(2),
+            () => openHub(TournamentHubTab.fixture),
           ),
           for (final m in thisWeekMatches) _matchRow(d, m, focusTeams),
         ],
         if (groupFilter != null || d.groups.isNotEmpty) ...[
-          _sectionHeader('PUAN DURUMU', 'Tamamı', () => widget.onOpenTab(3)),
+          _sectionHeader(
+            'PUAN DURUMU',
+            'Tamamı',
+            () => openHub(TournamentHubTab.standings),
+          ),
           _miniStandings(d, groupFilter ?? d.groups.keys.first, focusTeams),
         ],
         if (d.scorers.isNotEmpty) ...[
           _sectionHeader(
             'GOL KRALLIĞI',
             'İstatistik',
-            () => widget.onOpenTab(4),
+            () => openHub(TournamentHubTab.stats),
           ),
           _leaders(d, d.scorers, 'gol'),
         ],
@@ -937,7 +943,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
           _sectionHeader(
             'ASİST KRALLIĞI',
             'İstatistik',
-            () => widget.onOpenTab(4),
+            () => openHub(TournamentHubTab.stats),
           ),
           _leaders(d, d.assisters, 'asist'),
         ],
@@ -945,7 +951,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
           _sectionHeader(
             'GEÇEN HAFTA · $lastWeek. HAFTA',
             'Sonuçlar',
-            () => widget.onOpenTab(2),
+            () => openHub(TournamentHubTab.fixture),
           ),
           for (final m in lastWeekMatches.take(4)) _matchRow(d, m, focusTeams),
         ],

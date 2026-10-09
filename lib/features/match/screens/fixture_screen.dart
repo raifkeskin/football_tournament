@@ -1,13 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:football_tournament/core/widgets/master_class_app_bar.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/utils/resilient_stream.dart';
-import '../../../core/utils/table_feed.dart';
 import '../../tournament/models/league.dart';
-import '../../tournament/models/season.dart';
 import '../models/match.dart';
 import '../../team/models/team.dart';
 import '../../../core/services/app_session.dart';
@@ -15,8 +12,6 @@ import '../../tournament/services/interfaces/i_league_service.dart';
 import '../services/interfaces/i_match_service.dart';
 import '../../team/services/interfaces/i_team_service.dart';
 import '../../../core/services/service_locator.dart';
-import '../../../core/services/global_filter.dart';
-import '../../../core/services/active_tournament.dart';
 import 'match_details_screen.dart';
 import '../utils/match_clock.dart';
 import '../../../core/widgets/web_safe_image.dart';
@@ -25,34 +20,44 @@ import '../../share/fixture_poster.dart';
 import '../../share/poster_share.dart';
 import '../../../core/utils/team_name.dart';
 
-// ORTAK BİLEŞEN IMPORT EDİLDİ
-import '../../../core/widgets/tournament_filter_dialog.dart';
 import '../../../core/widgets/app_date_picker.dart';
 import '../../../core/utils/string_utils.dart';
-import '../../../core/widgets/league_filter_header.dart';
 
-class FixtureScreen extends StatefulWidget {
-  const FixtureScreen({super.key});
+/// Bir turnuva + sezon + grubun haftalık fikstürü (üstte hafta şeridi).
+/// Başlık çubuğu yok; Turnuva Sayfası'nın Fikstür sekmesinde gösterilir.
+/// Hızlı skor, erteleme ve tarih düzenleme akışları maç kartlarında.
+class FixtureView extends StatefulWidget {
+  const FixtureView({
+    super.key,
+    required this.leagueId,
+    required this.seasonId,
+    required this.groupId,
+    this.shareAction,
+  });
+
+  final String leagueId;
+  final String seasonId;
+  final String groupId;
+
+  /// Seçili haftanın afişini paylaşma işlevi (yetki ve maç varsa dolu);
+  /// paylaş düğmesi sayfanın kendisinde.
+  final ValueNotifier<VoidCallback?>? shareAction;
 
   @override
-  State<FixtureScreen> createState() => _FixtureScreenState();
+  State<FixtureView> createState() => _FixtureViewState();
 }
 
-class _FixtureScreenState extends State<FixtureScreen> {
+class _FixtureViewState extends State<FixtureView> {
   final ILeagueService _leagueService = ServiceLocator.leagueService;
   final IMatchService _matchService = ServiceLocator.matchService;
   final ITeamService _teamService = ServiceLocator.teamService;
-  String? _leagueId;
-  String? _seasonId;
-  String? _groupId;
+  String get _leagueId => widget.leagueId;
+  String get _seasonId => widget.seasonId;
   int? _week;
 
   /// [_week] hangi turnuva|sezon|grup için seçildi; grup (bölge) değişince
   /// o grubun güncel haftası açılır.
   String? _weekKey;
-
-  /// Başlık çubuğundaki paylaş düğmesinin işlevi (yetki ve veri varsa).
-  final _shareAction = ValueNotifier<VoidCallback?>(null);
 
   /// Filtre (turnuva|sezon|grup) başına hafta bilgisi önbelleği.
   final Map<String, Future<({int? maxWeek, int? nextWeek})>> _weekInfo = {};
@@ -107,67 +112,32 @@ class _FixtureScreenState extends State<FixtureScreen> {
   }
 
   Stream<List<Team>>? _teamsStream;
-  Stream<List<League>>? _leaguesStream;
-
-  String? _lastLeagueIdForSeason;
-  Stream<List<Season>>? _seasonsStream;
-
-  String? _lastSeasonIdForGroup;
+  Stream<League?>? _leagueStream;
   Stream<List<GroupModel>>? _groupsStream;
 
   @override
   void initState() {
     super.initState();
     _teamsStream = _teamService.watchAllTeams();
-    _leaguesStream = _leagueService.watchLeagues();
-    _leagueId = GlobalFilter.leagueId.value;
-    _seasonId = GlobalFilter.seasonId.value;
-    _groupId = GlobalFilter.groupId.value;
-
-    GlobalFilter.leagueId.addListener(_onGlobalFilterChanged);
-    GlobalFilter.seasonId.addListener(_onGlobalFilterChanged);
-    GlobalFilter.groupId.addListener(_onGlobalFilterChanged);
+    _leagueStream = _leagueService.watchLeagueById(_leagueId);
+    _groupsStream = _leagueService.watchGroups(_seasonId);
   }
 
-  void _onGlobalFilterChanged() {
-    if (!mounted) return;
-    setState(() {
-      _leagueId = GlobalFilter.leagueId.value ?? _leagueId;
-      _seasonId = GlobalFilter.seasonId.value ?? _seasonId;
-      _groupId = GlobalFilter.groupId.value ?? _groupId;
-      // Dışarıdan gelen seçim (ör. canlı kura sonucu) yeni maçlar getirmiş
-      // olabilir; hafta bilgisi yeniden okunur.
-      _weekInfo.clear();
-    });
+  @override
+  void didUpdateWidget(covariant FixtureView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.leagueId != widget.leagueId) {
+      _leagueStream = _leagueService.watchLeagueById(_leagueId);
+    }
+    if (oldWidget.seasonId != widget.seasonId) {
+      _groupsStream = _leagueService.watchGroups(_seasonId);
+    }
   }
 
   @override
   void dispose() {
-    GlobalFilter.leagueId.removeListener(_onGlobalFilterChanged);
-    GlobalFilter.seasonId.removeListener(_onGlobalFilterChanged);
-    GlobalFilter.groupId.removeListener(_onGlobalFilterChanged);
-    _shareAction.dispose();
+    widget.shareAction?.value = null;
     super.dispose();
-  }
-
-  Stream<List<Season>> _watchSeasons(String leagueId) {
-    // Önce normal sorgu, canlı bağlantı arkadan (bkz. watchTableRows).
-    return watchTableRows(
-      Supabase.instance.client,
-      table: 'seasons',
-      column: 'league_id',
-      value: leagueId,
-      orderBy: 'start_date',
-      ascending: false,
-    ).map((rows) => rows.map((r) => Season.fromMap(r)).toList());
-  }
-
-  Stream<List<Season>> _getSeasonsStream(String leagueId) {
-    if (_lastLeagueIdForSeason != leagueId || _seasonsStream == null) {
-      _lastLeagueIdForSeason = leagueId;
-      _seasonsStream = _watchSeasons(leagueId);
-    }
-    return _seasonsStream!;
   }
 
   // Fikstür maç akışı: yalnızca turnuva/sezon/grup/hafta değişince yeniden
@@ -194,14 +164,6 @@ class _FixtureScreenState extends State<FixtureScreen> {
       );
     }
     return _fixtureMatchesStream!;
-  }
-
-  Stream<List<GroupModel>> _getGroupsStream(String seasonId) {
-    if (_lastSeasonIdForGroup != seasonId || _groupsStream == null) {
-      _lastSeasonIdForGroup = seasonId;
-      _groupsStream = _leagueService.watchGroups(seasonId);
-    }
-    return _groupsStream!;
   }
 
   DateTime? _parseYyyyMmDd(String yyyyMmDd) {
@@ -297,110 +259,41 @@ class _FixtureScreenState extends State<FixtureScreen> {
     );
   }
 
-  // ORTADA AÇILAN FİKSTÜR FİLTRE DİALOGU; seçimler yalnızca "Filtreleri
-  // Uygula" ile ekrana yansır.
-  Future<void> _showFilterDialog(
-    BuildContext context,
-    List<League> leagues,
-    int currentWeek,
-    String? currentGroupId,
-  ) async {
-    final result = await showTournamentFilterDialog(
-      context: context,
-      leagues: leagues,
-      initial: TournamentFilter(
-        leagueId: _leagueId,
-        seasonId: _seasonId,
-        groupId: currentGroupId,
-        week: currentWeek,
-      ),
-      watchSeasons: _watchSeasons,
-      watchGroups: _leagueService.watchGroups,
-      loadWeekInfo: (leagueId, seasonId, groupId) => _weekInfo.putIfAbsent(
-        '$leagueId|$seasonId|$groupId',
-        () => _loadWeekInfo(leagueId, seasonId, groupId),
-      ),
-    );
-    if (result == null || !mounted) return;
-    GlobalFilter.setLeague(result.leagueId);
-    ActiveTournament.noteViewed(result.leagueId);
-    GlobalFilter.setSeason(result.seasonId);
-    GlobalFilter.setGroup(result.groupId);
-    setState(() {
-      _leagueId = result.leagueId;
-      _seasonId = result.seasonId;
-      _groupId = result.groupId;
-      _week = result.week;
-      _weekKey = '${result.leagueId}|${result.seasonId}|${result.groupId}';
-    });
-  }
-
-  /// Fikstür üst kısmı: gerekirse sezon/grup kapsülü (dokununca filtre) ve
-  /// hafta şeridi.
+  /// Fikstür üst kısmı: hafta şeridi. Paylaş işlevi sayfaya bildirilir.
   Widget _buildFixtureHeader({
     required BuildContext context,
-    required List<League> leagues,
-    required List<Season> seasons,
+    required League? league,
     required List<int> weeks,
     required int week,
-    required List<GroupModel> groups,
-    required Map<String, String> groupNameById,
-    required String? selectedGroupId,
-    required String currentGroupName,
+    required String groupName,
     required List<MatchModel> matches,
     required Map<String, String> teamNameById,
     required Map<String, String> teamLogoById,
   }) {
-    final league = leagues.firstWhere(
-      (l) => l.id == _leagueId,
-      orElse: () => leagues.first,
-    );
-    final seasonName = seasons
-        .where((s) => s.id == _seasonId)
-        .map((s) => s.name)
-        .firstOrNull;
     final canShare =
+        league != null &&
         matches.isNotEmpty &&
         AppSession.of(context).value.canManageLeague(_leagueId);
-
-    // Paylaş düğmesi başlık çubuğunda (sağda); seçili haftanın afişi.
     final VoidCallback? share = !canShare
         ? null
         : () => _shareFixturePoster(
             league: league,
-            groupName: groups.length > 1 ? currentGroupName : '',
+            groupName: groupName,
             week: week,
             matches: matches,
             teamNameById: teamNameById,
             teamLogoById: teamLogoById,
           );
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _shareAction.value = share;
+      if (mounted) widget.shareAction?.value = share;
     });
-    // Turnuva üst bantta duruyor; sezon/grup filtresi yalnızca seçilecek
-    // birden fazla sezon ya da grup varsa görünür.
-    final hasFilter = seasons.length > 1 || groups.length > 1;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (hasFilter) ...[
-            LeagueFilterCapsule(
-              seasonName: seasonName,
-              detail: groups.length > 1 ? currentGroupName : null,
-              onTap: () =>
-                  _showFilterDialog(context, leagues, week, selectedGroupId),
-            ),
-            const SizedBox(height: 8),
-          ],
-          _WeekStrip(
-            weeks: weeks,
-            week: week,
-            onSelect: (w) => setState(() => _week = w),
-          ),
-        ],
+      child: _WeekStrip(
+        weeks: weeks,
+        week: week,
+        onSelect: (w) => setState(() => _week = w),
       ),
     );
   }
@@ -408,303 +301,145 @@ class _FixtureScreenState extends State<FixtureScreen> {
   @override
   Widget build(BuildContext context) {
     final bool isAdmin = AppSession.of(context).value.isAdmin;
-
-    const bgDark = Color(0xFF0F172A);
     final cardBg = Colors.black.withValues(alpha: 0.3);
     final outline = Colors.white.withValues(alpha: 0.08);
 
-    return Scaffold(
-      backgroundColor: bgDark,
-      extendBodyBehindAppBar: true,
-      appBar: MasterClassAppBar(
-        title: 'Fikstür',
-        actions: [
-          ValueListenableBuilder<VoidCallback?>(
-            valueListenable: _shareAction,
-            builder: (context, share, _) => share == null
-                ? const SizedBox.shrink()
-                : IconButton(
-                    tooltip: 'Afişi paylaş',
-                    onPressed: share,
-                    icon: const Icon(
-                      Icons.ios_share_rounded,
-                      color: Colors.white70,
-                    ),
+    return StreamBuilder<List<Team>>(
+      stream: _teamsStream,
+      builder: (context, teamsSnap) {
+        final teamLogoById = <String, String>{};
+        final teamNameById = <String, String>{};
+        for (final t in teamsSnap.data ?? const <Team>[]) {
+          teamLogoById[t.id] = t.logoUrl;
+          teamNameById[t.id] = t.name;
+        }
+        return StreamBuilder<League?>(
+          stream: _leagueStream,
+          builder: (context, leagueSnap) {
+            final league = leagueSnap.data;
+            return StreamBuilder<List<GroupModel>>(
+              stream: _groupsStream,
+              builder: (context, groupsSnap) {
+                final groups = groupsSnap.data ?? const <GroupModel>[];
+                final groupName = groups.length > 1
+                    ? (groups
+                              .where((g) => g.id == widget.groupId)
+                              .firstOrNull
+                              ?.name ??
+                          '')
+                    : '';
+                final weekKey = '$_leagueId|$_seasonId|${widget.groupId}';
+                return FutureBuilder<({int? maxWeek, int? nextWeek})>(
+                  key: ValueKey(weekKey),
+                  future: _weekInfo.putIfAbsent(
+                    weekKey,
+                    () => _loadWeekInfo(_leagueId, _seasonId, widget.groupId),
                   ),
-          ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          SafeArea(
-            child: StreamBuilder<List<Team>>(
-              stream: _teamsStream,
-              builder: (context, teamsSnap) {
-                final teamLogoById = <String, String>{};
-                final teamNameById = <String, String>{};
-                if (teamsSnap.hasData) {
-                  for (final t in teamsSnap.data!) {
-                    teamLogoById[t.id] = t.logoUrl;
-                    teamNameById[t.id] = t.name;
-                  }
-                }
-
-                return StreamBuilder<List<League>>(
-                  stream: _leaguesStream,
-                  builder: (context, leaguesSnap) {
-                    if (!leaguesSnap.hasData) {
+                  builder: (context, weekSnap) {
+                    // Bilgi gelmeden hafta seçilmez; aksi halde geçici olarak
+                    // 1. hafta seçilip kalıcı oluyordu.
+                    if (!weekSnap.hasData) {
                       return const Center(child: CircularProgressIndicator());
                     }
+                    final info = weekSnap.data!;
+                    final maxWeek = info.maxWeek ?? 1;
+                    final safeMaxWeek = maxWeek > 0 ? maxWeek : 1;
+                    final weeks = <int>[
+                      for (var i = 1; i <= safeMaxWeek; i++) i,
+                    ];
 
-                    final leagues = [...(leaguesSnap.data ?? const <League>[])];
+                    // Kullanıcı hafta seçmediyse: oynanmamış ilk maçın haftası.
+                    final defaultWeek = weeks.contains(info.nextWeek)
+                        ? info.nextWeek
+                        : weeks.first;
+                    final userWeek = _weekKey == weekKey ? _week : null;
+                    final displayWeek = weeks.contains(userWeek)
+                        ? userWeek
+                        : defaultWeek;
 
-                    if (leagues.isEmpty) {
-                      return const Center(
-                        child: Text(
-                          'Turnuva bulunamadı.',
-                          style: TextStyle(color: Colors.white),
-                        ),
-                      );
-                    }
-
-                    if (_leagueId == null ||
-                        !leagues.any((l) => l.id == _leagueId)) {
-                      final newLeagueId = leagues.any((l) => l.isDefault)
-                          ? (leagues.where((l) => l.isDefault).first.id)
-                          : leagues.first.id;
+                    if (_week != displayWeek || _weekKey != weekKey) {
                       WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (!mounted) return;
-                        setState(() {
-                          _leagueId = newLeagueId;
-                          _seasonId = null;
-                          _groupId = null;
-                          _week = null;
-                        });
-                        GlobalFilter.setLeague(newLeagueId);
+                        if (mounted) {
+                          setState(() {
+                            _week = displayWeek;
+                            _weekKey = weekKey;
+                          });
+                        }
                       });
-                      _leagueId = newLeagueId;
                     }
 
-                    return StreamBuilder<List<Season>>(
-                      stream: _leagueId == null
-                          ? Stream.value([])
-                          : _getSeasonsStream(_leagueId!),
-                      builder: (context, seasonSnap) {
-                        // Turnuva değişince yeni sezonlar gelene kadar eski
-                        // turnuvanınkiler tutulur; onlarla seçim yapılmasın.
-                        if (seasonSnap.connectionState ==
+                    return StreamBuilder<List<MatchModel>>(
+                      stream: displayWeek == null
+                          ? const Stream.empty()
+                          : _fixtureStream(
+                              _leagueId,
+                              _seasonId,
+                              widget.groupId,
+                              displayWeek,
+                            ),
+                      builder: (context, matchesSnap) {
+                        if (matchesSnap.connectionState ==
                             ConnectionState.waiting) {
                           return const Center(
                             child: CircularProgressIndicator(),
                           );
                         }
-                        final seasons = seasonSnap.data ?? [];
-
-                        if (_leagueId != null && seasons.isNotEmpty) {
-                          final hasSelected =
-                              _seasonId != null &&
-                              seasons.any((s) => s.id == _seasonId);
-                          if (!hasSelected) {
-                            final def = pickDefaultSeasonId(seasons);
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              if (mounted) {
-                                setState(() {
-                                  _seasonId = def;
-                                  _groupId = null;
-                                  _week = null;
-                                });
-                                GlobalFilter.setSeason(def);
-                              }
-                            });
-                          }
-                        }
-
-                        return StreamBuilder<List<GroupModel>>(
-                          stream: _seasonId == null
-                              ? const Stream<List<GroupModel>>.empty()
-                              : _getGroupsStream(_seasonId!),
-                          builder: (context, snapshot) {
-                            if (snapshot.connectionState ==
-                                ConnectionState.waiting) {
-                              return const Center(
-                                child: CircularProgressIndicator(),
-                              );
-                            }
-                            final groupsRaw =
-                                snapshot.data ?? const <GroupModel>[];
-                            final groups = [...groupsRaw]
-                              ..sort(
-                                (a, b) => a.name.toLowerCase().compareTo(
-                                  b.name.toLowerCase(),
-                                ),
-                              );
-
-                            String groupDisplayName(GroupModel g, int index) {
-                              final name = g.name.trim();
-                              if (name.isNotEmpty) return name;
-                              return 'Grup ${index + 1}';
-                            }
-
-                            final groupNameById = <String, String>{
-                              for (final e in groups.indexed)
-                                e.$2.id: groupDisplayName(e.$2, e.$1),
-                            };
-
-                            // "Tümü" yok: seçili grup yoksa ilk grup.
-                            final selectedGroupId =
-                                (_groupId != null &&
-                                    groupNameById.containsKey(_groupId))
-                                ? _groupId
-                                : (groups.isEmpty ? null : groups.first.id);
-                            // Tek grup gösterilir; grup adı sekmede.
-                            const showGroupInHeader = false;
-
-                            final weekKey =
-                                '$_leagueId|$_seasonId|$selectedGroupId';
-                            return FutureBuilder<
-                              ({int? maxWeek, int? nextWeek})
-                            >(
-                              key: ValueKey(weekKey),
-                              future: _weekInfo.putIfAbsent(
-                                weekKey,
-                                () => _loadWeekInfo(
-                                  _leagueId!,
-                                  _seasonId,
-                                  selectedGroupId,
-                                ),
-                              ),
-                              builder: (context, weekSnap) {
-                                // Bilgi gelmeden hafta seçilmez; aksi halde
-                                // geçici olarak 1. hafta seçilip kalıcı oluyordu.
-                                if (!weekSnap.hasData) {
-                                  return const Center(
-                                    child: CircularProgressIndicator(),
-                                  );
-                                }
-                                final info = weekSnap.data!;
-                                final maxWeek = info.maxWeek ?? 1;
-
-                                final safeMaxWeek = maxWeek > 0 ? maxWeek : 1;
-                                final weeks = <int>[
-                                  for (var i = 1; i <= safeMaxWeek; i++) i,
-                                ];
-
-                                // Kullanıcı hafta seçmediyse: oynanmamış ilk
-                                // maçın haftası.
-                                final defaultWeek =
-                                    weeks.contains(info.nextWeek)
-                                    ? info.nextWeek
-                                    : weeks.first;
-                                final userWeek = _weekKey == weekKey
-                                    ? _week
-                                    : null;
-                                final displayWeek = weeks.contains(userWeek)
-                                    ? userWeek
-                                    : defaultWeek;
-
-                                if (_week != displayWeek ||
-                                    _weekKey != weekKey) {
-                                  WidgetsBinding.instance.addPostFrameCallback((
-                                    _,
-                                  ) {
-                                    if (mounted) {
-                                      setState(() {
-                                        _week = displayWeek;
-                                        _weekKey = weekKey;
-                                      });
-                                    }
-                                  });
-                                }
-
-                                return StreamBuilder<List<MatchModel>>(
-                                  stream:
-                                      displayWeek == null || _seasonId == null
-                                      ? Stream.empty()
-                                      : _fixtureStream(
-                                          _leagueId!,
-                                          _seasonId!,
-                                          selectedGroupId,
-                                          displayWeek,
-                                        ),
-                                  builder: (context, matchesSnap) {
-                                    if (matchesSnap.connectionState ==
-                                        ConnectionState.waiting) {
-                                      return const Center(
-                                        child: CircularProgressIndicator(),
-                                      );
-                                    }
-
-                                    final matches = (matchesSnap.data ?? [])
-                                      ..sort((a, b) {
-                                        int dateComp = (a.matchDate ?? '')
-                                            .compareTo(b.matchDate ?? '');
-                                        if (dateComp != 0) return dateComp;
-                                        return (a.matchTime ?? '').compareTo(
-                                          b.matchTime ?? '',
-                                        );
-                                      });
-                                    //final currentSeasonName = seasons.isEmpty ? '' : seasons.firstWhere((s) => s.id == _seasonId, orElse: () => seasons.first).name;
-                                    final currentGroupName =
-                                        selectedGroupId == null
-                                        ? 'Tüm Gruplar'
-                                        : (groupNameById[selectedGroupId] ??
-                                              '');
-
-                                    final header = _buildFixtureHeader(
-                                      context: context,
-                                      leagues: leagues,
-                                      seasons: seasons,
-                                      weeks: weeks,
-                                      week: displayWeek ?? 1,
-                                      groups: groups,
-                                      groupNameById: groupNameById,
-                                      selectedGroupId: selectedGroupId,
-                                      currentGroupName: currentGroupName,
-                                      matches: matches,
-                                      teamNameById: teamNameById,
-                                      teamLogoById: teamLogoById,
-                                    );
-                                    // Başlık listeyle birlikte kayar; aşağı
-                                    // kaydırınca ekranın tamamı maçlara kalır.
-                                    return _FixtureList(
-                                      header: header,
-                                      matches: matches,
-                                      dateStripText: _dateStripText,
-                                      groupNameById: groupNameById,
-                                      showGroupInHeader: showGroupInHeader,
-                                      teamLogoById: teamLogoById,
-                                      teamNameById: teamNameById,
-                                      isAdmin: isAdmin,
-                                      onMatchTap: (m) => Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) =>
-                                              MatchDetailsScreen(match: m),
-                                        ),
-                                      ),
-                                      cardColor: cardBg,
-                                      outlineColor: outline,
-                                      // Akış önbellekli; kayıttan sonra
-                                      // hafta listesi yeniden okunsun.
-                                      onDataChanged: () => setState(
-                                        () => _fixtureMatchesStream = null,
-                                      ),
-                                    );
-                                  },
-                                );
-                              },
+                        final matches = (matchesSnap.data ?? [])
+                          ..sort((a, b) {
+                            final dateComp = (a.matchDate ?? '').compareTo(
+                              b.matchDate ?? '',
                             );
-                          },
+                            if (dateComp != 0) return dateComp;
+                            return (a.matchTime ?? '').compareTo(
+                              b.matchTime ?? '',
+                            );
+                          });
+
+                        final header = _buildFixtureHeader(
+                          context: context,
+                          league: league,
+                          weeks: weeks,
+                          week: displayWeek ?? 1,
+                          groupName: groupName,
+                          matches: matches,
+                          teamNameById: teamNameById,
+                          teamLogoById: teamLogoById,
+                        );
+                        // Başlık listeyle birlikte kayar; aşağı kaydırınca
+                        // ekranın tamamı maçlara kalır.
+                        return _FixtureList(
+                          header: header,
+                          matches: matches,
+                          dateStripText: _dateStripText,
+                          groupNameById: {for (final g in groups) g.id: g.name},
+                          showGroupInHeader: false,
+                          teamLogoById: teamLogoById,
+                          teamNameById: teamNameById,
+                          isAdmin: isAdmin,
+                          onMatchTap: (m) => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => MatchDetailsScreen(match: m),
+                            ),
+                          ),
+                          cardColor: cardBg,
+                          outlineColor: outline,
+                          // Akış önbellekli; kayıttan sonra hafta listesi
+                          // yeniden okunsun.
+                          onDataChanged: () => setState(() {
+                            _fixtureMatchesStream = null;
+                            _weekInfo.remove(weekKey);
+                          }),
                         );
                       },
                     );
                   },
                 );
               },
-            ),
-          ),
-        ],
-      ),
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -907,7 +642,8 @@ class _MatchCard extends StatelessWidget {
     final actions = <(String, String)>[
       ('score', 'Hızlı Skor Girişi'),
       ('postpone', 'Ertelendi (ERT)'),
-      if (match.status != MatchStatus.cancelled) ('cancel', 'İptal Edildi (İPT)'),
+      if (match.status != MatchStatus.cancelled)
+        ('cancel', 'İptal Edildi (İPT)'),
       if (unplayed) ('restore', 'Oynanacak (Erteleme/İptali Kaldır)'),
     ];
     final picked = await showAdminOptionPicker<(String, String)>(

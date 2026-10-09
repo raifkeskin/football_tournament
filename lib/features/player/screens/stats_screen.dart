@@ -1,66 +1,33 @@
 import 'package:flutter/material.dart';
-import '../../../core/utils/table_feed.dart';
-import 'package:football_tournament/core/widgets/master_class_app_bar.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../tournament/models/league.dart';
-import '../../tournament/models/season.dart';
 import '../models/player_stats.dart';
 import '../widgets/player_card.dart';
 import '../../team/models/team.dart';
-import '../../tournament/services/interfaces/i_league_service.dart';
 import '../../match/services/interfaces/i_match_service.dart';
 import '../../team/services/interfaces/i_team_service.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/widgets/web_safe_image.dart';
-import '../../../core/services/global_filter.dart';
-import '../../../core/widgets/league_filter_header.dart';
-import '../../../core/services/active_tournament.dart';
 
 // ORTAK BİLEŞEN
-import '../../../core/widgets/tournament_filter_dialog.dart';
 import '../../../core/utils/string_utils.dart';
 import '../../../core/utils/team_colors.dart';
 import '../../../core/services/app_session.dart';
 
-class StatsScreen extends StatefulWidget {
-  const StatsScreen({super.key});
+/// Bir sezonun oyuncu istatistikleri (gol, asist, maçın oyuncusu, kartlar).
+/// Başlık çubuğu yok; Turnuva Sayfası'nın İstatistik sekmesinde gösterilir.
+class StatsView extends StatefulWidget {
+  const StatsView({super.key, required this.seasonId});
+
+  final String seasonId;
 
   @override
-  State<StatsScreen> createState() => _StatsScreenState();
+  State<StatsView> createState() => _StatsViewState();
 }
 
-class _StatsScreenState extends State<StatsScreen> {
-  final ILeagueService _leagueService = ServiceLocator.leagueService;
+class _StatsViewState extends State<StatsView> {
   final IMatchService _matchService = ServiceLocator.matchService;
   final ITeamService _teamService = ServiceLocator.teamService;
-
-  String? _selectedLeagueId;
-  String? _selectedSeasonId;
-
-  Stream<List<League>>? _leaguesStream;
-
-  String? _lastLeagueIdForSeason;
-  Stream<List<Season>>? _seasonsStream;
-
-  Stream<List<Season>> _watchSeasons(String leagueId) {
-    // Önce normal sorgu, canlı bağlantı arkadan (bkz. watchTableRows).
-    return watchTableRows(
-      Supabase.instance.client,
-      table: 'seasons',
-      column: 'league_id',
-      value: leagueId,
-      orderBy: 'start_date',
-      ascending: false,
-    ).map((rows) => rows.map((r) => Season.fromMap(r)).toList());
-  }
-
-  Stream<List<Season>> _getSeasonsStream(String leagueId) {
-    if (_lastLeagueIdForSeason != leagueId || _seasonsStream == null) {
-      _lastLeagueIdForSeason = leagueId;
-      _seasonsStream = _watchSeasons(leagueId);
-    }
-    return _seasonsStream!;
-  }
+  late final Stream<List<Team>> _teamsStream = _teamService.watchAllTeams();
 
   // İstatistikteki oyuncuların ad + fotoğrafı tek sorguda okunur (önceden
   // her satır ayrı sorgu atıyordu). Aynı oyuncu kümesi için tekrar okunmaz.
@@ -117,252 +84,78 @@ class _StatsScreenState extends State<StatsScreen> {
   }
 
   @override
-  void initState() {
-    super.initState();
-    _leaguesStream = _leagueService.watchLeagues();
-    _selectedLeagueId = GlobalFilter.leagueId.value;
-    _selectedSeasonId = GlobalFilter.seasonId.value;
-    GlobalFilter.leagueId.addListener(_onGlobalFilterChanged);
-    GlobalFilter.seasonId.addListener(_onGlobalFilterChanged);
-  }
-
-  void _onGlobalFilterChanged() {
-    if (!mounted) return;
-    setState(() {
-      _selectedLeagueId = GlobalFilter.leagueId.value;
-      _selectedSeasonId = GlobalFilter.seasonId.value;
-    });
-  }
-
-  @override
-  void dispose() {
-    GlobalFilter.leagueId.removeListener(_onGlobalFilterChanged);
-    GlobalFilter.seasonId.removeListener(_onGlobalFilterChanged);
-    super.dispose();
-  }
-
-  // İSTATİSTİK EKRANI İÇİN ORTADAN AÇILAN FİLTRE DİALOGU; seçimler yalnızca
-  // "Filtreleri Uygula" ile ekrana yansır.
-  Future<void> _showFilterDialog(
-    BuildContext context,
-    List<League> leagues,
-  ) async {
-    final result = await showTournamentFilterDialog(
-      context: context,
-      leagues: leagues,
-      initial: TournamentFilter(
-        leagueId: _selectedLeagueId,
-        seasonId: _selectedSeasonId,
-      ),
-      watchSeasons: _watchSeasons,
-    );
-    if (result == null || !mounted) return;
-    GlobalFilter.setLeague(result.leagueId);
-    ActiveTournament.noteViewed(result.leagueId);
-    GlobalFilter.setSeason(result.seasonId);
-    setState(() {
-      _selectedLeagueId = result.leagueId;
-      _selectedSeasonId = result.seasonId;
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    const bgDark = Color(0xFF0F172A);
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: StreamBuilder<List<Team>>(
+        stream: _teamsStream,
+        builder: (context, teamsSnap) {
+          if (!teamsSnap.hasData &&
+              teamsSnap.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final teams = (teamsSnap.data ?? const <Team>[])
+              .where((t) => t.id != 'free_agent_pool')
+              .toList();
+          final teamById = {for (final t in teams) t.id: t};
 
-    return StreamBuilder<List<League>>(
-      stream: _leaguesStream,
-      builder: (context, leaguesSnap) {
-        if (!leaguesSnap.hasData &&
-            leaguesSnap.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            backgroundColor: bgDark,
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-
-        final leagues = leaguesSnap.data ?? const <League>[];
-        if (leagues.isEmpty) {
-          return const Scaffold(
-            backgroundColor: bgDark,
-            body: Center(
-              child: Text(
-                'Turnuva bulunamadı.',
-                style: TextStyle(color: Colors.white),
-              ),
+          return StreamBuilder<List<PlayerStats>>(
+            stream: _matchService.watchPlayerStats(
+              tournamentId: widget.seasonId,
             ),
+            builder: (context, statsSnap) {
+              if (!statsSnap.hasData &&
+                  statsSnap.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              // Sadece golü, asisti, ödülü ya da kartı olan oyuncular.
+              final stats = (statsSnap.data ?? const <PlayerStats>[])
+                  .where(
+                    (s) =>
+                        s.goals > 0 ||
+                        s.assists > 0 ||
+                        s.manOfTheMatch > 0 ||
+                        s.yellowCards > 0 ||
+                        s.redCards > 0,
+                  )
+                  .toList();
+
+              if (stats.isEmpty) {
+                return Center(
+                  child: Text(
+                    'Bu sezon için istatistik bulunmuyor.',
+                    style: TextStyle(
+                      color: cs.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                );
+              }
+
+              final ids = stats.map((s) => s.playerPhone).toSet();
+              return FutureBuilder<Map<String, _PlayerLite>>(
+                future: _playersFor(ids),
+                initialData: ids.every(_playersKnown.containsKey)
+                    ? _playersKnown
+                    : null,
+                builder: (context, pSnap) {
+                  // İsimler gelmeden ham anahtarlar gösterilmez.
+                  if (!pSnap.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  return _StatsTabs(
+                    stats: stats,
+                    teamById: teamById,
+                    players: pSnap.data!,
+                  );
+                },
+              );
+            },
           );
-        }
-
-        return Scaffold(
-          backgroundColor: bgDark,
-          extendBodyBehindAppBar: true,
-          appBar: const MasterClassAppBar(title: 'İstatistik'),
-          body: Stack(
-            children: [
-              SafeArea(
-                child: Column(
-                  children: [
-                    // KAPSÜL BÖLÜMÜ
-                    StreamBuilder<List<Season>>(
-                      stream: _selectedLeagueId == null
-                          ? Stream.value([])
-                          : _getSeasonsStream(_selectedLeagueId!),
-                      builder: (context, seasonSnap) {
-                        // Turnuva değişince yeni sezonlar gelene kadar eski
-                        // turnuvanınkiler tutulur; onlarla seçim yapılmasın.
-                        final seasons =
-                            seasonSnap.connectionState ==
-                                ConnectionState.waiting
-                            ? const <Season>[]
-                            : (seasonSnap.data ?? const <Season>[]);
-
-                        if (seasons.isNotEmpty &&
-                            _selectedSeasonId == null &&
-                            GlobalFilter.seasonId.value == null) {
-                          final defaultSeason = pickDefaultSeasonId(seasons);
-
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            GlobalFilter.setSeason(defaultSeason);
-                          });
-                        }
-
-                        final currentSeasonName = seasons.isEmpty
-                            ? ''
-                            : seasons
-                                  .firstWhere(
-                                    (s) => s.id == _selectedSeasonId,
-                                    orElse: () => seasons.first,
-                                  )
-                                  .name;
-
-                        // Fikstür ve puan durumuyla aynı filtre kapsülü;
-                        // birden fazla aktif sezon yoksa gösterilmez.
-                        if (seasons.where((s) => s.isActive).length < 2) {
-                          return const SizedBox(height: 4);
-                        }
-                        return Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                          child: LeagueFilterCapsule(
-                            seasonName: currentSeasonName,
-                            onTap: () => _showFilterDialog(context, leagues),
-                          ),
-                        );
-                      },
-                    ),
-
-                    // LİSTE BÖLÜMÜ
-                    Expanded(
-                      child: _selectedSeasonId == null
-                          ? const Center(
-                              child: Text(
-                                'Lütfen bir turnuva ve sezon seçin.',
-                                style: TextStyle(color: Colors.white),
-                              ),
-                            )
-                          : Padding(
-                              padding: const EdgeInsets.only(top: 10),
-                              child: StreamBuilder<List<Team>>(
-                                stream: _teamService.watchAllTeams(),
-                                builder: (context, teamsSnap) {
-                                  if (!teamsSnap.hasData &&
-                                      teamsSnap.connectionState ==
-                                          ConnectionState.waiting) {
-                                    return const Center(
-                                      child: CircularProgressIndicator(),
-                                    );
-                                  }
-
-                                  final teams =
-                                      (teamsSnap.data ?? const <Team>[])
-                                          .where(
-                                            (t) => t.id != 'free_agent_pool',
-                                          )
-                                          .toList();
-                                  final teamById = {
-                                    for (final t in teams) t.id: t,
-                                  };
-
-                                  return StreamBuilder<List<PlayerStats>>(
-                                    stream: _matchService.watchPlayerStats(
-                                      tournamentId: _selectedSeasonId ?? '',
-                                    ),
-                                    builder: (context, statsSnap) {
-                                      if (!statsSnap.hasData &&
-                                          statsSnap.connectionState ==
-                                              ConnectionState.waiting) {
-                                        return const Center(
-                                          child: CircularProgressIndicator(),
-                                        );
-                                      }
-
-                                      // Sadece golü veya asisti olan oyuncuları dahil et
-                                      final stats =
-                                          (statsSnap.data ??
-                                                  const <PlayerStats>[])
-                                              .where(
-                                                (s) =>
-                                                    s.goals > 0 ||
-                                                    s.assists > 0 ||
-                                                    s.manOfTheMatch > 0 ||
-                                                    s.yellowCards > 0 ||
-                                                    s.redCards > 0,
-                                              )
-                                              .toList();
-
-                                      if (stats.isEmpty) {
-                                        return Center(
-                                          child: Text(
-                                            'Bu sezon için istatistik bulunmuyor.',
-                                            style: TextStyle(
-                                              color: cs.onSurfaceVariant,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        );
-                                      }
-
-                                      final ids = stats
-                                          .map((s) => s.playerPhone)
-                                          .toSet();
-                                      return FutureBuilder<
-                                        Map<String, _PlayerLite>
-                                      >(
-                                        future: _playersFor(ids),
-                                        initialData:
-                                            ids.every(_playersKnown.containsKey)
-                                            ? _playersKnown
-                                            : null,
-                                        builder: (context, pSnap) {
-                                          // İsimler gelmeden ham anahtarlar
-                                          // gösterilmez.
-                                          if (!pSnap.hasData) {
-                                            return const Center(
-                                              child:
-                                                  CircularProgressIndicator(),
-                                            );
-                                          }
-                                          return _StatsTabs(
-                                            stats: stats,
-                                            teamById: teamById,
-                                            players: pSnap.data!,
-                                          );
-                                        },
-                                      );
-                                    },
-                                  );
-                                },
-                              ),
-                            ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
+        },
+      ),
     );
   }
 }
