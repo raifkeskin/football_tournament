@@ -137,7 +137,7 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
             ? null
             : await _uploadLeagueLogo(file: selectedLogo!);
         final payload = <String, dynamic>{
-          'name': name,
+          if (isAdmin) 'name': name,
           'is_private': isPrivate,
           'access_code': isPrivate ? access : null,
           'logo_url': ?newLogoUrl,
@@ -347,7 +347,8 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                           const SizedBox(height: 22),
                           TextField(
                             controller: nameController,
-                            enabled: !saving,
+                            // Turnuva adını yalnızca admin değiştirir.
+                            enabled: !saving && isAdmin,
                             textCapitalization: TextCapitalization.words,
                             style: const TextStyle(
                               color: Colors.white,

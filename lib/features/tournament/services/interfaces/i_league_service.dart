@@ -55,9 +55,10 @@ abstract class ILeagueService {
     bool includeUnpublished = false,
   });
 
-  /// Haberler akışı: yayındaki haberler, en yeni önce; [leagueId] boşsa tümü.
+  /// Haberler akışı: yayındaki haberler, en yeni önce. [seasonId] verilirse
+  /// o sezon, yoksa [leagueId] turnuvası, ikisi de boşsa tümü.
   /// Giriş yapılmışsa her haberde [NewsItem.likedByMe] dolu gelir.
-  Stream<List<NewsItem>> watchNewsFeed({String? leagueId});
+  Stream<List<NewsItem>> watchNewsFeed({String? leagueId, String? seasonId});
 
   /// Yönetim listesi "Tümü": verilen turnuvaların tüm haberleri (taslak ve
   /// süresi dolmuşlar dahil), en yeni üstte.
@@ -65,8 +66,11 @@ abstract class ILeagueService {
 
   Future<void> setNewsLike({required String newsId, required bool liked});
 
+  /// Haber sezona yazılır: [seasonId] yoksa bölgenin sezonu, o da yoksa
+  /// turnuvanın aktif sezonu.
   Future<void> addNews({
     required String tournamentId,
+    String? seasonId,
     required String content,
     List<String> imageUrls = const [],
     bool isPublished = true,

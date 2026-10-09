@@ -18,6 +18,7 @@ class NewsItem {
   const NewsItem({
     required this.id,
     required this.tournamentId,
+    this.seasonId = '',
     required this.content,
     required this.isPublished,
     required this.createdAt,
@@ -39,6 +40,9 @@ class NewsItem {
 
   final String id;
   final String tournamentId;
+
+  /// Haber sezona bağlıdır; [tournamentId] sezondan türetilir.
+  final String seasonId;
   final String content;
   final bool isPublished;
   final DateTime? createdAt;
