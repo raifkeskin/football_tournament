@@ -748,24 +748,6 @@ class _MyProfileViewState extends State<MyProfileView> {
                 );
               },
             ),
-            if (t.jerseyNumber != null) ...[
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.25),
-                  borderRadius: BorderRadius.circular(7),
-                ),
-                child: Text(
-                  '#${t.jerseyNumber}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ],
           ],
         ),
       ),
@@ -953,7 +935,7 @@ class _MyProfileViewState extends State<MyProfileView> {
     );
   }
 
-  /// Maçın hangi takımla oynandığı: takım logosu + turnuva adı.
+  /// Maçın hangi turnuvadan olduğu: turnuva logosu + adı.
   Widget _teamBadge(MyTeam t) {
     return Container(
       padding: const EdgeInsets.fromLTRB(3, 2, 8, 2),
@@ -964,8 +946,8 @@ class _MyProfileViewState extends State<MyProfileView> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _teamLogo(t.logoUrl, t.color, 16),
-          const SizedBox(width: 5),
+          _teamLogo(t.leagueLogoUrl, null, 18),
+          const SizedBox(width: 6),
           Flexible(
             child: Text(
               t.leagueName.isEmpty ? shortTeamName(t.teamName) : t.leagueName,
@@ -1207,28 +1189,26 @@ class _MyProfileViewState extends State<MyProfileView> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (top.isNotEmpty || team != null)
+                // Birden fazla takımda: ortada turnuva rozeti, altında
+                // ortalı tarih · stat.
+                if (team != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(6, 0, 6, 6),
+                    child: Center(child: _teamBadge(team)),
+                  ),
+                if (top.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(6, 0, 6, 8),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            top,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: kAdminMuted,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        if (team != null) ...[
-                          const SizedBox(width: 8),
-                          Flexible(child: _teamBadge(team)),
-                        ],
-                      ],
+                    child: Text(
+                      top,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: team != null ? TextAlign.center : null,
+                      style: const TextStyle(
+                        color: kAdminMuted,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 MatchScoreLine(

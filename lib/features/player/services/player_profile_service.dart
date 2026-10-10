@@ -125,7 +125,11 @@ class MyTeam {
     this.color,
     this.jerseyNumber,
     this.year,
+    this.leagueLogoUrl,
   });
+
+  /// Turnuvanın logosu (maç rozetinde).
+  final String? leagueLogoUrl;
 
   /// Sezonun yılı (profilde sezon seçici ve toplam istatistik için).
   final int? year;
@@ -301,7 +305,7 @@ class PlayerProfileService {
         .select(
           'season_id, team_id, jersey_number, '
           'teams(name, logo_url, first_color), '
-          'seasons(name, start_date, season_year, leagues(name))',
+          'seasons(name, start_date, season_year, leagues(name, logo_url))',
         )
         .eq('player_id', playerId)
         .eq('is_active', true);
@@ -328,6 +332,7 @@ class PlayerProfileService {
           teamId: (r['team_id'] ?? '').toString(),
           teamName: str(t['name']) ?? 'Takım',
           leagueName: str(l['name']) ?? '',
+          leagueLogoUrl: str(l['logo_url']),
           seasonName: str(s['name']) ?? '',
           logoUrl: str(t['logo_url']),
           color: str(t['first_color']),
