@@ -24,13 +24,15 @@ class _Row {
     required this.league,
     required this.seasonId,
     required this.groupId,
-    required this.title,
+    this.groupName,
   });
 
   final League league;
   final String seasonId;
   final String groupId;
-  final String title;
+
+  /// Sezonda birden fazla grup varsa grubun adı (turnuva adının altında).
+  final String? groupName;
 }
 
 class _StandingsListScreenState extends State<StandingsListScreen> {
@@ -79,9 +81,7 @@ class _StandingsListScreenState extends State<StandingsListScreen> {
             league: l,
             seasonId: sId,
             groupId: g['id'].toString(),
-            title: own.length > 1 && name.isNotEmpty
-                ? '${l.name} - $name'
-                : l.name,
+            groupName: own.length > 1 && name.isNotEmpty ? name : null,
           ),
         );
       }
@@ -180,15 +180,34 @@ class _RowCard extends StatelessWidget {
                     child: Row(
                       children: [
                         Expanded(
-                          child: Text(
-                            row.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 14.5,
-                              fontWeight: FontWeight.w700,
-                            ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                row.league.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w600,
+                                  height: 1.2,
+                                ),
+                              ),
+                              if (row.groupName != null)
+                                Text(
+                                  row.groupName!,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white54,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                    height: 1.2,
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
                         const Icon(
