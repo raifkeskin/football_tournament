@@ -465,6 +465,50 @@ class _BandSeasonButton extends StatelessWidget {
   final bool canPick;
   final VoidCallback onTap;
 
+  static const _style = TextStyle(
+    color: Colors.white,
+    fontSize: 12.5,
+    fontWeight: FontWeight.w800,
+    decoration: TextDecoration.none,
+  );
+
+  /// "2026 Sezonu" bantta sığmıyor: yıl üstte, "Sezonu" altında küçük ve
+  /// ortalı. Yılla başlamayan ad tek satır.
+  Widget _label() {
+    final m = RegExp(
+      r'^(\d{4}(?:\s*[-/]\s*\d{2,4})?)\s+(.+)$',
+    ).firstMatch(text.trim());
+    if (m == null) {
+      return Text(
+        text,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: _style,
+      );
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          m.group(1)!,
+          maxLines: 1,
+          style: _style.copyWith(fontSize: 14, height: 1.05),
+        ),
+        Text(
+          m.group(2)!,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: _style.copyWith(
+            color: Colors.white70,
+            fontSize: 10.5,
+            fontWeight: FontWeight.w600,
+            height: 1.05,
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Material(
@@ -477,19 +521,7 @@ class _BandSeasonButton extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Flexible(
-                child: Text(
-                  text,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w800,
-                    decoration: TextDecoration.none,
-                  ),
-                ),
-              ),
+              Flexible(child: _label()),
               if (canPick)
                 const Icon(
                   Icons.keyboard_arrow_down_rounded,

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/push/push_card.dart';
+
+import '../../notifications/notification_settings_screen.dart';
 import '../../../core/utils/team_colors.dart';
 import '../../../core/utils/team_name.dart';
 import '../../../core/widgets/admin_form.dart';
@@ -57,7 +59,12 @@ class MyProfileView extends StatefulWidget {
     required this.displayName,
     required this.phone,
     this.roleLabels = const [],
+    this.onSignOut,
   });
+
+  /// Sayfanın en altındaki "Çıkış yap / Hesabı sil" bağlantısı (yönetim
+  /// panelinde çıkış bantta olduğundan verilmez).
+  final VoidCallback? onSignOut;
 
   /// Kartta adın altında gösterilen roller (ör. Futbolcu, Takım Sorumlusu).
   final List<String> roleLabels;
@@ -232,12 +239,6 @@ class _MyProfileViewState extends State<MyProfileView> {
             const SizedBox(height: 14),
           ],
           _playerCard(player, team),
-          if (_consents != null) ...[
-            const SizedBox(height: 14),
-            _consentCard(_consents!),
-          ],
-          const SizedBox(height: 14),
-          const PushCard(),
           for (final r in _pending) ...[
             const SizedBox(height: 14),
             _pendingCard(r),
@@ -254,6 +255,17 @@ class _MyProfileViewState extends State<MyProfileView> {
           if (history.isNotEmpty) ...[
             const SizedBox(height: 18),
             _historyButton(history),
+          ],
+          if (widget.onSignOut != null) ...[
+            const SizedBox(height: 24),
+            Center(
+              child: TextButton.icon(
+                onPressed: widget.onSignOut,
+                style: TextButton.styleFrom(foregroundColor: kAdminMuted),
+                icon: const Icon(Icons.logout_rounded, size: 18),
+                label: const Text('Çıkış yap / Hesabı sil'),
+              ),
+            ),
           ],
         ],
       ),
@@ -558,6 +570,39 @@ class _MyProfileViewState extends State<MyProfileView> {
                     label: 'Bilgilerim',
                     color: Colors.white,
                     onTap: _openEdit,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // İzinler (eksikse sarı) ve bildirim ayarları: aynı düğme dili.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _consents == null
+                      ? const SizedBox.shrink()
+                      : _cardButton(
+                          icon: _consents!.complete
+                              ? Icons.verified_user_outlined
+                              : Icons.privacy_tip_outlined,
+                          label: _consents!.complete
+                              ? 'İzinlerim'
+                              : 'Onay eksik',
+                          color: _consents!.complete
+                              ? Colors.white
+                              : kAdminAmber,
+                          onTap: _openConsents,
+                        ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _cardButton(
+                    icon: Icons.notifications_none_rounded,
+                    label: 'Bildirimler',
+                    color: Colors.white,
+                    onTap: () => NotificationSettingsScreen.open(context),
                   ),
                 ),
               ],
@@ -1046,66 +1091,6 @@ class _MyProfileViewState extends State<MyProfileView> {
 
   /// Onay eksikse uyarı; tamamsa sade bir "onaylandı" satırı (geri almak
   /// ya da metinleri tekrar okumak için).
-  Widget _consentCard(MyConsents c) {
-    final ok = c.complete;
-    final color = ok ? kAdminAccent : kAdminAmber;
-    final last = c.lastAt;
-    return Material(
-      color: ok ? _surface : kAdminAmber.withValues(alpha: 0.10),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: BorderSide(
-          color: ok
-              ? Colors.white.withValues(alpha: 0.08)
-              : kAdminAmber.withValues(alpha: 0.4),
-        ),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: _openConsents,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
-          child: Row(
-            children: [
-              Icon(
-                ok ? Icons.verified_user_outlined : Icons.privacy_tip_outlined,
-                color: color,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      ok
-                          ? 'İzinler ve beyanlar onaylandı'
-                          : 'KVKK ve sağlık onayın eksik',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      ok
-                          ? (last == null
-                                ? 'Görüntülemek için dokun'
-                                : 'Son güncelleme: ${last.day.toString().padLeft(2, '0')}.${last.month.toString().padLeft(2, '0')}.${last.year}')
-                          : 'Turnuvada oynayabilmek için metinleri okuyup onayla.',
-                      style: const TextStyle(color: kAdminMuted, fontSize: 13),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(Icons.chevron_right_rounded, color: color),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _infoCard(IconData icon, String text) {
     return Container(
       padding: const EdgeInsets.all(16),

@@ -84,8 +84,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.dispose();
   }
 
-  bool _isLoading = false;
-
   /// Hesap menüsü: çıkış ya da hesabı silme (mağaza şartı: hesap silme
   /// uygulama içinden kolayca bulunabilmeli).
   Future<void> _logout(dynamic session) async {
@@ -201,12 +199,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       icon: Icons.person_remove_rounded,
     );
     if (!confirmed || !mounted) return;
-    setState(() => _isLoading = true);
     try {
       await Supabase.instance.client.rpc('delete_my_account');
     } on PostgrestException catch (e) {
       if (!mounted) return;
-      setState(() => _isLoading = false);
       final msg = e.message.startsWith('SOLE_OWNER:')
           ? 'Şu turnuvaların tek kurucu başkanısınız: '
                 '${e.message.substring('SOLE_OWNER:'.length).trim()}. '
@@ -223,7 +219,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return;
     } catch (e) {
       if (!mounted) return;
-      setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Hesap silinemedi: $e'),
@@ -236,7 +231,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       await session.signOut();
     } catch (_) {}
-    if (mounted) setState(() => _isLoading = false);
     final messenger = ScaffoldMessenger.of(context);
     await _toLoginGate();
     messenger.showSnackBar(const SnackBar(content: Text('Hesabınız silindi.')));
@@ -298,8 +292,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           isLoading: sessionData.isLoading,
         );
 
-        final showAppBar = !panelMode && (isRealUser || isAdminPanelVisible);
-
         return PopScope(
           canPop: !isAdminPanelVisible,
           onPopInvokedWithResult: (didPop, result) {
@@ -310,72 +302,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           },
           child: Scaffold(
             backgroundColor: bgDark,
-            extendBodyBehindAppBar:
-                true, // KİLİT NOKTA: Arka planı AppBar'ın altına iter
-            appBar: !showAppBar
-                ? null
-                : AppBar(
-                    centerTitle: true,
-                    backgroundColor:
-                        Colors.transparent, // Yeşil renk iptal, tamamen şeffaf
-                    elevation: 0,
-                    iconTheme: const IconThemeData(color: Colors.white),
-                    // Ana sayfa: admin için yeni gezinme yığını; diğer
-                    // kullanıcılar için ana sekmeye geçiş (menü oradan açılır).
-                    leading: IconButton(
-                      icon: const Icon(Icons.home_rounded),
-                      tooltip: 'Ana Sayfa',
-                      onPressed: () {
-                        if (!isAdminPanelVisible) {
-                          widget.onRequestHomeTab();
-                          return;
-                        }
-                        Navigator.of(context).pushAndRemoveUntil(
-                          MaterialPageRoute<void>(
-                            settings: const RouteSettings(
-                              name: 'MainNavigator',
-                            ),
-                            builder: (_) =>
-                                const MainNavigator(initialTabIndex: 0),
-                          ),
-                          (route) => false,
-                        );
-                      },
-                    ),
-                    // Çıkış: başlığın sağında kırmızı ikon (admin paneli ve
-                    // profil için ortak).
-                    actions: [
-                      IconButton(
-                        tooltip: 'Çıkış Yap',
-                        onPressed: _isLoading ? null : () => _logout(session),
-                        icon: const Icon(
-                          Icons.logout_rounded,
-                          color: Color(0xFFF87171),
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                    ],
-                    title: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          isAdminPanelVisible
-                              ? Icons.admin_panel_settings_rounded
-                              : Icons.person_rounded,
-                          color: Colors.white,
-                        ),
-                        const SizedBox(width: 10),
-                        Text(
-                          isAdminPanelVisible ? 'Admin Panel' : 'Profil',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 20,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+            // Başlık çubuğu yok: menü üst bantta (çıkış yan menüde).
             body: Stack(
               // ... geri kalanı aynı
               children: [
@@ -446,6 +373,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         playerId: sessionValue.playerId,
         displayName: state.displayName,
         phone: phone,
+        onSignOut: () => _logout(session),
         roleLabels: [
           'Futbolcu',
           if (sessionValue.managedTeams.isNotEmpty) 'Takım Sorumlusu',
