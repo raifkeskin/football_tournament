@@ -637,6 +637,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
     final isAdmin = AppSession.of(context).value.isAdmin;
     Navigator.of(context).push(
       MaterialPageRoute<void>(
+        settings: const RouteSettings(name: 'MatchDetailsScreen'),
         builder: (_) => MatchDetailsScreen(
           match: m,
           isAdmin: isAdmin,
@@ -1044,6 +1045,9 @@ class _HomeDashboardState extends State<HomeDashboard> {
             'Onaylamak için dokun.',
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
+                settings: const RouteSettings(
+                  name: 'AdminPenaltyManagementScreen',
+                ),
                 builder: (_) => const AdminPenaltyManagementScreen(),
               ),
             ),

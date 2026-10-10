@@ -250,6 +250,7 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
         if (open && mounted) {
           await Navigator.of(context).push(
             MaterialPageRoute<void>(
+              settings: const RouteSettings(name: 'LiveDrawScreen'),
               builder: (_) => LiveDrawScreen(drawId: live.id),
             ),
           );
@@ -277,6 +278,7 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
       if (!mounted) return;
       final saved = await Navigator.of(context).push<bool>(
         MaterialPageRoute(
+          settings: const RouteSettings(name: 'FixtureDrawScreen'),
           builder: (_) => FixtureDrawScreen(
             leagueId: leagueId,
             seasonId: seasonId,

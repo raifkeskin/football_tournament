@@ -1280,6 +1280,7 @@ class _LiveDrawNewsCardState extends State<LiveDrawNewsCard> {
   void _open() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
+        settings: const RouteSettings(name: 'LiveDrawScreen'),
         builder: (_) => LiveDrawScreen(drawId: widget.drawId),
       ),
     );

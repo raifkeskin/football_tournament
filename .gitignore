@@ -6,6 +6,8 @@
 .DS_Store
 .atom/
 .build/
+# Web kaynak haritaları (derleme kimliğine göre; hata izlerini çözmek için)
+build_maps/
 .buildlog/
 .history
 .svn/

@@ -925,6 +925,7 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
   void _openSeasons(League league) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
+        settings: const RouteSettings(name: 'SeasonManagementScreen'),
         builder: (_) => SeasonManagementScreen(
           leagueId: league.id,
           leagueName: league.name,
@@ -962,6 +963,7 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
             tooltip: 'Ödüller',
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
+                settings: const RouteSettings(name: 'AdminAwardsScreen'),
                 builder: (_) => const AdminAwardsScreen(),
               ),
             ),

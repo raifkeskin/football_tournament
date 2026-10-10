@@ -1174,6 +1174,7 @@ class _MatchCardState extends State<_MatchCard> {
           await Navigator.push(
             context,
             MaterialPageRoute(
+              settings: const RouteSettings(name: 'MatchDetailsScreen'),
               builder: (_) =>
                   MatchDetailsScreen(match: widget.match, isAdmin: isAdmin),
             ),

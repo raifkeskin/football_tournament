@@ -215,7 +215,10 @@ class _TeamFixtureTabState extends State<TeamFixtureTab> {
         child: InkWell(
           borderRadius: BorderRadius.circular(14),
           onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => MatchDetailsScreen(match: m)),
+            MaterialPageRoute(
+              settings: const RouteSettings(name: 'MatchDetailsScreen'),
+              builder: (_) => MatchDetailsScreen(match: m),
+            ),
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),

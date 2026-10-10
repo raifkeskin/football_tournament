@@ -63,6 +63,9 @@ dev_dependencies:
   flutter_launcher_icons: ^0.14.4
   flutter_native_splash: ^2.4.4
   flutter_lints: ^6.0.0
+  source_maps: ^0.10.14
+  source_map_stack_trace: ^2.1.2
+  stack_trace: ^1.12.2
 
 flutter_launcher_icons:
   # Görseller AppLogo çiziminden üretilir: flutter test tool/render_app_icons_test.dart

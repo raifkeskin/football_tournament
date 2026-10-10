@@ -30,6 +30,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
   LineupPlayer? _selectedAssist;
   LineupPlayer? _selectedSubIn;
   bool _isOwnGoal = false;
+
   /// Penaltı olayının sonucu: true gol, false kaçtı.
   bool _penaltyScored = true;
   bool _isLoading = false;

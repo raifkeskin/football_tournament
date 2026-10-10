@@ -17,7 +17,10 @@ class NotificationSettingsScreen extends StatefulWidget {
   const NotificationSettingsScreen({super.key});
 
   static Future<void> open(BuildContext context) => Navigator.of(context).push(
-    MaterialPageRoute<void>(builder: (_) => const NotificationSettingsScreen()),
+    MaterialPageRoute<void>(
+      settings: const RouteSettings(name: 'NotificationSettingsScreen'),
+      builder: (_) => const NotificationSettingsScreen(),
+    ),
   );
 
   @override

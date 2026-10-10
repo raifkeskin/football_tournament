@@ -176,6 +176,7 @@ class _TeamInfo extends StatelessWidget {
           ? null
           : () => Navigator.of(context).push(
               MaterialPageRoute<void>(
+                settings: const RouteSettings(name: 'TeamSquadScreen'),
                 builder: (_) => TeamSquadScreen(
                   teamId: teamId,
                   tournamentId: seasonId,
@@ -1964,6 +1965,7 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
     return GestureDetector(
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(
+          settings: const RouteSettings(name: 'PhotoGalleryScreen'),
           builder: (_) => _PhotoGalleryScreen(photos: list, initialIndex: i),
         ),
       ),
@@ -2149,6 +2151,7 @@ class _YoutubeVideoViewState extends State<_YoutubeVideoView> {
     if (!kIsWeb) {
       Navigator.of(context).push(
         MaterialPageRoute<void>(
+          settings: const RouteSettings(name: 'NativeYoutubeScreen'),
           fullscreenDialog: true,
           builder: (_) => _NativeYoutubeScreen(videoId: id, url: widget.url),
         ),

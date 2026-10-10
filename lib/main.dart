@@ -1,3 +1,4 @@
+import 'core/services/screen_trail.dart';
 import 'core/app_navigator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
@@ -265,6 +266,7 @@ class _MyAppState extends State<MyApp> {
     ErrorReporter.restartHandler = () {
       appNavigatorKey.currentState?.pushAndRemoveUntil(
         MaterialPageRoute<void>(
+          settings: const RouteSettings(name: 'Root'),
           builder: (_) => _showLoginGate()
               ? const LoginScreen(gate: true)
               : const MainNavigator(),
@@ -301,7 +303,7 @@ class _MyAppState extends State<MyApp> {
       controller: _sessionController,
       child: MaterialApp(
         navigatorKey: appNavigatorKey,
-        navigatorObservers: [LeagueSwitchScope.observer],
+        navigatorObservers: [LeagueSwitchScope.observer, ScreenTrail.instance],
         title: kAppName,
         debugShowCheckedModeBanner: false,
         localizationsDelegates: const [

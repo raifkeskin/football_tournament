@@ -394,15 +394,16 @@ class PlayerProfileService {
           .eq('season_id', seasonId),
       _client
           .from('match_events')
-          .select('event_type, match_id, player_id, assist_player_id, is_own_goal')
+          .select(
+            'event_type, match_id, player_id, assist_player_id, is_own_goal',
+          )
           .eq('season_id', seasonId)
           .or('player_id.eq.$playerId,assist_player_id.eq.$playerId'),
       // Ertelenen / iptal maçlar oynanmadı: sayılara katılmaz.
-      _client
-          .from('matches')
-          .select('id')
-          .eq('season_id', seasonId)
-          .inFilter('status', ['cancelled', 'postponed']),
+      _client.from('matches').select('id').eq('season_id', seasonId).inFilter(
+        'status',
+        ['cancelled', 'postponed'],
+      ),
     ]);
     final unplayed = results[2].map((r) => r['id'].toString()).toSet();
     final matchIds = results[0]

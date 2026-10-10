@@ -104,12 +104,14 @@ List<StandingEntry> computeGroupStandings({
     final hs = _score(m, 'home');
     final as = _score(m, 'away');
     final key = playedKey(m);
-    formOf
-        .putIfAbsent(h.teamId, () => [])
-        .add((key, hs > as ? 'G' : (hs == as ? 'B' : 'M')));
-    formOf
-        .putIfAbsent(a.teamId, () => [])
-        .add((key, as > hs ? 'G' : (hs == as ? 'B' : 'M')));
+    formOf.putIfAbsent(h.teamId, () => []).add((
+      key,
+      hs > as ? 'G' : (hs == as ? 'B' : 'M'),
+    ));
+    formOf.putIfAbsent(a.teamId, () => []).add((
+      key,
+      as > hs ? 'G' : (hs == as ? 'B' : 'M'),
+    ));
     h
       ..played += 1
       ..goalsFor += hs

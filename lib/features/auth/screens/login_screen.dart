@@ -143,6 +143,7 @@ class _LoginScreenState extends State<LoginScreen> {
       }
       Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
         MaterialPageRoute<void>(
+          settings: const RouteSettings(name: 'MainNavigator'),
           builder: (_) => const MainNavigator(
             initialTabIndex: MainNavigator.profileTab,
           ), // Direkt Profil sekmesine yönlendiriyoruz
@@ -226,6 +227,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (session.mustChangePassword) {
         nav.push(
           MaterialPageRoute<void>(
+            settings: const RouteSettings(name: 'ResetPasswordScreen'),
             builder: (_) => ResetPasswordScreen(rememberMe: rememberMe),
           ),
         );
@@ -243,6 +245,7 @@ class _LoginScreenState extends State<LoginScreen> {
       final toPanel = staff && session.value.hasManagementPanel;
       rootNav.pushAndRemoveUntil(
         MaterialPageRoute<void>(
+          settings: const RouteSettings(name: 'MainNavigator'),
           builder: (_) => MainNavigator(
             initialTabIndex: toPanel ? MainNavigator.profileTab : 0,
           ),
@@ -272,14 +275,20 @@ class _LoginScreenState extends State<LoginScreen> {
     await GuestMode.set(true);
     if (!mounted) return;
     Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
-      MaterialPageRoute<void>(builder: (_) => const MainNavigator()),
+      MaterialPageRoute<void>(
+        settings: const RouteSettings(name: 'MainNavigator'),
+        builder: (_) => const MainNavigator(),
+      ),
       (Route<dynamic> route) => false,
     );
   }
 
   void _openRegistration() {
     Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const OnlineRegistrationScreen()),
+      MaterialPageRoute<void>(
+        settings: const RouteSettings(name: 'OnlineRegistrationScreen'),
+        builder: (_) => const OnlineRegistrationScreen(),
+      ),
     );
   }
 
@@ -493,6 +502,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           ? null
                           : () => Navigator.of(context).push(
                               MaterialPageRoute<void>(
+                                settings: const RouteSettings(
+                                  name: 'ForgotPasswordScreen',
+                                ),
                                 builder: (_) => const ForgotPasswordScreen(),
                               ),
                             ),

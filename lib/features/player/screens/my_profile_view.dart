@@ -155,6 +155,7 @@ class _MyProfileViewState extends State<MyProfileView> {
     if (p == null) return;
     final saved = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
+        settings: const RouteSettings(name: 'EditMyProfileScreen'),
         builder: (_) => EditMyProfileScreen(
           player: p,
           pending: _pending,
@@ -790,9 +791,12 @@ class _MyProfileViewState extends State<MyProfileView> {
   }
 
   void _openMatch(MatchModel m) {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => MatchDetailsScreen(match: m)));
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        settings: const RouteSettings(name: 'MatchDetailsScreen'),
+        builder: (_) => MatchDetailsScreen(match: m),
+      ),
+    );
   }
 
   Widget _nextMatchCard(TeamMatch m) {
@@ -995,6 +999,7 @@ class _MyProfileViewState extends State<MyProfileView> {
         borderRadius: BorderRadius.circular(16),
         onTap: () => Navigator.of(context).push(
           MaterialPageRoute(
+            settings: const RouteSettings(name: 'RequestHistoryScreen'),
             builder: (_) => _RequestHistoryScreen(items: items),
           ),
         ),
@@ -1028,6 +1033,7 @@ class _MyProfileViewState extends State<MyProfileView> {
     if (id == null || current == null) return;
     final saved = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
+        settings: const RouteSettings(name: 'ConsentScreen'),
         builder: (_) => ConsentScreen(playerId: id, initial: current.granted),
       ),
     );
@@ -1434,6 +1440,7 @@ class _UnmatchedView extends StatelessWidget {
             ),
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(
+                settings: const RouteSettings(name: 'HomeScreen'),
                 builder: (_) => const HomeScreen(showCalendar: true),
               ),
             ),

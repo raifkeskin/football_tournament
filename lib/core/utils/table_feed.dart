@@ -98,9 +98,7 @@ List<Map<String, dynamic>>? applyRowChange(
   };
   final next = [...rows];
   if (index >= 0) next.removeAt(index);
-  if (column != null &&
-      value != null &&
-      row[column]?.toString() != value) {
+  if (column != null && value != null && row[column]?.toString() != value) {
     // Satır artık bu listeye ait değil.
     return index >= 0 ? next : null;
   }

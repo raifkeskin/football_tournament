@@ -6,6 +6,8 @@ import 'package:flutter/scheduler.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'screen_trail.dart';
+
 /// Uygulama hatalarını yakalar, veritabanına (`log_client_error`) yazar ve
 /// ekran yerleşemediğinde "Bir sorun oluştu" kartını açar.
 class ErrorReporter {
@@ -23,6 +25,10 @@ class ErrorReporter {
   static String? Function()? roleProvider;
 
   static String? _version;
+
+  /// Derleme kimliği (yayın betiği git kısa özetini verir); web'de yığın
+  /// izini o derlemenin kaynak haritasıyla çözmek için.
+  static const _buildId = String.fromEnvironment('BUILD_ID');
   static final _sent = <String>{};
   static const _maxPerSession = 20;
 
@@ -64,7 +70,9 @@ class ErrorReporter {
   static Future<void> _loadVersion() async {
     try {
       final info = await PackageInfo.fromPlatform();
-      _version = '${info.version}+${info.buildNumber}';
+      _version =
+          '${info.version}+${info.buildNumber}'
+          '${_buildId.isEmpty ? '' : ' · $_buildId'}';
     } catch (_) {}
   }
 
@@ -106,6 +114,12 @@ class ErrorReporter {
       try {
         role = roleProvider?.call();
       } catch (_) {}
+      String? screen;
+      int? channels;
+      try {
+        screen = ScreenTrail.describe();
+        channels = Supabase.instance.client.getChannels().length;
+      } catch (_) {}
       unawaited(
         Supabase.instance.client
             .rpc(
@@ -120,6 +134,8 @@ class ErrorReporter {
                 'p_platform': _platform,
                 'p_app_version': _version,
                 'p_role': role,
+                'p_screen': screen,
+                'p_channels': channels,
               },
             )
             .then((_) {}, onError: (_) {}),

@@ -637,6 +637,9 @@ class SeasonManagementScreen extends StatelessWidget {
                   // Bölgeli sezon: önce Bölgeler; bölgesiz: doğrudan Gruplar.
                   Navigator.of(context).push(
                     MaterialPageRoute<void>(
+                      settings: const RouteSettings(
+                        name: 'SeasonRegionsScreen',
+                      ),
                       builder: (_) => hasRegions || !full
                           ? SeasonRegionsScreen(
                               leagueId: leagueId,
@@ -792,6 +795,7 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
     if (!added || !mounted) return;
     Navigator.of(context).pushReplacement(
       MaterialPageRoute<void>(
+        settings: const RouteSettings(name: 'SeasonRegionsScreen'),
         builder: (_) => SeasonRegionsScreen(
           leagueId: widget.leagueId,
           seasonId: widget.seasonId,
@@ -1322,6 +1326,7 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
   Future<void> _openTeams({String? initialGroupName}) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
+        settings: const RouteSettings(name: 'TeamListScreen'),
         builder: (_) => TeamListScreen(
           seasonId: widget.seasonId,
           seasonName: widget.seasonName,
@@ -1481,6 +1486,7 @@ class _TeamListScreenState extends State<TeamListScreen> {
   Future<void> _openSquad(_TeamStanding t) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
+        settings: const RouteSettings(name: 'TeamSquadScreen'),
         builder: (_) => TeamSquadScreen(
           teamId: t.id,
           tournamentId: widget.seasonId,
@@ -2740,6 +2746,7 @@ class _SeasonRegionsScreenState extends State<SeasonRegionsScreen> {
   }) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
+        settings: const RouteSettings(name: 'SeasonGroupsScreen'),
         builder: (_) => SeasonGroupsScreen(
           leagueId: widget.leagueId,
           seasonId: widget.seasonId,

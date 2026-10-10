@@ -36,7 +36,10 @@ class AdminPanelWidget extends StatelessWidget {
         onPressed: () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const AdminManageLeaguesScreen()),
+            MaterialPageRoute(
+              settings: const RouteSettings(name: 'AdminManageLeaguesScreen'),
+              builder: (_) => const AdminManageLeaguesScreen(),
+            ),
           );
         },
       ),
@@ -48,7 +51,10 @@ class AdminPanelWidget extends StatelessWidget {
         onPressed: () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const AdminManageTeamsScreen()),
+            MaterialPageRoute(
+              settings: const RouteSettings(name: 'AdminManageTeamsScreen'),
+              builder: (_) => const AdminManageTeamsScreen(),
+            ),
           );
         },
       ),
@@ -60,7 +66,10 @@ class AdminPanelWidget extends StatelessWidget {
         onPressed: () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const FootballerLicenseScreen()),
+            MaterialPageRoute(
+              settings: const RouteSettings(name: 'FootballerLicenseScreen'),
+              builder: (_) => const FootballerLicenseScreen(),
+            ),
           );
         },
       ),
@@ -72,7 +81,10 @@ class AdminPanelWidget extends StatelessWidget {
         onPressed: () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const AdminFixtureEntryScreen()),
+            MaterialPageRoute(
+              settings: const RouteSettings(name: 'AdminFixtureEntryScreen'),
+              builder: (_) => const AdminFixtureEntryScreen(),
+            ),
           );
         },
       ),
@@ -85,6 +97,9 @@ class AdminPanelWidget extends StatelessWidget {
           Navigator.push(
             context,
             MaterialPageRoute(
+              settings: const RouteSettings(
+                name: 'AdminPenaltyManagementScreen',
+              ),
               builder: (_) => const AdminPenaltyManagementScreen(),
             ),
           );
@@ -98,7 +113,10 @@ class AdminPanelWidget extends StatelessWidget {
         onPressed: () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const AdminManageNewsScreen()),
+            MaterialPageRoute(
+              settings: const RouteSettings(name: 'AdminManageNewsScreen'),
+              builder: (_) => const AdminManageNewsScreen(),
+            ),
           );
         },
       ),
@@ -112,7 +130,10 @@ class AdminPanelWidget extends StatelessWidget {
           onPressed: () {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const AdminSponsorsScreen()),
+              MaterialPageRoute(
+                settings: const RouteSettings(name: 'AdminSponsorsScreen'),
+                builder: (_) => const AdminSponsorsScreen(),
+              ),
             );
           },
         ),
@@ -127,6 +148,9 @@ class AdminPanelWidget extends StatelessWidget {
             Navigator.push(
               context,
               MaterialPageRoute(
+                settings: const RouteSettings(
+                  name: 'AdminPosterBackgroundScreen',
+                ),
                 builder: (_) => const AdminPosterBackgroundScreen(),
               ),
             );
@@ -142,6 +166,9 @@ class AdminPanelWidget extends StatelessWidget {
             Navigator.push(
               context,
               MaterialPageRoute(
+                settings: const RouteSettings(
+                  name: 'AdminPitchManagementScreen',
+                ),
                 builder: (_) => const AdminPitchManagementScreen(),
               ),
             );
@@ -188,6 +215,9 @@ class AdminPanelWidget extends StatelessWidget {
                     Icons.key_rounded,
                     () => Navigator.of(context).push(
                       MaterialPageRoute(
+                        settings: const RouteSettings(
+                          name: 'AdminOtpMonitorScreen',
+                        ),
                         builder: (_) => AdminOtpMonitorScreen(),
                       ),
                     ),
@@ -200,6 +230,9 @@ class AdminPanelWidget extends StatelessWidget {
                   Icons.rule_folder_outlined,
                   () => Navigator.of(context).push(
                     MaterialPageRoute(
+                      settings: const RouteSettings(
+                        name: 'AdminPendingActionsScreen',
+                      ),
                       builder: (_) => AdminPendingActionsScreen(),
                     ),
                   ),

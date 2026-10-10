@@ -60,15 +60,18 @@ class PosterBackgrounds {
 
 /// Afişin altındaki ağaca turnuvanın zemin görselini taşır.
 class PosterBackground extends InheritedWidget {
-  const PosterBackground({super.key, required this.image, required super.child});
+  const PosterBackground({
+    super.key,
+    required this.image,
+    required super.child,
+  });
 
   /// Yüklenmiş (ya da yönetim ekranında önizlenen) zemin; null ise afiş kendi
   /// varsayılan zeminini çizer.
   final ImageProvider? image;
 
-  static ImageProvider? of(BuildContext context) => context
-      .dependOnInheritedWidgetOfExactType<PosterBackground>()
-      ?.image;
+  static ImageProvider? of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<PosterBackground>()?.image;
 
   /// Fotoğraf zeminli afişler için: turnuvanınki ya da stadyum fotoğrafı.
   static ImageProvider photoOf(BuildContext context) =>

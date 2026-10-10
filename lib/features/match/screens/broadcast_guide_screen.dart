@@ -290,6 +290,7 @@ class _BroadcastRow extends StatelessWidget {
     return InkWell(
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute<void>(
+          settings: const RouteSettings(name: 'MatchDetailsScreen'),
           builder: (_) => MatchDetailsScreen(
             match: match,
             isAdmin: AppSession.of(context).value.isAdmin,

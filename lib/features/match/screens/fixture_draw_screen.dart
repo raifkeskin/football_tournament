@@ -169,7 +169,10 @@ class _FixtureDrawScreenState extends State<FixtureDrawScreen> {
       );
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute<void>(builder: (_) => LiveDrawScreen(drawId: id)),
+        MaterialPageRoute<void>(
+          settings: const RouteSettings(name: 'LiveDrawScreen'),
+          builder: (_) => LiveDrawScreen(drawId: id),
+        ),
       );
     } catch (e) {
       if (!mounted) return;

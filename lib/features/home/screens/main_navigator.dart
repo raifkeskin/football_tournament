@@ -1,3 +1,4 @@
+import '../../../core/services/screen_trail.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show SystemNavigator;
@@ -126,7 +127,10 @@ class _MainNavigatorState extends State<MainNavigator> {
     final nav = Navigator.of(context, rootNavigator: true);
     await GuestMode.set(false);
     nav.pushAndRemoveUntil(
-      MaterialPageRoute<void>(builder: (_) => const LoginScreen(gate: true)),
+      MaterialPageRoute<void>(
+        settings: const RouteSettings(name: 'LoginScreen'),
+        builder: (_) => const LoginScreen(gate: true),
+      ),
       (route) => false,
     );
     await session.signOut();
@@ -182,6 +186,14 @@ class _MainNavigatorState extends State<MainNavigator> {
     );
     final user = session.value.user;
     final loggedIn = user != null && !user.isAnonymous;
+    // Hata kaydında hangi sekmede olunduğu görünsün.
+    ScreenTrail.tab = const [
+      'Ana sayfa',
+      'Fikstür',
+      'Puan durumu',
+      'Yayın rehberi',
+      'Profil',
+    ].elementAtOrNull(_aktifSekme);
     final ekranlar = <Widget>[
       const HomeScreen(),
       const HomeScreen(showCalendar: true),
@@ -615,6 +627,9 @@ class _MenuDrawer extends StatelessWidget {
                         nav.pop(); // çekmeceyi kapat
                         nav.push(
                           MaterialPageRoute<void>(
+                            settings: const RouteSettings(
+                              name: 'NotificationSettingsScreen',
+                            ),
                             builder: (_) => const NotificationSettingsScreen(),
                           ),
                         );

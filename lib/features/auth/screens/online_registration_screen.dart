@@ -39,6 +39,9 @@ class AccountRequestForm extends StatelessWidget {
               isReset: isReset,
               onNotRegistered: () => Navigator.of(context).pushReplacement(
                 MaterialPageRoute<void>(
+                  settings: const RouteSettings(
+                    name: 'OnlineRegistrationScreen',
+                  ),
                   builder: (_) => const OnlineRegistrationScreen(),
                 ),
               ),
@@ -261,6 +264,9 @@ class _AccountRequestFormState extends State<_AccountRequestForm> {
                 child: TextButton(
                   onPressed: () => Navigator.of(context).pushReplacement(
                     MaterialPageRoute<void>(
+                      settings: const RouteSettings(
+                        name: 'OnlineRegistrationScreen',
+                      ),
                       builder: (_) => const OnlineRegistrationScreen(),
                     ),
                   ),
@@ -290,6 +296,9 @@ class _AccountRequestFormState extends State<_AccountRequestForm> {
                     ? null
                     : () => Navigator.of(context).pushReplacement(
                         MaterialPageRoute<void>(
+                          settings: const RouteSettings(
+                            name: 'ForgotPasswordScreen',
+                          ),
                           builder: (_) => const ForgotPasswordScreen(),
                         ),
                       ),

@@ -123,6 +123,9 @@ class _AdminDataToolsScreenState extends State<AdminDataToolsScreen> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
+                                settings: const RouteSettings(
+                                  name: 'AdminTeamFixtureBuildScreen',
+                                ),
                                 builder: (_) =>
                                     const AdminTeamFixtureBuildScreen(),
                               ),

@@ -221,6 +221,7 @@ class _SmsOtpFormState extends State<SmsOtpForm> {
       ]);
       rootNav.pushAndRemoveUntil(
         MaterialPageRoute<void>(
+          settings: const RouteSettings(name: 'MainNavigator'),
           builder: (_) => const MainNavigator(initialTabIndex: 0),
         ),
         (Route<dynamic> route) => false,

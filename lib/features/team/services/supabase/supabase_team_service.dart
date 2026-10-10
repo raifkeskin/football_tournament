@@ -7,7 +7,6 @@ import '../../../tournament/models/league.dart';
 import '../../../match/models/match.dart';
 import '../../models/team.dart';
 
-
 /// Aynı kişi (ad + soyad + doğum tarihi) ikinci kez kaydedilmek istendiğinde.
 const kPlayerAlreadyRegistered =
     'Bu futbolcu zaten sistemde kayıtlı! Aynı ad, soyad ve doğum tarihiyle '

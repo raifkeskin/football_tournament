@@ -307,6 +307,9 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
+                              settings: const RouteSettings(
+                                name: 'TeamSquadScreen',
+                              ),
                               builder: (_) => TeamSquadScreen(
                                 teamId: rows[i].teamId,
                                 tournamentId: widget.leagueId,

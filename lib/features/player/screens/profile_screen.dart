@@ -178,7 +178,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     await GuestMode.set(false);
     if (!mounted) return;
     Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
-      MaterialPageRoute<void>(builder: (_) => const LoginScreen(gate: true)),
+      MaterialPageRoute<void>(
+        settings: const RouteSettings(name: 'LoginScreen'),
+        builder: (_) => const LoginScreen(gate: true),
+      ),
       (route) => false,
     );
   }
@@ -329,6 +332,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         }
                         Navigator.of(context).pushAndRemoveUntil(
                           MaterialPageRoute<void>(
+                            settings: const RouteSettings(
+                              name: 'MainNavigator',
+                            ),
                             builder: (_) =>
                                 const MainNavigator(initialTabIndex: 0),
                           ),

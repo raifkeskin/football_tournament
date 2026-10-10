@@ -50,6 +50,7 @@ Future<void> openYoutubeInApp(BuildContext context, String url) async {
   }
   await Navigator.of(context, rootNavigator: true).push(
     MaterialPageRoute<void>(
+      settings: const RouteSettings(name: 'YoutubePlayerPage'),
       fullscreenDialog: true,
       builder: (_) => _YoutubePlayerPage(videoId: id, url: url),
     ),

@@ -618,6 +618,7 @@ class SupabaseMatchService implements IMatchService {
     try {
       AppConfig.sqlLogStart(table: 'match_media', operation: 'INSERT');
       await _client.from('match_media').insert(media.toMap(snakeCase: true));
+      notifyLocalChange(media.matchId);
       AppConfig.sqlLogResult(
         table: 'match_media',
         operation: 'INSERT',
@@ -671,6 +672,14 @@ class SupabaseMatchService implements IMatchService {
       final cached = _mediaCache[id];
       if (cached != null) yield cached;
       yield await _fetchMatchMedia(id);
+      // Bitmiş maçta canlı bağlantı açılmaz (kanal sayısı); bu cihazdan
+      // eklenen/silinen medya yine hemen yansır.
+      if (await _matchStatus(id) == 'finished') {
+        await for (final _ in _localChanges.stream.where((m) => m == id)) {
+          yield await _fetchMatchMedia(id);
+        }
+        return;
+      }
       await for (final _ in realtimeChangeSignal(
         _client,
         table: 'match_media',
@@ -1767,6 +1776,9 @@ class SupabaseMatchService implements IMatchService {
   @override
   Future<void> deleteMatchMedia(String mediaId) async {
     await _client.from('match_media').delete().eq('id', mediaId);
+    for (final e in _mediaCache.entries) {
+      if (e.value.any((m) => m.id == mediaId)) notifyLocalChange(e.key);
+    }
   }
 
   @override

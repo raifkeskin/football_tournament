@@ -48,6 +48,7 @@ class TournamentHubScreen extends StatefulWidget {
   }) {
     return Navigator.of(context).push(
       MaterialPageRoute<void>(
+        settings: const RouteSettings(name: 'TournamentHubScreen'),
         builder: (_) => TournamentHubScreen(
           leagueId: leagueId,
           seasonId: seasonId,

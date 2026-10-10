@@ -57,12 +57,14 @@ class NotificationRouter {
       case 'approval':
         await Navigator.of(context).push(
           MaterialPageRoute<void>(
+            settings: const RouteSettings(name: 'AdminPendingActionsScreen'),
             builder: (_) => const AdminPendingActionsScreen(),
           ),
         );
       case 'penalty':
         await Navigator.of(context).push(
           MaterialPageRoute<void>(
+            settings: const RouteSettings(name: 'AdminPenaltyManagementScreen'),
             builder: (_) => const AdminPenaltyManagementScreen(),
           ),
         );
@@ -110,6 +112,7 @@ class NotificationRouter {
       );
       await nav.push(
         MaterialPageRoute<void>(
+          settings: const RouteSettings(name: 'MatchDetailsScreen'),
           builder: (_) => MatchDetailsScreen(match: match, isAdmin: isAdmin),
         ),
       );
