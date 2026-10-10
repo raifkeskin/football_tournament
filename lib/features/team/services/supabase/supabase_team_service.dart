@@ -7,7 +7,6 @@ import '../../../tournament/models/league.dart';
 import '../../../match/models/match.dart';
 import '../../models/team.dart';
 
-
 /// Aynı kişi (ad + soyad + doğum tarihi) ikinci kez kaydedilmek istendiğinde.
 const kPlayerAlreadyRegistered =
     'Bu futbolcu zaten sistemde kayıtlı! Aynı ad, soyad ve doğum tarihiyle '
@@ -820,13 +819,21 @@ class SupabaseTeamService implements ITeamService {
     if (pid.isEmpty || team.isEmpty || league.isEmpty) return;
 
     if (newNumber == null) {
-      await _client
-          .from('season_team_players')
-          .update({'jersey_number': null})
-          .eq('season_id', league)
-          .eq('team_id', team)
-          .eq('player_id', pid)
-          .eq('is_active', true);
+      // Numarayı silmek de yetki kontrollü fonksiyonla (takım sorumlusu da
+      // silebilir; doğrudan güncelleme RLS'e takılıp sessizce boşa düşüyordu).
+      try {
+        await _client.rpc(
+          'set_jersey_number',
+          params: {
+            'p_season_id': league,
+            'p_team_id': team,
+            'p_player_id': pid,
+            'p_number': null,
+          },
+        );
+      } on PostgrestException catch (e) {
+        throw Exception(e.message);
+      }
       return;
     }
 

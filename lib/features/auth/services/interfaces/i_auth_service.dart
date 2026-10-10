@@ -14,6 +14,21 @@ abstract class IAuthService {
     bool isReset = false,
   });
 
+  /// Giriş yapmadan çağrılır: SMS doğrulama kodu gönderir (SMS doğrulama
+  /// açıkken). [isReset] true ise hesabı olmayan numaraya kod gönderilmez.
+  Future<SmsOtpSendOutcome> sendSmsOtp({
+    required String phoneRaw10,
+    bool isReset = false,
+  });
+
+  /// Giriş yapmadan çağrılır: kodu doğrular; hesabı açar ya da şifresini
+  /// [password] yapar. Başarılıysa kullanıcı bu şifreyle giriş yapabilir.
+  Future<SmsOtpVerifyOutcome> verifySmsOtp({
+    required String phoneRaw10,
+    required String code,
+    required String password,
+  });
+
   /// Admin: şifre talepleri (yeniden eskiye).
   Stream<List<AccountRequestEntry>> watchAccountRequests({
     bool includeClosed = false,

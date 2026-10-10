@@ -9,19 +9,13 @@ import '../../../core/widgets/web_safe_image.dart';
 import '../../match/screens/live_draw_screen.dart';
 import '../../news/screens/news_feed_screen.dart';
 import '../../tournament/models/league_extras.dart';
+import '../../tournament/screens/tournament_hub_screen.dart';
 
 /// Ana sayfanın üstündeki "Son Dakika" haber kartı: son günlerin haberleri
 /// sırayla döner; dokununca Haberler sekmesi açılır. Yeni haber yoksa hiç
 /// görünmez.
 class HomeNewsCard extends StatefulWidget {
-  const HomeNewsCard({
-    super.key,
-    required this.onOpenNews,
-    this.leagueId,
-    this.regionId,
-  });
-
-  final VoidCallback onOpenNews;
+  const HomeNewsCard({super.key, this.leagueId, this.regionId});
 
   /// Verilirse yalnız bu turnuvanın haberleri; [regionId] verilirse o
   /// bölgenin ve tüm turnuvanın haberleri (kişinin bölgesi).
@@ -129,10 +123,16 @@ class _HomeNewsCardState extends State<HomeNewsCard> {
           child: Material(
             color: Colors.transparent,
             child: InkWell(
-              // Haberler'de bu haber açık gelsin.
+              // Turnuva Sayfası'nın Haberler sekmesi; bu haber açık gelir.
               onTap: () {
-                NewsFeedScreen.focusNewsId.value = items[_index].id;
-                widget.onOpenNews();
+                final n = items[_index];
+                NewsView.focusNewsId.value = n.id;
+                TournamentHubScreen.open(
+                  context,
+                  leagueId: n.tournamentId,
+                  seasonId: n.seasonId.isEmpty ? null : n.seasonId,
+                  initialTab: TournamentHubTab.news,
+                );
               },
               borderRadius: BorderRadius.circular(18),
               child: Ink(

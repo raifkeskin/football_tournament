@@ -7,9 +7,10 @@ import '../../../core/widgets/admin_page.dart';
 import '../models/auth_models.dart';
 import '../widgets/phone_input.dart';
 import 'forgot_password_screen.dart';
+import 'sms_otp_form.dart';
 
-/// Kayıt: telefon numarasıyla geçici şifre talebi. Admin onaylayınca
-/// geçici şifre WhatsApp'tan iletilir (SMS kullanılmıyor).
+/// Kayıt: SMS doğrulama açıksa telefona gelen kodla, kapalıysa geçici şifre
+/// talebiyle (admin onaylayınca geçici şifre WhatsApp'tan iletilir).
 class OnlineRegistrationScreen extends StatelessWidget {
   const OnlineRegistrationScreen({super.key});
 
@@ -22,17 +23,45 @@ class OnlineRegistrationScreen extends StatelessWidget {
   }
 }
 
-/// Kayıt ve "Şifremi Unuttum" ekranlarının ortak formu.
-class AccountRequestForm extends StatefulWidget {
+/// Kayıt ve "Şifremi Unuttum" ekranlarının ortak formu. SMS doğrulama
+/// açıksa ([AppSettings.smsOtpEnabled]) kodla, kapalıysa talep/onay akışıyla.
+class AccountRequestForm extends StatelessWidget {
   const AccountRequestForm({super.key, required this.isReset});
 
   final bool isReset;
 
   @override
-  State<AccountRequestForm> createState() => _AccountRequestFormState();
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: AppSettings.smsOtpEnabled,
+      builder: (context, sms, _) => sms
+          ? SmsOtpForm(
+              isReset: isReset,
+              onNotRegistered: () => Navigator.of(context).pushReplacement(
+                MaterialPageRoute<void>(
+                  settings: const RouteSettings(
+                    name: 'OnlineRegistrationScreen',
+                  ),
+                  builder: (_) => const OnlineRegistrationScreen(),
+                ),
+              ),
+            )
+          : _AccountRequestForm(isReset: isReset),
+    );
+  }
 }
 
-class _AccountRequestFormState extends State<AccountRequestForm> {
+/// Eski akış: geçici şifre talebi → admin onayı → WhatsApp.
+class _AccountRequestForm extends StatefulWidget {
+  const _AccountRequestForm({required this.isReset});
+
+  final bool isReset;
+
+  @override
+  State<_AccountRequestForm> createState() => _AccountRequestFormState();
+}
+
+class _AccountRequestFormState extends State<_AccountRequestForm> {
   final _phoneController = TextEditingController();
 
   bool _busy = false;
@@ -235,6 +264,9 @@ class _AccountRequestFormState extends State<AccountRequestForm> {
                 child: TextButton(
                   onPressed: () => Navigator.of(context).pushReplacement(
                     MaterialPageRoute<void>(
+                      settings: const RouteSettings(
+                        name: 'OnlineRegistrationScreen',
+                      ),
                       builder: (_) => const OnlineRegistrationScreen(),
                     ),
                   ),
@@ -264,6 +296,9 @@ class _AccountRequestFormState extends State<AccountRequestForm> {
                     ? null
                     : () => Navigator.of(context).pushReplacement(
                         MaterialPageRoute<void>(
+                          settings: const RouteSettings(
+                            name: 'ForgotPasswordScreen',
+                          ),
                           builder: (_) => const ForgotPasswordScreen(),
                         ),
                       ),

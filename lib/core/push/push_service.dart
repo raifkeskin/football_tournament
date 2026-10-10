@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'notification_prefs.dart';
 import 'push_bridge_stub.dart'
     if (dart.library.js_interop) 'push_bridge_web.dart'
     as bridge;
@@ -69,6 +70,10 @@ class PushService {
   /// İzin ister ve abone olur. Bir butona basılınca çağrılmalı (tarayıcılar
   /// kullanıcı etkileşimi olmadan izin penceresi açmaz).
   static Future<void> enable() async {
+    // Misafir: abonelik cihaza bağlı isimsiz kimliğe kaydedilir.
+    if (_sb.auth.currentUser == null) {
+      await NotificationPrefsService.ensureUser();
+    }
     await _save(await bridge.pushSubscribe(kVapidPublicKey));
   }
 

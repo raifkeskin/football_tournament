@@ -7,8 +7,8 @@ import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../auth/widgets/phone_input.dart';
+import '../../home/screens/home_screen.dart';
 import '../../match/models/match.dart';
-import '../../match/screens/fixture_screen.dart';
 import '../../match/screens/match_details_screen.dart';
 import '../../match/widgets/match_score_line.dart';
 import '../consent/consent_screen.dart';
@@ -56,7 +56,11 @@ class MyProfileView extends StatefulWidget {
     required this.playerId,
     required this.displayName,
     required this.phone,
+    this.roleLabels = const [],
   });
+
+  /// Kartta adın altında gösterilen roller (ör. Futbolcu, Takım Sorumlusu).
+  final List<String> roleLabels;
 
   /// Hesaba bağlı oyuncu kaydı; yoksa "eşleşmedi" görünümü açılır.
   final String? playerId;
@@ -151,6 +155,7 @@ class _MyProfileViewState extends State<MyProfileView> {
     if (p == null) return;
     final saved = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
+        settings: const RouteSettings(name: 'EditMyProfileScreen'),
         builder: (_) => EditMyProfileScreen(
           player: p,
           pending: _pending,
@@ -446,6 +451,37 @@ class _MyProfileViewState extends State<MyProfileView> {
                           ),
                         ),
                       ],
+                      if (widget.roleLabels.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: [
+                            for (final r in widget.roleLabels)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 9,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: kAdminAccent.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: kAdminAccent.withValues(alpha: 0.4),
+                                  ),
+                                ),
+                                child: Text(
+                                  r,
+                                  style: const TextStyle(
+                                    color: kAdminAccent,
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
                       if (team != null) ...[
                         const SizedBox(height: 8),
                         Row(
@@ -543,7 +579,7 @@ class _MyProfileViewState extends State<MyProfileView> {
               style: TextStyle(
                 color: color,
                 fontSize: 22,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w800,
               ),
             ),
             Text(
@@ -662,6 +698,13 @@ class _MyProfileViewState extends State<MyProfileView> {
         final all = snap.data ?? const <TeamMatch>[];
         final upcoming = all.where((m) => !m.isPlayed).toList()
           ..sort((a, b) {
+            final weekA = a.match.week;
+            final weekB = b.match.week;
+            if (weekA != null && weekB != null && weekA != weekB) {
+              return weekA.compareTo(weekB);
+            }
+            if (weekA != null && weekB == null) return -1;
+            if (weekA == null && weekB != null) return 1;
             final x = a.startsAt, y = b.startsAt;
             if (x == null) return 1;
             if (y == null) return -1;
@@ -748,9 +791,12 @@ class _MyProfileViewState extends State<MyProfileView> {
   }
 
   void _openMatch(MatchModel m) {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => MatchDetailsScreen(match: m)));
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        settings: const RouteSettings(name: 'MatchDetailsScreen'),
+        builder: (_) => MatchDetailsScreen(match: m),
+      ),
+    );
   }
 
   Widget _nextMatchCard(TeamMatch m) {
@@ -790,8 +836,8 @@ class _MyProfileViewState extends State<MyProfileView> {
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: Colors.white,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
               height: 1.2,
             ),
           ),
@@ -844,7 +890,7 @@ class _MyProfileViewState extends State<MyProfileView> {
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 26,
-                            fontWeight: FontWeight.w900,
+                            fontWeight: FontWeight.w800,
                           ),
                         ),
                         if (at != null)
@@ -953,6 +999,7 @@ class _MyProfileViewState extends State<MyProfileView> {
         borderRadius: BorderRadius.circular(16),
         onTap: () => Navigator.of(context).push(
           MaterialPageRoute(
+            settings: const RouteSettings(name: 'RequestHistoryScreen'),
             builder: (_) => _RequestHistoryScreen(items: items),
           ),
         ),
@@ -986,6 +1033,7 @@ class _MyProfileViewState extends State<MyProfileView> {
     if (id == null || current == null) return;
     final saved = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
+        settings: const RouteSettings(name: 'ConsentScreen'),
         builder: (_) => ConsentScreen(playerId: id, initial: current.granted),
       ),
     );
@@ -1390,12 +1438,15 @@ class _UnmatchedView extends StatelessWidget {
                 borderRadius: BorderRadius.circular(14),
               ),
             ),
-            onPressed: () => Navigator.of(
-              context,
-            ).push(MaterialPageRoute(builder: (_) => const FixtureScreen())),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                settings: const RouteSettings(name: 'HomeScreen'),
+                builder: (_) => const HomeScreen(showCalendar: true),
+              ),
+            ),
             icon: const Icon(Icons.calendar_month_outlined, size: 18),
             label: const Text(
-              'Fikstüre göz at',
+              'Takvime göz at',
               style: TextStyle(fontWeight: FontWeight.w800),
             ),
           ),

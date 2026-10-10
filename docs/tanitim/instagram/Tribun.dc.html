@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>Tribün ve katılım</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600;700&family=Barlow+Condensed:ital,wght@1,800&display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1080px; height: 1080px; box-sizing: border-box; position: relative; overflow: hidden; background: #0F172A; color: #F8FAFC; font-family: 'Barlow', sans-serif; display: flex; flex-direction: column; justify-content: space-between; padding: 84px 88px">
+  <div style="position: absolute; left: 0; right: 0; top: 0; height: 12px; background: #38BDF8"></div>
+  <div style="display: flex; flex-direction: column; gap: 40px">
+    <div style="display: flex; align-items: center; justify-content: space-between">
+      <div style="font-size: 26px; font-weight: 700; letter-spacing: 4px; color: #38BDF8">TRİBÜN · HERKES</div>
+      <div style="font-size: 24px; font-weight: 600; color: #94A3B8">4 / 4</div>
+    </div>
+    <h2 style="margin: 0; font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 800; font-size: 112px; line-height: 0.95">GİRİŞ YAPMADAN<br><span style="color: #38BDF8">TAKİP ET.</span></h2>
+    <p style="margin: 0; font-size: 36px; line-height: 1.35; color: #CBD5E1; max-width: 860px">Skorlar, puan durumu, fikstür ve turnuva haberleri herkese açık. Hesap gerekmez.</p>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 26px">
+    <div style="display: flex; align-items: center; gap: 30px; padding: 34px 38px; border-radius: 30px; background: #10B981; color: #062A1C">
+      <img src="/_blob/524593e1660b715bfb8302bf6d4247a5" alt="Lig Masası logosu" style="width: 120px; height: 120px; border-radius: 24px; object-fit: cover; flex: none">
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <div style="font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 800; font-size: 76px; line-height: 1">LIGMASASI.COM</div>
+        <div style="font-size: 30px; font-weight: 700">Tarayıcıdan aç, ana ekrana ekle</div>
+      </div>
+    </div>
+    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 28px; font-weight: 600; color: #94A3B8">
+      <span>App Store ve Google Play'de çok yakında</span>
+      <span style="color: #F8FAFC">@[HESAP ADI]</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1080,"height":1080}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

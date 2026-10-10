@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../core/widgets/admin_page.dart';
 import 'online_registration_screen.dart';
 
-/// Şifremi Unuttum: kayıtlı numara için yeni geçici şifre talebi. Admin
-/// onaylayınca şifre WhatsApp'tan iletilir.
+/// Şifremi Unuttum: SMS doğrulama açıksa kodla yeni şifre, kapalıysa yeni
+/// geçici şifre talebi (admin onaylayınca şifre WhatsApp'tan iletilir).
 class ForgotPasswordScreen extends StatelessWidget {
   const ForgotPasswordScreen({super.key});
 

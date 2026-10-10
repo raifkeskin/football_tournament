@@ -19,6 +19,9 @@ enum MediaFolder {
   /// Turnuva sponsorlarının logoları.
   sponsors('sponsors'),
 
+  /// Turnuvanın afiş arka planı (turnuva başına tek dosya; yalnız admin).
+  posters('posters'),
+
   /// Futbolcunun onay bekleyen profil fotoğrafları:
   /// `profile_requests/<auth uid>/` (yalnızca kendi klasörüne yükleyebilir).
   profileRequests('profile_requests'),
@@ -81,7 +84,11 @@ class SupabaseImageUploadService implements ImageUploadService {
   /// 384 piksel keskin kalır, dosya 512'ye göre ~%45 küçük olur.
   static const _maxSideLogo = 384;
 
+  /// Afiş zemini 1080×1920 afişin tamamını kaplar.
+  static const _maxSidePoster = 1920;
+
   static int _maxSideFor(MediaFolder f) => switch (f) {
+    MediaFolder.posters => _maxSidePoster,
     MediaFolder.players ||
     MediaFolder.profileRequests ||
     MediaFolder.staff => _maxSidePortrait,
@@ -193,7 +200,9 @@ class SupabaseImageUploadService implements ImageUploadService {
             _extOf(image.name),
             maxSide: _maxSideFor(folder),
             // Haber fotoğrafları Instagram'a da gidebilir: yalnız JPEG.
-            forceJpeg: folder == MediaFolder.news,
+            // Afiş zemini fotoğraftır; şeffaflık gerekmez.
+            forceJpeg:
+                folder == MediaFolder.news || folder == MediaFolder.posters,
           );
 
     // Web'de (JS) `1 << 32` sıfır olur ve nextInt hata verir; 31 bit yeterli.

@@ -20,6 +20,7 @@ class MatchScoreLine extends StatelessWidget {
     required this.awayLogo,
     this.leading,
     this.showLogos = true,
+    this.compact = false,
   });
 
   final MatchModel match;
@@ -33,6 +34,9 @@ class MatchScoreLine extends StatelessWidget {
 
   /// Ana sayfada logolar gösterilmez (yalnızca fikstürde).
   final bool showLogos;
+
+  /// Takvim listesinde daha fazla maçın görünmesi için sıkı satır ölçüleri.
+  final bool compact;
 
   static const _mid = Color(0xFF94A3B8);
   static const _accent = Color(0xFF10B981);
@@ -82,27 +86,52 @@ class MatchScoreLine extends StatelessWidget {
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
         textAlign: TextAlign.center,
-        style: const TextStyle(
-          fontWeight: FontWeight.w700,
-          fontSize: 13,
-          height: 1.15,
+        style: TextStyle(
+          fontWeight: FontWeight.w600,
+          fontSize: compact ? 11.5 : 12,
+          height: compact ? 1.05 : 1.15,
           color: Colors.white,
+          fontFamily: 'Barlow',
         ),
       ),
     );
 
-    Widget logo(String url) => WebSafeImage(
-      url: url,
-      width: 20,
-      height: 20,
-      fit: BoxFit.contain,
-      fallbackIconSize: 16,
+    Widget logo(String url) => ColorFiltered(
+      colorFilter: const ColorFilter.matrix([
+        1.237,
+        -0.215,
+        -0.022,
+        0,
+        4,
+        -0.064,
+        1.086,
+        -0.022,
+        0,
+        4,
+        -0.064,
+        -0.215,
+        1.278,
+        0,
+        4,
+        0,
+        0,
+        0,
+        1,
+        0,
+      ]),
+      child: WebSafeImage(
+        url: url,
+        width: compact ? 17 : 20,
+        height: compact ? 17 : 20,
+        fit: BoxFit.contain,
+        fallbackIconSize: compact ? 14 : 16,
+      ),
     );
 
     return Row(
       children: [
         SizedBox(
-          width: 40,
+          width: compact ? 34 : 40,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -111,24 +140,35 @@ class MatchScoreLine extends StatelessWidget {
                   padding: const EdgeInsets.only(bottom: 2),
                   child: leading,
                 ),
-              Text(
-                time.isEmpty ? '--:--' : time,
-                style: const TextStyle(
-                  color: _mid,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 11.5,
-                  fontFeatures: [FontFeature.tabularFigures()],
-                ),
-              ),
-              if (status != null)
+              if (match.status == MatchStatus.finished)
                 Text(
-                  status.text,
+                  'MS',
                   style: TextStyle(
-                    color: status.color,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 10,
+                    color: status?.color ?? _accent,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 11.5,
+                  ),
+                )
+              else ...[
+                Text(
+                  time.isEmpty ? '--:--' : time,
+                  style: const TextStyle(
+                    color: _mid,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 11.5,
+                    fontFeatures: [FontFeature.tabularFigures()],
                   ),
                 ),
+                if (status != null)
+                  Text(
+                    status.text,
+                    style: TextStyle(
+                      color: status.color,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 10,
+                    ),
+                  ),
+              ],
             ],
           ),
         ),
@@ -143,10 +183,10 @@ class MatchScoreLine extends StatelessWidget {
         ),
         // Skor kapsülü: isimlerden boşlukla ayrılır; canlı maçta kırmızı.
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10),
+          padding: EdgeInsets.symmetric(horizontal: compact ? 4 : 10),
           child: Container(
-            width: 56,
-            height: 28,
+            width: compact ? 46 : 56,
+            height: compact ? 24 : 28,
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: isLive
@@ -161,8 +201,8 @@ class MatchScoreLine extends StatelessWidget {
               showScore ? '$hs - $as' : '-',
               style: TextStyle(
                 color: isLive ? _live : Colors.white,
-                fontWeight: FontWeight.w900,
-                fontSize: 14,
+                fontWeight: FontWeight.w800,
+                fontSize: compact ? 12 : 14,
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
@@ -179,4 +219,42 @@ class MatchScoreLine extends StatelessWidget {
       ],
     );
   }
+}
+
+class YoutubeBrandIcon extends StatelessWidget {
+  const YoutubeBrandIcon({super.key, this.size = 18});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => SizedBox.square(
+    dimension: size,
+    child: CustomPaint(painter: _YoutubeBrandPainter()),
+  );
+}
+
+class _YoutubeBrandPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final frame = RRect.fromRectAndRadius(
+      Rect.fromLTWH(
+        size.width * 0.04,
+        size.height * 0.17,
+        size.width * 0.92,
+        size.height * 0.66,
+      ),
+      Radius.circular(size.height * 0.2),
+    );
+    canvas.drawRRect(frame, Paint()..color = const Color(0xFFFF0033));
+
+    final play = Path()
+      ..moveTo(size.width * 0.43, size.height * 0.31)
+      ..lineTo(size.width * 0.43, size.height * 0.69)
+      ..lineTo(size.width * 0.70, size.height * 0.50)
+      ..close();
+    canvas.drawPath(play, Paint()..color = Colors.white);
+  }
+
+  @override
+  bool shouldRepaint(covariant _YoutubeBrandPainter oldDelegate) => false;
 }

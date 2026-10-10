@@ -17,7 +17,7 @@
   }
 
   async function registration() {
-    return navigator.serviceWorker.register('/push-sw.js?v=1', { scope: '/push/' });
+    return navigator.serviceWorker.register('/push-sw.js?v=2', { scope: '/push/' });
   }
 
   // 'unsupported' | 'ios-install' | 'denied' | 'granted' | 'default'
@@ -64,5 +64,34 @@
     return endpoint;
   }
 
-  window.mfPush = { state, subscribe, current, unsubscribe, isIos };
+  // Uygulama açıkken bildirime basılınca service worker adresi iletir;
+  // Flutter işleyicisi kurulana kadar bekletilir.
+  let openHandler = null;
+  let pendingOpen = null;
+  function setOpenHandler(fn) {
+    openHandler = fn;
+    if (pendingOpen) {
+      const url = pendingOpen;
+      pendingOpen = null;
+      fn(url);
+    }
+  }
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', (e) => {
+      if (!e.data || e.data.type !== 'push-open') return;
+      if (openHandler) openHandler(e.data.url);
+      else pendingOpen = e.data.url;
+    });
+  }
+
+  // Bildirim izni olan cihazda service worker'ın yeni sürümü kaydedilsin
+  // (bildirime basınca ilgili ekranı açan sürüm).
+  if ('serviceWorker' in navigator && 'Notification' in window &&
+      Notification.permission === 'granted') {
+    navigator.serviceWorker.getRegistration('/push/').then((reg) => {
+      if (reg) registration().catch(() => {});
+    }).catch(() => {});
+  }
+
+  window.mfPush = { state, subscribe, current, unsubscribe, isIos, setOpenHandler };
 })();

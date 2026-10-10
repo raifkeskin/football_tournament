@@ -1,3 +1,4 @@
+import 'core/services/screen_trail.dart';
 import 'core/app_navigator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
@@ -17,6 +18,7 @@ import 'core/widgets/web_responsive_frame.dart';
 import 'core/utils/app_activity.dart';
 import 'core/services/error_reporter.dart';
 import 'core/services/notification_center.dart';
+import 'features/notifications/notification_router.dart';
 
 bool _showLoginGate() {
   final user = Supabase.instance.client.auth.currentUser;
@@ -46,6 +48,8 @@ void main() async {
   // Son turnuva teması hemen; kişiye göre güncel tema arkadan.
   await ActiveTournament.init(guestChosen: GuestMode.chosen);
 
+  // Telefon bildiriminden açıldıysa hedef ekran (ana ekran hazır olunca).
+  NotificationRouter.init();
   runApp(const MyApp());
 }
 
@@ -65,6 +69,13 @@ class _SplashScreenState extends State<SplashScreen>
     vsync: this,
     duration: const Duration(milliseconds: 900),
   )..forward();
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Logo bant, menü ve afişlerde de anında çizilsin.
+    AppLogo.precache(context);
+  }
 
   @override
   void dispose() {
@@ -145,7 +156,7 @@ class _SplashScreenState extends State<SplashScreen>
                   _reveal(
                     start: 0,
                     child: theme == null
-                        ? const AppLogo(size: 150, tile: false)
+                        ? const AppLogo(size: 150)
                         : WebSafeImage(
                             url: theme.logoUrl,
                             width: 170,
@@ -165,7 +176,7 @@ class _SplashScreenState extends State<SplashScreen>
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 34,
-                            fontWeight: FontWeight.w900,
+                            fontWeight: FontWeight.w800,
                             letterSpacing: 0.5,
                           ),
                         ),
@@ -262,6 +273,7 @@ class _MyAppState extends State<MyApp> {
     ErrorReporter.restartHandler = () {
       appNavigatorKey.currentState?.pushAndRemoveUntil(
         MaterialPageRoute<void>(
+          settings: const RouteSettings(name: 'Root'),
           builder: (_) => _showLoginGate()
               ? const LoginScreen(gate: true)
               : const MainNavigator(),
@@ -298,7 +310,7 @@ class _MyAppState extends State<MyApp> {
       controller: _sessionController,
       child: MaterialApp(
         navigatorKey: appNavigatorKey,
-        navigatorObservers: [LeagueSwitchScope.observer],
+        navigatorObservers: [LeagueSwitchScope.observer, ScreenTrail.instance],
         title: kAppName,
         debugShowCheckedModeBanner: false,
         localizationsDelegates: const [
@@ -336,7 +348,7 @@ class _MyAppState extends State<MyApp> {
               if (s == null) return null;
               return s.copyWith(
                 fontFamily: 'Batangas',
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w800,
               );
             }
 
@@ -357,7 +369,7 @@ class _MyAppState extends State<MyApp> {
             titleTextStyle: const TextStyle(
               color: _text,
               fontFamily: 'Batangas',
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w800,
               fontSize: 18,
             ),
           ),

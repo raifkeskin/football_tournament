@@ -215,6 +215,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
     if (season == null || !ctx.mounted) return;
     await Navigator.of(ctx).push(
       MaterialPageRoute<void>(
+        settings: const RouteSettings(name: 'TeamSquadScreen'),
         builder: (_) => TeamSquadScreen(
           teamId: teamId,
           tournamentId: season.id,
@@ -1040,7 +1041,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                     style: const TextStyle(
                       color: kAdminAccent,
                       fontSize: 13,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w800,
                       letterSpacing: 1,
                     ),
                   ),

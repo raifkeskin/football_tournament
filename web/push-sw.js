@@ -27,7 +27,11 @@ self.addEventListener('notificationclick', (event) => {
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
       for (const c of list) {
-        if (c.url.startsWith(self.location.origin) && 'focus' in c) return c.focus();
+        if (c.url.startsWith(self.location.origin) && 'focus' in c) {
+          // Açık uygulama ilgili ekranı kendisi açar.
+          c.postMessage({ type: 'push-open', url });
+          return c.focus();
+        }
       }
       return self.clients.openWindow(url);
     }),

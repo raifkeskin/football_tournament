@@ -70,6 +70,7 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
   bool _loadingSeasons = false;
   bool _loadingGroups = false;
   bool _loadingTeams = false;
+  bool _autoSelectingSingleLeague = false;
 
   @override
   void initState() {
@@ -249,6 +250,7 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
         if (open && mounted) {
           await Navigator.of(context).push(
             MaterialPageRoute<void>(
+              settings: const RouteSettings(name: 'LiveDrawScreen'),
               builder: (_) => LiveDrawScreen(drawId: live.id),
             ),
           );
@@ -276,6 +278,7 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
       if (!mounted) return;
       final saved = await Navigator.of(context).push<bool>(
         MaterialPageRoute(
+          settings: const RouteSettings(name: 'FixtureDrawScreen'),
           builder: (_) => FixtureDrawScreen(
             leagueId: leagueId,
             seasonId: seasonId,
@@ -397,6 +400,18 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                               panelLeagueIds.contains(l.id))
                             (id: l.id, name: l.name, isDefault: false),
                       ];
+                      if (session.hasManagementPanel &&
+                          leagueOptions.length == 1 &&
+                          _selectedLeagueId == null &&
+                          !_autoSelectingSingleLeague) {
+                        final onlyLeagueId = leagueOptions.single.id;
+                        _autoSelectingSingleLeague = true;
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted && _selectedLeagueId == null) {
+                            _selectLeague(onlyLeagueId);
+                          }
+                        });
+                      }
                       return AdminFieldGroup(
                         children: [
                           AdminSelectRow(
@@ -534,7 +549,7 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 18,
-                                  fontWeight: FontWeight.w900,
+                                  fontWeight: FontWeight.w800,
                                 ),
                                 decoration: const InputDecoration(
                                   isDense: true,
@@ -690,7 +705,7 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 18,
-                                      fontWeight: FontWeight.w900,
+                                      fontWeight: FontWeight.w800,
                                     ),
                                   ),
                                 ),

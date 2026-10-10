@@ -72,7 +72,7 @@ class SupabaseLeagueService implements ILeagueService {
     // Tablo küçük; pasife alınan turnuva da yakalansın diye filtre burada.
     return watchTableRows(_client, table: 'leagues', orderBy: 'name').map(
       (rows) => rows
-          .where((r) => r['is_active'] == true)
+          .where((r) => r['status'] == 'active')
           // Giriş yapan kişi yalnızca kendi turnuvalarını görür.
           .where((r) => LeagueScope.allows(r['id']?.toString()))
           .map((r) => League.fromMap(r))
@@ -657,16 +657,78 @@ class SupabaseLeagueService implements ILeagueService {
   }
 
   static const _newsColumns =
-      'id, league_id, content, is_published, image_url, image_urls, '
+      'id, season_id, content, is_published, image_url, image_urls, '
       'like_count, created_at, publish_until, region_id, live_draw_id';
 
   /// Haberde en fazla 5 fotoğraf (veritabanı da sınırlar).
   static List<String> _cleanImages(List<String> urls) =>
       urls.map((u) => u.trim()).where((u) => u.isNotEmpty).take(5).toList();
 
-  NewsItem _newsFromRow(Map<String, dynamic> r) {
-    final league = r['leagues'];
+  /// Sezon → turnuva eşlemesi (haberde league_id yok, sezondan bulunur).
+  /// Bilinmeyen sezon gelirse (yeni sezon) bir kez yeniden okunur.
+  Map<String, String> _seasonLeague = const {};
+
+  Future<Map<String, String>> _seasonLeagues(
+    List<Map<String, dynamic>> rows,
+  ) async {
+    final missing = rows.any(
+      (r) => !_seasonLeague.containsKey((r['season_id'] ?? '').toString()),
+    );
+    if (missing) {
+      try {
+        final res = await _client.from('seasons').select('id, league_id');
+        _seasonLeague = {
+          for (final s in res)
+            s['id'].toString(): (s['league_id'] ?? '').toString(),
+        };
+      } catch (_) {}
+    }
+    return _seasonLeague;
+  }
+
+  /// Yeni haberin sezonu: verilen sezon, yoksa bölgenin sezonu, o da yoksa
+  /// turnuvanın aktif (en yeni) sezonu.
+  Future<String> _newsSeasonId({
+    required String leagueId,
+    String? seasonId,
+    String? regionId,
+  }) async {
+    final given = (seasonId ?? '').trim();
+    if (given.isNotEmpty) return given;
+    final region = (regionId ?? '').trim();
+    if (region.isNotEmpty) {
+      final r = await _client
+          .from('season_regions')
+          .select('season_id')
+          .eq('id', region)
+          .maybeSingle();
+      final s = (r?['season_id'] ?? '').toString();
+      if (s.isNotEmpty) return s;
+    }
+    final rows = await _client
+        .from('seasons')
+        .select('id, is_active')
+        .eq('league_id', leagueId)
+        .order('start_date', ascending: false);
+    if (rows.isEmpty) {
+      throw Exception('Turnuvanın sezonu yok; önce sezon eklenmeli.');
+    }
+    final active = rows.firstWhere(
+      (s) => s['is_active'] == true,
+      orElse: () => rows.first,
+    );
+    return active['id'].toString();
+  }
+
+  NewsItem _newsFromRow(
+    Map<String, dynamic> r, [
+    Map<String, String> leagueOf = const {},
+  ]) {
+    final season = r['seasons'];
+    final s = season is Map ? season : const <String, dynamic>{};
+    final league = s['leagues'] ?? r['leagues'];
     final l = league is Map ? league : const <String, dynamic>{};
+    final seasonId = (r['season_id'] ?? '').toString();
     final img = (r['image_url'] ?? '').toString().trim();
     final logo = (l['logo_url'] ?? '').toString().trim();
     final imgs = [
@@ -675,7 +737,8 @@ class SupabaseLeagueService implements ILeagueService {
     ];
     return NewsItem(
       id: (r['id'] ?? '').toString(),
-      tournamentId: (r['league_id'] ?? '').toString(),
+      tournamentId: (s['league_id'] ?? leagueOf[seasonId] ?? '').toString(),
+      seasonId: seasonId,
       content: (r['content'] ?? '').toString(),
       isPublished: r['is_published'] == true,
       createdAt: _readDate(r['created_at']),
@@ -713,19 +776,18 @@ class SupabaseLeagueService implements ILeagueService {
         table: 'news',
         operation: 'STREAM',
         filters:
-            'primaryKey=id | clientFilter=league_id=$id, is_published=${includeUnpublished ? 'any' : 'true'}',
+            'primaryKey=id | clientFilter=season.league_id=$id, is_published=${includeUnpublished ? 'any' : 'true'}',
       );
       return watchTableRows(
         _client,
         table: 'news',
-        column: 'league_id',
-        value: id,
         orderBy: 'created_at',
         ascending: false,
-      ).map((rows) {
+      ).asyncMap((rows) async {
+        final leagueOf = await _seasonLeagues(rows);
         return rows
-            .where((r) => (r['league_id'] ?? '').toString().trim() == id)
-            .map(_newsFromRow)
+            .where((r) => leagueOf[(r['season_id'] ?? '').toString()] == id)
+            .map((r) => _newsFromRow(r, leagueOf))
             .where((n) => includeUnpublished || n.isLive)
             .toList();
       });
@@ -745,12 +807,16 @@ class SupabaseLeagueService implements ILeagueService {
       table: 'news',
       orderBy: 'created_at',
       ascending: false,
-    ).map(
-      (rows) => rows
-          .where((r) => leagueIds.contains((r['league_id'] ?? '').toString()))
-          .map(_newsFromRow)
-          .toList(),
-    );
+    ).asyncMap((rows) async {
+      final leagueOf = await _seasonLeagues(rows);
+      return rows
+          .where(
+            (r) =>
+                leagueIds.contains(leagueOf[(r['season_id'] ?? '').toString()]),
+          )
+          .map((r) => _newsFromRow(r, leagueOf))
+          .toList();
+    });
   }
 
   final Map<String, Stream<List<NewsItem>>> _newsFeeds = {};
@@ -771,7 +837,7 @@ class SupabaseLeagueService implements ILeagueService {
       'is_published',
       'publish_until',
       'region_id',
-      'league_id',
+      'season_id',
       'live_draw_id',
     ];
     for (final k in watched) {
@@ -782,29 +848,42 @@ class SupabaseLeagueService implements ILeagueService {
   }
 
   @override
-  Stream<List<NewsItem>> watchNewsFeed({String? leagueId}) {
+  Stream<List<NewsItem>> watchNewsFeed({String? leagueId, String? seasonId}) {
     final id = (leagueId ?? '').trim();
+    final sid = (seasonId ?? '').trim();
     final uid = _client.auth.currentUser?.id;
     // Aynı kullanıcı + filtre için tek akış: build içinde çağrılsa da yeniden
     // bağlanmaz; giriş/çıkışta "beğendim mi" bilgisi doğru kullanıcıya ait olur.
-    return _newsFeeds.putIfAbsent('${uid ?? '-'}|$id', () {
+    return _newsFeeds.putIfAbsent('${uid ?? '-'}|$id|$sid', () {
+      // Turnuva sezondan gelir; turnuvaya göre süzmek için iç birleşim.
+      final season = sid.isEmpty && id.isNotEmpty
+          ? 'seasons!inner(league_id, leagues(name, logo_url, is_private))'
+          : 'seasons(league_id, leagues(name, logo_url, is_private))';
       // Misafirin news_likes yetkisi yok; beğeni bilgisi sadece girişte okunur.
       final select = uid == null
-          ? '$_newsColumns, leagues(name, logo_url, is_private), '
-                'season_regions(name)'
-          : '$_newsColumns, leagues(name, logo_url, is_private), '
-                'season_regions(name), news_likes(user_id)';
+          ? '$_newsColumns, $season, season_regions(name)'
+          : '$_newsColumns, $season, season_regions(name), news_likes(user_id)';
       Future<List<Map<String, dynamic>>> fetch() async {
         AppConfig.sqlLogStart(
           table: 'news',
           operation: 'SELECT',
-          filters: 'is_published=true${id.isEmpty ? '' : ' | league_id=$id'}',
+          filters:
+              'is_published=true'
+              '${sid.isNotEmpty
+                  ? ' | season_id=$sid'
+                  : id.isEmpty
+                  ? ''
+                  : ' | seasons.league_id=$id'}',
         );
         var query = _client
             .from('news')
             .select(select)
             .eq('is_published', true);
-        if (id.isNotEmpty) query = query.eq('league_id', id);
+        if (sid.isNotEmpty) {
+          query = query.eq('season_id', sid);
+        } else if (id.isNotEmpty) {
+          query = query.eq('seasons.league_id', id);
+        }
         // Süresi dolan haber akışta yok (RLS misafiri zaten süzer; turnuva
         // sahibi/admin de akışta görmesin).
         query = query.or(
@@ -823,7 +902,7 @@ class SupabaseLeagueService implements ILeagueService {
       }
 
       List<NewsItem> items(List<Map<String, dynamic>> rows) =>
-          rows.map(_newsFromRow).toList();
+          rows.map((r) => _newsFromRow(r)).toList();
 
       // Yalnızca beğeni sayısı değiştiyse (en sık değişiklik) satır yerinde
       // güncellenir; liste yeniden indirilmez. Diğer değişikliklerde
@@ -850,9 +929,9 @@ class SupabaseLeagueService implements ILeagueService {
           } else {
             if (c.type == PostgresChangeEvent.update &&
                 i < 0 &&
-                id.isNotEmpty &&
-                c.newRow['league_id']?.toString() != id) {
-              continue; // başka turnuvanın haberi
+                sid.isNotEmpty &&
+                c.newRow['season_id']?.toString() != sid) {
+              continue; // başka sezonun haberi
             }
             rows = await fetch();
           }
@@ -913,6 +992,7 @@ class SupabaseLeagueService implements ILeagueService {
   @override
   Future<void> addNews({
     required String tournamentId,
+    String? seasonId,
     required String content,
     List<String> imageUrls = const [],
     bool isPublished = true,
@@ -932,8 +1012,13 @@ class SupabaseLeagueService implements ILeagueService {
         operation: 'INSERT',
         filters: 'league_id=$tId',
       );
+      final sId = await _newsSeasonId(
+        leagueId: tId,
+        seasonId: seasonId,
+        regionId: regionId,
+      );
       await _client.from('news').insert({
-        'league_id': tId,
+        'season_id': sId,
         'content': text,
         'is_published': isPublished,
         // Kapak (image_url) veritabanında ilk fotoğraftan doldurulur.

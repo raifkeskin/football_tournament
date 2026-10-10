@@ -1,3 +1,4 @@
+import '../../../core/services/screen_trail.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show SystemNavigator;
@@ -9,12 +10,12 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../../core/services/app_settings.dart';
 import '../../../core/services/league_access.dart';
-import '../../match/screens/fixture_screen.dart';
-import '../../news/screens/news_feed_screen.dart';
-import '../../team/screens/groups_screen.dart';
+import '../../match/screens/broadcast_guide_screen.dart';
+import '../../notifications/notification_router.dart';
+import '../../notifications/notification_settings_screen.dart';
+import '../../team/screens/standings_list_screen.dart';
 import 'home_screen.dart';
 import '../../player/screens/profile_screen.dart';
-import '../../player/screens/stats_screen.dart';
 import '../../../core/widgets/app_name_band.dart';
 import '../../../core/widgets/app_logo.dart';
 import '../../../core/design_flags.dart';
@@ -25,7 +26,7 @@ class MainNavigator extends StatefulWidget {
   const MainNavigator({super.key, this.initialTabIndex = 0});
 
   /// Profil sekmesinin sırası (girişten sonra doğrudan açılır).
-  static const int profileTab = 5;
+  static const int profileTab = 4;
 
   /// Ana gezginin Scaffold'u: yan menü bant gibi gezgin dışındaki
   /// parçalardan da açılabilsin.
@@ -38,11 +39,17 @@ class MainNavigator extends StatefulWidget {
   /// Yan menüyü açar (ör. yönetim panelinde bantaki ☰).
   static void openMenu() => _activeScaffoldKey?.currentState?.openDrawer();
 
+  /// Yan menüyü kapatır (bantaki X).
+  static void closeMenu() => _activeScaffoldKey?.currentState?.closeDrawer();
+
   /// Gezgin dışından sekme değiştirme isteği (ör. canlı kura → Fikstür).
   static final tabRequest = ValueNotifier<int?>(null);
 
-  /// Fikstür sekmesinin sırası.
-  static const int fixtureTab = 2;
+  /// Takvimli maçlar sekmesinin sırası.
+  static const int fixtureTab = 1;
+
+  /// Yayın Rehberi sekmesinin sırası.
+  static const int broadcastTab = 3;
 
   final int initialTabIndex;
 
@@ -57,7 +64,12 @@ class _MainNavigatorState extends State<MainNavigator> {
   void initState() {
     super.initState();
     MainNavigator._activeScaffoldKey = _scaffoldKey;
+    LeagueSwitchScope.openMenu = MainNavigator.openMenu;
+    LeagueSwitchScope.closeMenu = MainNavigator.closeMenu;
     MainNavigator.tabRequest.addListener(_onTabRequest);
+    NotificationRouter.pending.addListener(_onPushOpen);
+    // Uygulama bir bildirimden açıldıysa ekran kurulunca hedefe git.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _onPushOpen());
     AppSettings.bottomNavEnabled.addListener(_onSettings);
   }
 
@@ -75,9 +87,18 @@ class _MainNavigatorState extends State<MainNavigator> {
       MainNavigator._activeScaffoldKey = null;
     }
     MainNavigator.tabRequest.removeListener(_onTabRequest);
+    NotificationRouter.pending.removeListener(_onPushOpen);
     AppSettings.bottomNavEnabled.removeListener(_onSettings);
     LeagueSwitchScope.clearHome(_route);
     super.dispose();
+  }
+
+  /// Telefon bildirimine basıldı: ilgili maç / haber açılır.
+  void _onPushOpen() {
+    final target = NotificationRouter.pending.value;
+    if (target == null || !mounted) return;
+    NotificationRouter.pending.value = null;
+    NotificationRouter.open(context, target.kind, target.ref);
   }
 
   void _onTabRequest() {
@@ -106,7 +127,10 @@ class _MainNavigatorState extends State<MainNavigator> {
     final nav = Navigator.of(context, rootNavigator: true);
     await GuestMode.set(false);
     nav.pushAndRemoveUntil(
-      MaterialPageRoute<void>(builder: (_) => const LoginScreen(gate: true)),
+      MaterialPageRoute<void>(
+        settings: const RouteSettings(name: 'LoginScreen'),
+        builder: (_) => const LoginScreen(gate: true),
+      ),
       (route) => false,
     );
     await session.signOut();
@@ -140,22 +164,44 @@ class _MainNavigatorState extends State<MainNavigator> {
     // değil).
     LeagueSwitchScope.setHome(
       _route,
-      mainTab: _aktifSekme < 5,
+      // Turnuva seçici yalnızca Ana Sayfa'da.
+      mainTab: _aktifSekme == 0,
       panelTab:
           _aktifSekme == MainNavigator.profileTab &&
           session.value.hasManagementPanel,
+      // Bantta menü düğmesi: Ana Sayfa, Puan Durumu, Yayın Rehberi.
+      homeTab:
+          _aktifSekme == 0 ||
+          _aktifSekme == 2 ||
+          _aktifSekme == MainNavigator.broadcastTab,
+      calendarTab: _aktifSekme == MainNavigator.fixtureTab,
+      // Yayın Rehberi tüm turnuvaların maçlarını gösterir: bantta turnuva
+      // adı yok.
+      genericTab: _aktifSekme == MainNavigator.broadcastTab,
+      // Yayın Rehberi: bantta sağda takvim (gün seçimi).
+      action: _aktifSekme == MainNavigator.broadcastTab
+          ? const BandIconButton(
+              icon: Icons.calendar_month_rounded,
+              size: 36,
+              onTap: BroadcastGuideScreen.pickDate,
+            )
+          : null,
     );
     final user = session.value.user;
     final loggedIn = user != null && !user.isAnonymous;
+    // Hata kaydında hangi sekmede olunduğu görünsün.
+    ScreenTrail.tab = const [
+      'Ana sayfa',
+      'Fikstür',
+      'Puan durumu',
+      'Yayın rehberi',
+      'Profil',
+    ].elementAtOrNull(_aktifSekme);
     final ekranlar = <Widget>[
-      HomeScreen(
-        onOpenNews: () => setState(() => _aktifSekme = 1),
-        onOpenTab: (i) => setState(() => _aktifSekme = i),
-      ),
-      const NewsFeedScreen(),
-      const FixtureScreen(),
-      const GroupsScreen(),
-      const StatsScreen(),
+      const HomeScreen(),
+      const HomeScreen(showCalendar: true),
+      const StandingsListScreen(),
+      const BroadcastGuideScreen(),
       ProfileScreen(
         onRequestHomeTab: () {
           setState(() {
@@ -172,6 +218,7 @@ class _MainNavigatorState extends State<MainNavigator> {
       },
       child: Scaffold(
         key: _scaffoldKey,
+        onDrawerChanged: LeagueSwitchScope.setDrawerOpen,
         extendBody: !kNewHomeDesign,
         // Alt çubuk yok: admin ayarı kapalıysa ya da Profil sekmesinde yönetim
         // paneli / giriş formu açıkken (gezinme bantaki ya da yan menüden).
@@ -202,26 +249,46 @@ class _MainNavigatorState extends State<MainNavigator> {
           valueListenable: LeagueAccess.dataEpoch,
           builder: (context, epoch, _) => KeyedSubtree(
             key: ValueKey('data_$epoch'),
-            // Ana sekmeler parmakla kaydırılır (Ana Sayfa → Haberler →
-            // Fikstür → Puan Durumu → İstatistik); Profil menüden açılır ve
-            // sekmelerin üstünde durur.
-            child: Stack(
-              children: [
-                _TabPager(
-                  index: _aktifSekme < 5 ? _aktifSekme : null,
-                  onChanged: (i) => setState(() => _aktifSekme = i),
-                  onSwipePastFirst: () =>
-                      _scaffoldKey.currentState?.openDrawer(),
-                  children: ekranlar.take(5).toList(),
-                ),
-                Offstage(
-                  offstage: _aktifSekme != 5,
-                  child: TickerMode(
-                    enabled: _aktifSekme == 5,
-                    child: ekranlar[5],
+            // Ana sekmeler parmakla kaydırılır (Ana Sayfa → Maç Takvimi →
+            // Puan Durumu → Yayın Rehberi); Profil menüden açılır ve
+            // sekmelerin üstünde durur. Haberler ve İstatistik Turnuva
+            // Sayfası'nda.
+            // Klavye boşluğunu bu Scaffold zaten bırakıyor; içteki ekranların
+            // Scaffold'ları ikinci kez bırakmasın (Profil'deki giriş formunda
+            // klavyenin üstünde boş alan kalıyordu).
+            child: MediaQuery.removeViewInsets(
+              context: context,
+              removeBottom: true,
+              child: Stack(
+                children: [
+                  // Görünmeyen sekmeler odak almasın: klavyenin "ileri" tuşu
+                  // odağı arkadaki sekmeye taşıyınca sayfa oraya kayıyordu.
+                  ExcludeFocus(
+                    excluding: _aktifSekme == MainNavigator.profileTab,
+                    child: _TabPager(
+                      index: _aktifSekme < MainNavigator.profileTab
+                          ? _aktifSekme
+                          : null,
+                      onChanged: (i) => setState(() => _aktifSekme = i),
+                      onSwipePastFirst: () =>
+                          _scaffoldKey.currentState?.openDrawer(),
+                      children: ekranlar
+                          .take(MainNavigator.profileTab)
+                          .toList(),
+                    ),
                   ),
-                ),
-              ],
+                  Offstage(
+                    offstage: _aktifSekme != MainNavigator.profileTab,
+                    child: ExcludeFocus(
+                      excluding: _aktifSekme != MainNavigator.profileTab,
+                      child: TickerMode(
+                        enabled: _aktifSekme == MainNavigator.profileTab,
+                        child: ekranlar[MainNavigator.profileTab],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -478,10 +545,9 @@ class _MenuDrawer extends StatelessWidget {
   /// (ikon, ad, renk geçişi) — her bölümün kendi rengi.
   static const _items = [
     (Icons.home_rounded, 'Ana Sayfa', [Color(0xFF22C55E), Color(0xFF15803D)]),
-    (Icons.article_rounded, 'Haberler', [Color(0xFFFB7185), Color(0xFFE11D48)]),
     (
       Icons.calendar_month_rounded,
-      'Fikstür',
+      'Maç Takvimi',
       [Color(0xFF60A5FA), Color(0xFF2563EB)],
     ),
     (
@@ -490,23 +556,12 @@ class _MenuDrawer extends StatelessWidget {
       [Color(0xFFFCD34D), Color(0xFFD97706)],
     ),
     (
-      Icons.bar_chart_rounded,
-      'İstatistik',
-      [Color(0xFFC084FC), Color(0xFF7C3AED)],
+      Icons.live_tv_rounded,
+      'Yayın Rehberi',
+      [Color(0xFFFB7185), Color(0xFFE11D48)],
     ),
+    // Haberler ve İstatistik şimdilik menüde yok (Turnuva Sayfası'nda).
   ];
-
-  static String _roleLabel(AppSessionState s) {
-    if (s.isAdmin) return 'Admin';
-    if (s.isLeagueOwner) return 'Kurucu Başkan';
-    if (s.isRegionOwner) return 'Bölge Sorumlusu';
-    final manager = s.isManager || s.managedTeams.isNotEmpty;
-    // Hem futbolcu hem takım sorumlusu olan kişide iki rol birlikte yazılır.
-    if (manager && s.playerId != null) return 'Futbolcu · Takım Sorumlusu';
-    if (manager) return 'Takım Sorumlusu';
-    if (s.playerId != null) return 'Futbolcu';
-    return 'Üye';
-  }
 
   Future<void> _open(String url) async {
     final uri = Uri.tryParse(url);
@@ -575,6 +630,30 @@ class _MenuDrawer extends StatelessWidget {
                             ),
                         ],
                       ),
+                    ),
+                    // Bildirim ayarları (misafir dahil herkes).
+                    TextButton.icon(
+                      style: TextButton.styleFrom(foregroundColor: accent),
+                      icon: const Icon(
+                        Icons.notifications_active_outlined,
+                        size: 20,
+                      ),
+                      label: const Text(
+                        'Bildirim Ayarları',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      onPressed: () {
+                        final nav = Navigator.of(context);
+                        nav.pop(); // çekmeceyi kapat
+                        nav.push(
+                          MaterialPageRoute<void>(
+                            settings: const RouteSettings(
+                              name: 'NotificationSettingsScreen',
+                            ),
+                            builder: (_) => const NotificationSettingsScreen(),
+                          ),
+                        );
+                      },
                     ),
                     if (AppSettings.privateLeaguesEnabled.value)
                       TextButton.icon(
@@ -656,7 +735,7 @@ class _MenuDrawer extends StatelessWidget {
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 18,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w800,
                     height: 1.15,
                   ),
                 ),
@@ -798,7 +877,7 @@ class _MenuDrawer extends StatelessWidget {
                                   ? const Color(0xFF0B1220)
                                   : Colors.white,
                               fontSize: 18,
-                              fontWeight: FontWeight.w900,
+                              fontWeight: FontWeight.w800,
                             ),
                           ),
                   ),
@@ -815,14 +894,6 @@ class _MenuDrawer extends StatelessWidget {
                             color: Colors.white,
                             fontWeight: FontWeight.w800,
                             fontSize: 15,
-                          ),
-                        ),
-                        Text(
-                          _roleLabel(session),
-                          style: TextStyle(
-                            color: accent,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 12,
                           ),
                         ),
                       ],

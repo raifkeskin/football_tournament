@@ -226,7 +226,7 @@ class ActiveTournament {
     final all = guest || await _sb.rpc('is_admin') == true;
     var query = _sb
         .from('leagues')
-        .select('id, name, short_name, logo_url, is_active');
+        .select('id, name, short_name, logo_url, status');
     if (!all) {
       final ids = ((await _sb.rpc('my_league_ids')) as List? ?? const [])
           .map((e) => e.toString())
@@ -237,7 +237,7 @@ class ActiveTournament {
     final rows = await query.order('name');
     final list = [
       for (final r in rows)
-        if (r['is_active'] != false)
+        if (r['status'] == 'active')
           LeagueChoice(
             id: r['id'].toString(),
             name: (r['name'] ?? '').toString(),

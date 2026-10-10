@@ -40,11 +40,11 @@ class _AdminSponsorsScreenState extends State<AdminSponsorsScreen> {
     try {
       final rows = await _sb
           .from('leagues')
-          .select('id, name, logo_url, is_active')
+          .select('id, name, logo_url, status')
           .order('name');
       final list = [
         for (final r in rows)
-          if (r['is_active'] != false &&
+          if (r['status'] == 'active' &&
               (s.isAdmin || s.ownedLeagueIds.contains(r['id'].toString())))
             LeagueChoice(
               id: r['id'].toString(),

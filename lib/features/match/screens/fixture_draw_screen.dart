@@ -169,7 +169,10 @@ class _FixtureDrawScreenState extends State<FixtureDrawScreen> {
       );
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute<void>(builder: (_) => LiveDrawScreen(drawId: id)),
+        MaterialPageRoute<void>(
+          settings: const RouteSettings(name: 'LiveDrawScreen'),
+          builder: (_) => LiveDrawScreen(drawId: id),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
@@ -277,7 +280,7 @@ class _FixtureDrawScreenState extends State<FixtureDrawScreen> {
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 18,
-                                  fontWeight: FontWeight.w900,
+                                  fontWeight: FontWeight.w800,
                                 ),
                               ),
                             ),
@@ -475,7 +478,7 @@ class _FixtureDrawScreenState extends State<FixtureDrawScreen> {
               style: TextStyle(
                 color: kAdminMuted,
                 fontSize: 15,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w800,
               ),
             ),
           ),

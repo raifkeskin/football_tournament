@@ -15,6 +15,10 @@ class StandingEntry {
   int goalsAgainst = 0;
   int points = 0;
 
+  /// Son maçlar, eskiden yeniye: 'G' galibiyet, 'B' beraberlik, 'M'
+  /// mağlubiyet (en çok 5).
+  List<String> form = const [];
+
   int get goalDiff => goalsFor - goalsAgainst;
 }
 
@@ -44,6 +48,8 @@ String _awayId(Map<String, dynamic> m) =>
 
 bool _isCompleted(Map<String, dynamic> m) {
   final status = (m['status'] ?? '').toString().trim().toLowerCase();
+  // Ertelenen / iptal edilen maç oynanmamıştır; puana sayılmaz.
+  if (status == 'cancelled' || status == 'postponed') return false;
   return m['is_completed'] == true ||
       m['isCompleted'] == true ||
       status == 'finished' ||
@@ -84,12 +90,28 @@ List<StandingEntry> computeGroupStandings({
         t.id: StandingEntry(teamId: t.id, name: t.name, logo: t.logoUrl),
   };
 
+  // Form için maçlar oynanma sırasıyla (tarih, saat, hafta).
+  String playedKey(Map<String, dynamic> m) =>
+      '${m['match_date'] ?? m['matchDate'] ?? ''}'
+      '|${m['match_time'] ?? m['matchTime'] ?? ''}'
+      '|${(_asInt(m['week'])).toString().padLeft(3, '0')}';
+  final formOf = <String, List<(String, String)>>{};
+
   for (final m in groupMatches) {
     final h = table[_homeId(m)];
     final a = table[_awayId(m)];
     if (!_isCompleted(m) || h == null || a == null) continue;
     final hs = _score(m, 'home');
     final as = _score(m, 'away');
+    final key = playedKey(m);
+    formOf.putIfAbsent(h.teamId, () => []).add((
+      key,
+      hs > as ? 'G' : (hs == as ? 'B' : 'M'),
+    ));
+    formOf.putIfAbsent(a.teamId, () => []).add((
+      key,
+      as > hs ? 'G' : (hs == as ? 'B' : 'M'),
+    ));
     h
       ..played += 1
       ..goalsFor += hs
@@ -116,6 +138,13 @@ List<StandingEntry> computeGroupStandings({
         ..drawn += 1
         ..points += 1;
     }
+  }
+
+  for (final e in table.values) {
+    final f = formOf[e.teamId];
+    if (f == null) continue;
+    f.sort((x, y) => x.$1.compareTo(y.$1));
+    e.form = [for (final r in f.skip(f.length > 5 ? f.length - 5 : 0)) r.$2];
   }
 
   final list = table.values.toList()

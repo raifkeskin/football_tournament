@@ -16,7 +16,7 @@ import '../../../core/services/global_filter.dart';
 import '../../../core/services/active_tournament.dart';
 import '../../../core/utils/resilient_stream.dart';
 import '../../../core/widgets/app_date_picker.dart';
-import '../../team/screens/groups_screen.dart';
+import '../../tournament/screens/tournament_hub_screen.dart';
 import '../../match/screens/match_details_screen.dart';
 import '../../match/widgets/match_score_line.dart';
 import '../../../core/widgets/league_logo.dart';
@@ -27,22 +27,23 @@ import '../../../core/widgets/youtube_player_page.dart';
 import '../widgets/home_news_card.dart';
 import '../widgets/home_dashboard.dart';
 import '../../../core/design_flags.dart';
+import '../../../core/widgets/app_name_band.dart';
 
 /// Ana sayfa — günün maçları, tarih şeridi ve maç kartları.
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, this.onOpenNews, this.onOpenTab});
+  const HomeScreen({super.key, this.showCalendar = false});
 
-  /// Son dakika haber kartına dokununca (Haberler sekmesine geçiş).
-  final VoidCallback? onOpenNews;
-
-  /// Yeni tasarımda bölüm bağlantıları (Fikstür, Puan Durumu, İstatistik).
-  final ValueChanged<int>? onOpenTab;
+  /// Ana gezinmede eski takvimli maç ekranını göstermek için.
+  final bool showCalendar;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  /// Takvim görünümü (Maç Takvimi).
+  bool get _calendar => widget.showCalendar;
+
   static const int _yaricap = 2;
 
   static const List<String> _haftaKisa = [
@@ -76,6 +77,14 @@ class _HomeScreenState extends State<HomeScreen> {
   Set<String> _visibleLeagueIds = const <String>{};
   Map<String, String> _leagueNameById = const <String, String>{};
   Map<String, String> _leagueLogoById = const <String, String>{};
+  Map<String, Color> _leaguePrimaryById = const <String, Color>{};
+  Map<String, Color> _leagueSecondaryById = const <String, Color>{};
+
+  static Color _themeColor(String? value, Color fallback) {
+    final hex = (value ?? '').trim();
+    if (!RegExp(r'^#[0-9A-Fa-f]{6}$').hasMatch(hex)) return fallback;
+    return Color(int.parse('FF${hex.substring(1)}', radix: 16));
+  }
 
   static String _dateKey(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-'
@@ -265,6 +274,22 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _selectedDate = DateTime(date.year, date.month, date.day);
       _rebuildDates(_selectedDate);
+    });
+  }
+
+  void _shiftDateWindow(int days) {
+    final shifted = _tarihler
+        .map((date) => date.add(Duration(days: days)))
+        .toList();
+    final selectedIndex = shifted.indexWhere(
+      (date) =>
+          date.year == _selectedDate.year &&
+          date.month == _selectedDate.month &&
+          date.day == _selectedDate.day,
+    );
+    setState(() {
+      _tarihler = shifted;
+      _seciliIndeks = selectedIndex;
     });
   }
 
@@ -463,25 +488,26 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
-          Positioned(
-            left: -40,
-            right: -40,
-            bottom: -60,
-            child: IgnorePointer(
-              child: Opacity(
-                opacity: 0.06,
-                child: AspectRatio(
-                  aspectRatio: 1,
-                  child: (ActiveTournament.theme.value?.logoUrl ?? '').isEmpty
-                      ? const FittedBox(child: AppLogo(size: 200))
-                      : WebSafeImage(
-                          url: ActiveTournament.theme.value!.logoUrl,
-                          fit: BoxFit.contain,
-                        ),
+          if (!_calendar)
+            Positioned(
+              left: -40,
+              right: -40,
+              bottom: -60,
+              child: IgnorePointer(
+                child: Opacity(
+                  opacity: 0.06,
+                  child: AspectRatio(
+                    aspectRatio: 1,
+                    child: (ActiveTournament.theme.value?.logoUrl ?? '').isEmpty
+                        ? const FittedBox(child: AppLogo(size: 200))
+                        : WebSafeImage(
+                            url: ActiveTournament.theme.value!.logoUrl,
+                            fit: BoxFit.contain,
+                          ),
+                  ),
                 ),
               ),
             ),
-          ),
           Positioned.fill(
             child: StreamBuilder<List<League>>(
               stream: _leagueService.watchLeagues(),
@@ -510,8 +536,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 }
 
-                if (!_didAutoSelectDefaultLeague ||
-                    !allLeagues.any((l) => l.id == _activeLeagueId)) {
+                if (!_calendar &&
+                    (!_didAutoSelectDefaultLeague ||
+                        !allLeagues.any((l) => l.id == _activeLeagueId))) {
                   // Gizli turnuvalar yalnızca görme yetkisi olana gelir
                   // (veritabanı kuralı); burada ayrıca elenmez.
                   // Uygulamanın büründüğü turnuva (kişinin / misafirin son
@@ -534,7 +561,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 }
 
                 final uid = Supabase.instance.client.auth.currentUser?.id;
-                if (uid != null && uid != _preferredForUid) {
+                if (!_calendar && uid != null && uid != _preferredForUid) {
                   WidgetsBinding.instance.addPostFrameCallback(
                     (_) => _applyPreferredLeague(allLeagues),
                   );
@@ -547,7 +574,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 // Seçici gizliyken: kişinin görebildiği tüm aktif turnuvalar
                 // (gizliler yetkisi/kodu olana zaten gelir); admin hepsini.
-                _visibleLeagueIds = _showLeagueFilter
+                _visibleLeagueIds = _calendar
+                    ? {
+                        for (final l in allLeagues)
+                          if (isAdmin || l.isActive) l.id,
+                      }
+                    : _showLeagueFilter
                     ? {currentLeague.id}
                     : {
                         for (final l in allLeagues)
@@ -555,14 +587,81 @@ class _HomeScreenState extends State<HomeScreen> {
                       };
                 _leagueNameById = {for (final l in allLeagues) l.id: l.name};
                 _leagueLogoById = {for (final l in allLeagues) l.id: l.logoUrl};
+                _leaguePrimaryById = {
+                  for (final l in allLeagues)
+                    l.id: _themeColor(l.themePrimary, const Color(0xFF064E3B)),
+                };
+                _leagueSecondaryById = {
+                  for (final l in allLeagues)
+                    l.id: _themeColor(
+                      l.themeSecondary,
+                      const Color(0xFF10B981),
+                    ),
+                };
 
-                if (kNewHomeDesign) {
+                if (kNewHomeDesign && !_calendar) {
                   return HomeDashboard(
                     key: ValueKey('dash_${currentLeague.id}'),
                     league: currentLeague,
-                    onOpenNews: () => widget.onOpenNews?.call(),
-                    onOpenTab: (i) => widget.onOpenTab?.call(i),
                     onOpenMenu: () => _openMenu(context),
+                  );
+                }
+
+                if (_calendar) {
+                  return Column(
+                    children: [
+                      SizedBox(
+                        height: 68,
+                        child: Row(
+                          children: [
+                            // Menü: bantla aynı futbol topu düğmesi.
+                            const Padding(
+                              padding: EdgeInsets.only(left: 4),
+                              child: BandMenuButton(),
+                            ),
+                            IconButton(
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              tooltip: 'Önceki tarihler',
+                              onPressed: () => _shiftDateWindow(-1),
+                              icon: const Icon(
+                                Icons.chevron_left_rounded,
+                                color: Colors.white,
+                              ),
+                            ),
+                            Expanded(
+                              child: _TarihSeridi(
+                                tarihler: _tarihler,
+                                seciliIndeks: _seciliIndeks,
+                                bugunMu: _bugunMu,
+                                onSec: _tarihSec,
+                                vurguRenk: cs.primary,
+                                haftaKisa: _haftaKisa,
+                              ),
+                            ),
+                            IconButton(
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              tooltip: 'Sonraki tarihler',
+                              onPressed: () => _shiftDateWindow(1),
+                              icon: const Icon(
+                                Icons.chevron_right_rounded,
+                                color: Colors.white,
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.only(right: 4),
+                              child: BandIconButton(
+                                icon: Icons.calendar_month_rounded,
+                                tooltip: 'Takvim',
+                                onTap: _openModernCalendar,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Expanded(child: _buildMatchList(context, currentLeague)),
+                    ],
                   );
                 }
 
@@ -607,9 +706,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                             child: Column(
                               children: [
-                                HomeNewsCard(
-                                  onOpenNews: () => widget.onOpenNews?.call(),
-                                ),
+                                if (!_calendar) const HomeNewsCard(),
                                 Expanded(
                                   child: _buildMatchList(
                                     context,
@@ -700,7 +797,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                             ),
                             IconButton(
-                              tooltip: 'Takvim',
+                              tooltip: 'Maç Takvimi',
                               onPressed: _openModernCalendar,
                               icon: Icon(
                                 Icons.calendar_month_outlined,
@@ -743,7 +840,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     //               currentLeague.name,
                     //               style: TextStyle(
                     //                 color: cs.onPrimaryContainer,
-                    //                 fontWeight: FontWeight.w900,
+                    //                 fontWeight: FontWeight.w800,
                     //                 fontSize: 20,
                     //               ),
                     //               overflow: TextOverflow.ellipsis,
@@ -842,19 +939,22 @@ class _HomeScreenState extends State<HomeScreen> {
                 });
 
                 if (matches.isEmpty) {
-                  return const Center(
+                  return Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
+                        const Icon(
                           Icons.event_busy_rounded,
                           size: 64,
                           color: Colors.white24,
                         ),
-                        SizedBox(height: 16),
-                        Text(
+                        const SizedBox(height: 16),
+                        const Text(
                           'Bu tarihte maç bulunamadı.',
-                          style: TextStyle(color: Colors.white24, fontSize: 16),
+                          style: const TextStyle(
+                            color: Colors.white24,
+                            fontSize: 16,
+                          ),
                         ),
                       ],
                     ),
@@ -876,12 +976,11 @@ class _HomeScreenState extends State<HomeScreen> {
                           (groupCountBySeason[sid] ?? 0) + 1;
                     }
 
-                    // Bölüm: sezon; sezonda birden fazla grup varsa sezon+grup.
+                    // Bölümler grup varsa sezon+grup, yoksa yalnızca sezondur.
                     String sectionKey(MatchModel m) {
                       final sid = m.seasonId;
-                      final multi = (groupCountBySeason[sid] ?? 0) > 1;
                       final gid = (m.groupId ?? '').trim();
-                      return multi && gid.isNotEmpty ? '$sid|$gid' : sid;
+                      return gid.isNotEmpty ? '$sid|$gid' : sid;
                     }
 
                     final Map<String, List<MatchModel>> sectionMap = {};
@@ -899,7 +998,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     // Sezonda tek grup varsa boş döner.
                     String groupNameOf(String key) {
                       final parts = key.split('|');
-                      if (parts.length < 2) return '';
+                      if (parts.length < 2 ||
+                          (groupCountBySeason[parts.first] ?? 0) <= 1) {
+                        return '';
+                      }
                       return groupNameById[parts[1]] ?? '';
                     }
 
@@ -924,50 +1026,36 @@ class _HomeScreenState extends State<HomeScreen> {
                             sectionMap[key]!.first.leagueId;
                         final leagueText = leagueNameOf(key);
                         final groupText = groupNameOf(key);
-                        // Bölümdeki maçlar aynı haftadansa "3. Hafta".
-                        final weeks = sectionMap[key]!
-                            .map((m) => m.week)
-                            .whereType<int>()
-                            .toSet();
-                        final weekText = weeks.length == 1
-                            ? '${weeks.first}. Hafta'
-                            : '';
+                        void openSection() {
+                          GlobalFilter.setLeague(sectionLeagueId);
+                          GlobalFilter.setSeason(sId);
+                          ActiveTournament.noteViewed(sectionLeagueId);
+                          TournamentHubScreen.open(
+                            context,
+                            leagueId: sectionLeagueId,
+                            seasonId: sId,
+                            groupId: key.contains('|')
+                                ? key.split('|').last
+                                : null,
+                          );
+                        }
 
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            InkWell(
-                              onTap: () {
-                                GlobalFilter.setLeague(sectionLeagueId);
-                                GlobalFilter.setSeason(sId);
-                                ActiveTournament.noteViewed(sectionLeagueId);
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => GroupsScreen(
-                                      initialLeagueId: sectionLeagueId,
-                                      initialSeasonId: sId,
-                                      initialGroupId: key.contains('|')
-                                          ? key.split('|').last
-                                          : null,
-                                    ),
-                                  ),
-                                );
-                              },
-                              borderRadius: BorderRadius.circular(12),
-                              // Başlık şeridi: kartlardan koyu zemin ve
-                              // belirgin yeşil tonlu kenarlık.
-                              child: _LeagueSectionHeader(
-                                logoUrl: _leagueLogoById[sectionLeagueId],
-                                title: leagueText,
-                                subtitle: [
-                                  if (groupText.isNotEmpty) groupText,
-                                  if (weekText.isNotEmpty) weekText,
-                                ].join(' · '),
+                            if (!_calendar)
+                              InkWell(
+                                onTap: openSection,
+                                borderRadius: BorderRadius.circular(12),
+                                child: _LeagueSectionHeader(
+                                  logoUrl: _leagueLogoById[sectionLeagueId],
+                                  title: leagueText,
+                                  subtitle: groupText,
+                                ),
                               ),
-                            ),
-                            ...sectionMap[key]!.map(
-                              (m) => _MatchCard(
+                            ...sectionMap[key]!.asMap().entries.map((entry) {
+                              final m = entry.value;
+                              return _MatchCard(
                                 match: m,
                                 homeLogo: logoMap[m.homeTeamId] ?? '',
                                 awayLogo: logoMap[m.awayTeamId] ?? '',
@@ -979,8 +1067,22 @@ class _HomeScreenState extends State<HomeScreen> {
                                     (nameMap[m.awayTeamId] ?? '').trim().isEmpty
                                     ? 'Deplasman'
                                     : (nameMap[m.awayTeamId] ?? '').trim(),
-                              ),
-                            ),
+                                sectionTitle: _calendar && entry.key == 0
+                                    ? leagueText
+                                    : null,
+                                sectionLogoUrl:
+                                    _leagueLogoById[sectionLeagueId],
+                                sectionSubtitle: groupText,
+                                sectionPrimary:
+                                    _leaguePrimaryById[sectionLeagueId] ??
+                                    const Color(0xFF064E3B),
+                                sectionAccent:
+                                    _leagueSecondaryById[sectionLeagueId] ??
+                                    const Color(0xFF10B981),
+                                compact: _calendar,
+                                onTapSection: openSection,
+                              );
+                            }),
                           ],
                         );
                       }).toList(),
@@ -1002,12 +1104,27 @@ class _MatchCard extends StatefulWidget {
   final String awayLogo;
   final String homeName;
   final String awayName;
+  final String? sectionTitle;
+  final String? sectionLogoUrl;
+  final String sectionSubtitle;
+  final Color sectionPrimary;
+  final Color sectionAccent;
+  final bool compact;
+
+  final VoidCallback? onTapSection;
   const _MatchCard({
     required this.match,
     required this.homeLogo,
     required this.awayLogo,
     required this.homeName,
     required this.awayName,
+    this.sectionTitle,
+    this.sectionLogoUrl,
+    this.sectionSubtitle = '',
+    this.sectionPrimary = const Color(0xFF064E3B),
+    this.sectionAccent = const Color(0xFF10B981),
+    this.compact = false,
+    this.onTapSection,
   });
 
   @override
@@ -1046,8 +1163,10 @@ class _MatchCardState extends State<_MatchCard> {
     final isAdmin = AppSession.of(context).value.isAdmin;
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      margin: EdgeInsets.only(bottom: widget.compact ? 5 : 10),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(widget.compact ? 10 : 16),
+      ),
       color: const Color(0xFF1E293B).withValues(alpha: 0.78),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
@@ -1055,6 +1174,7 @@ class _MatchCardState extends State<_MatchCard> {
           await Navigator.push(
             context,
             MaterialPageRoute(
+              settings: const RouteSettings(name: 'MatchDetailsScreen'),
               builder: (_) =>
                   MatchDetailsScreen(match: widget.match, isAdmin: isAdmin),
             ),
@@ -1062,25 +1182,112 @@ class _MatchCardState extends State<_MatchCard> {
           _checkBroadcast(); // Geri dönüldüğünde ikonu güncelle
         },
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-          child: MatchScoreLine(
-            match: widget.match,
-            homeName: widget.homeName,
-            awayName: widget.awayName,
-            homeLogo: widget.homeLogo,
-            awayLogo: widget.awayLogo,
-            showLogos: false,
-            leading: _broadcastUrl == null
-                ? null
-                : InkWell(
-                    // Yayın uygulamanın içinde, tam ekran oynar.
-                    onTap: () => openYoutubeInApp(context, _broadcastUrl!),
-                    child: const Icon(
-                      Icons.play_circle_fill,
-                      color: Colors.redAccent,
-                      size: 20,
+          padding: EdgeInsets.symmetric(
+            horizontal: widget.compact ? 7 : 8,
+            vertical: widget.compact ? 6 : 12,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (widget.sectionTitle != null) ...[
+                InkWell(
+                  onTap: widget.onTapSection,
+                  borderRadius: BorderRadius.circular(7),
+                  child: Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: widget.compact ? 7 : 8,
+                      vertical: widget.compact ? 5 : 7,
+                    ),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Color.lerp(
+                            widget.sectionPrimary,
+                            Colors.black,
+                            0.58,
+                          )!,
+                          Color.lerp(
+                            widget.sectionPrimary,
+                            const Color(0xFF0B1220),
+                            0.76,
+                          )!,
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(7),
+                      border: Border.all(
+                        color: widget.sectionAccent.withValues(alpha: 0.42),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        if (widget.compact)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: LeagueLogo(
+                              url: widget.sectionLogoUrl ?? '',
+                              size: 18,
+                              fallbackColor: widget.sectionAccent,
+                            ),
+                          ),
+                        Expanded(
+                          child: Text(
+                            widget.sectionTitle!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: widget.compact ? 12 : 13,
+                              fontWeight: FontWeight.w700,
+                              fontFamily: 'Barlow',
+                            ),
+                          ),
+                        ),
+                        if (widget.sectionSubtitle.trim().isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 96),
+                            child: Text(
+                              widget.sectionSubtitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.right,
+                              style: TextStyle(
+                                color: Color.lerp(
+                                  Colors.white,
+                                  widget.sectionAccent,
+                                  0.56,
+                                ),
+                                fontSize: widget.compact ? 9.5 : 11,
+                                fontWeight: FontWeight.w500,
+                                fontFamily: 'Barlow',
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
+                ),
+                SizedBox(height: widget.compact ? 4 : 8),
+              ],
+              MatchScoreLine(
+                match: widget.match,
+                homeName: widget.homeName,
+                awayName: widget.awayName,
+                homeLogo: widget.homeLogo,
+                awayLogo: widget.awayLogo,
+                showLogos: widget.compact,
+                compact: widget.compact,
+                leading:
+                    _broadcastUrl == null ||
+                        widget.match.status == MatchStatus.finished
+                    ? null
+                    : InkWell(
+                        onTap: () => openYoutubeInApp(context, _broadcastUrl!),
+                        child: const YoutubeBrandIcon(size: 18),
+                      ),
+              ),
+            ],
           ),
         ),
       ),
@@ -1155,7 +1362,7 @@ class _TarihSeridi extends StatelessWidget {
                         style: const TextStyle(
                           fontSize: 13,
                           color: Colors.white,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w800,
                           shadows: [
                             Shadow(
                               color: Colors.black87,

@@ -15,8 +15,12 @@ import '../../player/widgets/player_card.dart';
 import '../../team/models/team.dart';
 import '../../team/utils/standings.dart';
 import '../../tournament/models/league.dart';
+import '../../tournament/screens/admin_penalty_management_screen.dart';
+import '../../tournament/screens/tournament_hub_screen.dart';
 import 'home_news_card.dart';
 import '../../sponsors/sponsor_strip.dart';
+import '../../../core/utils/team_name.dart';
+import '../../../core/push/notification_prefs.dart';
 
 /// Yeni tasarımın renk sistemi: temel renkler sabit, turnuva yalnızca ana ve
 /// vurgu rengini getirir, durum renkleri her turnuvada aynı.
@@ -187,6 +191,7 @@ class _DashData {
     required this.totalGoals,
     required this.activePenaltyMatches,
     required this.pendingPenalties,
+    required this.pendingPenaltyMatchIds,
   });
 
   final String seasonId;
@@ -207,6 +212,10 @@ class _DashData {
 
   /// Yöneticinin onayını bekleyen ceza sayısı.
   final int pendingPenalties;
+
+  /// Onay bekleyen cezaların maçları (grup bazında sayı için; maçsız elle
+  /// girilen cezada null).
+  final List<String?> pendingPenaltyMatchIds;
 }
 
 /// Yeni ana sayfa panosu (önizleme kanalı). Oyuncu ve takım sorumlusu için
@@ -216,16 +225,10 @@ class HomeDashboard extends StatefulWidget {
   const HomeDashboard({
     super.key,
     required this.league,
-    required this.onOpenNews,
-    required this.onOpenTab,
     required this.onOpenMenu,
   });
 
   final League league;
-  final VoidCallback onOpenNews;
-
-  /// Ana gezinme sekmesine geçiş (2 Fikstür, 3 Puan Durumu, 4 İstatistik).
-  final ValueChanged<int> onOpenTab;
   final VoidCallback onOpenMenu;
 
   @override
@@ -253,6 +256,13 @@ class _HomeDashboardState extends State<HomeDashboard> {
   bool _loadedOnce = false;
   String? _loadedFor;
   String? _followedTeamId;
+
+  /// Birden fazla gruplu sezonda karşılamanın sağındaki seçiciyle seçilen
+  /// grup (null: kişinin grubu, o da yoksa ilk grup).
+  String? _pickedGroupId;
+
+  /// Cihazdaki takip DB'ye taşındı mı (bu ekranda bir kez).
+  bool _followSynced = false;
   Timer? _tick;
 
   @override
@@ -311,6 +321,17 @@ class _HomeDashboardState extends State<HomeDashboard> {
   }) async {
     final prefs = await SharedPreferences.getInstance();
     _followedTeamId = prefs.getString(_followKey);
+    // Cihazda kalmış eski takip bir kez DB'ye taşınır (bildirim gitsin).
+    final followed = _followedTeamId;
+    if (followed != null && !_followSynced) {
+      _followSynced = true;
+      unawaited(
+        NotificationPrefsService.setFollowedTeam(
+          widget.league.id,
+          followed,
+        ).catchError((Object _) {}),
+      );
+    }
     if (fromDisk && _data == null) {
       try {
         final raw = prefs.getString(key);
@@ -379,7 +400,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
       _sb
           .from('match_events')
           .select(
-            'player_id, assist_player_id, team_id, is_own_goal, '
+            'match_id, player_id, assist_player_id, team_id, is_own_goal, '
             'scorer:players!match_events_player_id_fkey(name, surname, photo_url), '
             'assister:players!match_events_assist_player_id_fkey(name, surname, photo_url)',
           )
@@ -410,7 +431,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
       isOwner
           ? _sb
                 .from('player_penalties')
-                .select('id')
+                .select('id, match_id')
                 .eq('season_id', seasonId)
                 .eq('status', 'pending')
           : none(),
@@ -425,6 +446,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
       'my_player_teams': r[5],
       'my_penalties': r[6],
       'pending': (r[7] as List).length,
+      'pending_rows': r[7],
     };
   }
 
@@ -434,11 +456,15 @@ class _HomeDashboardState extends State<HomeDashboard> {
     if (season == null) return null;
     final seasonId = season['id'].toString();
 
+    // Gruplu sezonda gruba atanmamış takım (sezona kayıtlı ama oynamıyor)
+    // sayılmaz.
+    final hasGroups = (raw['groups'] as List? ?? const []).isNotEmpty;
     final teams = <String, _TeamInfo>{};
     for (final r in (raw['season_teams'] as List? ?? const [])) {
       final t = (r['teams'] as Map?) ?? const {};
       final id = (r['team_id'] ?? '').toString();
       if (id.isEmpty) continue;
+      if (hasGroups && r['group_id'] == null) continue;
       teams[id] = _TeamInfo(
         id: id,
         name: (t['name'] ?? '').toString(),
@@ -487,7 +513,14 @@ class _HomeDashboardState extends State<HomeDashboard> {
           .goals++;
     }
 
+    // Ertelenen / iptal maçların golleri sayılmaz.
+    final unplayed = {
+      for (final m in (raw['matches'] as List? ?? const []))
+        if (m['status'] == 'cancelled' || m['status'] == 'postponed')
+          (m['id'] ?? '').toString(),
+    };
     for (final e in (raw['events'] as List? ?? const [])) {
+      if (unplayed.contains((e['match_id'] ?? '').toString())) continue;
       totalGoals++;
       if (e['is_own_goal'] == true) continue;
       final team = (e['team_id'] ?? '').toString();
@@ -545,6 +578,10 @@ class _HomeDashboardState extends State<HomeDashboard> {
       totalGoals: totalGoals,
       activePenaltyMatches: activePenalty,
       pendingPenalties: (raw['pending'] as num?)?.toInt() ?? 0,
+      pendingPenaltyMatchIds: [
+        for (final p in (raw['pending_rows'] as List? ?? const []))
+          (p as Map)['match_id']?.toString(),
+      ],
     );
   }
 
@@ -610,6 +647,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
     final isAdmin = AppSession.of(context).value.isAdmin;
     Navigator.of(context).push(
       MaterialPageRoute<void>(
+        settings: const RouteSettings(name: 'MatchDetailsScreen'),
         builder: (_) => MatchDetailsScreen(
           match: m,
           isAdmin: isAdmin,
@@ -673,6 +711,14 @@ class _HomeDashboardState extends State<HomeDashboard> {
       await prefs.setString(_followKey, picked);
     } catch (_) {}
     if (mounted) setState(() => _followedTeamId = picked);
+    // Bildirim için DB'ye de (misafire cihaza bağlı isimsiz oturum açılır).
+    unawaited(
+      NotificationPrefsService.setFollowedTeam(
+        widget.league.id,
+        picked,
+        ensureSession: true,
+      ).catchError((Object _) {}),
+    );
   }
 
   // ---- Görünüm --------------------------------------------------------
@@ -697,18 +743,25 @@ class _HomeDashboardState extends State<HomeDashboard> {
     } else {
       content = _message('Bu turnuvada henüz sezon yok.');
     }
-    return RefreshIndicator(
-      color: DashColors.accent(),
-      onRefresh: _refresh,
-      child: ListView(
-        padding: EdgeInsets.fromLTRB(0, top, 0, 24),
-        children: [
+    // Sponsor şeridi sabit (menü bantta); selamlama içerikle kayar.
+    return Column(
+      children: [
+        Padding(
+          padding: EdgeInsets.only(top: top),
           // Bandın hemen altında dönen sponsor şeridi (sponsor yoksa boş).
-          SponsorStrip(leagueId: widget.league.id),
-          _greeting(session, data),
-          content,
-        ],
-      ),
+          child: SponsorStrip(leagueId: widget.league.id),
+        ),
+        Expanded(
+          child: RefreshIndicator(
+            color: DashColors.accent(),
+            onRefresh: _refresh,
+            child: ListView(
+              padding: const EdgeInsets.only(bottom: 24),
+              children: [_greeting(session, data), content],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -740,17 +793,19 @@ class _HomeDashboardState extends State<HomeDashboard> {
 
   Widget _greeting(AppSessionState session, _DashData? data) {
     final loggedIn = session.user != null && !session.user!.isAnonymous;
-    final first = (session.displayName ?? '').trim().split(' ').first;
-    final myGroup = data == null ? null : _myGroupId(data);
+    final fullName = (session.displayName ?? '').trim();
+    final group = data == null ? null : _groupId(data);
+    // Birden fazla grup varsa grup sağdaki seçicide; altta yalnız sezon.
+    final multi = data != null && data.groups.length > 1;
     final sub = !loggedIn
         ? 'Misafir girişi'
         : [
             if (data != null && data.seasonName.isNotEmpty) data.seasonName,
-            if (myGroup != null)
-              data!.groupRegion[myGroup] ?? data.groups[myGroup] ?? '',
+            if (group != null && !multi)
+              data!.groupRegion[group] ?? data.groups[group] ?? '',
           ].where((s) => s.isNotEmpty).join(' · ');
     return Container(
-      padding: const EdgeInsets.fromLTRB(4, 10, 8, 14),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
@@ -762,20 +817,18 @@ class _HomeDashboardState extends State<HomeDashboard> {
         ),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          IconButton(
-            tooltip: 'Menü',
-            onPressed: widget.onOpenMenu,
-            icon: const Icon(Icons.menu_rounded, color: Colors.white),
-          ),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  loggedIn && first.isNotEmpty
-                      ? 'Merhaba, $first'
+                  loggedIn && fullName.isNotEmpty
+                      ? 'Merhaba, $fullName'
                       : 'Hoş geldin',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: _barlow(size: 18, weight: FontWeight.w800),
                 ),
                 if (sub.isNotEmpty)
@@ -788,9 +841,117 @@ class _HomeDashboardState extends State<HomeDashboard> {
               ],
             ),
           ),
+          if (multi && group != null) ...[
+            const SizedBox(width: 10),
+            _groupPicker(data, group),
+          ],
         ],
       ),
     );
+  }
+
+  /// Grup seçici: dokununca grupların listesi açılır; seçilen grubun özeti
+  /// (bu hafta, puan durumu, geçen hafta) gösterilir.
+  Widget _groupPicker(_DashData d, String current) {
+    final ids = d.groups.keys.toList()
+      ..sort(
+        (a, b) =>
+            d.groups[a]!.toLowerCase().compareTo(d.groups[b]!.toLowerCase()),
+      );
+    return Builder(
+      builder: (ctx) => Material(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () async {
+            final box = ctx.findRenderObject() as RenderBox?;
+            final overlay =
+                Navigator.of(ctx).overlay?.context.findRenderObject()
+                    as RenderBox?;
+            if (box == null || overlay == null) return;
+            final at = box.localToGlobal(
+              box.size.bottomRight(Offset.zero),
+              ancestor: overlay,
+            );
+            final picked = await showMenu<String>(
+              context: ctx,
+              color: DashColors.surface,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              position: RelativeRect.fromRect(
+                Rect.fromLTWH(at.dx, at.dy + 4, 0, 0),
+                Offset.zero & overlay.size,
+              ),
+              items: [
+                for (final id in ids)
+                  PopupMenuItem<String>(
+                    value: id,
+                    child: Row(
+                      children: [
+                        Icon(
+                          id == current
+                              ? Icons.radio_button_checked_rounded
+                              : Icons.radio_button_off_rounded,
+                          size: 18,
+                          color: id == current ? Colors.white : Colors.white38,
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          d.groups[id]!,
+                          style: _barlow(size: 14, weight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            );
+            if (picked != null && mounted) {
+              setState(() => _pickedGroupId = picked);
+            }
+          },
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 140),
+                  child: Text(
+                    d.groups[current] ?? '',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _barlow(size: 13, weight: FontWeight.w800),
+                  ),
+                ),
+                const Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Özetin grubu: seçilen grup, yoksa kişinin grubu, o da yoksa ilk grup
+  /// (gruplar karışmasın; her grubun haftası farklı olabilir).
+  String? _groupId(_DashData d) {
+    final picked = _pickedGroupId;
+    if (picked != null && d.groups.containsKey(picked)) return picked;
+    final mine = _myGroupId(d);
+    if (mine != null) return mine;
+    if (d.groups.isEmpty) return null;
+    final ids = d.groups.keys.toList()
+      ..sort(
+        (a, b) =>
+            d.groups[a]!.toLowerCase().compareTo(d.groups[b]!.toLowerCase()),
+      );
+    return ids.first;
   }
 
   /// Kişinin (ya da takip ettiği takımın) grubu.
@@ -806,9 +967,15 @@ class _HomeDashboardState extends State<HomeDashboard> {
     final focusTeams = d.myTeamIds.isNotEmpty
         ? d.myTeamIds
         : {?_followedTeamId}.where(d.teams.containsKey).toSet();
-    final myGroup = _myGroupId(d);
-    final groupFilter =
-        myGroup ?? (d.groups.length == 1 ? d.groups.keys.first : null);
+    final groupFilter = _groupId(d);
+    // Bölüm bağlantıları: Turnuva Sayfası, kişinin grubu (yoksa ilk grup).
+    void openHub(TournamentHubTab tab) => TournamentHubScreen.open(
+      context,
+      leagueId: widget.league.id,
+      seasonId: d.seasonId,
+      groupId: groupFilter ?? d.groups.keys.firstOrNull,
+      initialTab: tab,
+    );
 
     final sorted = [...d.matches]
       ..sort((a, b) {
@@ -863,6 +1030,14 @@ class _HomeDashboardState extends State<HomeDashboard> {
               .toList();
 
     final hasOwnTeam = d.myTeamIds.isNotEmpty;
+    // Birden fazla grup varsa yalnız seçili grubun maçlarından doğan
+    // cezalar (maçsız elle girilen ceza her grupta sayılır).
+    final matchGroup = {for (final m in d.matches) m.id: m.groupId};
+    final pendingHere = d.groups.length > 1 && groupFilter != null
+        ? d.pendingPenaltyMatchIds
+              .where((id) => id == null || matchGroup[id] == groupFilter)
+              .length
+        : d.pendingPenalties;
     final isOwner =
         session.isAdmin || session.ownedLeagueIds.contains(widget.league.id);
 
@@ -881,37 +1056,54 @@ class _HomeDashboardState extends State<HomeDashboard> {
           _alert('Cezalısın: ${d.activePenaltyMatches} maç daha oynayamazsın.'),
           const SizedBox(height: 12),
         ],
-        if (isOwner && d.pendingPenalties > 0) ...[
+        if (isOwner && pendingHere > 0) ...[
+          // Dokununca ceza onayları ekranı, ana sayfada seçili turnuva,
+          // sezon ve grupla süzülmüş olarak.
           _alert(
-            '${d.pendingPenalties} kart cezası onayını bekliyor '
-            '(Yönetim › Cezalar).',
+            '$pendingHere kart cezası onayını bekliyor. '
+            'Onaylamak için dokun.',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                settings: const RouteSettings(
+                  name: 'AdminPenaltyManagementScreen',
+                ),
+                builder: (_) => AdminPenaltyManagementScreen(
+                  initialLeagueId: widget.league.id,
+                  initialSeasonId: d.seasonId,
+                  initialGroupId: d.groups.length > 1 ? groupFilter : null,
+                ),
+              ),
+            ),
           ),
           const SizedBox(height: 12),
         ],
         // Son dakika haber kartı (mevcut bileşen).
         // Yalnız bu turnuvanın ve kişinin bölgesinin haberleri.
         HomeNewsCard(
-          onOpenNews: widget.onOpenNews,
           leagueId: widget.league.id,
-          regionId: myGroup == null ? null : d.groupRegionId[myGroup],
+          regionId: groupFilter == null ? null : d.groupRegionId[groupFilter],
         ),
         if (thisWeekMatches.isNotEmpty) ...[
           _sectionHeader(
             'BU HAFTA · $thisWeek. HAFTA',
             'Fikstür',
-            () => widget.onOpenTab(2),
+            () => openHub(TournamentHubTab.fixture),
           ),
           for (final m in thisWeekMatches) _matchRow(d, m, focusTeams),
         ],
         if (groupFilter != null || d.groups.isNotEmpty) ...[
-          _sectionHeader('PUAN DURUMU', 'Tamamı', () => widget.onOpenTab(3)),
+          _sectionHeader(
+            'PUAN DURUMU',
+            'Tamamı',
+            () => openHub(TournamentHubTab.standings),
+          ),
           _miniStandings(d, groupFilter ?? d.groups.keys.first, focusTeams),
         ],
         if (d.scorers.isNotEmpty) ...[
           _sectionHeader(
             'GOL KRALLIĞI',
             'İstatistik',
-            () => widget.onOpenTab(4),
+            () => openHub(TournamentHubTab.stats),
           ),
           _leaders(d, d.scorers, 'gol'),
         ],
@@ -919,7 +1111,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
           _sectionHeader(
             'ASİST KRALLIĞI',
             'İstatistik',
-            () => widget.onOpenTab(4),
+            () => openHub(TournamentHubTab.stats),
           ),
           _leaders(d, d.assisters, 'asist'),
         ],
@@ -927,7 +1119,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
           _sectionHeader(
             'GEÇEN HAFTA · $lastWeek. HAFTA',
             'Sonuçlar',
-            () => widget.onOpenTab(2),
+            () => openHub(TournamentHubTab.fixture),
           ),
           for (final m in lastWeekMatches.take(4)) _matchRow(d, m, focusTeams),
         ],
@@ -982,8 +1174,8 @@ class _HomeDashboardState extends State<HomeDashboard> {
     );
   }
 
-  Widget _alert(String text) {
-    return Container(
+  Widget _alert(String text, {VoidCallback? onTap}) {
+    final box = Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       decoration: BoxDecoration(
         color: DashColors.live.withValues(alpha: 0.12),
@@ -1007,7 +1199,18 @@ class _HomeDashboardState extends State<HomeDashboard> {
               style: _barlow(size: 13, weight: FontWeight.w700, height: 1.3),
             ),
           ),
+          if (onTap != null)
+            const Icon(Icons.chevron_right_rounded, color: Colors.white70),
         ],
+      ),
+    );
+    if (onTap == null) return box;
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: box,
       ),
     );
   }
@@ -1066,13 +1269,12 @@ class _HomeDashboardState extends State<HomeDashboard> {
                       widget.league.name,
                       style: _barlow(size: 16, weight: FontWeight.w800),
                     ),
-                    Text(
-                      [
+                    // Hafta yazılmaz: gruplar farklı haftada olabilir.
+                    if (d.seasonName.isNotEmpty)
+                      Text(
                         d.seasonName,
-                        if (week != null) '$week. Hafta oynanıyor',
-                      ].where((s) => s.isNotEmpty).join(' · '),
-                      style: _barlow(size: 12, color: Colors.white70),
-                    ),
+                        style: _barlow(size: 12, color: Colors.white70),
+                      ),
                   ],
                 ),
               ),
@@ -1409,13 +1611,18 @@ class _HomeDashboardState extends State<HomeDashboard> {
             ),
             const SizedBox(width: 8),
           ],
+          // Maç Takvimi'ndeki kural: "Master(lar)" atılır, SK/FK kısaltılır;
+          // uzun ad iki satıra iner.
           Flexible(
             child: Text(
-              t?.name ?? '-',
-              maxLines: 1,
+              t == null ? '-' : shortTeamName(t.name),
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
               textAlign: end ? TextAlign.right : TextAlign.left,
-              style: _barlow(size: 13, weight: FontWeight.w700),
+              style: _barlow(
+                size: 12,
+                weight: FontWeight.w700,
+              ).copyWith(height: 1.15),
             ),
           ),
           if (end) ...[

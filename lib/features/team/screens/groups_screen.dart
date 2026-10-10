@@ -1,459 +1,145 @@
 import 'package:flutter/material.dart';
-import 'package:football_tournament/core/widgets/master_class_app_bar.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../tournament/models/league.dart';
-import '../../tournament/models/season.dart';
 import '../../match/models/match.dart';
 import '../models/team.dart';
-import '../../tournament/services/interfaces/i_league_service.dart';
 import '../../../core/services/service_locator.dart';
-import '../../../core/services/global_filter.dart';
-import '../../../core/services/active_tournament.dart';
 import '../../../core/utils/team_name.dart';
 import '../../../core/utils/table_feed.dart';
 import 'team_squad_screen.dart';
 
-// YENİ OLUŞTURDUĞUMUZ ORTAK BİLEŞENİ IMPORT EDİYORUZ
-import '../../../core/widgets/tournament_filter_dialog.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../utils/standings.dart';
 import '../../share/poster_share.dart';
-import '../../../core/services/app_session.dart';
 import '../../share/standings_poster.dart';
-import '../../../core/widgets/league_filter_header.dart';
 
-class GroupsScreen extends StatefulWidget {
-  const GroupsScreen({
+/// Bir turnuva + sezon + grubun puan durumu. Başlık çubuğu ve grup sekmesi
+/// yok; Turnuva Sayfası'nın Puan Durumu sekmesinde gösterilir.
+class StandingsView extends StatefulWidget {
+  const StandingsView({
     super.key,
-    this.initialLeagueId,
-    this.initialSeasonId,
-    this.initialGroupId,
+    required this.leagueId,
+    required this.seasonId,
+    required this.groupId,
   });
 
-  final String? initialLeagueId;
-  final String? initialSeasonId;
-  final String? initialGroupId;
+  final String leagueId;
+  final String seasonId;
+  final String groupId;
 
   @override
-  State<GroupsScreen> createState() => _GroupsScreenState();
+  State<StandingsView> createState() => _StandingsViewState();
 }
 
-class _GroupsScreenState extends State<GroupsScreen> {
-  final ILeagueService _leagueService = ServiceLocator.leagueService;
-  String? _selectedLeagueId;
-  String? _selectedSeasonId;
-  String? _selectedGroupId;
-
-  /// Ekranda açık olan grup sekmesi (paylaşım afişi bunun için hazırlanır).
-  GroupModel? _activeGroup;
-  bool _sharing = false;
-
-  Stream<List<League>>? _leaguesStream;
-
-  /// Puan tablosu başlığındaki turnuva logosu için (lig akışından doldurulur).
-  Map<String, String> _leagueLogoById = const {};
-  Map<String, String> _leagueNameById = const {};
-  Map<String, String> _seasonNameById = const {};
-
-  String? _lastLeagueIdForSeason;
-  Stream<List<Season>>? _seasonsStream;
-
-  String? _lastSeasonIdForGroup;
-  Stream<List<GroupModel>>? _groupsStream;
-
-  Stream<List<Season>> _watchSeasons(String leagueId) {
-    // Önce normal sorgu, canlı bağlantı arkadan (bkz. watchTableRows).
-    return watchTableRows(
-      Supabase.instance.client,
-      table: 'seasons',
-      column: 'league_id',
-      value: leagueId,
-      orderBy: 'start_date',
-      ascending: false,
-    ).map((rows) => rows.map((r) => Season.fromMap(r)).toList());
-  }
+class _StandingsViewState extends State<StandingsView> {
+  late Stream<List<GroupModel>> _groupsStream = ServiceLocator.leagueService
+      .watchGroups(widget.seasonId);
 
   @override
-  void initState() {
-    super.initState();
-    _leaguesStream = _leagueService.watchLeagues();
-    _selectedLeagueId = widget.initialLeagueId ?? GlobalFilter.leagueId.value;
-    _selectedSeasonId = widget.initialSeasonId ?? GlobalFilter.seasonId.value;
-    _selectedGroupId = widget.initialGroupId;
-
-    GlobalFilter.leagueId.addListener(_onGlobalFilterChanged);
-    GlobalFilter.seasonId.addListener(_onGlobalFilterChanged);
-  }
-
-  void _onGlobalFilterChanged() {
-    if (!mounted) return;
-    setState(() {
-      _selectedLeagueId = GlobalFilter.leagueId.value ?? _selectedLeagueId;
-      _selectedSeasonId = GlobalFilter.seasonId.value ?? _selectedSeasonId;
-    });
-  }
-
-  @override
-  void dispose() {
-    GlobalFilter.leagueId.removeListener(_onGlobalFilterChanged);
-    GlobalFilter.seasonId.removeListener(_onGlobalFilterChanged);
-    super.dispose();
-  }
-
-  static bool _sameMap(Map<String, String> a, Map<String, String> b) =>
-      a.length == b.length && a.entries.every((e) => b[e.key] == e.value);
-
-  Stream<List<Season>> _getSeasonsStream(String leagueId) {
-    if (_lastLeagueIdForSeason != leagueId || _seasonsStream == null) {
-      _lastLeagueIdForSeason = leagueId;
-      _seasonsStream = _watchSeasons(leagueId);
+  void didUpdateWidget(covariant StandingsView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.seasonId != widget.seasonId) {
+      _groupsStream = ServiceLocator.leagueService.watchGroups(widget.seasonId);
     }
-    return _seasonsStream!;
-  }
-
-  Stream<List<GroupModel>> _getGroupsStream(String seasonId) {
-    if (_lastSeasonIdForGroup != seasonId || _groupsStream == null) {
-      _lastSeasonIdForGroup = seasonId;
-      _groupsStream = _leagueService.watchGroups(seasonId);
-    }
-    return _groupsStream!;
   }
 
   @override
   Widget build(BuildContext context) {
-    const bgDark = Color(0xFF0F172A);
-    return Scaffold(
-      backgroundColor: bgDark,
-      extendBodyBehindAppBar: true,
-      appBar: MasterClassAppBar(
-        title: 'Puan Durumu',
-        actions: [
-          // Afişi yalnızca giriş yapmış kullanıcılar paylaşabilir.
-          if (AppSession.of(context).value.user != null)
-            IconButton(
-              tooltip: 'Paylaş',
-              onPressed: _sharing ? null : _shareStandings,
-              icon: _sharing
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(Icons.ios_share_rounded, color: Colors.white),
+    return StreamBuilder<List<GroupModel>>(
+      stream: _groupsStream,
+      builder: (context, snap) {
+        final group = (snap.data ?? const <GroupModel>[])
+            .where((g) => g.id == widget.groupId)
+            .firstOrNull;
+        return ListView(
+          padding: const EdgeInsets.only(bottom: 120),
+          children: [
+            _GroupStandingsTable(
+              key: ValueKey('${widget.seasonId}|${widget.groupId}'),
+              leagueId: widget.leagueId,
+              seasonId: widget.seasonId,
+              groupId: widget.groupId,
+              groupName: group?.name ?? '',
+              fetchGroupId: null,
             ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          SafeArea(
-            child: Column(
-              children: [
-                // 1. ÜST FİLTRE KAPSÜLÜ BÖLÜMÜ
-                StreamBuilder<List<League>>(
-                  stream: _leaguesStream,
-                  builder: (context, snapshot) {
-                    if (!snapshot.hasData) return const SizedBox();
-                    final leagues = snapshot.data ?? const <League>[];
-                    if (leagues.isEmpty) return const SizedBox();
-
-                    final logos = {for (final l in leagues) l.id: l.logoUrl};
-                    final names = {for (final l in leagues) l.id: l.name};
-                    if (!_sameMap(logos, _leagueLogoById) ||
-                        !_sameMap(names, _leagueNameById)) {
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (mounted) {
-                          setState(() {
-                            _leagueLogoById = logos;
-                            _leagueNameById = names;
-                          });
-                        }
-                      });
-                    }
-
-                    final leagueIds = leagues.map((l) => l.id).toSet();
-                    if (_selectedLeagueId == null ||
-                        !leagueIds.contains(_selectedLeagueId)) {
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (!mounted) return;
-                        setState(() {
-                          _selectedLeagueId = leagues.first.id;
-                          _selectedSeasonId = null;
-                          _selectedGroupId = null;
-                        });
-                        GlobalFilter.setLeague(leagues.first.id);
-                      });
-                    }
-
-                    return StreamBuilder<List<Season>>(
-                      stream: _selectedLeagueId == null
-                          ? Stream.value([])
-                          : _getSeasonsStream(_selectedLeagueId!),
-                      builder: (context, seasonSnap) {
-                        // Turnuva değişince yeni sezonlar gelene kadar eski
-                        // turnuvanınkiler tutulur; onlarla seçim yapılmasın.
-                        final seasons =
-                            seasonSnap.connectionState ==
-                                ConnectionState.waiting
-                            ? const <Season>[]
-                            : (seasonSnap.data ?? const <Season>[]);
-
-                        if (_selectedLeagueId != null && seasons.isNotEmpty) {
-                          if (_selectedSeasonId == null ||
-                              !seasons.any((s) => s.id == _selectedSeasonId)) {
-                            final def = pickDefaultSeasonId(seasons);
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              if (!mounted) return;
-                              setState(() {
-                                _selectedSeasonId = def;
-                                _selectedGroupId = null;
-                              });
-                              GlobalFilter.setSeason(def);
-                            });
-                          }
-                        }
-
-                        final seasonNames = {
-                          for (final s in seasons) s.id: s.name,
-                        };
-                        if (seasons.isNotEmpty &&
-                            !_sameMap(seasonNames, _seasonNameById)) {
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            if (mounted) {
-                              setState(() => _seasonNameById = seasonNames);
-                            }
-                          });
-                        }
-
-                        final currentSeasonName = seasons.isEmpty
-                            ? ''
-                            : seasons
-                                  .firstWhere(
-                                    (s) => s.id == _selectedSeasonId,
-                                    orElse: () => seasons.first,
-                                  )
-                                  .name;
-
-                        // GRUP İSMİNİ BULMA
-                        return StreamBuilder<List<GroupModel>>(
-                          stream: _selectedSeasonId == null
-                              ? Stream.value([])
-                              : _getGroupsStream(_selectedSeasonId!),
-                          builder: (context, groupSnap) {
-                            // Gruplar/bölgeler zaten sekme olarak görünür;
-                            // filtre yalnızca turnuvada birden fazla aktif
-                            // sezon varsa gösterilir.
-                            if (seasons.where((s) => s.isActive).length < 2) {
-                              return const SizedBox(height: 4);
-                            }
-                            return Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                              child: LeagueFilterCapsule(
-                                seasonName: currentSeasonName,
-                                onTap: () =>
-                                    _showFilterDialog(context, leagues),
-                              ),
-                            );
-                          },
-                        );
-                      },
-                    );
-                  },
-                ),
-
-                // 2. PUAN DURUMU LİSTESİ
-                Expanded(
-                  child: _selectedSeasonId == null
-                      ? const Center(
-                          child: Text(
-                            'Lütfen bir turnuva ve sezon seçin.',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                        )
-                      : StreamBuilder<List<GroupModel>>(
-                          stream: _getGroupsStream(_selectedSeasonId!),
-                          builder: (context, snapshot) {
-                            // Sezon değişince eski sezonun grupları
-                            // gösterilmesin.
-                            if (!snapshot.hasData ||
-                                snapshot.connectionState ==
-                                    ConnectionState.waiting) {
-                              return const Center(
-                                child: CircularProgressIndicator(),
-                              );
-                            }
-
-                            final allGroups =
-                                snapshot.data ?? const <GroupModel>[];
-                            if (allGroups.isEmpty) {
-                              return const Center(
-                                child: Text(
-                                  'Bu sezonda henüz grup oluşturulmamış.',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                              );
-                            }
-
-                            // Sekmeler: sezondaki her grup. Seçili grup yoksa
-                            // (ya da başka sezona aitse) ilk grup açılır.
-                            final active = allGroups.firstWhere(
-                              (g) => g.id == _selectedGroupId,
-                              orElse: () => allGroups.first,
-                            );
-                            _activeGroup = active;
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                if (allGroups.length > 1)
-                                  Padding(
-                                    padding: const EdgeInsets.fromLTRB(
-                                      16,
-                                      0,
-                                      16,
-                                      8,
-                                    ),
-                                    child: GroupSegmentTabs(
-                                      groups: [
-                                        for (final g in allGroups)
-                                          (id: g.id, name: g.name),
-                                      ],
-                                      selectedId: active.id,
-                                      onSelect: (id) {
-                                        GlobalFilter.setGroup(id);
-                                        setState(() => _selectedGroupId = id);
-                                      },
-                                    ),
-                                  ),
-                                Expanded(
-                                  child: ListView(
-                                    padding: const EdgeInsets.only(bottom: 120),
-                                    children: [
-                                      _GroupStandingsTable(
-                                        key: ValueKey(active.id),
-                                        leagueId: _selectedLeagueId!,
-                                        seasonId: _selectedSeasonId!,
-                                        groupId: active.id,
-                                        groupName: active.name,
-                                        fetchGroupId: null,
-                                        leagueLogoUrl:
-                                            _leagueLogoById[_selectedLeagueId] ??
-                                            '',
-                                        leagueName:
-                                            _leagueNameById[_selectedLeagueId] ??
-                                            '',
-                                        seasonName:
-                                            _seasonNameById[_selectedSeasonId] ??
-                                            '',
-                                        showGroupName: allGroups.length > 1,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            );
-                          },
-                        ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Açık sekmedeki grubun puan durumu afişi (Instagram hikaye boyutu).
-  Future<void> _shareStandings() async {
-    final leagueId = _selectedLeagueId;
-    final seasonId = _selectedSeasonId;
-    final group = _activeGroup;
-    if (leagueId == null || seasonId == null || group == null) return;
-    setState(() => _sharing = true);
-    try {
-      final client = Supabase.instance.client;
-      final results = await Future.wait<Object>([
-        client
-            .from('matches')
-            .select()
-            .eq('league_id', leagueId)
-            .eq('season_id', seasonId),
-        ServiceLocator.teamService.watchAllTeams().first,
-      ]);
-      final matches = (results[0] as List)
-          .map((e) => Map<String, dynamic>.from(e as Map))
-          .toList();
-      final rows = computeGroupStandings(
-        leagueId: leagueId,
-        groupId: group.id,
-        groupName: group.name,
-        seasonMatches: matches,
-        allTeams: results[1] as List<Team>,
-      );
-      if (!mounted) return;
-      if (rows.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Paylaşılacak puan durumu yok.')),
+          ],
         );
-        return;
-      }
-      final leagueLogo = _leagueLogoById[leagueId] ?? '';
-      final leagueName = _leagueNameById[leagueId] ?? '';
-      final seasonName = _seasonNameById[seasonId] ?? '';
-      await showPosterPreview(
-        context: context,
-        fileName: 'puan_durumu_${group.name}'.replaceAll(' ', '_'),
-        imageUrls: [
-          leagueLogo,
-          for (final r in rows) r.logo,
-        ].where((u) => u.trim().isNotEmpty).toList(),
-        poster: StandingsPoster(
-          leagueName: leagueName,
-          leagueLogo: leagueLogo,
-          subtitle: [
-            seasonName,
-            group.name,
-          ].where((e) => e.trim().isNotEmpty).join(' · '),
-          rows: rows,
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Afiş hazırlanamadı: $e')));
-    } finally {
-      if (mounted) setState(() => _sharing = false);
-    }
-  }
-
-  // Kapsüle tıklandığında ORTADA açılacak Filtre Paneli; seçimler yalnızca
-  // "Filtreleri Uygula" ile ekrana yansır.
-  Future<void> _showFilterDialog(
-    BuildContext context,
-    List<League> leagues,
-  ) async {
-    final result = await showTournamentFilterDialog(
-      context: context,
-      leagues: leagues,
-      initial: TournamentFilter(
-        leagueId: _selectedLeagueId,
-        seasonId: _selectedSeasonId,
-        groupId: _selectedGroupId,
-      ),
-      watchSeasons: _watchSeasons,
-      watchGroups: _leagueService.watchGroups,
+      },
     );
-    if (result == null || !mounted) return;
-    GlobalFilter.setLeague(result.leagueId);
-    ActiveTournament.noteViewed(result.leagueId);
-    GlobalFilter.setSeason(result.seasonId);
-    setState(() {
-      _selectedLeagueId = result.leagueId;
-      _selectedSeasonId = result.seasonId;
-      _selectedGroupId = result.groupId;
-    });
+  }
+}
+
+/// Grubun puan durumu afişi (Instagram hikaye boyutu).
+Future<void> shareGroupStandings(
+  BuildContext context, {
+  required String leagueId,
+  required String seasonId,
+  required String groupId,
+}) async {
+  final leagueService = ServiceLocator.leagueService;
+  try {
+    final client = Supabase.instance.client;
+    final results = await Future.wait<Object?>([
+      client
+          .from('matches')
+          .select()
+          .eq('league_id', leagueId)
+          .eq('season_id', seasonId),
+      ServiceLocator.teamService.watchAllTeams().first,
+      leagueService.watchGroups(seasonId).first,
+      client
+          .from('leagues')
+          .select('name, logo_url')
+          .eq('id', leagueId)
+          .maybeSingle(),
+      client.from('seasons').select('name').eq('id', seasonId).maybeSingle(),
+    ]);
+    final matches = (results[0] as List)
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+    final seasonGroups = results[2] as List<GroupModel>;
+    final group = seasonGroups.where((g) => g.id == groupId).firstOrNull;
+    if (group == null) return;
+    final rows = computeGroupStandings(
+      leagueId: leagueId,
+      groupId: group.id,
+      groupName: group.name,
+      seasonMatches: matches,
+      allTeams: results[1] as List<Team>,
+    );
+    if (!context.mounted) return;
+    if (rows.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Paylaşılacak puan durumu yok.')),
+      );
+      return;
+    }
+    final league = results[3] as Map?;
+    final leagueLogo = (league?['logo_url'] ?? '').toString();
+    final leagueName = (league?['name'] ?? '').toString();
+    final seasonName = ((results[4] as Map?)?['name'] ?? '').toString();
+    await showPosterPreview(
+      context: context,
+      fileName: 'puan_durumu_${group.name}'.replaceAll(' ', '_'),
+      leagueId: leagueId,
+      imageUrls: [
+        leagueLogo,
+        for (final r in rows) r.logo,
+      ].where((u) => u.trim().isNotEmpty).toList(),
+      poster: StandingsPoster(
+        leagueName: leagueName,
+        leagueLogo: leagueLogo,
+        subtitle: [
+          seasonName,
+          if (seasonGroups.length > 1) group.name,
+        ].where((e) => e.trim().isNotEmpty).join(' · '),
+        rows: rows,
+      ),
+    );
+  } catch (e) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Afiş hazırlanamadı: $e')));
   }
 }
 
@@ -464,16 +150,6 @@ class _GroupStandingsTable extends StatefulWidget {
   final String groupName;
   final String? fetchGroupId;
 
-  /// Turnuva logosu; boşsa başlıkta kupa ikonu gösterilir.
-  final String leagueLogoUrl;
-
-  /// Logolu banner başlık için turnuva ve sezon adı.
-  final String leagueName;
-  final String seasonName;
-
-  /// Sezonda birden fazla grup varsa başlığın sağında grup adı gösterilir.
-  final bool showGroupName;
-
   const _GroupStandingsTable({
     super.key,
     required this.leagueId,
@@ -481,10 +157,6 @@ class _GroupStandingsTable extends StatefulWidget {
     required this.groupId,
     required this.groupName,
     required this.fetchGroupId,
-    this.leagueLogoUrl = '',
-    this.leagueName = '',
-    this.seasonName = '',
-    this.showGroupName = false,
   });
 
   @override
@@ -533,17 +205,18 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
     // Sezonun maçları tek akışta; gol vb. değişiklikte yalnızca değişen
     // satır işlenir (bkz. watchTableRows). Tüm grup tabloları aynı akışı
     // paylaşır.
-    final feed = watchTableRows(
-      Supabase.instance.client,
-      table: 'matches',
-      column: 'season_id',
-      value: sId,
-      orderBy: 'match_date',
-    ).map(
-      (rows) => rows
-          .where((r) => (r['league_id'] ?? '').toString().trim() == id)
-          .toList(),
-    );
+    final feed =
+        watchTableRows(
+          Supabase.instance.client,
+          table: 'matches',
+          column: 'season_id',
+          value: sId,
+          orderBy: 'match_date',
+        ).map(
+          (rows) => rows
+              .where((r) => (r['league_id'] ?? '').toString().trim() == id)
+              .toList(),
+        );
     if (fetchGroupId == null) return feed;
     return feed.map(
       (rows) => rows
@@ -604,9 +277,17 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
               // 4'ten az takımda bölge şeritleri anlamsız (hepsi yeşil olur).
               final showZones = rows.length > 4;
 
+              // Kenarlardan boşluklu, yuvarlak köşeli kart.
               return Container(
-                // Ekranı kenardan kenara kaplar; sekmelerle tek parça görünür.
-                color: Colors.black.withValues(alpha: 0.45),
+                margin: const EdgeInsets.fromLTRB(10, 10, 10, 0),
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.45),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.08),
+                  ),
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -626,6 +307,9 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
+                              settings: const RouteSettings(
+                                name: 'TeamSquadScreen',
+                              ),
                               builder: (_) => TeamSquadScreen(
                                 teamId: rows[i].teamId,
                                 tournamentId: widget.leagueId,
@@ -653,6 +337,18 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
                               label: 'Klasman',
                             ),
                           ],
+                          const _LegendDot(
+                            color: accentGreen,
+                            label: 'Galibiyet',
+                          ),
+                          const _LegendDot(
+                            color: Color(0xFF64748B),
+                            label: 'Beraberlik',
+                          ),
+                          const _LegendDot(
+                            color: Color(0xFFF87171),
+                            label: 'Mağlubiyet',
+                          ),
                           Text(
                             'O: Oynanan  G: Galibiyet  B: Beraberlik  '
                             'M: Mağlubiyet  A: Atılan  Y: Yenilen  AV: Averaj',
@@ -862,27 +558,48 @@ class _StandingsRow extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Container(
-          height: 40,
-          padding: const EdgeInsets.only(right: 10),
+          constraints: const BoxConstraints(minHeight: 44),
+          padding: const EdgeInsets.fromLTRB(0, 5, 10, 5),
           decoration: BoxDecoration(
             border: Border(
-              left: BorderSide(color: zoneColor, width: 3),
               top: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
             ),
           ),
           child: Row(
             children: [
               const SizedBox(width: 3),
+              // Sıra yuvarlak içinde: üst tur dolu yeşil, klasman turuncu.
               SizedBox(
                 width: c.rank,
-                child: Text(
-                  '${index + 1}',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w900,
-                    color: isLeader ? _kAccent : teamText,
-                    fontSize: 13,
-                    fontFeatures: _tabular,
+                child: Center(
+                  child: Container(
+                    width: 22,
+                    height: 22,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: zoneColor == _kAccent
+                          ? _kAccent
+                          : zoneColor == classOrange
+                          ? classOrange.withValues(alpha: 0.18)
+                          : const Color(0xFF334155),
+                      border: zoneColor == classOrange
+                          ? Border.all(color: classOrange, width: 1.5)
+                          : null,
+                    ),
+                    child: Text(
+                      '${index + 1}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: zoneColor == _kAccent
+                            ? const Color(0xFF052E20)
+                            : zoneColor == classOrange
+                            ? classOrange
+                            : teamText,
+                        fontSize: 11.5,
+                        fontFeatures: _tabular,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -897,16 +614,45 @@ class _StandingsRow extends StatelessWidget {
               const SizedBox(width: 8),
               // Uzun adlar küçülmek yerine 2 satıra iner.
               Expanded(
-                child: Text(
-                  shortTeamName(entry.name),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: teamText,
-                    fontSize: 12.5,
-                    height: 1.15,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      shortTeamName(entry.name),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: teamText,
+                        fontSize: 12,
+                        height: 1.15,
+                      ),
+                    ),
+                    // Son 5 maç: yeşil galibiyet, gri beraberlik, kırmızı
+                    // mağlubiyet.
+                    if (entry.form.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          for (final r in entry.form)
+                            Container(
+                              width: 7,
+                              height: 7,
+                              margin: const EdgeInsets.only(right: 3),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: r == 'G'
+                                    ? _kAccent
+                                    : r == 'B'
+                                    ? const Color(0xFF64748B)
+                                    : negative,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ],
                 ),
               ),
               const SizedBox(width: 4),
@@ -924,7 +670,7 @@ class _StandingsRow extends StatelessWidget {
                   '${entry.points}',
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w800,
                     color: _kAccent,
                     fontSize: 15,
                     fontFeatures: _tabular,

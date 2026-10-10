@@ -19,7 +19,10 @@ class NotificationBell extends StatelessWidget {
     _opening = true;
     try {
       await nav.push(
-        MaterialPageRoute<void>(builder: (_) => const NotificationsScreen()),
+        MaterialPageRoute<void>(
+          settings: const RouteSettings(name: 'NotificationsScreen'),
+          builder: (_) => const NotificationsScreen(),
+        ),
       );
     } finally {
       _opening = false;
@@ -77,7 +80,7 @@ class NotificationBell extends StatelessWidget {
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 10.5,
-                            fontWeight: FontWeight.w900,
+                            fontWeight: FontWeight.w800,
                             height: 1,
                             decoration: TextDecoration.none,
                           ),

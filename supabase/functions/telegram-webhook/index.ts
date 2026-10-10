@@ -13,7 +13,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN") ?? "";
 const WEBHOOK_SECRET = Deno.env.get("TELEGRAM_WEBHOOK_SECRET") ?? "";
-const LOGIN_URL = "https://masterfutbol.web.app";
+const LOGIN_URL = "https://ligmasasi.com";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,

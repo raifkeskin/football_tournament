@@ -101,7 +101,7 @@ class _AdminAwardsScreenState extends State<AdminAwardsScreen> {
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 18,
-                            fontWeight: FontWeight.w900,
+                            fontWeight: FontWeight.w800,
                           ),
                         ),
                       ],
@@ -147,7 +147,7 @@ class _AdminAwardsScreenState extends State<AdminAwardsScreen> {
                               )
                             : const Text(
                                 'KAYDET',
-                                style: TextStyle(fontWeight: FontWeight.w900),
+                                style: TextStyle(fontWeight: FontWeight.w800),
                               ),
                       ),
                     ),

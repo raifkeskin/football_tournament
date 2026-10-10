@@ -125,6 +125,8 @@ class SupabaseMatchService implements IMatchService {
     }
 
     // Önce önbellekteki hafta gösterilir, taze liste arkadan gelir.
+    // Sonra yalnız bu cihazdan bu haftanın bir maçı değişince (skor, olay)
+    // yeniden okunur; canlı bağlantı açılmaz.
     Stream<List<MatchModel>> feed() async* {
       final cached = _fixtureCache[key];
       if (cached != null) yield cached;
@@ -137,6 +139,13 @@ class SupabaseMatchService implements IMatchService {
           error: e,
         );
         if (cached == null) rethrow;
+      }
+      await for (final mid in _localChanges.stream) {
+        final week = _fixtureCache[key] ?? const <MatchModel>[];
+        if (!week.any((m) => m.id == mid)) continue;
+        try {
+          yield await fetch();
+        } catch (_) {}
       }
     }
 
@@ -344,6 +353,42 @@ class SupabaseMatchService implements IMatchService {
     });
   }
 
+  /// Bitmiş maçta olay eklenip silinince skor gol olaylarından 0-0'dan
+  /// yeniden hesaplanır. Maçta hiç gol olayı yoksa Hızlı Skor Girişi'yle
+  /// girilen skor korunur; son gol silindiyse ([goalRemoved]) skor 0-0 olur.
+  /// [row]: home/away_team_id ve home/away_score.
+  Future<void> _syncFinishedScore(
+    String matchId,
+    Map<String, dynamic> row, {
+    bool goalRemoved = false,
+  }) async {
+    final homeTeamId = (row['home_team_id'] ?? '').toString().trim();
+    final awayTeamId = (row['away_team_id'] ?? '').toString().trim();
+    final goals = await _client
+        .from('match_events')
+        .select('team_id, is_own_goal')
+        .eq('match_id', matchId)
+        .eq('event_type', 'goal');
+    var home = 0, away = 0;
+    for (final g in goals) {
+      final tid = (g['team_id'] ?? '').toString().trim();
+      final scorer = g['is_own_goal'] == true
+          ? (tid == homeTeamId ? awayTeamId : homeTeamId)
+          : tid;
+      if (scorer == homeTeamId) home++;
+      if (scorer == awayTeamId) away++;
+    }
+    if (goals.isEmpty && !goalRemoved) return;
+    final curHome = _readInt(row['home_score'], fallback: 0);
+    final curAway = _readInt(row['away_score'], fallback: 0);
+    if (curHome == home && curAway == away) return;
+    await _client
+        .from('matches')
+        .update({'home_score': home, 'away_score': away})
+        .eq('id', matchId);
+    notifyLocalChange(matchId);
+  }
+
   @override
   Future<void> deleteMatchEvent(String eventId) async {
     final res = await _client
@@ -363,9 +408,8 @@ class SupabaseMatchService implements IMatchService {
     if (deleted.isEmpty) throw Exception('Olay silinemedi (yetki yok).');
     notifyLocalChange(matchId);
 
-    if ((e['event_type'] ?? '').toString() != 'goal') return;
-    // Gol eklenince skor artırılmıştı; bitmiş maçta skor elle girildiği için
-    // dokunulmaz (bkz. addMatchEvent).
+    final isGoal = (e['event_type'] ?? '').toString() == 'goal';
+    // Gol eklenince skor artırılmıştı; bitmiş maçta bkz. _syncFinishedScore.
     try {
       final rows = await _client
           .from('matches')
@@ -376,8 +420,10 @@ class SupabaseMatchService implements IMatchService {
       final row = (rows.first as Map).cast<String, dynamic>();
       if ((row['status'] ?? '').toString().trim() ==
           MatchStatus.finished.name) {
+        await _syncFinishedScore(matchId, row, goalRemoved: isGoal);
         return;
       }
+      if (!isGoal) return;
       final homeTeamId = (row['home_team_id'] ?? '').toString().trim();
       final awayTeamId = (row['away_team_id'] ?? '').toString().trim();
       final teamId = (e['team_id'] ?? '').toString().trim();
@@ -391,11 +437,13 @@ class SupabaseMatchService implements IMatchService {
             .from('matches')
             .update({'home_score': home - 1})
             .eq('id', matchId);
+        notifyLocalChange(matchId);
       } else if (scoringTeamId == awayTeamId && away > 0) {
         await _client
             .from('matches')
             .update({'away_score': away - 1})
             .eq('id', matchId);
+        notifyLocalChange(matchId);
       }
     } catch (err) {
       AppConfig.sqlLogResult(table: 'matches', operation: 'UPDATE', error: err);
@@ -430,8 +478,6 @@ class SupabaseMatchService implements IMatchService {
         rethrow;
       }
 
-      if (event.eventType != 'goal') return;
-
       try {
         AppConfig.sqlLogStart(
           table: 'matches',
@@ -456,12 +502,13 @@ class SupabaseMatchService implements IMatchService {
         }
         AppConfig.sqlLogResult(table: 'matches', operation: 'SELECT', count: 1);
         final row = (res.first as Map).cast<String, dynamic>();
-        // Bitmiş maçın skoru zaten girilmiştir (ör. Hızlı Skor Girişi);
-        // sonradan gol atanları eklemek skoru ikinci kez artırmamalı.
         if ((row['status'] ?? '').toString().trim() ==
             MatchStatus.finished.name) {
+          // Bitmiş maçta her olay girişinde skor gollerle eşitlenir.
+          await _syncFinishedScore(event.matchId, row);
           return;
         }
+        if (event.eventType != 'goal') return;
         final homeTeamId = (row['home_team_id'] ?? '').toString().trim();
         final awayTeamId = (row['away_team_id'] ?? '').toString().trim();
         final scoringTeamId = event.isOwnGoal
@@ -486,6 +533,7 @@ class SupabaseMatchService implements IMatchService {
             .from('matches')
             .update({'home_score': nextHome, 'away_score': nextAway})
             .eq('id', event.matchId);
+        notifyLocalChange(event.matchId);
         AppConfig.sqlLogResult(table: 'matches', operation: 'UPDATE', count: 1);
       } catch (e) {
         AppConfig.sqlLogResult(table: 'matches', operation: 'UPDATE', error: e);
@@ -570,6 +618,7 @@ class SupabaseMatchService implements IMatchService {
     try {
       AppConfig.sqlLogStart(table: 'match_media', operation: 'INSERT');
       await _client.from('match_media').insert(media.toMap(snakeCase: true));
+      notifyLocalChange(media.matchId);
       AppConfig.sqlLogResult(
         table: 'match_media',
         operation: 'INSERT',
@@ -623,6 +672,14 @@ class SupabaseMatchService implements IMatchService {
       final cached = _mediaCache[id];
       if (cached != null) yield cached;
       yield await _fetchMatchMedia(id);
+      // Bitmiş maçta canlı bağlantı açılmaz (kanal sayısı); bu cihazdan
+      // eklenen/silinen medya yine hemen yansır.
+      if (await _matchStatus(id) == 'finished') {
+        await for (final _ in _localChanges.stream.where((m) => m == id)) {
+          yield await _fetchMatchMedia(id);
+        }
+        return;
+      }
       await for (final _ in realtimeChangeSignal(
         _client,
         table: 'match_media',
@@ -761,6 +818,29 @@ class SupabaseMatchService implements IMatchService {
   }
 
   @override
+  Future<void> setMatchSchedulingStatus({
+    required String matchId,
+    required MatchStatus status,
+    String? matchDate,
+    String? matchTime,
+  }) async {
+    final rows = await _client
+        .from('matches')
+        .update({
+          'status': status.name,
+          'is_completed': false,
+          'match_date': ?matchDate,
+          'match_time': ?matchTime,
+        })
+        .eq('id', matchId)
+        .select('id');
+    if (rows.isEmpty) {
+      throw Exception('Maç güncellenemedi: bu maçı düzenleme yetkiniz yok.');
+    }
+    notifyLocalChange(matchId);
+  }
+
+  @override
   Future<void> completeMatchWithScoreAndDefaultEvents({
     required String matchId,
     required int homeScore,
@@ -793,6 +873,7 @@ class SupabaseMatchService implements IMatchService {
           );
         }
         AppConfig.sqlLogResult(table: 'matches', operation: 'UPDATE', count: 1);
+        notifyLocalChange(id);
       } catch (e) {
         AppConfig.sqlLogResult(table: 'matches', operation: 'UPDATE', error: e);
         rethrow;
@@ -1067,6 +1148,7 @@ class SupabaseMatchService implements IMatchService {
     // Oynanmış (bitmiş / sürüyor) maçlar: maç sayısı yalnız bunlardan sayılır;
     // önceden girilmiş kadro oynanmamış maçı saydırmasın.
     final played = <String>{};
+    final unplayed = <String>{};
     for (final any in matchesRes) {
       final m = any as Map;
       final id = (m['id'] ?? '').toString().trim();
@@ -1074,6 +1156,7 @@ class SupabaseMatchService implements IMatchService {
       matchIds.add(id);
       final st = (m['status'] ?? '').toString().trim();
       if (st == 'finished' || st == 'live' || st == 'halftime') played.add(id);
+      if (st == 'cancelled' || st == 'postponed') unplayed.add(id);
     }
 
     final results = matchIds.isEmpty
@@ -1082,7 +1165,11 @@ class SupabaseMatchService implements IMatchService {
             _client
                 .from('match_events')
                 .select()
-                .inFilter('match_id', matchIds)
+                // Ertelenen / iptal maçın olayları istatistiğe sayılmaz.
+                .inFilter(
+                  'match_id',
+                  matchIds.where((id) => !unplayed.contains(id)).toList(),
+                )
                 .then(
                   (r) => r.map((e) => Map<String, dynamic>.from(e)).toList(),
                 ),
@@ -1200,8 +1287,11 @@ class SupabaseMatchService implements IMatchService {
 
     final playerIds = events.isEmpty
         ? {for (final r in fallbackRows) (r['player_id'] ?? '').toString()}
-        // Yalnız kadroda olup hiç olayı olmayan oyuncular listelenmez.
+        // Kadroda olup olayı olmayanlar da (yalnız maç sayısıyla) listelenir;
+        // takım istatistik sekmesi oynanan maçı gösterebilsin. Genel
+        // istatistik ekranı bunları zaten süzer.
         : {
+            ...matchesByPlayer.keys,
             ...goals.keys,
             ...assists.keys,
             ...yellows.keys,
@@ -1686,6 +1776,9 @@ class SupabaseMatchService implements IMatchService {
   @override
   Future<void> deleteMatchMedia(String mediaId) async {
     await _client.from('match_media').delete().eq('id', mediaId);
+    for (final e in _mediaCache.entries) {
+      if (e.value.any((m) => m.id == mediaId)) notifyLocalChange(e.key);
+    }
   }
 
   @override

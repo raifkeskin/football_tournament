@@ -69,7 +69,20 @@ class SeasonManagementScreen extends StatelessWidget {
   Future<void> _openSeasonSheet(BuildContext context, {Season? season}) async {
     final isEdit = season != null;
     final messenger = ScaffoldMessenger.of(context);
-    final nameController = TextEditingController(text: season?.name ?? '');
+    final isAdmin = AppSession.of(context).value.isAdmin;
+    // Transfer tarihleri yalnızca admin'e ve turnuvada transfer açıksa.
+    var showTransfer = false;
+    if (isAdmin) {
+      try {
+        final row = await Supabase.instance.client
+            .from('leagues')
+            .select('transfer_enabled')
+            .eq('id', leagueId)
+            .maybeSingle();
+        showTransfer = row?['transfer_enabled'] == true;
+      } catch (_) {}
+      if (!context.mounted) return;
+    }
     final subtitleController = TextEditingController(
       text: (season?.subtitle ?? '').trim(),
     );
@@ -188,14 +201,7 @@ class SeasonManagementScreen extends StatelessWidget {
       BuildContext sheetContext,
       StateSetter setSheetState,
     ) async {
-      final name = nameController.text.trim();
       final subtitle = subtitleController.text.trim();
-      if (name.isEmpty) {
-        messenger.showSnackBar(
-          const SnackBar(content: Text('Sezon adı zorunludur.')),
-        );
-        return;
-      }
       if (startDate == null || endDate == null) {
         messenger.showSnackBar(
           const SnackBar(
@@ -204,6 +210,8 @@ class SeasonManagementScreen extends StatelessWidget {
         );
         return;
       }
+      // Ad standart: başlangıç yılı + "Sezonu" (veritabanı da böyle yazar).
+      final name = '${startDate!.year} Sezonu';
 
       final built = Season(
         id: season?.id ?? '',
@@ -260,8 +268,9 @@ class SeasonManagementScreen extends StatelessWidget {
           seasonId = (res['id'] ?? '').toString().trim();
         }
 
-        // Tek gruplu sezonda grup, turnuva adıyla otomatik oluşturulur.
-        if (built.numberOfGroups == 1 && seasonId.isNotEmpty) {
+        // Tek gruplu sezonda grup, turnuva adıyla otomatik oluşturulur
+        // (grup eklemek yalnızca admin'de).
+        if (isAdmin && built.numberOfGroups == 1 && seasonId.isNotEmpty) {
           final existing = await _sb
               .from('groups')
               .select('id')
@@ -374,17 +383,12 @@ class SeasonManagementScreen extends StatelessWidget {
                       title: 'Genel',
                       child: AdminFieldGroup(
                         children: [
-                          textRow(
-                            Icons.emoji_events_outlined,
-                            'Sezon Adı',
-                            nameController,
-                            hint: 'Örn. 2026-2027 Sezonu',
-                          ),
+                          // Sezon adı başlangıç yılından otomatik gelir.
                           textRow(
                             Icons.short_text_rounded,
                             'Alt Başlık',
                             subtitleController,
-                            hint: 'İsteğe bağlı',
+                            hint: 'Örn. Kış Ligi (isteğe bağlı)',
                           ),
                           textRow(
                             Icons.flag_outlined,
@@ -417,24 +421,26 @@ class SeasonManagementScreen extends StatelessWidget {
                               isStart: false,
                             ),
                           ),
-                          dateRow(
-                            Icons.swap_horiz_rounded,
-                            'Transfer Başlangıcı',
-                            transferStartController,
-                            () => pickTransferDate(
-                              setSheetState: setSheetState,
-                              isStart: true,
+                          if (showTransfer) ...[
+                            dateRow(
+                              Icons.swap_horiz_rounded,
+                              'Transfer Başlangıcı',
+                              transferStartController,
+                              () => pickTransferDate(
+                                setSheetState: setSheetState,
+                                isStart: true,
+                              ),
                             ),
-                          ),
-                          dateRow(
-                            Icons.event_busy_outlined,
-                            'Transfer Bitişi',
-                            transferEndController,
-                            () => pickTransferDate(
-                              setSheetState: setSheetState,
-                              isStart: false,
+                            dateRow(
+                              Icons.event_busy_outlined,
+                              'Transfer Bitişi',
+                              transferEndController,
+                              () => pickTransferDate(
+                                setSheetState: setSheetState,
+                                isStart: false,
+                              ),
                             ),
-                          ),
+                          ],
                         ],
                       ),
                     ),
@@ -555,7 +561,6 @@ class SeasonManagementScreen extends StatelessWidget {
     );
 
     _disposeControllersLater([
-      nameController,
       subtitleController,
       startDateController,
       endDateController,
@@ -580,11 +585,13 @@ class SeasonManagementScreen extends StatelessWidget {
     // bölgesinin sezonunu görür, sezon ekleyip düzenleyemez.
     final session = AppSession.of(context).value;
     final full = session.canManageLeague(leagueId);
+    // Sezon ekleme yalnızca admin'de.
+    final canAdd = session.isAdmin;
     final regionSeasons = {for (final r in session.ownedRegions) r.seasonId};
     return _AdminPageScaffold(
       title: leagueName.trim().isEmpty ? 'Sezonlar' : leagueName,
       actions: [
-        if (full)
+        if (canAdd)
           IconButton(
             onPressed: () => _openSeasonSheet(context),
             icon: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
@@ -612,7 +619,7 @@ class SeasonManagementScreen extends StatelessWidget {
 
           return ListView.builder(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-            itemCount: seasons.length + (full ? 1 : 0),
+            itemCount: seasons.length + (canAdd ? 1 : 0),
             itemBuilder: (_, index) {
               if (index == seasons.length) {
                 return _AddDashedButton(
@@ -630,6 +637,9 @@ class SeasonManagementScreen extends StatelessWidget {
                   // Bölgeli sezon: önce Bölgeler; bölgesiz: doğrudan Gruplar.
                   Navigator.of(context).push(
                     MaterialPageRoute<void>(
+                      settings: const RouteSettings(
+                        name: 'SeasonRegionsScreen',
+                      ),
                       builder: (_) => hasRegions || !full
                           ? SeasonRegionsScreen(
                               leagueId: leagueId,
@@ -785,6 +795,7 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
     if (!added || !mounted) return;
     Navigator.of(context).pushReplacement(
       MaterialPageRoute<void>(
+        settings: const RouteSettings(name: 'SeasonRegionsScreen'),
         builder: (_) => SeasonRegionsScreen(
           leagueId: widget.leagueId,
           seasonId: widget.seasonId,
@@ -1192,6 +1203,8 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
 
   Future<void> _openEditGroupSheet(GroupModel g) async {
     final messenger = ScaffoldMessenger.of(context);
+    // Grup adını yalnızca admin değiştirir.
+    final isAdmin = AppSession.of(context).value.isAdmin;
     final controller = TextEditingController(text: g.name.trim());
     var saving = false;
     var regionId = g.regionId;
@@ -1213,7 +1226,7 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
         // `season_teams.group_id` ile bağlı olduğundan ek güncelleme gerekmez.
         await _sb
             .from('groups')
-            .update({'name': next, 'region_id': regionId})
+            .update({if (isAdmin) 'name': next, 'region_id': regionId})
             .eq('id', g.id);
 
         if (sheetContext.mounted) Navigator.of(sheetContext).pop();
@@ -1240,7 +1253,7 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
               title: 'Grup',
               child: AdminFieldGroup(
                 children: [
-                  _groupNameRow(controller, enabled: !saving),
+                  _groupNameRow(controller, enabled: !saving && isAdmin),
                   if (_regions.isNotEmpty &&
                       AppSession.of(
                         context,
@@ -1313,6 +1326,7 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
   Future<void> _openTeams({String? initialGroupName}) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
+        settings: const RouteSettings(name: 'TeamListScreen'),
         builder: (_) => TeamListScreen(
           seasonId: widget.seasonId,
           seasonName: widget.seasonName,
@@ -1402,11 +1416,12 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
             ),
             tooltip: 'Bölge Sorumluları',
           ),
-        IconButton(
-          onPressed: _busy ? null : _openAddGroupSheet,
-          icon: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
-          tooltip: 'Grup Ekle',
-        ),
+        if (AppSession.of(context).value.isAdmin)
+          IconButton(
+            onPressed: _busy ? null : _openAddGroupSheet,
+            icon: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
+            tooltip: 'Grup Ekle',
+          ),
       ],
       body: Column(
         children: [
@@ -1471,6 +1486,7 @@ class _TeamListScreenState extends State<TeamListScreen> {
   Future<void> _openSquad(_TeamStanding t) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
+        settings: const RouteSettings(name: 'TeamSquadScreen'),
         builder: (_) => TeamSquadScreen(
           teamId: t.id,
           tournamentId: widget.seasonId,
@@ -1839,7 +1855,7 @@ class _SheetHeader extends StatelessWidget {
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 18,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
@@ -1895,7 +1911,7 @@ class _SaveButton extends StatelessWidget {
           : Text(
               label,
               style: const TextStyle(
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w800,
                 letterSpacing: 1.2,
               ),
             ),
@@ -2730,6 +2746,7 @@ class _SeasonRegionsScreenState extends State<SeasonRegionsScreen> {
   }) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
+        settings: const RouteSettings(name: 'SeasonGroupsScreen'),
         builder: (_) => SeasonGroupsScreen(
           leagueId: widget.leagueId,
           seasonId: widget.seasonId,

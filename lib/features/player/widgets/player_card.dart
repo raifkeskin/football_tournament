@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../../team/widgets/team_page_tabs.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../tournament/models/league.dart';
@@ -134,6 +136,17 @@ class PlayerCard extends StatefulWidget {
 
 class _PlayerCardState extends State<PlayerCard> {
   late final Future<_PlayerCardData> _future = _load();
+
+  /// Alt bölüm sekmesi: 0 Özet, 1 Turnuvalar (ileride yenileri eklenir).
+  int _tab = 0;
+  static const _tabs = ['Özet', 'Turnuvalar'];
+
+  /// Alt çizgili sekme çubuğu (takım sayfası ve maç detayıyla aynı).
+  Widget _tabBar() => TeamPageTabBar(
+    index: _tab,
+    labels: _tabs,
+    onChanged: (i) => setState(() => _tab = i),
+  );
 
   SupabaseClient get _sb => Supabase.instance.client;
 
@@ -272,6 +285,9 @@ class _PlayerCardState extends State<PlayerCard> {
           final id = (m['id'] ?? '').toString();
           final sid = (m['season_id'] ?? '').toString();
           if (id.isEmpty || sid.isEmpty) continue;
+          // Ertelenen / iptal maç oynanmadı: hiçbir sayıya katılmaz.
+          final st = (m['status'] ?? '').toString();
+          if (st == 'cancelled' || st == 'postponed') continue;
           seasonByMatch[id] = sid;
           if ((m['status'] ?? '').toString() == 'finished') finished.add(id);
         }
@@ -387,7 +403,8 @@ class _PlayerCardState extends State<PlayerCard> {
       }
     } catch (_) {}
 
-    final seasonIds = totalsBySeason.keys.toList();
+    // Maçı / esamesi olmasa da kayıtlı olduğu aktif sezonlar da listelenir.
+    final seasonIds = {...totalsBySeason.keys, ...teamsBySeason.keys}.toList();
 
     final seasonById = <String, Map<String, dynamic>>{};
     final leagueById = <String, Map<String, dynamic>>{};
@@ -395,7 +412,7 @@ class _PlayerCardState extends State<PlayerCard> {
       try {
         final res = await _sb
             .from('seasons')
-            .select('id, name, league_id, start_date')
+            .select('id, name, league_id, start_date, is_active')
             .inFilter('id', seasonIds);
         for (final row in res) {
           final id = (row['id'] ?? '').toString().trim();
@@ -423,9 +440,13 @@ class _PlayerCardState extends State<PlayerCard> {
 
     final byLeague = <String, _TournamentNode>{};
     var overall = const _StatTotals();
-    for (final entry in totalsBySeason.entries) {
+    for (final sid in seasonIds) {
+      final totals = totalsBySeason[sid];
+      final seasonRow = seasonById[sid];
+      // İstatistiği olmayan kayıt: yalnız aktif sezondaysa gösterilir.
+      if (totals == null && seasonRow?['is_active'] != true) continue;
+      final entry = MapEntry(sid, totals ?? const _StatTotals());
       overall = overall + entry.value;
-      final seasonRow = seasonById[entry.key];
       final leagueId = (seasonRow?['league_id'] ?? '').toString().trim();
       final leagueName = (leagueById[leagueId]?['name'] ?? '')
           .toString()
@@ -470,6 +491,9 @@ class _PlayerCardState extends State<PlayerCard> {
   Widget build(BuildContext context) {
     return Material(
       color: _bgDark,
+      // Dialog şeffaf olduğundan köşeleri kart kendisi yuvarlar.
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+      clipBehavior: Clip.antiAlias,
       child: FutureBuilder<_PlayerCardData>(
         future: _future,
         builder: (context, snap) {
@@ -480,29 +504,21 @@ class _PlayerCardState extends State<PlayerCard> {
             children: [
               _hero(context),
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+                // Üst kart ile sekmeler arası dar tutulur.
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const _SectionTitle(
-                      icon: Icons.insights_rounded,
-                      title: 'Kariyer Özeti',
-                    ),
+                    _tabBar(),
                     const SizedBox(height: 10),
                     if (loading)
                       const Padding(
                         padding: EdgeInsets.all(24),
                         child: Center(child: CircularProgressIndicator()),
                       )
-                    else
-                      _summaryGrid(data.overall),
-                    const SizedBox(height: 22),
-                    const _SectionTitle(
-                      icon: Icons.emoji_events_outlined,
-                      title: 'Turnuva Geçmişi',
-                    ),
-                    const SizedBox(height: 10),
-                    if (!loading && data.tournaments.isEmpty)
+                    else if (_tab == 0)
+                      _summaryGrid(data.overall)
+                    else if (data.tournaments.isEmpty)
                       Container(
                         padding: const EdgeInsets.all(18),
                         decoration: _panel(),
@@ -512,7 +528,7 @@ class _PlayerCardState extends State<PlayerCard> {
                           style: TextStyle(color: _mid),
                         ),
                       )
-                    else if (!loading)
+                    else
                       _historyTable(data.tournaments),
                   ],
                 ),
@@ -600,7 +616,8 @@ class _PlayerCardState extends State<PlayerCard> {
           end: Alignment.bottomRight,
           colors: [_surface, _forest],
         ),
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
+        // Üst köşeler de oval: popup çerçevesiyle aynı yarıçap.
+        borderRadius: BorderRadius.all(Radius.circular(28)),
       ),
       padding: const EdgeInsets.fromLTRB(16, 44, 16, 16),
       child: Column(
@@ -640,7 +657,7 @@ class _PlayerCardState extends State<PlayerCard> {
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 56,
-                                    fontWeight: FontWeight.w900,
+                                    fontWeight: FontWeight.w800,
                                   ),
                                 ),
                               )
@@ -678,7 +695,7 @@ class _PlayerCardState extends State<PlayerCard> {
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 19,
-                                  fontWeight: FontWeight.w900,
+                                  fontWeight: FontWeight.w800,
                                   height: 1.1,
                                   shadows: [
                                     Shadow(
@@ -730,7 +747,7 @@ class _PlayerCardState extends State<PlayerCard> {
                               '#$number',
                               style: const TextStyle(
                                 color: Colors.white,
-                                fontWeight: FontWeight.w900,
+                                fontWeight: FontWeight.w800,
                                 fontSize: 15,
                               ),
                             ),
@@ -806,7 +823,7 @@ class _PlayerCardState extends State<PlayerCard> {
               '$value',
               style: const TextStyle(
                 color: Colors.white,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w800,
                 fontSize: 24,
                 height: 1.1,
               ),
@@ -857,7 +874,7 @@ class _PlayerCardState extends State<PlayerCard> {
             style: TextStyle(
               color: color,
               fontSize: 13,
-              fontWeight: bold ? FontWeight.w900 : FontWeight.w600,
+              fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
             ),
           ),
         );
@@ -1026,31 +1043,6 @@ class _PlayerCardState extends State<PlayerCard> {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({required this.icon, required this.title});
-
-  final IconData icon;
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, color: _accent, size: 18),
-        const SizedBox(width: 8),
-        Text(
-          title,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w900,
-            fontSize: 16,
-          ),
-        ),
-      ],
     );
   }
 }

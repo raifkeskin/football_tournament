@@ -14,7 +14,17 @@ import '../../../core/widgets/web_safe_image.dart';
 import '../../player/services/penalty_service.dart';
 
 class AdminPenaltyManagementScreen extends StatefulWidget {
-  const AdminPenaltyManagementScreen({super.key});
+  const AdminPenaltyManagementScreen({
+    super.key,
+    this.initialLeagueId,
+    this.initialSeasonId,
+    this.initialGroupId,
+  });
+
+  /// Ana sayfadan açılınca orada seçili turnuva, sezon ve grup.
+  final String? initialLeagueId;
+  final String? initialSeasonId;
+  final String? initialGroupId;
 
   @override
   State<AdminPenaltyManagementScreen> createState() =>
@@ -28,8 +38,11 @@ class _AdminPenaltyManagementScreenState
   final PenaltyService _penaltyService = PenaltyService();
   final SupabaseClient _sb = Supabase.instance.client;
 
-  String _selectedLeagueId = '';
-  String _selectedSeasonId = '';
+  late String _selectedLeagueId = widget.initialLeagueId?.trim() ?? '';
+  late String _selectedSeasonId = widget.initialSeasonId?.trim() ?? '';
+
+  /// Boş: tüm gruplar.
+  late String _selectedGroupId = widget.initialGroupId?.trim() ?? '';
   _PenaltyFilter _penaltyFilter = _PenaltyFilter.active;
   final Set<String> _hiddenPenaltyIds = <String>{};
 
@@ -112,6 +125,7 @@ class _AdminPenaltyManagementScreenState
                 _selectedSeasonId = cached == null || cached.isEmpty
                     ? ''
                     : (cached.first['id'] ?? '').toString().trim();
+                _selectedGroupId = '';
                 _hiddenPenaltyIds.clear();
               });
               _ensureSeasons(lid, onLoaded: refresh);
@@ -126,11 +140,31 @@ class _AdminPenaltyManagementScreenState
             onChanged: (v) {
               setState(() {
                 _selectedSeasonId = (v ?? '').trim();
+                _selectedGroupId = '';
                 _hiddenPenaltyIds.clear();
               });
+              _ensureGroups(_selectedSeasonId, onLoaded: refresh);
               refresh();
             },
           ),
+          // Birden fazla grup varsa grup seçimi ('' = tüm gruplar).
+          if ((_groupsBySeason[_selectedSeasonId]?.length ?? 0) > 1)
+            CustomPopupSelector<String>(
+              label: 'Grup',
+              selectedValue: _selectedGroupId,
+              items: [
+                '',
+                for (final g in _groupsBySeason[_selectedSeasonId]!) g.$1,
+              ],
+              labelBuilder: (id) => _groupName(id ?? ''),
+              onChanged: (v) {
+                setState(() {
+                  _selectedGroupId = (v ?? '').trim();
+                  _hiddenPenaltyIds.clear();
+                });
+                refresh();
+              },
+            ),
           CustomPopupSelector<_PenaltyFilter>(
             label: 'Filtre',
             selectedValue: _penaltyFilter,
@@ -145,6 +179,67 @@ class _AdminPenaltyManagementScreenState
         ];
       },
     );
+  }
+
+  /// Sezonun grupları (id, ad), ada göre.
+  final Map<String, List<(String, String)>> _groupsBySeason = {};
+
+  Future<void> _ensureGroups(String seasonId, {VoidCallback? onLoaded}) async {
+    final sid = seasonId.trim();
+    if (sid.isEmpty || _groupsBySeason.containsKey(sid)) return;
+    _groupsBySeason[sid] = const [];
+    try {
+      final rows = await _sb
+          .from('groups')
+          .select('id, name')
+          .eq('season_id', sid)
+          .order('name');
+      if (!mounted) return;
+      setState(() {
+        _groupsBySeason[sid] = [
+          for (final g in rows)
+            ((g['id'] ?? '').toString(), (g['name'] ?? '').toString()),
+        ];
+      });
+      onLoaded?.call();
+    } catch (_) {
+      _groupsBySeason.remove(sid);
+    }
+  }
+
+  String _groupName(String groupId) {
+    if (groupId.isEmpty) return 'Tüm gruplar';
+    for (final g in _groupsBySeason[_selectedSeasonId] ?? const []) {
+      if (g.$1 == groupId) return g.$2;
+    }
+    return '';
+  }
+
+  /// Listede gösterilecek oyuncular: yetki (bölge) ve seçili grup
+  /// kesişimi; null: hepsi.
+  final Map<String, Future<Set<String>?>> _visibleBySeasonGroup = {};
+
+  Future<Set<String>?> _visiblePlayers() {
+    final seasonId = _selectedSeasonId;
+    final groupId = _selectedGroupId;
+    return _visibleBySeasonGroup['$seasonId|$groupId'] ??= () async {
+      final allowed = await _allowedPlayers(seasonId);
+      if (groupId.isEmpty) return allowed;
+      final teams = await _sb
+          .from('season_teams')
+          .select('team_id')
+          .eq('season_id', seasonId)
+          .eq('group_id', groupId);
+      final teamIds = [for (final t in teams) (t['team_id'] ?? '').toString()];
+      if (teamIds.isEmpty) return <String>{};
+      final rows = await _sb
+          .from('season_team_players')
+          .select('player_id')
+          .eq('season_id', seasonId)
+          .inFilter('team_id', teamIds);
+      final inGroup = {for (final r in rows) (r['player_id'] ?? '').toString()};
+      return allowed == null ? inGroup : inGroup.intersection(allowed);
+    }();
   }
 
   /// Bölge sorumlusunun bu sezonda görebileceği oyuncular (bölgesindeki
@@ -431,9 +526,11 @@ class _AdminPenaltyManagementScreenState
                   _ensureSeasons(_selectedLeagueId);
                 }
 
+                _ensureGroups(_selectedSeasonId);
                 final parts = [
                   byId[_selectedLeagueId]?.name ?? 'Turnuva seçin',
                   _seasonName(_selectedSeasonId),
+                  if (_selectedGroupId.isNotEmpty) _groupName(_selectedGroupId),
                   _filterLabel(_penaltyFilter),
                 ].where((s) => s.trim().isNotEmpty);
                 return AdminFilterBar(
@@ -445,13 +542,15 @@ class _AdminPenaltyManagementScreenState
             ),
             if (_selectedSeasonId.trim().isNotEmpty)
               FutureBuilder<Set<String>?>(
-                future: _allowedPlayers(_selectedSeasonId),
+                future: _visiblePlayers(),
                 builder: (context, allowedSnap) {
                   if (allowedSnap.connectionState != ConnectionState.done) {
                     return const SizedBox.shrink();
                   }
                   return _PendingPenaltiesCard(
-                    key: ValueKey('pending_$_selectedSeasonId'),
+                    key: ValueKey(
+                      'pending_${_selectedSeasonId}_$_selectedGroupId',
+                    ),
                     seasonId: _selectedSeasonId,
                     penaltyService: _penaltyService,
                     allowedPlayerIds: allowedSnap.data,
@@ -467,7 +566,7 @@ class _AdminPenaltyManagementScreenState
                       ),
                     )
                   : FutureBuilder<Set<String>?>(
-                      future: _allowedPlayers(_selectedSeasonId),
+                      future: _visiblePlayers(),
                       builder: (context, allowedSnap) {
                         if (allowedSnap.connectionState !=
                             ConnectionState.done) {
@@ -632,7 +731,7 @@ class _AdminPenaltyManagementScreenState
                                                               : pNum,
                                                           style: TextStyle(
                                                             fontWeight:
-                                                                FontWeight.w900,
+                                                                FontWeight.w800,
                                                             color: cs.primary,
                                                           ),
                                                         ),
@@ -655,7 +754,7 @@ class _AdminPenaltyManagementScreenState
                                                       TextOverflow.ellipsis,
                                                   style: const TextStyle(
                                                     color: Colors.white,
-                                                    fontWeight: FontWeight.w900,
+                                                    fontWeight: FontWeight.w800,
                                                     fontSize: 14,
                                                   ),
                                                 ),
@@ -711,7 +810,7 @@ class _AdminPenaltyManagementScreenState
                                                         '${pen.matchCount} maç',
                                                         style: const TextStyle(
                                                           fontWeight:
-                                                              FontWeight.w900,
+                                                              FontWeight.w800,
                                                           color: Colors.red,
                                                           fontSize: 12,
                                                         ),

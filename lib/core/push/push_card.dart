@@ -2,12 +2,17 @@ import 'package:flutter/material.dart';
 
 import '../widgets/admin_form.dart';
 import '../widgets/admin_page.dart';
+import '../../features/notifications/notification_settings_screen.dart';
 import 'push_service.dart';
 
 /// Profildeki bildirim kartı: izin/abonelik durumuna göre aç-kapat ya da
 /// yönlendirme (iPhone'da "Ana Ekrana Ekle", engellenmişse ayarlar).
 class PushCard extends StatefulWidget {
-  const PushCard({super.key});
+  const PushCard({super.key, this.showSettingsLink = true});
+
+  /// Kartın altında "Bildirim ayarları" bağlantısı (ayarlar ekranının
+  /// kendisinde gösterilmez).
+  final bool showSettingsLink;
 
   @override
   State<PushCard> createState() => _PushCardState();
@@ -59,7 +64,45 @@ class _PushCardState extends State<PushCard> {
 
   @override
   Widget build(BuildContext context) {
-    if (_state == PushState.unsupported) return const SizedBox.shrink();
+    final card = _card();
+    if (!widget.showSettingsLink) return card ?? const SizedBox.shrink();
+    final link = Material(
+      color: const Color(0xFF1E293B),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => NotificationSettingsScreen.open(context),
+        child: const Padding(
+          padding: EdgeInsets.fromLTRB(16, 12, 10, 12),
+          child: Row(
+            children: [
+              Icon(Icons.tune_rounded, color: kAdminAccent),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Bildirim ayarları',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, color: Colors.white38),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (card == null) return link;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [card, const SizedBox(height: 8), link],
+    );
+  }
+
+  Widget? _card() {
+    if (_state == PushState.unsupported) return null;
 
     final on = _state == PushState.granted && _subscribed;
     final String title;
@@ -79,10 +122,10 @@ class _PushCardState extends State<PushCard> {
       default:
         title = on ? 'Bildirimler açık' : 'Bildirimleri aç';
         text = on
-            ? 'Maç saati, maç öncesi hatırlatma, maç sonucu ve turnuva '
-                  'haberleri bu cihaza gelir.'
-            : 'Maç saati belirlendiğinde, maçtan 2 saat önce, maç '
-                  'bittiğinde ve yeni haberde bildirim al.';
+            ? 'Bu cihaz bildirim alıyor. Hangi bildirimlerin geleceğini '
+                  'ayarlardan seçebilirsiniz.'
+            : 'Maç saati, gol, maç sonucu ve haberler için bu cihazda '
+                  'bildirim alın.';
         action = _busy
             ? const SizedBox(
                 width: 22,

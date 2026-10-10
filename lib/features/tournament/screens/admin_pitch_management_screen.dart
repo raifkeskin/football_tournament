@@ -253,7 +253,7 @@ class _AdminPitchManagementScreenState
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 18,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
@@ -517,7 +517,7 @@ class _AdminPitchManagementScreenState
                       )
                     : Text(
                         isEdit ? 'GÜNCELLE' : 'KAYDET',
-                        style: const TextStyle(fontWeight: FontWeight.w900),
+                        style: const TextStyle(fontWeight: FontWeight.w800),
                       ),
               ),
             ],
@@ -556,7 +556,7 @@ class _AdminPitchManagementScreenState
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text(
               'SİL',
-              style: TextStyle(fontWeight: FontWeight.w900),
+              style: TextStyle(fontWeight: FontWeight.w800),
             ),
           ),
         ],

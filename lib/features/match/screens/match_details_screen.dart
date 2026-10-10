@@ -5,6 +5,7 @@ import '../../player/widgets/player_card.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
@@ -30,15 +31,47 @@ import '../../../core/utils/team_colors.dart';
 import '../../../core/widgets/pitch_token_style.dart';
 import 'package:football_tournament/core/widgets/picked_image.dart';
 import '../utils/match_clock.dart';
-import '../../../core/widgets/league_logo.dart';
+import '../../team/screens/team_squad_screen.dart';
 import 'package:football_tournament/core/widgets/admin_page.dart';
 import 'package:football_tournament/core/widgets/admin_form.dart';
-import '../../../core/utils/string_utils.dart';
 import '../../player/services/penalty_service.dart';
+import '../../../core/widgets/app_name_band.dart';
+import '../../../core/widgets/youtube_player_page.dart'
+    show youtubePlayerOrigin, youtubeVideoId;
 
 // --- YARDIMCI WIDGETLAR ---
 
 /// Çift sarıdan ihraç: arkada sarı, önde kırmızı kart.
+/// Maç akışının ortasındaki dikey çizgi parçası.
+class _TimelineLine extends StatelessWidget {
+  const _TimelineLine();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(width: 2, color: Colors.white.withValues(alpha: 0.1));
+  }
+}
+
+/// Kaçan penaltı: soluk top, üzerinde kırmızı çarpı.
+class _MissedPenaltyIcon extends StatelessWidget {
+  const _MissedPenaltyIcon();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox(
+      width: 20,
+      height: 20,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Icon(Icons.sports_soccer, size: 18, color: Color(0xFF64748B)),
+          Icon(Icons.close_rounded, size: 20, color: Colors.redAccent),
+        ],
+      ),
+    );
+  }
+}
+
 /// Penaltı golü: top, altında "P" rozeti.
 class _PenaltyGoalIcon extends StatelessWidget {
   const _PenaltyGoalIcon();
@@ -66,7 +99,7 @@ class _PenaltyGoalIcon extends StatelessWidget {
                 style: TextStyle(
                   color: Colors.black,
                   fontSize: 9,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w800,
                   height: 1.2,
                 ),
               ),
@@ -118,32 +151,69 @@ class _SecondYellowCardIcon extends StatelessWidget {
 class _TeamInfo extends StatelessWidget {
   final String name;
   final String logoUrl;
+  final String teamId;
+  final String seasonId;
+  final bool compact;
+  final String? firstColor;
+  final String? secondColor;
 
-  const _TeamInfo({required this.name, required this.logoUrl});
+  const _TeamInfo({
+    required this.name,
+    required this.logoUrl,
+    required this.teamId,
+    required this.seasonId,
+    this.compact = false,
+    this.firstColor,
+    this.secondColor,
+  });
 
   @override
   Widget build(BuildContext context) {
+    // Logoya / ada dokununca takımın sayfası (kadro, fikstür, istatistik).
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: teamId.isEmpty
+          ? null
+          : () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                settings: const RouteSettings(name: 'TeamSquadScreen'),
+                builder: (_) => TeamSquadScreen(
+                  teamId: teamId,
+                  tournamentId: seasonId,
+                  teamName: name,
+                  teamLogoUrl: logoUrl,
+                  initialFirstColor: firstColor,
+                  initialSecondColor: secondColor,
+                ),
+              ),
+            ),
+      child: _content(),
+    );
+  }
+
+  Widget _content() {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         // Şeffaf logolar kırpılmadan, çerçevesiz gösterilir.
         WebSafeImage(
           url: logoUrl,
-          width: 64,
-          height: 64,
+          width: compact ? 42 : 64,
+          height: compact ? 42 : 64,
           fit: BoxFit.contain,
-          fallbackIconSize: 26,
+          fallbackIconSize: compact ? 20 : 26,
         ),
-        const SizedBox(height: 4),
+        SizedBox(height: compact ? 1 : 4),
         Text(
           shortTeamName(name),
           textAlign: TextAlign.center,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
+          style: TextStyle(
             color: Colors.white,
-            fontWeight: FontWeight.w900,
-            fontSize: 15,
+            // 700: uzun adlar da okunur kalsın.
+            fontWeight: FontWeight.w700,
+            fontSize: compact ? 13 : 15,
             height: 1.15,
             letterSpacing: 0.2,
             shadows: [
@@ -153,109 +223,6 @@ class _TeamInfo extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-/// Geri okunun yanında turnuva bandı: logo + ad + hafta.
-class _LeagueStrip extends StatefulWidget {
-  const _LeagueStrip({required this.leagueId, this.week});
-
-  final String leagueId;
-  final int? week;
-
-  @override
-  State<_LeagueStrip> createState() => _LeagueStripState();
-}
-
-class _LeagueStripState extends State<_LeagueStrip> {
-  static final Map<String, Future<({String name, String logo})?>> _cache = {};
-  late Future<({String name, String logo})?> _info;
-
-  @override
-  void initState() {
-    super.initState();
-    _info = _load(widget.leagueId);
-  }
-
-  static Future<({String name, String logo})?> _load(String id) {
-    if (id.trim().isEmpty) return Future.value(null);
-    return _cache.putIfAbsent(id, () async {
-      try {
-        final r = await Supabase.instance.client
-            .from('leagues')
-            .select('name, logo_url')
-            .eq('id', id)
-            .maybeSingle();
-        if (r == null) return null;
-        return (
-          name: (r['name'] ?? '').toString(),
-          logo: (r['logo_url'] ?? '').toString(),
-        );
-      } catch (_) {
-        _cache.remove(id);
-        return null;
-      }
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    const gold = Color(0xFFE2B845);
-    return FutureBuilder<({String name, String logo})?>(
-      future: _info,
-      builder: (context, snap) {
-        final info = snap.data;
-        if (info == null) return const SizedBox.shrink();
-        // Turnuva adı üstte, hafta altında: uzun adlarda hafta kesilmesin.
-        return Center(
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(5, 3, 14, 3),
-            decoration: BoxDecoration(
-              color: const Color(0xFF0F172A).withValues(alpha: 0.6),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: gold.withValues(alpha: 0.5)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                LeagueLogo(url: info.logo, size: 30, fallbackColor: gold),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        info.name.trUpper,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11.5,
-                          height: 1.2,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.8,
-                        ),
-                      ),
-                      if (widget.week != null)
-                        Text(
-                          '${widget.week}. HAFTA',
-                          style: const TextStyle(
-                            color: gold,
-                            fontSize: 10,
-                            height: 1.2,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 1,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
     );
   }
 }
@@ -284,7 +251,7 @@ class _MatchPhaseLabel extends StatelessWidget {
           text,
           style: TextStyle(
             color: color,
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w800,
             fontSize: 13,
             shadows: const [
               Shadow(color: Colors.black, blurRadius: 10, offset: Offset(0, 2)),
@@ -325,7 +292,8 @@ class _MatchFlowBarState extends State<_MatchFlowBar> {
     final m = widget.match;
     final ({String action, String label, IconData icon, Color color})? next =
         switch (m.status) {
-          MatchStatus.notStarted => (
+          // Ertelenen maç yeni tarihinde doğrudan başlatılır.
+          MatchStatus.notStarted || MatchStatus.postponed => (
             action: 'start',
             label: 'Başlama Düdüğü',
             icon: Icons.sports_rounded,
@@ -384,7 +352,7 @@ class _MatchFlowBarState extends State<_MatchFlowBar> {
                 label: Text(
                   next.label,
                   style: const TextStyle(
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w800,
                     letterSpacing: 0.3,
                   ),
                 ),
@@ -421,6 +389,19 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
   final ILeagueService _leagueService = ServiceLocator.leagueService;
 
   late final TabController _tabController;
+  ModalRoute<dynamic>? _bandRoute;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route == _bandRoute) return;
+    if (_bandRoute != null) {
+      LeagueSwitchScope.setBandHidden(_bandRoute, false);
+    }
+    _bandRoute = route;
+    LeagueSwitchScope.setBandHidden(route, true);
+  }
 
   @override
   void initState() {
@@ -518,6 +499,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
       context: context,
       fileName: 'mac_${homeName}_$awayName'.replaceAll(RegExp(r'\s+'), '_'),
       imageUrls: [leagueLogo, homeLogo, awayLogo],
+      leagueId: m.leagueId,
       poster: MatchPoster(
         leagueName: leagueName,
         leagueLogo: leagueLogo,
@@ -543,8 +525,39 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     }
   }
 
+  /// Medya sekmesindeki menüde "Canlı Yayını Kaldır" için.
+  late final Stream<List<MatchMediaModel>> _fabMediaStream = ServiceLocator
+      .matchService
+      .watchMatchMedia(widget.match.id);
+
+  /// Maçın canlı yayın linkini (linklerini) onayla kaldırır.
+  Future<void> _removeLiveStream(List<MatchMediaModel> links) async {
+    final ok = await showAdminConfirmDialog(
+      context: context,
+      title: 'Canlı Yayını Kaldır',
+      message: 'Maçın canlı yayın linki kaldırılacak. Onaylıyor musunuz?',
+      confirmLabel: 'KALDIR',
+      destructive: true,
+      icon: Icons.live_tv_rounded,
+    );
+    if (!ok || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      for (final l in links) {
+        await ServiceLocator.matchService.deleteMatchMedia(l.id);
+      }
+      _triggerRefresh();
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Canlı yayın linki kaldırıldı.')),
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Kaldırılamadı: $e')));
+    }
+  }
+
   @override
   void dispose() {
+    LeagueSwitchScope.setBandHidden(_bandRoute, false);
     _tabController.dispose();
     super.dispose();
   }
@@ -700,15 +713,30 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     }
 
     if (tabIndex == 2) {
-      return _SpeedDialFab(
-        key: const ValueKey('fab_highlights'),
-        actions: [
-          _SpeedDialAction(
-            label: 'Medya Ekle',
-            icon: Icons.perm_media_rounded,
-            onTap: () => _openHighlightMediaAdder(match, _triggerRefresh),
-          ),
-        ],
+      return StreamBuilder<List<MatchMediaModel>>(
+        stream: _fabMediaStream,
+        builder: (context, snap) {
+          final links = [
+            for (final m in snap.data ?? const <MatchMediaModel>[])
+              if (m.mediaType == 'Maç Yayın Linki') m,
+          ];
+          return _SpeedDialFab(
+            key: const ValueKey('fab_highlights'),
+            actions: [
+              _SpeedDialAction(
+                label: 'Medya Ekle',
+                icon: Icons.perm_media_rounded,
+                onTap: () => _openHighlightMediaAdder(match, _triggerRefresh),
+              ),
+              if (links.isNotEmpty)
+                _SpeedDialAction(
+                  label: 'Canlı Yayını Kaldır',
+                  icon: Icons.tv_off_rounded,
+                  onTap: () => _removeLiveStream(links),
+                ),
+            ],
+          );
+        },
       );
     }
 
@@ -797,25 +825,13 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
             final awayName = (nameMap[m.awayTeamId] ?? '').trim().isEmpty
                 ? 'Deplasman'
                 : (nameMap[m.awayTeamId] ?? '').trim();
+            final compactHeader = _tabController.index == 3;
 
             return Scaffold(
               extendBodyBehindAppBar: true,
               backgroundColor: const Color(0xFF0F172A),
               appBar: AppBar(
                 toolbarHeight: 44,
-                // Bant tam genişlikteki katmanda ortalanır; başlık alanı
-                // geri okundan sonra ortaladığı için sağa kayıyordu. İki
-                // yanda geri oku kadar (56px) boşluk bırakılır.
-                flexibleSpace: SafeArea(
-                  bottom: false,
-                  child: SizedBox(
-                    height: 44,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 56),
-                      child: _LeagueStrip(leagueId: m.leagueId, week: m.week),
-                    ),
-                  ),
-                ),
                 backgroundColor: Colors.transparent,
                 surfaceTintColor: Colors.transparent,
                 elevation: 0,
@@ -878,7 +894,12 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                             top: MediaQuery.of(context).padding.top + 50,
                           ),
                           child: Padding(
-                            padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+                            padding: EdgeInsets.fromLTRB(
+                              14,
+                              0,
+                              14,
+                              compactHeader ? 6 : 10,
+                            ),
                             child: Column(
                               children: [
                                 Row(
@@ -891,14 +912,19 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                       child: _TeamInfo(
                                         name: homeName,
                                         logoUrl: homeLogo,
+                                        teamId: m.homeTeamId,
+                                        seasonId: m.seasonId,
+                                        compact: compactHeader,
+                                        firstColor: homeTeam?.firstColor,
+                                        secondColor: homeTeam?.secondColor,
                                       ),
                                     ),
                                     Padding(
                                       // Skor, büyütülen logoların ortasına
                                       // denk gelir.
-                                      padding: const EdgeInsets.fromLTRB(
+                                      padding: EdgeInsets.fromLTRB(
                                         10,
-                                        12,
+                                        compactHeader ? 5 : 12,
                                         10,
                                         0,
                                       ),
@@ -906,11 +932,11 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                         children: [
                                           Text(
                                             "${m.homeScore} - ${m.awayScore}",
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               color: Colors.white,
-                                              fontWeight: FontWeight.w900,
-                                              fontSize: 30,
-                                              shadows: [
+                                              fontWeight: FontWeight.w800,
+                                              fontSize: compactHeader ? 23 : 30,
+                                              shadows: const [
                                                 Shadow(
                                                   color: Colors.black,
                                                   blurRadius: 10,
@@ -927,28 +953,33 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                       child: _TeamInfo(
                                         name: awayName,
                                         logoUrl: awayLogo,
+                                        teamId: m.awayTeamId,
+                                        seasonId: m.seasonId,
+                                        compact: compactHeader,
+                                        firstColor: awayTeam?.firstColor,
+                                        secondColor: awayTeam?.secondColor,
                                       ),
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 10),
+                                SizedBox(height: compactHeader ? 4 : 10),
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    const Icon(
+                                    Icon(
                                       Icons.access_time_filled_rounded,
-                                      size: 14,
+                                      size: compactHeader ? 12 : 14,
                                       color: Colors.white70,
                                     ),
-                                    const SizedBox(width: 8),
+                                    SizedBox(width: compactHeader ? 4 : 8),
                                     Text(
                                       _dateTimeText(m),
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         color: Colors.white,
-                                        fontSize: 11,
+                                        fontSize: compactHeader ? 9.5 : 11,
                                         fontWeight: FontWeight.w700,
-                                        shadows: [
+                                        shadows: const [
                                           Shadow(
                                             color: Colors.black,
                                             blurRadius: 10,
@@ -958,7 +989,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                       ),
                                     ),
                                     if ((m.pitchId ?? '').isNotEmpty) ...[
-                                      const SizedBox(width: 12),
+                                      SizedBox(width: compactHeader ? 6 : 12),
                                       const Text(
                                         "|",
                                         style: TextStyle(
@@ -974,13 +1005,13 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                           ],
                                         ),
                                       ),
-                                      const SizedBox(width: 12),
-                                      const Icon(
+                                      SizedBox(width: compactHeader ? 6 : 12),
+                                      Icon(
                                         Icons.location_on_rounded,
-                                        size: 14,
+                                        size: compactHeader ? 12 : 14,
                                         color: Colors.white70,
                                       ),
-                                      const SizedBox(width: 4),
+                                      const SizedBox(width: 3),
                                       Flexible(
                                         child: StreamBuilder<List<Pitch>>(
                                           stream: _pitchesStream,
@@ -1013,11 +1044,13 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                                     ),
                                               child: Text(
                                                 displayPitchName,
-                                                style: const TextStyle(
+                                                style: TextStyle(
                                                   color: Colors.white,
-                                                  fontSize: 11,
+                                                  fontSize: compactHeader
+                                                      ? 9.5
+                                                      : 11,
                                                   fontWeight: FontWeight.w700,
-                                                  shadows: [
+                                                  shadows: const [
                                                     Shadow(
                                                       color: Colors.black,
                                                       blurRadius: 10,
@@ -1060,7 +1093,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                             // ayrı bir şerit, seçili sekmenin altı çizili.
                             Container(
                               height: 46,
-                              margin: const EdgeInsets.only(top: 10),
+                              margin: EdgeInsets.only(
+                                top: compactHeader ? 4 : 10,
+                              ),
                               decoration: BoxDecoration(
                                 color: const Color(0xFF111A2E),
                                 border: Border(
@@ -1085,7 +1120,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                 ),
                                 labelStyle: const TextStyle(
                                   fontFamily: 'Batangas',
-                                  fontWeight: FontWeight.w900,
+                                  fontWeight: FontWeight.w800,
                                   fontSize: 13.5,
                                 ),
                                 unselectedLabelStyle: const TextStyle(
@@ -1930,6 +1965,7 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
     return GestureDetector(
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(
+          settings: const RouteSettings(name: 'PhotoGalleryScreen'),
           builder: (_) => _PhotoGalleryScreen(photos: list, initialIndex: i),
         ),
       ),
@@ -2075,32 +2111,6 @@ class _PhotoGalleryScreenState extends State<_PhotoGalleryScreen> {
   }
 }
 
-/// YouTube linkinden video id'si çıkarır (watch, youtu.be, embed, shorts, live).
-String? _youtubeVideoId(String url) {
-  final u = url.trim();
-  if (RegExp(r'^[_\-a-zA-Z0-9]{11}$').hasMatch(u)) return u;
-  final uri = Uri.tryParse(u);
-  if (uri == null) return null;
-  final host = uri.host.toLowerCase();
-  String? id;
-  if (host.endsWith('youtu.be')) {
-    id = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : null;
-  } else if (host.contains('youtube.com') ||
-      host.contains('youtube-nocookie.com')) {
-    id = uri.queryParameters['v'];
-    final seg = uri.pathSegments;
-    if (id == null &&
-        seg.length >= 2 &&
-        const {'embed', 'shorts', 'live', 'v'}.contains(seg.first)) {
-      id = seg[1];
-    }
-  }
-  if (id == null || !RegExp(r'^[_\-a-zA-Z0-9]{11}$').hasMatch(id)) {
-    return null;
-  }
-  return id;
-}
-
 Future<void> _openYoutubeExternally(BuildContext context, String url) async {
   final uri = Uri.tryParse(url.trim());
   final ok =
@@ -2136,6 +2146,18 @@ class _YoutubeVideoViewState extends State<_YoutubeVideoView> {
       _openYoutubeExternally(context, widget.url);
       return;
     }
+    // Telefon uygulamasında oynatıcı, açılır panel/kaydırma alanı içinde
+    // (WebView) donuk kalıyordu: tam ekran ayrı sayfada açılır.
+    if (!kIsWeb) {
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          settings: const RouteSettings(name: 'NativeYoutubeScreen'),
+          fullscreenDialog: true,
+          builder: (_) => _NativeYoutubeScreen(videoId: id, url: widget.url),
+        ),
+      );
+      return;
+    }
     setState(() {
       _controller = YoutubePlayerController.fromVideoId(
         videoId: id,
@@ -2143,6 +2165,7 @@ class _YoutubeVideoViewState extends State<_YoutubeVideoView> {
         params: const YoutubePlayerParams(
           showFullscreenButton: true,
           strictRelatedVideos: true,
+          origin: youtubePlayerOrigin,
         ),
       );
     });
@@ -2150,7 +2173,7 @@ class _YoutubeVideoViewState extends State<_YoutubeVideoView> {
 
   @override
   Widget build(BuildContext context) {
-    final id = _youtubeVideoId(widget.url);
+    final id = youtubeVideoId(widget.url);
     return AspectRatio(
       aspectRatio: 16 / 9,
       child: _controller != null
@@ -2232,6 +2255,80 @@ class _YoutubeVideoViewState extends State<_YoutubeVideoView> {
                 ],
               ),
             ),
+    );
+  }
+}
+
+/// Telefon uygulamasında YouTube oynatıcısı: siyah zeminli ayrı sayfa.
+/// YouTube gömülü oynatıcı için geçerli bir https kaynağı (origin) ister;
+/// verilmezse "oynatıcı yapılandırma hatası" verip boş kalabiliyor.
+class _NativeYoutubeScreen extends StatefulWidget {
+  const _NativeYoutubeScreen({required this.videoId, required this.url});
+
+  final String videoId;
+  final String url;
+
+  @override
+  State<_NativeYoutubeScreen> createState() => _NativeYoutubeScreenState();
+}
+
+class _NativeYoutubeScreenState extends State<_NativeYoutubeScreen> {
+  late final YoutubePlayerController _controller =
+      YoutubePlayerController.fromVideoId(
+        videoId: widget.videoId,
+        autoPlay: true,
+        params: const YoutubePlayerParams(
+          showFullscreenButton: true,
+          strictRelatedVideos: true,
+          origin: youtubePlayerOrigin,
+        ),
+      );
+
+  @override
+  void dispose() {
+    _controller.close();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: const Text('Maç Yayını'),
+        actions: [
+          TextButton.icon(
+            onPressed: () => _openYoutubeExternally(context, widget.url),
+            icon: const Icon(Icons.open_in_new_rounded, color: Colors.white70),
+            label: const Text(
+              "YouTube'da aç",
+              style: TextStyle(color: Colors.white70),
+            ),
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            const Spacer(),
+            AspectRatio(
+              aspectRatio: 16 / 9,
+              child: YoutubePlayer(controller: _controller),
+            ),
+            const Spacer(),
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                "Yayın açılmazsa sağ üstten YouTube'da açabilirsiniz.",
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -2539,7 +2636,7 @@ class _LineupTabState extends State<_LineupTab>
                 'VS',
                 style: TextStyle(
                   color: Colors.white,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w800,
                   fontSize: 11,
                   letterSpacing: 0.5,
                 ),
@@ -2600,7 +2697,7 @@ class _LineupTabState extends State<_LineupTab>
       textAlign: alignEnd ? TextAlign.right : TextAlign.left,
       style: const TextStyle(
         color: Colors.white,
-        fontWeight: FontWeight.w900,
+        fontWeight: FontWeight.w800,
         fontSize: 14,
       ),
     );
@@ -2909,7 +3006,7 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
         textAlign: TextAlign.center,
         style: const TextStyle(
           color: Colors.white,
-          fontWeight: FontWeight.w900,
+          fontWeight: FontWeight.w800,
           fontSize: 14,
           letterSpacing: 0.3,
         ),
@@ -2956,7 +3053,7 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
               jersey.isEmpty ? '-' : jersey,
               style: TextStyle(
                 color: badge,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w800,
                 fontSize: 12,
               ),
             ),
@@ -3287,7 +3384,7 @@ class _RosterEditSheetState extends State<_RosterEditSheet> {
                 '$value / $limit',
                 style: TextStyle(
                   color: on ? c : Colors.white54,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w800,
                   fontSize: 13,
                 ),
               ),
@@ -3337,7 +3434,7 @@ class _RosterEditSheetState extends State<_RosterEditSheet> {
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   color: Colors.white,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w800,
                   fontSize: 14,
                 ),
                 decoration: InputDecoration(
@@ -3377,7 +3474,7 @@ class _RosterEditSheetState extends State<_RosterEditSheet> {
                         style: TextStyle(
                           color: Color(0xFFFBBF24),
                           fontSize: 10.5,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w800,
                           letterSpacing: 0.6,
                         ),
                       ),
@@ -3481,7 +3578,7 @@ class _RosterEditSheetState extends State<_RosterEditSheet> {
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 19,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w800,
                         ),
                         children: [
                           TextSpan(
@@ -3613,7 +3710,7 @@ class _RosterEditSheetState extends State<_RosterEditSheet> {
                             'KAYDET',
                             style: TextStyle(
                               fontSize: 16,
-                              fontWeight: FontWeight.w900,
+                              fontWeight: FontWeight.w800,
                             ),
                           ),
                   ),
@@ -3758,7 +3855,12 @@ class _DetailTabView extends StatelessWidget {
         return <Map<String, dynamic>>[
           {'minute': 0, 'type': 'status', 'title': 'Maç Başladı'},
           {'minute': period, 'type': 'status', 'title': 'İlk Yarı Bitti'},
-          {'minute': period * 2, 'type': 'status', 'title': 'Maç Bitti'},
+          // Uzatma golleri ve maçın adamından sonra, akışın en sonunda.
+          {
+            'minute': 100000,
+            'type': 'status',
+            'title': 'Maç Sonucu  ${match.homeScore} - ${match.awayScore}',
+          },
         ];
     }
   }
@@ -3883,18 +3985,13 @@ class _DetailTabView extends StatelessWidget {
         }
 
         return ListView.separated(
-          padding: const EdgeInsets.all(16),
-          itemCount: normalized.length + 1,
-          separatorBuilder: (_, _) => const SizedBox(height: 6),
+          // Altta sağdaki menü düğmesi son satırları örtmesin.
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 104),
+          itemCount: normalized.length,
+          separatorBuilder: (_, _) =>
+              const SizedBox(height: 2, child: Center(child: _TimelineLine())),
           itemBuilder: (context, i) {
-            if (i == 0) {
-              return const Text(
-                'Maç Detayı',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
-              );
-            }
-            final e = normalized[i - 1];
+            final e = normalized[i];
             final type = secondYellows.contains(e)
                 ? 'second_yellow'
                 : pickType(e);
@@ -3923,11 +4020,8 @@ class _DetailTabView extends StatelessWidget {
                 return title.isEmpty ? 'Değişiklik' : title;
               }
               if (type == 'goal') {
-                final suffix = isOwnGoal
-                    ? ' (KK)'
-                    : isPenalty
-                    ? ' (P)'
-                    : '';
+                // Kendi kalesine: adın altında soluk alt satırda yazılır.
+                final suffix = isPenalty && !isOwnGoal ? ' (P)' : '';
                 return '${title.isEmpty ? 'Gol' : title}$suffix';
               }
               return title;
@@ -3942,16 +4036,21 @@ class _DetailTabView extends StatelessWidget {
             return _DetailEventTile(
               eventId: system ? '' : _readString(e['id']),
               isPenalty: type == 'goal' && isPenalty,
+              isOwnGoal: type == 'goal' && isOwnGoal,
               match: match,
               minute: minute,
               fullTime: period * 2,
               type: type,
               title: displayTitle(),
               // Asist, gol atanın altında daha küçük ve soluk gösterilir.
-              subtitle: type == 'goal' && assist.isNotEmpty
+              subtitle: type == 'goal' && isOwnGoal
+                  ? 'Kendi Kalesine'
+                  : type == 'goal' && assist.isNotEmpty
                   ? 'Asist: $assist'
                   : type == 'second_yellow'
                   ? 'Çift sarıdan ihraç'
+                  : type == 'penalty_missed'
+                  ? 'Penaltı kaçtı'
                   : null,
               subInName: type == 'substitution' ? subIn : '',
               teamId: sideTeamId,
@@ -3973,6 +4072,9 @@ class _DetailEventTile extends StatelessWidget {
 
   /// Penaltı golü: top yerine penaltı noktası ikonu.
   final bool isPenalty;
+
+  /// Kendi kalesine gol: kırmızı top ikonu.
+  final bool isOwnGoal;
   final int minute;
 
   /// Normal maç süresi (2 devre); aşan dakika "60+4'" gösterilir.
@@ -3993,6 +4095,7 @@ class _DetailEventTile extends StatelessWidget {
     required this.eventId,
     required this.match,
     this.isPenalty = false,
+    this.isOwnGoal = false,
     required this.minute,
     required this.fullTime,
     required this.type,
@@ -4013,7 +4116,7 @@ class _DetailEventTile extends StatelessWidget {
     if (t.contains('devre') || t.contains('yarı')) {
       return const Icon(Icons.timelapse_rounded);
     }
-    if (t.contains('bitti') || t.contains('son')) {
+    if (t.contains('bitti') || t.contains('son') || t.contains('sonuç')) {
       return const Icon(Icons.flag_rounded);
     }
     return const Icon(Icons.info_outline);
@@ -4109,7 +4212,13 @@ class _DetailEventTile extends StatelessWidget {
     } else {
       switch (type) {
         case 'goal':
-          icon = isPenalty
+          icon = isOwnGoal
+              ? const Icon(
+                  Icons.sports_soccer,
+                  size: 18,
+                  color: Colors.redAccent,
+                )
+              : isPenalty
               ? const _PenaltyGoalIcon()
               : const Icon(Icons.sports_soccer, size: 18, color: Colors.white);
           break;
@@ -4126,6 +4235,9 @@ class _DetailEventTile extends StatelessWidget {
           // Giren/çıkan okları yeterli; ayrıca ikon gösterilmez.
           icon = const SizedBox.shrink();
           break;
+        case 'penalty_missed':
+          icon = const _MissedPenaltyIcon();
+          break;
         case 'man_of_the_match':
           icon = const Icon(Icons.star_rounded, size: 18, color: Colors.amber);
           break;
@@ -4134,8 +4246,8 @@ class _DetailEventTile extends StatelessWidget {
       }
     }
 
-    final tile = Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+    final content = Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: system
           ? Row(
               children: [
@@ -4152,7 +4264,8 @@ class _DetailEventTile extends StatelessWidget {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.06),
+                    // Opak: ortadaki çizgi rozetin içinden görünmesin.
+                    color: const Color(0xFF1A2335),
                     borderRadius: BorderRadius.circular(999),
                     border: Border.all(
                       color: Colors.white.withValues(alpha: 0.12),
@@ -4160,16 +4273,8 @@ class _DetailEventTile extends StatelessWidget {
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
+                    // Durum satırlarında (başladı, ilk yarı, sonuç) dakika yok.
                     children: [
-                      Text(
-                        min,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.amber,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
                       IconTheme(
                         data: const IconThemeData(
                           size: 13,
@@ -4198,46 +4303,55 @@ class _DetailEventTile extends StatelessWidget {
                 ),
               ],
             )
+          // Ortada dakika rozeti; ev sahibi olayları solda (dakikaya
+          // yaslı), deplasman olayları sağda.
           : Row(
-              mainAxisAlignment: isHome
-                  ? MainAxisAlignment.start
-                  : MainAxisAlignment.end,
-              children: isHome
-                  ? [
-                      Text(
-                        min,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.amber,
+              children: [
+                Expanded(
+                  child: isHome
+                      ? Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Flexible(
+                              child: _titleBlock(CrossAxisAlignment.end),
+                            ),
+                            const SizedBox(width: 8),
+                            icon,
+                          ],
+                        )
+                      : const SizedBox.shrink(),
+                ),
+                // Rozetle iki yandaki yazı arasında nefes payı.
+                SizedBox(width: 80, child: Center(child: _minuteBadge(min))),
+                Expanded(
+                  child: isHome
+                      ? const SizedBox.shrink()
+                      : Row(
+                          children: [
+                            icon,
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: _titleBlock(CrossAxisAlignment.start),
+                            ),
+                          ],
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      icon,
-                      const SizedBox(width: 8),
-                      Flexible(child: _titleBlock(CrossAxisAlignment.start)),
-                    ]
-                  : [
-                      Flexible(child: _titleBlock(CrossAxisAlignment.end)),
-                      const SizedBox(width: 8),
-                      icon,
-                      const SizedBox(width: 8),
-                      Text(
-                        min,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.amber,
-                        ),
-                      ),
-                    ],
+                ),
+              ],
             ),
+    );
+    // Akışın ortasından geçen dikey çizgi (rozetler üstünde durur).
+    final tile = Stack(
+      children: [
+        const Positioned.fill(child: Center(child: _TimelineLine())),
+        content,
+      ],
     );
     final session = AppSession.of(context).value;
     // Olay girebilenler (admin, turnuva sahibi, gözlemci) silebilir.
     final canDelete =
         eventId.isNotEmpty &&
         (session.canManageLeague(match.leagueId) ||
-            (match.observerId != null &&
-                match.observerId == session.user?.id));
+            (match.observerId != null && match.observerId == session.user?.id));
     if (playerId.isEmpty && !canDelete) return tile;
     return InkWell(
       borderRadius: BorderRadius.circular(12),
@@ -4246,6 +4360,44 @@ class _DetailEventTile extends StatelessWidget {
           : () => showPlayerCard(context, playerKey: playerId),
       onLongPress: canDelete ? () => _confirmDelete(context) : null,
       child: tile,
+    );
+  }
+
+  /// Ortadaki dakika rozeti; maçın adamında dakika yerine yıldız. Gol
+  /// dakikası dolu yeşil zeminde beyaz yazılır.
+  Widget _minuteBadge(String min) {
+    final goal = type == 'goal';
+    // Sabit boy: 2 haneli dakika sığar, satır genişliğine yayılmaz;
+    // 60+4' gibi uzatma dakikası için biraz genişleyebilir.
+    return Container(
+      constraints: const BoxConstraints(minWidth: 34, minHeight: 22),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: goal ? const Color(0xFF10B981) : const Color(0xFF0F172A),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: goal
+              ? const Color(0xFF10B981)
+              : Colors.amber.withValues(alpha: 0.45),
+        ),
+      ),
+      child: min.isEmpty
+          ? const Icon(Icons.star_rounded, size: 12, color: Colors.amber)
+          // widthFactor 1: rozet yazı kadar (en az minWidth), yazı ortada.
+          : Center(
+              widthFactor: 1,
+              heightFactor: 1,
+              child: Text(
+                min,
+                maxLines: 1,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w800,
+                  color: goal ? Colors.white : Colors.amber,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ),
     );
   }
 
@@ -4490,6 +4642,7 @@ Future<void> shareLineupPoster(
     context: context,
     fileName: kind == 'Esame' ? 'esame_$slug' : 'dizilis_$slug',
     imageUrls: [data.teamLogo, data.opponentLogo, data.leagueLogo],
+    leagueId: match.leagueId,
     poster: kind == 'Esame'
         ? LineupListPoster(data: data)
         : LineupPitchPoster(data: data),

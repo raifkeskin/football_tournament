@@ -6,6 +6,7 @@ import '../../core/utils/team_name.dart';
 import '../../core/widgets/app_name_band.dart' show kShowAppName;
 import '../../core/widgets/app_logo.dart';
 import 'poster_share.dart';
+import 'poster_background.dart';
 
 /// Tek maç afişi ("2. Hafta Maçı"). Zemin sabittir (stadyum fotoğrafı);
 /// turnuva logosu, grup, hafta, takımlar, saha, tarih ve saat maça göre
@@ -157,8 +158,8 @@ class MatchPoster extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        // Sabit zemin: stadyum + koyu lacivert geçiş.
-        Image.asset('assets/anasayfa.jpg', fit: BoxFit.cover),
+        // Zemin: turnuvanın afiş görseli (yoksa stadyum) + koyu lacivert geçiş.
+        Image(image: PosterBackground.photoOf(context), fit: BoxFit.cover),
         DecoratedBox(
           decoration: BoxDecoration(
             gradient: LinearGradient(

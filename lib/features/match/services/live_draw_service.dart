@@ -93,6 +93,61 @@ class LiveDrawState {
 
 /// Canlı kura sunucu çağrıları. Tabloya doğrudan erişilmez; sonuç sunucuda
 /// kilitlidir ve yalnız açıklanan kısmı döner.
+/// Yönetim listesindeki bir kura (list_live_draws).
+class LiveDrawSummary {
+  const LiveDrawSummary({
+    required this.id,
+    required this.title,
+    required this.leagueName,
+    required this.seasonName,
+    required this.groupName,
+    required this.regionName,
+    required this.startAt,
+    required this.status,
+    required this.teamCount,
+    required this.totalMatches,
+    required this.drawMatches,
+    required this.startedMatches,
+  });
+
+  final String id;
+  final String title;
+  final String leagueName;
+  final String seasonName;
+  final String groupName;
+  final String? regionName;
+  final DateTime startAt;
+
+  /// scheduled | running | done | cancelled
+  final String status;
+  final int teamCount;
+  final int totalMatches;
+
+  /// Kuranın fikstüre yazdığı (hâlâ duran) maçlar.
+  final int drawMatches;
+
+  /// Bunlardan başlamış ya da esame/olay girilmiş olanlar.
+  final int startedMatches;
+
+  static LiveDrawSummary fromJson(Map<String, dynamic> j) {
+    int n(String k) => (j[k] as num?)?.toInt() ?? 0;
+    return LiveDrawSummary(
+      id: j['id'].toString(),
+      title: j['title']?.toString() ?? '',
+      leagueName: j['league_name']?.toString() ?? '',
+      seasonName: j['season_name']?.toString() ?? '',
+      groupName: j['group_name']?.toString() ?? '',
+      regionName: j['region_name']?.toString(),
+      startAt: DateTime.parse(j['start_at'].toString()).toLocal(),
+      status: j['status']?.toString() ?? '',
+      teamCount: n('team_count'),
+      totalMatches: n('total_matches'),
+      drawMatches: n('draw_matches'),
+      startedMatches: n('started_matches'),
+    );
+  }
+}
+
 class LiveDrawService {
   LiveDrawService._();
   static final instance = LiveDrawService._();
@@ -125,6 +180,22 @@ class LiveDrawService {
 
   Future<void> cancel(String id) =>
       _sb.rpc('cancel_live_draw', params: {'p_id': id});
+
+  /// Yönetim listesi: adminin tüm kuraları, kurucu başkanın kendi
+  /// turnuvalarınınkiler (yeniden eskiye).
+  Future<List<LiveDrawSummary>> list() async {
+    final res = await _sb.rpc('list_live_draws');
+    return [
+      for (final e in (res as List? ?? const []))
+        LiveDrawSummary.fromJson(Map<String, dynamic>.from(e as Map)),
+    ];
+  }
+
+  /// Tamamlanmış kurayı geri alır (maçları siler); silinen maç sayısı.
+  Future<int> revert(String id) async {
+    final res = await _sb.rpc('revert_live_draw', params: {'p_id': id});
+    return (res as num?)?.toInt() ?? 0;
+  }
 
   /// Kurayı açıklama zamanlarıyla kaydeder ve haberini yayınlar.
   Future<String> create({

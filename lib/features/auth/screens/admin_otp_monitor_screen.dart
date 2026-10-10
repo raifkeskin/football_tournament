@@ -166,7 +166,7 @@ class _AdminOtpMonitorScreenState extends State<AdminOtpMonitorScreen> {
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 32,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w800,
                     letterSpacing: 6,
                   ),
                 ),

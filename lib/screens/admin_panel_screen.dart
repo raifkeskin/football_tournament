@@ -6,7 +6,9 @@ import 'package:football_tournament/features/team/screens/team_squad_screen.dart
 import 'package:football_tournament/features/tournament/screens/admin_manage_leagues_screen.dart';
 import 'package:football_tournament/features/tournament/screens/admin_pitch_management_screen.dart';
 import '../features/match/screens/admin_fixture_entry_screen.dart';
+import '../features/match/screens/admin_live_draws_screen.dart';
 import '../features/news/screens/admin_manage_news_screen.dart';
+import '../features/share/admin_poster_background_screen.dart';
 import '../features/sponsors/admin_sponsors_screen.dart';
 import '../features/tournament/screens/admin_penalty_management_screen.dart';
 import 'admin_pending_actions_screen.dart';
@@ -35,7 +37,10 @@ class AdminPanelWidget extends StatelessWidget {
         onPressed: () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const AdminManageLeaguesScreen()),
+            MaterialPageRoute(
+              settings: const RouteSettings(name: 'AdminManageLeaguesScreen'),
+              builder: (_) => const AdminManageLeaguesScreen(),
+            ),
           );
         },
       ),
@@ -47,19 +52,25 @@ class AdminPanelWidget extends StatelessWidget {
         onPressed: () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const AdminManageTeamsScreen()),
+            MaterialPageRoute(
+              settings: const RouteSettings(name: 'AdminManageTeamsScreen'),
+              builder: (_) => const AdminManageTeamsScreen(),
+            ),
           );
         },
       ),
       _AdminMenuData(
-        baslik: 'Futbolcu Lisans',
+        baslik: 'Lisans Yönetimi',
         renkler: const [Color(0xFF818CF8), Color(0xFF4F46E5)],
         ikon: Icons.assignment_ind_rounded,
         resimYolu: 'assets/images/admin_license.jpg',
         onPressed: () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const FootballerLicenseScreen()),
+            MaterialPageRoute(
+              settings: const RouteSettings(name: 'FootballerLicenseScreen'),
+              builder: (_) => const FootballerLicenseScreen(),
+            ),
           );
         },
       ),
@@ -71,10 +82,30 @@ class AdminPanelWidget extends StatelessWidget {
         onPressed: () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const AdminFixtureEntryScreen()),
+            MaterialPageRoute(
+              settings: const RouteSettings(name: 'AdminFixtureEntryScreen'),
+              builder: (_) => const AdminFixtureEntryScreen(),
+            ),
           );
         },
       ),
+      // Canlı kuralar: iptal / geri alma (admin ve kurucu başkan).
+      if (isAdmin || session.isLeagueOwner)
+        _AdminMenuData(
+          baslik: 'Canlı Kuralar',
+          renkler: const [Color(0xFF38BDF8), Color(0xFF0369A1)],
+          ikon: Icons.casino_rounded,
+          resimYolu: 'assets/images/admin_fixture.jpg',
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                settings: const RouteSettings(name: 'AdminLiveDrawsScreen'),
+                builder: (_) => const AdminLiveDrawsScreen(),
+              ),
+            );
+          },
+        ),
       _AdminMenuData(
         baslik: 'Ceza Yönetimi',
         renkler: const [Color(0xFFF87171), Color(0xFFDC2626)],
@@ -84,6 +115,9 @@ class AdminPanelWidget extends StatelessWidget {
           Navigator.push(
             context,
             MaterialPageRoute(
+              settings: const RouteSettings(
+                name: 'AdminPenaltyManagementScreen',
+              ),
               builder: (_) => const AdminPenaltyManagementScreen(),
             ),
           );
@@ -97,7 +131,10 @@ class AdminPanelWidget extends StatelessWidget {
         onPressed: () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const AdminManageNewsScreen()),
+            MaterialPageRoute(
+              settings: const RouteSettings(name: 'AdminManageNewsScreen'),
+              builder: (_) => const AdminManageNewsScreen(),
+            ),
           );
         },
       ),
@@ -111,7 +148,29 @@ class AdminPanelWidget extends StatelessWidget {
           onPressed: () {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const AdminSponsorsScreen()),
+              MaterialPageRoute(
+                settings: const RouteSettings(name: 'AdminSponsorsScreen'),
+                builder: (_) => const AdminSponsorsScreen(),
+              ),
+            );
+          },
+        ),
+      // Afiş arka planı: şimdilik yalnız admin.
+      if (isAdmin)
+        _AdminMenuData(
+          baslik: 'Afiş Arka Planı',
+          renkler: const [Color(0xFFC4B5FD), Color(0xFF7C3AED)],
+          ikon: Icons.wallpaper_rounded,
+          resimYolu: 'assets/anasayfa.jpg',
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                settings: const RouteSettings(
+                  name: 'AdminPosterBackgroundScreen',
+                ),
+                builder: (_) => const AdminPosterBackgroundScreen(),
+              ),
             );
           },
         ),
@@ -125,6 +184,9 @@ class AdminPanelWidget extends StatelessWidget {
             Navigator.push(
               context,
               MaterialPageRoute(
+                settings: const RouteSettings(
+                  name: 'AdminPitchManagementScreen',
+                ),
                 builder: (_) => const AdminPitchManagementScreen(),
               ),
             );
@@ -171,6 +233,9 @@ class AdminPanelWidget extends StatelessWidget {
                     Icons.key_rounded,
                     () => Navigator.of(context).push(
                       MaterialPageRoute(
+                        settings: const RouteSettings(
+                          name: 'AdminOtpMonitorScreen',
+                        ),
                         builder: (_) => AdminOtpMonitorScreen(),
                       ),
                     ),
@@ -183,6 +248,9 @@ class AdminPanelWidget extends StatelessWidget {
                   Icons.rule_folder_outlined,
                   () => Navigator.of(context).push(
                     MaterialPageRoute(
+                      settings: const RouteSettings(
+                        name: 'AdminPendingActionsScreen',
+                      ),
                       builder: (_) => AdminPendingActionsScreen(),
                     ),
                   ),
@@ -209,6 +277,37 @@ class AdminPanelWidget extends StatelessWidget {
                     offIcon: Icons.menu_rounded,
                     onText: 'Açık · ana ekranlarda alt gezinme çubuğu görünür',
                     offText: 'Kapalı · gezinme yan menü ve kaydırma ile',
+                  ),
+                  const SizedBox(height: 8),
+                  _SettingSwitch(
+                    setting: AppSettings.smsOtpEnabled,
+                    save: AppSettings.setSmsOtpEnabled,
+                    title: 'SMS Doğrulama',
+                    onIcon: Icons.sms_outlined,
+                    offIcon: Icons.send_rounded,
+                    onText:
+                        'Açık · Kayıt ve şifre sıfırlama SMS koduyla, '
+                        'onaysız',
+                    offText:
+                        'Kapalı · talep Telegram\'a düşer, şifre WhatsApp\'tan',
+                  ),
+                  ValueListenableBuilder<bool>(
+                    valueListenable: AppSettings.smsOtpEnabled,
+                    builder: (context, on, _) => !on
+                        ? const SizedBox.shrink()
+                        : Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: _SettingSwitch(
+                              setting: AppSettings.smsOtpTestMode,
+                              save: AppSettings.setSmsOtpTestMode,
+                              title: 'SMS Test Modu',
+                              onIcon: Icons.science_outlined,
+                              offIcon: Icons.cell_tower_rounded,
+                              onText:
+                                  'Açık · kodlar SMS yerine Telegram\'a gelir',
+                              offText: 'Kapalı · kodlar İletiMerkezi ile SMS',
+                            ),
+                          ),
                   ),
                 ],
                 const SizedBox(height: 40),

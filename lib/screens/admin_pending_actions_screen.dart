@@ -161,7 +161,7 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 18,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -202,7 +202,7 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
                     onPressed: () => Navigator.pop(context, controller.text),
                     child: Text(
                       approve ? 'ONAYLA' : 'REDDET',
-                      style: const TextStyle(fontWeight: FontWeight.w900),
+                      style: const TextStyle(fontWeight: FontWeight.w800),
                     ),
                   ),
                 ),
@@ -436,7 +436,7 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 15,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
               const SizedBox(height: 2),
@@ -652,7 +652,7 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
             style: const TextStyle(
               color: Colors.white,
               fontSize: 15,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w800,
             ),
           ),
           const SizedBox(height: 2),

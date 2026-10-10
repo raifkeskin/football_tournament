@@ -50,3 +50,13 @@ bool pushIsIos() {
     return false;
   }
 }
+
+@JS('mfPush.setOpenHandler')
+external void _setOpenHandler(JSFunction handler);
+
+/// Uygulama açıkken telefon bildirimine basılınca adresi verir.
+void pushOnOpen(void Function(String url) onOpen) {
+  try {
+    _setOpenHandler(((JSString url) => onOpen(url.toDart)).toJS);
+  } catch (_) {}
+}

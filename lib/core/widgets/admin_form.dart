@@ -116,7 +116,7 @@ class AdminDialogHeader extends StatelessWidget {
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 18,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
               ),
@@ -432,7 +432,7 @@ Future<T?> showAdminOptionPicker<T>({
                 title,
                 style: const TextStyle(
                   color: Colors.white,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w800,
                   fontSize: 18,
                 ),
               ),
@@ -470,7 +470,7 @@ Future<T?> showAdminOptionPicker<T>({
                             style: TextStyle(
                               color: isSelected ? kAdminAccent : Colors.white,
                               fontWeight: isSelected
-                                  ? FontWeight.w900
+                                  ? FontWeight.w800
                                   : FontWeight.w600,
                             ),
                           ),
@@ -542,7 +542,7 @@ class AdminPrimaryButton extends StatelessWidget {
                   Text(
                     label,
                     style: const TextStyle(
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w800,
                       letterSpacing: 1.2,
                     ),
                   ),
@@ -580,7 +580,7 @@ class AdminSecondaryButton extends StatelessWidget {
         child: Text(
           label,
           style: const TextStyle(
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w800,
             letterSpacing: 1.2,
           ),
         ),
@@ -721,7 +721,7 @@ Future<void> showAdminInfoDialog({
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 18,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),

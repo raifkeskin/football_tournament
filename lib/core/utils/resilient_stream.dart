@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'app_activity.dart';
+import 'stream_scope.dart';
 
 /// Arka planda bu süre kalınca canlı bağlantı kapatılır (kısa uygulama
 /// geçişlerinde bağlantı kurup kapatmakla uğraşılmasın).
@@ -26,37 +27,49 @@ Stream<T> resilientStream<T>(
 }) {
   final listeners = <MultiStreamController<T>>{};
   StreamSubscription<T>? sub;
+  // Geçerli bağlantının kapsamı: içinde açılan realtime kanalları bağlantı
+  // kapanınca doğrudan kapatılır (bkz. StreamScope).
+  StreamScope? scope;
   Timer? retry;
   Timer? sleep;
   late T last;
   var hasLast = false;
 
+  void closeConnection() {
+    scope?.cancel();
+    scope = null;
+    sub?.cancel();
+    sub = null;
+  }
+
   void connect() {
     retry = null;
     if (listeners.isEmpty || !AppActivity.foreground.value) return;
-    sub = create().listen(
-      (value) {
-        last = value;
-        hasLast = true;
-        for (final l in [...listeners]) {
-          l.add(value);
-        }
-      },
-      onError: (Object _, StackTrace _) {
-        sub?.cancel();
-        sub = null;
-        if (listeners.isEmpty) return;
-        retry?.cancel();
-        retry = Timer(retryDelay, connect);
-      },
+    final s = scope = StreamScope();
+    sub = s.run(
+      () => create().listen(
+        (value) {
+          last = value;
+          hasLast = true;
+          for (final l in [...listeners]) {
+            l.add(value);
+          }
+        },
+        onError: (Object _, StackTrace _) {
+          if (scope != s) return; // eski bağlantının geç gelen hatası
+          closeConnection();
+          if (listeners.isEmpty) return;
+          retry?.cancel();
+          retry = Timer(retryDelay, connect);
+        },
+      ),
     );
   }
 
   void disconnect() {
     retry?.cancel();
     retry = null;
-    sub?.cancel();
-    sub = null;
+    closeConnection();
   }
 
   void onActivity() {
@@ -77,8 +90,8 @@ Stream<T> resilientStream<T>(
     listeners.add(controller);
     if (hasLast) controller.add(last);
     if (sub == null && retry == null) connect();
-    controller.onCancel = () {
-      listeners.remove(controller);
+    void detach() {
+      if (!listeners.remove(controller)) return;
       if (listeners.isEmpty) {
         AppActivity.foreground.removeListener(onActivity);
         sleep?.cancel();
@@ -86,6 +99,18 @@ Stream<T> resilientStream<T>(
         disconnect();
         hasLast = false;
       }
+    }
+
+    // Bu akışı başka bir akışın gövdesi dinliyorsa (iç içe akış), o akış
+    // kapanınca bu dinleyici de bırakılır; aksi halde paylaşılan akışın
+    // kanalı hiç kapanmaz.
+    final unregister = StreamScope.current?.add(() {
+      detach();
+      controller.closeSync();
+    });
+    controller.onCancel = () {
+      unregister?.call();
+      detach();
     };
   });
 }

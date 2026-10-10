@@ -25,6 +25,10 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  /// Futbolcu + yönetici: açık sekme (0 Futbolcu, 1 Yönetim). Oturum
+  /// boyunca hatırlanır.
+  static int _roleTab = 0;
+
   /// Yönetim paneli görünürken bantta menü + çıkış (paneli bu ekran açtı mı).
   bool _bandOwned = false;
 
@@ -109,7 +113,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 18,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                   ],
@@ -136,7 +140,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     onPressed: () => Navigator.pop(ctx, 'logout'),
                     child: const Text(
                       'ÇIKIŞ YAP',
-                      style: TextStyle(fontWeight: FontWeight.w900),
+                      style: TextStyle(fontWeight: FontWeight.w800),
                     ),
                   ),
                 ),
@@ -174,7 +178,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     await GuestMode.set(false);
     if (!mounted) return;
     Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
-      MaterialPageRoute<void>(builder: (_) => const LoginScreen(gate: true)),
+      MaterialPageRoute<void>(
+        settings: const RouteSettings(name: 'LoginScreen'),
+        builder: (_) => const LoginScreen(gate: true),
+      ),
       (route) => false,
     );
   }
@@ -232,9 +239,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (mounted) setState(() => _isLoading = false);
     final messenger = ScaffoldMessenger.of(context);
     await _toLoginGate();
-    messenger.showSnackBar(
-      const SnackBar(content: Text('Hesabınız silindi.')),
-    );
+    messenger.showSnackBar(const SnackBar(content: Text('Hesabınız silindi.')));
   }
 
   @override
@@ -327,6 +332,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         }
                         Navigator.of(context).pushAndRemoveUntil(
                           MaterialPageRoute<void>(
+                            settings: const RouteSettings(
+                              name: 'MainNavigator',
+                            ),
                             builder: (_) =>
                                 const MainNavigator(initialTabIndex: 0),
                           ),
@@ -361,7 +369,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           isAdminPanelVisible ? 'Admin Panel' : 'Profil',
                           style: const TextStyle(
                             color: Colors.white,
-                            fontWeight: FontWeight.w900,
+                            fontWeight: FontWeight.w800,
                             fontSize: 20,
                           ),
                         ),
@@ -397,8 +405,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // Kurucu başkan / bölge sorumlusu: bilgi kartı + yetkili olduğu yönetim
     // kartları (admin panelinin süzülmüş hâli).
     if (sessionValue.hasManagementPanel) {
-      return AdminPanelWidget(
+      final panel = AdminPanelWidget(
         header: _staffInfoCard(context, state, phone, sessionValue),
+      );
+      if (sessionValue.playerId == null) return panel;
+      // Aynı zamanda futbolcu: üstte Futbolcu | Yönetim sekmesi.
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: _RoleTabs(
+              index: _roleTab,
+              onChanged: (i) => setState(() => _roleTab = i),
+            ),
+          ),
+          Expanded(
+            child: _roleTab == 0
+                ? MyProfileView(
+                    playerId: sessionValue.playerId,
+                    displayName: state.displayName,
+                    phone: phone,
+                    roleLabels: [
+                      'Futbolcu',
+                      if (sessionValue.managedTeams.isNotEmpty)
+                        'Takım Sorumlusu',
+                    ],
+                  )
+                : panel,
+          ),
+        ],
       );
     }
     // Futbolcu (ya da oyuncu kaydı olan herkes): kart, maçlar, talepler.
@@ -410,6 +446,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         playerId: sessionValue.playerId,
         displayName: state.displayName,
         phone: phone,
+        roleLabels: [
+          'Futbolcu',
+          if (sessionValue.managedTeams.isNotEmpty) 'Takım Sorumlusu',
+        ],
       );
     }
 
@@ -663,52 +703,76 @@ class _StaffHeaderCardState extends State<_StaffHeaderCard> {
               ],
             ),
           ),
-          if (session.playerId != null)
-            InkWell(
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => Scaffold(
-                    backgroundColor: const Color(0xFF0F172A),
-                    appBar: AppBar(
-                      title: const Text('Futbolcu Profilim'),
-                      backgroundColor: Colors.transparent,
-                      foregroundColor: Colors.white,
-                    ),
-                    body: SafeArea(
-                      child: MyProfileView(
-                        playerId: session.playerId,
-                        displayName: widget.name,
-                        phone: widget.phone,
-                      ),
-                    ),
-                  ),
-                ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Profilde Futbolcu | Yönetim sekmesi (iki rolü olan kişi için).
+class _RoleTabs extends StatelessWidget {
+  const _RoleTabs({required this.index, required this.onChanged});
+
+  final int index;
+  final ValueChanged<int> onChanged;
+
+  static const _accent = Color(0xFF10B981);
+
+  @override
+  Widget build(BuildContext context) {
+    Widget tab(int i, IconData icon, String label) {
+      final on = i == index;
+      return Expanded(
+        child: Material(
+          color: on ? const Color(0xFF334155) : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: on ? null : () => onChanged(i),
+            child: Container(
+              height: 40,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                border: on
+                    ? const Border(bottom: BorderSide(color: _accent, width: 2))
+                    : null,
               ),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                decoration: BoxDecoration(
-                  border: Border(
-                    top: BorderSide(
-                      color: Colors.white.withValues(alpha: 0.06),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    icon,
+                    size: 18,
+                    color: on ? Colors.white : const Color(0xFF94A3B8),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: on ? Colors.white : const Color(0xFF94A3B8),
+                      fontWeight: FontWeight.w800,
+                      fontSize: 14,
                     ),
                   ),
-                ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.sports_soccer_rounded, color: _accent, size: 18),
-                    SizedBox(width: 6),
-                    Text(
-                      'Futbolcu Profilim',
-                      style: TextStyle(
-                        color: _accent,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
-                ),
+                ],
               ),
             ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          tab(0, Icons.sports_soccer_rounded, 'Futbolcu'),
+          const SizedBox(width: 4),
+          tab(1, Icons.admin_panel_settings_rounded, 'Yönetim'),
         ],
       ),
     );
