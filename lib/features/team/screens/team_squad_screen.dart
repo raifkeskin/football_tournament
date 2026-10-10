@@ -36,6 +36,7 @@ import '../../share/poster_share.dart';
 import '../../share/squad_poster.dart';
 import '../../../core/utils/team_colors.dart';
 import '../widgets/team_page_tabs.dart';
+import '../../admin/services/approval_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show Supabase;
 
 class TeamSquadScreen extends StatefulWidget {
@@ -549,6 +550,61 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
   final Set<String> _playerPhotoFetchInFlight = {};
 
   bool _isTeamManager = false;
+
+  /// Kadroya doğrudan yazabilir mi (admin, kurucu başkan, takımın bölge
+  /// sorumlusu). Yalnızca takım sorumlusu olan kişinin ekleme/çıkarması
+  /// talep olarak onaya gider; forma numarasını doğrudan değiştirebilir.
+  bool _directRoster = false;
+  bool get _needsApproval => _isTeamManager && !_directRoster;
+
+  final _approval = ApprovalService();
+
+  /// Bu takım için kişinin onay bekleyen talepleri (yalnız takım sorumlusu).
+  Future<List<PendingAction>>? _myPending;
+  String? _myPendingSeasonId;
+
+  Future<List<PendingAction>> _pendingFor(String seasonId) {
+    if (_myPending == null || _myPendingSeasonId != seasonId) {
+      _myPendingSeasonId = seasonId;
+      _myPending = _approval.fetchMyActions().then(
+        (all) => [
+          for (final a in all)
+            if (a.status == PendingActionStatus.pending &&
+                a.seasonId == seasonId &&
+                a.teamId == widget.teamId)
+              a,
+        ],
+      );
+    }
+    return _myPending!;
+  }
+
+  void _reloadPending() {
+    if (!mounted) return;
+    setState(() => _myPending = null);
+  }
+
+  /// Talep gönderildi bilgisi (popup'ın üstünde, okunabilir).
+  Future<void> _showRequestSent(String what) => showAdminInfoDialog(
+    context: context,
+    title: 'Onaya gönderildi',
+    message:
+        '$what talebiniz bölge sorumlusunun onayına gönderildi. '
+        'Onaylanınca kadroya işlenecek.',
+    icon: Icons.hourglass_top_rounded,
+    iconColor: const Color(0xFFF59E0B),
+  );
+
+  /// Talep hatası: aynı oyuncu için bekleyen talep varsa anlaşılır mesaj.
+  String _requestError(Object e) {
+    final msg = e.toString();
+    if (msg.contains('pending_actions_one_open_per_player') ||
+        msg.contains('23505')) {
+      return 'Bu futbolcu için zaten onay bekleyen bir talebiniz var.';
+    }
+    return msg.replaceFirst('Exception: ', '').trim();
+  }
+
   bool _isLoadingTournaments = true;
 
   /// Üst bant altındaki sekme: 0 Kadro, 1 Fikstür, 2 İstatistik.
@@ -609,10 +665,34 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     final ok = await showAdminConfirmDialog(
       context: context,
       title: 'Futbolcu Sil',
-      message: '${p.name} oyuncusunu bu takımdan kaldırmak istiyor musunuz?',
+      message: _needsApproval
+          ? '${p.name} oyuncusunu kadrodan çıkarma talebi bölge sorumlusunun '
+                'onayına gönderilsin mi?'
+          : '${p.name} oyuncusunu bu takımdan kaldırmak istiyor musunuz?',
       icon: Icons.person_remove_outlined,
     );
     if (ok != true || !mounted) return;
+    if (_needsApproval) {
+      try {
+        await _approval.submit(
+          type: PendingActionType.rosterRemove,
+          seasonId: tId,
+          teamId: widget.teamId,
+          payload: {'player_id': p.id, 'player_name': p.name},
+        );
+        _reloadPending();
+        if (!mounted) return;
+        await _showRequestSent('Kadrodan çıkarma');
+      } catch (e) {
+        if (!mounted) return;
+        await showAdminInfoDialog(
+          context: context,
+          title: 'Gönderilemedi',
+          message: _requestError(e),
+        );
+      }
+      return;
+    }
     try {
       await _deleteRosterPlayer(
         tournamentId: tId,
@@ -672,13 +752,114 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
         teamId: tid,
         displayPosition: _displayPosition,
         normalizeUrl: _normalizeUrl,
+        requestApproval: _needsApproval ? _approval : null,
       ),
     );
     if (added != true || !mounted) return;
+    if (_needsApproval) {
+      _reloadPending();
+      await _showRequestSent('Kadroya ekleme');
+      return;
+    }
     _refreshPlayersStreamForTournament(lid);
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Seçilen futbolcular kadroya eklendi.')),
     );
+  }
+
+  /// Takım sorumlusunun onay bekleyen kadro talepleri; geri çekilebilir.
+  Widget _pendingRequests(String seasonId) {
+    return FutureBuilder<List<PendingAction>>(
+      future: _pendingFor(seasonId),
+      builder: (context, snap) {
+        final items = snap.data ?? const <PendingAction>[];
+        if (items.isEmpty) return const SizedBox.shrink();
+        return _SquadSection(
+          title: 'Onay bekleyen talepler',
+          count: items.length,
+          countLabel: 'talep',
+          children: [
+            for (var i = 0; i < items.length; i++)
+              Container(
+                padding: const EdgeInsets.fromLTRB(12, 6, 4, 6),
+                decoration: BoxDecoration(
+                  border: i == 0
+                      ? null
+                      : Border(
+                          top: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.06),
+                          ),
+                        ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.hourglass_top_rounded,
+                      color: Color(0xFFF59E0B),
+                      size: 18,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            (items[i].payload['player_name'] ??
+                                    items[i].newPlayerName ??
+                                    'Futbolcu')
+                                .toString(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          Text(
+                            '${items[i].typeLabel} · bölge sorumlusu onayı bekleniyor',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: _squadMuted,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => _withdrawRequest(items[i]),
+                      child: const Text('Geri çek'),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _withdrawRequest(PendingAction a) async {
+    final ok = await showAdminConfirmDialog(
+      context: context,
+      title: 'Talebi geri çek',
+      message: 'Bu talep geri çekilsin mi?',
+      icon: Icons.undo_rounded,
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await _approval.cancelAction(a.id);
+    } catch (e) {
+      if (!mounted) return;
+      await showAdminInfoDialog(
+        context: context,
+        title: 'Geri çekilemedi',
+        message: _requestError(e),
+      );
+    }
+    _reloadPending();
   }
 
   Future<void> _promptJerseyNumberEdit({
@@ -719,8 +900,9 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     if (input == null) return;
 
     final raw = input.replaceAll(RegExp(r'\D'), '').trim();
+    // Boş bırakılırsa numara silinir.
     final n = int.tryParse(raw);
-    if (n == null) {
+    if (n == null && raw.isNotEmpty) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -729,7 +911,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     }
 
     try {
-      await svc.updateJerseyNumber(player.id, tid, lid, n);
+      await svc.setJerseyNumber(player.id, tid, lid, n);
       if (!mounted) return;
       _refreshPlayersStreamForTournament(lid);
       if (!context.mounted) return;
@@ -1087,26 +1269,35 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     final session = AppSession.of(context).value;
     final seasonId = tournamentId.trim();
     if (session.isAdmin || seasonId.isEmpty) {
-      if (_isTeamManager) setState(() => _isTeamManager = false);
+      if (_isTeamManager || !_directRoster) {
+        setState(() {
+          _isTeamManager = false;
+          _directRoster = true;
+        });
+      }
       return;
     }
-    var allowed =
+    final manages =
         session.managesTeam(seasonId, widget.teamId) ||
         (session.isManager && session.teamId?.trim() == widget.teamId.trim());
-    if (!allowed && session.hasManagementPanel) {
+    var direct = false;
+    if (session.hasManagementPanel) {
       try {
-        allowed =
+        direct =
             await Supabase.instance.client.rpc(
               'owns_season_team',
               params: {'p_season_id': seasonId, 'p_team_id': widget.teamId},
             ) ==
             true;
       } catch (_) {
-        allowed = false;
+        direct = false;
       }
     }
     if (!mounted) return;
-    setState(() => _isTeamManager = allowed);
+    setState(() {
+      _isTeamManager = manages || direct;
+      _directRoster = direct;
+    });
   }
 
   Future<String?> _ensureSelectedTournament() async {
@@ -1423,6 +1614,8 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                                       );
                                     },
                                   ),
+                                  if (_needsApproval)
+                                    _pendingRequests(effectiveTournamentId),
                                   if (_rosterSearchOpen) ...[
                                     const SizedBox(height: 10),
                                     _rosterSearchField(),
@@ -1656,10 +1849,15 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                   }
                 },
                 itemBuilder: (_) => [
-                  const PopupMenuItem(
-                    value: 'edit',
-                    child: _MenuRow(icon: Icons.edit_outlined, text: 'Düzenle'),
-                  ),
+                  // Kişisel bilgileri yalnız bölge sorumlusu ve üstü düzenler.
+                  if (!_needsApproval)
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: _MenuRow(
+                        icon: Icons.edit_outlined,
+                        text: 'Düzenle',
+                      ),
+                    ),
                   const PopupMenuItem(
                     value: 'jersey',
                     child: _MenuRow(
@@ -3540,11 +3738,13 @@ class _SquadSection extends StatelessWidget {
     required this.title,
     required this.count,
     required this.children,
+    this.countLabel = 'oyuncu',
   });
 
   final String title;
   final int count;
   final List<Widget> children;
+  final String countLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -3572,7 +3772,7 @@ class _SquadSection extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '$count oyuncu',
+                  '$count $countLabel',
                   style: const TextStyle(color: _squadMuted, fontSize: 12),
                 ),
               ],
@@ -3902,6 +4102,7 @@ class _SeasonPlayerPicker extends StatefulWidget {
     required this.teamId,
     required this.displayPosition,
     required this.normalizeUrl,
+    this.requestApproval,
   });
 
   final SupabaseTeamService service;
@@ -3909,6 +4110,10 @@ class _SeasonPlayerPicker extends StatefulWidget {
   final String teamId;
   final String Function(PlayerModel) displayPosition;
   final String Function(String) normalizeUrl;
+
+  /// Verilirse seçilenler doğrudan eklenmez, her biri için onay talebi
+  /// açılır (takım sorumlusu).
+  final ApprovalService? requestApproval;
 
   @override
   State<_SeasonPlayerPicker> createState() => _SeasonPlayerPickerState();
@@ -3982,19 +4187,67 @@ class _SeasonPlayerPickerState extends State<_SeasonPlayerPicker> {
     if (_busy || _selected.isEmpty) return;
     setState(() => _busy = true);
     try {
-      await widget.service.addMultiplePlayersToTeam(
-        _selected.keys.toList(),
-        widget.teamId,
-        widget.seasonId,
-      );
+      final approval = widget.requestApproval;
+      if (approval != null) {
+        // Her oyuncu ayrı talep; biri için bekleyen talep varsa diğerleri
+        // yine gönderilir.
+        final failed = <String>[];
+        var sent = 0;
+        for (final p in [..._selected.values]) {
+          try {
+            await approval.submit(
+              type: PendingActionType.rosterAdd,
+              seasonId: widget.seasonId,
+              teamId: widget.teamId,
+              payload: {'player_id': p.id, 'player_name': p.name},
+            );
+            _selected.remove(p.id);
+            sent++;
+          } catch (e) {
+            final msg = e.toString();
+            failed.add(
+              msg.contains('pending_actions_one_open_per_player') ||
+                      msg.contains('23505')
+                  ? '${p.name}: zaten onay bekleyen bir talep var'
+                  : '${p.name}: ${msg.replaceFirst('Exception: ', '').trim()}',
+            );
+          }
+        }
+        if (failed.isNotEmpty) {
+          if (!mounted) return;
+          await showAdminInfoDialog(
+            context: context,
+            title: sent > 0
+                ? 'Bazı talepler gönderilemedi'
+                : 'Talep gönderilemedi',
+            message: failed.join('\n'),
+          );
+          if (!mounted) return;
+          if (sent == 0) {
+            setState(() => _busy = false);
+            return;
+          }
+        }
+      } else {
+        await widget.service.addMultiplePlayersToTeam(
+          _selected.keys.toList(),
+          widget.teamId,
+          widget.seasonId,
+        );
+      }
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
       final msg = e.toString().replaceFirst('Exception: ', '').trim();
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Eklenemedi: $msg')));
-      setState(() => _busy = false);
+      // Popup'ın üstünde göster (SnackBar arkada kalıyordu).
+      await showAdminInfoDialog(
+        context: context,
+        title: widget.requestApproval != null
+            ? 'Talep gönderilemedi'
+            : 'Eklenemedi',
+        message: msg,
+      );
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -4156,7 +4409,11 @@ class _SeasonPlayerPickerState extends State<_SeasonPlayerPicker> {
                         ),
                       )
                     : Text(
-                        _selected.isEmpty
+                        widget.requestApproval != null
+                            ? (_selected.isEmpty
+                                  ? 'ONAYA GÖNDER'
+                                  : 'ONAYA GÖNDER (${_selected.length})')
+                            : _selected.isEmpty
                             ? 'KADROYA EKLE'
                             : 'KADROYA EKLE (${_selected.length})',
                         style: const TextStyle(

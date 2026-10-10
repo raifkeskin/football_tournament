@@ -10,6 +10,7 @@ import '../match/models/match.dart';
 import '../match/screens/match_details_screen.dart';
 import '../news/screens/news_feed_screen.dart';
 import '../tournament/screens/admin_penalty_management_screen.dart';
+import '../../screens/admin_pending_actions_screen.dart';
 import '../tournament/screens/tournament_hub_screen.dart';
 
 /// Bildirimin açtığı ekran: maç bildirimleri maç detayını, haber Turnuva
@@ -53,6 +54,12 @@ class NotificationRouter {
         if (ref != null) await _openMatch(context, ref);
       case 'news':
         if (ref != null) await _openNews(context, ref);
+      case 'approval':
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => const AdminPendingActionsScreen(),
+          ),
+        );
       case 'penalty':
         await Navigator.of(context).push(
           MaterialPageRoute<void>(
