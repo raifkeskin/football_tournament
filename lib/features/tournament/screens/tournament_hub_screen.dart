@@ -18,9 +18,10 @@ import '../models/season.dart';
 enum TournamentHubTab { standings, fixture, stats, news }
 
 /// Turnuva Sayfası: bir turnuva + sezon + grubun Puan Durumu, Fikstür,
-/// İstatistik ve Haberler sekmeleri. Üstte sezon seçici (aktif sezon seçili
-/// gelir; önceki sezonlara geçilebilir). Grup sekmesi yok: hangi grubun
-/// başlığına basıldıysa o grup açılır.
+/// İstatistik ve Haberler sekmeleri. Bantta sezon seçici (aktif sezon seçili
+/// gelir; önceki sezonlara geçilebilir). Birden fazla grup varsa sekmelerin
+/// üstünde grup çipleri; [groupId] verilirse (ör. takvimden) o grup seçili
+/// açılır.
 class TournamentHubScreen extends StatefulWidget {
   const TournamentHubScreen({
     super.key,
@@ -270,6 +271,15 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         const SizedBox(height: 8),
+                        // Birden fazla grup varsa sekmelerin üstünde ortalı
+                        // grup çipleri; tek gruplu turnuvada satır yok.
+                        if (groups.length > 1 && group != null)
+                          _GroupChips(
+                            groups: groups,
+                            selectedId: group.id,
+                            accent: accent,
+                            onSelect: (id) => setState(() => _groupId = id),
+                          ),
                         _HubTabBar(controller: _tabs, accent: accent),
                         Expanded(
                           child: season == null || group == null
@@ -375,6 +385,71 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
       case TournamentHubTab.news:
         return null;
     }
+  }
+}
+
+/// Grup çipleri: sığarsa ortalı, sığmazsa yana kayar.
+class _GroupChips extends StatelessWidget {
+  const _GroupChips({
+    required this.groups,
+    required this.selectedId,
+    required this.accent,
+    required this.onSelect,
+  });
+
+  final List<GroupModel> groups;
+  final String selectedId;
+  final Color accent;
+  final ValueChanged<String> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, c) => SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minWidth: c.maxWidth - 24),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              for (final g in groups)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: _chip(g),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _chip(GroupModel g) {
+    final on = g.id == selectedId;
+    return Material(
+      color: on ? accent : Colors.transparent,
+      shape: StadiumBorder(
+        side: BorderSide(
+          color: on ? accent : Colors.white.withValues(alpha: 0.14),
+        ),
+      ),
+      child: InkWell(
+        customBorder: const StadiumBorder(),
+        onTap: on ? null : () => onSelect(g.id),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+          child: Text(
+            g.name.trim().isEmpty ? 'Grup' : g.name.trim(),
+            style: TextStyle(
+              color: on ? Colors.white : Colors.white70,
+              fontSize: 12.5,
+              fontWeight: on ? FontWeight.w800 : FontWeight.w600,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
