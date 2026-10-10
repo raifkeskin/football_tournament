@@ -1,6 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Mağaza sürümünde de gerekli (Flutter yalnız debug/profile'a ekler). -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Android 13+: telefon bildirimi izni (FCM) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Fotoğraflar sistemin fotoğraf seçicisiyle seçilir; depolama/medya
          izni istenmez (Google Play fotoğraf izni politikası). -->
     <queries>

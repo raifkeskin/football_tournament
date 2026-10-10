@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../widgets/admin_form.dart';
 import '../widgets/admin_page.dart';
 import '../../features/notifications/notification_settings_screen.dart';
+import 'native_push.dart';
 import 'push_service.dart';
 
 /// Profildeki bildirim kartı: izin/abonelik durumuna göre aç-kapat ya da
@@ -38,6 +39,7 @@ class _PushCardState extends State<PushCard> {
   }
 
   Future<void> _refresh({bool resync = false}) async {
+    await PushService.refresh();
     final state = PushService.state();
     final subscribed =
         state == PushState.granted && await PushService.isSubscribed();
@@ -121,11 +123,11 @@ class _PushCardState extends State<PushCard> {
     Widget? action;
     switch (_state) {
       case PushState.unsupported:
-        // Uygulama (APK) sürümü: telefon bildirimi henüz yok.
+        // Bu cihazda telefon bildirimi yok (ör. iPhone uygulaması henüz).
         title = 'Telefon bildirimleri';
         text =
-            'Uygulama sürümünde telefon bildirimleri yakında geliyor. Şimdilik '
-            'bildirimler sağ üstteki zilde görünür.';
+            'Bu cihazda telefon bildirimleri henüz yok. Bildirimler sağ '
+            'üstteki zilde görünür.';
       case PushState.iosInstall:
         title = 'Telefon bildirimlerini aç';
         text =
@@ -133,9 +135,11 @@ class _PushCardState extends State<PushCard> {
             'Ekle" ile uygulamayı ekleyin ve ana ekrandaki simgeden açın.';
       case PushState.denied:
         title = 'Bildirimler engellendi';
-        text =
-            'Bildirim izni bu tarayıcıda kapalı. Tarayıcı / site ayarlarından '
-            'bildirimlere izin verip sayfayı yenileyin.';
+        text = NativePush.supported
+            ? 'Bildirim izni kapalı. Telefonun Ayarlar › Uygulamalar › '
+                  'Lig Masası › Bildirimler bölümünden izin verin.'
+            : 'Bildirim izni bu tarayıcıda kapalı. Tarayıcı / site '
+                  'ayarlarından bildirimlere izin verip sayfayı yenileyin.';
       default:
         title = on ? 'Telefon bildirimleri açık' : 'Telefon bildirimlerini aç';
         text = on

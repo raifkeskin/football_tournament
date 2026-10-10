@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'native_push.dart';
 import 'notification_prefs.dart';
 import 'push_bridge_stub.dart'
     if (dart.library.js_interop) 'push_bridge_web.dart'
@@ -35,7 +36,20 @@ enum PushState {
 class PushService {
   static SupabaseClient get _sb => Supabase.instance.client;
 
+  /// Uygulama (APK) sürümünde izin durumunu yeniden okur (state() eşzamanlı
+  /// olduğu için önce bu çağrılır).
+  static Future<void> refresh() async {
+    if (NativePush.supported) await NativePush.refreshStatus();
+  }
+
   static PushState state() {
+    if (NativePush.supported) {
+      return switch (NativePush.status) {
+        'granted' => PushState.granted,
+        'denied' => PushState.denied,
+        _ => PushState.available,
+      };
+    }
     switch (bridge.pushState()) {
       case 'ios-install':
         return PushState.iosInstall;
@@ -74,11 +88,40 @@ class PushService {
     if (_sb.auth.currentUser == null) {
       await NotificationPrefsService.ensureUser();
     }
+    if (NativePush.supported) {
+      await _saveNative(await NativePush.enable());
+      return;
+    }
     await _save(await bridge.pushSubscribe(kVapidPublicKey));
+  }
+
+  /// FCM belirteci: Web Push anahtarları yok, adres `fcm:<belirteç>`.
+  static Future<void> _saveNative(String token) => _sb.rpc(
+    'save_push_subscription',
+    params: {
+      'p_endpoint': 'fcm:$token',
+      'p_p256dh': '',
+      'p_auth': '',
+      'p_platform': 'android',
+    },
+  );
+
+  /// Uygulama açılışında: belirteç yenilenince kayıt güncellensin.
+  static void initNative() {
+    NativePush.onTokenRefresh = _saveNative;
   }
 
   /// Bu cihazda bildirimleri kapatır.
   static Future<void> disable() async {
+    if (NativePush.supported) {
+      final token = await NativePush.disable();
+      if (token.isEmpty) return;
+      await _sb.rpc(
+        'delete_push_subscription',
+        params: {'p_endpoint': 'fcm:$token'},
+      );
+      return;
+    }
     final endpoint = await bridge.pushUnsubscribe();
     if (endpoint.isEmpty) return;
     await _sb.rpc('delete_push_subscription', params: {'p_endpoint': endpoint});
@@ -86,12 +129,22 @@ class PushService {
 
   /// Bu cihazda abonelik var mı (izin verilmiş olsa da abonelik silinmiş
   /// olabilir).
-  static Future<bool> isSubscribed() async =>
-      (await bridge.pushCurrent()).isNotEmpty;
+  static Future<bool> isSubscribed() async => NativePush.supported
+      ? NativePush.isOn()
+      : (await bridge.pushCurrent()).isNotEmpty;
 
   /// İzin verilmiş cihazda aboneliği şu anki hesaba yeniden bağlar (başka
   /// hesapla girildiyse bildirimler doğru kişiye gitsin).
   static Future<void> resync() async {
+    if (NativePush.supported) {
+      try {
+        final token = await NativePush.currentToken();
+        if (token.isNotEmpty) await _saveNative(token);
+      } catch (e) {
+        debugPrint('push resync: $e');
+      }
+      return;
+    }
     if (state() != PushState.granted) return;
     try {
       if (!await isSubscribed()) return;
@@ -104,7 +157,13 @@ class PushService {
   /// Çıkışta bu cihazın kaydı silinir; çıkış yapmış cihaza bildirim gitmez.
   static Future<void> onSignOut() async {
     try {
-      final endpoint = await bridge.pushCurrent();
+      final String endpoint;
+      if (NativePush.supported) {
+        final t = await NativePush.currentToken();
+        endpoint = t.isEmpty ? '' : 'fcm:$t';
+      } else {
+        endpoint = await bridge.pushCurrent();
+      }
       if (endpoint.isEmpty) return;
       await _sb.rpc(
         'delete_push_subscription',
