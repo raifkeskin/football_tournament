@@ -191,6 +191,7 @@ class _DashData {
     required this.totalGoals,
     required this.activePenaltyMatches,
     required this.pendingPenalties,
+    required this.pendingPenaltyMatchIds,
   });
 
   final String seasonId;
@@ -211,6 +212,10 @@ class _DashData {
 
   /// Yöneticinin onayını bekleyen ceza sayısı.
   final int pendingPenalties;
+
+  /// Onay bekleyen cezaların maçları (grup bazında sayı için; maçsız elle
+  /// girilen cezada null).
+  final List<String?> pendingPenaltyMatchIds;
 }
 
 /// Yeni ana sayfa panosu (önizleme kanalı). Oyuncu ve takım sorumlusu için
@@ -426,7 +431,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
       isOwner
           ? _sb
                 .from('player_penalties')
-                .select('id')
+                .select('id, match_id')
                 .eq('season_id', seasonId)
                 .eq('status', 'pending')
           : none(),
@@ -441,6 +446,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
       'my_player_teams': r[5],
       'my_penalties': r[6],
       'pending': (r[7] as List).length,
+      'pending_rows': r[7],
     };
   }
 
@@ -572,6 +578,10 @@ class _HomeDashboardState extends State<HomeDashboard> {
       totalGoals: totalGoals,
       activePenaltyMatches: activePenalty,
       pendingPenalties: (raw['pending'] as num?)?.toInt() ?? 0,
+      pendingPenaltyMatchIds: [
+        for (final p in (raw['pending_rows'] as List? ?? const []))
+          (p as Map)['match_id']?.toString(),
+      ],
     );
   }
 
@@ -1020,6 +1030,14 @@ class _HomeDashboardState extends State<HomeDashboard> {
               .toList();
 
     final hasOwnTeam = d.myTeamIds.isNotEmpty;
+    // Birden fazla grup varsa yalnız seçili grubun maçlarından doğan
+    // cezalar (maçsız elle girilen ceza her grupta sayılır).
+    final matchGroup = {for (final m in d.matches) m.id: m.groupId};
+    final pendingHere = d.groups.length > 1 && groupFilter != null
+        ? d.pendingPenaltyMatchIds
+              .where((id) => id == null || matchGroup[id] == groupFilter)
+              .length
+        : d.pendingPenalties;
     final isOwner =
         session.isAdmin || session.ownedLeagueIds.contains(widget.league.id);
 
@@ -1038,17 +1056,22 @@ class _HomeDashboardState extends State<HomeDashboard> {
           _alert('Cezalısın: ${d.activePenaltyMatches} maç daha oynayamazsın.'),
           const SizedBox(height: 12),
         ],
-        if (isOwner && d.pendingPenalties > 0) ...[
-          // Dokununca doğrudan ceza onayları ekranı.
+        if (isOwner && pendingHere > 0) ...[
+          // Dokununca ceza onayları ekranı, ana sayfada seçili turnuva,
+          // sezon ve grupla süzülmüş olarak.
           _alert(
-            '${d.pendingPenalties} kart cezası onayını bekliyor. '
+            '$pendingHere kart cezası onayını bekliyor. '
             'Onaylamak için dokun.',
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
                 settings: const RouteSettings(
                   name: 'AdminPenaltyManagementScreen',
                 ),
-                builder: (_) => const AdminPenaltyManagementScreen(),
+                builder: (_) => AdminPenaltyManagementScreen(
+                  initialLeagueId: widget.league.id,
+                  initialSeasonId: d.seasonId,
+                  initialGroupId: d.groups.length > 1 ? groupFilter : null,
+                ),
               ),
             ),
           ),
