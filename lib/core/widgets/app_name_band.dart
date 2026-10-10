@@ -69,9 +69,32 @@ class AppNameBand extends StatelessWidget {
                 }
                 // Sayfa banda kendi içeriğini verdiyse (ör. Turnuva Sayfası).
                 final page = LeagueSwitchScope.pageBand.value;
+                // Temasız sayfa bandı (ör. Bildirim ayarları): kişinin
+                // turnuvası varsa onun bandı, yoksa uygulama bandı; solda
+                // geri.
+                final pageTheme =
+                    page?.theme ??
+                    (LeagueSwitchScope.panel.value ||
+                            LeagueSwitchScope.genericTab.value
+                        ? null
+                        : ActiveTournament.theme.value);
+                if (page != null && pageTheme == null) {
+                  return Stack(
+                    children: [
+                      tvlBand!,
+                      Positioned(
+                        left: 4,
+                        bottom: 3,
+                        child: _BandBackButton(onTap: page.onBack),
+                      ),
+                      if (page.trailing != null)
+                        Positioned(right: 4, bottom: 3, child: page.trailing!),
+                    ],
+                  );
+                }
                 if (page != null) {
                   return _TournamentBand(
-                    theme: page.theme,
+                    theme: pageTheme!,
                     top: top,
                     leading: _BandBackButton(onTap: page.onBack),
                     trailing: page.trailing,
@@ -446,18 +469,56 @@ class LeagueSwitchScope {
 @immutable
 class PageBand {
   const PageBand({
-    required this.theme,
+    this.theme,
     required this.onBack,
     this.trailing,
     this.subtitle,
   });
 
-  final TournamentTheme theme;
+  /// null: kişinin aktif turnuvasının bandı (yoksa uygulama bandı).
+  final TournamentTheme? theme;
   final VoidCallback onBack;
   final Widget? trailing;
 
   /// Ör. yönetim ekranlarında "2026 Sezonu · A Grubu".
   final String? subtitle;
+}
+
+/// Sayfayı bantta geri düğmesiyle gösterir (başlık çubuğu olmayan
+/// sayfalar için): [child] açıkken bant solunda geri, ortada kişinin
+/// turnuvası.
+class BandBackPage extends StatefulWidget {
+  const BandBackPage({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<BandBackPage> createState() => _BandBackPageState();
+}
+
+class _BandBackPageState extends State<BandBackPage> {
+  ModalRoute<dynamic>? _route;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route == _route) return;
+    _route = route;
+    LeagueSwitchScope.setPageBand(
+      route,
+      PageBand(onBack: () => Navigator.of(context).maybePop()),
+    );
+  }
+
+  @override
+  void dispose() {
+    LeagueSwitchScope.setPageBand(_route, null);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 /// Bandın kök gezgin katmanındaki konumu (bandın altında açılan listeler
