@@ -18,9 +18,10 @@ import '../models/season.dart';
 enum TournamentHubTab { standings, fixture, stats, news }
 
 /// Turnuva Sayfası: bir turnuva + sezon + grubun Puan Durumu, Fikstür,
-/// İstatistik ve Haberler sekmeleri. Üstte sezon seçici (aktif sezon seçili
-/// gelir; önceki sezonlara geçilebilir). Grup sekmesi yok: hangi grubun
-/// başlığına basıldıysa o grup açılır.
+/// İstatistik ve Haberler sekmeleri. Bantta sezon seçici (aktif sezon seçili
+/// gelir; önceki sezonlara geçilebilir). Birden fazla grup varsa sekmelerin
+/// üstünde grup çipleri; [groupId] verilirse (ör. takvimden) o grup seçili
+/// açılır.
 class TournamentHubScreen extends StatefulWidget {
   const TournamentHubScreen({
     super.key,
@@ -262,23 +263,24 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
                 // Başlık çubuğu yok: sekmeler doğrudan bandın altında.
                 return Scaffold(
                   backgroundColor: _bgDark,
+                  // Afiş paylaşma: sekmelerin yanında değil, sağ altta yüzer.
+                  floatingActionButton: _shareButton(group, accent),
                   body: SafeArea(
                     top: false,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _HubTabBar(
-                                controller: _tabs,
-                                accent: accent,
-                              ),
-                            ),
-                            _shareButton(group),
-                          ],
-                        ),
+                        // Birden fazla grup varsa sekmelerin üstünde ortalı
+                        // grup çipleri; tek gruplu turnuvada satır yok.
+                        if (groups.length > 1 && group != null)
+                          _GroupChips(
+                            groups: groups,
+                            selectedId: group.id,
+                            accent: accent,
+                            onSelect: (id) => setState(() => _groupId = id),
+                          ),
+                        _HubTabBar(controller: _tabs, accent: accent),
                         Expanded(
                           child: season == null || group == null
                               ? Center(
@@ -345,9 +347,17 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
     );
   }
 
-  /// Puan Durumu ve Fikstür sekmelerinde afiş paylaşma düğmesi.
-  Widget _shareButton(GroupModel? group) {
-    const icon = Icon(Icons.ios_share_rounded, color: Colors.white);
+  /// Puan Durumu ve Fikstür sekmelerinde sağ altta yüzen afiş paylaşma
+  /// düğmesi.
+  Widget? _shareButton(GroupModel? group, Color accent) {
+    Widget fab(VoidCallback onPressed) => FloatingActionButton(
+      heroTag: null,
+      tooltip: 'Afişi paylaş',
+      backgroundColor: accent,
+      foregroundColor: Colors.white,
+      onPressed: onPressed,
+      child: const Icon(Icons.ios_share_rounded),
+    );
     final seasonId = _seasonId;
     switch (TournamentHubTab.values[_tabs.index]) {
       case TournamentHubTab.standings:
@@ -355,12 +365,10 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
         if (group == null ||
             seasonId == null ||
             AppSession.of(context).value.user == null) {
-          return const SizedBox.shrink();
+          return null;
         }
-        return IconButton(
-          tooltip: 'Paylaş',
-          icon: icon,
-          onPressed: () => shareGroupStandings(
+        return fab(
+          () => shareGroupStandings(
             context,
             leagueId: widget.leagueId,
             seasonId: seasonId,
@@ -370,18 +378,78 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
       case TournamentHubTab.fixture:
         return ValueListenableBuilder<VoidCallback?>(
           valueListenable: _fixtureShare,
-          builder: (context, share, _) => share == null
-              ? const SizedBox.shrink()
-              : IconButton(
-                  tooltip: 'Afişi paylaş',
-                  icon: icon,
-                  onPressed: share,
-                ),
+          builder: (context, share, _) =>
+              share == null ? const SizedBox.shrink() : fab(share),
         );
       case TournamentHubTab.stats:
       case TournamentHubTab.news:
-        return const SizedBox.shrink();
+        return null;
     }
+  }
+}
+
+/// Grup çipleri: sığarsa ortalı, sığmazsa yana kayar.
+class _GroupChips extends StatelessWidget {
+  const _GroupChips({
+    required this.groups,
+    required this.selectedId,
+    required this.accent,
+    required this.onSelect,
+  });
+
+  final List<GroupModel> groups;
+  final String selectedId;
+  final Color accent;
+  final ValueChanged<String> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, c) => SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minWidth: c.maxWidth - 24),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              for (final g in groups)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: _chip(g),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _chip(GroupModel g) {
+    final on = g.id == selectedId;
+    return Material(
+      color: on ? accent : Colors.transparent,
+      shape: StadiumBorder(
+        side: BorderSide(
+          color: on ? accent : Colors.white.withValues(alpha: 0.14),
+        ),
+      ),
+      child: InkWell(
+        customBorder: const StadiumBorder(),
+        onTap: on ? null : () => onSelect(g.id),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+          child: Text(
+            g.name.trim().isEmpty ? 'Grup' : g.name.trim(),
+            style: TextStyle(
+              color: on ? Colors.white : Colors.white70,
+              fontSize: 12.5,
+              fontWeight: on ? FontWeight.w800 : FontWeight.w600,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -397,6 +465,50 @@ class _BandSeasonButton extends StatelessWidget {
   final bool canPick;
   final VoidCallback onTap;
 
+  static const _style = TextStyle(
+    color: Colors.white,
+    fontSize: 12.5,
+    fontWeight: FontWeight.w800,
+    decoration: TextDecoration.none,
+  );
+
+  /// "2026 Sezonu" bantta sığmıyor: yıl üstte, "Sezonu" altında küçük ve
+  /// ortalı. Yılla başlamayan ad tek satır.
+  Widget _label() {
+    final m = RegExp(
+      r'^(\d{4}(?:\s*[-/]\s*\d{2,4})?)\s+(.+)$',
+    ).firstMatch(text.trim());
+    if (m == null) {
+      return Text(
+        text,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: _style,
+      );
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          m.group(1)!,
+          maxLines: 1,
+          style: _style.copyWith(fontSize: 14, height: 1.05),
+        ),
+        Text(
+          m.group(2)!,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: _style.copyWith(
+            color: Colors.white70,
+            fontSize: 10.5,
+            fontWeight: FontWeight.w600,
+            height: 1.05,
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Material(
@@ -409,19 +521,7 @@ class _BandSeasonButton extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Flexible(
-                child: Text(
-                  text,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w800,
-                    decoration: TextDecoration.none,
-                  ),
-                ),
-              ),
+              Flexible(child: _label()),
               if (canPick)
                 const Icon(
                   Icons.keyboard_arrow_down_rounded,

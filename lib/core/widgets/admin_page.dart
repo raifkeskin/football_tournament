@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'admin_form.dart';
+import 'app_name_band.dart';
 import 'master_class_app_bar.dart';
 
 // Yönetim ekranlarının ortak renkleri
@@ -16,14 +17,26 @@ class AdminPageScaffold extends StatelessWidget {
     required this.title,
     required this.body,
     this.actions,
+    this.bandBack = false,
   });
 
   final String title;
   final Widget body;
   final List<Widget>? actions;
 
+  /// true: başlık çubuğu yok, geri düğmesi üst bandın solunda.
+  final bool bandBack;
+
   @override
   Widget build(BuildContext context) {
+    if (bandBack) {
+      return BandBackPage(
+        child: Scaffold(
+          backgroundColor: kAdminBg,
+          body: SafeArea(top: false, child: body),
+        ),
+      );
+    }
     return Scaffold(
       backgroundColor: kAdminBg,
       extendBodyBehindAppBar: true,

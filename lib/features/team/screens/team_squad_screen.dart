@@ -927,6 +927,128 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     }
   }
 
+  bool _assigningJerseys = false;
+
+  /// Forma numarası olmayan oyuncular varsa: "Otomatik ata" şeridi.
+  Widget _autoJerseyBanner(List<PlayerModel> players, String seasonId) {
+    final missing = [
+      for (final p in players)
+        if (int.tryParse((p.number ?? '').trim()) == null) p,
+    ];
+    if (missing.isEmpty) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.tag_rounded, color: _squadMuted, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              '${missing.length} oyuncunun forma numarası yok.',
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+            ),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF10B981),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: _assigningJerseys
+                ? null
+                : () => _autoAssignJerseys(players, missing, seasonId),
+            child: _assigningJerseys
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Text(
+                    'Otomatik ata',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Numarasız oyunculara takımda boşta kalan en küçük numaralar verilir
+  /// (kaleciler önce, sonra ada göre). Mevcut numaralara dokunulmaz.
+  Future<void> _autoAssignJerseys(
+    List<PlayerModel> all,
+    List<PlayerModel> missing,
+    String seasonId,
+  ) async {
+    final svc = _sbTeamService;
+    if (svc == null) return;
+    final ok = await showAdminConfirmDialog(
+      context: context,
+      title: 'Forma No Ata',
+      message:
+          'Forma numarası olmayan ${missing.length} oyuncuya takımda boşta '
+          'olan en küçük numaralar sırayla verilecek. Mevcut numaralar '
+          'değişmez; numaraları sonradan tek tek değiştirebilirsiniz.',
+      confirmLabel: 'ATA',
+      destructive: false,
+      icon: Icons.tag_rounded,
+    );
+    if (!ok || !mounted) return;
+    final used = <int>{
+      for (final p in all) ?int.tryParse((p.number ?? '').trim()),
+    };
+    bool isKeeper(PlayerModel p) => [
+      p.mainPosition,
+      p.position,
+    ].any((v) => (v ?? '').toLowerCase().contains('kaleci'));
+    final order = [...missing]
+      ..sort((a, b) {
+        final k = (isKeeper(a) ? 0 : 1).compareTo(isKeeper(b) ? 0 : 1);
+        return k != 0 ? k : a.name.compareTo(b.name);
+      });
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _assigningJerseys = true);
+    var next = 1;
+    var done = 0;
+    String? error;
+    for (final p in order) {
+      while (used.contains(next)) {
+        next++;
+      }
+      try {
+        await svc.updateJerseyNumber(p.id, widget.teamId, seasonId, next);
+        used.add(next);
+        done++;
+      } catch (e) {
+        error = e.toString().replaceFirst('Exception: ', '').trim();
+        break;
+      }
+    }
+    if (!mounted) return;
+    setState(() => _assigningJerseys = false);
+    _refreshPlayersStreamForTournament(seasonId);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          error == null
+              ? '$done oyuncuya forma numarası verildi.'
+              : '$done oyuncuya numara verildi, sonra hata oluştu: $error',
+        ),
+      ),
+    );
+  }
+
   String _normalizeUrl(String raw) {
     final url = raw.trim();
     if (url.isEmpty) return '';
@@ -1614,6 +1736,11 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                                       );
                                     },
                                   ),
+                                  if (canAdd)
+                                    _autoJerseyBanner(
+                                      allPlayers,
+                                      effectiveTournamentId,
+                                    ),
                                   if (_needsApproval)
                                     _pendingRequests(effectiveTournamentId),
                                   if (_rosterSearchOpen) ...[
@@ -3908,7 +4035,10 @@ class _SquadSummaryCard extends StatelessWidget {
             stops: const [0, 0.5, 1],
           ),
         ),
+        // Stack kartın tam genişliğinde: köşe düğmeleri kartın kenarlarına
+        // hizalı (içerik genişliğine daralmasın).
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Stack(
               children: [

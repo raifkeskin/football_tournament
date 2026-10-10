@@ -124,8 +124,11 @@ class MyTeam {
     this.logoUrl,
     this.color,
     this.jerseyNumber,
+    this.year,
   });
 
+  /// Sezonun yılı (profilde sezon seçici ve toplam istatistik için).
+  final int? year;
   final String seasonId;
   final String teamId;
   final String teamName;
@@ -298,7 +301,7 @@ class PlayerProfileService {
         .select(
           'season_id, team_id, jersey_number, '
           'teams(name, logo_url, first_color), '
-          'seasons(name, start_date, leagues(name))',
+          'seasons(name, start_date, season_year, leagues(name))',
         )
         .eq('player_id', playerId)
         .eq('is_active', true);
@@ -314,6 +317,13 @@ class PlayerProfileService {
       return (
         start: str(s['start_date']) ?? '',
         team: MyTeam(
+          year:
+              (s['season_year'] as num?)?.toInt() ??
+              DateTime.tryParse(str(s['start_date']) ?? '')?.year ??
+              int.tryParse(
+                RegExp(r'\d{4}').firstMatch(str(s['name']) ?? '')?.group(0) ??
+                    '',
+              ),
           seasonId: (r['season_id'] ?? '').toString(),
           teamId: (r['team_id'] ?? '').toString(),
           teamName: str(t['name']) ?? 'Takım',

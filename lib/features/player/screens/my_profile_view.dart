@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/push/push_card.dart';
+
+import '../../notifications/notification_settings_screen.dart';
 import '../../../core/utils/team_colors.dart';
 import '../../../core/utils/team_name.dart';
 import '../../../core/widgets/admin_form.dart';
@@ -11,6 +13,7 @@ import '../../home/screens/home_screen.dart';
 import '../../match/models/match.dart';
 import '../../match/screens/match_details_screen.dart';
 import '../../match/widgets/match_score_line.dart';
+import '../../team/screens/team_squad_screen.dart';
 import '../consent/consent_screen.dart';
 import '../consent/consent_service.dart';
 import '../services/player_profile_service.dart';
@@ -57,7 +60,12 @@ class MyProfileView extends StatefulWidget {
     required this.displayName,
     required this.phone,
     this.roleLabels = const [],
+    this.onSignOut,
   });
+
+  /// Sayfanın en altındaki "Çıkış yap / Hesabı sil" bağlantısı (yönetim
+  /// panelinde çıkış bantta olduğundan verilmez).
+  final VoidCallback? onSignOut;
 
   /// Kartta adın altında gösterilen roller (ör. Futbolcu, Takım Sorumlusu).
   final List<String> roleLabels;
@@ -81,8 +89,13 @@ class _MyProfileViewState extends State<MyProfileView> {
   List<MyTeam> _teams = const [];
   List<ProfileChangeRequest> _requests = const [];
   MyConsents? _consents;
-  int _selected = 0;
+
+  /// Profilde gösterilen sezon yılı (null: en yeni).
+  int? _year;
   bool _showPlayed = false;
+
+  /// Takım listesi 4'ten uzunsa ilk 3'ü görünür; "Tüm takımlar" açar.
+  bool _allTeams = false;
   final _matches = <String, Future<List<TeamMatch>>>{};
   final _stats = <String, Future<MySeasonStats>>{};
 
@@ -124,9 +137,10 @@ class _MyProfileViewState extends State<MyProfileView> {
         _teams = results[1] as List<MyTeam>;
         _requests = results[2] as List<ProfileChangeRequest>;
         _consents = results[3] as MyConsents?;
-        if (_selected >= _teams.length) _selected = 0;
+        if (!_years.contains(_year)) _year = null;
         _matches.clear();
         _stats.clear();
+        _yearMatchFutures.clear();
       });
     } catch (e) {
       if (mounted) setState(() => _error = 'Profil yüklenemedi.');
@@ -145,7 +159,47 @@ class _MyProfileViewState extends State<MyProfileView> {
     } catch (_) {}
   }
 
-  MyTeam? get _team => _teams.isEmpty ? null : _teams[_selected];
+  /// Oyuncunun takımlarının sezon yılları (yeniden eskiye).
+  List<int> get _years {
+    final ys = {for (final t in _teams) ?t.year}.toList()
+      ..sort((a, b) => b.compareTo(a));
+    return ys;
+  }
+
+  int? get _shownYear => _year ?? _years.firstOrNull;
+
+  /// Seçili sezondaki takımlar (yılı bilinmeyen sezonlar en yeni sezonda).
+  List<MyTeam> get _yearTeams {
+    final y = _shownYear;
+    if (y == null) return _teams;
+    final newest = _years.firstOrNull;
+    return [
+      for (final t in _teams)
+        if (t.year == y || (t.year == null && y == newest)) t,
+    ];
+  }
+
+  Future<MySeasonStats> _statsOf(MyTeam t) => _stats.putIfAbsent(
+    t.key,
+    () => _service.loadStats(widget.playerId!, t.seasonId),
+  );
+
+  /// Seçili sezondaki tüm takımların maçları; her maç hangi takımla.
+  Future<List<({MyTeam team, TeamMatch match})>> _yearMatches(
+    List<MyTeam> teams,
+  ) async {
+    final lists = await Future.wait([
+      for (final t in teams)
+        _matches.putIfAbsent(t.key, () => _service.loadTeamMatches(t)),
+    ]);
+    return [
+      for (var i = 0; i < teams.length; i++)
+        for (final m in lists[i]) (team: teams[i], match: m),
+    ];
+  }
+
+  final _yearMatchFutures =
+      <String, Future<List<({MyTeam team, TeamMatch match})>>>{};
 
   List<ProfileChangeRequest> get _pending =>
       _requests.where((r) => r.status == ProfileChangeStatus.pending).toList();
@@ -216,7 +270,7 @@ class _MyProfileViewState extends State<MyProfileView> {
       );
     }
 
-    final team = _team;
+    final teams = _yearTeams;
     final history = _requests
         .where((r) => r.status != ProfileChangeStatus.pending)
         .toList();
@@ -227,33 +281,34 @@ class _MyProfileViewState extends State<MyProfileView> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
         children: [
-          if (_teams.length > 1) ...[
-            _teamSwitcher(),
-            const SizedBox(height: 14),
-          ],
-          _playerCard(player, team),
-          if (_consents != null) ...[
-            const SizedBox(height: 14),
-            _consentCard(_consents!),
-          ],
-          const SizedBox(height: 14),
-          const PushCard(),
+          _playerCard(player, teams),
           for (final r in _pending) ...[
             const SizedBox(height: 14),
             _pendingCard(r),
           ],
           const SizedBox(height: 14),
-          if (team == null)
+          if (teams.isEmpty)
             _infoCard(
               Icons.groups_outlined,
               'Henüz aktif bir takım kadrosunda değilsin. Kadroya '
               'eklendiğinde takımının maçları burada görünecek.',
             )
           else
-            _matchesSection(team),
+            _matchesSection(teams),
           if (history.isNotEmpty) ...[
             const SizedBox(height: 18),
             _historyButton(history),
+          ],
+          if (widget.onSignOut != null) ...[
+            const SizedBox(height: 24),
+            Center(
+              child: TextButton.icon(
+                onPressed: widget.onSignOut,
+                style: TextButton.styleFrom(foregroundColor: kAdminMuted),
+                icon: const Icon(Icons.logout_rounded, size: 18),
+                label: const Text('Çıkış yap / Hesabı sil'),
+              ),
+            ),
           ],
         ],
       ),
@@ -272,82 +327,6 @@ class _MyProfileViewState extends State<MyProfileView> {
       ),
     ),
   );
-
-  Widget _teamSwitcher() {
-    return SizedBox(
-      height: 58,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: _teams.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 8),
-        itemBuilder: (context, i) {
-          final t = _teams[i];
-          final sel = i == _selected;
-          return Material(
-            color: sel ? kAdminAccent.withValues(alpha: 0.12) : _surface,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-              side: BorderSide(
-                color: sel
-                    ? kAdminAccent.withValues(alpha: 0.6)
-                    : Colors.white.withValues(alpha: 0.08),
-              ),
-            ),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(14),
-              onTap: () => setState(() {
-                _selected = i;
-                _showPlayed = false;
-              }),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 220),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _teamLogo(t.logoUrl, t.color, 28),
-                      const SizedBox(width: 10),
-                      Flexible(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              shortTeamName(t.teamName),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 14,
-                              ),
-                            ),
-                            Text(
-                              t.leagueName.isEmpty
-                                  ? t.seasonName
-                                  : t.leagueName,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: kAdminMuted,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
 
   Widget _teamLogo(String? url, String? color, double size) {
     final u = (url ?? '').trim();
@@ -375,24 +354,36 @@ class _MyProfileViewState extends State<MyProfileView> {
     );
   }
 
-  Widget _playerCard(MyPlayer p, MyTeam? team) {
-    final teamColor = parseHexColor(team?.color) ?? kAdminAccent;
+  /// Oyuncu kartı: kimlik, seçili sezonun tüm takımlarındaki toplam
+  /// istatistik, o sezonun takımları alt alta ve işlem düğmeleri.
+  Widget _playerCard(MyPlayer p, List<MyTeam> teams) {
+    final first = teams.firstOrNull;
+    final teamColor = parseHexColor(first?.color) ?? kAdminAccent;
     final position = [
       p.mainPosition,
       p.subPosition,
     ].whereType<String>().where((e) => e.isNotEmpty).toSet().join(' · ');
     final details = [
-      if (team?.jerseyNumber != null) '#${team!.jerseyNumber}',
       if (position.isNotEmpty) position,
       if (p.age != null) '${p.age} yaş',
     ].join(' · ');
     final photo = (p.photoUrl ?? '').trim();
-    final statsFuture = team == null
+    final year = _shownYear;
+    final newest = year == null || year == _years.firstOrNull;
+    final totalFuture = teams.isEmpty
         ? null
-        : _stats.putIfAbsent(
-            team.key,
-            () => _service.loadStats(p.id, team.seasonId),
+        : Future.wait([for (final t in teams) _statsOf(t)]).then(
+            (list) => MySeasonStats(
+              matches: list.fold(0, (a, s) => a + s.matches),
+              goals: list.fold(0, (a, s) => a + s.goals),
+              assists: list.fold(0, (a, s) => a + s.assists),
+              yellow: list.fold(0, (a, s) => a + s.yellow),
+              red: list.fold(0, (a, s) => a + s.red),
+            ),
           );
+    final shownTeams = teams.length > 4 && !_allTeams
+        ? teams.take(3).toList()
+        : teams;
 
     return Container(
       clipBehavior: Clip.antiAlias,
@@ -482,61 +473,54 @@ class _MyProfileViewState extends State<MyProfileView> {
                           ],
                         ),
                       ],
-                      if (team != null) ...[
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            _teamLogo(team.logoUrl, team.color, 22),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                team.teamName,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
                     ],
                   ),
                 ),
               ],
             ),
           ),
-          if (statsFuture != null)
+          if (totalFuture != null) ...[
+            _cardSectionHead(
+              newest
+                  ? 'BU SEZON · TÜM TAKIMLAR'
+                  : '$year SEZONU · TÜM TAKIMLAR',
+              trailing: _yearPicker(),
+            ),
             FutureBuilder<MySeasonStats>(
-              future: statsFuture,
+              future: totalFuture,
               builder: (context, snap) {
                 final s = snap.data;
                 String v(int Function(MySeasonStats) f) =>
                     s == null ? '-' : '${f(s)}';
-                return Container(
-                  decoration: BoxDecoration(
-                    border: Border(
-                      top: BorderSide(
-                        color: Colors.white.withValues(alpha: 0.06),
-                      ),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      _stat(v((s) => s.matches), 'Maç'),
-                      _stat(v((s) => s.goals), 'Gol', kAdminAccent),
-                      _stat(v((s) => s.assists), 'Asist'),
-                      _stat(v((s) => s.yellow), 'Sarı kart', kAdminAmber),
-                    ],
-                  ),
+                return Row(
+                  children: [
+                    _stat(v((s) => s.matches), 'Maç'),
+                    _stat(v((s) => s.goals), 'Gol', kAdminAccent),
+                    _stat(v((s) => s.assists), 'Asist'),
+                    _stat(v((s) => s.yellow), 'Sarı', kAdminAmber),
+                    _stat(v((s) => s.red), 'Kırmızı', kAdminDanger),
+                  ],
                 );
               },
             ),
+            _cardSectionHead(
+              year == null ? 'TAKIMLARIM' : 'TAKIMLARIM · $year',
+            ),
+            for (final t in shownTeams) _teamRow(t),
+            if (teams.length > 4)
+              TextButton(
+                onPressed: () => setState(() => _allTeams = !_allTeams),
+                style: TextButton.styleFrom(foregroundColor: kAdminAccent),
+                child: Text(
+                  _allTeams
+                      ? 'Daha az göster'
+                      : 'Tüm takımlar (${teams.length})',
+                ),
+              ),
+            const SizedBox(height: 8),
+          ],
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 4, 14, 14),
+            padding: const EdgeInsets.fromLTRB(14, 6, 14, 10),
             child: Row(
               children: [
                 Expanded(
@@ -547,7 +531,7 @@ class _MyProfileViewState extends State<MyProfileView> {
                     onTap: () => showPlayerCard(
                       context,
                       playerKey: p.id,
-                      number: team?.jerseyNumber?.toString() ?? '',
+                      number: first?.jerseyNumber?.toString() ?? '',
                     ),
                   ),
                 ),
@@ -563,7 +547,227 @@ class _MyProfileViewState extends State<MyProfileView> {
               ],
             ),
           ),
+          // İzinler (eksikse sarı) ve bildirim ayarları: aynı düğme dili.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _consents == null
+                      ? const SizedBox.shrink()
+                      : _cardButton(
+                          icon: _consents!.complete
+                              ? Icons.verified_user_outlined
+                              : Icons.privacy_tip_outlined,
+                          label: _consents!.complete
+                              ? 'İzinlerim'
+                              : 'Onay eksik',
+                          color: _consents!.complete
+                              ? Colors.white
+                              : kAdminAmber,
+                          onTap: _openConsents,
+                        ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _cardButton(
+                    icon: Icons.notifications_none_rounded,
+                    label: 'Bildirimler',
+                    color: Colors.white,
+                    onTap: () => NotificationSettingsScreen.open(context),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
+      ),
+    );
+  }
+
+  /// Kart içindeki bölüm başlığı: üstte ince çizgi, yeşil küçük başlık.
+  Widget _cardSectionHead(String text, {Widget? trailing}) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 10, 12, 2),
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                color: kAdminAccent,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1,
+              ),
+            ),
+          ),
+          ?trailing,
+        ],
+      ),
+    );
+  }
+
+  /// Sezon seçici: birden fazla sezonda oynadıysa "2026 ▾" menüsü.
+  Widget? _yearPicker() {
+    final years = _years;
+    final y = _shownYear;
+    if (years.length < 2 || y == null) return null;
+    return PopupMenuButton<int>(
+      tooltip: 'Sezon seç',
+      color: const Color(0xFF1E293B),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      onSelected: (v) => setState(() {
+        _year = v;
+        _allTeams = false;
+        _showPlayed = false;
+      }),
+      itemBuilder: (_) => [
+        for (final v in years)
+          PopupMenuItem<int>(
+            value: v,
+            child: Text(
+              '$v Sezonu',
+              style: TextStyle(
+                color: v == y ? kAdminAccent : Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.2),
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '$y',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const Icon(
+              Icons.keyboard_arrow_down_rounded,
+              color: Colors.white,
+              size: 18,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Takım satırı: logo, takım ve turnuva, mini istatistik, forma no.
+  /// Dokununca takımın sayfası (kadro, fikstür, istatistik).
+  Widget _teamRow(MyTeam t) {
+    return InkWell(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          settings: const RouteSettings(name: 'TeamSquadScreen'),
+          builder: (_) => TeamSquadScreen(
+            teamId: t.teamId,
+            tournamentId: t.seasonId,
+            teamName: t.teamName,
+            teamLogoUrl: t.logoUrl ?? '',
+            initialFirstColor: t.color,
+          ),
+        ),
+      ),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 9, 12, 9),
+        child: Row(
+          children: [
+            _teamLogo(t.logoUrl, t.color, 32),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    t.teamName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  Text(
+                    t.leagueName.isEmpty ? t.seasonName : t.leagueName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: kAdminMuted,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            FutureBuilder<MySeasonStats>(
+              future: _statsOf(t),
+              builder: (context, snap) {
+                final s = snap.data;
+                if (s == null) return const SizedBox.shrink();
+                return Text.rich(
+                  TextSpan(
+                    style: const TextStyle(color: kAdminMuted, fontSize: 12),
+                    children: [
+                      TextSpan(
+                        text: '${s.matches}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const TextSpan(text: ' M · '),
+                      TextSpan(
+                        text: '${s.goals}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const TextSpan(text: ' G'),
+                    ],
+                  ),
+                );
+              },
+            ),
+            if (t.jerseyNumber != null) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.25),
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: Text(
+                  '#${t.jerseyNumber}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -676,12 +880,16 @@ class _MyProfileViewState extends State<MyProfileView> {
 
   // --- Maçlar ------------------------------------------------------------------
 
-  Widget _matchesSection(MyTeam team) {
-    final future = _matches.putIfAbsent(
-      team.key,
-      () => _service.loadTeamMatches(team),
+  /// Seçili sezondaki tüm takımların maçları tek akışta: sıradaki maç en
+  /// yakın olanı; birden fazla takımda her maçın üstünde takım rozeti.
+  Widget _matchesSection(List<MyTeam> teams) {
+    final key = [for (final t in teams) t.key].join(',');
+    final future = _yearMatchFutures.putIfAbsent(
+      key,
+      () => _yearMatches(teams),
     );
-    return FutureBuilder<List<TeamMatch>>(
+    final multi = teams.length > 1;
+    return FutureBuilder<List<({MyTeam team, TeamMatch match})>>(
       future: future,
       builder: (context, snap) {
         if (snap.connectionState != ConnectionState.done) {
@@ -695,23 +903,25 @@ class _MyProfileViewState extends State<MyProfileView> {
         if (snap.hasError) {
           return _infoCard(Icons.error_outline, 'Maçlar yüklenemedi.');
         }
-        final all = snap.data ?? const <TeamMatch>[];
-        final upcoming = all.where((m) => !m.isPlayed).toList()
-          ..sort((a, b) {
-            final weekA = a.match.week;
-            final weekB = b.match.week;
-            if (weekA != null && weekB != null && weekA != weekB) {
-              return weekA.compareTo(weekB);
-            }
-            if (weekA != null && weekB == null) return -1;
-            if (weekA == null && weekB != null) return 1;
-            final x = a.startsAt, y = b.startsAt;
-            if (x == null) return 1;
-            if (y == null) return -1;
-            return x.compareTo(y);
-          });
-        final played = all.where((m) => m.isPlayed).toList().reversed.toList();
-        final next = upcoming.isEmpty ? null : upcoming.first;
+        final all = snap.data ?? const [];
+        int byDate(
+          ({MyTeam team, TeamMatch match}) a,
+          ({MyTeam team, TeamMatch match}) b,
+        ) {
+          final x = a.match.startsAt, y = b.match.startsAt;
+          if (x != null && y != null) return x.compareTo(y);
+          if (x != null) return -1;
+          if (y != null) return 1;
+          return (a.match.match.week ?? 999).compareTo(
+            b.match.match.week ?? 999,
+          );
+        }
+
+        final upcoming = all.where((e) => !e.match.isPlayed).toList()
+          ..sort(byDate);
+        final played = all.where((e) => e.match.isPlayed).toList()
+          ..sort((a, b) => byDate(b, a));
+        final next = upcoming.firstOrNull;
         final rest = upcoming.skip(1).toList();
         final list = _showPlayed ? played : rest;
 
@@ -719,10 +929,10 @@ class _MyProfileViewState extends State<MyProfileView> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (next != null) ...[
-              _nextMatchCard(next),
+              _nextMatchCard(next.match, team: multi ? next.team : null),
               const SizedBox(height: 18),
             ],
-            _sectionTitle('TAKIMIMIN MAÇLARI'),
+            _sectionTitle(multi ? 'MAÇLARIM' : 'TAKIMIMIN MAÇLARI'),
             _segmented(rest.length, played.length),
             const SizedBox(height: 10),
             if (list.isEmpty)
@@ -735,10 +945,41 @@ class _MyProfileViewState extends State<MyProfileView> {
                     : 'Sıradaki maçtan sonra planlanmış maç yok.',
               )
             else
-              for (final m in list) _matchRow(m),
+              for (final e in list)
+                _matchRow(e.match, team: multi ? e.team : null),
           ],
         );
       },
+    );
+  }
+
+  /// Maçın hangi takımla oynandığı: takım logosu + turnuva adı.
+  Widget _teamBadge(MyTeam t) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(3, 2, 8, 2),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.25),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _teamLogo(t.logoUrl, t.color, 16),
+          const SizedBox(width: 5),
+          Flexible(
+            child: Text(
+              t.leagueName.isEmpty ? shortTeamName(t.teamName) : t.leagueName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -799,7 +1040,7 @@ class _MyProfileViewState extends State<MyProfileView> {
     );
   }
 
-  Widget _nextMatchCard(TeamMatch m) {
+  Widget _nextMatchCard(TeamMatch m, {MyTeam? team}) {
     final at = m.startsAt;
     final live =
         m.match.status == MatchStatus.live ||
@@ -871,6 +1112,10 @@ class _MyProfileViewState extends State<MyProfileView> {
                   _chip(badge, live ? kAdminDanger : kAdminAccent),
                 ],
               ),
+              if (team != null) ...[
+                const SizedBox(height: 8),
+                Center(child: _teamBadge(team)),
+              ],
               const SizedBox(height: 14),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -943,7 +1188,7 @@ class _MyProfileViewState extends State<MyProfileView> {
     );
   }
 
-  Widget _matchRow(TeamMatch m) {
+  Widget _matchRow(TeamMatch m, {MyTeam? team}) {
     final at = m.startsAt;
     final top = [
       if (at != null) _dayLabel(at),
@@ -962,16 +1207,28 @@ class _MyProfileViewState extends State<MyProfileView> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (top.isNotEmpty)
+                if (top.isNotEmpty || team != null)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(6, 0, 6, 8),
-                    child: Text(
-                      top,
-                      style: const TextStyle(
-                        color: kAdminMuted,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            top,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: kAdminMuted,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        if (team != null) ...[
+                          const SizedBox(width: 8),
+                          Flexible(child: _teamBadge(team)),
+                        ],
+                      ],
                     ),
                   ),
                 MatchScoreLine(
@@ -1046,66 +1303,6 @@ class _MyProfileViewState extends State<MyProfileView> {
 
   /// Onay eksikse uyarı; tamamsa sade bir "onaylandı" satırı (geri almak
   /// ya da metinleri tekrar okumak için).
-  Widget _consentCard(MyConsents c) {
-    final ok = c.complete;
-    final color = ok ? kAdminAccent : kAdminAmber;
-    final last = c.lastAt;
-    return Material(
-      color: ok ? _surface : kAdminAmber.withValues(alpha: 0.10),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: BorderSide(
-          color: ok
-              ? Colors.white.withValues(alpha: 0.08)
-              : kAdminAmber.withValues(alpha: 0.4),
-        ),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: _openConsents,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
-          child: Row(
-            children: [
-              Icon(
-                ok ? Icons.verified_user_outlined : Icons.privacy_tip_outlined,
-                color: color,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      ok
-                          ? 'İzinler ve beyanlar onaylandı'
-                          : 'KVKK ve sağlık onayın eksik',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      ok
-                          ? (last == null
-                                ? 'Görüntülemek için dokun'
-                                : 'Son güncelleme: ${last.day.toString().padLeft(2, '0')}.${last.month.toString().padLeft(2, '0')}.${last.year}')
-                          : 'Turnuvada oynayabilmek için metinleri okuyup onayla.',
-                      style: const TextStyle(color: kAdminMuted, fontSize: 13),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(Icons.chevron_right_rounded, color: color),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _infoCard(IconData icon, String text) {
     return Container(
       padding: const EdgeInsets.all(16),

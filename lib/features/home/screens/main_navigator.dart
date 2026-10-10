@@ -160,6 +160,8 @@ class _MainNavigatorState extends State<MainNavigator> {
   Widget build(BuildContext context) {
     final session = AppSession.of(context);
     _route = ModalRoute.of(context);
+    final signedIn =
+        session.value.user != null && !session.value.user!.isAnonymous;
     // Turnuva seçicisi yalnızca ana sekmelerde (Profil / yönetim panelinde
     // değil).
     LeagueSwitchScope.setHome(
@@ -169,11 +171,16 @@ class _MainNavigatorState extends State<MainNavigator> {
       panelTab:
           _aktifSekme == MainNavigator.profileTab &&
           session.value.hasManagementPanel,
-      // Bantta menü düğmesi: Ana Sayfa, Puan Durumu, Yayın Rehberi.
+      // Bantta menü düğmesi: Ana Sayfa, Puan Durumu, Yayın Rehberi ve
+      // futbolcu profili (yönetim panelinin kendi bant düğmeleri var).
       homeTab:
           _aktifSekme == 0 ||
           _aktifSekme == 2 ||
-          _aktifSekme == MainNavigator.broadcastTab,
+          _aktifSekme == MainNavigator.broadcastTab ||
+          (_aktifSekme == MainNavigator.profileTab &&
+              signedIn &&
+              !session.value.hasManagementPanel &&
+              !session.value.isAdmin),
       calendarTab: _aktifSekme == MainNavigator.fixtureTab,
       // Yayın Rehberi tüm turnuvaların maçlarını gösterir: bantta turnuva
       // adı yok.
