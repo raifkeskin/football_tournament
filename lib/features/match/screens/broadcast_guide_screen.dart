@@ -187,14 +187,6 @@ class _BroadcastGuideScreenState extends State<BroadcastGuideScreen> {
                                       ),
                                     ),
                                   ),
-                                  // Başka gündeyken bugüne dönüş.
-                                  if (!isToday)
-                                    TextButton(
-                                      onPressed: () =>
-                                          BroadcastGuideScreen.date.value =
-                                              today,
-                                      child: const Text('Bugün'),
-                                    ),
                                 ],
                               ),
                             ),
@@ -356,16 +348,20 @@ class _BroadcastRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    '$homeName - $awayName',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: main,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
+                  // Takımlar alt alta: büyük yazı boyutunda da iki ad
+                  // birlikte görünür.
+                  for (final name in [homeName, awayName])
+                    Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: main,
+                        fontSize: 14,
+                        height: 1.3,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  ),
                   const SizedBox(height: 5),
                   Row(
                     children: [

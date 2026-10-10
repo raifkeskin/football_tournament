@@ -55,6 +55,7 @@ class AppNameBand extends StatelessWidget {
                 LeagueSwitchScope.panel,
                 LeagueSwitchScope.homeTab,
                 LeagueSwitchScope.calendarTab,
+                LeagueSwitchScope.genericTab,
                 LeagueSwitchScope.bandHidden,
                 LeagueSwitchScope.pageBand,
                 LeagueSwitchScope.tabAction,
@@ -76,7 +77,9 @@ class AppNameBand extends StatelessWidget {
                     trailing: page.trailing,
                   );
                 }
-                final t = LeagueSwitchScope.panel.value
+                final t =
+                    LeagueSwitchScope.panel.value ||
+                        LeagueSwitchScope.genericTab.value
                     ? null
                     : ActiveTournament.theme.value;
                 final actions = genericScreens.value > 0
@@ -311,6 +314,10 @@ class LeagueSwitchScope {
   /// Takvim sekmesi en üstte: turnuva bandı tamamen gizlenir.
   static final calendarTab = ValueNotifier<bool>(false);
 
+  /// Tüm turnuvaları gösteren sekme (Yayın Rehberi) en üstte: bantta tek
+  /// bir turnuvanın kimliği yerine uygulama bandı.
+  static final genericTab = ValueNotifier<bool>(false);
+
   /// Ana gezgin çekmecesinin gerçek açılma durumu.
   static final drawerOpen = ValueNotifier<bool>(false);
 
@@ -351,6 +358,7 @@ class LeagueSwitchScope {
           bool panelTab,
           bool homeTab,
           bool calendarTab,
+          bool genericTab,
           Widget? action,
         })
       >{};
@@ -365,6 +373,7 @@ class LeagueSwitchScope {
     bool panelTab = false,
     bool homeTab = false,
     bool calendarTab = false,
+    bool genericTab = false,
     Widget? action,
   }) {
     if (route == null) return;
@@ -373,6 +382,7 @@ class LeagueSwitchScope {
       panelTab: panelTab,
       homeTab: homeTab,
       calendarTab: calendarTab,
+      genericTab: genericTab,
       action: action,
     );
     _update();
@@ -397,6 +407,7 @@ class LeagueSwitchScope {
     final p = home != null && home.panelTab;
     final h = isHomeTop && home != null && home.homeTab;
     final c = isHomeTop && home != null && home.calendarTab;
+    final g = isHomeTop && home != null && home.genericTab;
     final hidden = c || (top != null && _bandHiddenRoutes.contains(top));
     final pb = top == null ? null : _pageBands[top];
     final a = isHomeTop ? home?.action : null;
@@ -404,6 +415,7 @@ class LeagueSwitchScope {
         panel.value == p &&
         homeTab.value == h &&
         calendarTab.value == c &&
+        genericTab.value == g &&
         bandHidden.value == hidden &&
         pageBand.value == pb &&
         tabAction.value == a) {
@@ -420,6 +432,7 @@ class LeagueSwitchScope {
     panel.value = p;
     homeTab.value = h;
     calendarTab.value = c;
+    genericTab.value = g;
     bandHidden.value = hidden;
     pageBand.value = pb;
     tabAction.value = a;

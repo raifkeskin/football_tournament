@@ -175,6 +175,9 @@ class _MainNavigatorState extends State<MainNavigator> {
           _aktifSekme == 2 ||
           _aktifSekme == MainNavigator.broadcastTab,
       calendarTab: _aktifSekme == MainNavigator.fixtureTab,
+      // Yayın Rehberi tüm turnuvaların maçlarını gösterir: bantta turnuva
+      // adı yok.
+      genericTab: _aktifSekme == MainNavigator.broadcastTab,
       // Yayın Rehberi: bantta sağda takvim (gün seçimi).
       action: _aktifSekme == MainNavigator.broadcastTab
           ? const BandIconButton(
@@ -250,25 +253,42 @@ class _MainNavigatorState extends State<MainNavigator> {
             // Puan Durumu → Yayın Rehberi); Profil menüden açılır ve
             // sekmelerin üstünde durur. Haberler ve İstatistik Turnuva
             // Sayfası'nda.
-            child: Stack(
-              children: [
-                _TabPager(
-                  index: _aktifSekme < MainNavigator.profileTab
-                      ? _aktifSekme
-                      : null,
-                  onChanged: (i) => setState(() => _aktifSekme = i),
-                  onSwipePastFirst: () =>
-                      _scaffoldKey.currentState?.openDrawer(),
-                  children: ekranlar.take(MainNavigator.profileTab).toList(),
-                ),
-                Offstage(
-                  offstage: _aktifSekme != MainNavigator.profileTab,
-                  child: TickerMode(
-                    enabled: _aktifSekme == MainNavigator.profileTab,
-                    child: ekranlar[MainNavigator.profileTab],
+            // Klavye boşluğunu bu Scaffold zaten bırakıyor; içteki ekranların
+            // Scaffold'ları ikinci kez bırakmasın (Profil'deki giriş formunda
+            // klavyenin üstünde boş alan kalıyordu).
+            child: MediaQuery.removeViewInsets(
+              context: context,
+              removeBottom: true,
+              child: Stack(
+                children: [
+                  // Görünmeyen sekmeler odak almasın: klavyenin "ileri" tuşu
+                  // odağı arkadaki sekmeye taşıyınca sayfa oraya kayıyordu.
+                  ExcludeFocus(
+                    excluding: _aktifSekme == MainNavigator.profileTab,
+                    child: _TabPager(
+                      index: _aktifSekme < MainNavigator.profileTab
+                          ? _aktifSekme
+                          : null,
+                      onChanged: (i) => setState(() => _aktifSekme = i),
+                      onSwipePastFirst: () =>
+                          _scaffoldKey.currentState?.openDrawer(),
+                      children: ekranlar
+                          .take(MainNavigator.profileTab)
+                          .toList(),
+                    ),
                   ),
-                ),
-              ],
+                  Offstage(
+                    offstage: _aktifSekme != MainNavigator.profileTab,
+                    child: ExcludeFocus(
+                      excluding: _aktifSekme != MainNavigator.profileTab,
+                      child: TickerMode(
+                        enabled: _aktifSekme == MainNavigator.profileTab,
+                        child: ekranlar[MainNavigator.profileTab],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

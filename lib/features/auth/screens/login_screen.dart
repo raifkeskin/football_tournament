@@ -58,6 +58,9 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
+  // Telefon alanında klavyenin "ileri" tuşu doğrudan şifreye geçer; odak
+  // sıralamasına bırakılırsa arkadaki sekmelere atlayabiliyor.
+  final _passwordFocus = FocusNode();
   bool _rememberMe = false;
   bool _loading = false;
   int _adminTapCount = 0;
@@ -95,6 +98,7 @@ class _LoginScreenState extends State<LoginScreen> {
     _adminTapTimer?.cancel();
     _phoneController.dispose();
     _passwordController.dispose();
+    _passwordFocus.dispose();
     super.dispose();
   }
 
@@ -412,6 +416,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     controller: _phoneController,
                     textInputAction: TextInputAction.next,
                     keyboardType: TextInputType.phone,
+                    onEditingComplete: _passwordFocus.requestFocus,
                     inputFormatters: [PhoneMaskFormatter()],
                     decoration: _fieldDecoration(
                       label: 'Telefon Numarası',
@@ -425,6 +430,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 12),
                   TextField(
                     controller: _passwordController,
+                    focusNode: _passwordFocus,
                     obscureText: true,
                     onSubmitted: _loading ? null : (_) => _login(session),
                     decoration: _fieldDecoration(
