@@ -64,3 +64,4 @@ gen/
 *.moved-aside
 # Supabase CLI
 supabase/.temp/
+tool/loadtest/results/
