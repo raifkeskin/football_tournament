@@ -6,6 +6,7 @@ import 'package:football_tournament/features/team/screens/team_squad_screen.dart
 import 'package:football_tournament/features/tournament/screens/admin_manage_leagues_screen.dart';
 import 'package:football_tournament/features/tournament/screens/admin_pitch_management_screen.dart';
 import '../features/match/screens/admin_fixture_entry_screen.dart';
+import '../features/match/screens/admin_live_draws_screen.dart';
 import '../features/news/screens/admin_manage_news_screen.dart';
 import '../features/share/admin_poster_background_screen.dart';
 import '../features/sponsors/admin_sponsors_screen.dart';
@@ -88,6 +89,23 @@ class AdminPanelWidget extends StatelessWidget {
           );
         },
       ),
+      // Canlı kuralar: iptal / geri alma (admin ve kurucu başkan).
+      if (isAdmin || session.isLeagueOwner)
+        _AdminMenuData(
+          baslik: 'Canlı Kuralar',
+          renkler: const [Color(0xFF38BDF8), Color(0xFF0369A1)],
+          ikon: Icons.casino_rounded,
+          resimYolu: 'assets/images/admin_fixture.jpg',
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                settings: const RouteSettings(name: 'AdminLiveDrawsScreen'),
+                builder: (_) => const AdminLiveDrawsScreen(),
+              ),
+            );
+          },
+        ),
       _AdminMenuData(
         baslik: 'Ceza Yönetimi',
         renkler: const [Color(0xFFF87171), Color(0xFFDC2626)],
