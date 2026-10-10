@@ -8,7 +8,15 @@ import 'push_service.dart';
 /// Profildeki bildirim kartı: izin/abonelik durumuna göre aç-kapat ya da
 /// yönlendirme (iPhone'da "Ana Ekrana Ekle", engellenmişse ayarlar).
 class PushCard extends StatefulWidget {
-  const PushCard({super.key, this.showSettingsLink = true});
+  const PushCard({
+    super.key,
+    this.showSettingsLink = true,
+    this.onlyWhenActionable = false,
+  });
+
+  /// true: yalnızca bildirimler kapalıyken ve açılabilirken görünür (ör.
+  /// bildirim listesinin üstünde).
+  final bool onlyWhenActionable;
 
   /// Kartın altında "Bildirim ayarları" bağlantısı (ayarlar ekranının
   /// kendisinde gösterilmez).
@@ -48,11 +56,13 @@ class _PushCardState extends State<PushCard> {
       await action();
       messenger.showSnackBar(SnackBar(content: Text(done)));
     } catch (e) {
-      final denied = e.toString().contains('permission-denied');
+      final text = e.toString();
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            denied ? 'Bildirim izni verilmedi.' : 'Bildirimler açılamadı: $e',
+            text.contains('permission-')
+                ? 'Bildirim izni verilmedi.'
+                : 'Bildirimler açılamadı. Sayfayı yenileyip tekrar deneyin.',
           ),
         ),
       );
@@ -102,15 +112,22 @@ class _PushCardState extends State<PushCard> {
   }
 
   Widget? _card() {
-    if (_state == PushState.unsupported) return null;
-
     final on = _state == PushState.granted && _subscribed;
+    if (widget.onlyWhenActionable && (on || _state == PushState.unsupported)) {
+      return null;
+    }
     final String title;
     final String text;
     Widget? action;
     switch (_state) {
+      case PushState.unsupported:
+        // Uygulama (APK) sürümü: telefon bildirimi henüz yok.
+        title = 'Telefon bildirimleri';
+        text =
+            'Uygulama sürümünde telefon bildirimleri yakında geliyor. Şimdilik '
+            'bildirimler sağ üstteki zilde görünür.';
       case PushState.iosInstall:
-        title = 'Bildirimler';
+        title = 'Telefon bildirimlerini aç';
         text =
             'iPhone\'da bildirim almak için Safari\'de Paylaş → "Ana Ekrana '
             'Ekle" ile uygulamayı ekleyin ve ana ekrandaki simgeden açın.';
@@ -120,7 +137,7 @@ class _PushCardState extends State<PushCard> {
             'Bildirim izni bu tarayıcıda kapalı. Tarayıcı / site ayarlarından '
             'bildirimlere izin verip sayfayı yenileyin.';
       default:
-        title = on ? 'Bildirimler açık' : 'Bildirimleri aç';
+        title = on ? 'Telefon bildirimleri açık' : 'Telefon bildirimlerini aç';
         text = on
             ? 'Bu cihaz bildirim alıyor. Hangi bildirimlerin geleceğini '
                   'ayarlardan seçebilirsiniz.'
