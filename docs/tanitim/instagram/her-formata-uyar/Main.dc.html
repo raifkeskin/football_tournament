@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>Her formata uyar kapak</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600;700&family=Barlow+Condensed:ital,wght@1,800&display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1080px; height: 1080px; box-sizing: border-box; position: relative; overflow: hidden; background: #0F172A; color: #F8FAFC; font-family: 'Barlow', sans-serif; display: flex; flex-direction: column; justify-content: space-between; padding: 84px 88px">
+  <div style="position: absolute; left: 50%; top: 540px; width: 760px; height: 760px; margin-left: -380px; margin-top: -380px; border: 3px solid rgba(16,185,129,0.12); border-radius: 50%"></div>
+  <div style="position: absolute; left: 0; right: 0; top: 538px; height: 3px; background: rgba(16,185,129,0.12)"></div>
+  <div style="position: absolute; left: 0; right: 0; top: 0; height: 520px; background: linear-gradient(180deg, #0B3D24 0%, rgba(15,23,42,0) 100%)"></div>
+
+  <div style="position: relative; display: flex; align-items: center; justify-content: space-between">
+    <div style="display: flex; align-items: center; gap: 18px">
+      <img src="/_blob/c34c2d9bc6ea94e67e4693fdc5d27ea5" alt="Lig Masası logosu" style="display: block; width: 64px; height: 64px; border-radius: 14px; object-fit: cover">
+      <div style="font-size: 26px; font-weight: 700; letter-spacing: 4px; color: #10B981">LİG MASASI</div>
+    </div>
+    <div style="font-size: 24px; font-weight: 600; color: #94A3B8">1 / 5</div>
+  </div>
+
+  <div style="position: relative; display: flex; flex-direction: column; gap: 30px">
+    <h1 style="margin: 0; font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 800; font-size: 176px; line-height: 0.88; letter-spacing: 1px">HER FORMATA<br><span style="color: #10B981">UYAR.</span></h1>
+    <p style="margin: 0; font-size: 44px; font-weight: 600; line-height: 1.22; max-width: 880px">11'li master ligi, 7'li okul kupası, iş çıkışı halısaha ligi. Hepsi aynı masada.</p>
+  </div>
+
+  <div style="position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px">
+    <div style="display: flex; flex-direction: column; gap: 14px; padding: 24px 26px; border-radius: 26px; background: #1E293B; border: 2px solid #334155">
+      <div style="display: flex; align-items: center; gap: 12px">
+        <img src="/_blob/c4da19ab30885a5614d980e791b2eb0c" alt="Kuzey Yıldızları arması" style="width: 64px; height: 64px">
+        <span style="font-size: 30px; font-weight: 700">Master ligi</span>
+      </div>
+      <span style="align-self: flex-start; padding: 8px 18px; border-radius: 30px; background: #F5B937; color: #3A2604; font-size: 26px; font-weight: 700">11'li · 2×30</span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 14px; padding: 24px 26px; border-radius: 26px; background: #1E293B; border: 2px solid #334155">
+      <div style="display: flex; align-items: center; gap: 12px">
+        <img src="/_blob/074be9289e2e77c4434d4eb1176c0b41" alt="Deniz Anadolu Lisesi arması" style="width: 64px; height: 64px">
+        <span style="font-size: 30px; font-weight: 700">Okul kupası</span>
+      </div>
+      <span style="align-self: flex-start; padding: 8px 18px; border-radius: 30px; background: #60A5FA; color: #0B2447; font-size: 26px; font-weight: 700">7'li · 2×20</span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 14px; padding: 24px 26px; border-radius: 26px; background: #1E293B; border: 2px solid #334155">
+      <div style="display: flex; align-items: center; gap: 12px">
+        <img src="/_blob/5332d5a53b5d40f3534af07545872496" alt="Kuzey Lojistik arması" style="width: 64px; height: 64px">
+        <span style="font-size: 30px; font-weight: 700">Şirketler ligi</span>
+      </div>
+      <span style="align-self: flex-start; padding: 8px 18px; border-radius: 30px; background: #F97316; color: #3B1203; font-size: 26px; font-weight: 700">7'li · 2×25</span>
+    </div>
+  </div>
+
+  <div style="position: relative; display: flex; justify-content: space-between; align-items: center; font-size: 30px; font-weight: 600; color: #94A3B8">
+    <span>ligmasasi.com</span>
+    <span style="color: #F8FAFC">Kaydır →</span>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1080,"height":1080}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
