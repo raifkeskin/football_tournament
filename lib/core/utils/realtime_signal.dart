@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'stream_scope.dart';
+
 /// Realtime'dan gelen tek bir satır değişikliği.
 class RowChange {
   const RowChange(this.type, this.newRow, this.oldRow);
@@ -40,6 +42,15 @@ Stream<RowChange> realtimeRowChanges(
 }) {
   late StreamController<RowChange> controller;
   RealtimeChannel? channel;
+  void Function()? unregister;
+
+  Future<void> close() async {
+    unregister?.call();
+    unregister = null;
+    final c = channel;
+    channel = null;
+    if (c != null) await client.removeChannel(c);
+  }
 
   controller = StreamController<RowChange>(
     onListen: () {
@@ -57,6 +68,9 @@ Stream<RowChange> realtimeRowChanges(
       final name =
           'sig:$table:$column=$value:${DateTime.now().microsecondsSinceEpoch}';
       final base = client.channel(name);
+      // Kanal oluşturulunca istemcinin listesine girer; kapatma bunu da
+      // kaldırsın.
+      channel = base;
       final RealtimeChannel configured;
       if (column == null || value == null) {
         configured = base.onPostgresChanges(
@@ -93,6 +107,14 @@ Stream<RowChange> realtimeRowChanges(
               callback: forward,
             );
       }
+      // Akışı dinleyen gövde bir kapsam içindeyse (resilientStream), kapsam
+      // kapanınca kanal `await for`'un bitmesini beklemeden kapatılır.
+      unregister = StreamScope.current?.add(() {
+        close();
+        if (!controller.isClosed) controller.close();
+      });
+      // Kapsam zaten kapanmışsa kanal hiç açılmaz.
+      if (controller.isClosed) return;
       channel = configured.subscribe((status, error) {
         if (status == RealtimeSubscribeStatus.channelError ||
             status == RealtimeSubscribeStatus.timedOut) {
@@ -102,11 +124,7 @@ Stream<RowChange> realtimeRowChanges(
         }
       });
     },
-    onCancel: () async {
-      final c = channel;
-      channel = null;
-      if (c != null) await client.removeChannel(c);
-    },
+    onCancel: close,
   );
   return controller.stream;
 }
@@ -154,6 +172,12 @@ Stream<void> realtimeChangeSignal(
             },
             onError: (Object e, StackTrace s) {
               if (!controller.isClosed) controller.addError(e, s);
+            },
+            // Kanal kapsamla kapatılınca sinyal de biter (`await for` çıkar).
+            onDone: () {
+              timer?.cancel();
+              timer = null;
+              if (!controller.isClosed) controller.close();
             },
           );
     },
