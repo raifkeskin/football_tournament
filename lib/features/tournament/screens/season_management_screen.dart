@@ -8,11 +8,13 @@ import '../models/season.dart';
 import '../services/interfaces/i_league_service.dart';
 import '../../match/models/match.dart';
 import '../../team/models/team.dart';
+import '../../../core/services/active_tournament.dart';
 import '../../../core/services/app_session.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/utils/resilient_stream.dart';
 import '../../../core/utils/table_feed.dart';
 import '../../../core/widgets/app_date_picker.dart';
+import '../../../core/widgets/app_name_band.dart';
 import '../../../core/widgets/master_class_app_bar.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../team/screens/team_squad_screen.dart';
@@ -590,14 +592,9 @@ class SeasonManagementScreen extends StatelessWidget {
     final regionSeasons = {for (final r in session.ownedRegions) r.seasonId};
     return _AdminPageScaffold(
       title: leagueName.trim().isEmpty ? 'Sezonlar' : leagueName,
-      actions: [
-        if (canAdd)
-          IconButton(
-            onPressed: () => _openSeasonSheet(context),
-            icon: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
-            tooltip: 'Sezon Ekle',
-          ),
-      ],
+      leagueId: leagueId,
+      leagueName: leagueName,
+      leagueLogoUrl: leagueLogoUrl,
       body: StreamBuilder<List<Season>>(
         stream: _watchSeasons(),
         builder: (_, snapshot) {
@@ -622,7 +619,7 @@ class SeasonManagementScreen extends StatelessWidget {
             itemCount: seasons.length + (canAdd ? 1 : 0),
             itemBuilder: (_, index) {
               if (index == seasons.length) {
-                return _AddDashedButton(
+                return _AddButton(
                   label: 'Yeni Sezon Ekle',
                   onTap: () => _openSeasonSheet(context),
                 );
@@ -717,6 +714,12 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
 
   /// Sezonun bölgeleri (Turnuva > Sezon > Bölge > Grup).
   List<_Region> _regions = const <_Region>[];
+
+  /// Sezon formundaki "Toplam Takım Sayısı" (0: sınır yok) ve sezonda bir
+  /// gruba atanmış takımlar; takım seçicide x/8 sınırı için
+  /// [_loadTeamOptions] doldurur.
+  int _teamLimit = 0;
+  Map<String, String> _assignedGroupByTeam = const <String, String>{};
 
   Future<void> _loadRegions() async {
     try {
@@ -896,6 +899,13 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
           .from('season_teams')
           .select('team_id, group_id')
           .eq('season_id', widget.seasonId.trim());
+      final seasonRow = await _sb
+          .from('seasons')
+          .select('teams_per_group')
+          .eq('id', widget.seasonId.trim())
+          .maybeSingle();
+      _teamLimit =
+          int.tryParse((seasonRow?['teams_per_group'] ?? '').toString()) ?? 0;
 
       final groupNameById = <String, String>{
         for (final g in _groups ?? const <GroupModel>[]) g.id: g.name,
@@ -907,6 +917,7 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
         final gid = (row['group_id'] ?? '').toString().trim();
         if (tid.isNotEmpty && gid.isNotEmpty) groupIdByTeam[tid] = gid;
       }
+      _assignedGroupByTeam = groupIdByTeam;
 
       final options = <_TeamOption>[];
       for (final any in teamsRes) {
@@ -980,6 +991,14 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
     // yeniden build edildiğinde seçimler sıfırlanmaz.
     final working = <String>{...initial};
     final qController = TextEditingController();
+    // Sezonun takım sınırı tüm gruplar için: başka gruplardaki takımlar da
+    // sayılır (buraya seçilen başka grup takımı taşınır, iki kez sayılmaz).
+    final limit = _teamLimit;
+    final elsewhere = {
+      for (final e in _assignedGroupByTeam.entries)
+        if (e.value != currentGroupId && !initial.contains(e.key)) e.key,
+    };
+    int seasonCount() => elsewhere.difference(working).length + working.length;
 
     final picked = await _showAdminSheet<Set<String>>(
       context: context,
@@ -989,14 +1008,27 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
           if (q.isEmpty) return true;
           return _norm(t.name).contains(q);
         }).toList();
+        final count = seasonCount();
+        final full = limit > 0 && count >= limit;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _SheetHeader(
               icon: Icons.playlist_add_check_outlined,
               title: 'Takım Seç',
-              subtitle: '${working.length} takım seçildi',
+              subtitle: limit > 0
+                  ? '$count/$limit takım seçildi'
+                  : '${working.length} takım seçildi',
             ),
+            if (full)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 10),
+                child: Text(
+                  'Sezonun takım sayısı doldu. Başka takım seçmek için '
+                  'önce bir takımın işaretini kaldırın.',
+                  style: TextStyle(color: _amber, fontSize: 12.5),
+                ),
+              ),
             TextField(
               controller: qController,
               decoration: const InputDecoration(
@@ -1020,26 +1052,34 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
                         final inOtherGroup =
                             (t.groupId ?? '').isNotEmpty &&
                             t.groupId != currentGroupId;
+                        final selected = working.contains(t.id);
+                        // Sınır doluyken yalnızca seçili olanlar (işaret
+                        // kaldırmak için) ve zaten sayılan başka grup
+                        // takımları (taşıma sayıyı artırmaz) seçilebilir.
+                        final enabled =
+                            selected || !full || elsewhere.contains(t.id);
                         return CheckboxListTile(
-                          value: working.contains(t.id),
+                          value: selected,
                           activeColor: _accent,
                           controlAffinity: ListTileControlAffinity.leading,
                           contentPadding: const EdgeInsets.symmetric(
                             horizontal: 4,
                           ),
-                          onChanged: (val) {
-                            setPickerState(() {
-                              if (val == true) {
-                                working.add(t.id);
-                              } else {
-                                working.remove(t.id);
-                              }
-                            });
-                          },
+                          onChanged: !enabled
+                              ? null
+                              : (val) {
+                                  setPickerState(() {
+                                    if (val == true) {
+                                      working.add(t.id);
+                                    } else {
+                                      working.remove(t.id);
+                                    }
+                                  });
+                                },
                           title: Text(
                             t.name,
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: enabled ? Colors.white : Colors.white38,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -1328,6 +1368,7 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
       MaterialPageRoute<void>(
         settings: const RouteSettings(name: 'TeamListScreen'),
         builder: (_) => TeamListScreen(
+          leagueId: widget.leagueId,
           seasonId: widget.seasonId,
           seasonName: widget.seasonName,
           initialGroupName: initialGroupName,
@@ -1358,11 +1399,14 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            const Expanded(
-              child: _EmptyText(
-                'Grup bulunamadı.\nSağ üstteki + ile grup ekleyebilirsiniz.',
+            const Expanded(child: _EmptyText('Grup bulunamadı.')),
+            if (_canAddGroup) ...[
+              _AddButton(
+                label: 'Yeni Grup Ekle',
+                onTap: _busy ? null : _openAddGroupSheet,
               ),
-            ),
+              const SizedBox(height: 14),
+            ],
             if (rid == null) _SplitRegionsHint(onTap: _splitIntoRegions),
           ],
         ),
@@ -1386,7 +1430,11 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
         children: [
           for (final g in groups) card(g),
-          _AllTeamsLink(count: _overview?.teamCount, onTap: () => _openTeams()),
+          if (_canAddGroup)
+            _AddButton(
+              label: 'Yeni Grup Ekle',
+              onTap: _busy ? null : _openAddGroupSheet,
+            ),
           if (rid == null) ...[
             const SizedBox(height: 14),
             _SplitRegionsHint(onTap: _splitIntoRegions),
@@ -1396,6 +1444,9 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
     );
   }
 
+  /// Grup ekleme yalnızca admin'de.
+  bool get _canAddGroup => AppSession.of(context).value.isAdmin;
+
   @override
   Widget build(BuildContext context) {
     return _AdminPageScaffold(
@@ -1404,7 +1455,13 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
           : widget.seasonName.trim().isEmpty
           ? 'Gruplar'
           : widget.seasonName,
+      leagueId: widget.leagueId,
+      bandSubtitle: [
+        widget.seasonName,
+        widget.regionName ?? '',
+      ].where((e) => e.trim().isNotEmpty).join(' · '),
       actions: [
+        // Bantta (gezginin dışında): ipucu balonu yok.
         if ((widget.regionId ?? '').isNotEmpty &&
             AppSession.of(context).value.canManageLeague(widget.leagueId))
           IconButton(
@@ -1413,14 +1470,8 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
               Icons.manage_accounts_outlined,
               color: Colors.white,
               size: 24,
+              semanticLabel: 'Bölge Sorumluları',
             ),
-            tooltip: 'Bölge Sorumluları',
-          ),
-        if (AppSession.of(context).value.isAdmin)
-          IconButton(
-            onPressed: _busy ? null : _openAddGroupSheet,
-            icon: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
-            tooltip: 'Grup Ekle',
           ),
       ],
       body: Column(
@@ -1441,11 +1492,13 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
 class TeamListScreen extends StatefulWidget {
   const TeamListScreen({
     super.key,
+    required this.leagueId,
     required this.seasonId,
     required this.seasonName,
     this.initialGroupName,
   });
 
+  final String leagueId;
   final String seasonId;
   final String seasonName;
   final String? initialGroupName;
@@ -1456,8 +1509,29 @@ class TeamListScreen extends StatefulWidget {
 
 class _TeamListScreenState extends State<TeamListScreen> {
   final _queryController = TextEditingController();
+  final _queryFocus = FocusNode();
   late Future<_SeasonOverview> _overview = _loadSeasonOverview(widget.seasonId);
   String _query = '';
+
+  /// Arama alanı yalnızca sağ alttaki büyütece basınca açılır.
+  bool _searchOpen = false;
+
+  void _toggleSearch() {
+    setState(() {
+      _searchOpen = !_searchOpen;
+      if (!_searchOpen) {
+        _queryController.clear();
+        _query = '';
+      }
+    });
+    if (_searchOpen) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _queryFocus.requestFocus(),
+      );
+    } else {
+      _queryFocus.unfocus();
+    }
+  }
 
   String _formatGroupName(String? input) {
     final raw = (input ?? '').trim();
@@ -1480,6 +1554,7 @@ class _TeamListScreenState extends State<TeamListScreen> {
   @override
   void dispose() {
     _queryController.dispose();
+    _queryFocus.dispose();
     super.dispose();
   }
 
@@ -1626,6 +1701,19 @@ class _TeamListScreenState extends State<TeamListScreen> {
     final onlyGroup = (widget.initialGroupName ?? '').trim();
     return _AdminPageScaffold(
       title: widget.seasonName.trim().isEmpty ? 'Takımlar' : widget.seasonName,
+      leagueId: widget.leagueId,
+      bandSubtitle: [
+        widget.seasonName,
+        onlyGroup,
+      ].where((e) => e.trim().isNotEmpty).join(' · '),
+      floatingActionButton: FloatingActionButton(
+        heroTag: null,
+        tooltip: _searchOpen ? 'Aramayı kapat' : 'Takım ara',
+        backgroundColor: _accent,
+        foregroundColor: Colors.white,
+        onPressed: _toggleSearch,
+        child: Icon(_searchOpen ? Icons.close_rounded : Icons.search_rounded),
+      ),
       body: FutureBuilder<_SeasonOverview>(
         future: _overview,
         builder: (context, snap) {
@@ -1660,30 +1748,33 @@ class _TeamListScreenState extends State<TeamListScreen> {
             onRefresh: _reload,
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
               children: [
-                TextField(
-                  controller: _queryController,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    hintText: 'Takım ara',
-                    prefixIcon: const Icon(Icons.search, color: _muted),
-                    filled: true,
-                    fillColor: _sheetBg.withValues(alpha: 0.9),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide(
-                        color: Colors.white.withValues(alpha: 0.12),
+                if (_searchOpen) ...[
+                  TextField(
+                    controller: _queryController,
+                    focusNode: _queryFocus,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'Takım ara',
+                      prefixIcon: const Icon(Icons.search, color: _muted),
+                      filled: true,
+                      fillColor: _sheetBg.withValues(alpha: 0.9),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.12),
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(color: _accent),
                       ),
                     ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: const BorderSide(color: _accent),
-                    ),
+                    onChanged: (v) => setState(() => _query = v),
                   ),
-                  onChanged: (v) => setState(() => _query = v),
-                ),
-                const SizedBox(height: 12),
+                  const SizedBox(height: 12),
+                ],
                 if (missing > 0)
                   Container(
                     margin: const EdgeInsets.only(bottom: 12),
@@ -1807,24 +1898,133 @@ Future<T?> _showAdminSheet<T>({
   );
 }
 
-class _AdminPageScaffold extends StatelessWidget {
+class _AdminPageScaffold extends StatefulWidget {
   const _AdminPageScaffold({
     required this.title,
     required this.body,
     this.actions,
+    this.leagueId,
+    this.bandSubtitle,
+    this.leagueName,
+    this.leagueLogoUrl,
+    this.floatingActionButton,
   });
 
   final String title;
   final Widget body;
   final List<Widget>? actions;
+  final Widget? floatingActionButton;
+
+  /// Verilirse başlık çubuğu yok: üst bantta solda geri, ortada turnuvanın
+  /// logosu ve adı, altında küçük puntoyla [bandSubtitle]; [actions] bandın
+  /// sağında.
+  final String? leagueId;
+  final String? bandSubtitle;
+
+  /// Turnuvanın teması gelene kadar bantta gösterilecek ad / logo.
+  final String? leagueName;
+  final String? leagueLogoUrl;
+
+  @override
+  State<_AdminPageScaffold> createState() => _AdminPageScaffoldState();
+}
+
+class _AdminPageScaffoldState extends State<_AdminPageScaffold> {
+  /// Turnuva teması önbelleği: sezon → grup → takımlar arasında bant
+  /// beklemeden dolu gelir.
+  static final _themes = <String, TournamentTheme>{};
+
+  ModalRoute<dynamic>? _route;
+
+  String get _leagueId => (widget.leagueId ?? '').trim();
+
+  @override
+  void initState() {
+    super.initState();
+    final id = _leagueId;
+    if (id.isEmpty) return;
+    if (!_themes.containsKey(id) && (widget.leagueName ?? '').isNotEmpty) {
+      final seed = TournamentTheme.fromRow({
+        'id': id,
+        'name': widget.leagueName,
+        'logo_url': widget.leagueLogoUrl,
+      });
+      if (seed != null) _themes[id] = seed;
+    }
+    _loadTheme(id);
+  }
+
+  Future<void> _loadTheme(String id) async {
+    try {
+      final row = await Supabase.instance.client
+          .from('leagues')
+          .select(
+            'id, name, short_name, logo_url, theme_primary, theme_secondary',
+          )
+          .eq('id', id)
+          .maybeSingle();
+      final theme = row == null ? null : TournamentTheme.fromRow(row);
+      if (theme == null || !mounted) return;
+      _themes[id] = theme;
+      _syncBand();
+    } catch (e) {
+      debugPrint('Turnuva teması okunamadı: $e');
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _route = ModalRoute.of(context);
+    _syncBand();
+  }
+
+  @override
+  void didUpdateWidget(covariant _AdminPageScaffold oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncBand();
+  }
+
+  @override
+  void dispose() {
+    if (_leagueId.isNotEmpty) LeagueSwitchScope.setPageBand(_route, null);
+    super.dispose();
+  }
+
+  void _syncBand() {
+    final theme = _themes[_leagueId];
+    if (theme == null) return;
+    final actions = widget.actions ?? const <Widget>[];
+    LeagueSwitchScope.setPageBand(
+      _route,
+      PageBand(
+        theme: theme,
+        subtitle: widget.bandSubtitle,
+        onBack: () => Navigator.of(context).maybePop(),
+        trailing: actions.isEmpty
+            ? null
+            : Material(
+                type: MaterialType.transparency,
+                child: Row(mainAxisSize: MainAxisSize.min, children: actions),
+              ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (_leagueId.isNotEmpty) {
+      return Scaffold(
+        backgroundColor: _bgDark,
+        floatingActionButton: widget.floatingActionButton,
+        body: SafeArea(top: false, child: widget.body),
+      );
+    }
     return Scaffold(
       backgroundColor: _bgDark,
       extendBodyBehindAppBar: true,
-      appBar: MasterClassAppBar(title: title, actions: actions),
-      body: Stack(children: [SafeArea(child: body)]),
+      appBar: MasterClassAppBar(title: widget.title, actions: widget.actions),
+      body: Stack(children: [SafeArea(child: widget.body)]),
     );
   }
 }
@@ -2806,18 +3006,8 @@ class _SeasonRegionsScreenState extends State<SeasonRegionsScreen> {
           title: widget.seasonName.trim().isEmpty
               ? 'Bölgeler'
               : widget.seasonName,
-          actions: [
-            if (full)
-              IconButton(
-                onPressed: o == null ? null : () => _add(regions),
-                icon: const Icon(
-                  Icons.add_location_alt_outlined,
-                  color: Colors.white,
-                  size: 26,
-                ),
-                tooltip: 'Bölge Ekle',
-              ),
-          ],
+          leagueId: widget.leagueId,
+          bandSubtitle: widget.seasonName,
           body: snap.hasError
               ? _EmptyText('Hata: ${snap.error}')
               : o == null
@@ -2849,7 +3039,7 @@ class _SeasonRegionsScreenState extends State<SeasonRegionsScreen> {
                           );
                         }(),
                       if (full)
-                        _AddDashedButton(
+                        _AddButton(
                           label: 'Bölge Ekle',
                           onTap: () => _add(regions),
                         ),
@@ -3216,75 +3406,29 @@ class _GroupCard extends StatelessWidget {
   }
 }
 
-/// Listenin sonundaki kesik çizgili "ekle" butonu.
-class _AddDashedButton extends StatelessWidget {
-  const _AddDashedButton({required this.label, required this.onTap});
+/// Listenin sonundaki "ekle" butonu (Yeni Sezon / Grup / Bölge Ekle):
+/// uygulamanın yeşil vurgu renginde dolu buton.
+class _AddButton extends StatelessWidget {
+  const _AddButton({required this.label, required this.onTap});
 
   final String label;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      style: OutlinedButton.styleFrom(
-        minimumSize: const Size.fromHeight(60),
-        foregroundColor: const Color(0xFFCBD5E1),
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.22)),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+    return FilledButton.icon(
+      style: FilledButton.styleFrom(
+        minimumSize: const Size.fromHeight(54),
+        backgroundColor: _accent,
+        foregroundColor: Colors.white,
+        disabledBackgroundColor: _accent.withValues(alpha: 0.4),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
       onPressed: onTap,
       icon: const Icon(Icons.add_rounded),
-      label: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
-    );
-  }
-}
-
-/// Grup listesinin altındaki "Sezondaki tüm takımlar" girişi.
-class _AllTeamsLink extends StatelessWidget {
-  const _AllTeamsLink({required this.count, required this.onTap});
-
-  final int? count;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        height: 56,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text.rich(
-                TextSpan(
-                  text: 'Sezondaki tüm takımlar',
-                  style: const TextStyle(
-                    color: Color(0xFFCBD5E1),
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
-                  children: [
-                    if (count != null)
-                      TextSpan(
-                        text: ' ($count)',
-                        style: const TextStyle(
-                          color: _muted,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-            const Icon(Icons.chevron_right_rounded, color: Color(0xFFCBD5E1)),
-          ],
-        ),
+      label: Text(
+        label,
+        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
       ),
     );
   }

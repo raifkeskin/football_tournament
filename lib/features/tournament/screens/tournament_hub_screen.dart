@@ -262,23 +262,15 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
                 // Başlık çubuğu yok: sekmeler doğrudan bandın altında.
                 return Scaffold(
                   backgroundColor: _bgDark,
+                  // Afiş paylaşma: sekmelerin yanında değil, sağ altta yüzer.
+                  floatingActionButton: _shareButton(group, accent),
                   body: SafeArea(
                     top: false,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _HubTabBar(
-                                controller: _tabs,
-                                accent: accent,
-                              ),
-                            ),
-                            _shareButton(group),
-                          ],
-                        ),
+                        _HubTabBar(controller: _tabs, accent: accent),
                         Expanded(
                           child: season == null || group == null
                               ? Center(
@@ -345,9 +337,17 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
     );
   }
 
-  /// Puan Durumu ve Fikstür sekmelerinde afiş paylaşma düğmesi.
-  Widget _shareButton(GroupModel? group) {
-    const icon = Icon(Icons.ios_share_rounded, color: Colors.white);
+  /// Puan Durumu ve Fikstür sekmelerinde sağ altta yüzen afiş paylaşma
+  /// düğmesi.
+  Widget? _shareButton(GroupModel? group, Color accent) {
+    Widget fab(VoidCallback onPressed) => FloatingActionButton(
+      heroTag: null,
+      tooltip: 'Afişi paylaş',
+      backgroundColor: accent,
+      foregroundColor: Colors.white,
+      onPressed: onPressed,
+      child: const Icon(Icons.ios_share_rounded),
+    );
     final seasonId = _seasonId;
     switch (TournamentHubTab.values[_tabs.index]) {
       case TournamentHubTab.standings:
@@ -355,12 +355,10 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
         if (group == null ||
             seasonId == null ||
             AppSession.of(context).value.user == null) {
-          return const SizedBox.shrink();
+          return null;
         }
-        return IconButton(
-          tooltip: 'Paylaş',
-          icon: icon,
-          onPressed: () => shareGroupStandings(
+        return fab(
+          () => shareGroupStandings(
             context,
             leagueId: widget.leagueId,
             seasonId: seasonId,
@@ -370,17 +368,12 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
       case TournamentHubTab.fixture:
         return ValueListenableBuilder<VoidCallback?>(
           valueListenable: _fixtureShare,
-          builder: (context, share, _) => share == null
-              ? const SizedBox.shrink()
-              : IconButton(
-                  tooltip: 'Afişi paylaş',
-                  icon: icon,
-                  onPressed: share,
-                ),
+          builder: (context, share, _) =>
+              share == null ? const SizedBox.shrink() : fab(share),
         );
       case TournamentHubTab.stats:
       case TournamentHubTab.news:
-        return const SizedBox.shrink();
+        return null;
     }
   }
 }
