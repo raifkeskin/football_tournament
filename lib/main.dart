@@ -71,6 +71,13 @@ class _SplashScreenState extends State<SplashScreen>
   )..forward();
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Logo bant, menü ve afişlerde de anında çizilsin.
+    AppLogo.precache(context);
+  }
+
+  @override
   void dispose() {
     _anim.dispose();
     super.dispose();
@@ -149,7 +156,7 @@ class _SplashScreenState extends State<SplashScreen>
                   _reveal(
                     start: 0,
                     child: theme == null
-                        ? const AppLogo(size: 150, tile: false)
+                        ? const AppLogo(size: 150)
                         : WebSafeImage(
                             url: theme.logoUrl,
                             width: 170,

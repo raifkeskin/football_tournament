@@ -236,10 +236,11 @@ class _LoginBand extends StatelessWidget {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(13),
               child: Image.asset(
-                'assets/images/app_logo_sample.png',
+                AppLogo.asset,
                 width: 56,
                 height: 56,
                 fit: BoxFit.cover,
+                gaplessPlayback: true,
               ),
             ),
           ),

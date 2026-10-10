@@ -68,12 +68,14 @@ dev_dependencies:
   stack_trace: ^1.12.2
 
 flutter_launcher_icons:
-  # Görseller AppLogo çiziminden üretilir: flutter test tool/render_app_icons_test.dart
+  # Görseller ana logodan üretilir (design/app_logo_master.jpg):
+  # flutter test tool/render_app_icons_test.dart
   android: true
   ios: true
   image_path: "design/app_icon_ios.png"
   remove_alpha_ios: true
-  adaptive_icon_background: "#0F172A"
+  # Uyarlanabilir ikonda zemin logonun kendisi, ön yüz saydam.
+  adaptive_icon_background: "design/app_icon_android_bg.png"
   adaptive_icon_foreground: "design/app_icon_android_fg.png"
 
 flutter_native_splash:
