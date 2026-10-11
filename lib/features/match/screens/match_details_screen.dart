@@ -37,7 +37,11 @@ import 'package:football_tournament/core/widgets/admin_form.dart';
 import '../../player/services/penalty_service.dart';
 import '../../../core/widgets/app_name_band.dart';
 import '../../../core/widgets/youtube_player_page.dart'
-    show youtubePlayerOrigin, youtubeVideoId;
+    show
+        landscapeOnFullscreen,
+        resetPlayerOrientation,
+        youtubePlayerOrigin,
+        youtubeVideoId;
 
 // --- YARDIMCI WIDGETLAR ---
 
@@ -2285,7 +2289,15 @@ class _NativeYoutubeScreenState extends State<_NativeYoutubeScreen> {
       );
 
   @override
+  void initState() {
+    super.initState();
+    // Tam ekran düğmesi ekranı yataya çevirir.
+    landscapeOnFullscreen(_controller);
+  }
+
+  @override
   void dispose() {
+    resetPlayerOrientation();
     _controller.close();
     super.dispose();
   }

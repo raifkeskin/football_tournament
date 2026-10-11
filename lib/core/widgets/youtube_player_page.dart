@@ -1,8 +1,35 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
 const youtubePlayerOrigin = 'https://masterfutbol.web.app';
+
+/// Oynatıcı tam ekrana geçince ekran yataya döner (sistem çubukları gizli),
+/// çıkınca telefonun kendi yönüne bırakılır. Web'de bunu index.html'deki
+/// `fullscreenchange` dinleyicisi yapar.
+void landscapeOnFullscreen(YoutubePlayerController controller) {
+  if (kIsWeb) return;
+  controller.setFullScreenListener((full) {
+    if (full) {
+      SystemChrome.setPreferredOrientations(const [
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    } else {
+      resetPlayerOrientation();
+    }
+  });
+}
+
+/// Tam ekrandan çıkışta ya da oynatıcı kapanınca yönlendirmeyi geri verir.
+void resetPlayerOrientation() {
+  if (kIsWeb) return;
+  SystemChrome.setPreferredOrientations(const []);
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+}
 
 /// YouTube linkinden 11 karakterlik video kimliği (watch, youtu.be, embed,
 /// shorts, live); YouTube'a ait değilse null.
@@ -79,7 +106,14 @@ class _YoutubePlayerPageState extends State<_YoutubePlayerPage> {
   );
 
   @override
+  void initState() {
+    super.initState();
+    landscapeOnFullscreen(_controller);
+  }
+
+  @override
   void dispose() {
+    resetPlayerOrientation();
     _controller.close();
     super.dispose();
   }
