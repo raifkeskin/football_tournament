@@ -148,32 +148,24 @@ class SupabaseTeamService implements ITeamService {
                 if (gid.isNotEmpty) groupIds.add(gid);
               }
 
+              final (teamRows, groupRows) = await _teamsAndGroups(
+                teamIds,
+                groupIds,
+              );
               final teamById = <String, Map<String, dynamic>>{};
-              if (teamIds.isNotEmpty) {
-                final res = await _client
-                    .from('teams')
-                    .select()
-                    .inFilter('id', teamIds.toList());
-                for (final any in res) {
-                  final row = (any as Map).cast<String, dynamic>();
-                  final id = (row['id'] ?? '').toString().trim();
-                  if (id.isNotEmpty) teamById[id] = row;
-                }
+              for (final any in teamRows) {
+                final row = (any as Map).cast<String, dynamic>();
+                final id = (row['id'] ?? '').toString().trim();
+                if (id.isNotEmpty) teamById[id] = row;
               }
 
               final groupNameById = <String, String>{};
-              if (groupIds.isNotEmpty) {
-                final res = await _client
-                    .from('groups')
-                    .select('id, name')
-                    .inFilter('id', groupIds.toList());
-                for (final any in res) {
-                  final row = (any as Map).cast<String, dynamic>();
-                  final id = (row['id'] ?? '').toString().trim();
-                  if (id.isEmpty) continue;
-                  final name = (row['name'] ?? '').toString().trim();
-                  if (name.isNotEmpty) groupNameById[id] = name;
-                }
+              for (final any in groupRows) {
+                final row = (any as Map).cast<String, dynamic>();
+                final id = (row['id'] ?? '').toString().trim();
+                if (id.isEmpty) continue;
+                final name = (row['name'] ?? '').toString().trim();
+                if (name.isNotEmpty) groupNameById[id] = name;
               }
 
               final list = <Team>[];
@@ -244,32 +236,24 @@ class SupabaseTeamService implements ITeamService {
                 if (gid.isNotEmpty) groupIds.add(gid);
               }
 
+              final (teamRows, groupRows) = await _teamsAndGroups(
+                teamIds,
+                groupIds,
+              );
               final teamById = <String, Map<String, dynamic>>{};
-              if (teamIds.isNotEmpty) {
-                final res = await _client
-                    .from('teams')
-                    .select()
-                    .inFilter('id', teamIds.toList());
-                for (final any in res) {
-                  final row = (any as Map).cast<String, dynamic>();
-                  final id = (row['id'] ?? '').toString().trim();
-                  if (id.isNotEmpty) teamById[id] = row;
-                }
+              for (final any in teamRows) {
+                final row = (any as Map).cast<String, dynamic>();
+                final id = (row['id'] ?? '').toString().trim();
+                if (id.isNotEmpty) teamById[id] = row;
               }
 
               final groupNameById = <String, String>{};
-              if (groupIds.isNotEmpty) {
-                final res = await _client
-                    .from('groups')
-                    .select('id, name')
-                    .inFilter('id', groupIds.toList());
-                for (final any in res) {
-                  final row = (any as Map).cast<String, dynamic>();
-                  final id = (row['id'] ?? '').toString().trim();
-                  if (id.isEmpty) continue;
-                  final name = (row['name'] ?? '').toString().trim();
-                  if (name.isNotEmpty) groupNameById[id] = name;
-                }
+              for (final any in groupRows) {
+                final row = (any as Map).cast<String, dynamic>();
+                final id = (row['id'] ?? '').toString().trim();
+                if (id.isEmpty) continue;
+                final name = (row['name'] ?? '').toString().trim();
+                if (name.isNotEmpty) groupNameById[id] = name;
               }
 
               final out = <Map<String, dynamic>>[];
@@ -723,6 +707,25 @@ class SupabaseTeamService implements ITeamService {
           teamName: teamNames[teamByPlayer[p.id]],
         ),
     ];
+  }
+
+  /// Takım ve grup satırları tek turda (paralel) gelir.
+  Future<(List<Map<String, dynamic>>, List<Map<String, dynamic>>)>
+  _teamsAndGroups(Set<String> teamIds, Set<String> groupIds) async {
+    final r = await Future.wait<List<Map<String, dynamic>>>([
+      if (teamIds.isEmpty)
+        Future.value(const <Map<String, dynamic>>[])
+      else
+        _client.from('teams').select().inFilter('id', teamIds.toList()),
+      if (groupIds.isEmpty)
+        Future.value(const <Map<String, dynamic>>[])
+      else
+        _client
+            .from('groups')
+            .select('id, name')
+            .inFilter('id', groupIds.toList()),
+    ]);
+    return (r[0], r[1]);
   }
 
   /// Aramada i / ı / İ / I eşdeğer sayılır (Türkçe ve yabancı isimler).
@@ -2331,32 +2334,21 @@ class SupabaseTeamService implements ITeamService {
           if (gid.isNotEmpty) groupIds.add(gid);
         }
 
+        final (teamRows, groupRows) = await _teamsAndGroups(teamIds, groupIds);
         final teamById = <String, Map<String, dynamic>>{};
-        if (teamIds.isNotEmpty) {
-          final res = await _client
-              .from('teams')
-              .select()
-              .inFilter('id', teamIds.toList());
-          for (final any in res) {
-            final row = (any as Map).cast<String, dynamic>();
-            final tid = (row['id'] ?? '').toString().trim();
-            if (tid.isNotEmpty) teamById[tid] = row;
-          }
+        for (final any in teamRows) {
+          final row = (any as Map).cast<String, dynamic>();
+          final tid = (row['id'] ?? '').toString().trim();
+          if (tid.isNotEmpty) teamById[tid] = row;
         }
 
         final groupNameById = <String, String>{};
-        if (groupIds.isNotEmpty) {
-          final res = await _client
-              .from('groups')
-              .select('id, name')
-              .inFilter('id', groupIds.toList());
-          for (final any in res) {
-            final row = (any as Map).cast<String, dynamic>();
-            final gid = (row['id'] ?? '').toString().trim();
-            if (gid.isEmpty) continue;
-            final name = (row['name'] ?? '').toString().trim();
-            if (name.isNotEmpty) groupNameById[gid] = name;
-          }
+        for (final any in groupRows) {
+          final row = (any as Map).cast<String, dynamic>();
+          final gid = (row['id'] ?? '').toString().trim();
+          if (gid.isEmpty) continue;
+          final name = (row['name'] ?? '').toString().trim();
+          if (name.isNotEmpty) groupNameById[gid] = name;
         }
 
         final list = <Team>[];

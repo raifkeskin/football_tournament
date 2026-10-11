@@ -45,10 +45,12 @@ class _StandingsListScreenState extends State<StandingsListScreen> {
   Future<List<_Row>> _load(List<League> leagues) async {
     final sb = Supabase.instance.client;
     final ids = [for (final l in leagues) l.id];
-    final seasons =
-        (await sb.from('seasons').select().inFilter('league_id', ids))
-            .map((r) => Season.fromMap(r))
-            .toList();
+    // Sezonlar grupları ile tek istekte.
+    final seasonRows = await sb
+        .from('seasons')
+        .select('*, groups(id, name, season_id)')
+        .inFilter('league_id', ids);
+    final seasons = seasonRows.map((r) => Season.fromMap(r)).toList();
     // Her turnuvanın varsayılan (aktif) sezonu.
     final seasonOf = <String, String>{};
     for (final l in leagues) {
@@ -60,13 +62,13 @@ class _StandingsListScreenState extends State<StandingsListScreen> {
         );
       if (own.isNotEmpty) seasonOf[l.id] = pickDefaultSeasonId(own);
     }
-    final groups = seasonOf.isEmpty
-        ? const <Map<String, dynamic>>[]
-        : await sb
-              .from('groups')
-              .select('id, name, season_id')
-              .inFilter('season_id', seasonOf.values.toList())
-              .order('name');
+    final wanted = seasonOf.values.toSet();
+    final groups = [
+      for (final r in seasonRows)
+        if (wanted.contains(r['id'].toString()))
+          for (final g in (r['groups'] as List? ?? const []))
+            (g as Map).cast<String, dynamic>(),
+    ]..sort((a, b) => '${a['name']}'.compareTo('${b['name']}'));
     final rows = <_Row>[];
     for (final l in leagues) {
       final sId = seasonOf[l.id];

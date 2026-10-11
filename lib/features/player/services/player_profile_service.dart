@@ -363,24 +363,25 @@ class PlayerProfileService {
       if (p.isNotEmpty) pitchIds.add(p);
     }
     teamIds.remove('');
-    final teams = {
-      for (final t
-          in await _client
-              .from('teams')
-              .select('id, name, logo_url, first_color')
-              .inFilter('id', teamIds.toList()))
-        t['id'].toString(): t,
+    // Takımlar ve sahalar aynı turda (paralel).
+    final fetched = await Future.wait<List<Map<String, dynamic>>>([
+      _client
+          .from('teams')
+          .select('id, name, logo_url, first_color')
+          .inFilter('id', teamIds.toList()),
+      if (pitchIds.isEmpty)
+        Future.value(const <Map<String, dynamic>>[])
+      else
+        _client
+            .from('pitches')
+            .select('id, name')
+            .inFilter('id', pitchIds.toList()),
+    ]);
+    final teams = {for (final t in fetched[0]) t['id'].toString(): t};
+    final pitches = {
+      for (final p in fetched[1])
+        p['id'].toString(): (p['name'] ?? '').toString(),
     };
-    final pitches = pitchIds.isEmpty
-        ? const <String, String>{}
-        : {
-            for (final p
-                in await _client
-                    .from('pitches')
-                    .select('id, name')
-                    .inFilter('id', pitchIds.toList()))
-              p['id'].toString(): (p['name'] ?? '').toString(),
-          };
 
     return rows.map((r) {
       final m = MatchModel.fromMap(r, r['id'].toString());

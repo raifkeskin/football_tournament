@@ -295,8 +295,14 @@ class SupabaseMatchService implements IMatchService {
       if (cached != null) yield cached;
       // Bitmiş maçın olayları değişmez: bir kez okunur, canlı bağlantı
       // açılmaz (arka plandan dönüşte de yeniden okunmaz).
+      // Önbellek yoksa olaylar durumla aynı anda istenir (tek tur).
+      final early = cached == null ? _fetchInlineMatchEvents(id) : null;
       final finished = await _matchStatus(id) == 'finished';
-      if (!finished || cached == null) yield await _fetchInlineMatchEvents(id);
+      if (early != null) {
+        yield await early;
+      } else if (!finished) {
+        yield await _fetchInlineMatchEvents(id);
+      }
       if (finished) {
         await for (final _ in _localChanges.stream.where((m) => m == id)) {
           yield await _fetchInlineMatchEvents(id);
@@ -962,8 +968,14 @@ class SupabaseMatchService implements IMatchService {
     if (cached != null) yield cached;
     // Maç başladıktan sonra esame değişmez: bir kez okunur, canlı bağlantı
     // açılmaz (arka plandan dönüşte de yeniden okunmaz).
+    // Önbellek yoksa esame durumla aynı anda istenir (tek tur).
+    final early = cached == null ? _fetchMatchRosters(matchId) : null;
     final started = _startedStatuses.contains(await _matchStatus(matchId));
-    if (!started || cached == null) yield await _fetchMatchRosters(matchId);
+    if (early != null) {
+      yield await early;
+    } else if (!started) {
+      yield await _fetchMatchRosters(matchId);
+    }
     if (started) {
       await for (final _ in _localChanges.stream.where((m) => m == matchId)) {
         yield await _fetchMatchRosters(matchId);
@@ -1140,17 +1152,22 @@ class SupabaseMatchService implements IMatchService {
   final Map<String, Stream<List<PlayerStats>>> _statsFeeds = {};
 
   Future<List<PlayerStats>> _loadSeasonStats(String seasonId) async {
-    final matchesRes = await _client
-        .from('matches')
-        .select('id, status')
-        .eq('season_id', seasonId);
+    // Maçlar, olaylar ve kadrolar sezona göre tek turda (paralel) okunur;
+    // olay/kadro satırları season_id'yi maçtan kopyalar (tetikleyici).
+    final fetched = await Future.wait<List<Map<String, dynamic>>>([
+      _client.from('matches').select('id, status').eq('season_id', seasonId),
+      _client.from('match_events').select().eq('season_id', seasonId),
+      _client
+          .from('match_rosters')
+          .select('match_id, player_id, team_id')
+          .eq('season_id', seasonId),
+    ]);
     final matchIds = <String>[];
     // Oynanmış (bitmiş / sürüyor) maçlar: maç sayısı yalnız bunlardan sayılır;
     // önceden girilmiş kadro oynanmamış maçı saydırmasın.
     final played = <String>{};
     final unplayed = <String>{};
-    for (final any in matchesRes) {
-      final m = any as Map;
+    for (final m in fetched[0]) {
       final id = (m['id'] ?? '').toString().trim();
       if (id.isEmpty) continue;
       matchIds.add(id);
@@ -1158,32 +1175,20 @@ class SupabaseMatchService implements IMatchService {
       if (st == 'finished' || st == 'live' || st == 'halftime') played.add(id);
       if (st == 'cancelled' || st == 'postponed') unplayed.add(id);
     }
-
-    final results = matchIds.isEmpty
-        ? const <List<Map<String, dynamic>>>[[], []]
-        : await Future.wait([
-            _client
-                .from('match_events')
-                .select()
-                // Ertelenen / iptal maçın olayları istatistiğe sayılmaz.
-                .inFilter(
-                  'match_id',
-                  matchIds.where((id) => !unplayed.contains(id)).toList(),
-                )
-                .then(
-                  (r) => r.map((e) => Map<String, dynamic>.from(e)).toList(),
-                ),
-            played.isEmpty
-                ? Future.value(const <Map<String, dynamic>>[])
-                : _client
-                      .from('match_rosters')
-                      .select('match_id, player_id, team_id')
-                      .inFilter('match_id', played.toList())
-                      .then(
-                        (r) =>
-                            r.map((e) => Map<String, dynamic>.from(e)).toList(),
-                      ),
-          ]);
+    final known = matchIds.toSet();
+    String mid(Map<String, dynamic> r) => (r['match_id'] ?? '').toString();
+    final results = [
+      // Ertelenen / iptal maçın olayları istatistiğe sayılmaz.
+      [
+        for (final e in fetched[1])
+          if (known.contains(mid(e)) && !unplayed.contains(mid(e)))
+            Map<String, dynamic>.from(e),
+      ],
+      [
+        for (final r in fetched[2])
+          if (played.contains(mid(r))) Map<String, dynamic>.from(r),
+      ],
+    ];
     _seasonMatchIds[seasonId] = matchIds.toSet();
     _seasonEventIds[seasonId] = {
       for (final e in results[0]) (e['id'] ?? '').toString(),
