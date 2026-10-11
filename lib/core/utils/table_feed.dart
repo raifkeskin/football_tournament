@@ -26,6 +26,9 @@ final Map<String, List<Map<String, dynamic>>> _cache = {};
 ///   satır listeye işlenir (gol olunca tüm fikstür yeniden indirilmez).
 ///   Başka listelere ait silmeler yok sayılır. Satırda `id` yoksa liste
 ///   yeniden okunur.
+/// * Canlı maç tabloları Broadcast konularından dinlenir (bkz.
+///   [broadcastTopicFor]); konu süzgeçten çıkarılamıyorsa (ör. tarihe göre
+///   maçlar) [broadcastTopics] verilir.
 Stream<List<Map<String, dynamic>>> watchTableRows(
   SupabaseClient client, {
   required String table,
@@ -33,8 +36,10 @@ Stream<List<Map<String, dynamic>>> watchTableRows(
   String? value,
   String? orderBy,
   bool ascending = true,
+  List<String>? broadcastTopics,
 }) {
-  final key = '$table|$column=$value|$orderBy|$ascending';
+  final key =
+      '$table|$column=$value|$orderBy|$ascending|${broadcastTopics?.join(',')}';
   final scopes = _scopesFor(table, column, value);
   final persist = scopes != null && !_memoryOnly.contains(table);
   return _feeds.putIfAbsent(key, () {
@@ -79,6 +84,7 @@ Stream<List<Map<String, dynamic>>> watchTableRows(
         table: table,
         column: column,
         value: value,
+        broadcastTopics: broadcastTopics,
       )) {
         final next = applyRowChange(
           rows,

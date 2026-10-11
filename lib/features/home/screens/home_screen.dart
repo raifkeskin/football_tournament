@@ -102,6 +102,10 @@ class _HomeScreenState extends State<HomeScreen> {
       table: 'matches',
       column: 'match_date',
       value: key,
+      // Görünen turnuvaların canlı maç yayınları (Broadcast).
+      broadcastTopics: [
+        for (final id in _visibleLeagueIds.toList()..sort()) 'league:$id',
+      ],
     );
     return feed.map(
       (rows) => rows

@@ -31,6 +31,6 @@ STAMP=$(date +%Y%m%d-%H%M)
 WRITER=$!
 trap 'kill $WRITER 2>/dev/null || true' EXIT
 k6 run \
-  -e MODE="$MODE" -e MATCH_ID="$MATCH" -e SEASON_ID="$SEASON" -e REFETCH="${REFETCH:-0}" -e SUPABASE_URL="$URL" -e SUPABASE_ANON_KEY="$KEY" \
+  -e MODE="$MODE" -e MATCH_ID="$MATCH" -e SEASON_ID="$SEASON" -e REFETCH="${REFETCH:-0}" -e BROADCAST="${BROADCAST:-1}" -e SUPABASE_URL="$URL" -e SUPABASE_ANON_KEY="$KEY" \
   --summary-export "$OUT/summary-live-$MODE-$STAMP.json" \
   tool/loadtest/live_match.js 2>&1 | tee "$OUT/log-live-$MODE-$STAMP.txt"

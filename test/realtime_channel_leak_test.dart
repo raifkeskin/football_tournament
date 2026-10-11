@@ -77,4 +77,53 @@ void main() {
     }
     expect(client.getChannels(), isEmpty);
   });
+
+  const m1 = '11111111-1111-4111-8111-111111111111';
+  const s1 = '22222222-2222-4222-8222-222222222222';
+
+  test('canlı maç tablolarının broadcast konusu', () {
+    expect(broadcastTopicFor('matches', 'id', m1), 'match:$m1');
+    expect(broadcastTopicFor('match_events', 'match_id', m1), 'match:$m1');
+    expect(broadcastTopicFor('match_rosters', 'match_id', m1), 'match:$m1');
+    expect(broadcastTopicFor('matches', 'season_id', s1), 'season:$s1');
+    expect(broadcastTopicFor('match_events', 'season_id', s1), 'season:$s1');
+    expect(broadcastTopicFor('matches', 'league_id', s1), 'league:$s1');
+    // Esame sezona yayınlanmaz; başka tablolar ve uuid olmayan değerler
+    // postgres_changes'te kalır.
+    expect(broadcastTopicFor('match_rosters', 'season_id', s1), isNull);
+    expect(broadcastTopicFor('news', 'season_id', s1), isNull);
+    expect(broadcastTopicFor('matches', 'id', 'abc'), isNull);
+  });
+
+  test(
+    'aynı konuyu dinleyen akışlar tek kanalı paylaşır, sonra kapanır',
+    () async {
+      Stream<int> feed(String table) => resilientStream(() async* {
+        yield 0;
+        await for (final _ in realtimeRowChanges(
+          client,
+          table: table,
+          column: 'match_id',
+          value: m1,
+        )) {
+          yield 1;
+        }
+      });
+
+      for (var i = 0; i < 20; i++) {
+        final a = feed('match_events').listen((_) {});
+        final b = feed('match_rosters').listen((_) {});
+        await settle();
+        // İki akış da match:<id> konusunda: tek kanal.
+        expect(client.getChannels(), hasLength(1));
+        expect(client.getChannels().single.topic, 'realtime:match:$m1');
+        await a.cancel();
+        await settle();
+        expect(client.getChannels(), hasLength(1));
+        await b.cancel();
+        await settle();
+        expect(client.getChannels(), isEmpty);
+      }
+    },
+  );
 }

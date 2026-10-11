@@ -23,6 +23,8 @@ const MODE = __ENV.MODE || 'smoke';
 const MATCH = __ENV.MATCH_ID;
 const SEASON = __ENV.SEASON_ID;
 const REFETCH = __ENV.REFETCH === '1';
+// BROADCAST=0: eski yöntem (postgres_changes). Varsayılan: Broadcast konuları.
+const BROADCAST = __ENV.BROADCAST !== '0';
 const DEMO_EMAIL = __ENV.DEMO_EMAIL || '5000000000@masterclass.com';
 const DEMO_PASSWORD = __ENV.DEMO_PASSWORD || 'demo2026';
 
@@ -83,6 +85,19 @@ export function setup() {
   return { token: res.json('access_token') };
 }
 
+function joinTopic(socket, ref, topic, token) {
+  socket.send(JSON.stringify({
+    topic: `realtime:${topic}`,
+    event: 'phx_join',
+    ref: String(ref),
+    join_ref: String(ref),
+    payload: {
+      config: { broadcast: { ack: false, self: false }, presence: { key: '' }, private: true },
+      access_token: token,
+    },
+  }));
+}
+
 function join(socket, ref, table, column, value, token) {
   socket.send(JSON.stringify({
     topic: `realtime:sig:${table}:${column}=${value}:${__VU}-${__ITER}`,
@@ -111,9 +126,14 @@ export function fan(data) {
   let ref = 0;
   const res = ws.connect(wsUrl, {}, (socket) => {
     socket.on('open', () => {
-      join(socket, ++ref, 'matches', 'id', MATCH, t);
-      join(socket, ++ref, 'match_events', 'match_id', MATCH, t);
-      if (SEASON) join(socket, ++ref, 'match_events', 'season_id', SEASON, t);
+      if (BROADCAST) {
+        joinTopic(socket, ++ref, `match:${MATCH}`, t);
+        if (SEASON) joinTopic(socket, ++ref, `season:${SEASON}`, t);
+      } else {
+        join(socket, ++ref, 'matches', 'id', MATCH, t);
+        join(socket, ++ref, 'match_events', 'match_id', MATCH, t);
+        if (SEASON) join(socket, ++ref, 'match_events', 'season_id', SEASON, t);
+      }
       socket.setInterval(() => {
         socket.send(JSON.stringify({ topic: 'phoenix', event: 'heartbeat', payload: {}, ref: String(++ref) }));
       }, 25000);
@@ -123,7 +143,8 @@ export function fan(data) {
     socket.on('message', (msg) => {
       let m;
       try { m = JSON.parse(msg); } catch (_) { return; }
-      if (m.event === 'phx_reply' && m.payload && m.payload.response && m.payload.response.postgres_changes) {
+      if (m.event === 'phx_reply' && m.payload && m.payload.response &&
+          (m.payload.response.postgres_changes || (BROADCAST && m.payload.status === 'ok'))) {
         wsJoinOk.add(m.payload.status === 'ok');
         return;
       }
@@ -135,8 +156,10 @@ export function fan(data) {
         wsErrors.add(1);
         return;
       }
-      if (m.event === 'postgres_changes') {
-        const rec = (m.payload && m.payload.data && m.payload.data.record) || {};
+      if (m.event === 'postgres_changes' || (m.event === 'broadcast' && BROADCAST)) {
+        const rec = m.event === 'broadcast'
+          ? ((m.payload && m.payload.payload && m.payload.payload.record) || {})
+          : ((m.payload && m.payload.data && m.payload.data.record) || {});
         if (rec.updated_at) deliveryMs.add(Date.now() - Date.parse(rec.updated_at));
         delivered.add(1);
         if (!REFETCH) return;
