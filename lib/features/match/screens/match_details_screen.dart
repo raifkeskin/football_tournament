@@ -1,3 +1,4 @@
+import '../widgets/quick_score_dialog.dart';
 import '../../../core/services/active_tournament.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -677,6 +678,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     required int tabIndex,
     bool canAssignObserver = false,
     bool canUndo = false,
+    bool canQuickScore = false,
+    String homeName = '',
+    String awayName = '',
   }) {
     if (tabIndex == 1 || tabIndex == 3) return null;
 
@@ -684,6 +688,20 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
       return _SpeedDialFab(
         key: const ValueKey('fab_detail'),
         actions: [
+          if (canQuickScore &&
+              match.status != MatchStatus.postponed &&
+              match.status != MatchStatus.cancelled)
+            _SpeedDialAction(
+              label: 'Hızlı Skor Girişi',
+              icon: Icons.scoreboard_outlined,
+              onTap: () => showQuickScoreDialog(
+                context,
+                match: match,
+                homeName: homeName,
+                awayName: awayName,
+                onSaved: _triggerRefresh,
+              ),
+            ),
           _SpeedDialAction(
             label: 'Maç Detayı Gir',
             icon: Icons.edit_note_rounded,
@@ -865,6 +883,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                       tabIndex: _tabController.index,
                       canAssignObserver: canManageLeague,
                       canUndo: canManageLeague,
+                      canQuickScore: canManageLeague,
+                      homeName: homeName,
+                      awayName: awayName,
                     ),
               body: Column(
                 children: [
