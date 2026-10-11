@@ -107,6 +107,42 @@ class SupabaseMatchService implements IMatchService {
     final gId = (groupId ?? '').trim() == 'Tümü' ? '' : (groupId ?? '').trim();
     final key = '$id|$sId|$gId|$week';
 
+    // Sezon biliniyorsa: sezonun maçları tek ortak akıştan (cihazda saklı,
+    // canlı güncellenen) süzülür; sonuç başka cihazdan girilse de fikstür
+    // anında yenilenir.
+    if (sId.isNotEmpty) {
+      return watchTableRows(
+        _client,
+        table: 'matches',
+        column: 'season_id',
+        value: sId,
+        // Puan durumuyla aynı akış (tek kanal).
+        orderBy: 'match_date',
+      ).map((rows) {
+        final list =
+            rows
+                .where(
+                  (r) =>
+                      (r['league_id'] ?? '').toString() == id &&
+                      (gId.isEmpty ||
+                          (r['group_id'] ?? '').toString() == gId) &&
+                      r['week']?.toString() == '$week',
+                )
+                .toList()
+              ..sort(
+                (a, b) => '${b['created_at'] ?? ''}'.compareTo(
+                  '${a['created_at'] ?? ''}',
+                ),
+              );
+        final out = [
+          for (final r in list)
+            MatchModel.fromMap(r, (r['id'] ?? '').toString()),
+        ];
+        _fixtureCache[key] = out;
+        return out;
+      });
+    }
+
     Future<List<MatchModel>> fetch() async {
       var query = _client.from('matches').select().eq('league_id', id);
       if (sId.isNotEmpty) query = query.eq('season_id', sId);
