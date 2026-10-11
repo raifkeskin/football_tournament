@@ -6,6 +6,8 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/services/data_versions.dart';
+
 import '../../../core/services/active_tournament.dart';
 import '../../../core/services/app_session.dart';
 import '../../../core/widgets/web_safe_image.dart';
@@ -344,8 +346,26 @@ class _HomeDashboardState extends State<HomeDashboard> {
         }
       } catch (_) {}
     }
+    // Sunucudaki sürüm saklanan veriyle aynıysa sezon yeniden indirilmez
+    // (açılışta tek küçük istek).
+    final scopes = _versionScopes(_memCache[key]);
+    if (_memCache[key] != null && await VersionedCache.unchanged(key, scopes)) {
+      _fetchedAt[key] = DateTime.now();
+      if (mounted && _loadedFor == key) setState(() => _loadedOnce = true);
+      return;
+    }
     try {
+      // Sürüm, veriyle aynı anda istenir (fazladan tur yok).
+      final stampF = DataVersions.stamp(scopes);
       final raw = await _fetchRaw(session);
+      final stamp = await stampF;
+      // Sezon değiştiyse (yeni sezon) damga yeni sezona göre alınır.
+      final fresh = _versionScopes(raw);
+      final savedStamp = _sameScopes(fresh, scopes)
+          ? stamp
+          : await DataVersions.stamp(fresh);
+      // Yalnızca damga saklanır (veri zaten panonun kendi önbelleğinde).
+      unawaited(VersionedCache.save(key, true, savedStamp));
       _memCache[key] = raw;
       _fetchedAt[key] = DateTime.now();
       if (mounted && _loadedFor == key) {
@@ -368,6 +388,23 @@ class _HomeDashboardState extends State<HomeDashboard> {
       }
     }
   }
+
+  /// Panonun bağlı olduğu veri sürümleri: sezonun verisi + genel tablolar.
+  static List<String> _versionScopes(Map<String, dynamic>? raw) {
+    final season = raw?['season'];
+    final id = season is Map ? season['id']?.toString() : null;
+    return [
+      if (id != null) 'season:$id',
+      'seasons',
+      'teams',
+      'leagues',
+      'players',
+      'pitches',
+    ];
+  }
+
+  static bool _sameScopes(List<String> a, List<String> b) =>
+      a.length == b.length && a.every(b.contains);
 
   /// Sorgular: sezon (1 tur), ardından geri kalan her şey paralel (1 tur).
   Future<Map<String, dynamic>> _fetchRaw(AppSessionState session) async {

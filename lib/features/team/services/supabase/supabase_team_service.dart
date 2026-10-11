@@ -1,3 +1,5 @@
+import 'dart:async';
+import '../../../../core/services/data_versions.dart';
 import '../../../../core/utils/table_feed.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../interfaces/i_team_service.dart';
@@ -709,9 +711,21 @@ class SupabaseTeamService implements ITeamService {
     ];
   }
 
-  /// Takım ve grup satırları tek turda (paralel) gelir.
+  /// Takım ve grup satırları tek turda (paralel) gelir. Sonuç cihazda
+  /// saklanır; takım/grup sürümü değişmediyse sorgu atılmaz.
   Future<(List<Map<String, dynamic>>, List<Map<String, dynamic>>)>
   _teamsAndGroups(Set<String> teamIds, Set<String> groupIds) async {
+    final key = 'teams_groups:${_idsKey(teamIds)}:${_idsKey(groupIds)}';
+    const scopes = ['teams', 'groups'];
+    List<Map<String, dynamic>> rowsOf(Object? v) => [
+      for (final r in (v as List? ?? const []))
+        Map<String, dynamic>.from(r as Map),
+    ];
+    final cached = await VersionedCache.peek(key);
+    if (cached is Map && await VersionedCache.unchanged(key, scopes)) {
+      return (rowsOf(cached['t']), rowsOf(cached['g']));
+    }
+    final stampF = DataVersions.stamp(scopes);
     final r = await Future.wait<List<Map<String, dynamic>>>([
       if (teamIds.isEmpty)
         Future.value(const <Map<String, dynamic>>[])
@@ -725,7 +739,17 @@ class SupabaseTeamService implements ITeamService {
             .select('id, name')
             .inFilter('id', groupIds.toList()),
     ]);
+    unawaited(VersionedCache.save(key, {'t': r[0], 'g': r[1]}, await stampF));
     return (r[0], r[1]);
+  }
+
+  /// Kimlik kümesinin kısa ve kararlı anahtarı (FNV-1a).
+  static String _idsKey(Set<String> ids) {
+    var h = 0x811c9dc5;
+    for (final c in (ids.toList()..sort()).join(',').codeUnits) {
+      h = ((h ^ c) * 0x01000193) & 0xffffffff;
+    }
+    return '${ids.length}-${h.toRadixString(16)}';
   }
 
   /// Aramada i / ı / İ / I eşdeğer sayılır (Türkçe ve yabancı isimler).

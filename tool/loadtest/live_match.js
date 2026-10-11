@@ -1,13 +1,15 @@
 // Lig Masası maç günü testi (k6): canlı maçı izleyen kalabalık.
 //
-// Her sanal kullanıcı = maç detayını açık tutan bir kişi: uygulamadaki gibi
-// matches (id=...) ve match_events (match_id=...) kanallarına abone olur;
-// maç güncellenince sinyal gelir ve uygulama gibi maçı + olayları yeniden
-// okur. Skoru yazan taraf live_match.sh içindeki psql döngüsüdür (demo maçta
-// skoru aynı değerle günceller: bildirim tetiklenmez, veri değişmez).
+// Her sanal kullanıcı = maç detayını ve istatistiği açık tutan bir kişi:
+// uygulamadaki gibi matches (id=...), match_events (match_id=...) ve sezon
+// istatistiği için match_events (season_id=...) kanallarına abone olur.
+// Uygulama gelen satırı doğrudan ekrana işler; yeniden okumaz (REFETCH=1
+// verilirse eski davranış: her sinyalde maç + olaylar yeniden okunur).
+// Yazan taraf live_match.sh içindeki psql döngüsüdür (demo maçta skoru ve bir
+// olayı aynı değerle günceller: bildirim tetiklenmez, veri değişmez).
 //
-// Ölçülen: güncellemenin aboneye ulaşma süresi (veritabanı saatinden), sinyal
-// sonrası yeniden okuma süresi, kanal katılımı ve hatalar.
+// Ölçülen: güncellemenin aboneye ulaşma süresi (veritabanı saatinden),
+// kanal katılımı ve hatalar.
 //
 // Çalıştırma: tool/loadtest/live_match.sh smoke | full
 import http from 'k6/http';
@@ -19,6 +21,8 @@ const URL = __ENV.SUPABASE_URL;
 const KEY = __ENV.SUPABASE_ANON_KEY;
 const MODE = __ENV.MODE || 'smoke';
 const MATCH = __ENV.MATCH_ID;
+const SEASON = __ENV.SEASON_ID;
+const REFETCH = __ENV.REFETCH === '1';
 const DEMO_EMAIL = __ENV.DEMO_EMAIL || '5000000000@masterclass.com';
 const DEMO_PASSWORD = __ENV.DEMO_PASSWORD || 'demo2026';
 
@@ -79,9 +83,9 @@ export function setup() {
   return { token: res.json('access_token') };
 }
 
-function join(socket, ref, table, column, token) {
+function join(socket, ref, table, column, value, token) {
   socket.send(JSON.stringify({
-    topic: `realtime:sig:${table}:${column}=${MATCH}:${__VU}-${__ITER}`,
+    topic: `realtime:sig:${table}:${column}=${value}:${__VU}-${__ITER}`,
     event: 'phx_join',
     ref: String(ref),
     join_ref: String(ref),
@@ -90,7 +94,7 @@ function join(socket, ref, table, column, token) {
         broadcast: { ack: false, self: false },
         presence: { key: '' },
         postgres_changes: ['INSERT', 'UPDATE', 'DELETE'].map((event) => ({
-          event, schema: 'public', table, filter: `${column}=eq.${MATCH}`,
+          event, schema: 'public', table, filter: `${column}=eq.${value}`,
         })),
       },
       access_token: token,
@@ -107,8 +111,9 @@ export function fan(data) {
   let ref = 0;
   const res = ws.connect(wsUrl, {}, (socket) => {
     socket.on('open', () => {
-      join(socket, ++ref, 'matches', 'id', t);
-      join(socket, ++ref, 'match_events', 'match_id', t);
+      join(socket, ++ref, 'matches', 'id', MATCH, t);
+      join(socket, ++ref, 'match_events', 'match_id', MATCH, t);
+      if (SEASON) join(socket, ++ref, 'match_events', 'season_id', SEASON, t);
       socket.setInterval(() => {
         socket.send(JSON.stringify({ topic: 'phoenix', event: 'heartbeat', payload: {}, ref: String(++ref) }));
       }, 25000);
@@ -134,7 +139,7 @@ export function fan(data) {
         const rec = (m.payload && m.payload.data && m.payload.data.record) || {};
         if (rec.updated_at) deliveryMs.add(Date.now() - Date.parse(rec.updated_at));
         delivered.add(1);
-        // Uygulama sinyalde maçı ve olayları yeniden okur.
+        if (!REFETCH) return;
         const s = Date.now();
         get(t, `matches?select=*&id=eq.${MATCH}`, 'match_refetch');
         get(t, `match_events?select=*&match_id=eq.${MATCH}&order=minute.asc`, 'events_refetch');
