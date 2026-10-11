@@ -182,9 +182,11 @@ class _MainNavigatorState extends State<MainNavigator> {
               !session.value.hasManagementPanel &&
               !session.value.isAdmin),
       calendarTab: _aktifSekme == MainNavigator.fixtureTab,
-      // Yayın Rehberi tüm turnuvaların maçlarını gösterir: bantta turnuva
-      // adı yok.
-      genericTab: _aktifSekme == MainNavigator.broadcastTab,
+      // Yayın Rehberi (tüm turnuvalar) ve Profil turnuvaya bağlı değil:
+      // bantta turnuva yerine uygulama logosu ve adı.
+      genericTab:
+          _aktifSekme == MainNavigator.broadcastTab ||
+          _aktifSekme == MainNavigator.profileTab,
       // Yayın Rehberi: bantta sağda takvim (gün seçimi).
       action: _aktifSekme == MainNavigator.broadcastTab
           ? const BandIconButton(

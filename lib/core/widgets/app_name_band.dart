@@ -63,7 +63,14 @@ class AppNameBand extends StatelessWidget {
               builder: (context, _) {
                 // Uygulama bandı da (yönetim paneli, takvim) seçili
                 // turnuvanın renklerini alır; turnuva yoksa yeşil.
-                final tvlBand = _tvlBand(top, ActiveTournament.theme.value);
+                // Turnuvadan bağımsız bantta (yönetim paneli, profil, bildirim
+                // ekranları) logo ile uygulama adı; sağında sekme düğmesi
+                // olan bantta (Yayın Rehberi takvimi) yer yok, yalnız logo.
+                final tvlBand = _tvlBand(
+                  top,
+                  ActiveTournament.theme.value,
+                  showName: LeagueSwitchScope.tabAction.value == null,
+                );
                 // Yönetim panelinde turnuva kimliği yok: uygulama bandı.
                 // Giriş ekranı: rol kartlarının üstünde logo ve kısa tanıtım.
                 if (genericScreens.value > 0) return _loginBand(top);
