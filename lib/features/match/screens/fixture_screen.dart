@@ -757,6 +757,23 @@ class _MatchCard extends StatelessWidget {
 
   // Zaman çizelgesi satırı: solda saat/durum, ortada çizgi ve nokta, sağda
   // iki takımlı kart. Kazanan beyaz ve kalın, kaybeden soluk.
+  /// Planlanan saatten 2 saat geçti mi (saat yoksa hayır).
+  static bool _isOverdue(MatchModel m) {
+    final d = DateTime.tryParse((m.matchDate ?? '').trim());
+    final t = RegExp(
+      r'^(\d{1,2}):(\d{2})',
+    ).firstMatch((m.matchTime ?? '').trim());
+    if (d == null || t == null) return false;
+    final start = DateTime(
+      d.year,
+      d.month,
+      d.day,
+      int.parse(t.group(1)!),
+      int.parse(t.group(2)!),
+    );
+    return DateTime.now().isAfter(start.add(const Duration(hours: 2)));
+  }
+
   Widget _timelineItem(
     BuildContext context,
     String homeName,
@@ -772,14 +789,23 @@ class _MatchCard extends StatelessWidget {
     final isLive =
         match.status == MatchStatus.live ||
         match.status == MatchStatus.halftime;
-    final ({String text, Color color})? status = switch (match.status) {
-      MatchStatus.notStarted => null,
-      MatchStatus.finished => (text: 'MS', color: accent),
-      MatchStatus.halftime => (text: 'İY', color: live),
-      MatchStatus.live => (text: liveMinute ?? 'CANLI', color: live),
-      MatchStatus.cancelled => (text: 'İPT', color: Colors.white54),
-      MatchStatus.postponed => (text: 'ERT', color: Colors.white54),
-    };
+    // Sorumluya: maç saatinden 2 saat geçmiş, sonucu girilmemiş maç.
+    final overdue =
+        match.status != MatchStatus.finished &&
+        match.status != MatchStatus.postponed &&
+        match.status != MatchStatus.cancelled &&
+        _isOverdue(match) &&
+        AppSession.of(context).value.canManageLeague(match.leagueId);
+    final ({String text, Color color})? status = overdue
+        ? (text: 'SKOR?', color: const Color(0xFFF59E0B))
+        : switch (match.status) {
+            MatchStatus.notStarted => null,
+            MatchStatus.finished => (text: 'MS', color: accent),
+            MatchStatus.halftime => (text: 'İY', color: live),
+            MatchStatus.live => (text: liveMinute ?? 'CANLI', color: live),
+            MatchStatus.cancelled => (text: 'İPT', color: Colors.white54),
+            MatchStatus.postponed => (text: 'ERT', color: Colors.white54),
+          };
     final dotColor = isLive
         ? live
         : (match.status == MatchStatus.finished ? accent : Colors.white38);

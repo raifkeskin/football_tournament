@@ -9,6 +9,32 @@ import 'resilient_stream.dart';
 
 final Map<String, Stream<List<Map<String, dynamic>>>> _feeds = {};
 final Map<String, List<Map<String, dynamic>>> _cache = {};
+final _local = StreamController<(String, RowChange)>.broadcast();
+
+/// Satırı açık listelerden düşürür. Gizlenen (silindi olarak işaretlenen)
+/// satır artık okunamadığı için realtime'dan gelmez; işlemi yapan cihaz
+/// listesini bununla günceller.
+void announceRowRemoved(String table, String id) => _local.add((
+  table,
+  RowChange(PostgresChangeEvent.delete, const {}, {'id': id}),
+));
+
+Stream<RowChange> _withLocal(String table, Stream<RowChange> remote) {
+  late final StreamController<RowChange> c;
+  StreamSubscription<RowChange>? a;
+  StreamSubscription<(String, RowChange)>? b;
+  c = StreamController<RowChange>(
+    onListen: () {
+      a = remote.listen(c.add, onError: c.addError, onDone: c.close);
+      b = _local.stream.where((e) => e.$1 == table).listen((e) => c.add(e.$2));
+    },
+    onCancel: () async {
+      await b?.cancel();
+      await a?.cancel();
+    },
+  );
+  return c.stream;
+}
 
 /// `.stream(primaryKey: ...)` yerine kullanılan, sunucu tarafında filtrelenen
 /// satır akışı:
@@ -79,12 +105,15 @@ Stream<List<Map<String, dynamic>>> watchTableRows(
           ? cached
           : await fetch();
       if (!identical(rows, cached)) yield rows;
-      await for (final change in realtimeRowChanges(
-        client,
-        table: table,
-        column: column,
-        value: value,
-        broadcastTopics: broadcastTopics,
+      await for (final change in _withLocal(
+        table,
+        realtimeRowChanges(
+          client,
+          table: table,
+          column: column,
+          value: value,
+          broadcastTopics: broadcastTopics,
+        ),
       )) {
         final next = applyRowChange(
           rows,
@@ -149,7 +178,9 @@ List<Map<String, dynamic>>? applyRowChange(
   if (id == null) return const [];
   final index = rows.indexWhere((r) => r['id']?.toString() == id);
 
-  if (change.type == PostgresChangeEvent.delete) {
+  // Silindi olarak işaretlenen (gizlenen) satır listeden çıkar.
+  if (change.type == PostgresChangeEvent.delete ||
+      change.newRow['deleted_at'] != null) {
     if (index < 0) return null;
     return [...rows]..removeAt(index);
   }

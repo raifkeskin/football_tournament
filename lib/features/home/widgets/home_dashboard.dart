@@ -20,6 +20,7 @@ import '../../tournament/models/league.dart';
 import '../../tournament/screens/admin_penalty_management_screen.dart';
 import '../../tournament/screens/tournament_hub_screen.dart';
 import 'home_news_card.dart';
+import 'overdue_results_banner.dart';
 import '../../sponsors/sponsor_strip.dart';
 import '../../../core/utils/team_name.dart';
 import '../../../core/push/notification_prefs.dart';
@@ -312,6 +313,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
   }
 
   Future<void> _refresh() async {
+    OverdueResultsBanner.refresh.value++;
     final session = AppSession.of(context).value;
     await _revalidate(session, _cacheKey(session), fromDisk: false);
   }
@@ -794,7 +796,11 @@ class _HomeDashboardState extends State<HomeDashboard> {
             onRefresh: _refresh,
             child: ListView(
               padding: const EdgeInsets.only(bottom: 24),
-              children: [_greeting(session, data), content],
+              children: [
+                _greeting(session, data),
+                OverdueResultsBanner(leagueId: widget.league.id),
+                content,
+              ],
             ),
           ),
         ),
