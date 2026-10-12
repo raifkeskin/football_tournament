@@ -272,23 +272,8 @@ class _LoginBand extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(3),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              color: Colors.white.withValues(alpha: 0.15),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(13),
-              child: Image.asset(
-                AppLogo.asset,
-                width: 56,
-                height: 56,
-                fit: BoxFit.cover,
-                gaplessPlayback: true,
-              ),
-            ),
-          ),
+          // Zeminsiz arma: çerçeve yok, bandın rengi arkadan görünür.
+          const AppLogo(size: 62),
           const SizedBox(width: 14),
           Expanded(
             // Gizli admin girişi: ada üç kez dokunmak.

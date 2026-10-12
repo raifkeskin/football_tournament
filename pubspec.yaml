@@ -71,7 +71,7 @@ dev_dependencies:
   stack_trace: ^1.12.2
 
 flutter_launcher_icons:
-  # Görseller ana logodan üretilir (design/app_logo_master.jpg):
+  # Görseller ana logodan üretilir (design/app_logo_master.png):
   # flutter test tool/render_app_icons_test.dart
   android: true
   ios: true
