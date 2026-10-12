@@ -1045,9 +1045,16 @@ class _HomeDashboardState extends State<HomeDashboard> {
       }
     }
 
-    // Bu hafta: canlı ya da oynanmamış maçı olan ilk hafta.
+    // Bu hafta: canlı ya da oynanmamış maçı olan ilk hafta. Ertelenen /
+    // iptal edilen maç haftayı açık tutmaz (yoksa pano o haftada kalırdı).
     final openWeeks = sorted
-        .where((m) => m.status != MatchStatus.finished && inGroup(m))
+        .where(
+          (m) =>
+              m.status != MatchStatus.finished &&
+              m.status != MatchStatus.postponed &&
+              m.status != MatchStatus.cancelled &&
+              inGroup(m),
+        )
         .map((m) => m.week ?? 0)
         .toList();
     final thisWeek = openWeeks.isEmpty
@@ -1057,8 +1064,16 @@ class _HomeDashboardState extends State<HomeDashboard> {
         ? const <MatchModel>[]
         : sorted.where((m) => m.week == thisWeek && inGroup(m)).toList();
 
+    // Geçen hafta: bu haftadan önceki, bitmiş maçı olan son hafta (bu
+    // haftanın biten maçları yukarıda zaten görünür; aynı hafta iki kez
+    // gösterilmez).
     final finishedWeeks = sorted
-        .where((m) => m.status == MatchStatus.finished && inGroup(m))
+        .where(
+          (m) =>
+              m.status == MatchStatus.finished &&
+              inGroup(m) &&
+              (thisWeek == null || (m.week ?? 0) < thisWeek),
+        )
         .map((m) => m.week ?? 0)
         .toList();
     final lastWeek = finishedWeeks.isEmpty
