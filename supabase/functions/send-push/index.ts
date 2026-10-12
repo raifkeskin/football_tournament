@@ -16,7 +16,7 @@ import { importPKCS8, SignJWT } from "npm:jose@5.9.6";
 const PUSH_SECRET = Deno.env.get("PUSH_SECRET") ?? "";
 
 webpush.setVapidDetails(
-  Deno.env.get("VAPID_SUBJECT") ?? "https://masterfutbol.web.app",
+  Deno.env.get("VAPID_SUBJECT") ?? "https://ligmasasi.com",
   Deno.env.get("VAPID_PUBLIC_KEY") ?? "",
   Deno.env.get("VAPID_PRIVATE_KEY") ?? "",
 );

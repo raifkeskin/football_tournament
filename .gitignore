@@ -65,3 +65,7 @@ gen/
 # Supabase CLI
 supabase/.temp/
 tool/loadtest/results/
+
+# Firebase hizmet hesabı anahtarı asla depoya girmez
+firebase-sa.json
+*-sa.json

@@ -4,12 +4,8 @@ import 'package:football_tournament/core/services/error_reporter.dart';
 
 class _Counter extends StatefulWidget {
   const _Counter();
-  static int created = 0;
   @override
-  State<_Counter> createState() {
-    created++;
-    return _CounterState();
-  }
+  State<_Counter> createState() => _CounterState();
 }
 
 class _CounterState extends State<_Counter> {

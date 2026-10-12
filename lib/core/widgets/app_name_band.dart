@@ -60,7 +60,17 @@ class AppNameBand extends StatelessWidget {
                 LeagueSwitchScope.pageBand,
                 LeagueSwitchScope.tabAction,
               ]),
-              builder: (context, tvlBand) {
+              builder: (context, _) {
+                // Uygulama bandı da (yönetim paneli, takvim) seçili
+                // turnuvanın renklerini alır; turnuva yoksa yeşil.
+                // Turnuvadan bağımsız bantta (yönetim paneli, profil, bildirim
+                // ekranları) logo ile uygulama adı; sağında sekme düğmesi
+                // olan bantta (Yayın Rehberi takvimi) yer yok, yalnız logo.
+                final tvlBand = _tvlBand(
+                  top,
+                  ActiveTournament.theme.value,
+                  showName: LeagueSwitchScope.tabAction.value == null,
+                );
                 // Yönetim panelinde turnuva kimliği yok: uygulama bandı.
                 // Giriş ekranı: rol kartlarının üstünde logo ve kısa tanıtım.
                 if (genericScreens.value > 0) return _loginBand(top);
@@ -69,19 +79,17 @@ class AppNameBand extends StatelessWidget {
                 }
                 // Sayfa banda kendi içeriğini verdiyse (ör. Turnuva Sayfası).
                 final page = LeagueSwitchScope.pageBand.value;
-                // Temasız sayfa bandı (ör. Bildirim ayarları): kişinin
-                // turnuvası varsa onun bandı, yoksa uygulama bandı; solda
-                // geri.
-                final pageTheme =
-                    page?.theme ??
-                    (LeagueSwitchScope.panel.value ||
-                            LeagueSwitchScope.genericTab.value
-                        ? null
-                        : ActiveTournament.theme.value);
+                // Temasız sayfa bandı (ör. Bildirim ayarları): uygulama
+                // logosu ve adı (renk seçili turnuvanın), solda geri.
+                final pageTheme = page?.theme;
                 if (page != null && pageTheme == null) {
                   return Stack(
                     children: [
-                      tvlBand!,
+                      _tvlBand(
+                        top,
+                        ActiveTournament.theme.value,
+                        showName: true,
+                      ),
                       Positioned(
                         left: 4,
                         bottom: 3,
@@ -129,7 +137,7 @@ class AppNameBand extends StatelessWidget {
                   if (actions == null) {
                     return Stack(
                       children: [
-                        tvlBand!,
+                        tvlBand,
                         ?switcher,
                         if (LeagueSwitchScope.homeTab.value)
                           const Positioned(
@@ -142,7 +150,7 @@ class AppNameBand extends StatelessWidget {
                   }
                   return Stack(
                     children: [
-                      tvlBand!,
+                      tvlBand,
                       Positioned(
                         left: 4,
                         bottom: 3,
@@ -165,7 +173,6 @@ class AppNameBand extends StatelessWidget {
                 }
                 return _TournamentBand(theme: t, top: top, actions: actions);
               },
-              child: _tvlBand(top),
             ),
           ),
           Expanded(
@@ -182,20 +189,31 @@ class AppNameBand extends StatelessWidget {
 
   Widget _loginBand(double top) => _LoginBand(top: top);
 
-  Widget _tvlBand(double top) {
+  Widget _tvlBand(double top, TournamentTheme? theme, {bool showName = false}) {
+    final named = showName || kShowAppName;
     return Column(
       children: [
-        // Yeşil bant: solda logo (yazıdan büyük), yanında uygulama adı.
-        // Yazı tipi uygulamaya gömülü (pubspec fonts).
+        // Ortada uygulama logosu. Renk: seçili turnuvanın teması (turnuva
+        // bandıyla aynı), yoksa yeşil. Yazı tipi uygulamaya gömülü.
         Container(
           padding: EdgeInsets.only(top: top),
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [Color(0xFF064E3B), Color(0xFF10B981), Color(0xFF064E3B)],
+              colors: theme == null
+                  ? const [
+                      Color(0xFF064E3B),
+                      Color(0xFF10B981),
+                      Color(0xFF064E3B),
+                    ]
+                  : [theme.primaryDark, theme.primary, theme.primaryDark],
             ),
-            border: Border(bottom: BorderSide(color: Colors.white, width: 1.5)),
+            border: Border(
+              bottom: theme == null
+                  ? const BorderSide(color: Colors.white, width: 1.5)
+                  : BorderSide(color: theme.secondary, width: 2),
+            ),
           ),
-          child: const SizedBox(
+          child: SizedBox(
             height: 50,
             child: Stack(
               children: [
@@ -204,10 +222,10 @@ class AppNameBand extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      AppLogo(size: 40),
-                      if (kShowAppName) SizedBox(width: 12),
-                      if (kShowAppName)
-                        Text(
+                      const AppLogo(size: 40),
+                      if (named) const SizedBox(width: 12),
+                      if (named)
+                        const Text(
                           'LİG MASASI',
                           maxLines: 1,
                           style: TextStyle(

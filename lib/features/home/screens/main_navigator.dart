@@ -182,9 +182,11 @@ class _MainNavigatorState extends State<MainNavigator> {
               !session.value.hasManagementPanel &&
               !session.value.isAdmin),
       calendarTab: _aktifSekme == MainNavigator.fixtureTab,
-      // Yayın Rehberi tüm turnuvaların maçlarını gösterir: bantta turnuva
-      // adı yok.
-      genericTab: _aktifSekme == MainNavigator.broadcastTab,
+      // Yayın Rehberi (tüm turnuvalar) ve Profil turnuvaya bağlı değil:
+      // bantta turnuva yerine uygulama logosu ve adı.
+      genericTab:
+          _aktifSekme == MainNavigator.broadcastTab ||
+          _aktifSekme == MainNavigator.profileTab,
       // Yayın Rehberi: bantta sağda takvim (gün seçimi).
       action: _aktifSekme == MainNavigator.broadcastTab
           ? const BandIconButton(
@@ -239,16 +241,25 @@ class _MainNavigatorState extends State<MainNavigator> {
                 onTap: (i) => setState(() => _aktifSekme = i),
               )
             : null,
-        drawer: _MenuDrawer(
-          activeIndex: _aktifSekme,
-          session: session.value,
-          loggedIn: loggedIn,
-          onSelect: _sekmeDegistir,
-          onLogout: () => _cikisYap(session),
-          onEnterCode: () {
-            Navigator.of(context).pop(); // çekmeceyi kapat
-            showLeagueCodeDialog(this.context);
-          },
+        // Maç Takvimi'nde menü düğmesi ve tarih şeridi sayfanın içinde:
+        // çekmece onların altından açılır (üstüne binmez).
+        drawer: Padding(
+          padding: EdgeInsets.only(
+            top: _aktifSekme == MainNavigator.fixtureTab
+                ? kCalendarStripHeight
+                : 0,
+          ),
+          child: _MenuDrawer(
+            activeIndex: _aktifSekme,
+            session: session.value,
+            loggedIn: loggedIn,
+            onSelect: _sekmeDegistir,
+            onLogout: () => _cikisYap(session),
+            onEnterCode: () {
+              Navigator.of(context).pop(); // çekmeceyi kapat
+              showLeagueCodeDialog(this.context);
+            },
+          ),
         ),
         // Görülebilen turnuvalar değişince (giriş/çıkış, kod) ekranlar
         // baştan kurulur ve verilerini yeniden okur.

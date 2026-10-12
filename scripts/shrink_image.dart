@@ -1,3 +1,5 @@
+// Komut satırı aracı: çıktı konsola yazılır.
+// ignore_for_file: avoid_print
 // Tek bir görseli uygulamanın yükleme sınırlarına küçültür.
 // Kullanım: dart run scripts/shrink_image.dart <girdi> <çıktı-öneki> <logo|photo>
 // Çıktı: "ok <uzantı>" (küçüldü, dosya <önek>.<uzantı>) ya da "skip".

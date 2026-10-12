@@ -1,3 +1,5 @@
+// Komut satırı aracı: çıktı konsola yazılır.
+// ignore_for_file: avoid_print
 // Tek bir logonun açık arka planını temizler (uygulamadaki algoritma).
 // Kullanım: dart run scripts/clean_logo.dart <girdi> <çıktı.png> <önizleme.png>
 // Çıktı: "clean" (temizlendi), "skip" (köşeler açık/opak değil, gerek yok).

@@ -68,6 +68,30 @@ class SeasonManagementScreen extends StatelessWidget {
     return '$y-$m-$d';
   }
 
+  /// Sezon silinmez, gizlenir: hiçbir listede görünmez, verisi kalır
+  /// (geri alma veritabanından; bkz. 20261018200000_soft_delete_and_overdue).
+  Future<void> _deleteSeason(BuildContext sheetContext, Season season) async {
+    final messenger = ScaffoldMessenger.of(sheetContext);
+    final ok = await showAdminConfirmDialog(
+      context: sheetContext,
+      title: 'Sezon silinsin mi?',
+      message:
+          '${season.name} sezonu; grupları, maçları, kadroları ve '
+          'istatistikleriyle birlikte uygulamadan kaldırılacak. '
+          'Bu işlemi onaylıyor musunuz?',
+      confirmLabel: 'SEZONU SİL',
+    );
+    if (!ok) return;
+    try {
+      await _sb.rpc('soft_delete_season', params: {'p_season_id': season.id});
+      announceRowRemoved('seasons', season.id);
+      if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+      messenger.showSnackBar(const SnackBar(content: Text('Sezon silindi.')));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Hata: $e')));
+    }
+  }
+
   Future<void> _openSeasonSheet(BuildContext context, {Season? season}) async {
     final isEdit = season != null;
     final messenger = ScaffoldMessenger.of(context);
@@ -557,6 +581,13 @@ class SeasonManagementScreen extends StatelessWidget {
               saving: saving,
               onPressed: () => submit(sheetContext, setSheetState),
             ),
+            if (isEdit)
+              _DeleteButton(
+                label: 'SEZONU SİL',
+                onPressed: saving
+                    ? null
+                    : () => _deleteSeason(sheetContext, season),
+              ),
           ],
         );
       },
@@ -1322,12 +1353,44 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
               saving: saving,
               onPressed: () => submit(sheetContext, setSheetState),
             ),
+            _DeleteButton(
+              label: 'GRUBU SİL',
+              onPressed: saving ? null : () => _deleteGroup(sheetContext, g),
+            ),
           ],
         );
       },
     );
 
     _disposeControllersLater([controller]);
+  }
+
+  /// Grup silinmez, gizlenir; grubun maçları da listelerden kalkar.
+  /// Takımlar sezonda kalır (grupsuz görünür).
+  Future<void> _deleteGroup(BuildContext sheetContext, GroupModel g) async {
+    final messenger = ScaffoldMessenger.of(sheetContext);
+    final name = _formatGroupName(g.name);
+    final ok = await showAdminConfirmDialog(
+      context: sheetContext,
+      title: 'Grup silinsin mi?',
+      message:
+          '$name ve bu grubun maçları uygulamadan kaldırılacak. Takımlar '
+          'sezonda kalır. Bu işlemi onaylıyor musunuz?',
+      confirmLabel: 'GRUBU SİL',
+    );
+    if (!ok) return;
+    try {
+      await Supabase.instance.client.rpc(
+        'soft_delete_group',
+        params: {'p_group_id': g.id},
+      );
+      announceRowRemoved('groups', g.id);
+      if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+      messenger.showSnackBar(const SnackBar(content: Text('Grup silindi.')));
+      await _refreshTeamCounts();
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Hata: $e')));
+    }
   }
 
   Future<void> _openTeamAssignSheet(GroupModel group) async {
@@ -2072,6 +2135,36 @@ class _SheetHeader extends StatelessWidget {
           const SizedBox(height: 12),
           const Divider(color: Colors.white24, height: 1),
         ],
+      ),
+    );
+  }
+}
+
+/// Kaydet düğmesinin altında, kırmızı yazılı silme düğmesi.
+class _DeleteButton extends StatelessWidget {
+  const _DeleteButton({required this.label, required this.onPressed});
+
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: TextButton.icon(
+        onPressed: onPressed,
+        style: TextButton.styleFrom(
+          foregroundColor: kAdminDanger,
+          padding: const EdgeInsets.symmetric(vertical: 12),
+        ),
+        icon: const Icon(Icons.delete_outline_rounded, size: 20),
+        label: Text(
+          label,
+          style: const TextStyle(
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.2,
+          ),
+        ),
       ),
     );
   }

@@ -12,7 +12,6 @@ import '../../auth/widgets/phone_input.dart';
 import '../../home/screens/home_screen.dart';
 import '../../match/models/match.dart';
 import '../../match/screens/match_details_screen.dart';
-import '../../match/widgets/match_score_line.dart';
 import '../../team/screens/team_squad_screen.dart';
 import '../consent/consent_screen.dart';
 import '../consent/consent_service.dart';
@@ -301,12 +300,20 @@ class _MyProfileViewState extends State<MyProfileView> {
           ],
           if (widget.onSignOut != null) ...[
             const SizedBox(height: 24),
-            Center(
-              child: TextButton.icon(
-                onPressed: widget.onSignOut,
-                style: TextButton.styleFrom(foregroundColor: kAdminMuted),
-                icon: const Icon(Icons.logout_rounded, size: 18),
-                label: const Text('Çıkış yap / Hesabı sil'),
+            OutlinedButton.icon(
+              onPressed: widget.onSignOut,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: kAdminDanger,
+                side: BorderSide(color: kAdminDanger.withValues(alpha: 0.6)),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              icon: const Icon(Icons.logout_rounded, size: 18),
+              label: const Text(
+                'ÇIKIŞ YAP / HESABI SİL',
+                style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1),
               ),
             ),
           ],
@@ -1170,55 +1177,158 @@ class _MyProfileViewState extends State<MyProfileView> {
     );
   }
 
+  /// Listedeki maç: sıradaki maç kartıyla aynı tasarım (logolar, altında
+  /// adlar, ortada saat ya da skor), daha küçük ölçülerle.
   Widget _matchRow(TeamMatch m, {MyTeam? team}) {
     final at = m.startsAt;
-    final top = [
-      if (at != null) _dayLabel(at),
-      if ((m.pitchName ?? '').isNotEmpty) m.pitchName!,
-    ].join(' · ');
+    final st = m.match.status;
+    final live = st == MatchStatus.live || st == MatchStatus.halftime;
+    final unplayed = st == MatchStatus.cancelled || st == MatchStatus.postponed;
+    final played = st == MatchStatus.finished || live;
+    final time = (m.match.matchTime ?? '').trim();
+
+    Widget side(String name, String logo, String? color) => Expanded(
+      child: Column(
+        children: [
+          _teamLogo(logo, color, 34),
+          const SizedBox(height: 5),
+          Text(
+            shortTeamName(name),
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              height: 1.15,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    // Ortada: oynanmamış maçta saat; oynanan/canlı maçta yeşil kutuda skor,
+    // iptal/ertelenende kutuda İPT / ERT.
+    final Widget center;
+    if (played || unplayed) {
+      final color = live ? kAdminDanger : kAdminAccent;
+      center = Container(
+        width: 62,
+        height: 30,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: live
+              ? kAdminDanger.withValues(alpha: 0.22)
+              : const Color(0xFF064E3B),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withValues(alpha: 0.35)),
+        ),
+        child: Text(
+          unplayed
+              ? (st == MatchStatus.cancelled ? 'İPT' : 'ERT')
+              : '${m.match.homeScore} - ${m.match.awayScore}',
+          style: TextStyle(
+            color: live
+                ? kAdminDanger
+                : (unplayed ? Colors.white70 : Colors.white),
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+      );
+    } else {
+      center = Text(
+        time.length >= 5 ? time.substring(0, 5) : '--:--',
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 19,
+          fontWeight: FontWeight.w800,
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () => _openMatch(m.match),
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(8, 10, 8, 12),
-            decoration: _card(),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Birden fazla takımda: ortada turnuva rozeti, altında
-                // ortalı tarih · stat.
-                if (team != null)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(6, 0, 6, 6),
-                    child: Center(child: _teamBadge(team)),
-                  ),
-                if (top.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(6, 0, 6, 8),
-                    child: Text(
-                      top,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: team != null ? TextAlign.center : null,
-                      style: const TextStyle(
-                        color: kAdminMuted,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                MatchScoreLine(
-                  match: m.match,
-                  homeName: m.homeName,
-                  awayName: m.awayName,
-                  homeLogo: m.homeLogo,
-                  awayLogo: m.awayLogo,
+      child: Center(
+        // Sıradaki maç kartından dar: geniş ekranda da ortada sıkı durur.
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 330),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(18),
+              onTap: () => _openMatch(m.match),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+                decoration: _card().copyWith(
+                  borderRadius: BorderRadius.circular(18),
                 ),
-              ],
+                child: Column(
+                  children: [
+                    if (team != null) ...[
+                      Center(child: _teamBadge(team)),
+                      const SizedBox(height: 8),
+                    ],
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        side(m.homeName, m.homeLogo, m.homeColor),
+                        SizedBox(
+                          width: 86,
+                          child: Column(
+                            children: [
+                              const SizedBox(height: 3),
+                              center,
+                              if (at != null) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  _dayLabel(at),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: kAdminMuted,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        side(m.awayName, m.awayLogo, m.awayColor),
+                      ],
+                    ),
+                    if ((m.pitchName ?? '').isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.place_outlined,
+                            color: kAdminMuted,
+                            size: 13,
+                          ),
+                          const SizedBox(width: 3),
+                          Flexible(
+                            child: Text(
+                              m.pitchName!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: kAdminMuted,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ),
           ),
         ),

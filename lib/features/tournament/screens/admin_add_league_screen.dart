@@ -373,7 +373,7 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
         _endDate = null;
       });
     } catch (e) {
-      print('Turnuva ekleme hatası: $e');
+      debugPrint('Turnuva ekleme hatası: $e');
       if (!mounted) return;
       final msg = e.toString();
       final readable =

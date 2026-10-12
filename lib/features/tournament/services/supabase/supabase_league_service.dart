@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import '../../../../core/services/league_scope.dart';
 import '../../../../core/utils/table_feed.dart';
 import '../../../../core/utils/realtime_signal.dart';
@@ -174,10 +175,10 @@ class SupabaseLeagueService implements ILeagueService {
       throw Exception('Supabase INSERT sonucu boş döndü.');
     } catch (e) {
       AppConfig.sqlLogResult(table: 'leagues', operation: 'INSERT', error: e);
-      print('[SQL LOG] leagues INSERT hata: $e');
+      debugPrint('[SQL LOG] leagues INSERT hata: $e');
       final keys = Map<String, dynamic>.from(league.toMap(snakeCase: true))
         ..remove('groups');
-      print('[SQL LOG] leagues INSERT alanlar: ${keys.keys.toList()}');
+      debugPrint('[SQL LOG] leagues INSERT alanlar: ${keys.keys.toList()}');
       throw Exception('Supabase leagues INSERT hatası: $e');
     }
   }
@@ -229,8 +230,8 @@ class SupabaseLeagueService implements ILeagueService {
       AppConfig.sqlLogResult(table: 'leagues', operation: 'UPSERT', count: 1);
     } catch (e) {
       AppConfig.sqlLogResult(table: 'leagues', operation: 'UPSERT', error: e);
-      print('[SQL LOG] leagues UPSERT hata: $e');
-      print('[SQL LOG] leagues UPSERT id=$id');
+      debugPrint('[SQL LOG] leagues UPSERT hata: $e');
+      debugPrint('[SQL LOG] leagues UPSERT id=$id');
       throw Exception('Supabase leagues UPSERT hatası: $e');
     }
   }
