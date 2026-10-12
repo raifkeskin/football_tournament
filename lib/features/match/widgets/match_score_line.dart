@@ -82,24 +82,30 @@ class MatchScoreLine extends StatelessWidget {
     final showScore =
         !unplayed &&
         (match.status == MatchStatus.finished || isLive || hs != 0 || as != 0);
-    // Ad, kendi alanında skora yaslı durur; iki satıra inerse satırlar
-    // birbirine göre ortalanır.
-    Widget name(String text, Alignment align) => Align(
-      alignment: align,
-      child: Text(
-        shortTeamName(text),
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          fontWeight: FontWeight.w600,
-          fontSize: compact ? 11.5 : 12,
-          height: compact ? 1.05 : 1.15,
-          color: Colors.white,
-          fontFamily: 'Barlow',
+    // Ad, kendi alanında logoya yaslı durur; iki satıra inerse satırlar da
+    // logo tarafına hizalanır. Sonucu belli maçta yenen kalın, yenilen ince.
+    final decided = match.status == MatchStatus.finished && hs != as;
+    Widget name(String text, {required bool home}) {
+      final won = home ? hs > as : as > hs;
+      return Align(
+        alignment: home ? Alignment.centerRight : Alignment.centerLeft,
+        child: Text(
+          shortTeamName(text),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          textAlign: home ? TextAlign.right : TextAlign.left,
+          style: TextStyle(
+            fontWeight: !decided
+                ? FontWeight.w600
+                : (won ? FontWeight.w800 : FontWeight.w400),
+            fontSize: compact ? 11.5 : 12,
+            height: compact ? 1.05 : 1.15,
+            color: Colors.white,
+            fontFamily: 'Barlow',
+          ),
         ),
-      ),
-    );
+      );
+    }
 
     Widget logo(String url) => ColorFiltered(
       colorFilter: const ColorFilter.matrix([
@@ -181,7 +187,7 @@ class MatchScoreLine extends StatelessWidget {
         Expanded(
           child: Row(
             children: [
-              Expanded(child: name(homeName, Alignment.centerRight)),
+              Expanded(child: name(homeName, home: true)),
               if (showLogos) ...[const SizedBox(width: 5), logo(homeLogo)],
             ],
           ),
@@ -221,7 +227,7 @@ class MatchScoreLine extends StatelessWidget {
           child: Row(
             children: [
               if (showLogos) ...[logo(awayLogo), const SizedBox(width: 5)],
-              Expanded(child: name(awayName, Alignment.centerLeft)),
+              Expanded(child: name(awayName, home: false)),
             ],
           ),
         ),

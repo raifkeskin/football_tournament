@@ -1296,6 +1296,19 @@ class _MatchCardState extends State<_MatchCard> {
                             ),
                           ),
                         ],
+                        // Başlığa dokununca turnuva sayfası (puan durumu) açılır.
+                        Padding(
+                          padding: const EdgeInsets.only(left: 4),
+                          child: Icon(
+                            Icons.chevron_right_rounded,
+                            size: widget.compact ? 18 : 20,
+                            color: Color.lerp(
+                              Colors.white,
+                              widget.sectionAccent,
+                              0.56,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
