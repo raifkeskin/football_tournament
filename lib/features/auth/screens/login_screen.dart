@@ -13,6 +13,7 @@ import '../../home/screens/main_navigator.dart';
 import 'online_registration_screen.dart';
 import 'reset_password_screen.dart';
 import '../widgets/phone_input.dart';
+import '../password_input.dart';
 import '../../../core/widgets/admin_form.dart';
 
 /// Açılışta "Misafir olarak devam et" seçildi mi (cihazda saklanır).
@@ -428,17 +429,26 @@ class _LoginScreenState extends State<LoginScreen> {
                     enabled: !_loading,
                   ),
                   const SizedBox(height: 12),
-                  TextField(
-                    controller: _passwordController,
-                    focusNode: _passwordFocus,
-                    obscureText: true,
-                    onSubmitted: _loading ? null : (_) => _login(session),
-                    decoration: _fieldDecoration(
-                      label: 'Şifre',
-                      icon: Icons.lock_outline,
+                  ValueListenableBuilder<bool>(
+                    valueListenable: PasswordKeyboard.numeric,
+                    builder: (context, _, _) => TextField(
+                      controller: _passwordController,
+                      focusNode: _passwordFocus,
+                      obscureText: true,
+                      keyboardType: PasswordKeyboard.type,
+                      onSubmitted: _loading ? null : (_) => _login(session),
+                      decoration:
+                          _fieldDecoration(
+                            label: 'Şifre',
+                            icon: Icons.lock_outline,
+                          ).copyWith(
+                            suffixIcon: PasswordKeyboardToggle(
+                              focus: _passwordFocus,
+                            ),
+                          ),
+                      style: fieldText,
+                      enabled: !_loading,
                     ),
-                    style: fieldText,
-                    enabled: !_loading,
                   ),
                   const SizedBox(height: 6),
                   Row(

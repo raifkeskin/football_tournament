@@ -13,6 +13,7 @@ import '../../../core/widgets/admin_page.dart';
 import '../../home/screens/main_navigator.dart';
 import '../models/auth_models.dart';
 import '../widgets/phone_input.dart';
+import '../password_input.dart';
 
 /// SMS doğrulama açıkken Kayıt Ol / Şifremi Unuttum: telefona gelen 6 haneli
 /// kodla kişi kendi şifresini belirler ve doğrudan giriş yapar (admin onayı
@@ -37,6 +38,8 @@ class _SmsOtpFormState extends State<SmsOtpForm> {
   final _codeController = TextEditingController();
   final _pass1Controller = TextEditingController();
   final _pass2Controller = TextEditingController();
+  final _pass1Focus = FocusNode();
+  final _pass2Focus = FocusNode();
 
   bool _busy = false;
   String? _error;
@@ -54,11 +57,10 @@ class _SmsOtpFormState extends State<SmsOtpForm> {
     _codeController.dispose();
     _pass1Controller.dispose();
     _pass2Controller.dispose();
+    _pass1Focus.dispose();
+    _pass2Focus.dispose();
     super.dispose();
   }
-
-  static bool _lengthOk(String v) => v.length >= 6 && v.length <= 10;
-  static bool _hasDigitOrSpecial(String v) => RegExp(r'[^A-Za-z]').hasMatch(v);
 
   void _startResendTimer() {
     _timer?.cancel();
@@ -145,12 +147,16 @@ class _SmsOtpFormState extends State<SmsOtpForm> {
       setState(() => _error = 'SMS ile gelen 6 haneli kodu girin.');
       return;
     }
-    if (!_lengthOk(p1) || !_hasDigitOrSpecial(p1)) {
+    if (!PasswordRules.lengthOk(p1) || !PasswordRules.hasDigitOrSpecial(p1)) {
       setState(
         () => _error =
             'Şifre 6-10 karakter olmalı ve en az bir rakam veya özel '
             'karakter içermeli.',
       );
+      return;
+    }
+    if (PasswordRules.isWeak(p1, phone: raw10)) {
+      setState(() => _error = PasswordRules.weakMessage);
       return;
     }
     if (p1 != p2) {
@@ -250,9 +256,52 @@ class _SmsOtpFormState extends State<SmsOtpForm> {
     List<TextInputFormatter>? inputFormatters,
     Iterable<String>? autofillHints,
     bool obscure = false,
+    FocusNode? passwordFocus,
+  }) {
+    // Şifre alanı: rakam/harf klavyesi seçilebilir (ABC / 123 düğmesi).
+    final focus = passwordFocus;
+    if (focus != null) {
+      return ValueListenableBuilder<bool>(
+        valueListenable: PasswordKeyboard.numeric,
+        builder: (context, _, _) => _textField(
+          controller: controller,
+          hint: hint,
+          onSubmitted: onSubmitted,
+          keyboardType: PasswordKeyboard.type,
+          autofillHints: autofillHints,
+          obscure: obscure,
+          focus: focus,
+          suffix: PasswordKeyboardToggle(focus: focus),
+        ),
+      );
+    }
+    return _textField(
+      controller: controller,
+      hint: hint,
+      onSubmitted: onSubmitted,
+      keyboardType: keyboardType,
+      prefixText: prefixText,
+      inputFormatters: inputFormatters,
+      autofillHints: autofillHints,
+      obscure: obscure,
+    );
+  }
+
+  Widget _textField({
+    required TextEditingController controller,
+    required String hint,
+    required VoidCallback onSubmitted,
+    TextInputType? keyboardType,
+    String? prefixText,
+    List<TextInputFormatter>? inputFormatters,
+    Iterable<String>? autofillHints,
+    bool obscure = false,
+    FocusNode? focus,
+    Widget? suffix,
   }) {
     return TextField(
       controller: controller,
+      focusNode: focus,
       enabled: !_busy,
       keyboardType: keyboardType,
       obscureText: obscure,
@@ -265,10 +314,11 @@ class _SmsOtpFormState extends State<SmsOtpForm> {
         fontSize: 15,
         fontWeight: FontWeight.w700,
       ),
-      decoration: adminInlineInputDecoration(
-        hint: hint,
-        prefixText: prefixText,
-      ),
+      decoration: adminInlineInputDecoration(hint: hint, prefixText: prefixText)
+          .copyWith(
+            suffixIcon: suffix,
+            suffixIconConstraints: const BoxConstraints(),
+          ),
     );
   }
 
@@ -415,6 +465,7 @@ class _SmsOtpFormState extends State<SmsOtpForm> {
                 controller: _pass1Controller,
                 hint: '6-10 karakter',
                 obscure: true,
+                passwordFocus: _pass1Focus,
                 autofillHints: const [AutofillHints.newPassword],
                 onSubmitted: _verify,
               ),
@@ -426,6 +477,7 @@ class _SmsOtpFormState extends State<SmsOtpForm> {
                 controller: _pass2Controller,
                 hint: 'Şifreyi tekrar yazın',
                 obscure: true,
+                passwordFocus: _pass2Focus,
                 autofillHints: const [AutofillHints.newPassword],
                 onSubmitted: _verify,
               ),
@@ -437,8 +489,15 @@ class _SmsOtpFormState extends State<SmsOtpForm> {
         padding: const EdgeInsets.fromLTRB(4, 0, 4, 16),
         child: Column(
           children: [
-            _rule('6-10 karakter', _lengthOk(p1)),
-            _rule('En az 1 rakam veya özel karakter', _hasDigitOrSpecial(p1)),
+            _rule('6-10 karakter', PasswordRules.lengthOk(p1)),
+            _rule(
+              'En az 1 rakam veya özel karakter',
+              PasswordRules.hasDigitOrSpecial(p1),
+            ),
+            _rule(
+              'Kolay tahmin edilemez (123456, 111111 değil)',
+              p1.isNotEmpty && !PasswordRules.isWeak(p1, phone: _sentTo),
+            ),
           ],
         ),
       ),

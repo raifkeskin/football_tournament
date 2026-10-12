@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show Supabase;
 
 import '../../../core/services/app_session.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../home/screens/main_navigator.dart';
+import '../password_input.dart';
 
 /// Geçici şifreyle giriş yapan kullanıcı burada kendi şifresini belirler.
 /// Geri dönülürse oturum kapatılır (geçici şifreyle uygulamada kalınmaz).
@@ -21,6 +23,8 @@ class ResetPasswordScreen extends StatefulWidget {
 class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   final _pass1Controller = TextEditingController();
   final _pass2Controller = TextEditingController();
+  final _pass1Focus = FocusNode();
+  final _pass2Focus = FocusNode();
   bool _busy = false;
   String? _error;
 
@@ -28,21 +32,27 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   void dispose() {
     _pass1Controller.dispose();
     _pass2Controller.dispose();
+    _pass1Focus.dispose();
+    _pass2Focus.dispose();
     super.dispose();
   }
 
-  static bool _lengthOk(String v) => v.length >= 6 && v.length <= 10;
-  static bool _hasDigitOrSpecial(String v) => RegExp(r'[^A-Za-z]').hasMatch(v);
+  /// Kişinin telefonu (şifre telefonun bir parçası olmasın).
+  static String? get _phone => Supabase.instance.client.auth.currentUser?.phone;
 
   Future<void> _save() async {
     final p1 = _pass1Controller.text.trim();
     final p2 = _pass2Controller.text.trim();
-    if (!_lengthOk(p1) || !_hasDigitOrSpecial(p1)) {
+    if (!PasswordRules.lengthOk(p1) || !PasswordRules.hasDigitOrSpecial(p1)) {
       setState(
         () => _error =
             'Şifre 6-10 karakter olmalı ve en az bir rakam veya özel '
             'karakter içermeli.',
       );
+      return;
+    }
+    if (PasswordRules.isWeak(p1, phone: _phone)) {
+      setState(() => _error = PasswordRules.weakMessage);
       return;
     }
     if (p1 != p2) {
@@ -86,11 +96,24 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     }
   }
 
-  Widget _passwordField(TextEditingController c, String hint) {
+  Widget _passwordField(TextEditingController c, FocusNode focus, String hint) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: PasswordKeyboard.numeric,
+      builder: (context, _, _) => _passwordTextField(c, focus, hint),
+    );
+  }
+
+  Widget _passwordTextField(
+    TextEditingController c,
+    FocusNode focus,
+    String hint,
+  ) {
     return TextField(
       controller: c,
+      focusNode: focus,
       enabled: !_busy,
       obscureText: true,
+      keyboardType: PasswordKeyboard.type,
       onChanged: (_) => setState(() {}),
       onSubmitted: (_) => _save(),
       style: const TextStyle(
@@ -98,7 +121,10 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         fontSize: 15,
         fontWeight: FontWeight.w700,
       ),
-      decoration: adminInlineInputDecoration(hint: hint),
+      decoration: adminInlineInputDecoration(hint: hint).copyWith(
+        suffixIcon: PasswordKeyboardToggle(focus: focus),
+        suffixIconConstraints: const BoxConstraints(),
+      ),
     );
   }
 
@@ -161,12 +187,20 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                   AdminFieldRow(
                     icon: Icons.lock_outline_rounded,
                     label: 'Şifre',
-                    child: _passwordField(_pass1Controller, '6-10 karakter'),
+                    child: _passwordField(
+                      _pass1Controller,
+                      _pass1Focus,
+                      '6-10 karakter',
+                    ),
                   ),
                   AdminFieldRow(
                     icon: Icons.lock_reset_rounded,
                     label: 'Şifre (Tekrar)',
-                    child: _passwordField(_pass2Controller, 'Aynı şifre'),
+                    child: _passwordField(
+                      _pass2Controller,
+                      _pass2Focus,
+                      'Aynı şifre',
+                    ),
                   ),
                 ],
               ),
@@ -176,10 +210,14 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _rule('6-10 karakter', _lengthOk(p1)),
+                  _rule('6-10 karakter', PasswordRules.lengthOk(p1)),
                   _rule(
                     'En az 1 rakam veya özel karakter',
-                    _hasDigitOrSpecial(p1),
+                    PasswordRules.hasDigitOrSpecial(p1),
+                  ),
+                  _rule(
+                    'Kolay tahmin edilemez (123456, 111111 değil)',
+                    p1.isNotEmpty && !PasswordRules.isWeak(p1, phone: _phone),
                   ),
                 ],
               ),
