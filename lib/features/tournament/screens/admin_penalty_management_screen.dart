@@ -663,7 +663,7 @@ class _AdminPenaltyManagementScreenState
                                             0,
                                             0,
                                             0,
-                                            24,
+                                            kAdminFabClearance,
                                           ),
                                           itemCount: list.length,
                                           separatorBuilder: (_, _) =>

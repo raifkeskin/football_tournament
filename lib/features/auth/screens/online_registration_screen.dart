@@ -18,6 +18,7 @@ class OnlineRegistrationScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return const AdminPageScaffold(
       title: 'Kayıt Ol',
+      bandBack: false,
       body: AccountRequestForm(isReset: false),
     );
   }

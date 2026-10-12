@@ -1173,7 +1173,12 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
               color: kAdminAccent,
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                padding: const EdgeInsets.fromLTRB(
+                  16,
+                  4,
+                  16,
+                  kAdminFabClearance,
+                ),
                 children: [
                   for (final e in sections.entries)
                     _letterSection(e.key, e.value),

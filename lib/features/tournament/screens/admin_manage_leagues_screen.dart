@@ -1011,7 +1011,12 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
           }
 
           return ListView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
+            padding: EdgeInsets.fromLTRB(
+              16,
+              10,
+              16,
+              kAdminFabClearance + (isAdmin ? kAdminFabStep : 0),
+            ),
             itemCount: leagues.length,
             itemBuilder: (context, index) {
               final league = leagues[index];
