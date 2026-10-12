@@ -1082,10 +1082,25 @@ class _HomeDashboardState extends State<HomeDashboard> {
     final lastWeekMatches = lastWeek == null
         ? const <MatchModel>[]
         : sorted
-              .where((m) => m.week == lastWeek && inGroup(m))
+              .where(
+                (m) =>
+                    m.week == lastWeek &&
+                    inGroup(m) &&
+                    m.status != MatchStatus.postponed,
+              )
               .toList()
               .reversed
               .toList();
+
+    // Ertelenen maçlar (bu haftanınkiler Bu Hafta'da görünür): haftasına
+    // göre ayrı başlık altında.
+    final postponedByWeek = <int, List<MatchModel>>{};
+    for (final m in sorted) {
+      if (m.status != MatchStatus.postponed || !inGroup(m)) continue;
+      if (thisWeek != null && m.week == thisWeek) continue;
+      postponedByWeek.putIfAbsent(m.week ?? 0, () => []).add(m);
+    }
+    final postponedWeeks = postponedByWeek.keys.toList()..sort();
 
     final hasOwnTeam = d.myTeamIds.isNotEmpty;
     // Birden fazla grup varsa yalnız seçili grubun maçlarından doğan
@@ -1148,6 +1163,19 @@ class _HomeDashboardState extends State<HomeDashboard> {
             () => openHub(TournamentHubTab.fixture),
           ),
           for (final m in thisWeekMatches) _matchRow(d, m, focusTeams),
+        ],
+        for (final w in postponedWeeks) ...[
+          _sectionHeader(
+            [
+              postponedByWeek[w]!.length > 1
+                  ? 'ERTELENEN MAÇLAR'
+                  : 'ERTELENEN MAÇ',
+              if (w > 0) '$w. HAFTA',
+            ].join(' · '),
+            'Fikstür',
+            () => openHub(TournamentHubTab.fixture),
+          ),
+          for (final m in postponedByWeek[w]!) _matchRow(d, m, focusTeams),
         ],
         if (groupFilter != null || d.groups.isNotEmpty) ...[
           _sectionHeader(
@@ -1612,7 +1640,32 @@ class _HomeDashboardState extends State<HomeDashboard> {
     final mine = focus.contains(m.homeTeamId) || focus.contains(m.awayTeamId);
 
     Widget center;
-    if (live || finished) {
+    if (m.status == MatchStatus.postponed ||
+        m.status == MatchStatus.cancelled) {
+      // Ertelenen maçta yeni tarih (verildiyse), yoksa "TARİH YOK".
+      final postponed = m.status == MatchStatus.postponed;
+      final t = kickoff == null ? null : _tr(kickoff);
+      String two(int v) => v.toString().padLeft(2, '0');
+      center = Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            postponed ? 'ERT' : 'İPT',
+            style: _condensed(size: 18, color: DashColors.yellow),
+          ),
+          Text(
+            !postponed
+                ? 'İPTAL'
+                : (t == null ? 'TARİH YOK' : '${two(t.day)}.${two(t.month)}'),
+            style: _barlow(
+              size: 10,
+              weight: FontWeight.w700,
+              color: DashColors.muted,
+            ),
+          ),
+        ],
+      );
+    } else if (live || finished) {
       center = Column(
         mainAxisSize: MainAxisSize.min,
         children: [
