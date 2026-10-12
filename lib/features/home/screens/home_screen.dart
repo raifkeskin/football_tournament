@@ -151,6 +151,30 @@ class _HomeScreenState extends State<HomeScreen> {
     ).map((rows) => rows.map((r) => Season.fromMap(r)).toList());
   }
 
+  /// Tarih şeridindeki yeşil noktalar: ay başına maç olan günler (görünen
+  /// turnuvalara göre; turnuva seçimi değişince yeniden okunur).
+  final Map<String, Set<int>> _stripDays = {};
+  final Set<String> _stripLoading = {};
+
+  String _stripKey(DateTime d) =>
+      '${d.year}-${d.month}|${(_visibleLeagueIds.toList()..sort()).join(',')}';
+
+  /// Şeritteki gün maçlı mı; ayın verisi yoksa okunur ve şerit yenilenir.
+  bool _hasMatchOn(DateTime d) {
+    final key = _stripKey(d);
+    final days = _stripDays[key];
+    if (days == null &&
+        _visibleLeagueIds.isNotEmpty &&
+        _stripLoading.add(key)) {
+      _loadMatchDays(d.year, d.month).then((v) {
+        _stripLoading.remove(key);
+        if (!mounted) return;
+        setState(() => _stripDays[key] = v);
+      });
+    }
+    return days?.contains(d.day) ?? false;
+  }
+
   /// Takvimde işaretlenecek, maç olan günler (verilen ay için).
   Future<Set<int>> _loadMatchDays(int year, int month) async {
     try {
@@ -641,6 +665,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 onSec: _tarihSec,
                                 vurguRenk: cs.primary,
                                 haftaKisa: _haftaKisa,
+                                macVar: _hasMatchOn,
                               ),
                             ),
                             IconButton(
@@ -787,6 +812,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 onSec: _tarihSec,
                                 vurguRenk: cs.primary,
                                 haftaKisa: _haftaKisa,
+                                macVar: _hasMatchOn,
                               ),
                             ),
                             IconButton(
@@ -1296,6 +1322,9 @@ class _MatchCardState extends State<_MatchCard> {
   }
 }
 
+/// Tarih şeridi: üstte ortada ay · yıl (iki aya yayılınca "EKİM–KASIM ·
+/// 2026"), gün kutularında gün adı ve gün numarası; maç olan günün üstünde
+/// yeşil nokta.
 class _TarihSeridi extends StatelessWidget {
   const _TarihSeridi({
     required this.tarihler,
@@ -1304,6 +1333,7 @@ class _TarihSeridi extends StatelessWidget {
     required this.onSec,
     required this.vurguRenk,
     required this.haftaKisa,
+    required this.macVar,
   });
   final List<DateTime> tarihler;
   final int seciliIndeks;
@@ -1311,75 +1341,136 @@ class _TarihSeridi extends StatelessWidget {
   final void Function(int) onSec;
   final Color vurguRenk;
   final List<String> haftaKisa;
+  final bool Function(DateTime) macVar;
+
+  static const _aylar = [
+    'OCAK',
+    'ŞUBAT',
+    'MART',
+    'NİSAN',
+    'MAYIS',
+    'HAZİRAN',
+    'TEMMUZ',
+    'AĞUSTOS',
+    'EYLÜL',
+    'EKİM',
+    'KASIM',
+    'ARALIK',
+  ];
+  static const _gold = Color(0xFFE2B845);
+  static const _green = Color(0xFF10B981);
+  static const _shadow = [
+    Shadow(color: Colors.black87, blurRadius: 4, offset: Offset(0, 2)),
+  ];
+
+  String _ayBasligi() {
+    if (tarihler.isEmpty) return '';
+    final a = tarihler.first, b = tarihler.last;
+    if (a.year != b.year) {
+      return '${_aylar[a.month - 1]} ${a.year} – ${_aylar[b.month - 1]} ${b.year}';
+    }
+    if (a.month != b.month) {
+      return '${_aylar[a.month - 1]}–${_aylar[b.month - 1]} · ${a.year}';
+    }
+    return '${_aylar[a.month - 1]} · ${a.year}';
+  }
+
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 60,
-      child: Row(
-        children: List.generate(tarihler.length, (index) {
-          final t = tarihler[index];
-          final secili = index == seciliIndeks;
-          return Expanded(
-            child: GestureDetector(
-              onTap: () => onSec(index),
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 2),
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                decoration: BoxDecoration(
-                  color: secili
-                      ? Colors.white.withValues(alpha: 0.15)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // Dar ekranlarda yazılar bölünmez, gerekirse küçülür.
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        bugunMu(t) ? 'Bugün' : haftaKisa[t.weekday - 1],
-                        maxLines: 1,
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: secili ? Colors.white : Colors.white60,
-                          fontWeight: FontWeight.bold,
-                          shadows: const [
-                            Shadow(
-                              color: Colors.black87,
-                              blurRadius: 4,
-                              offset: Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        '${t.day.toString().padLeft(2, '0')}/${t.month.toString().padLeft(2, '0')}',
-                        maxLines: 1,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                          shadows: [
-                            Shadow(
-                              color: Colors.black87,
-                              blurRadius: 4,
-                              offset: Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+      height: 64,
+      child: Column(
+        children: [
+          Text(
+            _ayBasligi(),
+            maxLines: 1,
+            style: const TextStyle(
+              fontSize: 10,
+              height: 1.2,
+              color: _gold,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.3,
+              shadows: _shadow,
             ),
-          );
-        }),
+          ),
+          const SizedBox(height: 2),
+          Expanded(
+            child: Row(
+              children: List.generate(tarihler.length, (index) {
+                final t = tarihler[index];
+                final secili = index == seciliIndeks;
+                final mac = macVar(t);
+                return Expanded(
+                  child: GestureDetector(
+                    onTap: () => onSec(index),
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 2),
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      decoration: BoxDecoration(
+                        color: secili
+                            ? Colors.white.withValues(alpha: 0.15)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          // Maç olan gün: takvim penceresindeki gibi nokta.
+                          Container(
+                            width: 5,
+                            height: 5,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: mac ? _green : Colors.transparent,
+                              boxShadow: mac
+                                  ? [
+                                      BoxShadow(
+                                        color: _green.withValues(alpha: 0.8),
+                                        blurRadius: 4,
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          // Dar ekranlarda yazılar bölünmez, gerekirse küçülür.
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              bugunMu(t) ? 'Bugün' : haftaKisa[t.weekday - 1],
+                              maxLines: 1,
+                              style: TextStyle(
+                                fontSize: 10,
+                                height: 1.1,
+                                color: secili ? Colors.white : Colors.white60,
+                                fontWeight: FontWeight.bold,
+                                shadows: _shadow,
+                              ),
+                            ),
+                          ),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              '${t.day}',
+                              maxLines: 1,
+                              style: const TextStyle(
+                                fontSize: 17,
+                                height: 1.15,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                                shadows: _shadow,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            ),
+          ),
+        ],
       ),
     );
   }
