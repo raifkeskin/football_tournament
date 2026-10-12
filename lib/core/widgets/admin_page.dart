@@ -9,31 +9,55 @@ const kAdminBg = Color(0xFF0F172A);
 const kAdminAccent = Color(0xFF10B981);
 const kAdminDanger = Color(0xFFF87171);
 
-/// Yönetim ekranlarının ortak iskeleti: şeffaf başlık, koyu zemin ve soluk
-/// saha görseli (Sezon / Takım / Kadro / Saha ekranlarıyla aynı).
+/// Sağ alttaki eylem düğmesi olan listelerin alt boşluğu: liste sonuna
+/// inildiğinde son eleman düğmenin altında kalmaz.
+const kAdminFabClearance = 96.0;
+
+/// Üst üste birden fazla eylem düğmesi varsa her ek (küçük) düğme için
+/// eklenecek boşluk.
+const kAdminFabStep = 56.0;
+
+/// Yönetim ekranlarının ortak iskeleti: koyu zemin; geri düğmesi üst bandın
+/// solunda, [title] bantta uygulama adının altında küçük puntoyla. Eylem
+/// düğmeleri ([actions]) sağ altta yuvarlak düğme olarak durur.
 class AdminPageScaffold extends StatelessWidget {
   const AdminPageScaffold({
     super.key,
     required this.title,
     required this.body,
     this.actions,
-    this.bandBack = false,
+    this.bandBack = true,
   });
 
   final String title;
   final Widget body;
-  final List<Widget>? actions;
+  final List<AdminBarAction>? actions;
 
-  /// true: başlık çubuğu yok, geri düğmesi üst bandın solunda.
+  /// false: eski başlık çubuğu (giriş bandı açıkken görünen şifre / kayıt
+  /// ekranları; orada sayfa bandı gösterilmez).
   final bool bandBack;
 
   @override
   Widget build(BuildContext context) {
     if (bandBack) {
+      final acts = actions ?? const <AdminBarAction>[];
       return BandBackPage(
+        subtitle: title,
         child: Scaffold(
           backgroundColor: kAdminBg,
           body: SafeArea(top: false, child: body),
+          floatingActionButton: acts.isEmpty
+              ? null
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    for (var i = 0; i < acts.length; i++) ...[
+                      if (i > 0) const SizedBox(height: 12),
+                      acts[i].fab(small: i < acts.length - 1),
+                    ],
+                  ],
+                ),
         ),
       );
     }
@@ -58,6 +82,20 @@ class AdminBarAction extends StatelessWidget {
   final IconData icon;
   final String tooltip;
   final VoidCallback? onPressed;
+
+  /// Sağ alttaki yuvarlak düğme hâli (son eylem büyük, diğerleri küçük).
+  Widget fab({bool small = false}) {
+    final enabled = onPressed != null;
+    return FloatingActionButton(
+      heroTag: null,
+      mini: small,
+      tooltip: tooltip,
+      onPressed: onPressed,
+      backgroundColor: enabled ? kAdminAccent : const Color(0xFF334155),
+      foregroundColor: enabled ? Colors.white : Colors.white38,
+      child: Icon(icon, size: small ? 20 : 26),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {

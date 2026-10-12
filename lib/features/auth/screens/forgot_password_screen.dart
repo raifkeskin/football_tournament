@@ -12,6 +12,7 @@ class ForgotPasswordScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return const AdminPageScaffold(
       title: 'Şifremi Unuttum',
+      bandBack: false,
       body: AccountRequestForm(isReset: true),
     );
   }

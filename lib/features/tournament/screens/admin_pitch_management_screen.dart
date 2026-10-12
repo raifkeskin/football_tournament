@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/utils/resilient_stream.dart';
-import '../../../core/widgets/master_class_app_bar.dart';
+import '../../../core/widgets/admin_page.dart';
+import '../../../core/widgets/app_name_band.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../models/league_extras.dart';
 import '../../../core/services/app_session.dart';
@@ -691,127 +692,121 @@ class _AdminPitchManagementScreenState
   @override
   Widget build(BuildContext context) {
     final isAdmin = AppSession.of(context).value.isAdmin;
-    return Scaffold(
-      backgroundColor: _bgDark,
-      extendBodyBehindAppBar: true,
-      appBar: MasterClassAppBar(
-        title: 'Saha Yönetimi',
-        actions: [
-          if (isAdmin)
-            IconButton(
-              onPressed: _busy ? null : () => _openPitchForm(),
-              icon: const Icon(
-                Icons.add_rounded,
-                color: Colors.white,
-                size: 28,
-              ),
-              tooltip: 'Saha Ekle',
-            ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          SafeArea(
-            child: !isAdmin
-                ? const Center(
-                    child: Text(
-                      'Bu sayfa sadece adminler içindir.',
-                      style: TextStyle(color: Colors.white70),
-                    ),
-                  )
-                : StreamBuilder<List<Pitch>>(
-                    stream: _pitches,
-                    builder: (context, snapshot) {
-                      if (!snapshot.hasData) {
-                        return const Center(
-                          child: CircularProgressIndicator(color: _accent),
-                        );
-                      }
-                      final pitches = [...snapshot.data!]
-                        ..sort(
-                          (a, b) => a.name.toLowerCase().compareTo(
-                            b.name.toLowerCase(),
-                          ),
-                        );
-                      if (pitches.isEmpty) {
-                        return const Center(
-                          child: Text(
-                            'Saha bulunamadı.\nSağ üstteki + ile saha ekleyin.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.white54),
-                          ),
-                        );
-                      }
-                      final shown = pitches.where(_matches).toList();
-                      return Column(
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                            child: TextField(
-                              controller: _searchController,
-                              style: const TextStyle(color: Colors.white),
-                              cursorColor: _accent,
-                              textInputAction: TextInputAction.search,
-                              onChanged: (v) => setState(() => _query = v),
-                              decoration:
-                                  adminInputDecoration(
-                                    hint: 'Saha, il veya konum ara',
-                                    icon: Icons.search_rounded,
-                                  ).copyWith(
-                                    suffixIcon: _query.isEmpty
-                                        ? null
-                                        : IconButton(
-                                            tooltip: 'Temizle',
-                                            icon: const Icon(
-                                              Icons.close_rounded,
-                                              color: Colors.white54,
-                                            ),
-                                            onPressed: () => setState(() {
-                                              _searchController.clear();
-                                              _query = '';
-                                            }),
-                                          ),
-                                  ),
+    return BandBackPage(
+      subtitle: 'Saha Yönetimi',
+      child: Scaffold(
+        backgroundColor: _bgDark,
+        floatingActionButton: isAdmin
+            ? AdminBarAction(
+                icon: Icons.add_rounded,
+                tooltip: 'Saha Ekle',
+                onPressed: _busy ? null : () => _openPitchForm(),
+              ).fab()
+            : null,
+        body: Stack(
+          children: [
+            SafeArea(
+              child: !isAdmin
+                  ? const Center(
+                      child: Text(
+                        'Bu sayfa sadece adminler içindir.',
+                        style: TextStyle(color: Colors.white70),
+                      ),
+                    )
+                  : StreamBuilder<List<Pitch>>(
+                      stream: _pitches,
+                      builder: (context, snapshot) {
+                        if (!snapshot.hasData) {
+                          return const Center(
+                            child: CircularProgressIndicator(color: _accent),
+                          );
+                        }
+                        final pitches = [...snapshot.data!]
+                          ..sort(
+                            (a, b) => a.name.toLowerCase().compareTo(
+                              b.name.toLowerCase(),
                             ),
-                          ),
-                          Expanded(
-                            child: shown.isEmpty
-                                ? const Center(
-                                    child: Text(
-                                      'Aramaya uyan saha yok.',
-                                      style: TextStyle(color: Colors.white54),
+                          );
+                        if (pitches.isEmpty) {
+                          return const Center(
+                            child: Text(
+                              'Saha bulunamadı.\nSağ alttaki + ile saha ekleyin.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: Colors.white54),
+                            ),
+                          );
+                        }
+                        final shown = pitches.where(_matches).toList();
+                        return Column(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                              child: TextField(
+                                controller: _searchController,
+                                style: const TextStyle(color: Colors.white),
+                                cursorColor: _accent,
+                                textInputAction: TextInputAction.search,
+                                onChanged: (v) => setState(() => _query = v),
+                                decoration:
+                                    adminInputDecoration(
+                                      hint: 'Saha, il veya konum ara',
+                                      icon: Icons.search_rounded,
+                                    ).copyWith(
+                                      suffixIcon: _query.isEmpty
+                                          ? null
+                                          : IconButton(
+                                              tooltip: 'Temizle',
+                                              icon: const Icon(
+                                                Icons.close_rounded,
+                                                color: Colors.white54,
+                                              ),
+                                              onPressed: () => setState(() {
+                                                _searchController.clear();
+                                                _query = '';
+                                              }),
+                                            ),
                                     ),
-                                  )
-                                : ListView(
-                                    keyboardDismissBehavior:
-                                        ScrollViewKeyboardDismissBehavior
-                                            .onDrag,
-                                    padding: const EdgeInsets.fromLTRB(
-                                      16,
-                                      12,
-                                      16,
-                                      24,
+                              ),
+                            ),
+                            Expanded(
+                              child: shown.isEmpty
+                                  ? const Center(
+                                      child: Text(
+                                        'Aramaya uyan saha yok.',
+                                        style: TextStyle(color: Colors.white54),
+                                      ),
+                                    )
+                                  : ListView(
+                                      keyboardDismissBehavior:
+                                          ScrollViewKeyboardDismissBehavior
+                                              .onDrag,
+                                      padding: const EdgeInsets.fromLTRB(
+                                        16,
+                                        12,
+                                        16,
+                                        kAdminFabClearance,
+                                      ),
+                                      children: shown.map(_pitchCard).toList(),
                                     ),
-                                    children: shown.map(_pitchCard).toList(),
-                                  ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-          ),
-          if (_busy)
-            const Positioned.fill(
-              child: AbsorbPointer(
-                child: ColoredBox(
-                  color: Color(0x660F172A),
-                  child: Center(
-                    child: CircularProgressIndicator(color: _accent),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+            ),
+            if (_busy)
+              const Positioned.fill(
+                child: AbsorbPointer(
+                  child: ColoredBox(
+                    color: Color(0x660F172A),
+                    child: Center(
+                      child: CircularProgressIndicator(color: _accent),
+                    ),
                   ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }

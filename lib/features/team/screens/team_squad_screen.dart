@@ -27,7 +27,7 @@ import '../services/supabase/supabase_team_service.dart';
 import '../../../core/utils/resilient_stream.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/app_date_picker.dart';
-import '../../../core/widgets/master_class_app_bar.dart';
+import '../../../core/widgets/app_name_band.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import 'package:football_tournament/core/widgets/picked_image.dart';
 import 'package:football_tournament/core/widgets/admin_form.dart';
@@ -3484,192 +3484,200 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
     final isAdmin = session.isAdmin;
     const accent = Color(0xFF10B981);
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      extendBodyBehindAppBar: true,
-      appBar: MasterClassAppBar(
-        title: 'Lisans Yönetimi',
-        actions: [
-          // Toplu yükleme yalnız admin; futbolcu ekleme bölge sorumlusu ve
-          // üstü (yönetim paneli olanlar).
-          if (isAdmin)
-            IconButton(
-              tooltip: 'Toplu Yükle (Excel)',
-              onPressed: _openBulkUploadFlow,
-              icon: const Icon(
-                Icons.upload_file_rounded,
-                color: Colors.white,
-                size: 24,
+    return BandBackPage(
+      subtitle: 'Lisans Yönetimi',
+      child: Scaffold(
+        backgroundColor: const Color(0xFF0F172A),
+        // Sağ altta: arama (kapalıyken), toplu yükleme (yalnız admin) ve
+        // futbolcu ekleme (bölge sorumlusu ve üstü).
+        floatingActionButton: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            if (!_searchOpen) ...[
+              FloatingActionButton.small(
+                heroTag: null,
+                tooltip: 'Oyuncu ara',
+                backgroundColor: accent,
+                foregroundColor: Colors.white,
+                onPressed: () {
+                  setState(() => _searchOpen = true);
+                  _searchFocus.requestFocus();
+                },
+                child: const Icon(Icons.search_rounded, size: 20),
               ),
-            ),
-          if (session.hasManagementPanel)
-            IconButton(
-              tooltip: 'Futbolcu Ekle',
-              onPressed: _openPlayerForm,
-              icon: const Icon(
-                Icons.person_add_alt_1_rounded,
-                color: Colors.white,
-                size: 26,
-              ),
-            ),
-        ],
-      ),
-      floatingActionButton: _searchOpen
-          ? null
-          : FloatingActionButton.small(
-              tooltip: 'Oyuncu ara',
-              backgroundColor: accent,
-              foregroundColor: Colors.white,
-              onPressed: () {
-                setState(() => _searchOpen = true);
-                _searchFocus.requestFocus();
-              },
-              child: const Icon(Icons.search_rounded, size: 20),
-            ),
-      body: Stack(
-        children: [
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-              child: Column(
-                children: [
-                  if (_searchOpen) ...[
-                    SizedBox(
-                      height: 44,
-                      child: TextField(
-                        controller: _searchController,
-                        focusNode: _searchFocus,
-                        style: const TextStyle(color: Colors.white),
-                        textInputAction: TextInputAction.search,
-                        decoration: InputDecoration(
-                          isDense: true,
-                          hintText: 'Oyuncu ara',
-                          hintStyle: const TextStyle(color: Colors.white54),
-                          prefixIcon: const Icon(Icons.search, color: accent),
-                          suffixIcon: IconButton(
-                            tooltip: 'Aramayı kapat',
-                            icon: const Icon(
-                              Icons.close_rounded,
-                              color: Colors.white54,
+              const SizedBox(height: 12),
+            ],
+            if (isAdmin) ...[
+              AdminBarAction(
+                icon: Icons.upload_file_rounded,
+                tooltip: 'Toplu Yükle (Excel)',
+                onPressed: _openBulkUploadFlow,
+              ).fab(small: true),
+              const SizedBox(height: 12),
+            ],
+            if (session.hasManagementPanel)
+              AdminBarAction(
+                icon: Icons.person_add_alt_1_rounded,
+                tooltip: 'Futbolcu Ekle',
+                onPressed: _openPlayerForm,
+              ).fab(),
+          ],
+        ),
+        body: Stack(
+          children: [
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                child: Column(
+                  children: [
+                    if (_searchOpen) ...[
+                      SizedBox(
+                        height: 44,
+                        child: TextField(
+                          controller: _searchController,
+                          focusNode: _searchFocus,
+                          style: const TextStyle(color: Colors.white),
+                          textInputAction: TextInputAction.search,
+                          decoration: InputDecoration(
+                            isDense: true,
+                            hintText: 'Oyuncu ara',
+                            hintStyle: const TextStyle(color: Colors.white54),
+                            prefixIcon: const Icon(Icons.search, color: accent),
+                            suffixIcon: IconButton(
+                              tooltip: 'Aramayı kapat',
+                              icon: const Icon(
+                                Icons.close_rounded,
+                                color: Colors.white54,
+                              ),
+                              onPressed: () {
+                                _searchController.clear();
+                                _searchFocus.unfocus();
+                                setState(() {
+                                  _q = '';
+                                  _searchOpen = false;
+                                });
+                              },
                             ),
-                            onPressed: () {
-                              _searchController.clear();
-                              _searchFocus.unfocus();
-                              setState(() {
-                                _q = '';
-                                _searchOpen = false;
-                              });
-                            },
-                          ),
-                          filled: true,
-                          fillColor: Colors.black.withValues(alpha: 0.3),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide(
-                              color: Colors.white.withValues(alpha: 0.1),
+                            filled: true,
+                            fillColor: Colors.black.withValues(alpha: 0.3),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: BorderSide(
+                                color: Colors.white.withValues(alpha: 0.1),
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: const BorderSide(color: accent),
                             ),
                           ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: const BorderSide(color: accent),
-                          ),
+                          onChanged: (v) => setState(() => _q = v),
                         ),
-                        onChanged: (v) => setState(() => _q = v),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    Expanded(
+                      child: FutureBuilder<Set<String>?>(
+                        future: _allowedPlayers,
+                        builder: (context, allowedSnap) =>
+                            StreamBuilder<List<PlayerModel>>(
+                              stream: _playersStream,
+                              builder: (context, snap) {
+                                if (!snap.hasData ||
+                                    allowedSnap.connectionState !=
+                                        ConnectionState.done) {
+                                  return const Center(
+                                    child: CircularProgressIndicator(
+                                      color: accent,
+                                    ),
+                                  );
+                                }
+                                final allowed = allowedSnap.data;
+                                final q = _norm(_q);
+                                final list =
+                                    snap.data!
+                                        .where(
+                                          (p) =>
+                                              allowed == null ||
+                                              allowed.contains(p.id),
+                                        )
+                                        .where(
+                                          (p) =>
+                                              q.isEmpty ||
+                                              _norm(p.name).contains(q),
+                                        )
+                                        .toList()
+                                      ..sort(
+                                        (a, b) => a.name
+                                            .toLowerCase()
+                                            .compareTo(b.name.toLowerCase()),
+                                      );
+
+                                if (list.isEmpty) {
+                                  return const Center(
+                                    child: Text(
+                                      'Futbolcu bulunamadı.',
+                                      style: TextStyle(color: Colors.white54),
+                                    ),
+                                  );
+                                }
+                                // Durum tüm futbolcular için bir kez yüklenir (aramada
+                                // yeniden sorgu atılmaz).
+                                final all = snap.data!
+                                    .where(
+                                      (p) =>
+                                          allowed == null ||
+                                          allowed.contains(p.id),
+                                    )
+                                    .map((p) => p.id);
+                                return FutureBuilder(
+                                  future: _consentCache.of(all),
+                                  builder: (context, cs) {
+                                    final st = cs.data ?? const {};
+                                    final showBanner = st.values.any(
+                                      (s) => !s.complete,
+                                    );
+                                    // Sağ alttaki düğmeler son kartı kapatmasın.
+                                    return ListView.builder(
+                                      padding: const EdgeInsets.only(
+                                        bottom:
+                                            kAdminFabClearance +
+                                            2 * kAdminFabStep,
+                                      ),
+                                      itemCount:
+                                          list.length + (showBanner ? 1 : 0),
+                                      itemBuilder: (context, i) {
+                                        if (showBanner && i == 0) {
+                                          return Padding(
+                                            padding: const EdgeInsets.only(
+                                              bottom: 10,
+                                            ),
+                                            child: ConsentSummaryBanner(
+                                              statuses: st,
+                                            ),
+                                          );
+                                        }
+                                        final p =
+                                            list[i - (showBanner ? 1 : 0)];
+                                        return _licenseCard(
+                                          p,
+                                          consent: st[p.id],
+                                        );
+                                      },
+                                    );
+                                  },
+                                );
+                              },
+                            ),
                       ),
                     ),
-                    const SizedBox(height: 12),
                   ],
-                  Expanded(
-                    child: FutureBuilder<Set<String>?>(
-                      future: _allowedPlayers,
-                      builder: (context, allowedSnap) =>
-                          StreamBuilder<List<PlayerModel>>(
-                            stream: _playersStream,
-                            builder: (context, snap) {
-                              if (!snap.hasData ||
-                                  allowedSnap.connectionState !=
-                                      ConnectionState.done) {
-                                return const Center(
-                                  child: CircularProgressIndicator(
-                                    color: accent,
-                                  ),
-                                );
-                              }
-                              final allowed = allowedSnap.data;
-                              final q = _norm(_q);
-                              final list =
-                                  snap.data!
-                                      .where(
-                                        (p) =>
-                                            allowed == null ||
-                                            allowed.contains(p.id),
-                                      )
-                                      .where(
-                                        (p) =>
-                                            q.isEmpty ||
-                                            _norm(p.name).contains(q),
-                                      )
-                                      .toList()
-                                    ..sort(
-                                      (a, b) => a.name.toLowerCase().compareTo(
-                                        b.name.toLowerCase(),
-                                      ),
-                                    );
-
-                              if (list.isEmpty) {
-                                return const Center(
-                                  child: Text(
-                                    'Futbolcu bulunamadı.',
-                                    style: TextStyle(color: Colors.white54),
-                                  ),
-                                );
-                              }
-                              // Durum tüm futbolcular için bir kez yüklenir (aramada
-                              // yeniden sorgu atılmaz).
-                              final all = snap.data!
-                                  .where(
-                                    (p) =>
-                                        allowed == null ||
-                                        allowed.contains(p.id),
-                                  )
-                                  .map((p) => p.id);
-                              return FutureBuilder(
-                                future: _consentCache.of(all),
-                                builder: (context, cs) {
-                                  final st = cs.data ?? const {};
-                                  final showBanner = st.values.any(
-                                    (s) => !s.complete,
-                                  );
-                                  return ListView.builder(
-                                    padding: const EdgeInsets.only(bottom: 24),
-                                    itemCount:
-                                        list.length + (showBanner ? 1 : 0),
-                                    itemBuilder: (context, i) {
-                                      if (showBanner && i == 0) {
-                                        return Padding(
-                                          padding: const EdgeInsets.only(
-                                            bottom: 10,
-                                          ),
-                                          child: ConsentSummaryBanner(
-                                            statuses: st,
-                                          ),
-                                        );
-                                      }
-                                      final p = list[i - (showBanner ? 1 : 0)];
-                                      return _licenseCard(p, consent: st[p.id]);
-                                    },
-                                  );
-                                },
-                              );
-                            },
-                          ),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
