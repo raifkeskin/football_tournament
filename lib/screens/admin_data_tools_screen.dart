@@ -352,7 +352,9 @@ class _AdminTeamFixtureBuildScreenState
         await file.writeAsBytes(bytes);
 
         if (!mounted) return;
-        await Share.shareXFiles([XFile(path)], text: 'Fikstür Şablonu');
+        await SharePlus.instance.share(
+          ShareParams(files: [XFile(path)], text: 'Fikstür Şablonu'),
+        );
       } else {
         final blob = html.Blob([
           bytes,

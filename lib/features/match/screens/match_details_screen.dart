@@ -583,33 +583,6 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     return s;
   }
 
-  String _resolvePitchLocation({
-    required List<Pitch> pitches,
-    required String pitchId,
-    required String pitchName,
-  }) {
-    final id = pitchId.trim();
-    final name = pitchName.trim();
-
-    if (id.isNotEmpty) {
-      for (final p in pitches) {
-        if (p.id.trim() == id) {
-          return p.location;
-        }
-      }
-    }
-
-    if (name.isNotEmpty) {
-      for (final p in pitches) {
-        if (p.name.trim().toLowerCase() == name.toLowerCase()) {
-          return p.location;
-        }
-      }
-    }
-
-    return '';
-  }
-
   Future<void> _openPitchLocation(
     BuildContext context,
     String rawLocation,

@@ -16,6 +16,9 @@ analyzer:
     - windows/**
     - macos/**
     - linux/**
+    # Devre dışı / elle çalıştırılan denemeler (analiz ve test dışı).
+    - test_disabled/**
+    - test_supabase.dart
 include: package:flutter_lints/flutter.yaml
 
 linter:

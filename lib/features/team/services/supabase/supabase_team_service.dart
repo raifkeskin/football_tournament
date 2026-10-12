@@ -950,9 +950,6 @@ class SupabaseTeamService implements ITeamService {
     final team = teamId.trim();
     final tId = seasonId.trim();
     if (team.isEmpty || tId.isEmpty) return const <PlayerModel>[];
-    print('--- DEBUG: getEligiblePlayers BAŞLADI ---');
-    print('Gelen teamId: "$team"');
-    print('Gelen seasonId: "$tId"');
 
     try {
       final res = await _client
@@ -964,10 +961,6 @@ class SupabaseTeamService implements ITeamService {
           .eq('team_id', team)
           .eq('season_id', tId)
           .eq('is_active', true);
-
-      print(
-        'Sorgudan dönen ham satır sayısı: ${res.length}',
-      ); // Eğer 0 ise ID'ler yanlıştır.
 
       final rows = res.cast<Map<String, dynamic>>();
       if (rows.isEmpty) return const <PlayerModel>[];

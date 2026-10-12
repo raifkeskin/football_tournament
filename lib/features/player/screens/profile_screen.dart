@@ -228,10 +228,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return;
     }
     // Hesap sunucuda silindi; cihazdaki oturum da kapatılır.
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
     try {
       await session.signOut();
     } catch (_) {}
-    final messenger = ScaffoldMessenger.of(context);
     await _toLoginGate();
     messenger.showSnackBar(const SnackBar(content: Text('Hesabınız silindi.')));
   }
@@ -244,13 +245,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     // YENİ VE GÜVENLİ GİRİŞ KONTROLÜ
     // Önce User objesinin ID'sinin gerçekten var olup olmadığına bakıyoruz
-    final String uid = user != null ? (user.id?.toString().trim() ?? '') : '';
+    final String uid = user != null ? user.id.toString().trim() : '';
     bool isRealUser =
         uid.isNotEmpty && uid != 'guest' && uid != 'anonymous' && uid != '0';
 
     // Eğer Supabase kullanılıyorsa, "Sahte Giriş" hatasını önlemek için kesin kontrolü oradan yapıyoruz
     final su = Supabase.instance.client.auth.currentUser;
-    if (su == null || (su.isAnonymous ?? false)) {
+    if (su == null || su.isAnonymous) {
       isRealUser =
           false; // Supabase oturumu yoksa kesinlikle Login Ekranı çıkmalı
     } else {
@@ -263,7 +264,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // menü ve çıkış üst bantta, sayfa arka planı düz.
     final panelMode =
         isRealUser && (isAdminPanelVisible || sessionData.hasManagementPanel);
-    final panelOn = panelMode && TickerMode.of(context);
+    final panelOn = panelMode && TickerMode.valuesOf(context).enabled;
     if (panelOn != _bandOwned) {
       _syncBand(panelOn, () => _logout(session));
     }

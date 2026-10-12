@@ -35,7 +35,7 @@ void main() async {
   ErrorReporter.init();
   await Supabase.initialize(
     url: AppConfig.supabaseUrl,
-    anonKey: AppConfig.supabaseAnonKey,
+    publishableKey: AppConfig.supabaseAnonKey,
   );
   // Arka planda canlı bağlantılar kapansın (eşzamanlı bağlantı sınırı).
   AppActivity.start();

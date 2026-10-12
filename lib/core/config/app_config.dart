@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 class AppConfig {
   static bool dbLogEnabled =
       String.fromEnvironment('DB_LOG', defaultValue: '0') == '1';
@@ -15,7 +17,7 @@ class AppConfig {
 
   static void logDb(String message) {
     if (!dbLogEnabled) return;
-    print(message);
+    debugPrint(message);
   }
 
   static String _safe(String? v, {String fallback = '-'}) {
@@ -55,12 +57,12 @@ class AppConfig {
     final methodText = _safe(method);
     final filtersText = _safe(filters);
 
-    print('---------------- [SUPABASE QUERY START] ----------------');
-    print('📍 CALLER  : $callerText');
-    print('🏗️ SERVICE : $serviceText -> $methodText');
-    print('📊 TABLE   : $table | OP: $operation');
-    print('🔍 FILTERS : $filtersText');
-    print('--------------------------------------------------------');
+    debugPrint('---------------- [SUPABASE QUERY START] ----------------');
+    debugPrint('📍 CALLER  : $callerText');
+    debugPrint('🏗️ SERVICE : $serviceText -> $methodText');
+    debugPrint('📊 TABLE   : $table | OP: $operation');
+    debugPrint('🔍 FILTERS : $filtersText');
+    debugPrint('--------------------------------------------------------');
   }
 
   static void sqlLogResult({
@@ -76,20 +78,20 @@ class AppConfig {
     if (!dbLogEnabled) return;
 
     if (error != null) {
-      print('❌ ERROR: ${_formatError(error)}');
+      debugPrint('❌ ERROR: ${_formatError(error)}');
       return;
     }
 
     final c = count;
     final msg = (message ?? '').trim();
     if (msg.isNotEmpty) {
-      print('✅ RESULT: $msg');
+      debugPrint('✅ RESULT: $msg');
       return;
     }
     if (c != null) {
-      print('✅ RESULT: $c kayıt');
+      debugPrint('✅ RESULT: $c kayıt');
       return;
     }
-    print('✅ RESULT: Başarılı');
+    debugPrint('✅ RESULT: Başarılı');
   }
 }

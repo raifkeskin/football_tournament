@@ -100,9 +100,12 @@ Future<void> showSquadBulkUploadDialog({
             final dir = await getTemporaryDirectory();
             final file = File('${dir.path}/futbolcu_sablonu.xlsx');
             await file.writeAsBytes(bytes, flush: true);
-            await Share.shareXFiles([
-              XFile(file.path),
-            ], text: 'Futbolcu Excel Şablonu');
+            await SharePlus.instance.share(
+              ShareParams(
+                files: [XFile(file.path)],
+                text: 'Futbolcu Excel Şablonu',
+              ),
+            );
           } catch (e) {
             if (!dialogContext.mounted) return;
             ScaffoldMessenger.of(
@@ -869,7 +872,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
   }) async {
     final svc = _sbTeamService;
     if (svc == null) {
-      if (!context.mounted) return;
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Bu özellik Supabase modunda kullanılabilir.'),
@@ -903,7 +906,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     // Boş bırakılırsa numara silinir.
     final n = int.tryParse(raw);
     if (n == null && raw.isNotEmpty) {
-      if (!context.mounted) return;
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Forma numarası geçersiz.')));
@@ -914,12 +917,12 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
       await svc.setJerseyNumber(player.id, tid, lid, n);
       if (!mounted) return;
       _refreshPlayersStreamForTournament(lid);
-      if (!context.mounted) return;
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Forma numarası güncellendi.')),
       );
     } catch (e) {
-      if (!context.mounted) return;
+      if (!mounted) return;
       final msg = e.toString().replaceFirst('Exception: ', '').trim();
       ScaffoldMessenger.of(
         context,
@@ -2044,42 +2047,6 @@ class _SmallActionButton extends StatelessWidget {
   }
 }
 
-class _CardRow extends StatelessWidget {
-  const _CardRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.85),
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            value,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 /// Futbolcu ekle / güncelle formunu ortada açılan temalı popup olarak açar.
 /// Dışarı dokunmak kaydetmeden kapatır. Kaydedilirse true döner.
 Future<bool?> showPlayerFormPopup(BuildContext context, PlayerFormScreen form) {
@@ -2161,7 +2128,6 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
   String _mainPosition = _unsetOption;
   String _subPosition = _unsetOption;
   String _preferredFoot = '';
-  String? _activePlayerId;
   String? _existingPhotoUrl;
   String? _implicitPhoneKey;
   XFile? _pickedPhoto;
@@ -2268,9 +2234,6 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
     super.initState();
     final e = widget.editing;
     if (e != null) {
-      _activePlayerId = (e.phone ?? e.id).trim().isEmpty
-          ? e.id
-          : (e.phone ?? e.id);
       _identityNoController.text = (e.nationalId ?? '').toString();
       final full = e.name.trim().replaceAll(RegExp(r'\s+'), ' ');
       final parts = full.isEmpty ? const <String>[] : full.split(' ');
@@ -3808,7 +3771,6 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
 
 const _squadAccent = Color(0xFF10B981);
 const _squadMuted = Color(0xFF94A3B8);
-const _squadAmber = Color(0xFFFBBF24);
 const _squadCard = Color(0xFF1E293B);
 
 const _positionOrder = [

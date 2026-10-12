@@ -116,6 +116,7 @@ void main() {
         await settle();
         // İki akış da match:<id> konusunda: tek kanal.
         expect(client.getChannels(), hasLength(1));
+        // ignore: invalid_use_of_internal_member
         expect(client.getChannels().single.topic, 'realtime:match:$m1');
         await a.cancel();
         await settle();

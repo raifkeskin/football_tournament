@@ -955,10 +955,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         const SizedBox(height: 16),
                         const Text(
                           'Bu tarihte maç bulunamadı.',
-                          style: const TextStyle(
-                            color: Colors.white24,
-                            fontSize: 16,
-                          ),
+                          style: TextStyle(color: Colors.white24, fontSize: 16),
                         ),
                       ],
                     ),

@@ -1,7 +1,8 @@
-import 'dart:html' as html;
+import 'dart:js_interop';
 import 'dart:ui_web' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:web/web.dart' as web;
 
 final Map<String, String> _viewTypeByKey = {};
 
@@ -88,22 +89,22 @@ Widget _htmlImage(
 
   try {
     ui.platformViewRegistry.registerViewFactory(viewType, (int viewId) {
-      final container = html.DivElement();
+      final container = web.HTMLDivElement();
       container.style.width = w > 0 ? '${w}px' : '100%';
       container.style.height = h > 0 ? '${h}px' : '100%';
       container.style.overflow = 'hidden';
       container.style.borderRadius = '${radiusPx}px';
 
-      final img = html.ImageElement();
+      final img = web.HTMLImageElement();
       img.src = trimmed;
       img.style.width = '100%';
       img.style.height = '100%';
       img.style.objectFit = fitCss;
       img.style.border = '0';
-      img.onError.listen((_) {
+      img.onerror = ((web.Event _) {
         img.style.display = 'none';
-      });
-      container.append(img);
+      }).toJS;
+      container.appendChild(img);
       return container;
     });
   } catch (_) {}
