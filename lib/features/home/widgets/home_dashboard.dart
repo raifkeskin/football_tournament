@@ -626,6 +626,24 @@ class _HomeDashboardState extends State<HomeDashboard> {
 
   // ---- Yardımcılar ----------------------------------------------------
 
+  /// Saati belli olmayan maçta saat yerine düz, kalın beyaz çizgi.
+  static Widget _undatedBar({
+    required double width,
+    required double height,
+    required double top,
+    required double bottom,
+  }) => Padding(
+    padding: EdgeInsets.only(top: top, bottom: bottom),
+    child: Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(height),
+      ),
+    ),
+  );
+
   /// Maç başlangıcı (Türkiye saati, UTC+3) UTC olarak.
   static DateTime? _kickoff(MatchModel m) {
     final d = DateTime.tryParse((m.matchDate ?? '').trim());
@@ -1510,17 +1528,23 @@ class _HomeDashboardState extends State<HomeDashboard> {
                 child: Column(
                   children: [
                     const SizedBox(height: 8),
+                    if (live || hasTime)
+                      Text(
+                        live
+                            ? '${m.homeScore} – ${m.awayScore}'
+                            : m.matchTime!.substring(0, 5),
+                        style: _condensed(
+                          size: 30,
+                          color: live ? Colors.white : accent,
+                        ),
+                      )
+                    else
+                      _undatedBar(width: 34, height: 4, top: 16, bottom: 12),
                     Text(
-                      live
-                          ? '${m.homeScore} – ${m.awayScore}'
-                          : (hasTime ? m.matchTime!.substring(0, 5) : '--:--'),
-                      style: _condensed(
-                        size: 30,
-                        color: live ? Colors.white : accent,
-                      ),
-                    ),
-                    Text(
-                      kTr == null ? 'Tarih yok' : _daysLong[kTr.weekday - 1],
+                      kTr == null
+                          ? 'Tarih belirlenmedi'
+                          : _daysLong[kTr.weekday - 1],
+                      textAlign: TextAlign.center,
                       style: _barlow(size: 12, color: DashColors.muted),
                     ),
                     // Tarih (ör. 6 Ekim 2026): hafta numarası tarihi söylemez.
@@ -1688,21 +1712,29 @@ class _HomeDashboardState extends State<HomeDashboard> {
       center = Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (hasTime)
+            Text(
+              m.matchTime!.substring(0, 5),
+              style: _barlow(
+                size: 14,
+                weight: FontWeight.w800,
+                color: DashColors.accent(),
+              ),
+            )
+          else
+            _undatedBar(width: 26, height: 3, top: 7, bottom: 6),
+          // Tarih yoksa düz çizginin altında küçük ve silik not.
           Text(
-            hasTime ? m.matchTime!.substring(0, 5) : '--:--',
+            t == null ? 'Tarih belirlenmedi' : _trUpper(_days[t.weekday - 1]),
+            textAlign: TextAlign.center,
+            maxLines: 2,
             style: _barlow(
-              size: 14,
-              weight: FontWeight.w800,
-              color: DashColors.accent(),
-            ),
-          ),
-          Text(
-            t == null ? '' : _trUpper(_days[t.weekday - 1]),
-            style: _barlow(
-              size: 10,
+              size: t == null ? 9 : 10,
               weight: FontWeight.w700,
-              color: DashColors.muted,
-            ),
+              color: t == null
+                  ? DashColors.muted.withValues(alpha: 0.7)
+                  : DashColors.muted,
+            ).copyWith(height: 1.1),
           ),
         ],
       );
