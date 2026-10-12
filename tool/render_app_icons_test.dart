@@ -1,4 +1,10 @@
-// Uygulama ikonlarını ve uygulama içi logoyu ana logo görselinden üretir
+// Uygulama ikonlarını ve uygulama içi logoyu ana logo görselinden üretir.
+// Hangi logonun kullanılacağı [_secim] ile seçilir; seçeneklerin görselleri
+// design/logo-lm/secenekler/ altında durur (<secim>-master.png: opak kare,
+// <secim>-crest.png: saydam). Logoyu değiştirmek için _secim değiştirilip
+// aşağıdaki komutlar çalıştırılır.
+//   oneri2-arma  → LM arması (kullanımda)
+//   oneri1-forma → yazılı forma LM
 // (design/app_logo_master.png, 4096 px: LM arması, köşesiz kare; vektör
 // kaynağı design/logo-lm/lm-arma-kare.svg). Uygulama içi logo, açılış
 // ekranları, favicon ve Play tanıtım görseli zeminsiz yuvarlak armadan
@@ -11,6 +17,9 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+/// Kullanılan logo seçeneği (design/logo-lm/secenekler/ dosya öneki).
+const _secim = 'oneri2-arma';
 
 /// Ana görselin kullanılan kesiti: görselin tamamı (köşesiz kare).
 const _crop = Rect.fromLTWH(0, 0, 4096, 4096);
@@ -130,11 +139,11 @@ Future<void> _maskable(String path, int px, double frac) async =>
 void main() {
   setUpAll(() async {
     final codec = await ui.instantiateImageCodec(
-      File('design/app_logo_master.png').readAsBytesSync(),
+      File('design/logo-lm/secenekler/$_secim-master.png').readAsBytesSync(),
     );
     _master = (await codec.getNextFrame()).image;
     final crest = await ui.instantiateImageCodec(
-      File('design/app_logo_crest.png').readAsBytesSync(),
+      File('design/logo-lm/secenekler/$_secim-crest.png').readAsBytesSync(),
     );
     _crest = (await crest.getNextFrame()).image;
   });
