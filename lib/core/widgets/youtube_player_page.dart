@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
-const youtubePlayerOrigin = 'https://masterfutbol.web.app';
+const youtubePlayerOrigin = 'https://ligmasasi.com';
 
 /// Oynatıcı tam ekrana geçince ekran yataya döner (sistem çubukları gizli),
 /// çıkınca telefonun kendi yönüne bırakılır. Web'de bunu index.html'deki

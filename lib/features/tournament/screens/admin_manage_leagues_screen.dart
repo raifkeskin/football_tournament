@@ -876,7 +876,7 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
     final text =
         '${leagueName.isEmpty ? 'Turnuvamızı' : '$leagueName turnuvasını'} '
         'takip etmek için uygulamada menüden "Turnuva Kodu Gir"e '
-        '$code yazın.\n\nUygulama: https://masterfutbol.web.app';
+        '$code yazın.\n\nUygulama: https://ligmasasi.com';
     final uri = Uri.parse('https://wa.me/?text=${Uri.encodeComponent(text)}');
     final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!ok) {
