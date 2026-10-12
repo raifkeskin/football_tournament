@@ -11,9 +11,9 @@ import '../../news/screens/news_feed_screen.dart';
 import '../../tournament/models/league_extras.dart';
 import '../../tournament/screens/tournament_hub_screen.dart';
 
-/// Ana sayfanın üstündeki "Son Dakika" haber kartı: son günlerin haberleri
-/// sırayla döner; dokununca Haberler sekmesi açılır. Yeni haber yoksa hiç
-/// görünmez.
+/// Ana sayfanın üstündeki haber kartı: en son haberler (yaşına bakılmadan)
+/// sırayla döner; dokununca Haberler sekmesi açılır. Haber yoksa hiç
+/// görünmez. Son 24 saatin haberi "SON DAKİKA", daha eskisi "HABERLER".
 class HomeNewsCard extends StatefulWidget {
   const HomeNewsCard({super.key, this.leagueId, this.regionId});
 
@@ -27,9 +27,8 @@ class HomeNewsCard extends StatefulWidget {
 }
 
 class _HomeNewsCardState extends State<HomeNewsCard> {
-  /// Kartta gösterilecek en fazla haber ve ne kadar geriye bakılacağı.
+  /// Kartta gösterilecek en fazla haber.
   static const _maxItems = 3;
-  static const _window = Duration(days: 7);
 
   static const _red = Color(0xFFE5383B);
 
@@ -66,6 +65,9 @@ class _HomeNewsCardState extends State<HomeNewsCard> {
     });
   }
 
+  static bool _isFresh(DateTime? t) =>
+      t != null && DateTime.now().difference(t.toLocal()).inHours < 24;
+
   static String _ago(DateTime? t) {
     if (t == null) return '';
     final d = DateTime.now().difference(t.toLocal());
@@ -81,7 +83,6 @@ class _HomeNewsCardState extends State<HomeNewsCard> {
     return StreamBuilder<List<NewsItem>>(
       stream: _stream,
       builder: (context, snap) {
-        final since = DateTime.now().subtract(_window);
         final items = (snap.data ?? const <NewsItem>[])
             .where(
               (n) =>
@@ -90,9 +91,7 @@ class _HomeNewsCardState extends State<HomeNewsCard> {
                       n.tournamentId == widget.leagueId) &&
                   (widget.regionId == null ||
                       n.regionId == null ||
-                      n.regionId == widget.regionId) &&
-                  n.createdAt != null &&
-                  n.createdAt!.isAfter(since),
+                      n.regionId == widget.regionId),
             )
             .take(_maxItems)
             .toList();
@@ -161,18 +160,20 @@ class _HomeNewsCardState extends State<HomeNewsCard> {
                             color: _red,
                             borderRadius: BorderRadius.circular(11),
                           ),
-                          child: const Row(
+                          child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(
+                              const Icon(
                                 Icons.bolt_rounded,
                                 size: 14,
                                 color: Colors.white,
                               ),
-                              SizedBox(width: 2),
+                              const SizedBox(width: 2),
                               Text(
-                                'SON DAKİKA',
-                                style: TextStyle(
+                                _isFresh(items[_index].createdAt)
+                                    ? 'SON DAKİKA'
+                                    : 'HABERLER',
+                                style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 11,
                                   fontWeight: FontWeight.w800,
