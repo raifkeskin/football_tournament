@@ -626,24 +626,6 @@ class _HomeDashboardState extends State<HomeDashboard> {
 
   // ---- Yardımcılar ----------------------------------------------------
 
-  /// Saati belli olmayan maçta saat yerine düz, kalın beyaz çizgi.
-  static Widget _undatedBar({
-    required double width,
-    required double height,
-    required double top,
-    required double bottom,
-  }) => Padding(
-    padding: EdgeInsets.only(top: top, bottom: bottom),
-    child: Container(
-      width: width,
-      height: height,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(height),
-      ),
-    ),
-  );
-
   /// Maç başlangıcı (Türkiye saati, UTC+3) UTC olarak.
   static DateTime? _kickoff(MatchModel m) {
     final d = DateTime.tryParse((m.matchDate ?? '').trim());
@@ -1539,7 +1521,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
                         ),
                       )
                     else
-                      _undatedBar(width: 34, height: 4, top: 16, bottom: 12),
+                      Text('–', style: _condensed(size: 30)),
                     Text(
                       kTr == null
                           ? 'Tarih belirlenmedi'
@@ -1722,8 +1704,8 @@ class _HomeDashboardState extends State<HomeDashboard> {
               ),
             )
           else
-            _undatedBar(width: 26, height: 3, top: 7, bottom: 6),
-          // Tarih yoksa düz çizginin altında küçük ve silik not.
+            Text('–', style: _condensed(size: 20)),
+          // Tarih yoksa skor ayracının altında küçük ve silik not.
           Text(
             t == null ? 'Tarih belirlenmedi' : _trUpper(_days[t.weekday - 1]),
             textAlign: TextAlign.center,
