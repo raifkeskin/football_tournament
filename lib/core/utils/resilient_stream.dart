@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'app_activity.dart';
 import 'stream_scope.dart';
 
@@ -21,9 +23,14 @@ const _backgroundGrace = Duration(seconds: 30);
 ///
 /// Birden fazla dinleyiciyi destekler ve sonradan bağlanan dinleyiciye son
 /// değeri hemen iletir (ekran yeniden kurulsa da yükleniyor'da takılmaz).
+///
+/// Sorgu hatası (PostgrestException: ör. kaldırılmış sütun, yetki) bağlantı
+/// kopması değildir; henüz veri yoksa ekrana iletilir ki "yükleniyor"da
+/// sonsuza dek takılmasın. Yeniden deneme daha seyrek sürer.
 Stream<T> resilientStream<T>(
   Stream<T> Function() create, {
   Duration retryDelay = const Duration(seconds: 2),
+  Duration queryErrorRetryDelay = const Duration(seconds: 15),
 }) {
   final listeners = <MultiStreamController<T>>{};
   StreamSubscription<T>? sub;
@@ -55,12 +62,21 @@ Stream<T> resilientStream<T>(
             l.add(value);
           }
         },
-        onError: (Object _, StackTrace _) {
+        onError: (Object e, StackTrace st) {
           if (scope != s) return; // eski bağlantının geç gelen hatası
           closeConnection();
           if (listeners.isEmpty) return;
+          final queryError = e is PostgrestException;
+          if (queryError && !hasLast) {
+            for (final l in [...listeners]) {
+              l.addError(e, st);
+            }
+          }
           retry?.cancel();
-          retry = Timer(retryDelay, connect);
+          retry = Timer(
+            queryError ? queryErrorRetryDelay : retryDelay,
+            connect,
+          );
         },
       ),
     );
