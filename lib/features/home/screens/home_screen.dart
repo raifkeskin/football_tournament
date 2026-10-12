@@ -30,6 +30,11 @@ import '../../../core/design_flags.dart';
 import '../../../core/widgets/app_name_band.dart';
 
 /// Ana sayfa — günün maçları, tarih şeridi ve maç kartları.
+
+/// Maç Takvimi'nin üstündeki şerit (menü · tarihler · takvim) yüksekliği;
+/// yan menü bu şeridin altından açılır.
+const double kCalendarStripHeight = 68;
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, this.showCalendar = false});
 
@@ -639,7 +644,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   return Column(
                     children: [
                       SizedBox(
-                        height: 68,
+                        height: kCalendarStripHeight,
                         child: Row(
                           children: [
                             // Menü: bantla aynı futbol topu düğmesi.
