@@ -301,12 +301,20 @@ class _MyProfileViewState extends State<MyProfileView> {
           ],
           if (widget.onSignOut != null) ...[
             const SizedBox(height: 24),
-            Center(
-              child: TextButton.icon(
-                onPressed: widget.onSignOut,
-                style: TextButton.styleFrom(foregroundColor: kAdminMuted),
-                icon: const Icon(Icons.logout_rounded, size: 18),
-                label: const Text('Çıkış yap / Hesabı sil'),
+            OutlinedButton.icon(
+              onPressed: widget.onSignOut,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: kAdminDanger,
+                side: BorderSide(color: kAdminDanger.withValues(alpha: 0.6)),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              icon: const Icon(Icons.logout_rounded, size: 18),
+              label: const Text(
+                'ÇIKIŞ YAP / HESABI SİL',
+                style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1),
               ),
             ),
           ],
@@ -1022,6 +1030,8 @@ class _MyProfileViewState extends State<MyProfileView> {
     );
   }
 
+  /// Sıradaki maç: listedeki satırla aynı sıkı tasarım; üstünde
+  /// "SIRADAKİ MAÇ" ve kalan gün.
   Widget _nextMatchCard(TeamMatch m, {MyTeam? team}) {
     final at = m.startsAt;
     final live =
@@ -1045,170 +1055,94 @@ class _MyProfileViewState extends State<MyProfileView> {
           ? 'Yarın'
           : '$days gün kaldı';
     }
-    final time = (m.match.matchTime ?? '').trim();
-
-    Widget side(String name, String logo, String? color) => Expanded(
-      child: Column(
-        children: [
-          _teamLogo(logo, color, 52),
-          const SizedBox(height: 8),
-          Text(
-            shortTeamName(name),
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              height: 1.2,
-            ),
-          ),
-        ],
-      ),
-    );
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: () => _openMatch(m.match),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: _card(border: kAdminAccent.withValues(alpha: 0.35)),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'SIRADAKİ MAÇ',
-                      style: TextStyle(
-                        color: kAdminAccent,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                  ),
-                  _chip(badge, live ? kAdminDanger : kAdminAccent),
-                ],
-              ),
-              if (team != null) ...[
-                const SizedBox(height: 8),
-                Center(child: _teamBadge(team)),
-              ],
-              const SizedBox(height: 14),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  side(m.homeName, m.homeLogo, m.homeColor),
-                  SizedBox(
-                    width: 78,
-                    child: Column(
-                      children: [
-                        const SizedBox(height: 8),
-                        Text(
-                          live
-                              ? '${m.match.homeScore} - ${m.match.awayScore}'
-                              : (time.length >= 5
-                                    ? time.substring(0, 5)
-                                    : '--:--'),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 26,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        if (at != null)
-                          Text(
-                            _dayLabel(at),
-                            style: const TextStyle(
-                              color: kAdminMuted,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  side(m.awayName, m.awayLogo, m.awayColor),
-                ],
-              ),
-              if ((m.pitchName ?? '').isNotEmpty || m.match.week != null) ...[
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.place_outlined,
-                      color: kAdminMuted,
-                      size: 15,
-                    ),
-                    const SizedBox(width: 4),
-                    Flexible(
-                      child: Text(
-                        [
-                          if ((m.pitchName ?? '').isNotEmpty) m.pitchName!,
-                          if (m.match.week != null) '${m.match.week}. hafta',
-                        ].join(' · '),
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: kAdminMuted,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ],
-          ),
-        ),
+    return _matchRow(
+      m,
+      team: team,
+      highlight: (
+        title: 'SIRADAKİ MAÇ',
+        badge: badge,
+        color: live ? kAdminDanger : kAdminAccent,
       ),
     );
   }
 
-  Widget _matchRow(TeamMatch m, {MyTeam? team}) {
+  /// Sıkı maç satırı: üstte turnuva rozeti ile tarih · stat yan yana (taşan
+  /// yazı kısalır, üst üste binmez), altında skor satırı.
+  Widget _matchRow(
+    TeamMatch m, {
+    MyTeam? team,
+    ({String title, String badge, Color color})? highlight,
+  }) {
     final at = m.startsAt;
-    final top = [
+    final week = highlight != null && m.match.week != null
+        ? '${m.match.week}. hafta'
+        : null;
+    final info = [
       if (at != null) _dayLabel(at),
       if ((m.pitchName ?? '').isNotEmpty) m.pitchName!,
+      ?week,
     ].join(' · ');
+    const muted = TextStyle(
+      color: kAdminMuted,
+      fontSize: 11.5,
+      fontWeight: FontWeight.w600,
+    );
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(14),
           onTap: () => _openMatch(m.match),
           child: Container(
-            padding: const EdgeInsets.fromLTRB(8, 10, 8, 12),
-            decoration: _card(),
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 9),
+            decoration: _card(
+              border: highlight?.color.withValues(alpha: 0.45),
+            ).copyWith(borderRadius: BorderRadius.circular(14)),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Birden fazla takımda: ortada turnuva rozeti, altında
-                // ortalı tarih · stat.
-                if (team != null)
+                if (highlight != null)
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(6, 0, 6, 6),
-                    child: Center(child: _teamBadge(team)),
+                    padding: const EdgeInsets.fromLTRB(4, 0, 2, 6),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            highlight.title,
+                            style: TextStyle(
+                              color: highlight.color,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                        ),
+                        _chip(highlight.badge, highlight.color),
+                      ],
+                    ),
                   ),
-                if (top.isNotEmpty)
+                if (team != null || info.isNotEmpty)
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(6, 0, 6, 8),
-                    child: Text(
-                      top,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: team != null ? TextAlign.center : null,
-                      style: const TextStyle(
-                        color: kAdminMuted,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    padding: const EdgeInsets.fromLTRB(4, 0, 4, 6),
+                    child: Row(
+                      children: [
+                        if (team != null) ...[
+                          Flexible(child: _teamBadge(team)),
+                          const SizedBox(width: 8),
+                        ],
+                        Expanded(
+                          child: Text(
+                            info,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: team != null
+                                ? TextAlign.right
+                                : TextAlign.left,
+                            style: muted,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 MatchScoreLine(
@@ -1217,6 +1151,7 @@ class _MyProfileViewState extends State<MyProfileView> {
                   awayName: m.awayName,
                   homeLogo: m.homeLogo,
                   awayLogo: m.awayLogo,
+                  compact: true,
                 ),
               ],
             ),

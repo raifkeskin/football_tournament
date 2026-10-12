@@ -75,8 +75,13 @@ class MatchScoreLine extends StatelessWidget {
     final isLive =
         match.status == MatchStatus.live ||
         match.status == MatchStatus.halftime;
+    // İptal / ertelenen maçta skor kutusunda İPT / ERT yazar.
+    final unplayed =
+        match.status == MatchStatus.cancelled ||
+        match.status == MatchStatus.postponed;
     final showScore =
-        match.status == MatchStatus.finished || isLive || hs != 0 || as != 0;
+        !unplayed &&
+        (match.status == MatchStatus.finished || isLive || hs != 0 || as != 0);
     // Ad, kendi alanında skora yaslı durur; iki satıra inerse satırlar
     // birbirine göre ortalanır.
     Widget name(String text, Alignment align) => Align(
@@ -159,7 +164,7 @@ class MatchScoreLine extends StatelessWidget {
                     fontFeatures: [FontFeature.tabularFigures()],
                   ),
                 ),
-                if (status != null)
+                if (status != null && !unplayed)
                   Text(
                     status.text,
                     style: TextStyle(
@@ -198,9 +203,13 @@ class MatchScoreLine extends StatelessWidget {
               ),
             ),
             child: Text(
-              showScore ? '$hs - $as' : '-',
+              unplayed
+                  ? (status?.text ?? '-')
+                  : (showScore ? '$hs - $as' : '-'),
               style: TextStyle(
-                color: isLive ? _live : Colors.white,
+                color: isLive
+                    ? _live
+                    : (unplayed ? Colors.white70 : Colors.white),
                 fontWeight: FontWeight.w800,
                 fontSize: compact ? 12 : 14,
                 fontFeatures: const [FontFeature.tabularFigures()],
