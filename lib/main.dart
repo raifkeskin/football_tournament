@@ -18,6 +18,7 @@ import 'core/widgets/web_responsive_frame.dart';
 import 'core/utils/app_activity.dart';
 import 'core/services/error_reporter.dart';
 import 'core/push/native_push.dart';
+import 'features/auth/password_input.dart';
 import 'core/push/push_service.dart';
 import 'core/services/notification_center.dart';
 import 'features/notifications/notification_router.dart';
@@ -46,6 +47,7 @@ void main() async {
   // ekranıyla açılır.
   await AppSessionController.enforceRememberMe();
   await AppSettings.load();
+  await PasswordKeyboard.load();
   await GuestMode.load();
   // Son turnuva teması hemen; kişiye göre güncel tema arkadan.
   await ActiveTournament.init(guestChosen: GuestMode.chosen);

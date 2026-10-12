@@ -1,5 +1,8 @@
 // Uygulama ikonlarını ve uygulama içi logoyu ana logo görselinden üretir
-// (design/app_logo_master.jpg, 5120 px).
+// (design/app_logo_master.png, 4096 px: LM arması, köşesiz kare; vektör
+// kaynağı design/logo-lm/lm-arma-kare.svg). Uygulama içi logo, açılış
+// ekranları, favicon ve Play tanıtım görseli zeminsiz yuvarlak armadan
+// üretilir (design/app_logo_crest.png, saydam; design/logo-lm/lm-arma-yuvarlak.svg).
 // Çalıştırma: flutter test tool/render_app_icons_test.dart
 // Ardından: dart run flutter_launcher_icons && dart run flutter_native_splash:create
 import 'dart:io';
@@ -8,11 +11,9 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:image/image.dart' as img;
 
-/// Ana görselde yuvarlak köşeli iç panelin, köşeleri ve dış çerçeveyi
-/// dışarıda bırakan kare kesiti (panel: x 165–4905, y 215–4955).
-const _crop = Rect.fromLTWH(255, 305, 4560, 4560);
+/// Ana görselin kullanılan kesiti: görselin tamamı (köşesiz kare).
+const _crop = Rect.fromLTWH(0, 0, 4096, 4096);
 
 /// Uygulama içi logo ve yuvarlak ikonlarda köşe yarıçapı (kenarın oranı).
 const _radius = 0.22;
@@ -21,6 +22,7 @@ const _navy = Color(0xFF0F172A);
 const _green = Color(0xFF10B981);
 
 late ui.Image _master;
+late ui.Image _crest;
 
 Future<void> _save(String path, ui.Image image) async {
   final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
@@ -88,6 +90,22 @@ void _padded(Canvas c, double s, double frac) {
   c.drawImageRect(_master, r, dst, _paint);
 }
 
+/// Zeminsiz yuvarlak armayı [dst] alanına çizer (dışı saydam).
+void _crestAt(Canvas c, Rect dst) => c.drawImageRect(
+  _crest,
+  Rect.fromLTWH(0, 0, _crest.width.toDouble(), _crest.height.toDouble()),
+  dst,
+  _paint,
+);
+
+Future<void> _crestPng(String path, int px, {double frac = 1}) async => _save(
+  path,
+  await _draw(px, (c, s) {
+    final m = s * frac;
+    _crestAt(c, Rect.fromLTWH((s - m) / 2, (s - m) / 2, m, m));
+  }),
+);
+
 Future<void> _full(String path, int px) async => _save(
   path,
   await _draw(px, (c, s) => _logo(c, Rect.fromLTWH(0, 0, s, s))),
@@ -112,29 +130,19 @@ Future<void> _maskable(String path, int px, double frac) async =>
 void main() {
   setUpAll(() async {
     final codec = await ui.instantiateImageCodec(
-      File('design/app_logo_master.jpg').readAsBytesSync(),
+      File('design/app_logo_master.png').readAsBytesSync(),
     );
     _master = (await codec.getNextFrame()).image;
+    final crest = await ui.instantiateImageCodec(
+      File('design/app_logo_crest.png').readAsBytesSync(),
+    );
+    _crest = (await crest.getNextFrame()).image;
   });
 
   testWidgets('ikonları üret', (tester) async {
     await tester.runAsync(() async {
-      // Uygulama içi logo (köşeleri widget yuvarlar): küçük JPG.
-      final logo = await _draw(
-        512,
-        (c, s) => _logo(c, Rect.fromLTWH(0, 0, s, s)),
-      );
-      final raw = await logo.toByteData(format: ui.ImageByteFormat.rawRgba);
-      final jpg = img.encodeJpg(
-        img.Image.fromBytes(
-          width: 512,
-          height: 512,
-          bytes: raw!.buffer,
-          numChannels: 4,
-        ),
-        quality: 88,
-      );
-      File('assets/images/app_logo.jpg').writeAsBytesSync(jpg);
+      // Uygulama içi logo: zeminsiz yuvarlak arma, saydam PNG.
+      await _crestPng('assets/images/app_logo.png', 512);
 
       // iOS: tam kare (köşeleri iOS yuvarlar), saydamlık yok.
       await _full('design/app_icon_ios.png', 1024);
@@ -142,17 +150,17 @@ void main() {
       // alana sığacak kadar küçültülmüş), ön yüz saydam.
       await _maskable('design/app_icon_android_bg.png', 1024, 0.74);
       await _save('design/app_icon_android_fg.png', await _draw(1024, (_, _) {}));
-      // Açılış ekranı (lacivert zemin üstünde yuvarlak köşeli logo).
-      await _rounded('design/splash_logo.png', 768);
+      // Açılış ekranı (lacivert zemin üstünde zeminsiz arma).
+      await _crestPng('design/splash_logo.png', 768);
       // Android 12 açılış ikonu: dairesel maskeye sığsın.
-      await _rounded('design/splash_android12.png', 960, frac: 0.52);
+      await _crestPng('design/splash_android12.png', 960, frac: 0.6);
       // Web
       await _rounded('web/icons/Icon-192.png', 192);
       await _rounded('web/icons/Icon-512.png', 512);
       await _maskable('web/icons/Icon-maskable-192.png', 192, 0.8);
       await _maskable('web/icons/Icon-maskable-512.png', 512, 0.8);
       await _full('web/icons/Icon-180-apple.png', 180);
-      await _rounded('web/favicon.png', 64);
+      await _crestPng('web/favicon.png', 64);
       // Play Store ikonu: tam kare (köşeleri Play yuvarlar).
       await _full('design/store/play_icon_512.png', 512);
     });
@@ -175,7 +183,7 @@ void main() {
         const Rect.fromLTWH(0, 0, w, h),
         Paint()..color = _navy,
       );
-      _logo(canvas, const Rect.fromLTWH(90, 110, 280, 280), rounded: true);
+      _crestAt(canvas, const Rect.fromLTWH(90, 110, 280, 280));
       void text(String s, double x, double y, TextStyle style) {
         final tp = TextPainter(
           text: TextSpan(text: s, style: style),
