@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Takvim Şeridi Önizleme</title>
+<style>
+  :root {
+    --bg: #0F172A; --band: #13254d; --band2: #0d1a38; --white: #fff;
+    --muted: rgba(255,255,255,.6); --green: #10B981; --gold: #E2B845;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--white);
+    font-family: "Barlow", -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: 16px;
+  }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  p.lead { color: #94A3B8; font-size: 13px; margin: 0 0 18px; line-height: 1.45; }
+  .item { margin: 0 auto 26px; max-width: 420px; }
+  .label {
+    font-size: 12px; font-weight: 800; letter-spacing: 1px; color: var(--green);
+    margin-bottom: 6px;
+  }
+  .label.old { color: #94A3B8; }
+  .note { color: #94A3B8; font-size: 12.5px; margin-top: 8px; line-height: 1.45; }
+  .phone {
+    background: linear-gradient(90deg, var(--band), var(--band2));
+    border-radius: 14px; overflow: hidden; border: 1px solid rgba(255,255,255,.08);
+  }
+  .strip { display: flex; align-items: center; height: 68px; padding: 0 4px; gap: 2px; }
+  .ball {
+    width: 34px; height: 34px; border-radius: 50%; flex: none;
+    background: radial-gradient(circle at 50% 50%, #fff 0 45%, #1f2937 46% 52%, #fff 53%);
+    border: 2px solid #34d399; box-shadow: 0 0 8px rgba(16,185,129,.6);
+  }
+  .chev { width: 20px; text-align: center; color: #fff; font-size: 20px; flex: none; }
+  .days { flex: 1; display: flex; gap: 2px; min-width: 0; }
+  .day {
+    flex: 1; border-radius: 12px; padding: 3px 0; text-align: center; position: relative;
+    min-width: 0;
+  }
+  .day.sel { background: rgba(255,255,255,.15); }
+  .wd { font-size: 10px; font-weight: 700; color: var(--muted); }
+  .day.sel .wd { color: #fff; }
+  .dn { font-size: 13px; font-weight: 800; margin-top: 3px; }
+  .dn.big { font-size: 17px; margin-top: 1px; }
+  .dot {
+    width: 5px; height: 5px; border-radius: 50%; background: var(--green);
+    margin: 0 auto 2px; box-shadow: 0 0 4px rgba(16,185,129,.8);
+  }
+  .dot.none { background: transparent; box-shadow: none; }
+  .cal {
+    width: 40px; flex: none; display: flex; flex-direction: column; align-items: center;
+    color: #fff; font-size: 20px; line-height: 1;
+  }
+  .cal small { font-size: 9.5px; font-weight: 800; color: var(--gold); margin-top: 3px; letter-spacing: .5px; }
+  .month {
+    text-align: center; font-size: 10.5px; font-weight: 800; letter-spacing: 1.4px;
+    color: var(--gold); padding-top: 6px;
+  }
+  .stripA { height: 58px; }
+  .sep { opacity: .5; padding: 0 4px; }
+</style>
+</head>
+<body>
+  <h1>Maç Takvimi tarih şeridi</h1>
+  <p class="lead">Yalnızca tasarım önizlemesi; uygulamada değişiklik yapılmadı.
+  Yeşil nokta: o gün maç var (takvim penceresindeki gibi). Örnek: bugün 12 Ekim,
+  maçlar 10, 11 ve 14 Ekim'de.</p>
+
+  <div class="item">
+    <div class="label old">ŞİMDİKİ</div>
+    <div class="phone">
+      <div class="strip">
+        <div class="ball"></div><div class="chev">‹</div>
+        <div class="days">
+          <div class="day"><div class="wd">Cmt</div><div class="dn">10/10</div></div>
+          <div class="day"><div class="wd">Paz</div><div class="dn">11/10</div></div>
+          <div class="day sel"><div class="wd">Bugün</div><div class="dn">12/10</div></div>
+          <div class="day"><div class="wd">Sal</div><div class="dn">13/10</div></div>
+          <div class="day"><div class="wd">Çar</div><div class="dn">14/10</div></div>
+        </div>
+        <div class="chev">›</div><div class="cal">📅</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="item">
+    <div class="label">ÖNERİ A · AY ADI ŞERİDİN ÜSTÜNDE ORTADA</div>
+    <div class="phone">
+      <div class="month">EKİM · 2026</div>
+      <div class="strip stripA">
+        <div class="ball"></div><div class="chev">‹</div>
+        <div class="days">
+          <div class="day"><div class="dot"></div><div class="wd">Cmt</div><div class="dn big">10</div></div>
+          <div class="day"><div class="dot"></div><div class="wd">Paz</div><div class="dn big">11</div></div>
+          <div class="day sel"><div class="dot none"></div><div class="wd">Bugün</div><div class="dn big">12</div></div>
+          <div class="day"><div class="dot none"></div><div class="wd">Sal</div><div class="dn big">13</div></div>
+          <div class="day"><div class="dot"></div><div class="wd">Çar</div><div class="dn big">14</div></div>
+        </div>
+        <div class="chev">›</div><div class="cal">📅</div>
+      </div>
+    </div>
+    <div class="note">Gün numaraları büyür (ay yazısı tekrarlanmaz). Bant ~10 px uzar.</div>
+  </div>
+
+  <div class="item">
+    <div class="label">ÖNERİ A · AY GEÇİŞİNDE</div>
+    <div class="phone">
+      <div class="month">EKİM<span class="sep">–</span>KASIM · 2026</div>
+      <div class="strip stripA">
+        <div class="ball"></div><div class="chev">‹</div>
+        <div class="days">
+          <div class="day"><div class="dot"></div><div class="wd">Per</div><div class="dn big">29</div></div>
+          <div class="day"><div class="dot none"></div><div class="wd">Cum</div><div class="dn big">30</div></div>
+          <div class="day sel"><div class="dot"></div><div class="wd">Cmt</div><div class="dn big">31</div></div>
+          <div class="day"><div class="dot"></div><div class="wd">Paz</div><div class="dn big">1</div></div>
+          <div class="day"><div class="dot none"></div><div class="wd">Pzt</div><div class="dn big">2</div></div>
+        </div>
+        <div class="chev">›</div><div class="cal">📅</div>
+      </div>
+    </div>
+    <div class="note">Şerit iki aya yayılınca başlık iki ayı birden yazar.</div>
+  </div>
+
+  <div class="item">
+    <div class="label">ÖNERİ B · AY ADI TAKVİM İKONUNUN ALTINDA</div>
+    <div class="phone">
+      <div class="strip">
+        <div class="ball"></div><div class="chev">‹</div>
+        <div class="days">
+          <div class="day"><div class="dot"></div><div class="wd">Cmt</div><div class="dn big">10</div></div>
+          <div class="day"><div class="dot"></div><div class="wd">Paz</div><div class="dn big">11</div></div>
+          <div class="day sel"><div class="dot none"></div><div class="wd">Bugün</div><div class="dn big">12</div></div>
+          <div class="day"><div class="dot none"></div><div class="wd">Sal</div><div class="dn big">13</div></div>
+          <div class="day"><div class="dot"></div><div class="wd">Çar</div><div class="dn big">14</div></div>
+        </div>
+        <div class="chev">›</div>
+        <div class="cal">📅<small>EKİM</small></div>
+      </div>
+    </div>
+    <div class="note">Bant yüksekliği değişmez; ay adı seçili günün ayını gösterir. Yıl yazmaz.</div>
+  </div>
+</body>
+</html>

@@ -100,9 +100,12 @@ Future<void> showSquadBulkUploadDialog({
             final dir = await getTemporaryDirectory();
             final file = File('${dir.path}/futbolcu_sablonu.xlsx');
             await file.writeAsBytes(bytes, flush: true);
-            await Share.shareXFiles([
-              XFile(file.path),
-            ], text: 'Futbolcu Excel Şablonu');
+            await SharePlus.instance.share(
+              ShareParams(
+                files: [XFile(file.path)],
+                text: 'Futbolcu Excel Şablonu',
+              ),
+            );
           } catch (e) {
             if (!dialogContext.mounted) return;
             ScaffoldMessenger.of(
@@ -869,7 +872,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
   }) async {
     final svc = _sbTeamService;
     if (svc == null) {
-      if (!context.mounted) return;
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Bu özellik Supabase modunda kullanılabilir.'),
@@ -903,7 +906,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     // Boş bırakılırsa numara silinir.
     final n = int.tryParse(raw);
     if (n == null && raw.isNotEmpty) {
-      if (!context.mounted) return;
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Forma numarası geçersiz.')));
@@ -914,17 +917,139 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
       await svc.setJerseyNumber(player.id, tid, lid, n);
       if (!mounted) return;
       _refreshPlayersStreamForTournament(lid);
-      if (!context.mounted) return;
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Forma numarası güncellendi.')),
       );
     } catch (e) {
-      if (!context.mounted) return;
+      if (!mounted) return;
       final msg = e.toString().replaceFirst('Exception: ', '').trim();
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Güncellenemedi: $msg')));
     }
+  }
+
+  bool _assigningJerseys = false;
+
+  /// Forma numarası olmayan oyuncular varsa: "Otomatik ata" şeridi.
+  Widget _autoJerseyBanner(List<PlayerModel> players, String seasonId) {
+    final missing = [
+      for (final p in players)
+        if (int.tryParse((p.number ?? '').trim()) == null) p,
+    ];
+    if (missing.isEmpty) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.tag_rounded, color: _squadMuted, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              '${missing.length} oyuncunun forma numarası yok.',
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+            ),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF10B981),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: _assigningJerseys
+                ? null
+                : () => _autoAssignJerseys(players, missing, seasonId),
+            child: _assigningJerseys
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Text(
+                    'Otomatik ata',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Numarasız oyunculara takımda boşta kalan en küçük numaralar verilir
+  /// (kaleciler önce, sonra ada göre). Mevcut numaralara dokunulmaz.
+  Future<void> _autoAssignJerseys(
+    List<PlayerModel> all,
+    List<PlayerModel> missing,
+    String seasonId,
+  ) async {
+    final svc = _sbTeamService;
+    if (svc == null) return;
+    final ok = await showAdminConfirmDialog(
+      context: context,
+      title: 'Forma No Ata',
+      message:
+          'Forma numarası olmayan ${missing.length} oyuncuya takımda boşta '
+          'olan en küçük numaralar sırayla verilecek. Mevcut numaralar '
+          'değişmez; numaraları sonradan tek tek değiştirebilirsiniz.',
+      confirmLabel: 'ATA',
+      destructive: false,
+      icon: Icons.tag_rounded,
+    );
+    if (!ok || !mounted) return;
+    final used = <int>{
+      for (final p in all) ?int.tryParse((p.number ?? '').trim()),
+    };
+    bool isKeeper(PlayerModel p) => [
+      p.mainPosition,
+      p.position,
+    ].any((v) => (v ?? '').toLowerCase().contains('kaleci'));
+    final order = [...missing]
+      ..sort((a, b) {
+        final k = (isKeeper(a) ? 0 : 1).compareTo(isKeeper(b) ? 0 : 1);
+        return k != 0 ? k : a.name.compareTo(b.name);
+      });
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _assigningJerseys = true);
+    var next = 1;
+    var done = 0;
+    String? error;
+    for (final p in order) {
+      while (used.contains(next)) {
+        next++;
+      }
+      try {
+        await svc.updateJerseyNumber(p.id, widget.teamId, seasonId, next);
+        used.add(next);
+        done++;
+      } catch (e) {
+        error = e.toString().replaceFirst('Exception: ', '').trim();
+        break;
+      }
+    }
+    if (!mounted) return;
+    setState(() => _assigningJerseys = false);
+    _refreshPlayersStreamForTournament(seasonId);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          error == null
+              ? '$done oyuncuya forma numarası verildi.'
+              : '$done oyuncuya numara verildi, sonra hata oluştu: $error',
+        ),
+      ),
+    );
   }
 
   String _normalizeUrl(String raw) {
@@ -1614,6 +1739,11 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                                       );
                                     },
                                   ),
+                                  if (canAdd)
+                                    _autoJerseyBanner(
+                                      allPlayers,
+                                      effectiveTournamentId,
+                                    ),
                                   if (_needsApproval)
                                     _pendingRequests(effectiveTournamentId),
                                   if (_rosterSearchOpen) ...[
@@ -1917,42 +2047,6 @@ class _SmallActionButton extends StatelessWidget {
   }
 }
 
-class _CardRow extends StatelessWidget {
-  const _CardRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.85),
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            value,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 /// Futbolcu ekle / güncelle formunu ortada açılan temalı popup olarak açar.
 /// Dışarı dokunmak kaydetmeden kapatır. Kaydedilirse true döner.
 Future<bool?> showPlayerFormPopup(BuildContext context, PlayerFormScreen form) {
@@ -2034,7 +2128,6 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
   String _mainPosition = _unsetOption;
   String _subPosition = _unsetOption;
   String _preferredFoot = '';
-  String? _activePlayerId;
   String? _existingPhotoUrl;
   String? _implicitPhoneKey;
   XFile? _pickedPhoto;
@@ -2141,9 +2234,6 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
     super.initState();
     final e = widget.editing;
     if (e != null) {
-      _activePlayerId = (e.phone ?? e.id).trim().isEmpty
-          ? e.id
-          : (e.phone ?? e.id);
       _identityNoController.text = (e.nationalId ?? '').toString();
       final full = e.name.trim().replaceAll(RegExp(r'\s+'), ' ');
       final parts = full.isEmpty ? const <String>[] : full.split(' ');
@@ -3681,7 +3771,6 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
 
 const _squadAccent = Color(0xFF10B981);
 const _squadMuted = Color(0xFF94A3B8);
-const _squadAmber = Color(0xFFFBBF24);
 const _squadCard = Color(0xFF1E293B);
 
 const _positionOrder = [
@@ -3908,7 +3997,10 @@ class _SquadSummaryCard extends StatelessWidget {
             stops: const [0, 0.5, 1],
           ),
         ),
+        // Stack kartın tam genişliğinde: köşe düğmeleri kartın kenarlarına
+        // hizalı (içerik genişliğine daralmasın).
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Stack(
               children: [

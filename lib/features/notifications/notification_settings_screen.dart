@@ -133,6 +133,7 @@ class _NotificationSettingsScreenState
     final manager = session.isAdmin || session.ownedLeagueIds.isNotEmpty;
     return AdminPageScaffold(
       title: 'Bildirimler',
+      bandBack: true,
       body: p == null
           ? const Center(child: CircularProgressIndicator(color: kAdminAccent))
           : ListView(

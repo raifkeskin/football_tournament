@@ -111,6 +111,24 @@
   </script>
 </head>
   <body>
+    <script>
+      // Video tam ekrana geçince ekranı yataya kilitle, çıkınca bırak
+      // (Android Chrome; iPhone Safari'de video zaten kendi oynatıcısında
+      // döner).
+      (function () {
+        function onChange() {
+          var o = screen.orientation;
+          if (!o || !o.lock) return;
+          if (document.fullscreenElement || document.webkitFullscreenElement) {
+            o.lock('landscape').catch(function () {});
+          } else if (o.unlock) {
+            try { o.unlock(); } catch (e) {}
+          }
+        }
+        document.addEventListener('fullscreenchange', onChange);
+        document.addEventListener('webkitfullscreenchange', onChange);
+      })();
+    </script>
     <script src="push.js"></script>
     <script src="flutter_bootstrap.js" defer=""></script>
   

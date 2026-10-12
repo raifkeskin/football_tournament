@@ -3,12 +3,21 @@ import 'package:flutter/material.dart';
 import '../widgets/admin_form.dart';
 import '../widgets/admin_page.dart';
 import '../../features/notifications/notification_settings_screen.dart';
+import 'native_push.dart';
 import 'push_service.dart';
 
 /// Profildeki bildirim kartı: izin/abonelik durumuna göre aç-kapat ya da
 /// yönlendirme (iPhone'da "Ana Ekrana Ekle", engellenmişse ayarlar).
 class PushCard extends StatefulWidget {
-  const PushCard({super.key, this.showSettingsLink = true});
+  const PushCard({
+    super.key,
+    this.showSettingsLink = true,
+    this.onlyWhenActionable = false,
+  });
+
+  /// true: yalnızca bildirimler kapalıyken ve açılabilirken görünür (ör.
+  /// bildirim listesinin üstünde).
+  final bool onlyWhenActionable;
 
   /// Kartın altında "Bildirim ayarları" bağlantısı (ayarlar ekranının
   /// kendisinde gösterilmez).
@@ -30,6 +39,7 @@ class _PushCardState extends State<PushCard> {
   }
 
   Future<void> _refresh({bool resync = false}) async {
+    await PushService.refresh();
     final state = PushService.state();
     final subscribed =
         state == PushState.granted && await PushService.isSubscribed();
@@ -48,11 +58,13 @@ class _PushCardState extends State<PushCard> {
       await action();
       messenger.showSnackBar(SnackBar(content: Text(done)));
     } catch (e) {
-      final denied = e.toString().contains('permission-denied');
+      final text = e.toString();
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            denied ? 'Bildirim izni verilmedi.' : 'Bildirimler açılamadı: $e',
+            text.contains('permission-')
+                ? 'Bildirim izni verilmedi.'
+                : 'Bildirimler açılamadı. Sayfayı yenileyip tekrar deneyin.',
           ),
         ),
       );
@@ -102,25 +114,34 @@ class _PushCardState extends State<PushCard> {
   }
 
   Widget? _card() {
-    if (_state == PushState.unsupported) return null;
-
     final on = _state == PushState.granted && _subscribed;
+    if (widget.onlyWhenActionable && (on || _state == PushState.unsupported)) {
+      return null;
+    }
     final String title;
     final String text;
     Widget? action;
     switch (_state) {
+      case PushState.unsupported:
+        // Bu cihazda telefon bildirimi yok (ör. iPhone uygulaması henüz).
+        title = 'Telefon bildirimleri';
+        text =
+            'Bu cihazda telefon bildirimleri henüz yok. Bildirimler sağ '
+            'üstteki zilde görünür.';
       case PushState.iosInstall:
-        title = 'Bildirimler';
+        title = 'Telefon bildirimlerini aç';
         text =
             'iPhone\'da bildirim almak için Safari\'de Paylaş → "Ana Ekrana '
             'Ekle" ile uygulamayı ekleyin ve ana ekrandaki simgeden açın.';
       case PushState.denied:
         title = 'Bildirimler engellendi';
-        text =
-            'Bildirim izni bu tarayıcıda kapalı. Tarayıcı / site ayarlarından '
-            'bildirimlere izin verip sayfayı yenileyin.';
+        text = NativePush.supported
+            ? 'Bildirim izni kapalı. Telefonun Ayarlar › Uygulamalar › '
+                  'Lig Masası › Bildirimler bölümünden izin verin.'
+            : 'Bildirim izni bu tarayıcıda kapalı. Tarayıcı / site '
+                  'ayarlarından bildirimlere izin verip sayfayı yenileyin.';
       default:
-        title = on ? 'Bildirimler açık' : 'Bildirimleri aç';
+        title = on ? 'Telefon bildirimleri açık' : 'Telefon bildirimlerini aç';
         text = on
             ? 'Bu cihaz bildirim alıyor. Hangi bildirimlerin geleceğini '
                   'ayarlardan seçebilirsiniz.'

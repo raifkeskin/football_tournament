@@ -20,6 +20,32 @@
     return navigator.serviceWorker.register('/push-sw.js?v=2', { scope: '/push/' });
   }
 
+  // Bildirim service worker'ı etkin olana kadar bekler. navigator.serviceWorker
+  // .ready kullanılmaz: o, sayfanın kendi kapsamındaki ('/') worker'ı bekler;
+  // Flutter'ın worker'ı kendini kaldırdığı için hiç tamamlanmıyordu ("Aç"
+  // düğmesi tepkisiz kalıyordu).
+  async function activeRegistration() {
+    const reg = await registration();
+    if (reg.active) return reg;
+    const sw = reg.installing || reg.waiting;
+    if (!sw) throw new Error('sw-missing');
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('sw-timeout')), 15000);
+      const check = () => {
+        if (sw.state === 'activated') {
+          clearTimeout(timer);
+          resolve();
+        } else if (sw.state === 'redundant') {
+          clearTimeout(timer);
+          reject(new Error('sw-redundant'));
+        }
+      };
+      sw.addEventListener('statechange', check);
+      check();
+    });
+    return reg;
+  }
+
   // 'unsupported' | 'ios-install' | 'denied' | 'granted' | 'default'
   function state() {
     const supported = 'serviceWorker' in navigator && 'PushManager' in window &&
@@ -32,8 +58,7 @@
   async function subscribe(vapidKey) {
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') throw new Error('permission-' + permission);
-    const reg = await registration();
-    await navigator.serviceWorker.ready;
+    const reg = await activeRegistration();
     let sub = await reg.pushManager.getSubscription();
     if (!sub) {
       sub = await reg.pushManager.subscribe({

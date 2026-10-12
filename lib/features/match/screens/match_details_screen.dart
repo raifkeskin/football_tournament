@@ -1,3 +1,4 @@
+import '../widgets/quick_score_dialog.dart';
 import '../../../core/services/active_tournament.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -37,7 +38,11 @@ import 'package:football_tournament/core/widgets/admin_form.dart';
 import '../../player/services/penalty_service.dart';
 import '../../../core/widgets/app_name_band.dart';
 import '../../../core/widgets/youtube_player_page.dart'
-    show youtubePlayerOrigin, youtubeVideoId;
+    show
+        landscapeOnFullscreen,
+        resetPlayerOrientation,
+        youtubePlayerOrigin,
+        youtubeVideoId;
 
 // --- YARDIMCI WIDGETLAR ---
 
@@ -578,33 +583,6 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     return s;
   }
 
-  String _resolvePitchLocation({
-    required List<Pitch> pitches,
-    required String pitchId,
-    required String pitchName,
-  }) {
-    final id = pitchId.trim();
-    final name = pitchName.trim();
-
-    if (id.isNotEmpty) {
-      for (final p in pitches) {
-        if (p.id.trim() == id) {
-          return p.location;
-        }
-      }
-    }
-
-    if (name.isNotEmpty) {
-      for (final p in pitches) {
-        if (p.name.trim().toLowerCase() == name.toLowerCase()) {
-          return p.location;
-        }
-      }
-    }
-
-    return '';
-  }
-
   Future<void> _openPitchLocation(
     BuildContext context,
     String rawLocation,
@@ -673,6 +651,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     required int tabIndex,
     bool canAssignObserver = false,
     bool canUndo = false,
+    bool canQuickScore = false,
+    String homeName = '',
+    String awayName = '',
   }) {
     if (tabIndex == 1 || tabIndex == 3) return null;
 
@@ -680,6 +661,20 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
       return _SpeedDialFab(
         key: const ValueKey('fab_detail'),
         actions: [
+          if (canQuickScore &&
+              match.status != MatchStatus.postponed &&
+              match.status != MatchStatus.cancelled)
+            _SpeedDialAction(
+              label: 'Hızlı Skor Girişi',
+              icon: Icons.scoreboard_outlined,
+              onTap: () => showQuickScoreDialog(
+                context,
+                match: match,
+                homeName: homeName,
+                awayName: awayName,
+                onSaved: _triggerRefresh,
+              ),
+            ),
           _SpeedDialAction(
             label: 'Maç Detayı Gir',
             icon: Icons.edit_note_rounded,
@@ -861,6 +856,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                       tabIndex: _tabController.index,
                       canAssignObserver: canManageLeague,
                       canUndo: canManageLeague,
+                      canQuickScore: canManageLeague,
+                      homeName: homeName,
+                      awayName: awayName,
                     ),
               body: Column(
                 children: [
@@ -2285,7 +2283,15 @@ class _NativeYoutubeScreenState extends State<_NativeYoutubeScreen> {
       );
 
   @override
+  void initState() {
+    super.initState();
+    // Tam ekran düğmesi ekranı yataya çevirir.
+    landscapeOnFullscreen(_controller);
+  }
+
+  @override
   void dispose() {
+    resetPlayerOrientation();
     _controller.close();
     super.dispose();
   }

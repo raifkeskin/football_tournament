@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/push/push_bridge_stub.dart'
     if (dart.library.js_interop) '../../core/push/push_bridge_web.dart'
     as bridge;
+import '../../core/push/native_push.dart';
 import '../../core/services/app_session.dart';
 import '../match/models/match.dart';
 import '../match/screens/match_details_screen.dart';
@@ -24,6 +25,14 @@ class NotificationRouter {
 
   /// Açılış adresindeki ve açıkken gelen bildirim tıklamalarını dinler.
   static void init() {
+    if (NativePush.supported) {
+      // Uygulama (APK): FCM bildirimine basılınca.
+      NativePush.setOpenHandler((url) {
+        final t = Uri.tryParse(url)?.queryParameters['n'];
+        if (t != null && t.isNotEmpty) _queue(t);
+      });
+      return;
+    }
     if (!kIsWeb) return;
     final tag = Uri.base.queryParameters['n'];
     if (tag != null && tag.isNotEmpty) _queue(tag);

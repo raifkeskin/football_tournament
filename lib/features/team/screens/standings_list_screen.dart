@@ -9,9 +9,9 @@ import '../../tournament/models/season.dart';
 import '../../tournament/screens/tournament_hub_screen.dart';
 
 /// Menüdeki Puan Durumu: kişinin görebildiği aktif turnuvalar (misafire
-/// hepsi). Birden fazla grubu olan turnuvada her grup ayrı satır
-/// ("Turnuva - Grup"), tek gruplu turnuvada yalnızca turnuva adı. Satıra
-/// basınca Turnuva Sayfası'nın Puan Durumu sekmesi açılır.
+/// hepsi), her turnuva tek satır; birden fazla grup varsa sağda grup sayısı
+/// (grup Turnuva Sayfası'ndaki çiplerle seçilir). Satıra basınca Turnuva
+/// Sayfası'nın Puan Durumu sekmesi ilk grupla açılır.
 class StandingsListScreen extends StatefulWidget {
   const StandingsListScreen({super.key});
 
@@ -24,15 +24,13 @@ class _Row {
     required this.league,
     required this.seasonId,
     required this.groupId,
-    this.groupName,
+    required this.groupCount,
   });
 
   final League league;
   final String seasonId;
   final String groupId;
-
-  /// Sezonda birden fazla grup varsa grubun adı (turnuva adının altında).
-  final String? groupName;
+  final int groupCount;
 }
 
 class _StandingsListScreenState extends State<StandingsListScreen> {
@@ -47,10 +45,12 @@ class _StandingsListScreenState extends State<StandingsListScreen> {
   Future<List<_Row>> _load(List<League> leagues) async {
     final sb = Supabase.instance.client;
     final ids = [for (final l in leagues) l.id];
-    final seasons =
-        (await sb.from('seasons').select().inFilter('league_id', ids))
-            .map((r) => Season.fromMap(r))
-            .toList();
+    // Sezonlar grupları ile tek istekte.
+    final seasonRows = await sb
+        .from('seasons')
+        .select('*, groups(id, name, season_id)')
+        .inFilter('league_id', ids);
+    final seasons = seasonRows.map((r) => Season.fromMap(r)).toList();
     // Her turnuvanın varsayılan (aktif) sezonu.
     final seasonOf = <String, String>{};
     for (final l in leagues) {
@@ -62,29 +62,29 @@ class _StandingsListScreenState extends State<StandingsListScreen> {
         );
       if (own.isNotEmpty) seasonOf[l.id] = pickDefaultSeasonId(own);
     }
-    final groups = seasonOf.isEmpty
-        ? const <Map<String, dynamic>>[]
-        : await sb
-              .from('groups')
-              .select('id, name, season_id')
-              .inFilter('season_id', seasonOf.values.toList())
-              .order('name');
+    final wanted = seasonOf.values.toSet();
+    final groups = [
+      for (final r in seasonRows)
+        if (wanted.contains(r['id'].toString()))
+          for (final g in (r['groups'] as List? ?? const []))
+            (g as Map).cast<String, dynamic>(),
+    ]..sort((a, b) => '${a['name']}'.compareTo('${b['name']}'));
     final rows = <_Row>[];
     for (final l in leagues) {
       final sId = seasonOf[l.id];
       if (sId == null) continue;
-      final own = groups.where((g) => g['season_id'].toString() == sId);
-      for (final g in own) {
-        final name = (g['name'] ?? '').toString().trim();
-        rows.add(
-          _Row(
-            league: l,
-            seasonId: sId,
-            groupId: g['id'].toString(),
-            groupName: own.length > 1 && name.isNotEmpty ? name : null,
-          ),
-        );
-      }
+      final own = groups
+          .where((g) => g['season_id'].toString() == sId)
+          .toList();
+      if (own.isEmpty) continue;
+      rows.add(
+        _Row(
+          league: l,
+          seasonId: sId,
+          groupId: own.first['id'].toString(),
+          groupCount: own.length,
+        ),
+      );
     }
     _cache = rows;
     return rows;
@@ -180,36 +180,42 @@ class _RowCard extends StatelessWidget {
                     child: Row(
                       children: [
                         Expanded(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                row.league.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 13.5,
-                                  fontWeight: FontWeight.w600,
-                                  height: 1.2,
-                                ),
-                              ),
-                              if (row.groupName != null)
-                                Text(
-                                  row.groupName!,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Colors.white54,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
-                                    height: 1.2,
-                                  ),
-                                ),
-                            ],
+                          child: Text(
+                            row.league.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w600,
+                              height: 1.2,
+                            ),
                           ),
                         ),
+                        if (row.groupCount > 1)
+                          Container(
+                            margin: const EdgeInsets.only(left: 8),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: const Color(
+                                  0xFF10B981,
+                                ).withValues(alpha: 0.5),
+                              ),
+                            ),
+                            child: Text(
+                              '${row.groupCount} grup',
+                              style: const TextStyle(
+                                color: Color(0xFF10B981),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
                         const Icon(
                           Icons.chevron_right_rounded,
                           color: Colors.white38,

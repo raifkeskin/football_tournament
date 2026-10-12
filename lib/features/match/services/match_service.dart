@@ -290,13 +290,6 @@ class SupabaseMatchService implements IMatchService {
   @override
   Future<void> addMatchMedia(MatchMediaModel media) async {
     // toMap() yerine doğrudan tablo kolon isimlerini elle yazıyoruz
-    // DEBUG PRINT: Veri servise nasıl geliyor?
-    print('--- SUPABASE INSERT TEST ---');
-    print('MatchID: ${media.matchId}');
-    print(
-      'URL: "${media.url}"',
-    ); // Tırnak içinde yazdır ki boşluk mu var görelim
-    print('Type: ${media.mediaType}');
 
     await _supabase.from('match_media').insert({
       'match_id': media.matchId,

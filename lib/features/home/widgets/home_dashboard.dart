@@ -6,6 +6,8 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/services/data_versions.dart';
+
 import '../../../core/services/active_tournament.dart';
 import '../../../core/services/app_session.dart';
 import '../../../core/widgets/web_safe_image.dart';
@@ -18,6 +20,7 @@ import '../../tournament/models/league.dart';
 import '../../tournament/screens/admin_penalty_management_screen.dart';
 import '../../tournament/screens/tournament_hub_screen.dart';
 import 'home_news_card.dart';
+import 'overdue_results_banner.dart';
 import '../../sponsors/sponsor_strip.dart';
 import '../../../core/utils/team_name.dart';
 import '../../../core/push/notification_prefs.dart';
@@ -310,6 +313,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
   }
 
   Future<void> _refresh() async {
+    OverdueResultsBanner.refresh.value++;
     final session = AppSession.of(context).value;
     await _revalidate(session, _cacheKey(session), fromDisk: false);
   }
@@ -344,8 +348,26 @@ class _HomeDashboardState extends State<HomeDashboard> {
         }
       } catch (_) {}
     }
+    // Sunucudaki sürüm saklanan veriyle aynıysa sezon yeniden indirilmez
+    // (açılışta tek küçük istek).
+    final scopes = _versionScopes(_memCache[key]);
+    if (_memCache[key] != null && await VersionedCache.unchanged(key, scopes)) {
+      _fetchedAt[key] = DateTime.now();
+      if (mounted && _loadedFor == key) setState(() => _loadedOnce = true);
+      return;
+    }
     try {
+      // Sürüm, veriyle aynı anda istenir (fazladan tur yok).
+      final stampF = DataVersions.stamp(scopes);
       final raw = await _fetchRaw(session);
+      final stamp = await stampF;
+      // Sezon değiştiyse (yeni sezon) damga yeni sezona göre alınır.
+      final fresh = _versionScopes(raw);
+      final savedStamp = _sameScopes(fresh, scopes)
+          ? stamp
+          : await DataVersions.stamp(fresh);
+      // Yalnızca damga saklanır (veri zaten panonun kendi önbelleğinde).
+      unawaited(VersionedCache.save(key, true, savedStamp));
       _memCache[key] = raw;
       _fetchedAt[key] = DateTime.now();
       if (mounted && _loadedFor == key) {
@@ -368,6 +390,23 @@ class _HomeDashboardState extends State<HomeDashboard> {
       }
     }
   }
+
+  /// Panonun bağlı olduğu veri sürümleri: sezonun verisi + genel tablolar.
+  static List<String> _versionScopes(Map<String, dynamic>? raw) {
+    final season = raw?['season'];
+    final id = season is Map ? season['id']?.toString() : null;
+    return [
+      if (id != null) 'season:$id',
+      'seasons',
+      'teams',
+      'leagues',
+      'players',
+      'pitches',
+    ];
+  }
+
+  static bool _sameScopes(List<String> a, List<String> b) =>
+      a.length == b.length && a.every(b.contains);
 
   /// Sorgular: sezon (1 tur), ardından geri kalan her şey paralel (1 tur).
   Future<Map<String, dynamic>> _fetchRaw(AppSessionState session) async {
@@ -757,7 +796,11 @@ class _HomeDashboardState extends State<HomeDashboard> {
             onRefresh: _refresh,
             child: ListView(
               padding: const EdgeInsets.only(bottom: 24),
-              children: [_greeting(session, data), content],
+              children: [
+                _greeting(session, data),
+                OverdueResultsBanner(leagueId: widget.league.id),
+                content,
+              ],
             ),
           ),
         ),
@@ -1002,9 +1045,16 @@ class _HomeDashboardState extends State<HomeDashboard> {
       }
     }
 
-    // Bu hafta: canlı ya da oynanmamış maçı olan ilk hafta.
+    // Bu hafta: canlı ya da oynanmamış maçı olan ilk hafta. Ertelenen /
+    // iptal edilen maç haftayı açık tutmaz (yoksa pano o haftada kalırdı).
     final openWeeks = sorted
-        .where((m) => m.status != MatchStatus.finished && inGroup(m))
+        .where(
+          (m) =>
+              m.status != MatchStatus.finished &&
+              m.status != MatchStatus.postponed &&
+              m.status != MatchStatus.cancelled &&
+              inGroup(m),
+        )
         .map((m) => m.week ?? 0)
         .toList();
     final thisWeek = openWeeks.isEmpty
@@ -1014,8 +1064,16 @@ class _HomeDashboardState extends State<HomeDashboard> {
         ? const <MatchModel>[]
         : sorted.where((m) => m.week == thisWeek && inGroup(m)).toList();
 
+    // Geçen hafta: bu haftadan önceki, bitmiş maçı olan son hafta (bu
+    // haftanın biten maçları yukarıda zaten görünür; aynı hafta iki kez
+    // gösterilmez).
     final finishedWeeks = sorted
-        .where((m) => m.status == MatchStatus.finished && inGroup(m))
+        .where(
+          (m) =>
+              m.status == MatchStatus.finished &&
+              inGroup(m) &&
+              (thisWeek == null || (m.week ?? 0) < thisWeek),
+        )
         .map((m) => m.week ?? 0)
         .toList();
     final lastWeek = finishedWeeks.isEmpty
@@ -1024,10 +1082,25 @@ class _HomeDashboardState extends State<HomeDashboard> {
     final lastWeekMatches = lastWeek == null
         ? const <MatchModel>[]
         : sorted
-              .where((m) => m.week == lastWeek && inGroup(m))
+              .where(
+                (m) =>
+                    m.week == lastWeek &&
+                    inGroup(m) &&
+                    m.status != MatchStatus.postponed,
+              )
               .toList()
               .reversed
               .toList();
+
+    // Ertelenen maçlar (bu haftanınkiler Bu Hafta'da görünür): haftasına
+    // göre ayrı başlık altında.
+    final postponedByWeek = <int, List<MatchModel>>{};
+    for (final m in sorted) {
+      if (m.status != MatchStatus.postponed || !inGroup(m)) continue;
+      if (thisWeek != null && m.week == thisWeek) continue;
+      postponedByWeek.putIfAbsent(m.week ?? 0, () => []).add(m);
+    }
+    final postponedWeeks = postponedByWeek.keys.toList()..sort();
 
     final hasOwnTeam = d.myTeamIds.isNotEmpty;
     // Birden fazla grup varsa yalnız seçili grubun maçlarından doğan
@@ -1090,6 +1163,19 @@ class _HomeDashboardState extends State<HomeDashboard> {
             () => openHub(TournamentHubTab.fixture),
           ),
           for (final m in thisWeekMatches) _matchRow(d, m, focusTeams),
+        ],
+        for (final w in postponedWeeks) ...[
+          _sectionHeader(
+            [
+              postponedByWeek[w]!.length > 1
+                  ? 'ERTELENEN MAÇLAR'
+                  : 'ERTELENEN MAÇ',
+              if (w > 0) '$w. HAFTA',
+            ].join(' · '),
+            'Fikstür',
+            () => openHub(TournamentHubTab.fixture),
+          ),
+          for (final m in postponedByWeek[w]!) _matchRow(d, m, focusTeams),
         ],
         if (groupFilter != null || d.groups.isNotEmpty) ...[
           _sectionHeader(
@@ -1554,7 +1640,32 @@ class _HomeDashboardState extends State<HomeDashboard> {
     final mine = focus.contains(m.homeTeamId) || focus.contains(m.awayTeamId);
 
     Widget center;
-    if (live || finished) {
+    if (m.status == MatchStatus.postponed ||
+        m.status == MatchStatus.cancelled) {
+      // Ertelenen maçta yeni tarih (verildiyse), yoksa "TARİH YOK".
+      final postponed = m.status == MatchStatus.postponed;
+      final t = kickoff == null ? null : _tr(kickoff);
+      String two(int v) => v.toString().padLeft(2, '0');
+      center = Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            postponed ? 'ERT' : 'İPT',
+            style: _condensed(size: 18, color: DashColors.yellow),
+          ),
+          Text(
+            !postponed
+                ? 'İPTAL'
+                : (t == null ? 'TARİH YOK' : '${two(t.day)}.${two(t.month)}'),
+            style: _barlow(
+              size: 10,
+              weight: FontWeight.w700,
+              color: DashColors.muted,
+            ),
+          ),
+        ],
+      );
+    } else if (live || finished) {
       center = Column(
         mainAxisSize: MainAxisSize.min,
         children: [

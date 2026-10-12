@@ -17,6 +17,8 @@ import 'core/widgets/web_safe_image.dart';
 import 'core/widgets/web_responsive_frame.dart';
 import 'core/utils/app_activity.dart';
 import 'core/services/error_reporter.dart';
+import 'core/push/native_push.dart';
+import 'core/push/push_service.dart';
 import 'core/services/notification_center.dart';
 import 'features/notifications/notification_router.dart';
 
@@ -33,7 +35,7 @@ void main() async {
   ErrorReporter.init();
   await Supabase.initialize(
     url: AppConfig.supabaseUrl,
-    anonKey: AppConfig.supabaseAnonKey,
+    publishableKey: AppConfig.supabaseAnonKey,
   );
   // Arka planda canlı bağlantılar kapansın (eşzamanlı bağlantı sınırı).
   AppActivity.start();
@@ -48,6 +50,11 @@ void main() async {
   // Son turnuva teması hemen; kişiye göre güncel tema arkadan.
   await ActiveTournament.init(guestChosen: GuestMode.chosen);
 
+  // Uygulama (APK): Firebase Cloud Messaging ile telefon bildirimi.
+  if (NativePush.supported) {
+    PushService.initNative();
+    await NativePush.init();
+  }
   // Telefon bildiriminden açıldıysa hedef ekran (ana ekran hazır olunca).
   NotificationRouter.init();
   runApp(const MyApp());

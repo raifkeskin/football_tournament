@@ -9,6 +9,7 @@ import '../services/notification_center.dart';
 class NotificationBell extends StatelessWidget {
   const NotificationBell({super.key, this.color = Colors.white});
 
+  // Zil artık altın renkli; renk eski çağıranlar için tutuluyor.
   final Color color;
 
   static var _opening = false;
@@ -48,15 +49,29 @@ class NotificationBell extends StatelessWidget {
                 clipBehavior: Clip.none,
                 alignment: Alignment.center,
                 children: [
-                  Icon(
-                    n > 0
-                        ? Icons.notifications_rounded
-                        : Icons.notifications_none_rounded,
-                    color: color,
-                    size: 26,
-                    semanticLabel: n > 0
-                        ? 'Bildirimler, $n okunmamış'
-                        : 'Bildirimler',
+                  // Altın renkli dolu zil (🔔 gibi): gölgeli, üstten
+                  // alta açık sarıdan koyu altına.
+                  ShaderMask(
+                    blendMode: BlendMode.srcIn,
+                    shaderCallback: (r) => const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Color(0xFFFFE89A),
+                        Color(0xFFFBC02D),
+                        Color(0xFFD08A00),
+                      ],
+                    ).createShader(r),
+                    child: Icon(
+                      Icons.notifications_rounded,
+                      size: 27,
+                      shadows: const [
+                        Shadow(color: Color(0x66000000), blurRadius: 4),
+                      ],
+                      semanticLabel: n > 0
+                          ? 'Bildirimler, $n okunmamış'
+                          : 'Bildirimler',
+                    ),
                   ),
                   if (n > 0)
                     Positioned(

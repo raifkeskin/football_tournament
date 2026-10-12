@@ -12,7 +12,7 @@ void main() {
 
     NotificationCenter.enabled.value = true;
     await tester.pump();
-    expect(find.byIcon(Icons.notifications_none_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.notifications_rounded), findsOneWidget);
 
     NotificationCenter.unread.value = 2;
     await tester.pump();

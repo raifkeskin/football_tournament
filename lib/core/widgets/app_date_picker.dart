@@ -29,6 +29,7 @@ Future<DateTime?> showAppDatePicker({
   DateTime? initialDate,
   int? firstYear,
   int? lastYear,
+  // Artık gösterilmiyor (popup başlıksız); çağıranlar için tutuluyor.
   String title = 'Tarih Seçin',
   Future<Set<int>> Function(int year, int month)? markedDays,
 }) {
@@ -56,26 +57,45 @@ Future<DateTime?> showAppDatePicker({
         final daysInMonth = DateTime(year, month + 1, 0).day;
         final lead = first.weekday - 1; // Pazartesi başlangıçlı
 
-        // Ay gezinmesi: < Ekim 2026 >; yıl sınırlarında ok pasifleşir.
-        final canPrev = year > fromYear || month > 1;
-        final canNext = year < toYear || month < 12;
-        void shift(int delta) => setLocal(() {
-          final d = DateTime(year, month + delta);
-          year = d.year;
-          month = d.month;
-        });
-        Widget arrow(IconData icon, String tip, bool enabled, int delta) =>
-            IconButton(
-              tooltip: tip,
-              onPressed: enabled ? () => shift(delta) : null,
-              icon: Icon(icon),
-              color: Colors.white,
-              disabledColor: Colors.white24,
-              style: IconButton.styleFrom(
-                backgroundColor: Colors.black.withValues(alpha: 0.3),
-                side: const BorderSide(color: Colors.white24),
+        Widget dropdown<T>({
+          required T value,
+          required List<T> items,
+          required String Function(T) label,
+          required ValueChanged<T> onChanged,
+        }) {
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white24),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<T>(
+                value: value,
+                isExpanded: true,
+                dropdownColor: const Color(0xFF1E293B),
+                menuMaxHeight: 320,
+                icon: const Icon(
+                  Icons.keyboard_arrow_down,
+                  color: Colors.white70,
+                ),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+                items: [
+                  for (final i in items)
+                    DropdownMenuItem<T>(value: i, child: Text(label(i))),
+                ],
+                onChanged: (v) {
+                  if (v != null) setLocal(() => onChanged(v));
+                },
               ),
-            );
+            ),
+          );
+        }
 
         return Dialog(
           backgroundColor: Colors.transparent,
@@ -101,40 +121,28 @@ Future<DateTime?> showAppDatePicker({
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+                // Başlık yok: ay / yıl listeleri en üstte.
                 children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
                   Row(
                     children: [
-                      arrow(
-                        Icons.chevron_left_rounded,
-                        'Önceki ay',
-                        canPrev,
-                        -1,
-                      ),
                       Expanded(
-                        child: Text(
-                          '${_months[month - 1]} $year',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 16,
-                          ),
+                        flex: 3,
+                        child: dropdown<int>(
+                          value: month,
+                          items: List.generate(12, (i) => i + 1),
+                          label: (m) => _months[m - 1],
+                          onChanged: (m) => month = m,
                         ),
                       ),
-                      arrow(
-                        Icons.chevron_right_rounded,
-                        'Sonraki ay',
-                        canNext,
-                        1,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: dropdown<int>(
+                          value: year,
+                          items: [for (var y = toYear; y >= fromYear; y--) y],
+                          label: (y) => '$y',
+                          onChanged: (y) => year = y,
+                        ),
                       ),
                     ],
                   ),

@@ -14,6 +14,7 @@ import '../../team/services/interfaces/i_team_service.dart';
 import '../../../core/services/service_locator.dart';
 import 'match_details_screen.dart';
 import '../utils/match_clock.dart';
+import '../widgets/quick_score_dialog.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../share/fixture_poster.dart';
@@ -756,6 +757,23 @@ class _MatchCard extends StatelessWidget {
 
   // Zaman çizelgesi satırı: solda saat/durum, ortada çizgi ve nokta, sağda
   // iki takımlı kart. Kazanan beyaz ve kalın, kaybeden soluk.
+  /// Planlanan saatten 2 saat geçti mi (saat yoksa hayır).
+  static bool _isOverdue(MatchModel m) {
+    final d = DateTime.tryParse((m.matchDate ?? '').trim());
+    final t = RegExp(
+      r'^(\d{1,2}):(\d{2})',
+    ).firstMatch((m.matchTime ?? '').trim());
+    if (d == null || t == null) return false;
+    final start = DateTime(
+      d.year,
+      d.month,
+      d.day,
+      int.parse(t.group(1)!),
+      int.parse(t.group(2)!),
+    );
+    return DateTime.now().isAfter(start.add(const Duration(hours: 2)));
+  }
+
   Widget _timelineItem(
     BuildContext context,
     String homeName,
@@ -771,14 +789,23 @@ class _MatchCard extends StatelessWidget {
     final isLive =
         match.status == MatchStatus.live ||
         match.status == MatchStatus.halftime;
-    final ({String text, Color color})? status = switch (match.status) {
-      MatchStatus.notStarted => null,
-      MatchStatus.finished => (text: 'MS', color: accent),
-      MatchStatus.halftime => (text: 'İY', color: live),
-      MatchStatus.live => (text: liveMinute ?? 'CANLI', color: live),
-      MatchStatus.cancelled => (text: 'İPT', color: Colors.white54),
-      MatchStatus.postponed => (text: 'ERT', color: Colors.white54),
-    };
+    // Sorumluya: maç saatinden 2 saat geçmiş, sonucu girilmemiş maç.
+    final overdue =
+        match.status != MatchStatus.finished &&
+        match.status != MatchStatus.postponed &&
+        match.status != MatchStatus.cancelled &&
+        _isOverdue(match) &&
+        AppSession.of(context).value.canManageLeague(match.leagueId);
+    final ({String text, Color color})? status = overdue
+        ? (text: 'SKOR?', color: const Color(0xFFF59E0B))
+        : switch (match.status) {
+            MatchStatus.notStarted => null,
+            MatchStatus.finished => (text: 'MS', color: accent),
+            MatchStatus.halftime => (text: 'İY', color: live),
+            MatchStatus.live => (text: liveMinute ?? 'CANLI', color: live),
+            MatchStatus.cancelled => (text: 'İPT', color: Colors.white54),
+            MatchStatus.postponed => (text: 'ERT', color: Colors.white54),
+          };
     final dotColor = isLive
         ? live
         : (match.status == MatchStatus.finished ? accent : Colors.white38);
@@ -985,229 +1012,13 @@ class _MatchCard extends StatelessWidget {
     );
   }
 
-  void _showQuickScoreDialog(BuildContext context) async {
-    const accent = Color(0xFF10B981);
-    final homeName = (teamNameById[match.homeTeamId] ?? '').trim();
-    final awayName = (teamNameById[match.awayTeamId] ?? '').trim();
-    final homeScoreCtrl = TextEditingController(
-      text: match.homeScore.toString(),
-    );
-    final awayScoreCtrl = TextEditingController(
-      text: match.awayScore.toString(),
-    );
-    var saving = false;
-
-    Widget scoreBox(String teamName, TextEditingController ctrl) {
-      return Expanded(
-        child: Column(
-          children: [
-            Text(
-              teamName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
-              ),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: ctrl,
-              keyboardType: TextInputType.number,
-              textAlign: TextAlign.center,
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(2),
-              ],
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 32,
-                fontWeight: FontWeight.w800,
-              ),
-              decoration: InputDecoration(
-                filled: true,
-                fillColor: Colors.black.withValues(alpha: 0.4),
-                contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: Colors.white.withValues(alpha: 0.15),
-                  ),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: accent, width: 2),
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    await showDialog<void>(
-      context: context,
-      builder: (c) => StatefulBuilder(
-        builder: (c, setDialogState) {
-          Future<void> save() async {
-            setDialogState(() => saving = true);
-            try {
-              await _matchService.completeMatchWithScoreAndDefaultEvents(
-                matchId: match.id,
-                homeScore: int.tryParse(homeScoreCtrl.text) ?? 0,
-                awayScore: int.tryParse(awayScoreCtrl.text) ?? 0,
-              );
-              if (!c.mounted) return;
-              Navigator.pop(c);
-              onDataChanged();
-            } catch (e) {
-              if (!c.mounted) return;
-              setDialogState(() => saving = false);
-              ScaffoldMessenger.of(c).showSnackBar(
-                SnackBar(
-                  content: Text('Hata: $e'),
-                  backgroundColor: Colors.redAccent,
-                ),
-              );
-            }
-          }
-
-          return Dialog(
-            backgroundColor: Colors.transparent,
-            insetPadding: const EdgeInsets.symmetric(horizontal: 20),
-            child: AdminDialogCloseOverlay(
-              onClose: saving ? null : () => Navigator.pop(c),
-              child: Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(24),
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color(0xFF1E293B), Color(0xFF064E3B)],
-                  ),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.12),
-                  ),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Colors.black54,
-                      blurRadius: 15,
-                      offset: Offset(0, 8),
-                    ),
-                  ],
-                ),
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.scoreboard_outlined,
-                            color: accent,
-                            size: 22,
-                          ),
-                          SizedBox(width: 8),
-                          Text(
-                            'Hızlı Skor Girişi',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w800,
-                              fontSize: 18,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      const Divider(color: Colors.white24, height: 1),
-                      const SizedBox(height: 20),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          scoreBox(
-                            homeName.isEmpty ? 'Ev Sahibi' : homeName,
-                            homeScoreCtrl,
-                          ),
-                          const Padding(
-                            padding: EdgeInsets.fromLTRB(12, 0, 12, 18),
-                            child: Text(
-                              '-',
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 28,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                          scoreBox(
-                            awayName.isEmpty ? 'Deplasman' : awayName,
-                            awayScoreCtrl,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Kaydedildiğinde maç "Bitti" olarak işaretlenir.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.55),
-                          fontSize: 12,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      SizedBox(
-                        height: 50,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: accent,
-                            disabledBackgroundColor: accent.withValues(
-                              alpha: 0.5,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          onPressed: saving ? null : save,
-                          child: saving
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : const Text(
-                                  'KAYDET',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-
-    // Dialog kapanış animasyonu bitene kadar TextField'lar controller'ı
-    // kullanmaya devam eder; hemen dispose etmek hata verir.
-    Future<void>.delayed(const Duration(milliseconds: 600), () {
-      homeScoreCtrl.dispose();
-      awayScoreCtrl.dispose();
-    });
-  }
+  void _showQuickScoreDialog(BuildContext context) => showQuickScoreDialog(
+    context,
+    match: match,
+    homeName: (teamNameById[match.homeTeamId] ?? '').trim(),
+    awayName: (teamNameById[match.awayTeamId] ?? '').trim(),
+    onSaved: onDataChanged,
+  );
 
   void _showEditPopup(BuildContext context) async {
     const accent = Color(0xFF10B981);

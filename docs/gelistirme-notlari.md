@@ -97,3 +97,14 @@ _Eklendi: 2026-10-08_
 - Video + İngilizce cevap metni hem Resolution Center'a cevap olarak hem de App Review Information → Notes alanına eklenecek. Metinde: amaç/kitle, misafir modu + demo hesap, kayıt akışı, hesap silme yeri, herkese açık kullanıcı içeriği olmadığı (haberleri yalnızca admin girer, yorum/sohbet yok), ücretli özellik yok, dış servisler (Supabase, Firebase Hosting, YouTube, Telegram), bölge farkı yok, düzenlemeye tabi alan değil.
 - Göndermeden önce: demo hesabın rolüne bak (Apple her hesap türü için giriş bilgisi istiyor, gerekirse yönetici demo hesabı da ekle); mağazada yalnızca Türkiye seçiliyse 5. maddeyi buna göre düzelt.
 - **2026-10-08 13:43 gönderildi:** kesilmiş video (`~/Downloads/iosVideo_apple.mp4`, açılıştan kayıt talebine 2:34, sessiz) + İngilizce metin Resolution Center'a yazıldı; durum "Ready for Review".
+
+## 10. Sezon verisini CDN'den sunmak (ölçek: binlerce eşzamanlı kullanıcı)
+_Eklendi: 2026-10-11_
+
+- **Ne:** Sezonun takım, kadro, fikstür ve grup verisi değiştiğinde JSON dosyası olarak CDN'e yazılır. Açılışta herkes bu dosyayı okur, veritabanına sorgu gitmez.
+- **Neden bekliyor:** Sürüm önbelleği (data_versions) açılış yükünün büyük kısmını aldı. CDN'in getirisi asıl maç günü: sezon sayacı her golde arttığı için açılışlar yine veritabanına gidiyor.
+- **Karar ölçütü:** Pro'ya geçince 500–1.000 kişilik test yapılacak. Maç günü açılışları veritabanını zorlarsa önce daha basit adım denenecek: sezonun tüm verisini tek istekte döndüren veritabanı fonksiyonu (8 sorgu → 1). CDN ancak o da yetmezse yapılacak.
+- **Dikkat:**
+  - Gizli ve demo turnuvalar herkese açık CDN'den sunulamaz; onlar veritabanından okumaya devam eder.
+  - Dosyayı her değişiklikte yeniden üreten bir mekanizma gerekir (tetikleyici → Edge Function → Storage).
+- **Tahmini iş:** ~1 gün.

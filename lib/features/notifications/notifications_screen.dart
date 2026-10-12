@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/push/push_card.dart';
 import '../../core/services/notification_center.dart';
 import '../../core/widgets/admin_page.dart';
 import 'notification_router.dart';
@@ -81,17 +82,26 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     } else if (items.isEmpty) {
       body = _message('Henüz bildiriminiz yok.');
     } else {
+      // En üstte: telefon bildirimleri kapalıysa açma kartı.
       body = ListView.separated(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
-        itemCount: items.length,
-        separatorBuilder: (_, _) => const SizedBox(height: 8),
-        itemBuilder: (_, i) =>
-            _Tile(item: items[i], onTap: () => _open(items[i])),
+        itemCount: items.length + 1,
+        separatorBuilder: (_, i) => SizedBox(height: i == 0 ? 0 : 8),
+        itemBuilder: (_, i) => i == 0
+            ? const Padding(
+                padding: EdgeInsets.only(bottom: 10),
+                child: PushCard(
+                  showSettingsLink: false,
+                  onlyWhenActionable: true,
+                ),
+              )
+            : _Tile(item: items[i - 1], onTap: () => _open(items[i - 1])),
       );
     }
     return AdminPageScaffold(
       title: 'Bildirimler',
+      bandBack: true,
       body: RefreshIndicator(onRefresh: _load, child: body),
     );
   }

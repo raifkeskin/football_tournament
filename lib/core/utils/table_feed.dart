@@ -1,11 +1,40 @@
-import 'package:flutter/foundation.dart';
+import 'dart:async';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../services/data_versions.dart';
 
 import 'realtime_signal.dart';
 import 'resilient_stream.dart';
 
 final Map<String, Stream<List<Map<String, dynamic>>>> _feeds = {};
 final Map<String, List<Map<String, dynamic>>> _cache = {};
+final _local = StreamController<(String, RowChange)>.broadcast();
+
+/// Satırı açık listelerden düşürür. Gizlenen (silindi olarak işaretlenen)
+/// satır artık okunamadığı için realtime'dan gelmez; işlemi yapan cihaz
+/// listesini bununla günceller.
+void announceRowRemoved(String table, String id) => _local.add((
+  table,
+  RowChange(PostgresChangeEvent.delete, const {}, {'id': id}),
+));
+
+Stream<RowChange> _withLocal(String table, Stream<RowChange> remote) {
+  late final StreamController<RowChange> c;
+  StreamSubscription<RowChange>? a;
+  StreamSubscription<(String, RowChange)>? b;
+  c = StreamController<RowChange>(
+    onListen: () {
+      a = remote.listen(c.add, onError: c.addError, onDone: c.close);
+      b = _local.stream.where((e) => e.$1 == table).listen((e) => c.add(e.$2));
+    },
+    onCancel: () async {
+      await b?.cancel();
+      await a?.cancel();
+    },
+  );
+  return c.stream;
+}
 
 /// `.stream(primaryKey: ...)` yerine kullanılan, sunucu tarafında filtrelenen
 /// satır akışı:
@@ -17,10 +46,15 @@ final Map<String, List<Map<String, dynamic>>> _cache = {};
 /// * Aynı sorgu için uygulama genelinde tek akış ve tek realtime kanalı
 ///   kullanılır; akış her çağrıldığında aynı nesne döner, bu yüzden
 ///   `build` içinde çağrılması yeniden bağlanmaya yol açmaz.
+/// * Liste cihazda da saklanır; sunucudaki veri sürümü (bkz.
+///   [DataVersions]) değişmediyse açılışta hiç okunmaz.
 /// * Liste yalnızca bağlanırken bir kez okunur; sonrasında realtime'dan gelen
 ///   satır listeye işlenir (gol olunca tüm fikstür yeniden indirilmez).
 ///   Başka listelere ait silmeler yok sayılır. Satırda `id` yoksa liste
 ///   yeniden okunur.
+/// * Canlı maç tabloları Broadcast konularından dinlenir (bkz.
+///   [broadcastTopicFor]); konu süzgeçten çıkarılamıyorsa (ör. tarihe göre
+///   maçlar) [broadcastTopics] verilir.
 Stream<List<Map<String, dynamic>>> watchTableRows(
   SupabaseClient client, {
   required String table,
@@ -28,10 +62,16 @@ Stream<List<Map<String, dynamic>>> watchTableRows(
   String? value,
   String? orderBy,
   bool ascending = true,
+  List<String>? broadcastTopics,
 }) {
-  final key = '$table|$column=$value|$orderBy|$ascending';
+  final key =
+      '$table|$column=$value|$orderBy|$ascending|${broadcastTopics?.join(',')}';
+  final scopes = _scopesFor(table, column, value);
+  final persist = scopes != null && !_memoryOnly.contains(table);
   return _feeds.putIfAbsent(key, () {
     Future<List<Map<String, dynamic>>> fetch() async {
+      // Sürüm, veriyle aynı anda istenir (fazladan tur yok).
+      final stampF = scopes == null ? null : DataVersions.stamp(scopes);
       var query = client.from(table).select();
       if (column != null && value != null) query = query.eq(column, value);
       final rows = orderBy == null
@@ -39,19 +79,41 @@ Stream<List<Map<String, dynamic>>> watchTableRows(
           : await query.order(orderBy, ascending: ascending);
       final list = rows.map((e) => Map<String, dynamic>.from(e)).toList();
       _cache[key] = list;
+      if (scopes != null) {
+        final stamp = await stampF;
+        unawaited(VersionedCache.save(key, list, stamp, persist: persist));
+      }
       return list;
     }
 
     return resilientStream(() async* {
-      final cached = _cache[key];
+      var cached = _cache[key];
+      if (cached == null && persist) {
+        final disk = await VersionedCache.peek(key);
+        if (disk is List) {
+          cached = [for (final r in disk) Map<String, dynamic>.from(r as Map)];
+          _cache[key] = cached;
+        }
+      }
       if (cached != null) yield cached;
-      var rows = await fetch();
-      yield rows;
-      await for (final change in realtimeRowChanges(
-        client,
-        table: table,
-        column: column,
-        value: value,
+      // Sunucudaki sürüm değişmediyse yeniden okunmaz (açılışta ve arka
+      // plandan dönüşte tüm akışlar için tek küçük istek).
+      var rows =
+          cached != null &&
+              scopes != null &&
+              await VersionedCache.unchanged(key, scopes)
+          ? cached
+          : await fetch();
+      if (!identical(rows, cached)) yield rows;
+      await for (final change in _withLocal(
+        table,
+        realtimeRowChanges(
+          client,
+          table: table,
+          column: column,
+          value: value,
+          broadcastTopics: broadcastTopics,
+        ),
       )) {
         final next = applyRowChange(
           rows,
@@ -70,9 +132,40 @@ Stream<List<Map<String, dynamic>>> watchTableRows(
   });
 }
 
+/// Sezona bağlı tablolar (satırda season_id var; sürüm `season:<id>`).
+const _seasonTables = {
+  'groups',
+  'match_events',
+  'match_rosters',
+  'matches',
+  'news',
+  'player_penalties',
+  'player_season_stats',
+  'season_regions',
+  'season_registrations',
+  'season_team_players',
+  'season_teams',
+  'team_managers',
+};
+
+/// Sürümü tablo düzeyinde tutulan genel tablolar.
+const _globalTables = {'teams', 'players', 'leagues', 'pitches', 'seasons'};
+
+/// Sürümle doğrulanır ama cihaza yazılmaz (kişisel veri).
+const _memoryOnly = {'players', 'team_managers', 'player_penalties'};
+
+/// Akışın bağlı olduğu sürüm kapsamları; sürümü tutulmayan tabloda `null`
+/// (her bağlanışta okunur).
+List<String>? _scopesFor(String table, String? column, String? value) {
+  if (_seasonTables.contains(table)) {
+    return column == 'season_id' && value != null ? ['season:$value'] : [table];
+  }
+  if (_globalTables.contains(table)) return [table];
+  return null;
+}
+
 /// Değişikliği listeye işler ve yeni listeyi döner; liste etkilenmiyorsa
 /// `null`. Satırda `id` yoksa boş liste döner (çağıran yeniden okur).
-@visibleForTesting
 List<Map<String, dynamic>>? applyRowChange(
   List<Map<String, dynamic>> rows,
   RowChange change, {
@@ -85,7 +178,9 @@ List<Map<String, dynamic>>? applyRowChange(
   if (id == null) return const [];
   final index = rows.indexWhere((r) => r['id']?.toString() == id);
 
-  if (change.type == PostgresChangeEvent.delete) {
+  // Silindi olarak işaretlenen (gizlenen) satır listeden çıkar.
+  if (change.type == PostgresChangeEvent.delete ||
+      change.newRow['deleted_at'] != null) {
     if (index < 0) return null;
     return [...rows]..removeAt(index);
   }

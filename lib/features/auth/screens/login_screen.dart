@@ -89,7 +89,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _syncBand(TickerMode.of(context));
+    _syncBand(TickerMode.valuesOf(context).enabled);
   }
 
   @override
