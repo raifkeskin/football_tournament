@@ -43,11 +43,10 @@ import '../../../core/widgets/app_name_band.dart';
 import '../../../core/services/video_link.dart';
 import '../../../core/widgets/youtube_player_page.dart'
     show
-        landscapeOnFullscreen,
         openYoutubeClip,
-        resetPlayerOrientation,
         youtubePlayerOrigin,
-        youtubeVideoId;
+        youtubeVideoId,
+        YoutubePlayerFrame;
 
 // --- YARDIMCI WIDGETLAR ---
 
@@ -2633,56 +2632,33 @@ class _NativeYoutubeScreenState extends State<_NativeYoutubeScreen> {
       );
 
   @override
-  void initState() {
-    super.initState();
-    // Tam ekran düğmesi ekranı yataya çevirir.
-    landscapeOnFullscreen(_controller);
-  }
-
-  @override
   void dispose() {
-    resetPlayerOrientation();
     _controller.close();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        title: const Text('Maç Yayını'),
-        actions: [
-          TextButton.icon(
-            onPressed: () => _openYoutubeExternally(context, widget.url),
-            icon: const Icon(Icons.open_in_new_rounded, color: Colors.white70),
-            label: const Text(
-              "YouTube'da aç",
-              style: TextStyle(color: Colors.white70),
-            ),
+    // Tam ekran düğmesi ya da yatay tutuş: oynatıcı ekranı doldurur.
+    return YoutubePlayerFrame(
+      controller: _controller,
+      title: 'Maç Yayını',
+      actions: [
+        TextButton.icon(
+          onPressed: () => _openYoutubeExternally(context, widget.url),
+          icon: const Icon(Icons.open_in_new_rounded, color: Colors.white70),
+          label: const Text(
+            "YouTube'da aç",
+            style: TextStyle(color: Colors.white70),
           ),
-        ],
-      ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            const Spacer(),
-            AspectRatio(
-              aspectRatio: 16 / 9,
-              child: YoutubePlayer(controller: _controller),
-            ),
-            const Spacer(),
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text(
-                "Yayın açılmazsa sağ üstten YouTube'da açabilirsiniz.",
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white54, fontSize: 12),
-              ),
-            ),
-          ],
+        ),
+      ],
+      footer: const Padding(
+        padding: EdgeInsets.all(16),
+        child: Text(
+          "Yayın açılmazsa sağ üstten YouTube'da açabilirsiniz.",
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.white54, fontSize: 12),
         ),
       ),
     );

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
@@ -17,15 +18,6 @@ String _clock(int sec) {
   final mm = m.toString().padLeft(2, '0');
   final ss = s.toString().padLeft(2, '0');
   return h > 0 ? '$h:$mm:$ss' : '$mm:$ss';
-}
-
-/// "28:47", "1:02:03", "95" → saniye; boş/hatalıysa null.
-int? _parseClock(String raw) {
-  final t = raw.trim();
-  if (t.isEmpty) return null;
-  final parts = t.split(RegExp(r'[:.]')).map(int.tryParse).toList();
-  if (parts.any((p) => p == null || p < 0)) return null;
-  return parts.fold<int>(0, (acc, p) => acc * 60 + p!);
 }
 
 String _teamLabel(
@@ -208,7 +200,7 @@ class _MatchHighlightsStripState extends State<MatchHighlightsStrip> {
                       const SizedBox(width: 10),
                       const Expanded(
                         child: Text(
-                          'YZ Gol Kesitleri',
+                          'Gol Kesitleri',
                           style: TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.w800,
@@ -270,17 +262,37 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
   bool _loading = true;
   String? _playingId;
   final Set<String> _busy = {};
-  Timer? _poll;
+
+  /// Açılışta veri alınamadıysa yeniden deneme (bağlantı kopukluğu).
+  Timer? _retry;
+
+  /// Kendi [_refresh]'imizin artırdığı [changes] yeniden okuma tetiklemesin.
+  bool _selfBump = false;
+
+  String get _label =>
+      '${shortTeamName(widget.homeName)} – ${shortTeamName(widget.awayName)}';
 
   @override
   void initState() {
     super.initState();
+    MatchHighlightService.changes.addListener(_onServiceChanged);
+    MatchHighlightService.offline.addListener(_onOffline);
     _refresh();
+  }
+
+  void _onServiceChanged() {
+    if (!_selfBump) _refresh();
+  }
+
+  void _onOffline() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
-    _poll?.cancel();
+    _retry?.cancel();
+    MatchHighlightService.changes.removeListener(_onServiceChanged);
+    MatchHighlightService.offline.removeListener(_onOffline);
     resetPlayerOrientation();
     _player?.close();
     super.dispose();
@@ -298,16 +310,23 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
         _job = results[1] as MatchHighlightJob?;
         _loading = false;
       });
+      _retry?.cancel();
+      MatchHighlightService.offline.value = false;
+      _selfBump = true;
       MatchHighlightService.changes.value++;
-      // İş sürüyorsa birkaç saniyede bir yeniden bakılır.
-      _poll?.cancel();
+      _selfBump = false;
+      // İş sürüyorsa takip serviste (ekran kapansa da sürer, bitince
+      // bildirir); bitince [changes] ile bu ekran da yenilenir.
       if (_job?.isRunning ?? false) {
-        _poll = Timer(const Duration(seconds: 6), _refresh);
+        MatchHighlightService.watch(widget.match.id, label: _label);
       }
-    } catch (e) {
+    } catch (_) {
+      // Bağlantı koptu: ham hata yerine "yeniden deneniyor", sonra tekrar.
       if (!mounted) return;
+      MatchHighlightService.offline.value = true;
       setState(() => _loading = false);
-      _snack('Kesitler yüklenemedi: $e');
+      _retry?.cancel();
+      _retry = Timer(const Duration(seconds: 8), _refresh);
     }
   }
 
@@ -377,6 +396,33 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
   }
 
   Future<void> _startAnalysis() async {
+    // Gol kayıtları skorla eşit değilse tarama yapılmaz (boşa maliyet).
+    final m = widget.match;
+    final total = m.homeScore + m.awayScore;
+    final int goals;
+    try {
+      goals = await MatchHighlightService.goalCount(m.id);
+    } catch (_) {
+      _snack('Bağlantı yok; biraz sonra tekrar deneyin.');
+      return;
+    }
+    if (!mounted) return;
+    if (total == 0 || goals != total) {
+      await showAdminConfirmDialog(
+        context: context,
+        title: total == 0 ? 'Maçta gol yok' : 'Gol kayıtları eksik',
+        message: total == 0
+            ? 'Skor ${m.homeScore}-${m.awayScore}; taranacak gol yok.'
+            : 'Skor ${m.homeScore}-${m.awayScore} ($total gol) ama maç '
+                  'detayında $goals gol kaydı var. Maç detayındaki gol '
+                  'girişlerini skorla eşitledikten sonra tekrar deneyin.',
+        confirmLabel: 'TAMAM',
+        destructive: false,
+        icon: Icons.info_outline_rounded,
+      );
+      return;
+    }
+    if (!mounted) return;
     final offsets = await showAdminPopup<({int? kickoff, int? second})>(
       context: context,
       builder: (_) => const _AnalyzeDialog(),
@@ -392,7 +438,12 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
       _snack(err);
       return;
     }
-    _snack('Analiz başladı; birkaç dakika sürebilir.');
+    // İş sunucuda sürer; takip serviste. Ekrandan çıkılabilir.
+    MatchHighlightService.watch(widget.match.id, label: _label);
+    _snack(
+      'Analiz arka planda başladı. Ekrandan çıkabilirsiniz; bitince '
+      'bildirilecek.',
+    );
     _refresh();
   }
 
@@ -403,7 +454,7 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
     final running = _job?.isRunning ?? false;
 
     return AdminPageScaffold(
-      title: 'YZ Gol Kesitleri',
+      title: 'Gol Kesitleri',
       body: RefreshIndicator(
         onRefresh: _refresh,
         child: ListView(
@@ -476,15 +527,15 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
       text = 'Son analizde ${job?.found ?? 0} gol bulundu.';
     } else {
       text =
-          'YZ, maçın YouTube yayınında golleri bulur. Maç detayında gol '
-          'girildiyse yalnızca o dakikaların çevresi taranır (daha ucuz ve '
-          'isabetli).';
+          'Maçın YouTube yayınında, maç detayına girilen gollerin '
+          'dakikaları taranır ve gol anları bulunur. Gol kayıtları skorla '
+          'eşit olmalıdır.';
     }
     return AdminFieldGroup(
       children: [
         AdminFieldRow(
           icon: Icons.auto_awesome_rounded,
-          label: 'YZ ANALİZİ',
+          label: 'GOL ANALİZİ',
           trailing: running
               ? const SizedBox(
                   width: 22,
@@ -507,6 +558,19 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(text, style: TextStyle(color: color, fontSize: 13)),
+              if (MatchHighlightService.offline.value) ...[
+                const SizedBox(height: 4),
+                const Text(
+                  'Bağlantı koptu, yeniden deneniyor…',
+                  style: TextStyle(color: kAdminDanger, fontSize: 11.5),
+                ),
+              ] else if (running) ...[
+                const SizedBox(height: 4),
+                const Text(
+                  'Arka planda sürüyor; ekrandan çıkabilirsiniz.',
+                  style: TextStyle(color: kAdminMuted, fontSize: 11.5),
+                ),
+              ],
               if (job != null && _jobDetails(job).isNotEmpty) ...[
                 const SizedBox(height: 4),
                 Text(
@@ -726,38 +790,97 @@ class _AnalyzeDialog extends StatefulWidget {
 }
 
 class _AnalyzeDialogState extends State<_AnalyzeDialog> {
-  final _kickoff = TextEditingController();
-  final _second = TextEditingController();
-  String? _error;
+  int? _kickoff;
+  int? _second;
 
-  @override
-  void dispose() {
-    _kickoff.dispose();
-    _second.dispose();
-    super.dispose();
+  /// Videodaki an: saat / dk / sn çarkı (YouTube süresiyle aynı birimler).
+  Future<int?> _pick(String title, int? current) {
+    var picked = Duration(seconds: current ?? 0);
+    return showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: const Color(0xFF1E293B),
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              "YouTube'daki süreyle aynı: saat · dakika · saniye",
+              style: TextStyle(color: kAdminMuted, fontSize: 12),
+            ),
+            CupertinoTheme(
+              data: const CupertinoThemeData(brightness: Brightness.dark),
+              child: SizedBox(
+                height: 200,
+                child: CupertinoTimerPicker(
+                  mode: CupertinoTimerPickerMode.hms,
+                  initialTimerDuration: picked,
+                  onTimerDurationChanged: (d) => picked = d,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 4, 18, 12),
+              child: SizedBox(
+                width: double.infinity,
+                height: 46,
+                child: FilledButton(
+                  onPressed: () => Navigator.pop(ctx, picked.inSeconds),
+                  style: FilledButton.styleFrom(backgroundColor: kAdminAccent),
+                  child: const Text(
+                    'TAMAM',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _submit() {
-    final k = _parseClock(_kickoff.text);
-    final s = _parseClock(_second.text);
-    if ((_kickoff.text.trim().isNotEmpty && k == null) ||
-        (_second.text.trim().isNotEmpty && s == null)) {
-      setState(() => _error = 'Zamanı dk:sn biçiminde yazın (ör. 03:20).');
-      return;
-    }
-    Navigator.pop(context, (kickoff: k, second: s));
+    Navigator.pop(context, (kickoff: _kickoff, second: _second));
   }
 
-  Widget _timeRow(IconData icon, String label, TextEditingController c) {
+  Widget _timeRow(
+    IconData icon,
+    String label,
+    int? value,
+    ValueChanged<int?> onChanged,
+  ) {
     return AdminFieldRow(
       icon: icon,
       label: label,
-      child: TextField(
-        controller: c,
-        keyboardType: TextInputType.datetime,
-        style: const TextStyle(color: Colors.white, fontSize: 15),
-        decoration: adminInlineInputDecoration(
-          hint: 'ör. 03:20 (boş olabilir)',
+      onTap: () async {
+        final v = await _pick(label, value);
+        if (v != null && mounted) onChanged(v);
+      },
+      trailing: value == null
+          ? const Icon(Icons.chevron_right_rounded, color: Colors.white54)
+          : IconButton(
+              tooltip: 'Temizle',
+              visualDensity: VisualDensity.compact,
+              onPressed: () => onChanged(null),
+              icon: const Icon(Icons.close_rounded, color: Colors.white54),
+            ),
+      child: Text(
+        value == null ? 'Seçin (boş olabilir)' : _clock(value),
+        style: TextStyle(
+          color: value == null ? Colors.white38 : Colors.white,
+          fontSize: 15,
+          fontWeight: FontWeight.w700,
+          fontFeatures: const [FontFeature.tabularFigures()],
         ),
       ),
     );
@@ -776,7 +899,7 @@ class _AnalyzeDialogState extends State<_AnalyzeDialog> {
             const AdminDialogHeader(
               icon: Icons.auto_awesome_rounded,
               title: 'Golleri Bul',
-              subtitle: 'YZ maçın YouTube yayınını tarar',
+              subtitle: 'Maçın YouTube yayınını tarar',
             ),
             const SizedBox(height: 16),
             AdminFormSection(
@@ -787,26 +910,22 @@ class _AnalyzeDialogState extends State<_AnalyzeDialog> {
                     Icons.play_arrow_rounded,
                     'MAÇIN BAŞLADIĞI AN',
                     _kickoff,
+                    (v) => setState(() => _kickoff = v),
                   ),
                   _timeRow(
                     Icons.timelapse_rounded,
                     '2. YARININ BAŞLADIĞI AN',
                     _second,
+                    (v) => setState(() => _second = v),
                   ),
                 ],
               ),
             ),
-            Text(
-              _error ??
-                  'Girilirse her golün yalnızca ±2 dk çevresi taranır (en '
-                      'ucuzu). Boş bırakılırsa YZ başlangıçları kendisi bulur '
-                      '(birkaç sent ek maliyet). Maç detayında gol yoksa tüm '
-                      'video taranır.',
-              style: TextStyle(
-                color: _error != null ? kAdminDanger : kAdminMuted,
-                fontSize: 12,
-                height: 1.4,
-              ),
+            const Text(
+              'Girilirse her golün yalnızca ±2 dk çevresi taranır (en '
+              'ucuzu). Boş bırakılırsa başlangıçlar yayından bulunur '
+              '(birkaç sent ek maliyet).',
+              style: TextStyle(color: kAdminMuted, fontSize: 12, height: 1.4),
             ),
             const SizedBox(height: 16),
             SizedBox(

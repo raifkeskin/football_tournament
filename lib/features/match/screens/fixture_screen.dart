@@ -202,6 +202,36 @@ class _FixtureViewState extends State<FixtureView> {
     } catch (_) {
       // Saha adları gelmezse afiş sahasız hazırlanır.
     }
+    // Bay geçen takım(lar): grubun takımlarından bu hafta maçı olmayanlar.
+    final byes = <PosterTeam>[];
+    try {
+      final groupIds = {
+        for (final m in matches)
+          if ((m.groupId ?? '').isNotEmpty) m.groupId!,
+      };
+      final playing = {
+        for (final m in matches) ...[m.homeTeamId, m.awayTeamId],
+      };
+      if (groupIds.isNotEmpty) {
+        final rows = await Supabase.instance.client
+            .from('season_teams')
+            .select('team_id, teams(name, logo_url)')
+            .inFilter('group_id', groupIds.toList());
+        for (final r in rows) {
+          final id = (r['team_id'] ?? '').toString();
+          if (id.isEmpty || playing.contains(id)) continue;
+          final t = r['teams'] is Map ? r['teams'] as Map : const {};
+          byes.add(
+            PosterTeam(
+              name: (t['name'] ?? teamNameById[id] ?? '').toString().trim(),
+              logo: (t['logo_url'] ?? teamLogoById[id] ?? '').toString().trim(),
+            ),
+          );
+        }
+      }
+    } catch (_) {
+      // Bay bilgisi gelmezse afiş baysız hazırlanır.
+    }
     if (!mounted) return;
 
     String dateText(String? ymd) {
@@ -220,8 +250,8 @@ class _FixtureViewState extends State<FixtureView> {
       final t = (m.matchTime ?? '').trim();
       final played = m.status == MatchStatus.finished;
       return PosterMatch(
-        homeName: shortTeamName(teamNameById[m.homeTeamId] ?? 'Ev Sahibi'),
-        awayName: shortTeamName(teamNameById[m.awayTeamId] ?? 'Deplasman'),
+        homeName: teamNameById[m.homeTeamId] ?? 'Ev Sahibi',
+        awayName: teamNameById[m.awayTeamId] ?? 'Deplasman',
         homeLogo: (teamLogoById[m.homeTeamId] ?? '').trim(),
         awayLogo: (teamLogoById[m.awayTeamId] ?? '').trim(),
         time: t.isEmpty
@@ -243,6 +273,7 @@ class _FixtureViewState extends State<FixtureView> {
       league.logoUrl,
       for (final d in posterDays)
         for (final m in d.matches) ...[m.homeLogo, m.awayLogo],
+      for (final b in byes) b.logo,
     }.where((u) => u.isNotEmpty).toList();
 
     await showPosterPreview(
@@ -256,6 +287,7 @@ class _FixtureViewState extends State<FixtureView> {
         subtitle: groupName.isEmpty ? 'Fikstür' : '$groupName Fikstür',
         weekText: '$week. Hafta',
         days: posterDays,
+        byes: byes,
       ),
     );
   }

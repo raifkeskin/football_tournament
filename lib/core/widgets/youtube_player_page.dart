@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,9 +11,13 @@ const youtubePlayerOrigin = 'https://ligmasasi.com';
 /// Oynatıcı tam ekrana geçince ekran yataya döner (sistem çubukları gizli),
 /// çıkınca telefonun kendi yönüne bırakılır. Web'de bunu index.html'deki
 /// `fullscreenchange` dinleyicisi yapar.
-void landscapeOnFullscreen(YoutubePlayerController controller) {
+void landscapeOnFullscreen(
+  YoutubePlayerController controller, {
+  ValueChanged<bool>? onChanged,
+}) {
   if (kIsWeb) return;
   controller.setFullScreenListener((full) {
+    onChanged?.call(full);
     if (full) {
       SystemChrome.setPreferredOrientations(const [
         DeviceOrientation.landscapeLeft,
@@ -106,50 +112,28 @@ class _YoutubePlayerPageState extends State<_YoutubePlayerPage> {
   );
 
   @override
-  void initState() {
-    super.initState();
-    landscapeOnFullscreen(_controller);
-  }
-
-  @override
   void dispose() {
-    resetPlayerOrientation();
     _controller.close();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        leading: IconButton(
-          tooltip: 'Kapat',
-          icon: const Icon(Icons.close_rounded),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text('Maç Yayını', style: TextStyle(fontSize: 16)),
-        actions: [
-          // Video gömülemiyorsa (kanal izin vermiyorsa) YouTube'da açılır.
-          TextButton.icon(
-            onPressed: () => launchUrl(
-              Uri.parse(widget.url.trim()),
-              mode: LaunchMode.externalApplication,
-            ),
-            icon: const Icon(Icons.open_in_new_rounded, size: 18),
-            label: const Text('YouTube'),
-            style: TextButton.styleFrom(foregroundColor: Colors.white70),
+    return YoutubePlayerFrame(
+      controller: _controller,
+      title: 'Maç Yayını',
+      actions: [
+        // Video gömülemiyorsa (kanal izin vermiyorsa) YouTube'da açılır.
+        TextButton.icon(
+          onPressed: () => launchUrl(
+            Uri.parse(widget.url.trim()),
+            mode: LaunchMode.externalApplication,
           ),
-        ],
-      ),
-      body: Center(
-        child: AspectRatio(
-          aspectRatio: 16 / 9,
-          child: YoutubePlayer(controller: _controller),
+          icon: const Icon(Icons.open_in_new_rounded, size: 18),
+          label: const Text('YouTube'),
+          style: TextButton.styleFrom(foregroundColor: Colors.white70),
         ),
-      ),
+      ],
     );
   }
 }
@@ -196,11 +180,13 @@ class _YoutubeClipPage extends StatefulWidget {
 }
 
 class _YoutubeClipPageState extends State<_YoutubeClipPage> {
+  // Bitiş YouTube'a bırakılmaz (endSeconds yok): video sonunda YouTube öneri
+  // şeridi gösterir ve gömülü oynatıcıda kapatılamaz. Bitiş saniyesinde
+  // video duraklatılır, üstü "Tekrar İzle" katmanıyla örtülür.
   late final _controller = YoutubePlayerController.fromVideoId(
     videoId: widget.videoId,
     autoPlay: true,
     startSeconds: widget.startSec.toDouble(),
-    endSeconds: widget.endSec.toDouble(),
     params: const YoutubePlayerParams(
       showFullscreenButton: true,
       strictRelatedVideos: true,
@@ -208,50 +194,190 @@ class _YoutubeClipPageState extends State<_YoutubeClipPage> {
     ),
   );
 
+  StreamSubscription<YoutubeVideoState>? _position;
+  StreamSubscription<YoutubePlayerValue>? _state;
+  bool _ended = false;
+
   @override
   void initState() {
     super.initState();
-    landscapeOnFullscreen(_controller);
+    final endMs = widget.endSec * 1000 - 150;
+    _position = _controller.videoStateStream.listen((v) {
+      if (!_ended && v.position.inMilliseconds >= endMs) _finish();
+    });
+    _state = _controller.stream.listen((v) {
+      if (!_ended && v.playerState == PlayerState.ended) _finish();
+    });
+  }
+
+  void _finish() {
+    _controller.pauseVideo();
+    if (mounted) setState(() => _ended = true);
+  }
+
+  @override
+  void dispose() {
+    _position?.cancel();
+    _state?.cancel();
+    _controller.close();
+    super.dispose();
+  }
+
+  Future<void> _replay() async {
+    setState(() => _ended = false);
+    await _controller.seekTo(
+      seconds: widget.startSec.toDouble(),
+      allowSeekAhead: true,
+    );
+    await _controller.playVideo();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return YoutubePlayerFrame(
+      controller: _controller,
+      title: widget.title,
+      actions: [
+        IconButton(
+          tooltip: 'Tekrar izle',
+          onPressed: _replay,
+          icon: const Icon(Icons.replay_rounded),
+        ),
+      ],
+      overlay: _ended
+          ? ColoredBox(
+              color: Colors.black,
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: _replay,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.white.withValues(alpha: 0.14),
+                        foregroundColor: Colors.white,
+                      ),
+                      icon: const Icon(Icons.replay_rounded),
+                      label: const Text('Tekrar İzle'),
+                    ),
+                    const SizedBox(height: 10),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.white60,
+                      ),
+                      child: const Text('Kapat'),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : null,
+    );
+  }
+}
+
+/// Oynatıcı sayfası iskeleti. Dikeyde üst bar + ortada 16:9 oynatıcı (altta
+/// isteğe bağlı [footer]); tam ekran düğmesine basılınca ya da telefon yatay
+/// tutulunca bar ve sistem çubukları gizlenir, oynatıcı ekranı doldurur.
+/// Ağaç yapısı değişmez (yalnız bar gizlenir), geçişte video yeniden
+/// yüklenmez. [overlay] oynatıcının üstüne çizilir (ör. kesit sonu).
+class YoutubePlayerFrame extends StatefulWidget {
+  const YoutubePlayerFrame({
+    super.key,
+    required this.controller,
+    required this.title,
+    this.actions = const [],
+    this.overlay,
+    this.footer,
+  });
+
+  final YoutubePlayerController controller;
+  final String title;
+  final List<Widget> actions;
+  final Widget? overlay;
+  final Widget? footer;
+
+  @override
+  State<YoutubePlayerFrame> createState() => _YoutubePlayerFrameState();
+}
+
+class _YoutubePlayerFrameState extends State<YoutubePlayerFrame> {
+  bool _full = false;
+  bool? _immersive;
+
+  @override
+  void initState() {
+    super.initState();
+    landscapeOnFullscreen(
+      widget.controller,
+      onChanged: (full) {
+        if (mounted) setState(() => _full = full);
+      },
+    );
   }
 
   @override
   void dispose() {
     resetPlayerOrientation();
-    _controller.close();
     super.dispose();
   }
 
-  void _replay() => _controller.loadVideoById(
-    videoId: widget.videoId,
-    startSeconds: widget.startSec.toDouble(),
-    endSeconds: widget.endSec.toDouble(),
-  );
+  /// Telefon kendiliğinden yataya dönünce de sistem çubukları gizlenir.
+  void _syncImmersive(bool fill) {
+    if (kIsWeb || _immersive == fill) return;
+    _immersive = fill;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      SystemChrome.setEnabledSystemUIMode(
+        fill ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
+      );
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
+    final landscape =
+        MediaQuery.orientationOf(context) == Orientation.landscape;
+    final fill = _full || landscape;
+    _syncImmersive(fill);
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        leading: IconButton(
-          tooltip: 'Kapat',
-          icon: const Icon(Icons.close_rounded),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(widget.title, style: const TextStyle(fontSize: 16)),
-        actions: [
-          IconButton(
-            tooltip: 'Tekrar izle',
-            onPressed: _replay,
-            icon: const Icon(Icons.replay_rounded),
-          ),
-        ],
-      ),
-      body: Center(
-        child: AspectRatio(
-          aspectRatio: 16 / 9,
-          child: YoutubePlayer(controller: _controller),
+      appBar: fill
+          ? null
+          : AppBar(
+              backgroundColor: Colors.black,
+              foregroundColor: Colors.white,
+              leading: IconButton(
+                tooltip: 'Kapat',
+                icon: const Icon(Icons.close_rounded),
+                onPressed: () => Navigator.pop(context),
+              ),
+              title: Text(widget.title, style: const TextStyle(fontSize: 16)),
+              actions: widget.actions,
+            ),
+      body: SafeArea(
+        top: !fill,
+        bottom: !fill,
+        left: !fill,
+        right: !fill,
+        child: Column(
+          children: [
+            Expanded(
+              child: Center(
+                child: AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      YoutubePlayer(controller: widget.controller),
+                      if (widget.overlay != null) widget.overlay!,
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            if (!fill && widget.footer != null) widget.footer!,
+          ],
         ),
       ),
     );

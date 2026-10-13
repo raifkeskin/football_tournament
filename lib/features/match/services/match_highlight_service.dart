@@ -1,5 +1,10 @@
-import 'package:flutter/foundation.dart';
+import 'dart:async';
+import 'dart:math' as math;
+
+import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../../../core/app_navigator.dart';
 
 /// YZ'nin maç videosunda bulduğu an (şimdilik gol). Video kesilmez; YouTube
 /// yayınının [startSec]–[endSec] aralığı oynatılır.
@@ -108,6 +113,14 @@ class MatchHighlightService {
   static final ValueNotifier<int> changes = ValueNotifier<int>(0);
   static final Map<String, List<MatchHighlight>> _cache = {};
 
+  static int _byMinute(MatchHighlight a, MatchHighlight b) {
+    final am = a.minute, bm = b.minute;
+    if (am != null && bm != null && am != bm) return am.compareTo(bm);
+    if (am == null && bm != null) return 1;
+    if (am != null && bm == null) return -1;
+    return a.startSec.compareTo(b.startSec);
+  }
+
   /// Bellekteki son liste (ekran ilk açılışta beklemeden çizsin).
   static List<MatchHighlight>? cached(String matchId) => _cache[matchId];
 
@@ -119,10 +132,12 @@ class MatchHighlightService {
         .eq('match_id', matchId)
         .neq('status', 'rejected')
         .order('start_sec');
+    // Gol dakikasına göre; dakikası olmayan sona, kendi arasında videodaki
+    // sırasıyla.
     final list = [
       for (final r in rows)
         MatchHighlight.fromMap(Map<String, dynamic>.from(r)),
-    ];
+    ]..sort(_byMinute);
     _cache[matchId] = list;
     return list;
   }
@@ -153,6 +168,17 @@ class MatchHighlightService {
           ? (r['second_half_sec'] as num).toInt()
           : null,
     );
+  }
+
+  /// Maç detayındaki gol kaydı sayısı (kendi kalesine dahil). Analiz, gol
+  /// kayıtları skorla eşitse başlatılır (yoksa boşa tarama yapılmaz).
+  static Future<int> goalCount(String matchId) async {
+    final rows = await _db
+        .from('match_events')
+        .select('id')
+        .eq('match_id', matchId)
+        .eq('event_type', 'goal');
+    return (rows as List).length;
   }
 
   /// Analizi başlatır; iş arka planda sürer. Hata metnini döner (yoksa null).
@@ -199,5 +225,74 @@ class MatchHighlightService {
     await _db.from('match_highlights').update(patch).eq('id', h.id);
     await fetch(h.matchId);
     changes.value++;
+  }
+
+  // ---- Arka plan takibi ---------------------------------------------------
+  // Analiz sunucuda sürer; takip ekrana değil buraya bağlıdır. Ekran kapansa
+  // da iş bitince uygulamanın neresindeysen bildirim çıkar. Bağlantı koparsa
+  // takip bırakılmaz, artan aralıklarla yeniden denenir.
+
+  static final Map<String, Timer> _watchers = {};
+
+  /// Bağlantı kopukken true (ekran "yeniden deneniyor" gösterir).
+  static final ValueNotifier<bool> offline = ValueNotifier<bool>(false);
+
+  /// Takip edilen maç mı (ekran kendi dönen göstergesini buna göre tutar).
+  static bool isWatching(String matchId) => _watchers.containsKey(matchId);
+
+  /// İş bitene kadar takip eder; [label] bildirimde maçın adı.
+  static void watch(String matchId, {String? label}) {
+    if (_watchers.containsKey(matchId)) return;
+    _schedule(matchId, label, 0);
+  }
+
+  static void _schedule(String matchId, String? label, int failures) {
+    // 6 sn; hata sürdükçe 12, 24, 48, en çok 60 sn. ~30 dk sonra bırakılır.
+    if (failures > 30) {
+      _watchers.remove(matchId);
+      return;
+    }
+    final wait = math.min(6 << math.min(failures, 4), 60);
+    _watchers[matchId] = Timer(Duration(seconds: wait), () async {
+      try {
+        final j = await job(matchId);
+        offline.value = false;
+        if (j != null && j.isRunning) {
+          _schedule(matchId, label, 0);
+          return;
+        }
+        _watchers.remove(matchId);
+        try {
+          await fetch(matchId);
+        } catch (_) {}
+        changes.value++;
+        _notifyDone(j, label);
+      } catch (_) {
+        offline.value = true;
+        _schedule(matchId, label, failures + 1);
+      }
+    });
+  }
+
+  static void _notifyDone(MatchHighlightJob? j, String? label) {
+    final ctx = appNavigatorKey.currentContext;
+    if (ctx == null || j == null) return;
+    final who = (label ?? '').trim().isEmpty ? '' : ' ($label)';
+    final String msg;
+    if (j.status == 'done') {
+      final n = j.found ?? 0;
+      msg = n > 0
+          ? 'Gol analizi bitti$who: $n gol kesiti bulundu, onay bekliyor.'
+          : 'Gol analizi bitti$who: gol kesiti bulunamadı.';
+    } else if (j.status == 'error') {
+      msg = 'Gol analizi tamamlanamadı$who: ${j.error ?? 'bilinmeyen hata'}';
+    } else {
+      return;
+    }
+    ScaffoldMessenger.maybeOf(ctx)
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(msg), duration: const Duration(seconds: 6)),
+      );
   }
 }
