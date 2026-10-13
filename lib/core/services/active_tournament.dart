@@ -219,8 +219,8 @@ class ActiveTournament {
     }
   }
 
-  /// Kişinin turnuvaları: admin ve misafir tüm aktif turnuvalar (gizli ve
-  /// demo turnuvalar veritabanı kuralıyla misafire gelmez), diğerleri
+  /// Kişinin turnuvaları: admin ve misafir tüm aktif turnuvalar (gizli
+  /// turnuvalar veritabanı kuralıyla misafire gelmez), diğerleri
   /// my_league_ids (oyuncu, sorumlu, kurucu, bölge, gözlemci, takipçi).
   static Future<List<LeagueChoice>> _loadMyLeagues({bool guest = false}) async {
     final all = guest || await _sb.rpc('is_admin') == true;
