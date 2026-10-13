@@ -22,6 +22,7 @@ import '../../../core/utils/string_utils.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../widgets/league_owners_section.dart';
+import 'age_rules_dialog.dart';
 
 // Fikstür / Ana Sayfa ile ortak renkler
 const _bgDark = Color(0xFF0F172A);
@@ -96,6 +97,9 @@ class SeasonManagementScreen extends StatelessWidget {
     final isEdit = season != null;
     final messenger = ScaffoldMessenger.of(context);
     final isAdmin = AppSession.of(context).value.isAdmin;
+    // Yaş ve kontenjan kuralları: admin ve kurucu başkan (kayıtlı sezonda).
+    final canEditAgeRules =
+        isEdit && AppSession.of(context).value.canManageLeague(season.leagueId);
     // Transfer tarihleri yalnızca admin'e ve turnuvada transfer açıksa.
     var showTransfer = false;
     if (isAdmin) {
@@ -529,6 +533,32 @@ class SeasonManagementScreen extends StatelessWidget {
                         ],
                       ),
                     ),
+                    if (canEditAgeRules)
+                      AdminFormSection(
+                        title: 'Yaş ve Kontenjan',
+                        child: AdminFieldGroup(
+                          children: [
+                            AdminFieldRow(
+                              icon: Icons.rule_rounded,
+                              label: '40+, 47+ yaş sınırı ve kontenjanlar',
+                              onTap: () =>
+                                  showAgeRulesDialog(context, season.id),
+                              trailing: const Icon(
+                                Icons.chevron_right_rounded,
+                                color: kAdminMuted,
+                              ),
+                              child: const Text(
+                                'Kuralları düzenle',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     AdminFormSection(
                       title: 'Durum',
                       child: AdminFieldGroup(

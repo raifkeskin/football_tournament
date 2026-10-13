@@ -698,12 +698,12 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
             icon: Icons.location_on,
             onTap: () => _openPitchEditor(match),
           ),
-          if (canAssignObserver)
-            _SpeedDialAction(
-              label: 'Gözlemci Ata',
-              icon: Icons.visibility_outlined,
-              onTap: () => _openObserverPicker(match),
-            ),
+          // if (canAssignObserver)
+          //   _SpeedDialAction(
+          //     label: 'Gözlemci Ata',
+          //     icon: Icons.visibility_outlined,
+          //     onTap: () => _openObserverPicker(match),
+          //   ),
           if (canUndo &&
               match.status != MatchStatus.notStarted &&
               match.status != MatchStatus.postponed &&
