@@ -38,6 +38,7 @@ import 'package:football_tournament/core/widgets/admin_page.dart';
 import 'package:football_tournament/core/widgets/admin_form.dart';
 import '../../player/services/penalty_service.dart';
 import '../../../core/widgets/app_name_band.dart';
+import '../../../core/services/video_link.dart';
 import '../../../core/widgets/youtube_player_page.dart'
     show
         landscapeOnFullscreen,
@@ -1572,7 +1573,7 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
                         hint: isAlbum
                             ? 'Drive veya Google Fotoğraflar linki'
                             : isVideo
-                            ? 'Instagram veya YouTube linki'
+                            ? 'YouTube, Instagram, halısaha sitesi…'
                             : 'https://youtube.com/...',
                         keyboardType: TextInputType.url,
                       )
@@ -1646,8 +1647,11 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
                         ? 'Albüm paylaşımı "Bağlantıya sahip herkes · '
                               'Görüntüleyen" olmalı; yoksa her izleyici erişim '
                               'izni ister.'
-                        : 'Röportaj ya da kısa video. Dokununca Instagram '
-                              'veya YouTube uygulamasında açılır.',
+                        : 'Gol, pozisyon ya da röportaj videosu; her klip '
+                              'ayrı link. YouTube uygulamada oynar, diğerleri '
+                              '(Sosyal Halısaha vb.) uygulama içi tarayıcıda '
+                              'açılır. Halısaha siteleri videoları bir süre '
+                              'sonra silebilir.',
                     style: const TextStyle(
                       color: Colors.white54,
                       fontSize: 12.5,
@@ -2140,10 +2144,7 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
   Widget _albumCard(BuildContext context, MatchMediaModel album) {
     final desc = (album.description ?? '').trim();
     final isVideo = album.mediaType == kMediaVideoLink;
-    final host = Uri.tryParse(album.url.trim())?.host ?? '';
-    final where = host.contains('instagram')
-        ? 'Instagram'
-        : (host.contains('youtu') ? 'YouTube' : '');
+    final platform = isVideo ? videoPlatformName(album.url) : null;
     final accent = isVideo ? const Color(0xFFF472B6) : const Color(0xFFFBBF24);
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
@@ -2153,6 +2154,10 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
         child: InkWell(
           borderRadius: BorderRadius.circular(14),
           onTap: () async {
+            if (isVideo) {
+              await openMatchVideo(context, album.url);
+              return;
+            }
             final uri = Uri.tryParse(album.url.trim());
             if (uri == null) return;
             try {
@@ -2186,7 +2191,9 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        isVideo ? 'Röportaj / Video' : 'Tüm Fotoğraflar',
+                        isVideo
+                            ? (platform == null ? 'Video' : '$platform Videosu')
+                            : 'Tüm Fotoğraflar',
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 14.5,
@@ -2210,16 +2217,20 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
                   ),
                 ),
                 Text(
-                  isVideo
-                      ? (where.isEmpty ? 'İzle' : "$where'da İzle")
-                      : 'Albümü Aç',
+                  isVideo ? videoWatchLabel(album.url) : 'Albümü Aç',
                   style: TextStyle(
                     color: accent,
                     fontSize: 13,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                Icon(Icons.open_in_new_rounded, size: 16, color: accent),
+                Icon(
+                  platform == 'YouTube'
+                      ? Icons.play_arrow_rounded
+                      : Icons.open_in_new_rounded,
+                  size: 16,
+                  color: accent,
+                ),
               ],
             ),
           ),
