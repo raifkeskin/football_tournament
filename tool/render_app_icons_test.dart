@@ -155,10 +155,11 @@ void main() {
 
       // iOS: tam kare (köşeleri iOS yuvarlar), saydamlık yok.
       await _full('design/app_icon_ios.png', 1024);
-      // Android uyarlanabilir ikon: zemin logonun kendisi (maske güvenli
-      // alana sığacak kadar küçültülmüş), ön yüz saydam.
-      await _maskable('design/app_icon_android_bg.png', 1024, 0.74);
-      await _save('design/app_icon_android_fg.png', await _draw(1024, (_, _) {}));
+      // Android uyarlanabilir ikon: zemin saydam, ön yüz zeminsiz yuvarlak
+      // arma (koyu kare zemin ikon maskesinin kenarında görünmesin). Ön yüz
+      // %16 içeriden çizildiği için arma görünür alanı (%66) tam doldurur.
+      await _save('design/app_icon_android_bg.png', await _draw(1024, (_, _) {}));
+      await _crestPng('design/app_icon_android_fg.png', 1024, frac: 0.97);
       // Açılış ekranı (lacivert zemin üstünde zeminsiz arma).
       await _crestPng('design/splash_logo.png', 768);
       // Android 12 açılış ikonu: dairesel maskeye sığsın.
