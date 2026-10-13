@@ -113,6 +113,14 @@ class MatchHighlightService {
   static final ValueNotifier<int> changes = ValueNotifier<int>(0);
   static final Map<String, List<MatchHighlight>> _cache = {};
 
+  static int _byMinute(MatchHighlight a, MatchHighlight b) {
+    final am = a.minute, bm = b.minute;
+    if (am != null && bm != null && am != bm) return am.compareTo(bm);
+    if (am == null && bm != null) return 1;
+    if (am != null && bm == null) return -1;
+    return a.startSec.compareTo(b.startSec);
+  }
+
   /// Bellekteki son liste (ekran ilk açılışta beklemeden çizsin).
   static List<MatchHighlight>? cached(String matchId) => _cache[matchId];
 
@@ -124,10 +132,12 @@ class MatchHighlightService {
         .eq('match_id', matchId)
         .neq('status', 'rejected')
         .order('start_sec');
+    // Gol dakikasına göre; dakikası olmayan sona, kendi arasında videodaki
+    // sırasıyla.
     final list = [
       for (final r in rows)
         MatchHighlight.fromMap(Map<String, dynamic>.from(r)),
-    ];
+    ]..sort(_byMinute);
     _cache[matchId] = list;
     return list;
   }
