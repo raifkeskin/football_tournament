@@ -108,3 +108,21 @@ _Eklendi: 2026-10-11_
   - Gizli ve demo turnuvalar herkese açık CDN'den sunulamaz; onlar veritabanından okumaya devam eder.
   - Dosyayı her değişiklikte yeniden üreten bir mekanizma gerekir (tetikleyici → Edge Function → Storage).
 - **Tahmini iş:** ~1 gün.
+
+## 11. Demo turnuvalara oyuncu fotoğrafları + fotoğraf standardı
+_Eklendi: 2026-10-13_
+
+- **Sorun:** Demo turnuvalarda oyuncu profil fotoğrafı yok. "Demoyu Gez" ile gelen organizatör profilleri boş görüyor.
+- **Yapılacak:**
+  - Demo oyunculara örnek, vesikalık tarzı fotoğraflar eklenecek.
+  - Oyuncunun fotoğraf yüklediği yerde örnek bir fotoğraf gösterilecek: "Fotoğrafın bu standartta olsun". Standart: vesikalık gibi, yüz ortada, düz arka plan, dik çekim.
+- **Neden:** Profiller tutarlı ve şık görünür. Demo, gerçek kullanımı daha iyi anlatır.
+
+## 12. Röportaj videolarını uygulama içinde oynatmak
+_Eklendi: 2026-10-13_
+
+- **Şu an:** Maç medyasında "Video Linki" türü var. Instagram veya YouTube linki ekleniyor, dokununca video o uygulamada açılıyor.
+- **Sonra:** Video uygulamanın içinde oynasın.
+  - Web'de Instagram'ın gömme sayfası (iframe) kullanılabilir. Telefonda webview paketi gerekir.
+  - Küçük resim (thumbnail) ve başlık için Meta oEmbed izni gerekir. Instagram yayın planındaki Meta uygulaması kurulunca yapılır.
+- **Not:** Videoyu kendimiz barındırmıyoruz. Trafik ücreti yüksek olur, akış (HLS) da yok.

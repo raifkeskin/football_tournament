@@ -34,10 +34,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   /// Bu ekranın banda koyduğu düğmeler (başka ekranınkini silmemek için).
   BandActions? _myActions;
+  VoidCallback? _onLogout;
 
   void _syncBand(bool on, VoidCallback onLogout) {
     if (on == _bandOwned && !on) return;
     _bandOwned = on;
+    _onLogout = onLogout;
     // Çizim sırasında bant yeniden çizilemez; ertelenir.
     Future.microtask(() {
       if (on) {
@@ -71,6 +73,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
     LoginScreen.redirecting.addListener(_onRedirecting);
+    AppNameBand.panelActions.addListener(_onPanelActions);
+  }
+
+  /// Panel görünürken düğmeler bantta kalmalı. Gizli girişte eski ana ekran
+  /// kapanırken kendi kurduğu düğmeleri siler; o an bant boş kalırsa bu ekran
+  /// düğmelerini yeniden koyar.
+  void _onPanelActions() {
+    final logout = _onLogout;
+    if (!mounted || !_bandOwned || logout == null) return;
+    if (AppNameBand.panelActions.value != null) return;
+    _bandOwned = false;
+    _syncBand(true, logout);
   }
 
   void _onRedirecting() {
@@ -80,6 +94,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void dispose() {
     LoginScreen.redirecting.removeListener(_onRedirecting);
+    AppNameBand.panelActions.removeListener(_onPanelActions);
     if (_bandOwned) Future.microtask(_clearBand);
     super.dispose();
   }

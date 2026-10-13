@@ -931,7 +931,12 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
                       );
                     }
                     return ListView(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                      padding: const EdgeInsets.fromLTRB(
+                        16,
+                        0,
+                        16,
+                        kAdminFabClearance,
+                      ),
                       children: [
                         for (final d in docs)
                           _newsCard(d, showTournament: showAll),

@@ -1,3 +1,13 @@
+/// Maç yayın linki (YouTube); skorun altında gösterilir.
+const kMediaLiveLink = 'Maç Yayın Linki';
+
+/// Turnuvanın kendi albümü (Drive / Google Fotoğraflar); dışarıda açılır.
+const kMediaAlbumLink = 'Fotoğraf Albümü';
+
+/// Gol / pozisyon / röportaj videosu: herhangi bir platformun linki
+/// (YouTube uygulamada oynar, diğerleri uygulama içi tarayıcıda açılır).
+const kMediaVideoLink = 'Video Linki';
+
 class MatchMediaModel {
   final String id;
   final String matchId;
@@ -6,6 +16,10 @@ class MatchMediaModel {
   final String url;
   final String? description;
   final DateTime? createdAt;
+
+  /// Fotoğraf mı (link türleri hariç)? Maç başı fotoğraf sınırına sayılır.
+  bool get isPhoto =>
+      mediaType != kMediaLiveLink && mediaType != kMediaAlbumLink;
 
   MatchMediaModel({
     required this.id,

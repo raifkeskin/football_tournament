@@ -101,7 +101,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
     return AdminPageScaffold(
       title: 'Bildirimler',
-      bandBack: true,
       body: RefreshIndicator(onRefresh: _load, child: body),
     );
   }

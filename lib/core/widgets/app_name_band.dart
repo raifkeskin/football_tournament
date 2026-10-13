@@ -89,6 +89,7 @@ class AppNameBand extends StatelessWidget {
                         top,
                         ActiveTournament.theme.value,
                         showName: true,
+                        subtitle: page.subtitle,
                       ),
                       Positioned(
                         left: 4,
@@ -189,8 +190,14 @@ class AppNameBand extends StatelessWidget {
 
   Widget _loginBand(double top) => _LoginBand(top: top);
 
-  Widget _tvlBand(double top, TournamentTheme? theme, {bool showName = false}) {
+  Widget _tvlBand(
+    double top,
+    TournamentTheme? theme, {
+    bool showName = false,
+    String? subtitle,
+  }) {
     final named = showName || kShowAppName;
+    final sub = (subtitle ?? '').trim();
     return Column(
       children: [
         // Ortada uygulama logosu. Renk: seçili turnuvanın teması (turnuva
@@ -225,21 +232,52 @@ class AppNameBand extends StatelessWidget {
                       const AppLogo(size: 40),
                       if (named) const SizedBox(width: 12),
                       if (named)
-                        const Text(
-                          'LİG MASASI',
-                          maxLines: 1,
-                          style: TextStyle(
-                            fontFamily: 'BarlowCondensed',
-                            fontStyle: FontStyle.italic,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                            fontSize: 18,
-                            letterSpacing: 2.6,
-                            decoration: TextDecoration.none,
-                            shadows: [
-                              Shadow(color: Color(0x66000000), blurRadius: 4),
-                            ],
-                          ),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'LİG MASASI',
+                              maxLines: 1,
+                              style: TextStyle(
+                                fontFamily: 'BarlowCondensed',
+                                fontStyle: FontStyle.italic,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
+                                fontSize: 18,
+                                height: 1.1,
+                                letterSpacing: 2.6,
+                                decoration: TextDecoration.none,
+                                shadows: [
+                                  Shadow(
+                                    color: Color(0x66000000),
+                                    blurRadius: 4,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            // Sayfa adı (ör. yönetim ekranları): bilgi amaçlı,
+                            // küçük ve soluk.
+                            if (sub.isNotEmpty)
+                              ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  maxWidth: 190,
+                                ),
+                                child: Text(
+                                  sub,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Color(0xCCFFFFFF),
+                                    fontSize: 11.5,
+                                    height: 1.2,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.3,
+                                    decoration: TextDecoration.none,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                     ],
                   ),
@@ -491,9 +529,12 @@ class PageBand {
 /// sayfalar için): [child] açıkken bant solunda geri, ortada kişinin
 /// turnuvası.
 class BandBackPage extends StatefulWidget {
-  const BandBackPage({super.key, required this.child});
+  const BandBackPage({super.key, required this.child, this.subtitle});
 
   final Widget child;
+
+  /// Bantta uygulama adının altında küçük puntoyla sayfa adı.
+  final String? subtitle;
 
   @override
   State<BandBackPage> createState() => _BandBackPageState();
@@ -510,7 +551,10 @@ class _BandBackPageState extends State<BandBackPage> {
     _route = route;
     LeagueSwitchScope.setPageBand(
       route,
-      PageBand(onBack: () => Navigator.of(context).maybePop()),
+      PageBand(
+        subtitle: widget.subtitle,
+        onBack: () => Navigator.of(context).maybePop(),
+      ),
     );
   }
 
