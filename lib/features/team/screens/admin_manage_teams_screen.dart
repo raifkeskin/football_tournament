@@ -438,7 +438,9 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
     Future<void> pickLogo(void Function(void Function()) setSheetState) async {
       final picked = await _picker.pickImage(source: ImageSource.gallery);
       if (picked == null) return;
-      final logo = await preparePickedLogo(picked);
+      if (!mounted) return;
+      final logo = await preparePickedLogo(context, picked);
+      if (logo == null) return;
       setSheetState(() {
         selectedLogo = logo;
         removeLogo = false;
@@ -1477,7 +1479,9 @@ class _EditTeamScreenState extends State<EditTeamScreen> {
   Future<void> _pickLogo() async {
     final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
     if (picked == null) return;
-    final logo = await preparePickedLogo(picked);
+    if (!mounted) return;
+    final logo = await preparePickedLogo(context, picked);
+    if (logo == null) return;
     if (mounted) setState(() => _newLogo = logo);
   }
 

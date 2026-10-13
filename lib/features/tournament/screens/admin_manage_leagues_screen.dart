@@ -207,7 +207,9 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                 source: ImageSource.gallery,
               );
               if (picked == null) return;
-              final logo = await preparePickedLogo(picked);
+              if (!context.mounted) return;
+              final logo = await preparePickedLogo(context, picked);
+              if (logo == null) return;
               setPopupState(() {
                 selectedLogo = logo;
                 removedLogo = false;
@@ -1430,7 +1432,9 @@ class _EditLeagueScreenState extends State<EditLeagueScreen> {
   Future<void> _pickLogo() async {
     final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
     if (picked == null) return;
-    final logo = await preparePickedLogo(picked);
+    if (!mounted) return;
+    final logo = await preparePickedLogo(context, picked);
+    if (logo == null) return;
     if (mounted) setState(() => _newLogo = logo);
   }
 

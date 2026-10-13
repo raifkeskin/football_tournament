@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../utils/app_activity.dart';
 import 'global_filter.dart';
 
 /// Uygulamanın büründüğü turnuva kimliği (logo, ad, renkler).
@@ -126,6 +127,7 @@ class ActiveTournament {
   /// ve misafir seçimi de yapılmamışsa (açılışta giriş kapısı çıkacak) uygulama
   /// TVL kimliğiyle açılır; eski tema temizlenir.
   static Future<void> init({required bool guestChosen}) async {
+    AppActivity.foreground.addListener(_onForeground);
     try {
       final prefs = await SharedPreferences.getInstance();
       if (!_isRealUser && !guestChosen) {
@@ -139,6 +141,47 @@ class ActiveTournament {
         Map<String, dynamic>.from(jsonDecode(raw) as Map),
       );
       currentLeagueId.value = theme.value?.leagueId;
+    } catch (_) {}
+  }
+
+  static DateTime _themeCheckedAt = DateTime.now();
+
+  /// Uygulama öne gelince (en çok dakikada bir) turnuvanın logo / ad / renk
+  /// bilgisi yeniden okunur; değiştiyse başlık hemen güncellenir. Saklanan
+  /// tema yalnızca açılışta yenilendiği için yöneticinin değiştirdiği logo
+  /// uygulama kapatılana kadar eski kalıyordu.
+  static void _onForeground() {
+    if (!AppActivity.foreground.value) return;
+    final id = currentLeagueId.value;
+    if (id == null || id.isEmpty) return;
+    final now = DateTime.now();
+    if (now.difference(_themeCheckedAt) < const Duration(minutes: 1)) return;
+    _themeCheckedAt = now;
+    _reloadTheme(id);
+  }
+
+  static Future<void> _reloadTheme(String leagueId) async {
+    final gen = _generation;
+    try {
+      final row = await _sb
+          .from('leagues')
+          .select(
+            'id, name, short_name, logo_url, theme_primary, theme_secondary, '
+            'instagram_url, facebook_url, youtube_url, website_url',
+          )
+          .eq('id', leagueId)
+          .maybeSingle();
+      if (row == null || gen != _generation) return;
+      if (currentLeagueId.value != leagueId) return;
+      final next = TournamentTheme.fromRow(row);
+      if (next == null) return;
+      final json = jsonEncode(next.toJson());
+      if (theme.value != null && jsonEncode(theme.value!.toJson()) == json) {
+        return;
+      }
+      theme.value = next;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_kTheme, json);
     } catch (_) {}
   }
 

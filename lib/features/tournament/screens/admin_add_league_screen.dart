@@ -208,7 +208,9 @@ class _AdminAddLeagueScreenState extends State<AdminAddLeagueScreen> {
   Future<void> _logoSec() async {
     final picked = await _picker.pickImage(source: ImageSource.gallery);
     if (picked == null) return;
-    final logo = await preparePickedLogo(picked);
+    if (!mounted) return;
+    final logo = await preparePickedLogo(context, picked);
+    if (logo == null) return;
     if (!mounted) return;
     setState(() => _leagueLogo = logo);
   }
