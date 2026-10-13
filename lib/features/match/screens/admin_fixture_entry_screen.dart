@@ -383,6 +383,14 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
 
     return AdminPageScaffold(
       title: 'Fikstür Planlama',
+      // KAYDET altta sabit: form kaydırılırken de görünür.
+      bottomBar: _isLoading
+          ? null
+          : AdminPrimaryButton(
+              label: 'KAYDET',
+              icon: Icons.check_rounded,
+              onPressed: _saveFixture,
+            ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: kAdminAccent))
           : ListView(
@@ -729,12 +737,6 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
                       ],
                     ),
                   ),
-                const SizedBox(height: 6),
-                AdminPrimaryButton(
-                  label: 'KAYDET',
-                  icon: Icons.check_rounded,
-                  onPressed: _saveFixture,
-                ),
               ],
             ),
     );

@@ -22,11 +22,16 @@ class _AdminPitchManagementScreenState
   final ILeagueService _leagueService = ServiceLocator.leagueService;
   bool _busy = false;
   final _searchController = TextEditingController();
+  final _searchFocus = FocusNode();
   String _query = '';
+
+  /// Arama kutusu: sağ alttaki arama düğmesiyle açılır.
+  bool _searchOpen = false;
 
   @override
   void dispose() {
     _searchController.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
@@ -697,11 +702,28 @@ class _AdminPitchManagementScreenState
       child: Scaffold(
         backgroundColor: _bgDark,
         floatingActionButton: isAdmin
-            ? AdminBarAction(
-                icon: Icons.add_rounded,
-                tooltip: 'Saha Ekle',
-                onPressed: _busy ? null : () => _openPitchForm(),
-              ).fab()
+            ? Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (!_searchOpen) ...[
+                    AdminBarAction(
+                      icon: Icons.search_rounded,
+                      tooltip: 'Saha ara',
+                      onPressed: () {
+                        setState(() => _searchOpen = true);
+                        _searchFocus.requestFocus();
+                      },
+                    ).fab(small: true),
+                    const SizedBox(height: 12),
+                  ],
+                  AdminBarAction(
+                    icon: Icons.add_rounded,
+                    tooltip: 'Saha Ekle',
+                    onPressed: _busy ? null : () => _openPitchForm(),
+                  ).fab(),
+                ],
+              )
             : null,
         body: Stack(
           children: [
@@ -739,35 +761,45 @@ class _AdminPitchManagementScreenState
                         final shown = pitches.where(_matches).toList();
                         return Column(
                           children: [
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                              child: TextField(
-                                controller: _searchController,
-                                style: const TextStyle(color: Colors.white),
-                                cursorColor: _accent,
-                                textInputAction: TextInputAction.search,
-                                onChanged: (v) => setState(() => _query = v),
-                                decoration:
-                                    adminInputDecoration(
-                                      hint: 'Saha, il veya konum ara',
-                                      icon: Icons.search_rounded,
-                                    ).copyWith(
-                                      suffixIcon: _query.isEmpty
-                                          ? null
-                                          : IconButton(
-                                              tooltip: 'Temizle',
-                                              icon: const Icon(
-                                                Icons.close_rounded,
-                                                color: Colors.white54,
-                                              ),
-                                              onPressed: () => setState(() {
-                                                _searchController.clear();
-                                                _query = '';
-                                              }),
-                                            ),
-                                    ),
+                            if (_searchOpen)
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  12,
+                                  16,
+                                  0,
+                                ),
+                                child: TextField(
+                                  controller: _searchController,
+                                  focusNode: _searchFocus,
+                                  style: const TextStyle(color: Colors.white),
+                                  cursorColor: _accent,
+                                  textInputAction: TextInputAction.search,
+                                  onChanged: (v) => setState(() => _query = v),
+                                  decoration:
+                                      adminInputDecoration(
+                                        hint: 'Saha, il veya konum ara',
+                                        icon: Icons.search_rounded,
+                                      ).copyWith(
+                                        // Kapatınca arama da temizlenir.
+                                        suffixIcon: IconButton(
+                                          tooltip: 'Aramayı kapat',
+                                          icon: const Icon(
+                                            Icons.close_rounded,
+                                            color: Colors.white54,
+                                          ),
+                                          onPressed: () {
+                                            _searchController.clear();
+                                            _searchFocus.unfocus();
+                                            setState(() {
+                                              _query = '';
+                                              _searchOpen = false;
+                                            });
+                                          },
+                                        ),
+                                      ),
+                                ),
                               ),
-                            ),
                             Expanded(
                               child: shown.isEmpty
                                   ? const Center(
@@ -784,7 +816,7 @@ class _AdminPitchManagementScreenState
                                         16,
                                         12,
                                         16,
-                                        kAdminFabClearance,
+                                        kAdminFabClearance + kAdminFabStep,
                                       ),
                                       children: shown.map(_pitchCard).toList(),
                                     ),
