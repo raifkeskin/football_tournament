@@ -43,7 +43,7 @@ class MatchScoreLine extends StatelessWidget {
   static const _live = Color(0xFFF87171);
 
   ({String text, Color color})? _statusLabel(String? liveMinute) {
-    switch (match.status) {
+    switch (match.displayStatus) {
       case MatchStatus.notStarted:
         return null;
       case MatchStatus.finished:
@@ -77,8 +77,8 @@ class MatchScoreLine extends StatelessWidget {
         match.status == MatchStatus.halftime;
     // İptal / ertelenen maçta skor kutusunda İPT / ERT yazar.
     final unplayed =
-        match.status == MatchStatus.cancelled ||
-        match.status == MatchStatus.postponed;
+        match.displayStatus == MatchStatus.cancelled ||
+        match.displayStatus == MatchStatus.postponed;
     final showScore =
         !unplayed &&
         (match.status == MatchStatus.finished || isLive || hs != 0 || as != 0);
