@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/utils/string_utils.dart';
 import '../team/utils/standings.dart';
+import '../../core/utils/team_name.dart';
 import 'poster_share.dart';
 import 'poster_background.dart';
 
@@ -107,7 +108,7 @@ class StandingsPoster extends StatelessWidget {
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
               child: Text(
-                r.name.trim().trUpper,
+                posterTeamName(r.name).trUpper,
                 maxLines: 1,
                 style: _cond(14.5, spacing: 0.2),
               ),

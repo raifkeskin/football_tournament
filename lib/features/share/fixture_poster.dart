@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/utils/string_utils.dart';
+import '../../core/utils/team_name.dart';
 import 'poster_share.dart';
 import 'poster_background.dart';
 
@@ -123,13 +124,13 @@ class FixturePoster extends StatelessWidget {
         ),
       ),
       child: Text(
-        name.trUpper,
+        posterTeamName(name).trUpper,
         maxLines: 2,
         textAlign: TextAlign.center,
         overflow: TextOverflow.ellipsis,
         // Afişte tam ad yazılır; uzun adlarda yazı küçülür.
         style: _cond(
-          name.length > 24 ? 10.5 : 12.5,
+          posterTeamName(name).length > 24 ? 10.5 : 12.5,
           color: const Color(0xFF0B1440),
           spacing: 0.2,
         ),
