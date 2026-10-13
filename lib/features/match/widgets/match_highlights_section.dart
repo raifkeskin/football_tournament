@@ -270,17 +270,37 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
   bool _loading = true;
   String? _playingId;
   final Set<String> _busy = {};
-  Timer? _poll;
+
+  /// Açılışta veri alınamadıysa yeniden deneme (bağlantı kopukluğu).
+  Timer? _retry;
+
+  /// Kendi [_refresh]'imizin artırdığı [changes] yeniden okuma tetiklemesin.
+  bool _selfBump = false;
+
+  String get _label =>
+      '${shortTeamName(widget.homeName)} – ${shortTeamName(widget.awayName)}';
 
   @override
   void initState() {
     super.initState();
+    MatchHighlightService.changes.addListener(_onServiceChanged);
+    MatchHighlightService.offline.addListener(_onOffline);
     _refresh();
+  }
+
+  void _onServiceChanged() {
+    if (!_selfBump) _refresh();
+  }
+
+  void _onOffline() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
-    _poll?.cancel();
+    _retry?.cancel();
+    MatchHighlightService.changes.removeListener(_onServiceChanged);
+    MatchHighlightService.offline.removeListener(_onOffline);
     resetPlayerOrientation();
     _player?.close();
     super.dispose();
@@ -298,16 +318,23 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
         _job = results[1] as MatchHighlightJob?;
         _loading = false;
       });
+      _retry?.cancel();
+      MatchHighlightService.offline.value = false;
+      _selfBump = true;
       MatchHighlightService.changes.value++;
-      // İş sürüyorsa birkaç saniyede bir yeniden bakılır.
-      _poll?.cancel();
+      _selfBump = false;
+      // İş sürüyorsa takip serviste (ekran kapansa da sürer, bitince
+      // bildirir); bitince [changes] ile bu ekran da yenilenir.
       if (_job?.isRunning ?? false) {
-        _poll = Timer(const Duration(seconds: 6), _refresh);
+        MatchHighlightService.watch(widget.match.id, label: _label);
       }
-    } catch (e) {
+    } catch (_) {
+      // Bağlantı koptu: ham hata yerine "yeniden deneniyor", sonra tekrar.
       if (!mounted) return;
+      MatchHighlightService.offline.value = true;
       setState(() => _loading = false);
-      _snack('Kesitler yüklenemedi: $e');
+      _retry?.cancel();
+      _retry = Timer(const Duration(seconds: 8), _refresh);
     }
   }
 
@@ -392,7 +419,12 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
       _snack(err);
       return;
     }
-    _snack('Analiz başladı; birkaç dakika sürebilir.');
+    // İş sunucuda sürer; takip serviste. Ekrandan çıkılabilir.
+    MatchHighlightService.watch(widget.match.id, label: _label);
+    _snack(
+      'Analiz arka planda başladı. Ekrandan çıkabilirsiniz; bitince '
+      'bildirilecek.',
+    );
     _refresh();
   }
 
@@ -507,6 +539,19 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(text, style: TextStyle(color: color, fontSize: 13)),
+              if (MatchHighlightService.offline.value) ...[
+                const SizedBox(height: 4),
+                const Text(
+                  'Bağlantı koptu, yeniden deneniyor…',
+                  style: TextStyle(color: kAdminDanger, fontSize: 11.5),
+                ),
+              ] else if (running) ...[
+                const SizedBox(height: 4),
+                const Text(
+                  'Arka planda sürüyor; ekrandan çıkabilirsiniz.',
+                  style: TextStyle(color: kAdminMuted, fontSize: 11.5),
+                ),
+              ],
               if (job != null && _jobDetails(job).isNotEmpty) ...[
                 const SizedBox(height: 4),
                 Text(
