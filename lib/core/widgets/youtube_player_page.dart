@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
+import 'app_name_band.dart';
+
 const youtubePlayerOrigin = 'https://ligmasasi.com';
 
 /// Oynatıcı tam ekrana geçince ekran yataya döner (sistem çubukları gizli),
@@ -105,7 +107,9 @@ class _YoutubePlayerPageState extends State<_YoutubePlayerPage> {
     videoId: widget.videoId,
     autoPlay: true,
     params: const YoutubePlayerParams(
-      showFullscreenButton: true,
+      // Android'de YouTube'un kendi tam ekranı WebView'da boş ekran
+      // bırakıyor; telefonda tam ekran YoutubePlayerFrame düğmesiyle.
+      showFullscreenButton: kIsWeb,
       strictRelatedVideos: true,
       origin: youtubePlayerOrigin,
     ),
@@ -188,7 +192,9 @@ class _YoutubeClipPageState extends State<_YoutubeClipPage> {
     autoPlay: true,
     startSeconds: widget.startSec.toDouble(),
     params: const YoutubePlayerParams(
-      showFullscreenButton: true,
+      // Android'de YouTube'un kendi tam ekranı WebView'da boş ekran
+      // bırakıyor; telefonda tam ekran YoutubePlayerFrame düğmesiyle.
+      showFullscreenButton: kIsWeb,
       strictRelatedVideos: true,
       origin: youtubePlayerOrigin,
     ),
@@ -306,6 +312,20 @@ class _YoutubePlayerFrameState extends State<YoutubePlayerFrame> {
   bool _full = false;
   bool? _immersive;
 
+  /// Tam ekranda uygulamanın ortak (turnuva) bandı gizlenir.
+  Route<dynamic>? _route;
+  bool? _bandHidden;
+
+  void _syncBand(bool fill) {
+    final route = ModalRoute.of(context);
+    if (route == null || (_bandHidden == fill && _route == route)) return;
+    _route = route;
+    _bandHidden = fill;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      LeagueSwitchScope.setBandHidden(route, fill);
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -320,6 +340,7 @@ class _YoutubePlayerFrameState extends State<YoutubePlayerFrame> {
   @override
   void dispose() {
     resetPlayerOrientation();
+    LeagueSwitchScope.setBandHidden(_route, false);
     super.dispose();
   }
 
@@ -340,6 +361,18 @@ class _YoutubePlayerFrameState extends State<YoutubePlayerFrame> {
         MediaQuery.orientationOf(context) == Orientation.landscape;
     final fill = _full || landscape;
     _syncImmersive(fill);
+    _syncBand(fill);
+    // Tam ekrandayken geri tuşu önce tam ekrandan çıkarır.
+    return PopScope(
+      canPop: !_full,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _full) widget.controller.exitFullScreen();
+      },
+      child: _scaffold(context, fill),
+    );
+  }
+
+  Widget _scaffold(BuildContext context, bool fill) {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: fill
@@ -353,30 +386,59 @@ class _YoutubePlayerFrameState extends State<YoutubePlayerFrame> {
                 onPressed: () => Navigator.pop(context),
               ),
               title: Text(widget.title, style: const TextStyle(fontSize: 16)),
-              actions: widget.actions,
+              actions: [
+                ...widget.actions,
+                // Telefonda YouTube'un tam ekran düğmesi gizli; yerine bu.
+                if (!kIsWeb)
+                  IconButton(
+                    tooltip: 'Tam ekran',
+                    icon: const Icon(Icons.fullscreen_rounded),
+                    onPressed: () => widget.controller.enterFullScreen(),
+                  ),
+              ],
             ),
       body: SafeArea(
         top: !fill,
         bottom: !fill,
         left: !fill,
         right: !fill,
-        child: Column(
+        child: Stack(
           children: [
-            Expanded(
-              child: Center(
-                child: AspectRatio(
-                  aspectRatio: 16 / 9,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      YoutubePlayer(controller: widget.controller),
-                      if (widget.overlay != null) widget.overlay!,
-                    ],
+            Column(
+              children: [
+                Expanded(
+                  child: Center(
+                    child: AspectRatio(
+                      aspectRatio: 16 / 9,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          YoutubePlayer(controller: widget.controller),
+                          if (widget.overlay != null) widget.overlay!,
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-              ),
+                if (!fill && widget.footer != null) widget.footer!,
+              ],
             ),
-            if (!fill && widget.footer != null) widget.footer!,
+            // Çıkış düğmesi videonun dışında, sağ üstteki siyah boşlukta:
+            // Android'de video kutusu üstündeki düğmeleri örter.
+            if (_full)
+              Positioned(
+                top: 12,
+                right: 12,
+                child: IconButton.filled(
+                  tooltip: 'Tam ekrandan çık',
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.white24,
+                    foregroundColor: Colors.white,
+                  ),
+                  icon: const Icon(Icons.fullscreen_exit_rounded),
+                  onPressed: () => widget.controller.exitFullScreen(),
+                ),
+              ),
           ],
         ),
       ),

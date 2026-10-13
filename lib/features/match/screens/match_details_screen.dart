@@ -2510,7 +2510,9 @@ class _YoutubeVideoViewState extends State<_YoutubeVideoView> {
         videoId: id,
         autoPlay: true,
         params: const YoutubePlayerParams(
-          showFullscreenButton: true,
+          // Android'de YouTube'un kendi tam ekranı WebView'da boş ekran
+          // bırakıyor; telefonda tam ekran YoutubePlayerFrame düğmesiyle.
+          showFullscreenButton: kIsWeb,
           strictRelatedVideos: true,
           origin: youtubePlayerOrigin,
         ),
@@ -2625,7 +2627,9 @@ class _NativeYoutubeScreenState extends State<_NativeYoutubeScreen> {
         videoId: widget.videoId,
         autoPlay: true,
         params: const YoutubePlayerParams(
-          showFullscreenButton: true,
+          // Android'de YouTube'un kendi tam ekranı WebView'da boş ekran
+          // bırakıyor; telefonda tam ekran YoutubePlayerFrame düğmesiyle.
+          showFullscreenButton: kIsWeb,
           strictRelatedVideos: true,
           origin: youtubePlayerOrigin,
         ),

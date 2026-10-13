@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
@@ -345,7 +346,9 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
         startSeconds: h.startSec.toDouble(),
         endSeconds: h.endSec.toDouble(),
         params: const YoutubePlayerParams(
-          showFullscreenButton: true,
+          // Android'de YouTube'un kendi tam ekranı WebView'da boş ekran
+          // bırakıyor; telefonda tam ekran YoutubePlayerFrame düğmesiyle.
+          showFullscreenButton: kIsWeb,
           strictRelatedVideos: true,
           origin: youtubePlayerOrigin,
         ),
