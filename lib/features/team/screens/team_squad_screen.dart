@@ -5,6 +5,8 @@ import 'dart:math';
 import 'package:excel/excel.dart' hide Border;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+
+import '../../tournament/models/age_rules.dart';
 import '../../auth/widgets/phone_input.dart';
 import '../../player/consent/consent_service.dart';
 import '../../player/consent/consent_widgets.dart';
@@ -553,6 +555,112 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
   final Set<String> _playerPhotoFetchInFlight = {};
 
   bool _isTeamManager = false;
+
+  /// Sezonun yaş ve kontenjan kuralları (kadroda etiket ve özet için).
+  AgeRules _ageRules = const AgeRules();
+  String? _ageRulesSeason;
+
+  void _ensureAgeRules(String seasonId) {
+    if (_ageRulesSeason == seasonId) return;
+    _ageRulesSeason = seasonId;
+    Supabase.instance.client
+        .from('seasons')
+        .select('age_rules')
+        .eq('id', seasonId)
+        .maybeSingle()
+        .then((row) {
+          if (!mounted || _ageRulesSeason != seasonId) return;
+          setState(() => _ageRules = AgeRules.fromJson(row?['age_rules']));
+        })
+        .catchError((_) {});
+  }
+
+  AgeCheck _ageCheck(PlayerModel p) => _ageRules.check(
+    birthYear: int.tryParse(
+      RegExp(r'(\d{4})').firstMatch(p.birthDate ?? '')?.group(1) ?? '',
+    ),
+    isGk: (p.mainPosition ?? '').trim() == 'Kaleci',
+  );
+
+  /// Kadro üstünde kontenjan kullanımı: "1988–1989 · 2/3", kural dışı sayısı.
+  Widget _ageRulesSummary(List<PlayerModel> players) {
+    if (_ageRules.isEmpty) return const SizedBox.shrink();
+    final used = List.filled(_ageRules.quotas.length, 0);
+    var violations = 0;
+    for (final p in players) {
+      final c = _ageCheck(p);
+      if (c.status == AgeStatus.quota) used[c.quotaIndex!]++;
+      if (c.status == AgeStatus.violation) violations++;
+    }
+    Widget tile(String label, String value, Color color) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label, style: const TextStyle(color: _squadMuted, fontSize: 11)),
+          Text(
+            value,
+            style: TextStyle(
+              color: color,
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (var i = 0; i < _ageRules.quotas.length; i++)
+            tile(
+              'Kontenjan ${_ageRules.quotas[i].label}',
+              '${used[i]} / ${_ageRules.quotas[i].max}',
+              used[i] > _ageRules.quotas[i].max
+                  ? const Color(0xFFF87171)
+                  : const Color(0xFFFBBF24),
+            ),
+          if (violations > 0)
+            tile('Kural dışı', '$violations', const Color(0xFFF87171)),
+          tile('Yaş kuralı', _ageRules.summary, Colors.white70),
+        ],
+      ),
+    );
+  }
+
+  /// Satırdaki etiket: kontenjan oyuncusu "K", kurala uymayan "KURAL DIŞI".
+  Widget? _ageTag(PlayerModel p) {
+    final c = _ageCheck(p);
+    if (c.status == AgeStatus.ok) return null;
+    final quota = c.status == AgeStatus.quota;
+    final color = quota ? const Color(0xFFFBBF24) : const Color(0xFFF87171);
+    return Container(
+      margin: const EdgeInsets.only(left: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        quota ? 'K' : 'KURAL DIŞI',
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.4,
+        ),
+      ),
+    );
+  }
 
   /// Kadroya doğrudan yazabilir mi (admin, kurucu başkan, takımın bölge
   /// sorumlusu). Yalnızca takım sorumlusu olan kişinin ekleme/çıkarması
@@ -1537,6 +1645,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
         : (_teamTournaments.isEmpty && widgetTournamentId.isNotEmpty
               ? widgetTournamentId
               : null);
+    if (effectiveTournamentId != null) _ensureAgeRules(effectiveTournamentId);
     final Stream<List<PlayerModel>>? playersStream =
         effectiveTournamentId == null
         ? null
@@ -1739,6 +1848,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                                       );
                                     },
                                   ),
+                                  _ageRulesSummary(allPlayers),
                                   if (canAdd)
                                     _autoJerseyBanner(
                                       allPlayers,
@@ -1936,15 +2046,22 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    p.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          p.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      ?_ageTag(p),
+                    ],
                   ),
                   if (sub.isNotEmpty) ...[
                     const SizedBox(height: 1),

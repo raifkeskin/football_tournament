@@ -183,11 +183,14 @@ class _PlayerCardState extends State<PlayerCard> {
     return age < 0 ? null : age;
   }
 
-  String _birthYear() {
+  /// "16/09/1989 (37)"; tarih okunamazsa yalnız yıl, o da yoksa "-".
+  String _birthText(int? age) {
     final s = widget.birthDate.trim();
-    if (s.isEmpty) return '-';
-    final any = RegExp(r'(\d{4})').firstMatch(s);
-    return any?.group(1) ?? '-';
+    final m = RegExp(r'^(\d{4})-(\d{2})-(\d{2})').firstMatch(s);
+    final ageText = age == null ? '' : ' ($age)';
+    if (m != null) return '${m[3]}/${m[2]}/${m[1]}$ageText';
+    final y = RegExp(r'(\d{4})').firstMatch(s)?.group(1);
+    return y == null ? '-' : '$y$ageText';
   }
 
   String _normalizeUrl(String raw) {
@@ -761,11 +764,8 @@ class _PlayerCardState extends State<PlayerCard> {
                   flex: 38,
                   child: Column(
                     children: [
-                      info(
-                        Icons.cake_outlined,
-                        'Yaş',
-                        age == null ? '-' : '$age',
-                      ),
+                      // "16/09/1989 (37)"
+                      info(Icons.cake_outlined, 'Doğum', _birthText(age)),
                       const SizedBox(height: 8),
                       info(
                         Icons.height_rounded,
@@ -779,7 +779,11 @@ class _PlayerCardState extends State<PlayerCard> {
                         widget.weight == null ? '-' : '${widget.weight} kg',
                       ),
                       const SizedBox(height: 8),
-                      info(Icons.event_outlined, 'Doğum', _birthYear()),
+                      info(
+                        Icons.sports_soccer_outlined,
+                        'Mevki',
+                        pos.isEmpty ? '-' : pos,
+                      ),
                     ],
                   ),
                 ),
