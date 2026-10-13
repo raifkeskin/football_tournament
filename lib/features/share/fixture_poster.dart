@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/utils/string_utils.dart';
+import '../../core/utils/team_name.dart';
 import 'poster_share.dart';
 import 'poster_background.dart';
 
@@ -109,35 +110,64 @@ class FixturePoster extends StatelessWidget {
         : null,
   );
 
-  Widget _match(PosterMatch m) {
-    Widget nameBox(String name, BorderRadius r) => Expanded(
-      child: Container(
-        height: 34,
-        alignment: Alignment.center,
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-        decoration: BoxDecoration(
-          borderRadius: r,
-          gradient: const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFFF8FAFC), Color(0xFFD6DBE6)],
-          ),
-        ),
-        child: Text(
-          name.trUpper,
-          maxLines: 2,
-          textAlign: TextAlign.center,
-          overflow: TextOverflow.ellipsis,
-          // Afişte tam ad yazılır; uzun adlarda yazı küçülür.
-          style: _cond(
-            name.length > 24 ? 10.5 : 12.5,
-            color: const Color(0xFF0B1440),
-            spacing: 0.2,
-          ),
+  Widget _nameBox(String name, BorderRadius r) => Expanded(
+    child: Container(
+      height: 34,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      decoration: BoxDecoration(
+        borderRadius: r,
+        gradient: const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFFF8FAFC), Color(0xFFD6DBE6)],
         ),
       ),
-    );
+      child: Text(
+        posterTeamName(name).trUpper,
+        maxLines: 2,
+        textAlign: TextAlign.center,
+        overflow: TextOverflow.ellipsis,
+        // Afişte tam ad yazılır; uzun adlarda yazı küçülür.
+        style: _cond(
+          posterTeamName(name).length > 24 ? 10.5 : 12.5,
+          color: const Color(0xFF0B1440),
+          spacing: 0.2,
+        ),
+      ),
+    ),
+  );
 
+  /// Ortadaki lacivert kutu: üstte küçük etiket (SAAT / MS), altta değer.
+  Widget _centerBox(String label, String value) => Container(
+    width: 56,
+    height: 40,
+    alignment: Alignment.center,
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(6),
+      border: Border.all(color: _gold),
+      gradient: const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [Color(0xFF13245E), Color(0xFF0A1336)],
+      ),
+    ),
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        if (label.isNotEmpty) ...[
+          Text(
+            label,
+            style: _cond(9, color: const Color(0xFFCBD5E1), spacing: 1),
+          ),
+          const SizedBox(height: 2),
+        ],
+        Text(value, style: _cond(18, color: _goldHi)),
+      ],
+    ),
+  );
+
+  Widget _match(PosterMatch m) {
     final played = (m.score ?? '').isNotEmpty;
     return Padding(
       padding: const EdgeInsets.only(top: 6),
@@ -145,44 +175,38 @@ class FixturePoster extends StatelessWidget {
         children: [
           PosterLogo(url: m.homeLogo, name: m.homeName, size: 34),
           const SizedBox(width: 4),
-          nameBox(
+          _nameBox(
             m.homeName,
             const BorderRadius.horizontal(left: Radius.circular(8)),
           ),
-          Container(
-            width: 56,
-            height: 40,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: _gold),
-              gradient: const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0xFF13245E), Color(0xFF0A1336)],
-              ),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  played ? 'MS' : 'SAAT',
-                  style: _cond(9, color: const Color(0xFFCBD5E1), spacing: 1),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  played ? m.score! : m.time,
-                  style: _cond(18, color: _goldHi),
-                ),
-              ],
-            ),
-          ),
-          nameBox(
+          _centerBox(played ? 'MS' : 'SAAT', played ? m.score! : m.time),
+          _nameBox(
             m.awayName,
             const BorderRadius.horizontal(right: Radius.circular(8)),
           ),
           const SizedBox(width: 4),
           PosterLogo(url: m.awayLogo, name: m.awayName, size: 34),
+        ],
+      ),
+    );
+  }
+
+  /// Bay geçen takım: maç satırının sol yarısı; saat kutusunda "BAY",
+  /// deplasman tarafı boş (hizalama maç satırlarıyla aynı kalır).
+  Widget _bye(PosterTeam b) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
+        children: [
+          PosterLogo(url: b.logo, name: b.name, size: 34),
+          const SizedBox(width: 4),
+          _nameBox(
+            b.name,
+            const BorderRadius.horizontal(left: Radius.circular(8)),
+          ),
+          _centerBox('', 'BAY'),
+          const Expanded(child: SizedBox()),
+          const SizedBox(width: 38),
         ],
       ),
     );
@@ -228,49 +252,6 @@ class FixturePoster extends StatelessWidget {
             ],
           ),
           for (final m in d.matches) _match(m),
-        ],
-      ),
-    );
-  }
-
-  /// "BAY" etiketi + bay geçen takımın logosu ve tam adı.
-  Widget _byeRow() {
-    return Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: Wrap(
-        alignment: WrapAlignment.center,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        spacing: 8,
-        runSpacing: 6,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            decoration: BoxDecoration(
-              color: const Color(0xFFC81E3A),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text('BAY', style: _cond(14, spacing: 1.4)),
-          ),
-          for (final b in byes)
-            Container(
-              padding: const EdgeInsets.fromLTRB(4, 3, 12, 3),
-              decoration: BoxDecoration(
-                color: _navy.withValues(alpha: 0.9),
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: _gold.withValues(alpha: 0.55)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  PosterLogo(url: b.logo, name: b.name, size: 26),
-                  const SizedBox(width: 6),
-                  Text(
-                    b.name.trUpper,
-                    style: _cond(14, color: _goldHi, spacing: 0.3),
-                  ),
-                ],
-              ),
-            ),
         ],
       ),
     );
@@ -374,7 +355,8 @@ class FixturePoster extends StatelessWidget {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             for (final d in days) _day(d),
-                            if (byes.isNotEmpty) _byeRow(),
+                            if (byes.isNotEmpty) const SizedBox(height: 6),
+                            for (final b in byes) _bye(b),
                           ],
                         ),
                       ),
