@@ -4,6 +4,9 @@ const kMediaLiveLink = 'Maç Yayın Linki';
 /// Turnuvanın kendi albümü (Drive / Google Fotoğraflar); dışarıda açılır.
 const kMediaAlbumLink = 'Fotoğraf Albümü';
 
+/// Röportaj vb. kısa video (Instagram / YouTube); uygulamasında açılır.
+const kMediaVideoLink = 'Video Linki';
+
 class MatchMediaModel {
   final String id;
   final String matchId;
