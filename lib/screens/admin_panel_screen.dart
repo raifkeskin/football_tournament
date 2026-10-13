@@ -431,7 +431,7 @@ class _SettingSwitchState extends State<_SettingSwitch> {
   }
 }
 
-/// Maç başına en fazla fotoğraf (yayın ve albüm linki hariç).
+/// Maç başına en fazla fotoğraf (yayın, video ve albüm linki hariç).
 class _PhotoLimitSetting extends StatefulWidget {
   const _PhotoLimitSetting();
 
@@ -484,7 +484,7 @@ class _PhotoLimitSettingState extends State<_PhotoLimitSetting> {
           ),
         ),
         subtitle: Text(
-          'En fazla $limit fotoğraf · yayın ve albüm linki sayılmaz',
+          'En fazla $limit fotoğraf · yayın, video ve albüm linki sayılmaz',
           style: const TextStyle(color: Colors.white54, fontSize: 12),
         ),
         trailing: const Icon(

@@ -1384,10 +1384,13 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
   int _photoCount = 0;
 
   bool get _isUrlType =>
-      _selectedType == kMediaLiveLink || _selectedType == kMediaAlbumLink;
+      _selectedType == kMediaLiveLink ||
+      _selectedType == kMediaAlbumLink ||
+      _selectedType == kMediaVideoLink;
 
   final List<String> _types = [
     kMediaLiveLink,
+    kMediaVideoLink,
     kMediaAlbumLink,
     'Takım Fotosu',
     'Önemli An',
@@ -1398,6 +1401,7 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
   static IconData _typeIcon(String t) => switch (t) {
     kMediaLiveLink => Icons.live_tv_rounded,
     kMediaAlbumLink => Icons.photo_library_outlined,
+    kMediaVideoLink => Icons.smart_display_outlined,
     'Takım Fotosu' => Icons.groups_outlined,
     'Önemli An' => Icons.bolt_rounded,
     'Maçın Adamı' => Icons.star_outline_rounded,
@@ -1508,6 +1512,7 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
   Widget _buildDialog(BuildContext context) {
     final isLink = _isUrlType;
     final isAlbum = _selectedType == kMediaAlbumLink;
+    final isVideo = _selectedType == kMediaVideoLink;
     final limit = AppSettings.matchPhotoLimit.value;
     final full = !isLink && _photoCount >= limit;
     return Dialog(
@@ -1558,10 +1563,16 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
                     if (isLink)
                       _inputRow(
                         icon: Icons.link_rounded,
-                        label: isAlbum ? 'Albüm Linki' : 'YouTube Linki',
+                        label: isAlbum
+                            ? 'Albüm Linki'
+                            : isVideo
+                            ? 'Video Linki'
+                            : 'YouTube Linki',
                         controller: _urlCtrl,
                         hint: isAlbum
                             ? 'Drive veya Google Fotoğraflar linki'
+                            : isVideo
+                            ? 'Instagram veya YouTube linki'
                             : 'https://youtube.com/...',
                         keyboardType: TextInputType.url,
                       )
@@ -1628,6 +1639,21 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
                     ),
                   ],
                 ),
+                if (isAlbum || isVideo) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    isAlbum
+                        ? 'Albüm paylaşımı "Bağlantıya sahip herkes · '
+                              'Görüntüleyen" olmalı; yoksa her izleyici erişim '
+                              'izni ister.'
+                        : 'Röportaj ya da kısa video. Dokununca Instagram '
+                              'veya YouTube uygulamasında açılır.',
+                    style: const TextStyle(
+                      color: Colors.white54,
+                      fontSize: 12.5,
+                    ),
+                  ),
+                ],
                 if (!isLink && _pickedFile != null) ...[
                   const SizedBox(height: 14),
                   ClipRRect(
@@ -1670,6 +1696,8 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
             content: Text(
               _selectedType == kMediaAlbumLink
                   ? 'Lütfen geçerli bir albüm linki girin (https://...).'
+                  : _selectedType == kMediaVideoLink
+                  ? 'Lütfen geçerli bir video linki girin (https://...).'
                   : 'Lütfen geçerli bir yayın linki girin.',
             ),
           ),
@@ -1972,6 +2000,10 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
           for (final m in all)
             if (m.mediaType == kMediaAlbumLink && m.url.trim().isNotEmpty) m,
         ];
+        final videos = [
+          for (final m in all)
+            if (m.mediaType == kMediaVideoLink && m.url.trim().isNotEmpty) m,
+        ];
         final photos = all.where((m) => m.isPhoto).toList()
           ..sort(
             (a, b) => (b.createdAt ?? DateTime(0)).compareTo(
@@ -1980,6 +2012,7 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
           );
         final header = <Widget>[
           for (final a in albums) _albumCard(context, a),
+          for (final v in videos) _albumCard(context, v),
           if (widget.isSuperAdmin)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -2106,6 +2139,12 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
   /// Yönetici uzun basarak kaldırabilir.
   Widget _albumCard(BuildContext context, MatchMediaModel album) {
     final desc = (album.description ?? '').trim();
+    final isVideo = album.mediaType == kMediaVideoLink;
+    final host = Uri.tryParse(album.url.trim())?.host ?? '';
+    final where = host.contains('instagram')
+        ? 'Instagram'
+        : (host.contains('youtu') ? 'YouTube' : '');
+    final accent = isVideo ? const Color(0xFFF472B6) : const Color(0xFFFBBF24);
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
       child: Material(
@@ -2131,12 +2170,14 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFBBF24).withValues(alpha: 0.16),
+                    color: accent.withValues(alpha: 0.16),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(
-                    Icons.photo_library_outlined,
-                    color: Color(0xFFFBBF24),
+                  child: Icon(
+                    isVideo
+                        ? Icons.smart_display_outlined
+                        : Icons.photo_library_outlined,
+                    color: accent,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -2144,8 +2185,8 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Tüm Fotoğraflar',
+                      Text(
+                        isVideo ? 'Röportaj / Video' : 'Tüm Fotoğraflar',
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 14.5,
@@ -2153,7 +2194,11 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
                         ),
                       ),
                       Text(
-                        desc.isEmpty ? 'Maçın fotoğraf albümü' : desc,
+                        desc.isNotEmpty
+                            ? desc
+                            : isVideo
+                            ? 'Maç videosu'
+                            : 'Maçın fotoğraf albümü',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -2164,19 +2209,17 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
                     ],
                   ),
                 ),
-                const Text(
-                  'Albümü Aç',
+                Text(
+                  isVideo
+                      ? (where.isEmpty ? 'İzle' : "$where'da İzle")
+                      : 'Albümü Aç',
                   style: TextStyle(
-                    color: Color(0xFFFBBF24),
+                    color: accent,
                     fontSize: 13,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                const Icon(
-                  Icons.open_in_new_rounded,
-                  size: 16,
-                  color: Color(0xFFFBBF24),
-                ),
+                Icon(Icons.open_in_new_rounded, size: 16, color: accent),
               ],
             ),
           ),
@@ -2193,12 +2236,14 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
       context: context,
       builder: (c) => AlertDialog(
         backgroundColor: const Color(0xFF1E293B),
-        title: const Text(
-          'Albüm linki kaldırılsın mı?',
-          style: TextStyle(color: Colors.white),
+        title: Text(
+          album.mediaType == kMediaVideoLink
+              ? 'Video linki kaldırılsın mı?'
+              : 'Albüm linki kaldırılsın mı?',
+          style: const TextStyle(color: Colors.white),
         ),
         content: const Text(
-          'Albümün kendisi silinmez, yalnızca maçtaki bağlantı kalkar.',
+          'Asıl içerik silinmez, yalnızca maçtaki bağlantı kalkar.',
           style: TextStyle(color: Colors.white70),
         ),
         actions: [
