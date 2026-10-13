@@ -17,6 +17,7 @@ import '../../team/models/team.dart';
 import '../../../core/utils/team_name.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../../core/services/app_session.dart';
+import '../../../core/services/app_settings.dart';
 import '../../../core/services/image_upload_service.dart';
 import '../../tournament/services/interfaces/i_league_service.dart';
 import '../services/interfaces/i_match_service.dart';
@@ -1376,8 +1377,18 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
   XFile? _pickedFile;
   bool _isUploading = false;
 
+  /// Maçtaki fotoğraf sayısı (sınır göstergesi ve kontrolü için).
+  late final Stream<List<MatchMediaModel>> _mediaStream = ServiceLocator
+      .matchService
+      .watchMatchMedia(widget.match.id);
+  int _photoCount = 0;
+
+  bool get _isUrlType =>
+      _selectedType == kMediaLiveLink || _selectedType == kMediaAlbumLink;
+
   final List<String> _types = [
-    'Maç Yayın Linki',
+    kMediaLiveLink,
+    kMediaAlbumLink,
     'Takım Fotosu',
     'Önemli An',
     'Maçın Adamı',
@@ -1385,7 +1396,8 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
   ];
 
   static IconData _typeIcon(String t) => switch (t) {
-    'Maç Yayın Linki' => Icons.live_tv_rounded,
+    kMediaLiveLink => Icons.live_tv_rounded,
+    kMediaAlbumLink => Icons.photo_library_outlined,
     'Takım Fotosu' => Icons.groups_outlined,
     'Önemli An' => Icons.bolt_rounded,
     'Maçın Adamı' => Icons.star_outline_rounded,
@@ -1419,9 +1431,85 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
     );
   }
 
+  /// "Fotoğraflar 7 / 20" göstergesi; sınır dolunca kırmızı.
+  Widget _photoCounter(int count, int limit) {
+    final full = count >= limit;
+    final color = full ? const Color(0xFFF87171) : const Color(0xFF10B981);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.photo_outlined, size: 18, color: color),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Bu maçın fotoğrafları',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Text(
+                '$count / $limit',
+                style: TextStyle(
+                  color: color,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: limit == 0 ? 1 : (count / limit).clamp(0, 1).toDouble(),
+              minHeight: 5,
+              color: color,
+              backgroundColor: Colors.white.withValues(alpha: 0.08),
+            ),
+          ),
+          if (full && !_isUrlType) ...[
+            const SizedBox(height: 8),
+            const Text(
+              'Fotoğraf sınırı doldu. Yeni fotoğraf için önce birini silin '
+              'ya da tüm fotoğrafları "Fotoğraf Albümü" linkiyle paylaşın.',
+              style: TextStyle(color: Color(0xFFFCA5A5), fontSize: 12.5),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final isLink = _selectedType == 'Maç Yayın Linki';
+    return StreamBuilder<List<MatchMediaModel>>(
+      stream: _mediaStream,
+      builder: (context, snap) {
+        _photoCount = (snap.data ?? const <MatchMediaModel>[])
+            .where((m) => m.isPhoto)
+            .length;
+        return _buildDialog(context);
+      },
+    );
+  }
+
+  Widget _buildDialog(BuildContext context) {
+    final isLink = _isUrlType;
+    final isAlbum = _selectedType == kMediaAlbumLink;
+    final limit = AppSettings.matchPhotoLimit.value;
+    final full = !isLink && _photoCount >= limit;
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
@@ -1440,6 +1528,8 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
                   title: 'Medya Ekle',
                 ),
                 const SizedBox(height: 18),
+                _photoCounter(_photoCount, limit),
+                const SizedBox(height: 12),
                 AdminFieldGroup(
                   children: [
                     AdminSelectRow(
@@ -1468,9 +1558,11 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
                     if (isLink)
                       _inputRow(
                         icon: Icons.link_rounded,
-                        label: 'YouTube Linki',
+                        label: isAlbum ? 'Albüm Linki' : 'YouTube Linki',
                         controller: _urlCtrl,
-                        hint: 'https://youtube.com/...',
+                        hint: isAlbum
+                            ? 'Drive veya Google Fotoğraflar linki'
+                            : 'https://youtube.com/...',
                         keyboardType: TextInputType.url,
                       )
                     else
@@ -1553,7 +1645,7 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
                 AdminPrimaryButton(
                   label: 'KAYDET',
                   busy: _isUploading,
-                  onPressed: _save,
+                  onPressed: full ? null : _save,
                 ),
               ],
             ),
@@ -1567,17 +1659,35 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
     final m = widget.match;
     String finalUrl = '';
 
-    if (_selectedType == 'Maç Yayın Linki') {
+    if (_isUrlType) {
       finalUrl = _urlCtrl.text.trim();
-      if (finalUrl.isEmpty) {
+      final uri = Uri.tryParse(finalUrl);
+      if (finalUrl.isEmpty ||
+          uri == null ||
+          !(uri.scheme == 'http' || uri.scheme == 'https')) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Lütfen geçerli bir yayın linki girin.'),
+          SnackBar(
+            content: Text(
+              _selectedType == kMediaAlbumLink
+                  ? 'Lütfen geçerli bir albüm linki girin (https://...).'
+                  : 'Lütfen geçerli bir yayın linki girin.',
+            ),
           ),
         );
         return;
       }
     } else {
+      if (_photoCount >= AppSettings.matchPhotoLimit.value) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Bu maç için fotoğraf sınırı '
+              '(${AppSettings.matchPhotoLimit.value}) doldu.',
+            ),
+          ),
+        );
+        return;
+      }
       if (_pickedFile == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Lütfen bir görsel seçin.')),
@@ -1631,10 +1741,16 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
         );
       }
     } catch (e) {
+      // Kayıt reddedildiyse (ör. sınır aynı anda doldu) yüklenen dosya kalmasın.
+      if (!_isUrlType) {
+        unawaited(SupabaseImageUploadService().deleteImageByUrl(finalUrl));
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Kayıt Hatası: $e'),
+            content: Text(
+              e is PostgrestException ? e.message : 'Kayıt Hatası: $e',
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -1851,21 +1967,56 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
           return const Center(child: CircularProgressIndicator());
         }
 
-        final photos =
-            (snap.data ?? const <MatchMediaModel>[])
-                .where((m) => m.mediaType != 'Maç Yayın Linki')
-                .toList()
-              ..sort(
-                (a, b) => (b.createdAt ?? DateTime(0)).compareTo(
-                  a.createdAt ?? DateTime(0),
-                ),
-              );
-        if (photos.isEmpty) {
-          return const Center(
-            child: Text(
-              'Henüz fotoğraf eklenmedi.',
-              style: TextStyle(color: Colors.white60),
+        final all = snap.data ?? const <MatchMediaModel>[];
+        final albums = [
+          for (final m in all)
+            if (m.mediaType == kMediaAlbumLink && m.url.trim().isNotEmpty) m,
+        ];
+        final photos = all.where((m) => m.isPhoto).toList()
+          ..sort(
+            (a, b) => (b.createdAt ?? DateTime(0)).compareTo(
+              a.createdAt ?? DateTime(0),
             ),
+          );
+        final header = <Widget>[
+          for (final a in albums) _albumCard(context, a),
+          if (widget.isSuperAdmin)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.photo_outlined,
+                    size: 16,
+                    color: Colors.white54,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Fotoğraflar ${photos.length} / '
+                    '${AppSettings.matchPhotoLimit.value}',
+                    style: const TextStyle(
+                      color: Colors.white60,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ];
+        if (photos.isEmpty) {
+          return Column(
+            children: [
+              ...header,
+              const Expanded(
+                child: Center(
+                  child: Text(
+                    'Henüz fotoğraf eklenmedi.',
+                    style: TextStyle(color: Colors.white60),
+                  ),
+                ),
+              ),
+            ],
           );
         }
 
@@ -1879,6 +2030,7 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
 
         return Column(
           children: [
+            ...header,
             if (showFilter)
               SizedBox(
                 height: 48,
@@ -1948,6 +2100,130 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
         visualDensity: VisualDensity.compact,
       ),
     );
+  }
+
+  /// Turnuvanın kendi albümü: dokununca Drive / Google Fotoğraflar açılır.
+  /// Yönetici uzun basarak kaldırabilir.
+  Widget _albumCard(BuildContext context, MatchMediaModel album) {
+    final desc = (album.description ?? '').trim();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+      child: Material(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () async {
+            final uri = Uri.tryParse(album.url.trim());
+            if (uri == null) return;
+            try {
+              await launchUrl(uri, mode: LaunchMode.externalApplication);
+            } catch (_) {}
+          },
+          onLongPress: widget.isSuperAdmin
+              ? () => _confirmRemoveAlbum(context, album)
+              : null,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFBBF24).withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.photo_library_outlined,
+                    color: Color(0xFFFBBF24),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Tüm Fotoğraflar',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      Text(
+                        desc.isEmpty ? 'Maçın fotoğraf albümü' : desc,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white60,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Text(
+                  'Albümü Aç',
+                  style: TextStyle(
+                    color: Color(0xFFFBBF24),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const Icon(
+                  Icons.open_in_new_rounded,
+                  size: 16,
+                  color: Color(0xFFFBBF24),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmRemoveAlbum(
+    BuildContext context,
+    MatchMediaModel album,
+  ) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        title: const Text(
+          'Albüm linki kaldırılsın mı?',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const Text(
+          'Albümün kendisi silinmez, yalnızca maçtaki bağlantı kalkar.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Vazgeç'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Kaldır'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await ServiceLocator.matchService.deleteMatchMedia(album.id);
+      widget.onDataChanged();
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Kaldırılamadı: $e')));
+      }
+    }
   }
 
   static IconData? _badgeIcon(String type) => switch (type) {
