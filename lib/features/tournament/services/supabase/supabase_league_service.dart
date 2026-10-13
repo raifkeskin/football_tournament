@@ -659,7 +659,8 @@ class SupabaseLeagueService implements ILeagueService {
 
   static const _newsColumns =
       'id, season_id, content, is_published, image_url, image_urls, '
-      'like_count, created_at, publish_until, region_id, live_draw_id';
+      'like_count, created_at, publish_until, region_id, live_draw_id, '
+      'auto_kind, match_id, week, auto_data';
 
   /// Haberde en fazla 5 fotoğraf (veritabanı da sınırlar).
   static List<String> _cleanImages(List<String> urls) =>
@@ -752,6 +753,16 @@ class SupabaseLeagueService implements ILeagueService {
       liveDrawId: (r['live_draw_id'] ?? '').toString().trim().isEmpty
           ? null
           : r['live_draw_id'].toString(),
+      autoKind: (r['auto_kind'] ?? '').toString().isEmpty
+          ? null
+          : r['auto_kind'].toString(),
+      matchId: (r['match_id'] ?? '').toString().isEmpty
+          ? null
+          : r['match_id'].toString(),
+      week: (r['week'] as num?)?.toInt(),
+      autoData: r['auto_data'] is Map
+          ? Map<String, dynamic>.from(r['auto_data'] as Map)
+          : null,
       // RLS yalnızca kullanıcının kendi beğenisini döndürür.
       likedByMe:
           r['news_likes'] is List && (r['news_likes'] as List).isNotEmpty,
@@ -840,6 +851,7 @@ class SupabaseLeagueService implements ILeagueService {
       'region_id',
       'season_id',
       'live_draw_id',
+      'auto_data',
     ];
     for (final k in watched) {
       if (!next.containsKey(k)) continue;

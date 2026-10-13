@@ -773,7 +773,7 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  '$createdAtText$likes',
+                  '${doc.autoKind != null ? 'Otomatik · ' : ''}$createdAtText$likes',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -803,13 +803,16 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
                   color: isPublished ? draft : published,
                   onTap: () => _toggle(doc.id, !isPublished),
                 ),
-                const SizedBox(width: 6),
-                AdminSmallAction(
-                  icon: Icons.edit_outlined,
-                  tooltip: 'Düzenle',
-                  color: Colors.white70,
-                  onTap: () => _openNewsForm(item: doc),
-                ),
+                // Otomatik sonuç haberi maçtan yeniden yazılır; düzenlenmez.
+                if (doc.autoKind == null) ...[
+                  const SizedBox(width: 6),
+                  AdminSmallAction(
+                    icon: Icons.edit_outlined,
+                    tooltip: 'Düzenle',
+                    color: Colors.white70,
+                    onTap: () => _openNewsForm(item: doc),
+                  ),
+                ],
                 const SizedBox(width: 6),
                 AdminSmallAction(
                   icon: Icons.delete_outline_rounded,
