@@ -11,6 +11,7 @@ class AppSettings {
   static const _kBottomNav = 'bottom_nav_enabled';
   static const _kSmsOtp = 'sms_otp_enabled';
   static const _kSmsOtpProvider = 'sms_otp_provider';
+  static const _kMatchPhotoLimit = 'match_photo_limit';
 
   /// Gizli turnuva özelliği. Kapalıyken "Turnuva Kodu Gir" ve "Gizli turnuva"
   /// alanları gizlenir; veritabanı da tüm turnuvaları herkese açar.
@@ -28,6 +29,10 @@ class AppSettings {
   /// (`sms_otp_provider` = 'telegram'). Kapalıyken İletiMerkezi kullanılır.
   static final smsOtpTestMode = ValueNotifier<bool>(true);
 
+  /// Bir maça eklenebilecek en fazla fotoğraf (yayın ve albüm linki hariç).
+  /// Veritabanı da aynı sınırı uygular (match_media tetikleyicisi).
+  static final matchPhotoLimit = ValueNotifier<int>(20);
+
   static SupabaseClient get _sb => Supabase.instance.client;
 
   static Future<void> load() async {
@@ -42,6 +47,9 @@ class AppSettings {
           smsOtpEnabled.value = r['value'] == true;
         } else if (r['key'] == _kSmsOtpProvider) {
           smsOtpTestMode.value = r['value'] != 'iletimerkezi';
+        } else if (r['key'] == _kMatchPhotoLimit) {
+          final v = r['value'];
+          if (v is num && v > 0) matchPhotoLimit.value = v.toInt();
         }
       }
     } catch (e) {
@@ -88,5 +96,15 @@ class AppSettings {
       'updated_at': DateTime.now().toUtc().toIso8601String(),
     });
     smsOtpTestMode.value = testMode;
+  }
+
+  /// Yalnızca admin.
+  static Future<void> setMatchPhotoLimit(int limit) async {
+    await _sb.from('app_settings').upsert({
+      'key': _kMatchPhotoLimit,
+      'value': limit,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    });
+    matchPhotoLimit.value = limit;
   }
 }

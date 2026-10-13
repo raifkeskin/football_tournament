@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:football_tournament/core/services/app_session.dart';
 import 'package:football_tournament/core/services/app_settings.dart';
+import 'package:football_tournament/core/widgets/admin_form.dart';
 import 'package:football_tournament/features/team/screens/admin_manage_teams_screen.dart';
 import 'package:football_tournament/features/team/screens/team_squad_screen.dart';
 import 'package:football_tournament/features/tournament/screens/admin_manage_leagues_screen.dart';
@@ -279,6 +280,8 @@ class AdminPanelWidget extends StatelessWidget {
                     offText: 'Kapalı · gezinme yan menü ve kaydırma ile',
                   ),
                   const SizedBox(height: 8),
+                  const _PhotoLimitSetting(),
+                  const SizedBox(height: 8),
                   _SettingSwitch(
                     setting: AppSettings.smsOtpEnabled,
                     save: AppSettings.setSmsOtpEnabled,
@@ -421,6 +424,73 @@ class _SettingSwitchState extends State<_SettingSwitch> {
           style: const TextStyle(color: Colors.white54, fontSize: 12),
         ),
         activeTrackColor: const Color(0xFF10B981),
+        tileColor: Colors.white.withValues(alpha: 0.05),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+}
+
+/// Maç başına en fazla fotoğraf (yayın ve albüm linki hariç).
+class _PhotoLimitSetting extends StatefulWidget {
+  const _PhotoLimitSetting();
+
+  @override
+  State<_PhotoLimitSetting> createState() => _PhotoLimitSettingState();
+}
+
+class _PhotoLimitSettingState extends State<_PhotoLimitSetting> {
+  bool _saving = false;
+
+  Future<void> _pick() async {
+    final v = await showAdminOptionPicker<int>(
+      context: context,
+      title: 'Maç Başına Fotoğraf',
+      items: const [10, 20, 30, 50],
+      labelBuilder: (n) => '$n fotoğraf',
+      selected: AppSettings.matchPhotoLimit.value,
+    );
+    if (v == null || !mounted) return;
+    setState(() => _saving = true);
+    try {
+      await AppSettings.setMatchPhotoLimit(v);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Ayar kaydedilemedi: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<int>(
+      valueListenable: AppSettings.matchPhotoLimit,
+      builder: (context, limit, _) => ListTile(
+        onTap: _saving ? null : _pick,
+        leading: const Icon(
+          Icons.photo_library_outlined,
+          color: Colors.white70,
+        ),
+        title: const Text(
+          'Maç Başına Fotoğraf',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+          ),
+        ),
+        subtitle: Text(
+          'En fazla $limit fotoğraf · yayın ve albüm linki sayılmaz',
+          style: const TextStyle(color: Colors.white54, fontSize: 12),
+        ),
+        trailing: const Icon(
+          Icons.chevron_right_rounded,
+          color: Colors.white54,
+        ),
         tileColor: Colors.white.withValues(alpha: 0.05),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
