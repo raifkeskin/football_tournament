@@ -34,6 +34,10 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
   final ITeamService _teamService = ServiceLocator.teamService;
   String _searchQuery = '';
   final _searchController = TextEditingController();
+  final _searchFocus = FocusNode();
+
+  /// Arama kutusu: sağ alttaki arama düğmesiyle açılır.
+  bool _searchOpen = false;
   final _picker = ImagePicker();
   final _imageUploadService = SupabaseImageUploadService();
   Future<List<Map<String, dynamic>>>? _teamsFuture;
@@ -1080,6 +1084,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
   @override
   void dispose() {
     _searchController.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
@@ -1100,6 +1105,15 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
     return AdminPageScaffold(
       title: 'Takım Yönetimi',
       actions: [
+        if (!_searchOpen)
+          AdminBarAction(
+            icon: Icons.search_rounded,
+            tooltip: 'Takım ara',
+            onPressed: () {
+              setState(() => _searchOpen = true);
+              _searchFocus.requestFocus();
+            },
+          ),
         AdminBarAction(
           icon: Icons.group_add_rounded,
           tooltip: 'Takım Ekle',
@@ -1179,7 +1193,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                   16,
                   4,
                   16,
-                  kAdminFabClearance,
+                  kAdminFabClearance + kAdminFabStep,
                 ),
                 children: [
                   for (final e in sections.entries)
@@ -1191,34 +1205,41 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
 
           return Column(
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                child: TextField(
-                  controller: _searchController,
-                  style: const TextStyle(color: Colors.white),
-                  cursorColor: kAdminAccent,
-                  decoration:
-                      adminInputDecoration(
-                        hint: 'Takım veya sorumlu ara',
-                        icon: Icons.search_rounded,
-                      ).copyWith(
-                        suffixIcon: _searchQuery.isEmpty
-                            ? null
-                            : IconButton(
-                                icon: const Icon(
-                                  Icons.clear_rounded,
-                                  color: Colors.white54,
-                                ),
-                                onPressed: () {
-                                  _searchController.clear();
-                                  setState(() => _searchQuery = '');
-                                },
-                              ),
-                      ),
-                  onChanged: (val) =>
-                      setState(() => _searchQuery = _toTurkishLow(val)),
+              if (_searchOpen)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                  child: TextField(
+                    controller: _searchController,
+                    focusNode: _searchFocus,
+                    textInputAction: TextInputAction.search,
+                    style: const TextStyle(color: Colors.white),
+                    cursorColor: kAdminAccent,
+                    decoration:
+                        adminInputDecoration(
+                          hint: 'Takım veya sorumlu ara',
+                          icon: Icons.search_rounded,
+                        ).copyWith(
+                          // Kapatınca arama da temizlenir.
+                          suffixIcon: IconButton(
+                            tooltip: 'Aramayı kapat',
+                            icon: const Icon(
+                              Icons.close_rounded,
+                              color: Colors.white54,
+                            ),
+                            onPressed: () {
+                              _searchController.clear();
+                              _searchFocus.unfocus();
+                              setState(() {
+                                _searchQuery = '';
+                                _searchOpen = false;
+                              });
+                            },
+                          ),
+                        ),
+                    onChanged: (val) =>
+                        setState(() => _searchQuery = _toTurkishLow(val)),
+                  ),
                 ),
-              ),
               if (snapshot.hasData)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
