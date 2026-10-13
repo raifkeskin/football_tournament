@@ -1181,7 +1181,7 @@ class _MyProfileViewState extends State<MyProfileView> {
   /// adlar, ortada saat ya da skor), daha küçük ölçülerle.
   Widget _matchRow(TeamMatch m, {MyTeam? team}) {
     final at = m.startsAt;
-    final st = m.match.status;
+    final st = m.match.displayStatus;
     final live = st == MatchStatus.live || st == MatchStatus.halftime;
     final unplayed = st == MatchStatus.cancelled || st == MatchStatus.postponed;
     final played = st == MatchStatus.finished || live;

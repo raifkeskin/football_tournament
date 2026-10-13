@@ -163,6 +163,22 @@ class MatchModel {
     this.awayOrder,
   });
 
+  /// Ertelenip yeni bir güne (bugün ya da ileri) alınmış maç. Durum yine
+  /// 'postponed'dır (puan/istatistik akışı değişmez); listelerde oynanacak
+  /// maç gibi görünür, detayda "Ertelenen Maç" yazar.
+  bool get isRescheduled {
+    if (status != MatchStatus.postponed) return false;
+    final d = DateTime.tryParse((matchDate ?? '').trim());
+    if (d == null) return false;
+    final now = DateTime.now();
+    return !d.isBefore(DateTime(now.year, now.month, now.day));
+  }
+
+  /// Listelerde gösterilecek durum: yeni güne alınmış ertelenen maç,
+  /// oynanacak maç (notStarted) gibi görünür.
+  MatchStatus get displayStatus =>
+      isRescheduled ? MatchStatus.notStarted : status;
+
   factory MatchModel.fromMap(Map<String, dynamic> map, String id) {
     dynamic v(String camel, String snake) => map[camel] ?? map[snake];
 
