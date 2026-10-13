@@ -1323,9 +1323,8 @@ class _MatchCardState extends State<_MatchCard> {
                 awayLogo: widget.awayLogo,
                 showLogos: widget.compact,
                 compact: widget.compact,
-                leading:
-                    _broadcastUrl == null ||
-                        widget.match.status == MatchStatus.finished
+                // Maç bitse de yayın kaydı izlenebilsin diye ikon kalır.
+                leading: _broadcastUrl == null
                     ? null
                     : InkWell(
                         onTap: () => openYoutubeInApp(context, _broadcastUrl!),
