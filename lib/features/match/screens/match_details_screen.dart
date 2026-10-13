@@ -33,6 +33,8 @@ import '../../../core/utils/team_colors.dart';
 import '../../../core/widgets/pitch_token_style.dart';
 import 'package:football_tournament/core/widgets/picked_image.dart';
 import '../utils/match_clock.dart';
+import '../services/match_highlight_service.dart';
+import '../widgets/match_highlights_section.dart';
 import '../../team/screens/team_squad_screen.dart';
 import 'package:football_tournament/core/widgets/admin_page.dart';
 import 'package:football_tournament/core/widgets/admin_form.dart';
@@ -42,6 +44,7 @@ import '../../../core/services/video_link.dart';
 import '../../../core/widgets/youtube_player_page.dart'
     show
         landscapeOnFullscreen,
+        openYoutubeClip,
         resetPlayerOrientation,
         youtubePlayerOrigin,
         youtubeVideoId;
@@ -2020,7 +2023,16 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
               a.createdAt ?? DateTime(0),
             ),
           );
+        final session = AppSession.of(context).value;
         final header = <Widget>[
+          MatchHighlightsStrip(
+            match: widget.match,
+            homeName: widget.homeName,
+            awayName: widget.awayName,
+            canReview:
+                session.canManageLeague(widget.match.leagueId) ||
+                session.regionsInSeason(widget.match.seasonId).isNotEmpty,
+          ),
           for (final a in albums) _albumCard(context, a),
           for (final v in videos) _albumCard(context, v),
           if (widget.isSuperAdmin)
@@ -4089,6 +4101,41 @@ class _DetailTabState extends State<_DetailTab>
     widget.match.seasonId,
   );
 
+  /// Onaylı YZ gol kesitleri, maç olayına göre (gol satırında video ikonu).
+  late Map<String, MatchHighlight> _clips = _clipsByEvent(
+    MatchHighlightService.cached(widget.match.id),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    MatchHighlightService.changes.addListener(_onClipsChanged);
+    if (widget.match.status == MatchStatus.finished) {
+      MatchHighlightService.fetch(
+        widget.match.id,
+      ).then((_) => _onClipsChanged()).catchError((_) {});
+    }
+  }
+
+  @override
+  void dispose() {
+    MatchHighlightService.changes.removeListener(_onClipsChanged);
+    super.dispose();
+  }
+
+  static Map<String, MatchHighlight> _clipsByEvent(List<MatchHighlight>? l) => {
+    for (final h in l ?? const <MatchHighlight>[])
+      if (h.isApproved && h.matchEventId != null) h.matchEventId!: h,
+  };
+
+  void _onClipsChanged() {
+    if (!mounted) return;
+    setState(
+      () =>
+          _clips = _clipsByEvent(MatchHighlightService.cached(widget.match.id)),
+    );
+  }
+
   @override
   bool get wantKeepAlive => true;
 
@@ -4099,6 +4146,7 @@ class _DetailTabState extends State<_DetailTab>
       match: widget.match,
       eventsStream: _eventsStream,
       periodFuture: _periodFuture,
+      clips: _clips,
     );
   }
 }
@@ -4107,10 +4155,12 @@ class _DetailTabView extends StatelessWidget {
   final MatchModel match;
   final Stream<List<Map<String, dynamic>>> eventsStream;
   final Future<int> periodFuture;
+  final Map<String, MatchHighlight> clips;
   const _DetailTabView({
     required this.match,
     required this.eventsStream,
     required this.periodFuture,
+    this.clips = const {},
   });
 
   String _friendlyLoadError(Object? error) {
@@ -4383,8 +4433,10 @@ class _DetailTabView extends StatelessWidget {
                       ? match.awayTeamId
                       : match.homeTeamId)
                 : teamId;
+            final eventId = system ? '' : _readString(e['id']);
             return _DetailEventTile(
-              eventId: system ? '' : _readString(e['id']),
+              eventId: eventId,
+              clip: type == 'goal' ? clips[eventId] : null,
               isPenalty: type == 'goal' && isPenalty,
               isOwnGoal: type == 'goal' && isOwnGoal,
               match: match,
@@ -4441,8 +4493,12 @@ class _DetailEventTile extends StatelessWidget {
 
   /// Dolu ise satıra dokununca oyuncu kartı açılır.
   final String playerId;
+
+  /// Onaylı YZ gol kesiti; varsa gol satırında video ikonu çıkar.
+  final MatchHighlight? clip;
   const _DetailEventTile({
     required this.eventId,
+    this.clip,
     required this.match,
     this.isPenalty = false,
     this.isOwnGoal = false,
@@ -4520,15 +4576,32 @@ class _DetailEventTile extends StatelessWidget {
       return _substitutionBlock(align == CrossAxisAlignment.start);
     }
     final sub = (subtitle ?? '').trim();
+    final name = Text(
+      title.isEmpty ? '-' : title,
+      style: const TextStyle(fontWeight: FontWeight.bold),
+      overflow: TextOverflow.ellipsis,
+    );
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: align,
       children: [
-        Text(
-          title.isEmpty ? '-' : title,
-          style: const TextStyle(fontWeight: FontWeight.bold),
-          overflow: TextOverflow.ellipsis,
-        ),
+        if (clip == null)
+          name
+        else
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: align == CrossAxisAlignment.start
+                ? [
+                    Flexible(child: name),
+                    const SizedBox(width: 6),
+                    _clipButton(),
+                  ]
+                : [
+                    _clipButton(),
+                    const SizedBox(width: 6),
+                    Flexible(child: name),
+                  ],
+          ),
         if (sub.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 1),
@@ -4543,6 +4616,31 @@ class _DetailEventTile extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+
+  /// Gol kesitini oynatan küçük video ikonu.
+  Widget _clipButton() {
+    final c = clip!;
+    return Builder(
+      builder: (context) => InkWell(
+        customBorder: const CircleBorder(),
+        onTap: () => openYoutubeClip(
+          context,
+          videoId: c.videoId,
+          startSec: c.startSec,
+          endSec: c.endSec,
+          title: title.isEmpty ? 'Gol' : "$minute' $title",
+        ),
+        child: const Padding(
+          padding: EdgeInsets.all(2),
+          child: Icon(
+            Icons.play_circle_fill_rounded,
+            size: 20,
+            color: Color(0xFF10B981),
+          ),
+        ),
+      ),
     );
   }
 
