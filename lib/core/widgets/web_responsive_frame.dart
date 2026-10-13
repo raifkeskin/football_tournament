@@ -6,15 +6,15 @@ class WebResponsiveFrame extends StatelessWidget {
     super.key,
     required this.child,
     this.maxContentWidth = 600,
-    this.backgroundColor = const Color(0xFFF2F2F2),
-    this.backgroundImageAsset = 'assets/acilis_2.jpg',
+    // Uygulamanın koyu zemininden (0xFF0F172A) bir ton koyu; geniş ekranda
+    // içerik sütunu kenarlardan ayrışsın diye.
+    this.backgroundColor = const Color(0xFF020617),
     this.contentBackgroundColor,
   });
 
   final Widget child;
   final double maxContentWidth;
   final Color backgroundColor;
-  final String backgroundImageAsset;
   final Color? contentBackgroundColor;
 
   @override
@@ -22,31 +22,27 @@ class WebResponsiveFrame extends StatelessWidget {
     if (!kIsWeb) return child;
 
     final width = MediaQuery.sizeOf(context).width;
-    final showBackgroundImage = width > (maxContentWidth + 80);
+    final showSideBorders = width > maxContentWidth;
     final contentColor =
         contentBackgroundColor ?? Theme.of(context).scaffoldBackgroundColor;
 
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        if (showBackgroundImage)
-          DecoratedBox(
+    return ColoredBox(
+      color: backgroundColor,
+      child: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: maxContentWidth),
+          child: DecoratedBox(
             decoration: BoxDecoration(
-              image: DecorationImage(
-                image: AssetImage(backgroundImageAsset),
-                fit: BoxFit.cover,
-              ),
+              border: showSideBorders
+                  ? const Border.symmetric(
+                      vertical: BorderSide(color: Color(0xFF1E293B)),
+                    )
+                  : null,
             ),
-          )
-        else
-          ColoredBox(color: backgroundColor),
-        Center(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: maxContentWidth),
             child: Material(color: contentColor, child: child),
           ),
         ),
-      ],
+      ),
     );
   }
 }
