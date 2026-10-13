@@ -19,7 +19,8 @@
 // match_highlight_jobs tablosundan izlenir.
 //
 // Gizli değerler (supabase secrets): GEMINI_API_KEY; isteğe bağlı
-// GEMINI_MODEL (varsayılan gemini-flash-latest) ve 1M token başına USD
+// GEMINI_MODEL (varsayılan gemini-flash-latest), GEMINI_THINKING (düşünme
+// seviyesi: low | medium | high, varsayılan medium) ve 1M token başına USD
 // fiyatlar GEMINI_PRICE_INPUT (görüntü+metin, 0.5), GEMINI_PRICE_AUDIO (1.0),
 // GEMINI_PRICE_OUTPUT (3.0).
 
@@ -27,6 +28,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 const GEMINI_MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-flash-latest";
+const GEMINI_THINKING = Deno.env.get("GEMINI_THINKING") ?? "medium";
 const PRICE_INPUT = Number(Deno.env.get("GEMINI_PRICE_INPUT") ?? "0.5");
 const PRICE_AUDIO = Number(Deno.env.get("GEMINI_PRICE_AUDIO") ?? "1.0");
 const PRICE_OUTPUT = Number(Deno.env.get("GEMINI_PRICE_OUTPUT") ?? "3.0");
@@ -237,6 +239,7 @@ async function askGemini(opts: {
           mediaResolution: "MEDIA_RESOLUTION_LOW",
           responseMimeType: "application/json",
           responseSchema: opts.schema,
+          thinkingConfig: { thinkingLevel: GEMINI_THINKING },
         },
       }),
     },
