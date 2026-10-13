@@ -170,6 +170,17 @@ class MatchHighlightService {
     );
   }
 
+  /// Maç detayındaki gol kaydı sayısı (kendi kalesine dahil). Analiz, gol
+  /// kayıtları skorla eşitse başlatılır (yoksa boşa tarama yapılmaz).
+  static Future<int> goalCount(String matchId) async {
+    final rows = await _db
+        .from('match_events')
+        .select('id')
+        .eq('match_id', matchId)
+        .eq('event_type', 'goal');
+    return (rows as List).length;
+  }
+
   /// Analizi başlatır; iş arka planda sürer. Hata metnini döner (yoksa null).
   static Future<String?> analyze(
     String matchId, {
@@ -271,10 +282,10 @@ class MatchHighlightService {
     if (j.status == 'done') {
       final n = j.found ?? 0;
       msg = n > 0
-          ? 'YZ analizi bitti$who: $n gol kesiti bulundu, onay bekliyor.'
-          : 'YZ analizi bitti$who: gol kesiti bulunamadı.';
+          ? 'Gol analizi bitti$who: $n gol kesiti bulundu, onay bekliyor.'
+          : 'Gol analizi bitti$who: gol kesiti bulunamadı.';
     } else if (j.status == 'error') {
-      msg = 'YZ analizi tamamlanamadı$who: ${j.error ?? 'bilinmeyen hata'}';
+      msg = 'Gol analizi tamamlanamadı$who: ${j.error ?? 'bilinmeyen hata'}';
     } else {
       return;
     }
