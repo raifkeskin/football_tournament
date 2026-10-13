@@ -45,3 +45,12 @@ String compactTeamName(String raw, {int maxLength = 22}) {
       .replaceAll(RegExp(r'\s+'), ' ')
       .trim();
 }
+
+/// Afişler için takım adı: ad kısaysa (≤ [maxLength]) olduğu gibi
+/// ("Yıldız Masterlar"); uzunsa "Master / Masterlar" eki atılır
+/// ("Bmr Oto İstanbul Masterlar" → "Bmr Oto İstanbul").
+String posterTeamName(String raw, {int maxLength = 20}) {
+  final s = raw.trim();
+  if (s.length <= maxLength) return s;
+  return shortTeamName(s);
+}
