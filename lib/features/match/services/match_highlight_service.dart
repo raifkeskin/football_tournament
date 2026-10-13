@@ -73,12 +73,22 @@ class MatchHighlightJob {
   final String? error;
   final DateTime? startedAt;
 
+  /// Bu analizin Gemini maliyeti (USD, token sayısından).
+  final double? costUsd;
+
+  /// Videoda maçın / 2. yarının başladığı an (girilen ya da YZ'nin bulduğu).
+  final int? kickoffSec;
+  final int? secondHalfSec;
+
   const MatchHighlightJob({
     required this.status,
     this.mode,
     this.found,
     this.error,
     this.startedAt,
+    this.costUsd,
+    this.kickoffSec,
+    this.secondHalfSec,
   });
 
   bool get isRunning =>
@@ -120,7 +130,10 @@ class MatchHighlightService {
   static Future<MatchHighlightJob?> job(String matchId) async {
     final r = await _db
         .from('match_highlight_jobs')
-        .select('status, mode, found, error, started_at')
+        .select(
+          'status, mode, found, error, started_at, cost_usd, kickoff_sec, '
+          'second_half_sec',
+        )
         .eq('match_id', matchId)
         .maybeSingle();
     if (r == null) return null;
@@ -130,6 +143,15 @@ class MatchHighlightService {
       found: r['found'] is num ? (r['found'] as num).toInt() : null,
       error: r['error']?.toString(),
       startedAt: DateTime.tryParse('${r['started_at'] ?? ''}'),
+      costUsd: r['cost_usd'] is num
+          ? (r['cost_usd'] as num).toDouble()
+          : double.tryParse('${r['cost_usd'] ?? ''}'),
+      kickoffSec: r['kickoff_sec'] is num
+          ? (r['kickoff_sec'] as num).toInt()
+          : null,
+      secondHalfSec: r['second_half_sec'] is num
+          ? (r['second_half_sec'] as num).toInt()
+          : null,
     );
   }
 

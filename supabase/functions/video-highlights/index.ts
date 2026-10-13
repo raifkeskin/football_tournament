@@ -2,27 +2,52 @@
 // izler; video indirilmez). Bulunan kesitler match_highlights tablosuna
 // "onay bekliyor" olarak yazılır.
 //
-// Maliyeti düşürmek için tüm video yerine yalnızca maç detayındaki gol
-// dakikalarının çevresi (±10 dk) taranır. Maç detayı girilmemişse tüm video
-// taranır. Sorumlu videoda maçın / 2. yarının başladığı anı verirse pencere
-// daralır (±3 dk).
+// Maliyeti düşük tutmak için:
+//  1. Videoda maçın ve 2. yarının başladığı an sorumludan alınır (isteğe
+//     bağlı); verilmezse YZ düşük kare hızıyla kendisi bulur.
+//  2. Başlangıç biliniyorsa her gol dakikasının yalnızca ±2 dk'sı taranır;
+//     bilinmiyorsa ±10 dk. Maç detayında gol yoksa tüm video taranır.
+//  3. Pencereler videonun büyük kısmını kaplıyorsa tek seferde tüm video
+//     taranır (tavan).
+//  4. Her çağrının token'ı ve maliyeti ai_usage_log'a yazılır. Tahmini
+//     maliyet maç başı veya aylık sınırı (app_private_settings) aşıyorsa
+//     Gemini'ye hiç gidilmez.
 //
 // İstek: POST { match_id, kickoff_sec?, second_half_sec? } — kullanıcının
 // oturum belirteciyle; yalnızca owns_match() true olanlar (admin, kurucu
 // başkan, bölge sorumlusu) çalıştırabilir. İş arka planda sürer; durum
 // match_highlight_jobs tablosundan izlenir.
 //
-// Gizli değerler (supabase secrets): GEMINI_API_KEY, isteğe bağlı
-// GEMINI_MODEL (varsayılan gemini-2.5-flash).
+// Gizli değerler (supabase secrets): GEMINI_API_KEY; isteğe bağlı
+// GEMINI_MODEL (varsayılan gemini-flash-latest) ve 1M token başına USD
+// fiyatlar GEMINI_PRICE_INPUT (görüntü+metin, 0.5), GEMINI_PRICE_AUDIO (1.0),
+// GEMINI_PRICE_OUTPUT (3.0).
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
-const GEMINI_MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-2.5-flash";
+const GEMINI_MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-flash-latest";
+const PRICE_INPUT = Number(Deno.env.get("GEMINI_PRICE_INPUT") ?? "0.5");
+const PRICE_AUDIO = Number(Deno.env.get("GEMINI_PRICE_AUDIO") ?? "1.0");
+const PRICE_OUTPUT = Number(Deno.env.get("GEMINI_PRICE_OUTPUT") ?? "3.0");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
 const admin = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+// Düşük çözünürlükte saniye başına yaklaşık token (Gemini belgeleri).
+const VIDEO_TOKENS_PER_FRAME = 66;
+const AUDIO_TOKENS_PER_SEC = 32;
+// Çağrı başına tahmini çıktı (+ düşünme) token'ı.
+const OUTPUT_TOKENS_GUESS = 4000;
+
+// Gol penceresi: başlangıç biliniyorsa ±2 dk, bilinmiyorsa ±10 dk.
+const NARROW = 120;
+const WIDE = 600;
+// Devre arası belirsizliği (başlangıç bilinmiyorsa 2. yarı penceresine eklenir).
+const HALFTIME_SLACK = 900;
+// Başlangıç tespitinde kare hızı (5 sn'de bir kare).
+const DETECT_FPS = 0.2;
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -99,7 +124,183 @@ type FoundGoal = {
   guven?: string | null;
 };
 
-const RESPONSE_SCHEMA = {
+// --- Maliyet -----------------------------------------------------------------
+
+/** Bir çağrının tahmini maliyeti (USD). */
+function estimateCost(seconds: number, fps = 1): number {
+  const video = seconds * fps * VIDEO_TOKENS_PER_FRAME;
+  const audio = seconds * AUDIO_TOKENS_PER_SEC;
+  return (video * PRICE_INPUT + audio * PRICE_AUDIO + OUTPUT_TOKENS_GUESS * PRICE_OUTPUT) / 1e6;
+}
+
+type Usage = {
+  text: number;
+  video: number;
+  audio: number;
+  output: number;
+  cost: number;
+};
+
+function usageOf(meta: Record<string, unknown> | undefined): Usage {
+  const details = (meta?.promptTokensDetails ?? []) as { modality?: string; tokenCount?: number }[];
+  const by = (m: string) =>
+    details.filter((d) => d.modality === m).reduce((a, d) => a + (d.tokenCount ?? 0), 0);
+  const text = by("TEXT") + by("IMAGE");
+  const video = by("VIDEO");
+  const audio = by("AUDIO");
+  const output = Number(meta?.candidatesTokenCount ?? 0) + Number(meta?.thoughtsTokenCount ?? 0);
+  const cost = ((text + video) * PRICE_INPUT + audio * PRICE_AUDIO + output * PRICE_OUTPUT) / 1e6;
+  return { text, video, audio, output, cost };
+}
+
+/** Bir analiz işinin harcamasını izler; sınırı aşacak çağrıyı engeller. */
+class Budget {
+  spent = 0;
+  constructor(private matchId: string, private limit: number) {}
+
+  ensure(estimate: number) {
+    if (this.spent + estimate > this.limit) {
+      throw new Error(
+        `Maliyet sınırı: bu maç için ${this.limit.toFixed(2)} $ sınırına ulaşılacaktı, analiz durduruldu.`,
+      );
+    }
+  }
+
+  async record(purpose: string, u: Usage) {
+    this.spent += u.cost;
+    await admin.from("ai_usage_log").insert({
+      match_id: this.matchId,
+      model: GEMINI_MODEL,
+      purpose,
+      text_tokens: u.text,
+      video_tokens: u.video,
+      audio_tokens: u.audio,
+      output_tokens: u.output,
+      cost_usd: Number(u.cost.toFixed(5)),
+    });
+    await admin.from("match_highlight_jobs")
+      .update({ cost_usd: Number(this.spent.toFixed(5)) })
+      .eq("match_id", this.matchId);
+  }
+}
+
+async function readLimits() {
+  const { data } = await admin.from("app_private_settings")
+    .select("key, value")
+    .in("key", ["ai_clip_max_usd_per_match", "ai_clip_monthly_usd"]);
+  const get = (k: string, d: number) => {
+    const v = Number((data ?? []).find((r) => r.key === k)?.value);
+    return Number.isFinite(v) && v > 0 ? v : d;
+  };
+  return {
+    perMatch: get("ai_clip_max_usd_per_match", 0.5),
+    monthly: get("ai_clip_monthly_usd", 5),
+  };
+}
+
+async function spentThisMonth(): Promise<number> {
+  const now = new Date();
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const { data } = await admin.from("ai_usage_log")
+    .select("cost_usd").gte("created_at", monthStart.toISOString());
+  return (data ?? []).reduce((a, r) => a + Number(r.cost_usd ?? 0), 0);
+}
+
+// --- Gemini ------------------------------------------------------------------
+
+async function askGemini(opts: {
+  videoId: string;
+  prompt: string;
+  schema: Record<string, unknown>;
+  start?: number;
+  end?: number;
+  fps?: number;
+}): Promise<{ data: Record<string, unknown>; usage: Usage }> {
+  const videoPart: Record<string, unknown> = {
+    fileData: { fileUri: `https://www.youtube.com/watch?v=${opts.videoId}` },
+  };
+  const meta: Record<string, unknown> = {};
+  if (opts.start != null) meta.startOffset = `${opts.start}s`;
+  if (opts.end != null) meta.endOffset = `${opts.end}s`;
+  if (opts.fps != null) meta.fps = opts.fps;
+  if (Object.keys(meta).length) videoPart.videoMetadata = meta;
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [videoPart, { text: opts.prompt }] }],
+        generationConfig: {
+          temperature: 0.2,
+          mediaResolution: "MEDIA_RESOLUTION_LOW",
+          responseMimeType: "application/json",
+          responseSchema: opts.schema,
+        },
+      }),
+    },
+  );
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = body?.error?.message ?? `HTTP ${res.status}`;
+    throw new Error(`Gemini: ${msg}`);
+  }
+  const text: string = body?.candidates?.[0]?.content?.parts
+    ?.map((p: { text?: string }) => p.text ?? "")
+    .join("") ?? "";
+  return { data: JSON.parse(text || "{}"), usage: usageOf(body?.usageMetadata) };
+}
+
+// --- Başlangıç tespiti ---------------------------------------------------------
+
+const KICKOFF_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    an: { type: "STRING", nullable: true },
+    guven: { type: "STRING", enum: ["yuksek", "orta", "dusuk"] },
+  },
+  required: ["guven"],
+};
+
+async function detectStart(
+  budget: Budget,
+  videoId: string,
+  which: "kickoff" | "second_half",
+  start: number,
+  end: number,
+): Promise<number | null> {
+  budget.ensure(estimateCost(end - start, DETECT_FPS));
+  const what = which === "kickoff"
+    ? "maçın BAŞLAMA VURUŞUNUN (ilk yarı) yapıldığı anı"
+    : "devre arasından sonra İKİNCİ YARININ başlama vuruşunun yapıldığı anı";
+  const prompt = [
+    "Bu bir amatör futbol maçının videosudur.",
+    `Sana videonun ${fmt(start)} – ${fmt(end)} aralığı verildi.`,
+    `Bu aralıkta ${what} bul: oyuncular sahaya dizilmiş, top orta noktada,`,
+    "hakem düdüğüyle oyun başlıyor. Spiker veya skor tabelası varsa onları da kullan.",
+    "Zamanı VİDEONUN EN BAŞINDAN İTİBAREN (mutlak) SS:DD:ss olarak 'an' alanına yaz.",
+    "Bulamazsan 'an' boş, guven 'dusuk' olsun. Uydurma.",
+  ].join("\n");
+  const { data, usage } = await askGemini({
+    videoId,
+    prompt,
+    schema: KICKOFF_SCHEMA,
+    start,
+    end,
+    fps: DETECT_FPS,
+  });
+  await budget.record(which, usage);
+  if (data.guven === "dusuk") return null;
+  let sec = toSec(data.an);
+  if (sec == null) return null;
+  if (sec < start) sec += start; // aralığa göre verdiyse mutlağa çevir
+  return sec >= start - 30 && sec <= end + 30 ? sec : null;
+}
+
+// --- Gol taraması -------------------------------------------------------------
+
+const GOALS_SCHEMA = {
   type: "OBJECT",
   properties: {
     goller: {
@@ -123,12 +324,7 @@ const RESPONSE_SCHEMA = {
   required: ["goller"],
 };
 
-function buildPrompt(opts: {
-  home: string;
-  away: string;
-  window: Window | null;
-}): string {
-  const { home, away, window } = opts;
+function goalsPrompt(home: string, away: string, window: Window | null, goals: GoalEvent[]) {
   const lines = [
     "Bu bir amatör futbol maçının videosudur. Görevin maçtaki GOLLERİ bulmak.",
     "",
@@ -150,22 +346,26 @@ function buildPrompt(opts: {
       "başından itibaren değil.",
       "",
     );
-    if (window.goals.length) {
-      lines.push("Maç raporuna göre bu aralıkta şu goller var (dakika maç dakikasıdır):");
-      for (const g of window.goals) {
-        const extra = g.ownGoal ? " (kendi kalesine)" : g.penalty ? " (penaltı)" : "";
-        lines.push(
-          `- olay_no ${g.no}: ${g.minute}' ${g.teamName}${g.player ? ` – ${g.player}` : ""}${extra}`,
-        );
-      }
-      lines.push(
-        "Bu golleri videoda bul ve her biri için olay_no'yu yaz. Raporda olmayan",
-        "bir gol görürsen olay_no'yu boş bırakarak ekle.",
-        "",
-      );
-    }
   } else {
     lines.push("Tüm videoyu tara; zamanları videonun başından itibaren yaz.", "");
+  }
+  if (goals.length) {
+    lines.push(
+      window
+        ? "Maç raporuna göre bu aralıkta şu goller var (dakika maç dakikasıdır, video zamanı değil):"
+        : "Maç raporundaki goller (dakika maç dakikasıdır, video zamanı değil):",
+    );
+    for (const g of goals) {
+      const extra = g.ownGoal ? " (kendi kalesine)" : g.penalty ? " (penaltı)" : "";
+      lines.push(
+        `- olay_no ${g.no}: ${g.minute}' ${g.teamName}${g.player ? ` – ${g.player}` : ""}${extra}`,
+      );
+    }
+    lines.push(
+      "Bu golleri videoda bul ve her biri için olay_no'yu yaz. Raporda olmayan",
+      "bir gol görürsen olay_no'yu boş bırakarak ekle.",
+      "",
+    );
   }
   lines.push(
     "Her gol için:",
@@ -180,44 +380,6 @@ function buildPrompt(opts: {
   return lines.join("\n");
 }
 
-async function askGemini(videoId: string, prompt: string, window: Window | null) {
-  const videoPart: Record<string, unknown> = {
-    fileData: { fileUri: `https://www.youtube.com/watch?v=${videoId}` },
-  };
-  if (window) {
-    videoPart.videoMetadata = {
-      startOffset: `${window.start}s`,
-      endOffset: `${window.end}s`,
-    };
-  }
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [videoPart, { text: prompt }] }],
-        generationConfig: {
-          temperature: 0.2,
-          mediaResolution: "MEDIA_RESOLUTION_LOW",
-          responseMimeType: "application/json",
-          responseSchema: RESPONSE_SCHEMA,
-        },
-      }),
-    },
-  );
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const msg = body?.error?.message ?? `HTTP ${res.status}`;
-    throw new Error(`Gemini: ${msg}`);
-  }
-  const text: string = body?.candidates?.[0]?.content?.parts
-    ?.map((p: { text?: string }) => p.text ?? "")
-    .join("") ?? "";
-  const parsed = JSON.parse(text || "{}");
-  return (Array.isArray(parsed?.goller) ? parsed.goller : []) as FoundGoal[];
-}
-
 /** Gol dakikalarından taranacak video aralıkları (çakışanlar birleşir). */
 function buildWindows(
   goals: GoalEvent[],
@@ -228,22 +390,17 @@ function buildWindows(
   const raw: Window[] = goals.map((g) => {
     const firstHalf = g.minute <= period;
     let center: number;
-    let before: number;
-    let after: number;
-    if (firstHalf || secondHalf == null) {
-      center = (kickoff ?? 0) + g.minute * 60;
-      if (kickoff != null && firstHalf) {
-        before = 180;
-        after = 180;
-      } else {
-        // Başlangıç bilinmiyor: ±10 dk; 2. yarıda devre arası da eklenir.
-        before = 600;
-        after = firstHalf ? 600 : 600 + 900;
-      }
-    } else {
+    let before = NARROW;
+    let after = NARROW;
+    if (!firstHalf && secondHalf != null) {
       center = secondHalf + (g.minute - period) * 60;
-      before = 180;
-      after = 180;
+    } else {
+      center = (kickoff ?? 0) + g.minute * 60;
+      if (kickoff == null || !firstHalf) {
+        // Başlangıç bilinmiyor: geniş pencere; 2. yarıda devre arası da eklenir.
+        before = WIDE;
+        after = firstHalf ? WIDE : WIDE + HALFTIME_SLACK;
+      }
     }
     return { start: Math.max(0, center - before), end: center + after, goals: [g] };
   });
@@ -263,7 +420,7 @@ function buildWindows(
 
 const CONFIDENCE: Record<string, string> = { yuksek: "high", orta: "medium", dusuk: "low" };
 
-async function run(opts: {
+type RunOpts = {
   matchId: string;
   videoId: string;
   home: { id: string; name: string };
@@ -272,16 +429,59 @@ async function run(opts: {
   period: number;
   kickoff: number | null;
   secondHalf: number | null;
-}) {
-  const { matchId, videoId, home, away, goals } = opts;
+  limit: number;
+};
+
+/** Videonun yaklaşık süresi (sn): başlangıç + iki devre + devre arası. */
+function approxVideoLength(period: number, kickoff: number | null) {
+  return (kickoff ?? 0) + (2 * period) * 60 + HALFTIME_SLACK;
+}
+
+async function run(opts: RunOpts) {
+  const { matchId, videoId, home, away, goals, period } = opts;
+  const budget = new Budget(matchId, opts.limit);
+  let { kickoff, secondHalf } = opts;
   try {
-    const windows = goals.length
-      ? buildWindows(goals, opts.period, opts.kickoff, opts.secondHalf)
+    // 1) Başlangıçlar verilmediyse YZ bulur (yalnızca gerektiğinde).
+    if (goals.length) {
+      if (kickoff == null) {
+        kickoff = await detectStart(budget, videoId, "kickoff", 0, 1200);
+      }
+      const needSecond = secondHalf == null && goals.some((g) => g.minute > period);
+      if (needSecond && kickoff != null) {
+        const from = kickoff + period * 60;
+        secondHalf = await detectStart(budget, videoId, "second_half", from, from + 1500);
+      }
+      await admin.from("match_highlight_jobs")
+        .update({ kickoff_sec: kickoff, second_half_sec: secondHalf })
+        .eq("match_id", matchId);
+    }
+
+    // 2) Taranacak aralıklar; 3) tavan: büyük kısmı kaplıyorsa tüm video.
+    let windows: (Window | null)[] = goals.length
+      ? buildWindows(goals, period, kickoff, secondHalf)
       : [null];
+    const covered = windows.reduce((a, w) => a + (w ? w.end - w.start : 0), 0);
+    const total = approxVideoLength(period, kickoff);
+    if (goals.length && covered > total * 0.7) windows = [null];
+
+    const plannedCost = windows.reduce(
+      (a, w) => a + estimateCost(w ? w.end - w.start : total),
+      0,
+    );
+    budget.ensure(plannedCost);
 
     const results = await Promise.all(
       windows.map(async (w) => {
-        const found = await askGemini(videoId, buildPrompt({ home: home.name, away: away.name, window: w }), w);
+        const { data, usage } = await askGemini({
+          videoId,
+          prompt: goalsPrompt(home.name, away.name, w, w ? w.goals : goals),
+          schema: GOALS_SCHEMA,
+          start: w?.start,
+          end: w?.end,
+        });
+        await budget.record(w ? "goals" : "full", usage);
+        const found = Array.isArray(data.goller) ? (data.goller as FoundGoal[]) : [];
         return { w, found };
       }),
     );
@@ -349,7 +549,9 @@ async function run(opts: {
     }
     await admin.from("match_highlight_jobs").update({
       status: "done",
+      mode: windows[0] == null ? "full" : "events",
       found: rows.length,
+      cost_usd: Number(budget.spent.toFixed(5)),
       finished_at: new Date().toISOString(),
     }).eq("match_id", matchId);
   } catch (e) {
@@ -357,6 +559,7 @@ async function run(opts: {
     await admin.from("match_highlight_jobs").update({
       status: "error",
       error: (e as Error).message.slice(0, 500),
+      cost_usd: Number(budget.spent.toFixed(5)),
       finished_at: new Date().toISOString(),
     }).eq("match_id", matchId);
   }
@@ -428,6 +631,36 @@ Deno.serve(async (req) => {
     penalty: !!e.is_penalty,
   }));
 
+  // Sınırlar: en kötü durum tahmini (başlangıç bulunamazsa geniş pencereler
+  // ya da tüm video) maç başı veya aylık sınırı aşıyorsa Gemini'ye gidilmez.
+  const limits = await readLimits();
+  const total = approxVideoLength(period, kickoff);
+  const detectCost = goals.length
+    ? (kickoff == null ? estimateCost(1200, DETECT_FPS) : 0) +
+      (secondHalf == null ? estimateCost(1500, DETECT_FPS) : 0)
+    : 0;
+  const worstWindows = goals.length ? buildWindows(goals, period, kickoff, secondHalf) : [];
+  const worstScan = goals.length
+    ? Math.min(
+      worstWindows.reduce((a, w) => a + estimateCost(w.end - w.start), 0),
+      estimateCost(total),
+    )
+    : estimateCost(total);
+  const worst = detectCost + worstScan;
+  if (worst > limits.perMatch) {
+    return json({
+      error: `Tahmini maliyet (${worst.toFixed(2)} $) maç başı sınırı ` +
+        `(${limits.perMatch.toFixed(2)} $) aşıyor. Videoda maçın ve 2. yarının ` +
+        "başladığı anı girerek taranan süreyi kısaltın.",
+    }, 400);
+  }
+  const spent = await spentThisMonth();
+  if (spent + worst > limits.monthly) {
+    return json({
+      error: `Aylık YZ bütçesi doldu (${spent.toFixed(2)} / ${limits.monthly.toFixed(2)} $).`,
+    }, 400);
+  }
+
   await admin.from("match_highlight_jobs").upsert({
     match_id: matchId,
     status: "running",
@@ -436,13 +669,26 @@ Deno.serve(async (req) => {
     model: GEMINI_MODEL,
     found: null,
     error: null,
+    cost_usd: 0,
+    kickoff_sec: kickoff,
+    second_half_sec: secondHalf,
     requested_by: userData.user.id,
     started_at: new Date().toISOString(),
     finished_at: null,
   });
 
   // Analiz birkaç dakika sürebilir; yanıt hemen döner, iş arka planda sürer.
-  const task = run({ matchId, videoId, home, away, goals, period, kickoff, secondHalf });
+  const task = run({
+    matchId,
+    videoId,
+    home,
+    away,
+    goals,
+    period,
+    kickoff,
+    secondHalf,
+    limit: limits.perMatch,
+  });
   // deno-lint-ignore no-explicit-any
   const rt = (globalThis as any).EdgeRuntime;
   if (rt?.waitUntil) rt.waitUntil(task);

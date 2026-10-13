@@ -502,11 +502,31 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
                     style: const TextStyle(fontWeight: FontWeight.w800),
                   ),
                 ),
-          child: Text(text, style: TextStyle(color: color, fontSize: 13)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(text, style: TextStyle(color: color, fontSize: 13)),
+              if (job != null && _jobDetails(job).isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  _jobDetails(job),
+                  style: const TextStyle(color: kAdminMuted, fontSize: 11.5),
+                ),
+              ],
+            ],
+          ),
         ),
       ],
     );
   }
+
+  /// Maliyet ve videoda bulunan/girilen başlangıç anları.
+  String _jobDetails(MatchHighlightJob job) => [
+    if (job.kickoffSec != null) 'Başlangıç ${_clock(job.kickoffSec!)}',
+    if (job.secondHalfSec != null) '2. yarı ${_clock(job.secondHalfSec!)}',
+    if (job.costUsd != null) 'Maliyet ${job.costUsd!.toStringAsFixed(3)} \$',
+  ].join(' · ');
 
   Widget _card(MatchHighlight h) {
     final busy = _busy.contains(h.id);
@@ -778,8 +798,10 @@ class _AnalyzeDialogState extends State<_AnalyzeDialog> {
             ),
             Text(
               _error ??
-                  'Boş bırakılırsa her golün dakikasının ±10 dk çevresi '
-                      'taranır. Maç detayında gol yoksa tüm video taranır.',
+                  'Girilirse her golün yalnızca ±2 dk çevresi taranır (en '
+                      'ucuzu). Boş bırakılırsa YZ başlangıçları kendisi bulur '
+                      '(birkaç sent ek maliyet). Maç detayında gol yoksa tüm '
+                      'video taranır.',
               style: TextStyle(
                 color: _error != null ? kAdminDanger : kAdminMuted,
                 fontSize: 12,
