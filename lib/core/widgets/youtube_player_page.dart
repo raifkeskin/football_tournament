@@ -153,3 +153,107 @@ class _YoutubePlayerPageState extends State<_YoutubePlayerPage> {
     );
   }
 }
+
+/// YouTube yayınının yalnızca [startSec]–[endSec] aralığını tam ekran
+/// oynatır (YZ gol kesitleri). Video kesilmez; oynatıcı aralıkta başlar ve
+/// durur.
+Future<void> openYoutubeClip(
+  BuildContext context, {
+  required String videoId,
+  required int startSec,
+  required int endSec,
+  String title = 'Gol',
+}) {
+  return Navigator.of(context, rootNavigator: true).push(
+    MaterialPageRoute<void>(
+      settings: const RouteSettings(name: 'YoutubeClipPage'),
+      fullscreenDialog: true,
+      builder: (_) => _YoutubeClipPage(
+        videoId: videoId,
+        startSec: startSec,
+        endSec: endSec,
+        title: title,
+      ),
+    ),
+  );
+}
+
+class _YoutubeClipPage extends StatefulWidget {
+  const _YoutubeClipPage({
+    required this.videoId,
+    required this.startSec,
+    required this.endSec,
+    required this.title,
+  });
+
+  final String videoId;
+  final int startSec;
+  final int endSec;
+  final String title;
+
+  @override
+  State<_YoutubeClipPage> createState() => _YoutubeClipPageState();
+}
+
+class _YoutubeClipPageState extends State<_YoutubeClipPage> {
+  late final _controller = YoutubePlayerController.fromVideoId(
+    videoId: widget.videoId,
+    autoPlay: true,
+    startSeconds: widget.startSec.toDouble(),
+    endSeconds: widget.endSec.toDouble(),
+    params: const YoutubePlayerParams(
+      showFullscreenButton: true,
+      strictRelatedVideos: true,
+      origin: youtubePlayerOrigin,
+    ),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    landscapeOnFullscreen(_controller);
+  }
+
+  @override
+  void dispose() {
+    resetPlayerOrientation();
+    _controller.close();
+    super.dispose();
+  }
+
+  void _replay() => _controller.loadVideoById(
+    videoId: widget.videoId,
+    startSeconds: widget.startSec.toDouble(),
+    endSeconds: widget.endSec.toDouble(),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        leading: IconButton(
+          tooltip: 'Kapat',
+          icon: const Icon(Icons.close_rounded),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(widget.title, style: const TextStyle(fontSize: 16)),
+        actions: [
+          IconButton(
+            tooltip: 'Tekrar izle',
+            onPressed: _replay,
+            icon: const Icon(Icons.replay_rounded),
+          ),
+        ],
+      ),
+      body: Center(
+        child: AspectRatio(
+          aspectRatio: 16 / 9,
+          child: YoutubePlayer(controller: _controller),
+        ),
+      ),
+    );
+  }
+}
