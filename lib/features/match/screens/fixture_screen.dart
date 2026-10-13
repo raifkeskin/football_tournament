@@ -792,13 +792,13 @@ class _MatchCard extends StatelessWidget {
     // Sorumluya: maç saatinden 2 saat geçmiş, sonucu girilmemiş maç.
     final overdue =
         match.status != MatchStatus.finished &&
-        match.status != MatchStatus.postponed &&
+        match.displayStatus != MatchStatus.postponed &&
         match.status != MatchStatus.cancelled &&
         _isOverdue(match) &&
         AppSession.of(context).value.canManageLeague(match.leagueId);
     final ({String text, Color color})? status = overdue
         ? (text: 'SKOR?', color: const Color(0xFFF59E0B))
-        : switch (match.status) {
+        : switch (match.displayStatus) {
             MatchStatus.notStarted => null,
             MatchStatus.finished => (text: 'MS', color: accent),
             MatchStatus.halftime => (text: 'İY', color: live),
@@ -812,10 +812,11 @@ class _MatchCard extends StatelessWidget {
 
     final hs = match.homeScore;
     final as = match.awayScore;
-    // Ertelenen / iptal maçta skor yerine ERT / İPT yazar.
+    // Ertelenen / iptal maçta skor yerine ERT / İPT yazar (yeni güne
+    // alınmış ertelenen maç oynanacak maç gibi görünür).
     final unplayed =
-        match.status == MatchStatus.postponed ||
-        match.status == MatchStatus.cancelled;
+        match.displayStatus == MatchStatus.postponed ||
+        match.displayStatus == MatchStatus.cancelled;
     final showScore =
         !unplayed &&
         (match.status == MatchStatus.finished || isLive || hs != 0 || as != 0);

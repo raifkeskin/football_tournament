@@ -103,6 +103,8 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
     var isActive = league?.isActive ?? true;
     // Transfer dönemi: kapalı gelir; tarihleri sezonda, yalnızca admin görür.
     var transferEnabled = league?.transferEnabled ?? false;
+    // Maç sonucu haberi: varsayılan açık; yalnızca admin değiştirir.
+    var autoResultNews = league?.autoResultNews ?? true;
     final isAdmin = AppSession.of(context).value.isAdmin;
     // Gizli turnuva özelliği kapalıyken alan gösterilmez; mevcut değer korunur.
     final privateOn = AppSettings.privateLeaguesEnabled.value;
@@ -156,6 +158,7 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
           'website_url': link(webController),
           if (isAdmin) 'status': isActive ? 'active' : 'passive',
           if (isAdmin) 'transfer_enabled': transferEnabled,
+          if (isAdmin) 'auto_result_news': autoResultNews,
         };
         if (isEdit) {
           await _sb.from('leagues').update(payload).eq('id', league.id);
@@ -695,6 +698,35 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                                     transferEnabled
                                         ? 'Aktif · tarihler sezonda girilir'
                                         : 'Pasif',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                                AdminFieldRow(
+                                  icon: Icons.scoreboard_outlined,
+                                  label: 'Maç Sonucu Haberi',
+                                  onTap: saving
+                                      ? null
+                                      : () => setPopupState(
+                                          () =>
+                                              autoResultNews = !autoResultNews,
+                                        ),
+                                  trailing: Switch.adaptive(
+                                    value: autoResultNews,
+                                    activeTrackColor: kAdminAccent,
+                                    onChanged: saving
+                                        ? null
+                                        : (v) => setPopupState(
+                                            () => autoResultNews = v,
+                                          ),
+                                  ),
+                                  child: Text(
+                                    autoResultNews
+                                        ? 'Açık · maç ve hafta bitince haber'
+                                        : 'Kapalı',
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 15,

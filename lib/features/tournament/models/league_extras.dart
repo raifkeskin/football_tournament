@@ -33,10 +33,26 @@ class NewsItem {
     this.regionId,
     this.regionName = '',
     this.liveDrawId,
+    this.autoKind,
+    this.matchId,
+    this.week,
+    this.autoData,
   });
 
   /// Canlı kura haberi ise kuranın kimliği (kart kura görünümüyle çizilir).
   final String? liveDrawId;
+
+  /// Sistemin oluşturduğu haber: 'match_result' (tek maç skor kartı) veya
+  /// 'week_results' (haftanın sonuçları). null: elle yazılmış haber.
+  final String? autoKind;
+  final String? matchId;
+  final int? week;
+
+  /// Otomatik haberin kart verisi (takımlar, skor, golcüler).
+  final Map<String, dynamic>? autoData;
+
+  bool get isMatchResult => autoKind == 'match_result' && autoData != null;
+  bool get isWeekResults => autoKind == 'week_results' && autoData != null;
 
   final String id;
   final String tournamentId;

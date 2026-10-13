@@ -249,7 +249,11 @@ class _MatchPhaseLabel extends StatelessWidget {
           MatchStatus.live => (liveMinute ?? 'CANLI', const Color(0xFFF87171)),
           MatchStatus.halftime => ('İY', const Color(0xFFFBBF24)),
           MatchStatus.finished => ('MS', const Color(0xFF10B981)),
-          MatchStatus.postponed => ('ERTELENDİ', Colors.white70),
+          // Yeni güne alınmış ertelenen maç: "Ertelenen Maç".
+          MatchStatus.postponed => (
+            match.isRescheduled ? 'ERTELENEN MAÇ' : 'ERTELENDİ',
+            Colors.white70,
+          ),
           MatchStatus.cancelled => ('İPTAL', Colors.white70),
           MatchStatus.notStarted => (null, Colors.transparent),
         };
@@ -658,6 +662,8 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     String awayName = '',
   }) {
     if (tabIndex == 1 || tabIndex == 3) return null;
+    // İptal maçta işlem yok (iptali kaldırmak fikstürdeki maç menüsünde).
+    if (match.status == MatchStatus.cancelled) return null;
 
     if (tabIndex == 0) {
       return _SpeedDialFab(
@@ -4171,7 +4177,13 @@ class _DetailTabView extends StatelessWidget {
         ];
       case MatchStatus.postponed:
         return <Map<String, dynamic>>[
-          {'minute': 0, 'type': 'status', 'title': 'Maç Ertelendi'},
+          {
+            'minute': 0,
+            'type': 'status',
+            'title': match.isRescheduled
+                ? 'Ertelenen Maç · Henüz Başlamadı'
+                : 'Maç Ertelendi',
+          },
         ];
       case MatchStatus.cancelled:
         return <Map<String, dynamic>>[

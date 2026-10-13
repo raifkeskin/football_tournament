@@ -9,6 +9,7 @@ import '../../../core/services/service_locator.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../tournament/models/league_extras.dart';
 import '../../tournament/services/interfaces/i_league_service.dart';
+import '../widgets/result_news_cards.dart';
 
 const _bgDark = Color(0xFF0F172A);
 const _card = Color(0xFF1E293B);
@@ -195,6 +196,34 @@ class _NewsViewState extends State<NewsView> {
                   0,
                   1 << 31,
                 );
+            if (n.isMatchResult || n.isWeekResults) {
+              final meta = [
+                if (n.isMatchResult && n.week != null) '${n.week}. Hafta',
+                _timeAgo(n.createdAt),
+                if (n.regionName.isNotEmpty) n.regionName,
+              ].join(' · ');
+              return n.isMatchResult
+                  ? MatchResultNewsCard(
+                      key: _keys.putIfAbsent(n.id, GlobalKey.new),
+                      item: n,
+                      meta: meta,
+                      loggedIn: loggedIn,
+                      liked: liked,
+                      likeCount: count,
+                      onToggleLike: () => _toggleLike(n, liked),
+                      onShare: () => _share(n),
+                    )
+                  : WeekResultsNewsCard(
+                      key: _keys.putIfAbsent(n.id, GlobalKey.new),
+                      item: n,
+                      meta: meta,
+                      loggedIn: loggedIn,
+                      liked: liked,
+                      likeCount: count,
+                      onToggleLike: () => _toggleLike(n, liked),
+                      onShare: () => _share(n),
+                    );
+            }
             return _NewsTile(
               key: _keys.putIfAbsent(n.id, GlobalKey.new),
               item: n,

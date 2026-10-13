@@ -185,7 +185,7 @@ class _TeamFixtureTabState extends State<TeamFixtureTab> {
     final time = d == null ? '' : '${two(d.hour)}:${two(d.minute)}';
 
     // Sağdaki sonuç kutusu: skor (G/B/M rengiyle), ERT, İPT ya da saat.
-    final (String text, Color color) result = switch (m.status) {
+    final (String text, Color color) result = switch (m.displayStatus) {
       MatchStatus.cancelled => ('İPT', Colors.white54),
       MatchStatus.postponed => ('ERT', Colors.white54),
       MatchStatus.finished => () {
