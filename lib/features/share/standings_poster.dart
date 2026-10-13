@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/utils/string_utils.dart';
-import '../../core/utils/team_name.dart';
 import '../team/utils/standings.dart';
 import 'poster_share.dart';
 import 'poster_background.dart';
@@ -102,12 +101,16 @@ class StandingsPoster extends StatelessWidget {
           const SizedBox(width: 4),
           PosterLogo(url: r.logo, name: r.name, size: 22),
           const SizedBox(width: 4),
+          // Afişte tam ad; sığmazsa yazı küçülür.
           Expanded(
-            child: Text(
-              shortTeamName(r.name).trUpper,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: _cond(14.5, spacing: 0.2),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                r.name.trim().trUpper,
+                maxLines: 1,
+                style: _cond(14.5, spacing: 0.2),
+              ),
             ),
           ),
           _cell('${r.played}', _stat, num),

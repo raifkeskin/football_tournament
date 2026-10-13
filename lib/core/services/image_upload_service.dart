@@ -6,6 +6,7 @@ import 'package:image/image.dart' as img;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../utils/logo_background.dart';
+import '../widgets/picked_image.dart';
 
 /// Resimlerin hangi klasöre yükleneceği (storage kuralları klasöre göre
 /// yetki verir).
@@ -192,7 +193,14 @@ class SupabaseImageUploadService implements ImageUploadService {
         folder == MediaFolder.teams ||
         folder == MediaFolder.leagues ||
         folder == MediaFolder.sponsors;
-    final logoPng = isLogo ? await _logoWithoutBackground(original) : null;
+    // Logo seçilirken kullanıcı hâlini seçtiyse ona uyulur: temizlenmiş
+    // hâl olduğu gibi yüklenir, orijinal temizlenmez.
+    final choice = isLogo ? pickedLogoChoice(image) : null;
+    final logoPng = !isLogo || choice == 'original'
+        ? null
+        : choice == 'clean'
+        ? original
+        : await _logoWithoutBackground(original);
     final (bytes, ext) = logoPng != null
         ? (logoPng, 'png')
         : await _shrink(

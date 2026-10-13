@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/utils/string_utils.dart';
-import '../../core/utils/team_name.dart';
 import '../../core/widgets/app_name_band.dart' show kShowAppName;
 import '../../core/widgets/app_logo.dart';
 import 'poster_share.dart';
@@ -98,11 +97,15 @@ class MatchPoster extends StatelessWidget {
           SizedBox(
             height: 42,
             child: Text(
-              compactTeamName(name, maxLength: 20).trUpper,
+              name.trim().trUpper,
               maxLines: 2,
               textAlign: TextAlign.center,
               overflow: TextOverflow.ellipsis,
-              style: _cond(19, shadows: _shadow).copyWith(height: 1.05),
+              // Afişte tam ad; uzun adlarda yazı küçülür.
+              style: _cond(
+                name.trim().length > 22 ? 15.5 : 19,
+                shadows: _shadow,
+              ).copyWith(height: 1.05),
             ),
           ),
         ],
