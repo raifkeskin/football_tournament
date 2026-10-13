@@ -328,9 +328,21 @@ class MatchResultNewsCard extends StatelessWidget {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(child: _ScorerColumn(r.homeScorers, end: false)),
+                      Expanded(
+                        child: _ScorerColumn(
+                          r.homeScorers,
+                          goals: r.hs,
+                          end: false,
+                        ),
+                      ),
                       const SizedBox(width: 14),
-                      Expanded(child: _ScorerColumn(r.awayScorers, end: true)),
+                      Expanded(
+                        child: _ScorerColumn(
+                          r.awayScorers,
+                          goals: r.as,
+                          end: true,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -424,14 +436,18 @@ class _Band extends StatelessWidget {
 }
 
 class _ScorerColumn extends StatelessWidget {
-  const _ScorerColumn(this.scorers, {required this.end});
+  const _ScorerColumn(this.scorers, {required this.goals, required this.end});
 
   final List<_Scorer> scorers;
+
+  /// Takımın skoru: gol atmış ama golcü girilmemişse "Gol yok" yazılmaz.
+  final int goals;
   final bool end;
 
   @override
   Widget build(BuildContext context) {
     if (scorers.isEmpty) {
+      if (goals > 0) return const SizedBox.shrink();
       return Text(
         'Gol yok',
         textAlign: end ? TextAlign.right : TextAlign.left,
