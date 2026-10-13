@@ -18,6 +18,7 @@ import '../../../core/widgets/app_date_picker.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../player/screens/admin_awards_screen.dart';
 import 'season_management_screen.dart';
+import '../widgets/league_instagram_section.dart';
 import '../widgets/league_owners_section.dart';
 import 'package:football_tournament/core/widgets/picked_image.dart';
 
@@ -645,6 +646,8 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                               ],
                             ),
                           ),
+                          if (isEdit)
+                            LeagueInstagramSection(leagueId: league.id),
                           if (isAdmin) ...[
                             const SizedBox(height: 12),
                             AdminFieldGroup(

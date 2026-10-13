@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Instagram Bağlantısı · Lig Masası</title>
+<style>
+:root{--bg:#0f172a;--card:#1e293b;--text:#e2e8f0;--muted:#94a3b8;--accent:#10b981;--danger:#f87171;--line:#334155}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+header{background:linear-gradient(90deg,#064e3b,#10b981,#064e3b);padding:18px 16px;border-bottom:1.5px solid #fff}
+header a{color:#fff;text-decoration:none;font-weight:800;letter-spacing:1.5px;font-style:italic}
+main{max-width:520px;margin:0 auto;padding:40px 16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:28px 22px;text-align:center}
+.icon{width:64px;height:64px;border-radius:50%;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:800;color:#fff;background:var(--accent)}
+.icon.err{background:var(--danger)}
+h1{font-size:22px;margin:0 0 8px}
+p{margin:0;color:var(--muted)}
+a.btn{display:inline-block;margin-top:22px;padding:12px 22px;border-radius:12px;background:var(--accent);color:#fff;font-weight:700;text-decoration:none}
+</style>
+</head>
+<body>
+<header><a href="/">LİG MASASI</a></header>
+<main>
+<div class="card">
+  <div class="icon" id="icon">✓</div>
+  <h1 id="title">Instagram hesabı bağlandı</h1>
+  <p id="text">Bu sayfayı kapatıp uygulamaya dönebilirsiniz.</p>
+  <a class="btn" href="/">Uygulamaya dön</a>
+</div>
+</main>
+<script>
+(function () {
+  var q = new URLSearchParams(location.search);
+  var durum = q.get('durum') || 'hata';
+  var user = q.get('kullanici');
+  var reasons = {
+    eksik: 'Instagram yanıtı eksik geldi.',
+    gecersiz: 'Bu bağlantı geçersiz ya da daha önce kullanılmış.',
+    sure: 'Bağlantı süresi doldu (15 dakika).',
+    ayar: 'Sunucu ayarı eksik. Lütfen yöneticiye bildirin.',
+    kod: 'Instagram yetkilendirmesi doğrulanamadı.',
+    uzun: 'Uzun süreli erişim alınamadı.',
+    hesap: 'Instagram hesap bilgisi okunamadı.',
+    kayit: 'Bağlantı kaydedilemedi.',
+    ag: 'Instagram\'a ulaşılamadı.'
+  };
+  var icon = document.getElementById('icon');
+  var title = document.getElementById('title');
+  var text = document.getElementById('text');
+  if (durum === 'ok') {
+    if (user) title.textContent = '@' + user + ' bağlandı';
+  } else if (durum === 'izin') {
+    icon.textContent = '!'; icon.className = 'icon err';
+    title.textContent = (user ? '@' + user + ' bağlandı, ' : '') + 'paylaşım izni yok';
+    text.textContent = 'İzin ekranında "içerik yayınlama" iznini açık bırakarak tekrar bağlayın.';
+  } else if (durum === 'iptal') {
+    icon.textContent = '×'; icon.className = 'icon err';
+    title.textContent = 'Bağlantı iptal edildi';
+    text.textContent = 'İstediğiniz zaman turnuva ayarlarından tekrar bağlayabilirsiniz.';
+  } else {
+    icon.textContent = '!'; icon.className = 'icon err';
+    title.textContent = 'Instagram bağlanamadı';
+    text.textContent = (reasons[q.get('neden')] || 'Beklenmeyen bir hata oluştu.') + ' Tekrar deneyin.';
+  }
+})();
+</script>
+</body>
+</html>
