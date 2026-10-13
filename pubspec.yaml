@@ -77,7 +77,7 @@ flutter_launcher_icons:
   ios: true
   image_path: "design/app_icon_ios.png"
   remove_alpha_ios: true
-  # Uyarlanabilir ikonda zemin logonun kendisi, ön yüz saydam.
+  # Uyarlanabilir ikonda zemin saydam, ön yüz zeminsiz yuvarlak arma.
   adaptive_icon_background: "design/app_icon_android_bg.png"
   adaptive_icon_foreground: "design/app_icon_android_fg.png"
 
