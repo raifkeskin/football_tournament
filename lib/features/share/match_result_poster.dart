@@ -4,7 +4,6 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/utils/string_utils.dart';
 import '../../core/utils/team_name.dart';
 import '../../core/widgets/app_logo.dart';
-import '../../core/widgets/app_name_band.dart' show kShowAppName;
 import 'poster_background.dart';
 import 'poster_share.dart';
 
@@ -306,19 +305,18 @@ class MatchResultPoster extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  AppLogo(size: st.pick(22, 16)),
-                  if (kShowAppName) ...[
-                    const SizedBox(width: 6),
-                    Text(
-                      'LİG MASASI',
-                      style: _cond(
-                        st.pick(12, 10),
-                        italic: true,
-                        spacing: 2,
-                        color: Colors.white70,
-                      ),
+                  AppLogo(size: st.pick(30, 22)),
+                  // Uygulama adı bantta gizli olsa da afişte logonun yanında.
+                  const SizedBox(width: 8),
+                  Text(
+                    'LİG MASASI',
+                    style: _cond(
+                      st.pick(16, 13),
+                      italic: true,
+                      spacing: 2,
+                      color: Colors.white70,
                     ),
-                  ],
+                  ),
                 ],
               ),
             ],

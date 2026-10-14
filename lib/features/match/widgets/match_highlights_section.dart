@@ -54,6 +54,7 @@ class MatchHighlightsStrip extends StatefulWidget {
     required this.homeName,
     required this.awayName,
     required this.canReview,
+    this.hasStream = false,
   });
 
   final MatchModel match;
@@ -62,6 +63,9 @@ class MatchHighlightsStrip extends StatefulWidget {
 
   /// Admin, kurucu başkan, bölge sorumlusu (RLS ayrıca owns_match ile süzer).
   final bool canReview;
+
+  /// Maçın yayın linki var mı; yoksa "Gol Kesitleri" (YZ) kartı gizlenir.
+  final bool hasStream;
 
   @override
   State<MatchHighlightsStrip> createState() => _MatchHighlightsStripState();
@@ -120,7 +124,10 @@ class _MatchHighlightsStripState extends State<MatchHighlightsStrip> {
     final canRun = _tracksMinutes == false
         ? AppSession.of(context).value.isAdmin
         : widget.canReview;
-    final showReview = canRun && widget.match.status == MatchStatus.finished;
+    final showReview =
+        canRun &&
+        widget.hasStream &&
+        widget.match.status == MatchStatus.finished;
     if (approved.isEmpty && !showReview) return const SizedBox.shrink();
 
     return Padding(
