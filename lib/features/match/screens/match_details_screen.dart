@@ -1305,8 +1305,17 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                       match: m,
                                       homeName: homeName,
                                       awayName: awayName,
-                                      canEditHome: isSuperAdmin || managesHome,
-                                      canEditAway: isSuperAdmin || managesAway,
+                                      // Takım sorumlusu dizilişi yalnız maç
+                                      // başlamadan değiştirir; paylaşım
+                                      // sonra da açık.
+                                      canEditHome:
+                                          isSuperAdmin ||
+                                          managesHome && _beforeKickoff(m),
+                                      canEditAway:
+                                          isSuperAdmin ||
+                                          managesAway && _beforeKickoff(m),
+                                      canShareHome: isSuperAdmin || managesHome,
+                                      canShareAway: isSuperAdmin || managesAway,
                                       // Sorumlu kendi takımıyla açar.
                                       onShare: (teamId) => shareLineupPoster(
                                         context,
@@ -2966,6 +2975,11 @@ class _RosterInfoNote extends StatelessWidget {
   }
 }
 
+/// Takım sorumlusu esameyi yalnız maç başlamadan girer (ertelenen maç da
+/// başlamamış sayılır); admin ve turnuva/bölge sorumlusu için sınır yok.
+bool _beforeKickoff(MatchModel m) =>
+    m.status == MatchStatus.notStarted || m.status == MatchStatus.postponed;
+
 int _jerseyValue(String? n) => int.tryParse((n ?? '').trim()) ?? 999;
 
 /// Takım sorumlusunun esameyi girebileceği an: maç saatinden [hours] saat
@@ -3056,9 +3070,11 @@ class _LineupTabState extends State<_LineupTab>
       children: [
         // Esame bilgisi: düzenleme yetkisi olanlara (yetkililer ve maçın
         // takım sorumluları) gösterilir.
-        if (widget.isSuperAdmin ||
-            _managesTeam(m.homeTeamId) ||
-            _managesTeam(m.awayTeamId)) ...[
+        // Maç başladıktan sonra esame girilmediği için uyarı da çıkmaz.
+        if (_beforeKickoff(m) &&
+            (widget.isSuperAdmin ||
+                _managesTeam(m.homeTeamId) ||
+                _managesTeam(m.awayTeamId))) ...[
           _RosterInfoNote(hours: _openHours),
           const SizedBox(height: 10),
         ],
@@ -3166,15 +3182,14 @@ class _LineupTabState extends State<_LineupTab>
     if (managesThis) _scheduleOpen(openAt);
     final managerOpen =
         managesThis &&
-        m.status != MatchStatus.finished &&
+        _beforeKickoff(m) &&
         openAt != null &&
         !DateTime.now().toUtc().isBefore(openAt);
-    final locked = managesThis && !managerOpen;
+    // Maç başladıysa takım sorumlusuna ne kilit ne düzenleme düğmesi.
+    final locked = managesThis && _beforeKickoff(m) && !managerOpen;
     final edit = locked
         ? Tooltip(
-            message: m.status == MatchStatus.finished
-                ? 'Maç bitti; esame kapandı.'
-                : _openHours == 0
+            message: _openHours == 0
                 ? 'Esame maç saatinde açılır.'
                 : 'Esame maçtan $_openHours saat önce açılır.',
             child: Padding(
@@ -3190,9 +3205,7 @@ class _LineupTabState extends State<_LineupTab>
                   const SizedBox(width: 3),
                   Flexible(
                     child: Text(
-                      m.status == MatchStatus.finished
-                          ? 'Esame kapandı'
-                          : openAt == null
+                      openAt == null
                           ? 'Esame kapalı'
                           : 'Esame açılışı ${DateFormat('HH:mm').format(openAt.add(const Duration(hours: 3)))}',
                       maxLines: 1,
@@ -5527,9 +5540,10 @@ Future<void> shareLineupPoster(
     final team = teams[teamId];
     final opp = teams[opponentId];
     data = LineupPosterData(
-      teamName: isHome ? homeName : awayName,
+      // Maç detayı bandındaki kısa ad ("Masterler" vb. olmadan).
+      teamName: shortTeamName(isHome ? homeName : awayName),
       teamLogo: (team?['logo_url'] ?? '').toString().trim(),
-      opponentName: isHome ? awayName : homeName,
+      opponentName: shortTeamName(isHome ? awayName : homeName),
       opponentLogo: (opp?['logo_url'] ?? '').toString().trim(),
       isHome: isHome,
       leagueName: (league?['name'] ?? '').toString(),

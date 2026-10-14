@@ -352,12 +352,14 @@ class FormationTab extends StatefulWidget {
     required this.awayName,
     required this.canEditHome,
     required this.canEditAway,
+    this.canShareHome = false,
+    this.canShareAway = false,
     this.initialTeam = 0,
     this.onShare,
   });
 
-  /// Diziliş afişini paylaşır (takım kimliğiyle); düzenleme yetkisi olana
-  /// görünür.
+  /// Diziliş afişini paylaşır (takım kimliğiyle); [canShareHome] /
+  /// [canShareAway] olana görünür (maç başladıktan sonra da).
   final ValueChanged<String>? onShare;
 
   final MatchModel match;
@@ -368,6 +370,8 @@ class FormationTab extends StatefulWidget {
   /// yöneticiler ikisini de düzenler.
   final bool canEditHome;
   final bool canEditAway;
+  final bool canShareHome;
+  final bool canShareAway;
 
   /// Açılışta seçili takım (0: ev sahibi, 1: deplasman); sorumlu kendi
   /// takımıyla açar.
@@ -414,6 +418,8 @@ class _FormationTabState extends State<FormationTab>
   late int _selected = widget.initialTeam; // 0: ev sahibi, 1: deplasman
 
   bool get _canEdit => _selected == 0 ? widget.canEditHome : widget.canEditAway;
+  bool get _canShare =>
+      _canEdit || (_selected == 0 ? widget.canShareHome : widget.canShareAway);
 
   /// Kullanıcının bu oturumda seçtiği dizilişler (teamIndex -> "4-4-2").
   final Map<int, String> _chosen = {};
@@ -615,7 +621,7 @@ class _FormationTabState extends State<FormationTab>
                         // Gösterim tercihi diziliş afişine de uygulanır.
                         // Kaydet butonu da varsa yer açmak için yalnız ikon.
                         PitchTokenStyleToggle(compact: _canEdit),
-                        if (_canEdit && widget.onShare != null)
+                        if (_canShare && widget.onShare != null)
                           IconButton(
                             tooltip: 'Diziliş afişini paylaş',
                             visualDensity: VisualDensity.compact,
