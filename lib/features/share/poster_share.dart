@@ -8,6 +8,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/utils/in_app_browser.dart';
 import '../../core/widgets/admin_form.dart';
 import '../../core/widgets/admin_page.dart';
 import 'poster_background.dart';
@@ -101,6 +102,14 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
   bool _sharing = false;
   bool _saving = false;
 
+  /// Pencerenin altında gösterilen sonuç (snackbar popup'ın arkasında
+  /// kalıyordu).
+  ({String text, bool error})? _notice;
+
+  void _say(String text, {bool error = false}) {
+    if (mounted) setState(() => _notice = (text: text, error: error));
+  }
+
   late PosterFormat _format = widget.formats.first;
   bool _plain = false;
   bool _scorers = true;
@@ -183,7 +192,10 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
       '${widget.fileName}${_format == PosterFormat.post ? '_gonderi' : ''}';
 
   Future<void> _share() async {
-    setState(() => _sharing = true);
+    setState(() {
+      _sharing = true;
+      _notice = null;
+    });
     try {
       final bytes = await _png();
       await SharePlus.instance.share(
@@ -196,19 +208,29 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
         ),
       );
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Paylaşılamadı: $e')));
+      _say('Paylaşılamadı: $e', error: true);
     } finally {
       if (mounted) setState(() => _sharing = false);
     }
   }
 
   /// Telefonda galeriye kaydeder; web'de PNG dosyası olarak indirir.
+  /// Instagram vb. uygulamaların içindeki tarayıcı indirmeyi sessizce
+  /// engellediği için orada indirme denenmez, ne yapılacağı yazılır.
   Future<void> _download() async {
-    final messenger = ScaffoldMessenger.of(context);
-    setState(() => _saving = true);
+    final inApp = kIsWeb ? inAppBrowserName() : null;
+    if (inApp != null) {
+      _say(
+        '$inApp içindeki tarayıcı dosya indirmeye izin vermiyor. Sağ üstteki '
+        '⋮ menüsünden "Tarayıcıda aç" deyip orada indirin.',
+        error: true,
+      );
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _notice = null;
+    });
     try {
       final bytes = await _png();
       if (kIsWeb) {
@@ -217,28 +239,23 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
           mimeType: 'image/png',
           name: '$_name.png',
         ).saveTo('$_name.png');
-        messenger.showSnackBar(const SnackBar(content: Text('Afiş indirildi.')));
+        _say('İndirme başlatıldı: $_name.png (İndirilenler klasörü).');
       } else {
         if (!await Gal.hasAccess(toAlbum: false)) {
           await Gal.requestAccess(toAlbum: false);
         }
         await Gal.putImageBytes(bytes, name: _name);
-        messenger.showSnackBar(
-          const SnackBar(content: Text('Afiş galeriye kaydedildi.')),
-        );
+        _say('Afiş galeriye kaydedildi.');
       }
     } on GalException catch (e) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            e.type == GalExceptionType.accessDenied
-                ? 'Galeriye kaydetmek için fotoğraf izni gerekli.'
-                : 'Kaydedilemedi: ${e.type.message}',
-          ),
-        ),
+      _say(
+        e.type == GalExceptionType.accessDenied
+            ? 'Galeriye kaydetmek için fotoğraf izni gerekli.'
+            : 'Kaydedilemedi: ${e.type.message}',
+        error: true,
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Kaydedilemedi: $e')));
+      _say('Kaydedilemedi: $e', error: true);
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -464,6 +481,34 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
                     ),
                   ),
                 ),
+                if (_notice != null) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        _notice!.error
+                            ? Icons.info_outline_rounded
+                            : Icons.check_circle_rounded,
+                        size: 18,
+                        color: _notice!.error
+                            ? const Color(0xFFFBBF24)
+                            : kAdminAccent,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _notice!.text,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13.5,
+                            height: 1.35,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
