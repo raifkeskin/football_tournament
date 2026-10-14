@@ -35,6 +35,7 @@ class FixtureView extends StatefulWidget {
     required this.seasonId,
     required this.groupId,
     this.shareAction,
+    this.accent = const Color(0xFF10B981),
   });
 
   final String leagueId;
@@ -44,6 +45,9 @@ class FixtureView extends StatefulWidget {
   /// Seçili haftanın afişini paylaşma işlevi (yetki ve maç varsa dolu);
   /// paylaş düğmesi sayfanın kendisinde.
   final ValueNotifier<VoidCallback?>? shareAction;
+
+  /// Turnuvanın rengi (sekmelerle aynı); hafta ve gün seçimi bu renkte.
+  final Color accent;
 
   @override
   State<FixtureView> createState() => _FixtureViewState();
@@ -56,6 +60,30 @@ class _FixtureViewState extends State<FixtureView> {
   String get _leagueId => widget.leagueId;
   String get _seasonId => widget.seasonId;
   int? _week;
+
+  /// Gün şeridinde seçili gün (maç tarihi 'yyyy-MM-dd' ya da tarihsiz);
+  /// hafta değişince sıfırlanır.
+  String? _day;
+
+  /// Gün başlıklarına kaydırmak için anahtarlar (tarih → başlık).
+  final Map<String, GlobalKey> _dayKeys = {};
+
+  void _selectWeek(int w) => setState(() {
+    _week = w;
+    _day = null;
+  });
+
+  void _selectDay(String key) {
+    setState(() => _day = key);
+    final ctx = _dayKeys[key]?.currentContext;
+    if (ctx != null) {
+      Scrollable.ensureVisible(
+        ctx,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
 
   /// [_week] hangi turnuva|sezon|grup için seçildi; grup (bölge) değişince
   /// o grubun güncel haftası açılır.
@@ -332,14 +360,56 @@ class _FixtureViewState extends State<FixtureView> {
       if (mounted) widget.shareAction?.value = share;
     });
 
+    // Haftanın maç günleri (ertelenip başka güne alınan maç kendi gününde
+    // görünür). Nokta: hepsi bitti yeşil, canlı kırmızı, oynanmadı gri.
+    final dayStatus = <String, Color>{};
+    for (final m in matches) {
+      final k = _dayKeyOf(m);
+      final live =
+          m.status == MatchStatus.live || m.status == MatchStatus.halftime;
+      final done =
+          m.status == MatchStatus.finished || m.status == MatchStatus.cancelled;
+      final prev = dayStatus[k];
+      dayStatus[k] = live || prev == _FixtureDayStrip.live
+          ? _FixtureDayStrip.live
+          : (done && (prev == null || prev == _FixtureDayStrip.done))
+          ? _FixtureDayStrip.done
+          : _FixtureDayStrip.upcoming;
+    }
+    final days = dayStatus.keys.toList()..sort();
+    final selectedDay = days.contains(_day)
+        ? _day
+        : (days.isEmpty ? null : days.first);
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-      child: _WeekStrip(
-        weeks: weeks,
-        week: week,
-        onSelect: (w) => setState(() => _week = w),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _WeekHeader(
+            weeks: weeks,
+            week: week,
+            accent: widget.accent,
+            onSelect: _selectWeek,
+          ),
+          if (days.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _FixtureDayStrip(
+              days: days,
+              status: dayStatus,
+              selected: selectedDay,
+              accent: widget.accent,
+              onSelect: _selectDay,
+            ),
+          ],
+        ],
       ),
     );
+  }
+
+  static String _dayKeyOf(MatchModel m) {
+    final d = (m.matchDate ?? '').trim();
+    return d.isEmpty ? _FixtureDayStrip.noDate : d;
   }
 
   @override
@@ -453,6 +523,7 @@ class _FixtureViewState extends State<FixtureView> {
                         // ekranın tamamı maçlara kalır.
                         return _FixtureList(
                           header: header,
+                          dayKeys: _dayKeys,
                           matches: matches,
                           dateStripText: _dateStripText,
                           groupNameById: {for (final g in groups) g.id: g.name},
@@ -494,6 +565,7 @@ class _FixtureViewState extends State<FixtureView> {
 class _FixtureList extends StatelessWidget {
   const _FixtureList({
     required this.header,
+    required this.dayKeys,
     required this.matches,
     required this.dateStripText,
     required this.groupNameById,
@@ -508,6 +580,7 @@ class _FixtureList extends StatelessWidget {
   });
 
   final Widget header;
+  final Map<String, GlobalKey> dayKeys;
   final List<MatchModel> matches;
   final String Function(String yyyyMmDd) dateStripText;
   final Map<String, String> groupNameById;
@@ -530,7 +603,7 @@ class _FixtureList extends StatelessWidget {
     final byDate = <String, List<MatchModel>>{};
     for (final m in matches) {
       final dateKey = (m.matchDate ?? '').trim().isEmpty
-          ? '__NO_DATE__'
+          ? _FixtureDayStrip.noDate
           : m.matchDate!.trim();
       (byDate[dateKey] ??= []).add(m);
     }
@@ -538,44 +611,50 @@ class _FixtureList extends StatelessWidget {
     final sortedDates = byDate.keys.toList()..sort();
 
     String dayLabel(String key) {
-      if (key == '__NO_DATE__') return 'Tarih Belirlenmedi';
+      if (key == _FixtureDayStrip.noDate) return 'Tarih Belirlenmedi';
       final dt = DateTime.tryParse(key);
       if (dt == null) return key;
       // Ör. "04 Ekim Pazar"
       return DateFormat('dd MMMM EEEE', 'tr_TR').format(dt);
     }
 
-    return ListView(
+    // Liste kısa (bir hafta); tüm gün başlıkları kurulsun ki gün şeridi
+    // uzaktaki güne de kaydırabilsin.
+    return SingleChildScrollView(
       physics: const ClampingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(0, 0, 0, 120),
-      children: [
-        header,
-        if (matches.isEmpty)
-          const Padding(
-            padding: EdgeInsets.only(top: 48),
-            child: Center(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          header,
+          if (matches.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 48),
+              child: Center(
+                child: Text(
+                  'Maç bulunamadı.',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+            ),
+          for (final dKey in sortedDates) ...[
+            Padding(
+              key: dayKeys.putIfAbsent(dKey, GlobalKey.new),
+              padding: const EdgeInsets.fromLTRB(70, 12, 16, 6),
               child: Text(
-                'Maç bulunamadı.',
-                style: TextStyle(color: Colors.white),
+                dayLabel(dKey),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13.5,
+                  letterSpacing: 0.3,
+                ),
               ),
             ),
-          ),
-        for (final dKey in sortedDates) ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(70, 12, 16, 6),
-            child: Text(
-              dayLabel(dKey),
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-                fontSize: 13.5,
-                letterSpacing: 0.3,
-              ),
-            ),
-          ),
-          ..._buildGroupedSection(byDate[dKey]!, groupLabel),
+            ..._buildGroupedSection(byDate[dKey]!, groupLabel),
+          ],
         ],
-      ],
+      ),
     );
   }
 
@@ -1523,93 +1602,189 @@ class _TimeInputFormatter extends TextInputFormatter {
   }
 }
 
-/// Hafta şeridi: ortada seçili hafta, yanlarında önceki ve sonraki hafta;
-/// uçlardaki oklar birer hafta ilerletir. Haftaya dokunmak onu seçer.
-class _WeekStrip extends StatelessWidget {
-  const _WeekStrip({
+/// Hafta başlığı: "3. HAFTA" ve önceki / sonraki hafta okları. Başlığa
+/// dokununca bütün haftalar listelenir.
+class _WeekHeader extends StatelessWidget {
+  const _WeekHeader({
     required this.weeks,
     required this.week,
+    required this.accent,
     required this.onSelect,
   });
 
   final List<int> weeks;
   final int week;
+  final Color accent;
   final ValueChanged<int> onSelect;
-
-  static const _accent = Color(0xFF10B981);
 
   @override
   Widget build(BuildContext context) {
     final sorted = [...weeks]..sort();
     final i = sorted.indexOf(week);
-    // Seçili haftanın iki öncesi ve iki sonrası (toplam 5 hafta).
-    int? at(int k) => i >= 0 && k >= 0 && k < sorted.length ? sorted[k] : null;
-    final prev2 = at(i - 2);
-    final prev = at(i - 1);
-    final next = at(i + 1);
-    final next2 = at(i + 2);
+    final prev = i > 0 ? sorted[i - 1] : null;
+    final next = i >= 0 && i < sorted.length - 1 ? sorted[i + 1] : null;
 
-    Widget arrow(IconData icon, int? target) => IconButton(
-      onPressed: target == null ? null : () => onSelect(target),
-      icon: Icon(icon),
-      color: Colors.white,
-      disabledColor: Colors.white24,
-      visualDensity: VisualDensity.compact,
+    Widget arrow(IconData icon, int? target, String tip) => Material(
+      color: Colors.white.withValues(alpha: 0.06),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: target == null ? null : () => onSelect(target),
+        child: SizedBox(
+          width: 40,
+          height: 38,
+          child: Icon(
+            icon,
+            semanticLabel: tip,
+            color: target == null ? Colors.white24 : Colors.white,
+          ),
+        ),
+      ),
     );
 
-    Widget cell(int? w, {bool current = false}) => Expanded(
-      flex: current ? 4 : 3,
-      child: w == null
-          ? const SizedBox()
-          : GestureDetector(
-              onTap: current ? null : () => onSelect(w),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                height: 38,
-                alignment: Alignment.center,
-                margin: const EdgeInsets.symmetric(horizontal: 2),
-                decoration: BoxDecoration(
-                  color: current
-                      ? _accent
-                      : Colors.white.withValues(alpha: 0.05),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                // Dar ekranda yazı kutuya sığacak kadar küçülür.
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    '$w. Hafta',
-                    maxLines: 1,
-                    style: TextStyle(
-                      color: current ? Colors.white : Colors.white60,
-                      fontSize: current ? 15 : 13,
-                      fontWeight: current ? FontWeight.w800 : FontWeight.w600,
+    return Row(
+      children: [
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: sorted.length < 2
+                  ? null
+                  : () async {
+                      final w = await showAdminOptionPicker<int>(
+                        context: context,
+                        title: 'Hafta Seç',
+                        items: sorted,
+                        selected: week,
+                        labelBuilder: (w) => '$w. Hafta',
+                      );
+                      if (w != null) onSelect(w);
+                    },
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(4, 4, 8, 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '$week. HAFTA',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                        fontStyle: FontStyle.italic,
+                        letterSpacing: 0.5,
+                      ),
                     ),
-                  ),
+                    if (sorted.length > 1)
+                      Icon(Icons.expand_more_rounded, color: accent, size: 22),
+                  ],
                 ),
               ),
             ),
+          ),
+        ),
+        arrow(Icons.chevron_left_rounded, prev, 'Önceki hafta'),
+        const SizedBox(width: 6),
+        arrow(Icons.chevron_right_rounded, next, 'Sonraki hafta'),
+      ],
     );
+  }
+}
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.3),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-      ),
-      child: Row(
-        children: [
-          arrow(Icons.chevron_left_rounded, prev),
-          cell(prev2),
-          cell(prev),
-          cell(week, current: true),
-          cell(next),
-          cell(next2),
-          arrow(Icons.chevron_right_rounded, next),
-        ],
-      ),
+/// Haftanın maç günleri (gün adı, gün, ay). Güne dokununca liste o güne
+/// kayar. Altındaki nokta günün durumunu gösterir.
+class _FixtureDayStrip extends StatelessWidget {
+  const _FixtureDayStrip({
+    required this.days,
+    required this.status,
+    required this.selected,
+    required this.accent,
+    required this.onSelect,
+  });
+
+  static const noDate = '__NO_DATE__';
+  static const done = Color(0xFF10B981);
+  static const live = Color(0xFFF87171);
+  static const upcoming = Colors.white38;
+
+  final List<String> days;
+  final Map<String, Color> status;
+  final String? selected;
+  final Color accent;
+  final ValueChanged<String> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget chip(String key) {
+      final on = key == selected;
+      final dt = DateTime.tryParse(key);
+      final dot = status[key] ?? upcoming;
+      final top = dt == null ? 'Tarih' : DateFormat('EEE', 'tr_TR').format(dt);
+      final mid = dt == null ? '?' : '${dt.day}';
+      final bottom = dt == null ? 'yok' : DateFormat('MMM', 'tr_TR').format(dt);
+      return Padding(
+        padding: const EdgeInsets.only(right: 6),
+        child: Material(
+          color: on ? accent : Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(14),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () => onSelect(key),
+            child: SizedBox(
+              width: 54,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 7),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      top,
+                      style: TextStyle(
+                        color: on ? Colors.white70 : Colors.white54,
+                        fontSize: 11,
+                      ),
+                    ),
+                    Text(
+                      mid,
+                      style: TextStyle(
+                        color: on ? Colors.white : Colors.white70,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    Text(
+                      bottom,
+                      style: TextStyle(
+                        color: on ? Colors.white70 : Colors.white38,
+                        fontSize: 10,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: dot,
+                        shape: BoxShape.circle,
+                        border: on
+                            ? Border.all(color: Colors.white, width: 1)
+                            : null,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(children: [for (final d in days) chip(d)]),
     );
   }
 }
