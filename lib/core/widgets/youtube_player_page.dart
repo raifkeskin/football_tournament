@@ -69,7 +69,12 @@ String? youtubeVideoId(String url) {
 
 /// Yayını uygulamanın içinde, tam ekran oynatır (kullanıcı YouTube'a
 /// gitmeden izler). Link YouTube'a ait değilse dışarıda açılır.
-Future<void> openYoutubeInApp(BuildContext context, String url) async {
+/// [fullscreen]: telefonda doğrudan yatay tam ekranda başlar.
+Future<void> openYoutubeInApp(
+  BuildContext context,
+  String url, {
+  bool fullscreen = false,
+}) async {
   final id = youtubeVideoId(url);
   if (id == null) {
     final uri = Uri.tryParse(url.trim());
@@ -87,16 +92,22 @@ Future<void> openYoutubeInApp(BuildContext context, String url) async {
     MaterialPageRoute<void>(
       settings: const RouteSettings(name: 'YoutubePlayerPage'),
       fullscreenDialog: true,
-      builder: (_) => _YoutubePlayerPage(videoId: id, url: url),
+      builder: (_) =>
+          _YoutubePlayerPage(videoId: id, url: url, fullscreen: fullscreen),
     ),
   );
 }
 
 class _YoutubePlayerPage extends StatefulWidget {
-  const _YoutubePlayerPage({required this.videoId, required this.url});
+  const _YoutubePlayerPage({
+    required this.videoId,
+    required this.url,
+    this.fullscreen = false,
+  });
 
   final String videoId;
   final String url;
+  final bool fullscreen;
 
   @override
   State<_YoutubePlayerPage> createState() => _YoutubePlayerPageState();
@@ -116,29 +127,26 @@ class _YoutubePlayerPageState extends State<_YoutubePlayerPage> {
   );
 
   @override
+  void initState() {
+    super.initState();
+    // Çerçevenin tam ekran dinleyicisi kurulduktan sonra.
+    if (widget.fullscreen && !kIsWeb) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _controller.enterFullScreen();
+      });
+    }
+  }
+
+  @override
   void dispose() {
     _controller.close();
     super.dispose();
   }
 
+  // YouTube'a geçiş videonun içindeki YouTube logosundan.
   @override
   Widget build(BuildContext context) {
-    return YoutubePlayerFrame(
-      controller: _controller,
-      title: 'Maç Yayını',
-      actions: [
-        // Video gömülemiyorsa (kanal izin vermiyorsa) YouTube'da açılır.
-        TextButton.icon(
-          onPressed: () => launchUrl(
-            Uri.parse(widget.url.trim()),
-            mode: LaunchMode.externalApplication,
-          ),
-          icon: const Icon(Icons.open_in_new_rounded, size: 18),
-          label: const Text('YouTube'),
-          style: TextButton.styleFrom(foregroundColor: Colors.white70),
-        ),
-      ],
-    );
+    return YoutubePlayerFrame(controller: _controller, title: 'Maç Yayını');
   }
 }
 
