@@ -105,7 +105,8 @@ function fmt(sec: number): string {
 type GoalEvent = {
   no: number;
   id: string;
-  minute: number;
+  /** Dakika tutulmayan sezonda (halısaha) null. */
+  minute: number | null;
   teamId: string | null;
   teamName: string;
   player: string;
@@ -356,12 +357,14 @@ function goalsPrompt(home: string, away: string, window: Window | null, goals: G
     lines.push(
       window
         ? "Maç raporuna göre bu aralıkta şu goller var (dakika maç dakikasıdır, video zamanı değil):"
+        : goals.some((g) => g.minute == null)
+        ? "Maç raporundaki goller (dakika tutulmadı; giriliş sırasıyla):"
         : "Maç raporundaki goller (dakika maç dakikasıdır, video zamanı değil):",
     );
     for (const g of goals) {
       const extra = g.ownGoal ? " (kendi kalesine)" : g.penalty ? " (penaltı)" : "";
       lines.push(
-        `- olay_no ${g.no}: ${g.minute}' ${g.teamName}${g.player ? ` – ${g.player}` : ""}${extra}`,
+        `- olay_no ${g.no}: ${g.minute != null ? `${g.minute}' ` : ""}${g.teamName}${g.player ? ` – ${g.player}` : ""}${extra}`,
       );
     }
     lines.push(
@@ -391,14 +394,15 @@ function buildWindows(
   secondHalf: number | null,
 ): Window[] {
   const raw: Window[] = goals.map((g) => {
-    const firstHalf = g.minute <= period;
+    const minute = g.minute ?? 0;
+    const firstHalf = minute <= period;
     let center: number;
     let before = NARROW;
     let after = NARROW;
     if (!firstHalf && secondHalf != null) {
-      center = secondHalf + (g.minute - period) * 60;
+      center = secondHalf + (minute - period) * 60;
     } else {
-      center = (kickoff ?? 0) + g.minute * 60;
+      center = (kickoff ?? 0) + minute * 60;
       if (kickoff == null || !firstHalf) {
         // Başlangıç bilinmiyor: geniş pencere; 2. yarıda devre arası da eklenir.
         before = WIDE;
@@ -435,6 +439,11 @@ type RunOpts = {
   limit: number;
 };
 
+/** Tüm gollerin dakikası girilmiş mi? (pencereli tarama yapılabilir) */
+function isTimed(goals: GoalEvent[]) {
+  return goals.length > 0 && goals.every((g) => g.minute != null);
+}
+
 /** Videonun yaklaşık süresi (sn): başlangıç + iki devre + devre arası. */
 function approxVideoLength(period: number, kickoff: number | null) {
   return (kickoff ?? 0) + (2 * period) * 60 + HALFTIME_SLACK;
@@ -442,15 +451,17 @@ function approxVideoLength(period: number, kickoff: number | null) {
 
 async function run(opts: RunOpts) {
   const { matchId, videoId, home, away, goals, period } = opts;
+  // Tüm gollerin dakikası varsa pencereli tarama; yoksa (halısaha) tüm video.
+  const timed = isTimed(goals);
   const budget = new Budget(matchId, opts.limit);
   let { kickoff, secondHalf } = opts;
   try {
     // 1) Başlangıçlar verilmediyse YZ bulur (yalnızca gerektiğinde).
-    if (goals.length) {
+    if (timed) {
       if (kickoff == null) {
         kickoff = await detectStart(budget, videoId, "kickoff", 0, 1200);
       }
-      const needSecond = secondHalf == null && goals.some((g) => g.minute > period);
+      const needSecond = secondHalf == null && goals.some((g) => (g.minute ?? 0) > period);
       if (needSecond && kickoff != null) {
         const from = kickoff + period * 60;
         secondHalf = await detectStart(budget, videoId, "second_half", from, from + 1500);
@@ -461,12 +472,12 @@ async function run(opts: RunOpts) {
     }
 
     // 2) Taranacak aralıklar; 3) tavan: büyük kısmı kaplıyorsa tüm video.
-    let windows: (Window | null)[] = goals.length
+    let windows: (Window | null)[] = timed
       ? buildWindows(goals, period, kickoff, secondHalf)
       : [null];
     const covered = windows.reduce((a, w) => a + (w ? w.end - w.start : 0), 0);
     const total = approxVideoLength(period, kickoff);
-    if (goals.length && covered > total * 0.7) windows = [null];
+    if (timed && covered > total * 0.7) windows = [null];
 
     const plannedCost = windows.reduce(
       (a, w) => a + estimateCost(w ? w.end - w.start : total),
@@ -614,7 +625,8 @@ Deno.serve(async (req) => {
     admin.from("seasons").select("match_period_duration").eq("id", m.season_id).maybeSingle(),
     admin.from("match_events")
       .select("id, minute, team_id, player_name, is_own_goal, is_penalty")
-      .eq("match_id", matchId).eq("event_type", "goal").order("minute"),
+      .eq("match_id", matchId).eq("event_type", "goal")
+      .order("minute").order("created_at"),
   ]);
   const nameOf = (id: string) => (teams ?? []).find((t) => t.id === id)?.name ?? "";
   const home = { id: m.home_team_id, name: nameOf(m.home_team_id) || "Ev sahibi" };
@@ -626,7 +638,7 @@ Deno.serve(async (req) => {
   const goals: GoalEvent[] = (events ?? []).map((e, i) => ({
     no: i + 1,
     id: e.id,
-    minute: Number(e.minute) || 0,
+    minute: e.minute == null ? null : Number(e.minute) || 0,
     teamId: e.team_id,
     teamName: e.team_id === home.id ? home.name : e.team_id === away.id ? away.name : "",
     player: (e.player_name ?? "").trim(),
@@ -636,14 +648,22 @@ Deno.serve(async (req) => {
 
   // Sınırlar: en kötü durum tahmini (başlangıç bulunamazsa geniş pencereler
   // ya da tüm video) maç başı veya aylık sınırı aşıyorsa Gemini'ye gidilmez.
+  const timed = isTimed(goals);
+  // Dakikasız maçta tüm video taranır (pahalı): yalnız admin başlatabilir.
+  if (!timed) {
+    const { data: isAdmin } = await userClient.rpc("is_admin");
+    if (isAdmin !== true) {
+      return json({ error: "Dakikası girilmemiş maçta YZ analizini yalnız admin başlatabilir." }, 403);
+    }
+  }
   const limits = await readLimits();
   const total = approxVideoLength(period, kickoff);
-  const detectCost = goals.length
+  const detectCost = timed
     ? (kickoff == null ? estimateCost(1200, DETECT_FPS) : 0) +
       (secondHalf == null ? estimateCost(1500, DETECT_FPS) : 0)
     : 0;
-  const worstWindows = goals.length ? buildWindows(goals, period, kickoff, secondHalf) : [];
-  const worstScan = goals.length
+  const worstWindows = timed ? buildWindows(goals, period, kickoff, secondHalf) : [];
+  const worstScan = timed
     ? Math.min(
       worstWindows.reduce((a, w) => a + estimateCost(w.end - w.start), 0),
       estimateCost(total),
@@ -668,7 +688,7 @@ Deno.serve(async (req) => {
     match_id: matchId,
     status: "running",
     video_id: videoId,
-    mode: goals.length ? "events" : "full",
+    mode: timed ? "events" : "full",
     model: GEMINI_MODEL,
     found: null,
     error: null,
@@ -697,5 +717,5 @@ Deno.serve(async (req) => {
   if (rt?.waitUntil) rt.waitUntil(task);
   else await task;
 
-  return json({ ok: true, mode: goals.length ? "events" : "full", goals: goals.length }, 202);
+  return json({ ok: true, mode: timed ? "events" : "full", goals: goals.length }, 202);
 });
