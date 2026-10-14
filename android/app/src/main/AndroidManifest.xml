@@ -5,6 +5,10 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Fotoğraflar sistemin fotoğraf seçicisiyle seçilir; depolama/medya
          izni istenmez (Google Play fotoğraf izni politikası). -->
+    <!-- Afişi galeriye kaydetme (gal): Android 10 ve üstünde izin gerekmez;
+         yalnız eski sürümler için yazma izni. -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29" />
     <queries>
         <intent>
             <action android:name="android.intent.action.VIEW" />
@@ -23,7 +27,8 @@
     <application
         android:label="Lig Masası"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:requestLegacyExternalStorage="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"

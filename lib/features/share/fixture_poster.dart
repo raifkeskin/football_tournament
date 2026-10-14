@@ -259,15 +259,20 @@ class FixturePoster extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final plain = PosterOptions.of(context).plain;
     // Zemin: turnuvanın afiş görseli (yoksa stadyum fotoğrafı); üstünde
     // okunurluk için lacivert geçiş.
     return Container(
       decoration: BoxDecoration(
         color: _navy,
-        image: DecorationImage(
-          image: PosterBackground.photoOf(context),
-          fit: BoxFit.cover,
-        ),
+        // Sade zemin seçildiyse fotoğraf yerine lacivert geçiş.
+        gradient: plain ? kPlainPosterGradient : null,
+        image: plain
+            ? null
+            : DecorationImage(
+                image: PosterBackground.photoOf(context),
+                fit: BoxFit.cover,
+              ),
       ),
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 16, 14, 12),

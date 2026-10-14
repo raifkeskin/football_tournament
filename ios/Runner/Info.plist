@@ -44,6 +44,8 @@
 	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Paylaşım afişlerini fotoğraflarınıza kaydedebilmek için gerekir.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Takım logosu, oyuncu fotoğrafı ve maç fotoğrafı eklemek için fotoğraflarınızdan seçim yapabilmeniz gerekir.</string>
 	<key>UIApplicationSceneManifest</key>

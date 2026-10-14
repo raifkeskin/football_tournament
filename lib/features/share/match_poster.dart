@@ -8,9 +8,9 @@ import '../../core/utils/team_name.dart';
 import 'poster_share.dart';
 import 'poster_background.dart';
 
-/// Tek maç afişi ("2. Hafta Maçı"). Zemin sabittir (stadyum fotoğrafı);
-/// turnuva logosu, grup, hafta, takımlar, saha, tarih ve saat maça göre
-/// değişir. Boyut [kPosterSize].
+/// Tek maç afişi ("2. Hafta Maçı"): turnuva logosu, grup, hafta, takımlar,
+/// saha, tarih ve saat. Zemin turnuvanın afiş görseli (yoksa stadyum) ya da
+/// sade lacivert; boyut hikâye ya da gönderi ([PosterOptions]).
 class MatchPoster extends StatelessWidget {
   const MatchPoster({
     super.key,
@@ -88,22 +88,23 @@ class MatchPoster extends StatelessWidget {
     );
   }
 
-  Widget _team(String name, String logo) {
+  Widget _team(String name, String logo, PosterStyle st) {
+    final halo = st.pick(172, 118);
     return Expanded(
       child: Column(
         children: [
           // Çerçevesiz logo; arkasındaki koyu hale, zemin ne kadar parlak
           // olursa olsun logonun renklerini öne çıkarır.
           SizedBox(
-            width: 172,
-            height: 136,
+            width: halo,
+            height: st.pick(136, 94),
             child: Stack(
               alignment: Alignment.center,
               clipBehavior: Clip.none,
               children: [
                 Container(
-                  width: 172,
-                  height: 172,
+                  width: halo,
+                  height: halo,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: RadialGradient(
@@ -116,13 +117,18 @@ class MatchPoster extends StatelessWidget {
                     ),
                   ),
                 ),
-                PosterLogo(url: logo, name: name, size: 124, shadow: true),
+                PosterLogo(
+                  url: logo,
+                  name: name,
+                  size: st.pick(124, 86),
+                  shadow: true,
+                ),
               ],
             ),
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: st.pick(10, 6)),
           SizedBox(
-            height: 42,
+            height: st.pick(42, 36),
             child: Text(
               posterTeamName(name).trUpper,
               maxLines: 2,
@@ -130,7 +136,9 @@ class MatchPoster extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               // Afişte tam ad; uzun adlarda yazı küçülür.
               style: _cond(
-                posterTeamName(name).length > 22 ? 15.5 : 19,
+                posterTeamName(name).length > 22
+                    ? st.pick(15.5, 13.5)
+                    : st.pick(19, 16),
                 shadows: _shadow,
               ).copyWith(height: 1.05),
             ),
@@ -184,12 +192,13 @@ class MatchPoster extends StatelessWidget {
         : groupName.trim().trUpper;
     final weekText = week == null ? 'MAÇ GÜNÜ' : '$week. HAFTA MAÇI';
     final hasDate = dateText.trim().isNotEmpty;
+    final st = PosterOptions.of(context);
 
     return Stack(
       fit: StackFit.expand,
       children: [
         // Zemin: turnuvanın afiş görseli (yoksa stadyum) + koyu lacivert geçiş.
-        Image(image: PosterBackground.photoOf(context), fit: BoxFit.cover),
+        const PosterPhotoLayer(),
         DecoratedBox(
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -206,44 +215,53 @@ class MatchPoster extends StatelessWidget {
           ),
         ),
         // Projektör ışıkları
-        for (final align in const [Alignment(-1.1, -1), Alignment(1.1, -1)])
-          Align(
-            alignment: align,
-            child: Container(
-              width: 170,
-              height: 170,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    Colors.white.withValues(alpha: 0.45),
-                    Colors.white.withValues(alpha: 0),
-                  ],
+        if (!st.plain)
+          for (final align in const [Alignment(-1.1, -1), Alignment(1.1, -1)])
+            Align(
+              alignment: align,
+              child: Container(
+                width: 170,
+                height: 170,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      Colors.white.withValues(alpha: 0.45),
+                      Colors.white.withValues(alpha: 0),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(18, 22, 18, 14),
+          padding: EdgeInsets.fromLTRB(
+            18,
+            st.pick(22, 14),
+            18,
+            st.pick(14, 10),
+          ),
           child: Column(
             children: [
               PosterLogo(
                 url: leagueLogo,
                 name: leagueName,
-                size: 116,
+                size: st.pick(116, 64),
                 shadow: true,
               ),
-              const SizedBox(height: 14),
-              FittedBox(fit: BoxFit.scaleDown, child: _goldText(title, 46)),
-              const SizedBox(height: 8),
+              SizedBox(height: st.pick(14, 6)),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: _goldText(title, st.pick(46, 32)),
+              ),
+              SizedBox(height: st.pick(8, 6)),
               // Kırmızı kurdele
               Transform(
                 transform: Matrix4.skewX(-0.18),
                 alignment: Alignment.center,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
+                  padding: EdgeInsets.symmetric(
                     horizontal: 22,
-                    vertical: 6,
+                    vertical: st.pick(6, 4),
                   ),
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
@@ -256,7 +274,7 @@ class MatchPoster extends StatelessWidget {
                   ),
                   child: Text(
                     weekText,
-                    style: _cond(28, italic: true, spacing: 1),
+                    style: _cond(st.pick(28, 20), italic: true, spacing: 1),
                   ),
                 ),
               ),
@@ -264,20 +282,20 @@ class MatchPoster extends StatelessWidget {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _team(homeName, homeLogo),
+                  _team(homeName, homeLogo, st),
                   Padding(
-                    padding: const EdgeInsets.only(top: 34),
-                    child: _goldText('VS', 52),
+                    padding: EdgeInsets.only(top: st.pick(34, 22)),
+                    child: _goldText('VS', st.pick(52, 40)),
                   ),
-                  _team(awayName, awayLogo),
+                  _team(awayName, awayLogo, st),
                 ],
               ),
               const Spacer(),
               // Bilgi bandı: saha | gün-tarih | saat
               Container(
-                padding: const EdgeInsets.symmetric(
+                padding: EdgeInsets.symmetric(
                   horizontal: 8,
-                  vertical: 10,
+                  vertical: st.pick(10, 7),
                 ),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.94),
@@ -314,11 +332,11 @@ class MatchPoster extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(height: 14),
+              SizedBox(height: st.pick(14, 8)),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const AppLogo(size: 22),
+                  AppLogo(size: st.pick(22, 16)),
                   if (kShowAppName) const SizedBox(width: 6),
                   if (kShowAppName)
                     Text(
