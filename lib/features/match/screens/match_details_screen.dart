@@ -4904,11 +4904,14 @@ class _MinutelessSummary extends StatelessWidget {
           ),
         ),
     ];
+    // Video ikonu isme bitişik değil, orta çizgi tarafında (ev sahibinde
+    // sağda, deplasmanda solda).
+    final gap = clipButtons.isEmpty ? const SizedBox.shrink() : const Spacer();
     return Row(
       mainAxisAlignment: end ? MainAxisAlignment.end : MainAxisAlignment.start,
       children: end
-          ? [...clipButtons, name, const SizedBox(width: 6), iconRow]
-          : [iconRow, const SizedBox(width: 6), name, ...clipButtons],
+          ? [...clipButtons, gap, name, const SizedBox(width: 6), iconRow]
+          : [iconRow, const SizedBox(width: 6), name, gap, ...clipButtons],
     );
   }
 }

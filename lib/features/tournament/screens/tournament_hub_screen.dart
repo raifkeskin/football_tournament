@@ -28,6 +28,7 @@ class TournamentHubScreen extends StatefulWidget {
     required this.leagueId,
     this.seasonId,
     this.groupId,
+    this.regionId,
     this.initialTab = TournamentHubTab.standings,
   });
 
@@ -38,6 +39,10 @@ class TournamentHubScreen extends StatefulWidget {
 
   /// Boşsa sezonun ilk grubu.
   final String? groupId;
+
+  /// [groupId] boşsa bu bölgenin ilk grubu seçili açılır (ör. ana sayfadaki
+  /// haberden gelince haberin bölgesi; Haberler sekmesi bölgeye göre süzer).
+  final String? regionId;
   final TournamentHubTab initialTab;
 
   static Future<void> open(
@@ -45,6 +50,7 @@ class TournamentHubScreen extends StatefulWidget {
     required String leagueId,
     String? seasonId,
     String? groupId,
+    String? regionId,
     TournamentHubTab initialTab = TournamentHubTab.standings,
   }) {
     return Navigator.of(context).push(
@@ -54,6 +60,7 @@ class TournamentHubScreen extends StatefulWidget {
           leagueId: leagueId,
           seasonId: seasonId,
           groupId: groupId,
+          regionId: regionId,
           initialTab: initialTab,
         ),
       ),
@@ -255,6 +262,11 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
                   );
                 final group =
                     groups.where((g) => g.id == _groupId).firstOrNull ??
+                    (widget.regionId == null
+                        ? null
+                        : groups
+                              .where((g) => g.regionId == widget.regionId)
+                              .firstOrNull) ??
                     groups.firstOrNull;
                 final season = seasons
                     .where((s) => s.id == _seasonId)

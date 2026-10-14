@@ -130,6 +130,9 @@ class _HomeNewsCardState extends State<HomeNewsCard> {
                   context,
                   leagueId: n.tournamentId,
                   seasonId: n.seasonId.isEmpty ? null : n.seasonId,
+                  // Haberin bölgesinin grubu açılsın (sekme bölgeye göre
+                  // süzer; ilk grup başka bölgedeyse haber görünmez).
+                  regionId: n.regionId,
                   initialTab: TournamentHubTab.news,
                 );
               },

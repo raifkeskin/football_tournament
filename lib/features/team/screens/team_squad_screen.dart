@@ -1673,237 +1673,239 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
 
     // Bir üst menüyle (sezon/grup/takım listeleri) aynı tema: koyu zemin,
     // soluk saha görseli ve şeffaf başlık.
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      extendBodyBehindAppBar: true,
-      // Kadro sekmesinde küçük yüzen büyüteç; arama alanı yalnız istenince.
-      floatingActionButton:
-          effectiveTournamentId == null || _tab != 0 || _rosterSearchOpen
-          ? null
-          : FloatingActionButton.small(
-              tooltip: 'Futbolcu ara',
-              backgroundColor: _squadAccent,
-              foregroundColor: Colors.white,
-              onPressed: () {
-                setState(() => _rosterSearchOpen = true);
-                _rosterSearchFocus.requestFocus();
-              },
-              child: const Icon(Icons.search_rounded, size: 20),
-            ),
-      body: Stack(
-        children: [
-          // Turnuva seçilmeden bant çizilmez; geri düğmesi yine görünsün.
-          if (effectiveTournamentId == null)
-            SafeArea(
-              child: Align(
-                alignment: Alignment.topLeft,
-                child: IconButton(
-                  tooltip: 'Geri',
-                  icon: const Icon(
-                    Icons.arrow_back_rounded,
-                    color: Colors.white,
-                  ),
-                  onPressed: () => Navigator.of(context).maybePop(),
-                ),
+    // Geri düğmesi bantta (sol üst); futbolcu ekleme sağ altta.
+    return BandBackPage(
+      child: Scaffold(
+        backgroundColor: const Color(0xFF0F172A),
+        extendBodyBehindAppBar: true,
+        // Kadro sekmesinde sağ altta: büyüteç (arama kapalıyken) ve futbolcu
+        // ekleme (yetkiliyse).
+        floatingActionButton: effectiveTournamentId == null || _tab != 0
+            ? null
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (!_rosterSearchOpen)
+                    FloatingActionButton.small(
+                      heroTag: null,
+                      tooltip: 'Futbolcu ara',
+                      backgroundColor: _squadAccent,
+                      foregroundColor: Colors.white,
+                      onPressed: () {
+                        setState(() => _rosterSearchOpen = true);
+                        _rosterSearchFocus.requestFocus();
+                      },
+                      child: const Icon(Icons.search_rounded, size: 20),
+                    ),
+                  if (!_rosterSearchOpen && canAdd) const SizedBox(height: 12),
+                  if (canAdd)
+                    AdminBarAction(
+                      icon: Icons.person_add_alt_1_rounded,
+                      tooltip: 'Futbolcu ekle',
+                      onPressed: () => _openExistingPlayerPicker(
+                        leagueId: effectiveTournamentId,
+                        teamId: widget.teamId,
+                      ),
+                    ).fab(),
+                ],
               ),
-            ),
-          SafeArea(
-            child: Column(
-              children: [
-                if (_isLoadingTournaments)
-                  const LinearProgressIndicator(minHeight: 2),
-                Expanded(
-                  child: effectiveTournamentId == null
-                      ? Center(
-                          child: Text(
-                            'Lütfen turnuva seçin.',
-                            style: TextStyle(color: cs.onSurfaceVariant),
-                          ),
-                        )
-                      : StreamBuilder<List<PlayerModel>>(
-                          stream: playersStream,
-                          builder: (context, snapshot) {
-                            if (snapshot.connectionState ==
-                                ConnectionState.waiting) {
-                              return const Center(
-                                child: CircularProgressIndicator(),
-                              );
-                            }
-                            if (snapshot.hasError) {
-                              return Center(
-                                child: Text('Hata: ${snapshot.error}'),
-                              );
-                            }
-                            final allPlayers =
-                                snapshot.data ?? const <PlayerModel>[];
-                            _prefetchPlayerPhotos(allPlayers);
-                            final q = _rosterQuery;
-                            final searchedPlayers = q.isEmpty
-                                ? allPlayers
-                                : allPlayers
-                                      .where(
-                                        (p) => p.name.toLowerCase().contains(q),
-                                      )
-                                      .toList();
-                            final players = _selectedPosition == null
-                                ? searchedPlayers
-                                : searchedPlayers
-                                      .where(
-                                        (p) =>
-                                            _positionGroup(p) ==
-                                            _selectedPosition,
-                                      )
-                                      .toList();
+        body: Stack(
+          children: [
+            SafeArea(
+              child: Column(
+                children: [
+                  if (_isLoadingTournaments)
+                    const LinearProgressIndicator(minHeight: 2),
+                  Expanded(
+                    child: effectiveTournamentId == null
+                        ? Center(
+                            child: Text(
+                              'Lütfen turnuva seçin.',
+                              style: TextStyle(color: cs.onSurfaceVariant),
+                            ),
+                          )
+                        : StreamBuilder<List<PlayerModel>>(
+                            stream: playersStream,
+                            builder: (context, snapshot) {
+                              if (snapshot.connectionState ==
+                                  ConnectionState.waiting) {
+                                return const Center(
+                                  child: CircularProgressIndicator(),
+                                );
+                              }
+                              if (snapshot.hasError) {
+                                return Center(
+                                  child: Text('Hata: ${snapshot.error}'),
+                                );
+                              }
+                              final allPlayers =
+                                  snapshot.data ?? const <PlayerModel>[];
+                              _prefetchPlayerPhotos(allPlayers);
+                              final q = _rosterQuery;
+                              final searchedPlayers = q.isEmpty
+                                  ? allPlayers
+                                  : allPlayers
+                                        .where(
+                                          (p) =>
+                                              p.name.toLowerCase().contains(q),
+                                        )
+                                        .toList();
+                              final players = _selectedPosition == null
+                                  ? searchedPlayers
+                                  : searchedPlayers
+                                        .where(
+                                          (p) =>
+                                              _positionGroup(p) ==
+                                              _selectedPosition,
+                                        )
+                                        .toList();
 
-                            return ListView(
-                              padding: const EdgeInsets.fromLTRB(
-                                16,
-                                12,
-                                16,
-                                // Yüzen büyüteç son satırı örtmesin.
-                                72,
-                              ),
-                              children: [
-                                FutureBuilder<(String?, String?)>(
-                                  future: _teamColors,
-                                  builder: (context, colorSnap) =>
-                                      _SquadSummaryCard(
-                                        firstColor:
-                                            widget.initialFirstColor ??
-                                            colorSnap.data?.$1,
-                                        secondColor:
-                                            widget.initialSecondColor ??
-                                            colorSnap.data?.$2,
-                                        teamName: titleTeam,
-                                        logoUrl: widget.teamLogoUrl,
-                                        // Üst satır yerine bandın köşelerinde.
-                                        onBack: () =>
-                                            Navigator.of(context).maybePop(),
-                                        onAdd: !canAdd
-                                            ? null
-                                            : () => _openExistingPlayerPicker(
-                                                leagueId: effectiveTournamentId,
-                                                teamId: widget.teamId,
-                                              ),
-                                        subtitle: _tournamentNameById(
-                                          effectiveTournamentId,
+                              return ListView(
+                                padding: EdgeInsets.fromLTRB(
+                                  16,
+                                  12,
+                                  16,
+                                  // Yüzen düğmeler son satırı örtmesin.
+                                  canAdd ? 150 : 72,
+                                ),
+                                children: [
+                                  FutureBuilder<(String?, String?)>(
+                                    future: _teamColors,
+                                    builder: (context, colorSnap) =>
+                                        _SquadSummaryCard(
+                                          firstColor:
+                                              widget.initialFirstColor ??
+                                              colorSnap.data?.$1,
+                                          secondColor:
+                                              widget.initialSecondColor ??
+                                              colorSnap.data?.$2,
+                                          teamName: titleTeam,
+                                          logoUrl: widget.teamLogoUrl,
+                                          subtitle: _tournamentNameById(
+                                            effectiveTournamentId,
+                                          ),
+                                          players: allPlayers,
+                                          ageOf: (p) =>
+                                              _ageFromBirthDate(p.birthDate),
+                                          // Paylaş şimdilik yalnızca admin ve
+                                          // turnuva sahibine açık.
+                                          onShare:
+                                              allPlayers.isEmpty ||
+                                                  !AppSession.of(
+                                                    context,
+                                                  ).value.canManageLeague(
+                                                    effectiveTournamentId,
+                                                  )
+                                              ? null
+                                              : () => _shareSquadPoster(
+                                                  teamName: titleTeam,
+                                                  tournamentId:
+                                                      effectiveTournamentId,
+                                                  players: allPlayers,
+                                                ),
                                         ),
-                                        players: allPlayers,
-                                        ageOf: (p) =>
-                                            _ageFromBirthDate(p.birthDate),
-                                        // Paylaş şimdilik yalnızca admin ve
-                                        // turnuva sahibine açık.
-                                        onShare:
-                                            allPlayers.isEmpty ||
-                                                !AppSession.of(
-                                                  context,
-                                                ).value.canManageLeague(
-                                                  effectiveTournamentId,
-                                                )
-                                            ? null
-                                            : () => _shareSquadPoster(
-                                                teamName: titleTeam,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  TeamPageTabBar(
+                                    index: _tab,
+                                    onChanged: (i) => setState(() => _tab = i),
+                                  ),
+                                  if (_tab == 0) ...[
+                                    const SizedBox(height: 8),
+                                    _positionFilter(allPlayers),
+                                  ],
+                                  if (_tab == 1)
+                                    TeamFixtureTab(
+                                      seasonId: effectiveTournamentId,
+                                      teamId: widget.teamId,
+                                      teamName: titleTeam,
+                                    ),
+                                  if (_tab == 2)
+                                    TeamStatsTab(
+                                      seasonId: effectiveTournamentId,
+                                      teamId: widget.teamId,
+                                      players: allPlayers,
+                                    ),
+                                  if (_tab == 0) ...[
+                                    FutureBuilder(
+                                      future: _consentCache.of(
+                                        allPlayers.map((p) => p.id),
+                                      ),
+                                      builder: (context, snap) {
+                                        final st = snap.data ?? const {};
+                                        if (st.values.every(
+                                          (s) => s.complete,
+                                        )) {
+                                          return const SizedBox.shrink();
+                                        }
+                                        return Padding(
+                                          padding: const EdgeInsets.only(
+                                            top: 12,
+                                          ),
+                                          child: ConsentSummaryBanner(
+                                            statuses: st,
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                    _ageRulesSummary(allPlayers),
+                                    if (canAdd)
+                                      _autoJerseyBanner(
+                                        allPlayers,
+                                        effectiveTournamentId,
+                                      ),
+                                    if (_needsApproval)
+                                      _pendingRequests(effectiveTournamentId),
+                                    if (_rosterSearchOpen) ...[
+                                      const SizedBox(height: 10),
+                                      _rosterSearchField(),
+                                    ],
+                                    const SizedBox(height: 4),
+                                    if (players.isEmpty)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 32),
+                                        child: Text(
+                                          allPlayers.isEmpty
+                                              ? 'Henüz kadro girişi yapılmamış.'
+                                              : 'Aramanıza uygun futbolcu bulunamadı.',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(color: _squadMuted),
+                                        ),
+                                      )
+                                    else
+                                      for (final section in _positionSections(
+                                        players,
+                                      ))
+                                        _SquadSection(
+                                          title: section.key,
+                                          count: section.value.length,
+                                          children: [
+                                            for (
+                                              var i = 0;
+                                              i < section.value.length;
+                                              i++
+                                            )
+                                              _squadRow(
+                                                section.value[i],
+                                                first: i == 0,
+                                                canAdd: canAdd,
                                                 tournamentId:
                                                     effectiveTournamentId,
-                                                players: allPlayers,
                                               ),
-                                      ),
-                                ),
-                                const SizedBox(height: 8),
-                                TeamPageTabBar(
-                                  index: _tab,
-                                  onChanged: (i) => setState(() => _tab = i),
-                                ),
-                                if (_tab == 0) ...[
-                                  const SizedBox(height: 8),
-                                  _positionFilter(allPlayers),
-                                ],
-                                if (_tab == 1)
-                                  TeamFixtureTab(
-                                    seasonId: effectiveTournamentId,
-                                    teamId: widget.teamId,
-                                    teamName: titleTeam,
-                                  ),
-                                if (_tab == 2)
-                                  TeamStatsTab(
-                                    seasonId: effectiveTournamentId,
-                                    teamId: widget.teamId,
-                                    players: allPlayers,
-                                  ),
-                                if (_tab == 0) ...[
-                                  FutureBuilder(
-                                    future: _consentCache.of(
-                                      allPlayers.map((p) => p.id),
-                                    ),
-                                    builder: (context, snap) {
-                                      final st = snap.data ?? const {};
-                                      if (st.values.every((s) => s.complete)) {
-                                        return const SizedBox.shrink();
-                                      }
-                                      return Padding(
-                                        padding: const EdgeInsets.only(top: 12),
-                                        child: ConsentSummaryBanner(
-                                          statuses: st,
+                                          ],
                                         ),
-                                      );
-                                    },
-                                  ),
-                                  _ageRulesSummary(allPlayers),
-                                  if (canAdd)
-                                    _autoJerseyBanner(
-                                      allPlayers,
-                                      effectiveTournamentId,
-                                    ),
-                                  if (_needsApproval)
-                                    _pendingRequests(effectiveTournamentId),
-                                  if (_rosterSearchOpen) ...[
-                                    const SizedBox(height: 10),
-                                    _rosterSearchField(),
                                   ],
-                                  const SizedBox(height: 4),
-                                  if (players.isEmpty)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 32),
-                                      child: Text(
-                                        allPlayers.isEmpty
-                                            ? 'Henüz kadro girişi yapılmamış.'
-                                            : 'Aramanıza uygun futbolcu bulunamadı.',
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(color: _squadMuted),
-                                      ),
-                                    )
-                                  else
-                                    for (final section in _positionSections(
-                                      players,
-                                    ))
-                                      _SquadSection(
-                                        title: section.key,
-                                        count: section.value.length,
-                                        children: [
-                                          for (
-                                            var i = 0;
-                                            i < section.value.length;
-                                            i++
-                                          )
-                                            _squadRow(
-                                              section.value[i],
-                                              first: i == 0,
-                                              canAdd: canAdd,
-                                              tournamentId:
-                                                  effectiveTournamentId,
-                                            ),
-                                        ],
-                                      ),
                                 ],
-                              ],
-                            );
-                          },
-                        ),
-                ),
-              ],
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -4020,15 +4022,7 @@ class _SquadSummaryCard extends StatelessWidget {
     this.firstColor,
     this.secondColor,
     this.onShare,
-    this.onBack,
-    this.onAdd,
   });
-
-  /// Bandın sol üstündeki geri düğmesi.
-  final VoidCallback? onBack;
-
-  /// Sağ üstte "Futbolcu ekle" (yalnız yetkililere).
-  final VoidCallback? onAdd;
 
   /// Bandın köşesindeki yarı saydam yuvarlak düğme.
   Widget _cornerButton(IconData icon, String tooltip, VoidCallback onTap) {
@@ -4197,38 +4191,16 @@ class _SquadSummaryCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (onBack != null)
+                if (onShare != null)
                   Positioned(
                     top: 10,
-                    left: 10,
+                    right: 10,
                     child: _cornerButton(
-                      Icons.arrow_back_rounded,
-                      'Geri',
-                      onBack!,
+                      Icons.ios_share_rounded,
+                      'Kadro afişini paylaş',
+                      onShare!,
                     ),
                   ),
-                Positioned(
-                  top: 10,
-                  right: 10,
-                  child: Row(
-                    children: [
-                      if (onShare != null)
-                        _cornerButton(
-                          Icons.ios_share_rounded,
-                          'Kadro afişini paylaş',
-                          onShare!,
-                        ),
-                      if (onShare != null && onAdd != null)
-                        const SizedBox(width: 8),
-                      if (onAdd != null)
-                        _cornerButton(
-                          Icons.person_add_alt_1_rounded,
-                          'Futbolcu ekle',
-                          onAdd!,
-                        ),
-                    ],
-                  ),
-                ),
               ],
             ),
             SizedBox(
