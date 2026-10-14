@@ -186,7 +186,11 @@ class StandingsPoster extends StatelessWidget {
                   leagueName.trUpper,
                   textAlign: TextAlign.center,
                   maxLines: st.isPost ? 1 : 2,
-                  style: _cond(st.pick(26, 20), w: FontWeight.w800, italic: true),
+                  style: _cond(
+                    st.pick(26, 20),
+                    w: FontWeight.w800,
+                    italic: true,
+                  ),
                 ),
                 if (subtitle.isNotEmpty) ...[
                   SizedBox(height: st.pick(3, 2)),
@@ -247,6 +251,8 @@ class StandingsPoster extends StatelessWidget {
                     ),
                   ),
                 ),
+                SizedBox(height: st.pick(6, 4)),
+                const PosterAppMark(),
               ],
             ),
           ],

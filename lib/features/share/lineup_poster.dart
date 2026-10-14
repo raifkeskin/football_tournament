@@ -151,7 +151,14 @@ class _PosterFrame extends StatelessWidget {
             ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 18, 16, 12),
-            child: child,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: child),
+                const SizedBox(height: 6),
+                const PosterAppMark(),
+              ],
+            ),
           ),
         ],
       ),

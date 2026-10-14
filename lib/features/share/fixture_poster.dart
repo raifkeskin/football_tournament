@@ -313,7 +313,11 @@ class FixturePoster extends StatelessWidget {
                   leagueName.trUpper,
                   textAlign: TextAlign.center,
                   maxLines: st.isPost ? 1 : 2,
-                  style: _cond(st.pick(28, 21), w: FontWeight.w800, italic: true),
+                  style: _cond(
+                    st.pick(28, 21),
+                    w: FontWeight.w800,
+                    italic: true,
+                  ),
                 ),
                 if (subtitle.isNotEmpty) ...[
                   SizedBox(height: st.pick(3, 2)),
@@ -369,6 +373,8 @@ class FixturePoster extends StatelessWidget {
                     ),
                   ),
                 ),
+                SizedBox(height: st.pick(6, 4)),
+                const PosterAppMark(),
               ],
             ),
           ],

@@ -11,6 +11,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/services/instagram_share.dart';
+import '../../core/widgets/app_logo.dart';
 import '../../core/utils/in_app_browser.dart';
 import '../../core/widgets/admin_form.dart';
 import '../../core/widgets/admin_page.dart';
@@ -659,6 +660,33 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Tüm afişlerin altındaki imza: uygulama logosu ve yanında "LİG MASASI".
+class PosterAppMark extends StatelessWidget {
+  const PosterAppMark({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final st = PosterOptions.of(context);
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        AppLogo(size: st.pick(26, 20)),
+        const SizedBox(width: 7),
+        Text(
+          'LİG MASASI',
+          style: GoogleFonts.barlowCondensed(
+            fontSize: st.pick(14, 12),
+            color: Colors.white70,
+            fontWeight: FontWeight.w800,
+            fontStyle: FontStyle.italic,
+            letterSpacing: 2,
+          ),
+        ),
+      ],
     );
   }
 }
