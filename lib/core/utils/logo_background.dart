@@ -269,16 +269,16 @@ img.Image _trimEdgeStripes(img.Image src) {
   );
 }
 
-/// Sponsor şeridindeki logo kutusu 96×36 (8:3); 6× yoğunlukta saklanır ki
-/// her ekranda net görünsün.
-const sponsorLogoWidth = 576;
-const sponsorLogoHeight = 216;
+/// Sponsor logoları bu yükseklikte saklanır (şeritte 32 px; 6× yoğunluk),
+/// genişlik logonun kendi oranıyla (en fazla [_sponsorMaxWidth]).
+const sponsorLogoHeight = 192;
+const _sponsorMaxWidth = 1080;
 
 /// Sponsor logosunu standarda getirir: kenarlardaki düz renkli bantlar
-/// (ekran görüntüsündeki siyah/beyaz boşluklar, şeffaf kenar) katman katman
-/// kırpılır, logo 576×216 şeffaf tuvale en büyük hâliyle ortalanır. Zemin
-/// opaksa (ör. siyah kutulu logo) kenarda o renkten ince pay bırakılır.
-/// Ağır iş; `compute` ile ayrı isolate'te çağrılmalı.
+/// (ekran görüntüsündeki siyah/beyaz boşluklar, şeffaf kenar, geçiş
+/// çizgileri) katman katman kırpılır; logo kendi oranında 192 px yüksekliğe
+/// ölçeklenir. Zemin opaksa (ör. siyah kutulu logo) kenarda o renkten ince
+/// pay bırakılır. Ağır iş; `compute` ile ayrı isolate'te çağrılmalı.
 Uint8List? fitSponsorLogo(Uint8List bytes) {
   final decoded = img.decodeImage(bytes);
   if (decoded == null) return null;
@@ -303,9 +303,9 @@ Uint8List? fitSponsorLogo(Uint8List bytes) {
   }
   final bg = bgs.isEmpty ? null : bgs.last;
 
-  // Opak zeminde logo kutunun kenarına yapışmasın: zemin renginden pay.
+  // Opak zeminde logo kutunun kenarına yapışmasın: zemin renginden ince pay.
   if (bg != null && !bg.transparent) {
-    final pad = (math.min(src.width, src.height) * 0.12).round();
+    final pad = math.max(2, (math.min(src.width, src.height) * 0.06).round());
     final framed = img.Image(
       width: src.width + pad * 2,
       height: src.height + pad * 2,
@@ -316,30 +316,25 @@ Uint8List? fitSponsorLogo(Uint8List bytes) {
     src = framed;
   }
 
-  final scale = math.min(
-    sponsorLogoWidth / src.width,
-    sponsorLogoHeight / src.height,
-  );
-  final w = math.max(1, (src.width * scale).round());
-  final h = math.max(1, (src.height * scale).round());
-  final resized = img.copyResize(
+  var scale = sponsorLogoHeight / src.height;
+  if (src.width * scale > _sponsorMaxWidth) {
+    scale = _sponsorMaxWidth / src.width;
+  }
+  final out = img.copyResize(
     src,
-    width: w,
-    height: h,
+    width: math.max(1, (src.width * scale).round()),
+    height: math.max(1, (src.height * scale).round()),
     interpolation: img.Interpolation.cubic,
   );
-  final canvas = img.Image(
-    width: sponsorLogoWidth,
-    height: sponsorLogoHeight,
-    numChannels: 4,
-  );
-  img.compositeImage(
-    canvas,
-    resized,
-    dstX: (sponsorLogoWidth - w) ~/ 2,
-    dstY: (sponsorLogoHeight - h) ~/ 2,
-  );
-  return img.encodePng(canvas, level: 6);
+  return img.encodePng(out, level: 6);
+}
+
+/// PNG başlığından en/boy oranı (genişlik / yükseklik); okunamazsa null.
+double? pngAspect(Uint8List png) {
+  if (png.length < 24) return null;
+  final d = ByteData.sublistView(png);
+  final w = d.getUint32(16), h = d.getUint32(20);
+  return w > 0 && h > 0 ? w / h : null;
 }
 
 /// Dört köşe aynı renkteyse (ya da şeffafsa) o renk; değilse null.
