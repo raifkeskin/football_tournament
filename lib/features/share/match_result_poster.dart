@@ -47,6 +47,9 @@ class MatchResultPoster extends StatelessWidget {
   final List<PosterScorer> awayScorers;
 
   static const _gold = Color(0xFFF6C744);
+
+  /// Boşlukları bölünmez yapar (satır içinde kesilmesin).
+  static String _nb(String s) => s.replaceAll(' ', '\u00A0');
   static const _goldDeep = Color(0xFFC98A12);
   static const _navy = Color(0xFF0A1433);
   static const _red = Color(0xFFD7182A);
@@ -144,11 +147,13 @@ class MatchResultPoster extends StatelessWidget {
               TextSpan(
                 children: [
                   for (var i = 0; i < scorers.length; i++) ...[
+                    // Ad ve dakika bölünmez boşlukla bağlı: satır sonuna
+                    // gelirse ikisi birlikte alta iner.
                     if (i > 0) const TextSpan(text: '  ·  '),
-                    TextSpan(text: scorers[i].name),
+                    TextSpan(text: _nb(scorers[i].name)),
                     if (scorers[i].detail.isNotEmpty)
                       TextSpan(
-                        text: ' ${scorers[i].detail}',
+                        text: '\u00A0${_nb(scorers[i].detail)}',
                         style: const TextStyle(color: _gold),
                       ),
                   ],

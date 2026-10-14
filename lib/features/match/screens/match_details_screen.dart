@@ -471,44 +471,52 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
         .select('team_id, minute, player_id, is_own_goal, is_penalty')
         .eq('match_id', m.id)
         .eq('event_type', 'goal');
-    // match_events'te ad yok: soyadlar oyunculardan okunur.
+    // match_events'te ad yok: adlar (soyad değil) oyunculardan okunur.
     final ids = {
       for (final r in rows)
         if ((r['player_id'] ?? '').toString().isNotEmpty) '${r['player_id']}',
     };
-    final surnames = <String, String>{};
+    final firstNames = <String, String>{};
     if (ids.isNotEmpty) {
       for (final p
           in await db
               .from('players')
               .select('id, name, surname')
               .inFilter('id', ids.toList())) {
+        final name = (p['name'] ?? '').toString().trim();
         final sn = (p['surname'] ?? '').toString().trim();
-        surnames['${p['id']}'] = sn.isNotEmpty
-            ? sn
-            : (p['name'] ?? '').toString().trim();
+        // Soyad ayrı sütunda değilse ad alanı "Ad Soyad" olabilir: son
+        // kelime soyad sayılır.
+        final parts = name.split(RegExp(r'\s+'));
+        firstNames['${p['id']}'] = sn.isEmpty && parts.length > 1
+            ? parts.sublist(0, parts.length - 1).join(' ')
+            : name;
       }
     }
-    // taraf → oyuncu → dakikalar (null: dakikasız)
+    // taraf → oyuncu → dakikalar (null: dakikasız); aynı adlı iki oyuncu
+    // karışmasın diye oyuncu kimliğiyle tutulur.
     final sides = [<String, List<String?>>{}, <String, List<String?>>{}];
+    final labels = <String, String>{};
     final firstMinute = <String, int>{};
     for (final r in rows) {
       final own = r['is_own_goal'] == true;
       final team = (r['team_id'] ?? '').toString();
       var home = team == m.homeTeamId;
       if (own) home = !home;
-      final sn = surnames['${r['player_id']}'] ?? '';
-      final surname = sn.isEmpty ? 'Gol' : sn;
-      final name = own ? '$surname (K.K.)' : surname;
+      final pid = (r['player_id'] ?? '').toString();
+      final fn = firstNames[pid] ?? '';
+      final label = fn.isEmpty ? 'Gol' : fn;
+      final key = '$pid|$own';
+      labels[key] = own ? '$label (K.K.)' : label;
       final minute = r['minute'] is num ? (r['minute'] as num).toInt() : null;
       final pen = r['is_penalty'] == true && !own;
-      (sides[home ? 0 : 1][name] ??= []).add(
+      (sides[home ? 0 : 1][key] ??= []).add(
         minute == null ? (pen ? '(P)' : null) : "$minute'${pen ? ' (P)' : ''}",
       );
       if (minute != null) {
-        firstMinute[name] = minute < (firstMinute[name] ?? 999)
+        firstMinute[key] = minute < (firstMinute[key] ?? 999)
             ? minute
-            : firstMinute[name]!;
+            : firstMinute[key]!;
       }
     }
     List<PosterScorer> build(Map<String, List<String?>> side) {
@@ -519,7 +527,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
       return [
         for (final n in names)
           (
-            name: n,
+            name: labels[n]!,
             detail: side[n]!.any((x) => x != null && x.contains("'"))
                 ? side[n]!.whereType<String>().join(' ')
                 : [
