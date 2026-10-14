@@ -11,6 +11,7 @@ import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/youtube_player_page.dart';
 import '../models/match.dart';
 import '../services/match_highlight_service.dart';
+import '../utils/season_match_settings.dart';
 
 String _clock(int sec) {
   final h = sec ~/ 3600;
@@ -69,11 +70,25 @@ class _MatchHighlightsStripState extends State<MatchHighlightsStrip> {
   late List<MatchHighlight> _items =
       MatchHighlightService.cached(widget.match.id) ?? const [];
 
+  /// Sezonda gol dakikası tutulmuyorsa (halısaha) YZ kesitleri gizlenir:
+  /// kesitler dakikaya göre aranır. Ayar okunana kadar bölüm görünmez.
+  late bool? _tracksMinutes = SeasonMatchSettings.cached(
+    widget.match.seasonId,
+  )?.tracksGoalMinutes;
+
   @override
   void initState() {
     super.initState();
     MatchHighlightService.changes.addListener(_onChanged);
-    _load();
+    if (_tracksMinutes == null) {
+      SeasonMatchSettings.of(widget.match.seasonId).then((s) {
+        if (!mounted) return;
+        setState(() => _tracksMinutes = s.tracksGoalMinutes);
+        if (s.tracksGoalMinutes) _load();
+      });
+    } else if (_tracksMinutes!) {
+      _load();
+    }
   }
 
   @override
@@ -98,6 +113,7 @@ class _MatchHighlightsStripState extends State<MatchHighlightsStrip> {
 
   @override
   Widget build(BuildContext context) {
+    if (_tracksMinutes != true) return const SizedBox.shrink();
     final approved = [
       for (final h in _items)
         if (h.isApproved && h.kind == 'goal') h,

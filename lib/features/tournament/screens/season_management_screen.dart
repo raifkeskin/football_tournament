@@ -23,6 +23,7 @@ import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../widgets/league_owners_section.dart';
 import 'age_rules_dialog.dart';
+import '../../match/utils/season_match_settings.dart';
 
 // Fikstür / Ana Sayfa ile ortak renkler
 const _bgDark = Color(0xFF0F172A);
@@ -173,6 +174,7 @@ class SeasonManagementScreen extends StatelessWidget {
     var isActive = season?.isActive ?? true;
     var isDefault = season?.isDefault ?? false;
     var isDoubleRound = season?.isDoubleRound ?? false;
+    var trackGoalMinutes = season?.trackGoalMinutes ?? true;
     var saving = false;
 
     Future<void> pickDate({
@@ -262,6 +264,7 @@ class SeasonManagementScreen extends StatelessWidget {
         isActive: isActive,
         isDefault: isDefault,
         isDoubleRound: isDoubleRound,
+        trackGoalMinutes: trackGoalMinutes,
         transferStartDate: transferStartDate,
         transferEndDate: transferEndDate,
         teamsPerGroup: int.tryParse(teamsPerGroupController.text.trim()) ?? 4,
@@ -313,6 +316,8 @@ class SeasonManagementScreen extends StatelessWidget {
             });
           }
         }
+
+        SeasonMatchSettings.invalidate(seasonId);
 
         // Başarılı kayıtta sheet kapanır; kapanmış sheet'e setState yapılmaz.
         if (sheetContext.mounted) Navigator.of(sheetContext).pop();
@@ -501,6 +506,15 @@ class SeasonManagementScreen extends StatelessWidget {
                             'Oyuncu Değişikliği Sınırı',
                             numberOfPlayerChangesController,
                             number: true,
+                          ),
+                          switchRow(
+                            Icons.more_time_rounded,
+                            'Gol Dakikası',
+                            trackGoalMinutes
+                                ? 'Gol ve kart dakikaları yazılır'
+                                : 'Dakika yazılmaz (halısaha)',
+                            trackGoalMinutes,
+                            (v) => setSheetState(() => trackGoalMinutes = v),
                           ),
                         ],
                       ),
