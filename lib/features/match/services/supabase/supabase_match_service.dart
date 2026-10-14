@@ -458,6 +458,43 @@ class SupabaseMatchService implements IMatchService {
   }
 
   @override
+  Future<List<MatchEvent>> fetchGoalEvents(String matchId) async {
+    final rows = await _client
+        .from('match_events')
+        .select(
+          'id, match_id, team_id, player_id, minute, is_own_goal, is_penalty',
+        )
+        .eq('match_id', matchId)
+        .eq('event_type', 'goal')
+        .order('minute', ascending: true);
+    final list = [for (final r in rows) Map<String, dynamic>.from(r as Map)];
+    await _attachPlayerNames(list);
+    return [
+      for (final r in list)
+        MatchEvent.fromMap({...r, 'event_type': 'goal'}, '${r['id']}'),
+    ];
+  }
+
+  @override
+  Future<void> setGoalCancelled(
+    String eventId, {
+    required bool cancelled,
+  }) async {
+    // Yalnız beklenen türdeki satır değişir (iki kişi aynı anda basarsa
+    // ikinci istek boşa düşer, skor iki kez düzeltilmez).
+    final updated = await _client
+        .from('match_events')
+        .update({'event_type': cancelled ? 'goal_cancelled' : 'goal'})
+        .eq('id', eventId)
+        .eq('event_type', cancelled ? 'goal' : 'goal_cancelled')
+        .select('match_id');
+    if (updated.isEmpty) {
+      throw Exception('Gol güncellenemedi (yetki yok ya da zaten değişmiş).');
+    }
+    notifyLocalChange('${updated.first['match_id']}');
+  }
+
+  @override
   Future<void> deleteMatchEvent(String eventId) async {
     final res = await _client
         .from('match_events')
