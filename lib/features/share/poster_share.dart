@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:gal/gal.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
@@ -105,14 +107,36 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
   bool _sharing = false;
   bool _saving = false;
   bool _instagramBusy = false;
+
+  /// İndirme bitti: düğme birkaç saniye "KAYDEDİLDİ" gösterir (galeriye
+  /// kayıt bildirim üretmediği için kullanıcı çalışmadı sanmasın).
+  bool _saved = false;
+  Timer? _savedTimer;
   late final Future<bool> _instagram = InstagramShare.isAvailable();
 
   /// Pencerenin altında gösterilen sonuç (snackbar popup'ın arkasında
   /// kalıyordu).
-  ({String text, bool error})? _notice;
+  ({String text, bool error, bool gallery})? _notice;
 
-  void _say(String text, {bool error = false}) {
-    if (mounted) setState(() => _notice = (text: text, error: error));
+  void _say(String text, {bool error = false, bool gallery = false}) {
+    if (mounted) {
+      setState(() => _notice = (text: text, error: error, gallery: gallery));
+    }
+  }
+
+  void _flashSaved() {
+    HapticFeedback.mediumImpact();
+    _savedTimer?.cancel();
+    setState(() => _saved = true);
+    _savedTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _saved = false);
+    });
+  }
+
+  @override
+  void dispose() {
+    _savedTimer?.cancel();
+    super.dispose();
   }
 
   late PosterFormat _format = widget.formats.first;
@@ -266,12 +290,14 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
           name: '$_name.png',
         ).saveTo('$_name.png');
         _say('İndirme başlatıldı: $_name.png (İndirilenler klasörü).');
+        _flashSaved();
       } else {
         if (!await Gal.hasAccess(toAlbum: false)) {
           await Gal.requestAccess(toAlbum: false);
         }
         await Gal.putImageBytes(bytes, name: _name);
-        _say('Afiş galeriye kaydedildi.');
+        _say('Afiş galeriye kaydedildi.', gallery: true);
+        _flashSaved();
       }
     } on GalException catch (e) {
       _say(
@@ -509,6 +535,45 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
                     );
                   },
                 ),
+                if (_notice != null) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Icon(
+                        _notice!.error
+                            ? Icons.info_outline_rounded
+                            : Icons.check_circle_rounded,
+                        size: 18,
+                        color: _notice!.error
+                            ? const Color(0xFFFBBF24)
+                            : kAdminAccent,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _notice!.text,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13.5,
+                            height: 1.35,
+                          ),
+                        ),
+                      ),
+                      if (_notice!.gallery)
+                        TextButton(
+                          onPressed: () => Gal.open(),
+                          child: const Text(
+                            'GALERİDE AÇ',
+                            style: TextStyle(
+                              color: kAdminAccent,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 14),
                 FutureBuilder<bool>(
                   future: _instagram,
@@ -521,8 +586,10 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
                           children: [
                             Expanded(
                               child: _actionButton(
-                                label: 'İNDİR',
-                                icon: Icons.download_rounded,
+                                label: _saved ? 'KAYDEDİLDİ' : 'İNDİR',
+                                icon: _saved
+                                    ? Icons.check_circle_rounded
+                                    : Icons.download_rounded,
                                 busy: _saving,
                                 onTap: _download,
                                 decoration: BoxDecoration(
@@ -587,34 +654,6 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
                     );
                   },
                 ),
-                if (_notice != null) ...[
-                  const SizedBox(height: 12),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        _notice!.error
-                            ? Icons.info_outline_rounded
-                            : Icons.check_circle_rounded,
-                        size: 18,
-                        color: _notice!.error
-                            ? const Color(0xFFFBBF24)
-                            : kAdminAccent,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _notice!.text,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 13.5,
-                            height: 1.35,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
               ],
             ),
           ),
