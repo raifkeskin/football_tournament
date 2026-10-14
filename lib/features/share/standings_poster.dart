@@ -127,93 +127,120 @@ class StandingsPoster extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PosterBackdrop(
-      padding: const EdgeInsets.fromLTRB(14, 16, 14, 12),
-      colors: const [Color(0xFF0B1440), _navy, Color(0xFF08102E)],
-      stops: const [0, 0.4, 1],
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: RadialGradient(
-                  center: const Alignment(0, -0.85),
-                  radius: 0.75,
-                  colors: [
-                    _gold.withValues(alpha: 0.28),
-                    _gold.withValues(alpha: 0),
-                  ],
+    // Zemin fikstür afişiyle aynı: turnuvanın afiş görseli (yoksa stadyum
+    // fotoğrafı), üstünde okunurluk için hafif lacivert geçiş.
+    return Container(
+      decoration: BoxDecoration(
+        color: _navy,
+        image: DecorationImage(
+          image: PosterBackground.photoOf(context),
+          fit: BoxFit.cover,
+        ),
+      ),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 16, 14, 12),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              const Color(0xFF0B1440).withValues(alpha: 0.55),
+              _navy.withValues(alpha: 0.18),
+              _navy.withValues(alpha: 0.18),
+              const Color(0xFF08102E).withValues(alpha: 0.5),
+            ],
+            stops: const [0, 0.32, 0.75, 1],
+          ),
+        ),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: RadialGradient(
+                    center: const Alignment(0, -0.85),
+                    radius: 0.75,
+                    colors: [
+                      _gold.withValues(alpha: 0.28),
+                      _gold.withValues(alpha: 0),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-          Column(
-            children: [
-              PosterLogo(url: leagueLogo, name: leagueName, size: 92),
-              const SizedBox(height: 4),
-              Text(
-                leagueName.trUpper,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                style: _cond(26, w: FontWeight.w800, italic: true),
-              ),
-              if (subtitle.isNotEmpty) ...[
-                const SizedBox(height: 3),
+            Column(
+              children: [
+                PosterLogo(url: leagueLogo, name: leagueName, size: 92),
+                const SizedBox(height: 4),
                 Text(
-                  subtitle.trUpper,
+                  leagueName.trUpper,
                   textAlign: TextAlign.center,
-                  style: _cond(14, color: _gold, spacing: 1.6),
+                  maxLines: 2,
+                  style: _cond(26, w: FontWeight.w800, italic: true),
                 ),
-              ],
-              const SizedBox(height: 7),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 22,
-                  vertical: 3,
-                ),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(6),
-                  gradient: const LinearGradient(
-                    colors: [
-                      Color(0x00C81E3A),
-                      Color(0xFFC81E3A),
-                      Color(0xFFC81E3A),
-                      Color(0x00C81E3A),
-                    ],
-                    stops: [0, 0.15, 0.85, 1],
+                if (subtitle.isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle.trUpper,
+                    textAlign: TextAlign.center,
+                    style: _cond(14, color: _gold, spacing: 1.6),
                   ),
+                ],
+                const SizedBox(height: 7),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 22,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(6),
+                    gradient: const LinearGradient(
+                      colors: [
+                        Color(0x00C81E3A),
+                        Color(0xFFC81E3A),
+                        Color(0xFFC81E3A),
+                        Color(0x00C81E3A),
+                      ],
+                      stops: [0, 0.15, 0.85, 1],
+                    ),
+                  ),
+                  child: Text('PUAN DURUMU', style: _cond(15, spacing: 1.4)),
                 ),
-                child: Text('PUAN DURUMU', style: _cond(15, spacing: 1.4)),
-              ),
-              const SizedBox(height: 10),
-              // Takım sayısı fazlaysa tablo afişe sığacak şekilde küçülür.
-              Expanded(
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
+                const SizedBox(height: 10),
+                // Takım sayısı fazlaysa tablo afişe sığacak şekilde küçülür.
+                Expanded(
+                  child: Align(
                     alignment: Alignment.topCenter,
-                    child: Container(
-                      width: kPosterSize.width - 28,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: _gold.withValues(alpha: 0.4)),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _header(),
-                          for (var i = 0; i < rows.length; i++)
-                            _row(i, rows[i]),
-                        ],
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.topCenter,
+                      child: Container(
+                        width: kPosterSize.width - 28,
+                        clipBehavior: Clip.antiAlias,
+                        decoration: BoxDecoration(
+                          // Fotoğraf zeminde satırlar okunsun diye koyu panel.
+                          color: _navy.withValues(alpha: 0.86),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: _gold.withValues(alpha: 0.4),
+                          ),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _header(),
+                            for (var i = 0; i < rows.length; i++)
+                              _row(i, rows[i]),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
-          ),
-        ],
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
