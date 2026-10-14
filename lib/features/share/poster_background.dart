@@ -57,6 +57,28 @@ class PosterOptions extends InheritedWidget {
       old.style.showScorers != style.showScorers;
 }
 
+/// Hikâye yerleşimini gönderide bozmadan kullanmak için: gönderi seçiliyse
+/// içerik hikâye yüksekliğinde ama 4:5 genişliğinde (512×640) çizilip
+/// gönderi boyutuna küçültülür. Sıkışınca üst üste binen yerleşimler
+/// (diziliş sahası, uzun esame) için.
+class PosterStoryLayout extends StatelessWidget {
+  const PosterStoryLayout({super.key, required this.child});
+
+  final Widget child;
+
+  static const _canvas = Size(512, 640);
+
+  @override
+  Widget build(BuildContext context) {
+    final st = PosterOptions.of(context);
+    if (!st.isPost) return child;
+    return FittedBox(
+      fit: BoxFit.fill,
+      child: SizedBox.fromSize(size: _canvas, child: child),
+    );
+  }
+}
+
 /// Sade zemin: koyu lacivert dikey geçiş.
 const kPlainPosterGradient = LinearGradient(
   begin: Alignment.topCenter,

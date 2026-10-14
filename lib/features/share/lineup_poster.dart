@@ -417,120 +417,124 @@ class LineupListPoster extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = data.palette;
     final d = data;
-    return _PosterFrame(
-      data: d,
-      watermark: (left: -90, right: null, top: 120, size: 340),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _eyebrow(d, 'MAÇ KADROSU'),
-          const SizedBox(height: 10),
-          Center(
-            child: PosterLogo(
-              url: d.teamLogo,
-              name: d.teamName,
-              size: 96,
-              badgeColor: p.primary,
-              badgeTextColor: Colors.white,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            d.teamName.trUpper,
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: _cond(
-              color: Colors.white,
-              fontSize: 30,
-              height: 1,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.5,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text(
-                'Rakip: ',
-                style: TextStyle(
-                  color: Colors.white60,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
+    // Gönderide hikâye yerleşimi korunur (sıkışınca liste / saha bozulur).
+    return PosterStoryLayout(
+      child: _PosterFrame(
+        data: d,
+        watermark: (left: -90, right: null, top: 120, size: 340),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _eyebrow(d, 'MAÇ KADROSU'),
+            const SizedBox(height: 10),
+            Center(
+              child: PosterLogo(
+                url: d.teamLogo,
+                name: d.teamName,
+                size: 96,
+                badgeColor: p.primary,
+                badgeTextColor: Colors.white,
               ),
-              PosterLogo(url: d.opponentLogo, name: d.opponentName, size: 16),
-              const SizedBox(width: 5),
-              Flexible(
-                child: Text(
-                  d.opponentName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white70,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              d.teamName.trUpper,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: _cond(
+                color: Colors.white,
+                fontSize: 30,
+                height: 1,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text(
+                  'Rakip: ',
+                  style: TextStyle(
+                    color: Colors.white60,
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-              ),
-            ],
-          ),
-          _matchMeta(d),
-          _divider(),
-          Expanded(
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
+                PosterLogo(url: d.opponentLogo, name: d.opponentName, size: 16),
+                const SizedBox(width: 5),
+                Flexible(
+                  child: Text(
+                    d.opponentName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            _matchMeta(d),
+            _divider(),
+            Expanded(
+              child: Align(
                 alignment: Alignment.topCenter,
-                child: SizedBox(
-                  width: kPosterSize.width - 32,
-                  child: IntrinsicHeight(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(
-                          flex: 115,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              const SizedBox(height: 12),
-                              _sectionTitle(p, 'İLK 11', d.starters.length),
-                              const SizedBox(height: 7),
-                              for (final pl in d.starters) _row(pl),
-                            ],
-                          ),
-                        ),
-                        if (d.subs.isNotEmpty) ...[
-                          const SizedBox(width: 10),
-                          Container(
-                            width: 1,
-                            margin: const EdgeInsets.only(top: 12),
-                            color: Colors.white.withValues(alpha: 0.1),
-                          ),
-                          const SizedBox(width: 10),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.topCenter,
+                  child: SizedBox(
+                    width: kPosterSize.width - 32,
+                    child: IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
                           Expanded(
-                            flex: 85,
+                            flex: 115,
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 const SizedBox(height: 12),
-                                _sectionTitle(p, 'YEDEKLER', d.subs.length),
+                                _sectionTitle(p, 'İLK 11', d.starters.length),
                                 const SizedBox(height: 7),
-                                for (final pl in d.subs) _row(pl, small: true),
+                                for (final pl in d.starters) _row(pl),
                               ],
                             ),
                           ),
+                          if (d.subs.isNotEmpty) ...[
+                            const SizedBox(width: 10),
+                            Container(
+                              width: 1,
+                              margin: const EdgeInsets.only(top: 12),
+                              color: Colors.white.withValues(alpha: 0.1),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              flex: 85,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  const SizedBox(height: 12),
+                                  _sectionTitle(p, 'YEDEKLER', d.subs.length),
+                                  const SizedBox(height: 7),
+                                  for (final pl in d.subs)
+                                    _row(pl, small: true),
+                                ],
+                              ),
+                            ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -631,107 +635,110 @@ class LineupPitchPoster extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = data.palette;
-    return _PosterFrame(
-      data: data,
-      watermark: (left: null, right: -80, top: 180, size: 320),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _MatchHeader(data: data, title: 'İLK 11'),
-          const SizedBox(height: 10),
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(14),
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    const Color(0xFF166534).withValues(alpha: 0.85),
-                    const Color(0xFF14532D).withValues(alpha: 0.85),
-                  ],
+    // Gönderide hikâye yerleşimi korunur (sıkışınca liste / saha bozulur).
+    return PosterStoryLayout(
+      child: _PosterFrame(
+        data: data,
+        watermark: (left: null, right: -80, top: 180, size: 320),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _MatchHeader(data: data, title: 'İLK 11'),
+            const SizedBox(height: 10),
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(14),
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      const Color(0xFF166534).withValues(alpha: 0.85),
+                      const Color(0xFF14532D).withValues(alpha: 0.85),
+                    ],
+                  ),
+                  border: Border.all(color: Colors.white24),
                 ),
-                border: Border.all(color: Colors.white24),
+                child: CustomPaint(
+                  painter: _HalfPitchPainter(),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 4, 4, 0),
+                    // Diziliş sekmesiyle aynı gerçekçi yerleşim.
+                    child: LayoutBuilder(
+                      builder: (context, c) {
+                        const tokenW = 78.0;
+                        final outfield = data.lines.length - 1;
+                        return Stack(
+                          children: [
+                            for (var li = 0; li < data.lines.length; li++)
+                              for (var i = 0; i < data.lines[li].length; i++)
+                                () {
+                                  final pos = pitchSlot(
+                                    li: li,
+                                    i: i,
+                                    n: data.lines[li].length,
+                                    outfieldLines: outfield,
+                                  );
+                                  return Positioned(
+                                    left: (pos.dx * c.maxWidth - tokenW / 2)
+                                        .clamp(0.0, c.maxWidth - tokenW),
+                                    top: (pos.dy * c.maxHeight - 26).clamp(
+                                      0.0,
+                                      c.maxHeight - 60,
+                                    ),
+                                    width: tokenW,
+                                    child: _token(data.lines[li][i]),
+                                  );
+                                }(),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ),
               ),
-              child: CustomPaint(
-                painter: _HalfPitchPainter(),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(4, 4, 4, 0),
-                  // Diziliş sekmesiyle aynı gerçekçi yerleşim.
-                  child: LayoutBuilder(
-                    builder: (context, c) {
-                      const tokenW = 78.0;
-                      final outfield = data.lines.length - 1;
-                      return Stack(
+            ),
+            if (data.subs.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              _sectionTitle(p, 'YEDEKLER', data.subs.length),
+              const SizedBox(height: 5),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 9,
+                runSpacing: 4,
+                children: [
+                  for (final pl in data.subs)
+                    Text.rich(
+                      TextSpan(
                         children: [
-                          for (var li = 0; li < data.lines.length; li++)
-                            for (var i = 0; i < data.lines[li].length; i++)
-                              () {
-                                final pos = pitchSlot(
-                                  li: li,
-                                  i: i,
-                                  n: data.lines[li].length,
-                                  outfieldLines: outfield,
-                                );
-                                return Positioned(
-                                  left: (pos.dx * c.maxWidth - tokenW / 2)
-                                      .clamp(0.0, c.maxWidth - tokenW),
-                                  top: (pos.dy * c.maxHeight - 26).clamp(
-                                    0.0,
-                                    c.maxHeight - 60,
-                                  ),
-                                  width: tokenW,
-                                  child: _token(data.lines[li][i]),
-                                );
-                              }(),
-                        ],
-                      );
-                    },
-                  ),
-                ),
-              ),
-            ),
-          ),
-          if (data.subs.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            _sectionTitle(p, 'YEDEKLER', data.subs.length),
-            const SizedBox(height: 5),
-            Wrap(
-              alignment: WrapAlignment.center,
-              spacing: 9,
-              runSpacing: 4,
-              children: [
-                for (final pl in data.subs)
-                  Text.rich(
-                    TextSpan(
-                      children: [
-                        TextSpan(
-                          text:
-                              '${(pl.number ?? '').isEmpty ? '–' : pl.number} ',
-                          style: TextStyle(
-                            color: p.accent,
-                            fontWeight: FontWeight.w800,
+                          TextSpan(
+                            text:
+                                '${(pl.number ?? '').isEmpty ? '–' : pl.number} ',
+                            style: TextStyle(
+                              color: p.accent,
+                              fontWeight: FontWeight.w800,
+                            ),
                           ),
-                        ),
-                        TextSpan(
-                          text:
-                              (pl.lastName.isNotEmpty
-                                      ? pl.lastName
-                                      : pl.firstName)
-                                  .trUpper,
-                        ),
-                      ],
+                          TextSpan(
+                            text:
+                                (pl.lastName.isNotEmpty
+                                        ? pl.lastName
+                                        : pl.firstName)
+                                    .trUpper,
+                          ),
+                        ],
+                      ),
+                      style: const TextStyle(
+                        color: Color(0xFFE2E8F0),
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                    style: const TextStyle(
-                      color: Color(0xFFE2E8F0),
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-              ],
-            ),
+                ],
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
