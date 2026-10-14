@@ -26,6 +26,7 @@ import '../../team/services/interfaces/i_team_service.dart';
 import '../../../core/services/service_locator.dart';
 import 'admin_match_event_screen.dart';
 import '../../tournament/screens/formation_tab.dart';
+import '../../share/poster_background.dart';
 import '../../share/lineup_poster.dart';
 import '../../share/match_poster.dart';
 import '../../share/poster_share.dart';
@@ -515,6 +516,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
       fileName: 'mac_${homeName}_$awayName'.replaceAll(RegExp(r'\s+'), '_'),
       imageUrls: [leagueLogo, homeLogo, awayLogo],
       leagueId: m.leagueId,
+      kind: PosterKind.match,
       poster: MatchPoster(
         leagueName: leagueName,
         leagueLogo: leagueLogo,

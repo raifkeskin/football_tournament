@@ -415,9 +415,7 @@ class SeasonManagementScreen extends StatelessWidget {
               child: AdminFormTabs(
                 labels: const ['Genel', 'Maç', 'Gruplar'],
                 selected: tab,
-                onChanged: saving
-                    ? null
-                    : (i) => setSheetState(() => tab = i),
+                onChanged: saving ? null : (i) => setSheetState(() => tab = i),
               ),
             ),
             Expanded(
@@ -427,142 +425,142 @@ class SeasonManagementScreen extends StatelessWidget {
                   children: [
                     const SizedBox(height: 4),
                     if (tab == 0)
-                    AdminFormSection(
-                      title: 'Genel',
-                      child: AdminFieldGroup(
-                        children: [
-                          // Sezon adı başlangıç yılından otomatik gelir.
-                          textRow(
-                            Icons.short_text_rounded,
-                            'Alt Başlık',
-                            subtitleController,
-                            hint: 'Örn. Kış Ligi (isteğe bağlı)',
-                          ),
-                          textRow(
-                            Icons.flag_outlined,
-                            'Ülke',
-                            countryController,
-                            hint: 'Türkiye',
-                          ),
-                        ],
+                      AdminFormSection(
+                        title: 'Genel',
+                        child: AdminFieldGroup(
+                          children: [
+                            // Sezon adı başlangıç yılından otomatik gelir.
+                            textRow(
+                              Icons.short_text_rounded,
+                              'Alt Başlık',
+                              subtitleController,
+                              hint: 'Örn. Kış Ligi (isteğe bağlı)',
+                            ),
+                            textRow(
+                              Icons.flag_outlined,
+                              'Ülke',
+                              countryController,
+                              hint: 'Türkiye',
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
                     if (tab == 0)
-                    AdminFormSection(
-                      title: 'Tarihler',
-                      child: AdminFieldGroup(
-                        children: [
-                          dateRow(
-                            Icons.play_circle_outline_rounded,
-                            'Sezon Başlangıcı',
-                            startDateController,
-                            () => pickDate(
-                              setSheetState: setSheetState,
-                              isStart: true,
-                            ),
-                          ),
-                          dateRow(
-                            Icons.flag_circle_outlined,
-                            'Sezon Bitişi',
-                            endDateController,
-                            () => pickDate(
-                              setSheetState: setSheetState,
-                              isStart: false,
-                            ),
-                          ),
-                          if (showTransfer) ...[
+                      AdminFormSection(
+                        title: 'Tarihler',
+                        child: AdminFieldGroup(
+                          children: [
                             dateRow(
-                              Icons.swap_horiz_rounded,
-                              'Transfer Başlangıcı',
-                              transferStartController,
-                              () => pickTransferDate(
+                              Icons.play_circle_outline_rounded,
+                              'Sezon Başlangıcı',
+                              startDateController,
+                              () => pickDate(
                                 setSheetState: setSheetState,
                                 isStart: true,
                               ),
                             ),
                             dateRow(
-                              Icons.event_busy_outlined,
-                              'Transfer Bitişi',
-                              transferEndController,
-                              () => pickTransferDate(
+                              Icons.flag_circle_outlined,
+                              'Sezon Bitişi',
+                              endDateController,
+                              () => pickDate(
                                 setSheetState: setSheetState,
                                 isStart: false,
                               ),
                             ),
+                            if (showTransfer) ...[
+                              dateRow(
+                                Icons.swap_horiz_rounded,
+                                'Transfer Başlangıcı',
+                                transferStartController,
+                                () => pickTransferDate(
+                                  setSheetState: setSheetState,
+                                  isStart: true,
+                                ),
+                              ),
+                              dateRow(
+                                Icons.event_busy_outlined,
+                                'Transfer Bitişi',
+                                transferEndController,
+                                () => pickTransferDate(
+                                  setSheetState: setSheetState,
+                                  isStart: false,
+                                ),
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
-                    ),
                     if (tab == 1)
-                    AdminFormSection(
-                      title: 'Maç ve Kadro',
-                      child: AdminFieldGroup(
-                        children: [
-                          textRow(
-                            Icons.groups_outlined,
-                            'İlk 11 Oyuncu Sayısı',
-                            startingPlayerCountController,
-                            number: true,
-                          ),
-                          textRow(
-                            Icons.event_seat_outlined,
-                            'Yedek Oyuncu Sayısı',
-                            subPlayerCountController,
-                            number: true,
-                          ),
-                          textRow(
-                            Icons.timer_outlined,
-                            'Devre Süresi (dk)',
-                            matchPeriodDurationController,
-                            number: true,
-                          ),
-                          textRow(
-                            Icons.swap_vert_rounded,
-                            'Oyuncu Değişikliği Sınırı',
-                            numberOfPlayerChangesController,
-                            number: true,
-                          ),
-                          switchRow(
-                            Icons.more_time_rounded,
-                            'Gol Dakikası',
-                            trackGoalMinutes
-                                ? 'Gol ve kart dakikaları yazılır'
-                                : 'Dakika yazılmaz (halısaha)',
-                            trackGoalMinutes,
-                            (v) => setSheetState(() => trackGoalMinutes = v),
-                          ),
-                        ],
+                      AdminFormSection(
+                        title: 'Maç ve Kadro',
+                        child: AdminFieldGroup(
+                          children: [
+                            textRow(
+                              Icons.groups_outlined,
+                              'İlk 11 Oyuncu Sayısı',
+                              startingPlayerCountController,
+                              number: true,
+                            ),
+                            textRow(
+                              Icons.event_seat_outlined,
+                              'Yedek Oyuncu Sayısı',
+                              subPlayerCountController,
+                              number: true,
+                            ),
+                            textRow(
+                              Icons.timer_outlined,
+                              'Devre Süresi (dk)',
+                              matchPeriodDurationController,
+                              number: true,
+                            ),
+                            textRow(
+                              Icons.swap_vert_rounded,
+                              'Oyuncu Değişikliği Sınırı',
+                              numberOfPlayerChangesController,
+                              number: true,
+                            ),
+                            switchRow(
+                              Icons.more_time_rounded,
+                              'Gol Dakikası',
+                              trackGoalMinutes
+                                  ? 'Gol ve kart dakikaları yazılır'
+                                  : 'Dakika bilgisi tutulmaz...',
+                              trackGoalMinutes,
+                              (v) => setSheetState(() => trackGoalMinutes = v),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
                     if (tab == 2)
-                    AdminFormSection(
-                      title: 'Gruplar',
-                      child: AdminFieldGroup(
-                        children: [
-                          textRow(
-                            Icons.shield_outlined,
-                            'Toplam Takım Sayısı',
-                            teamsPerGroupController,
-                            number: true,
-                          ),
-                          textRow(
-                            Icons.grid_view_rounded,
-                            'Grup Sayısı',
-                            numberOfGroupsController,
-                            number: true,
-                          ),
-                          switchRow(
-                            Icons.sync_alt_rounded,
-                            'Rövanşlı',
-                            isDoubleRound
-                                ? 'Her eşleşme iki maç (rövanşlı)'
-                                : 'Her eşleşme tek maç',
-                            isDoubleRound,
-                            (v) => setSheetState(() => isDoubleRound = v),
-                          ),
-                        ],
+                      AdminFormSection(
+                        title: 'Gruplar',
+                        child: AdminFieldGroup(
+                          children: [
+                            textRow(
+                              Icons.shield_outlined,
+                              'Toplam Takım Sayısı',
+                              teamsPerGroupController,
+                              number: true,
+                            ),
+                            textRow(
+                              Icons.grid_view_rounded,
+                              'Grup Sayısı',
+                              numberOfGroupsController,
+                              number: true,
+                            ),
+                            switchRow(
+                              Icons.sync_alt_rounded,
+                              'Rövanşlı',
+                              isDoubleRound
+                                  ? 'Her eşleşme iki maç (rövanşlı)'
+                                  : 'Her eşleşme tek maç',
+                              isDoubleRound,
+                              (v) => setSheetState(() => isDoubleRound = v),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
                     if (canEditAgeRules && tab == 1)
                       AdminFormSection(
                         title: 'Yaş ve Kontenjan',
@@ -590,27 +588,27 @@ class SeasonManagementScreen extends StatelessWidget {
                         ),
                       ),
                     if (tab == 0)
-                    AdminFormSection(
-                      title: 'Durum',
-                      child: AdminFieldGroup(
-                        children: [
-                          switchRow(
-                            Icons.check_circle_outline_rounded,
-                            'Aktif',
-                            'Sezon uygulamada görünür',
-                            isActive,
-                            (v) => setSheetState(() => isActive = v),
-                          ),
-                          switchRow(
-                            Icons.star_outline_rounded,
-                            'Varsayılan',
-                            'Turnuva açılınca bu sezon seçilir',
-                            isDefault,
-                            (v) => setSheetState(() => isDefault = v),
-                          ),
-                        ],
+                      AdminFormSection(
+                        title: 'Durum',
+                        child: AdminFieldGroup(
+                          children: [
+                            switchRow(
+                              Icons.check_circle_outline_rounded,
+                              'Aktif',
+                              'Sezon uygulamada görünür',
+                              isActive,
+                              (v) => setSheetState(() => isActive = v),
+                            ),
+                            switchRow(
+                              Icons.star_outline_rounded,
+                              'Varsayılan',
+                              'Turnuva açılınca bu sezon seçilir',
+                              isDefault,
+                              (v) => setSheetState(() => isDefault = v),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -2649,7 +2647,6 @@ class _ProgressRow extends StatelessWidget {
     );
   }
 }
-
 
 /// Sezon kartı: durum, ilerleme, grup / takım / maç sayıları.
 class _SeasonCard extends StatefulWidget {

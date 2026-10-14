@@ -17,6 +17,7 @@ import '../utils/match_clock.dart';
 import '../widgets/quick_score_dialog.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../../core/widgets/admin_form.dart';
+import '../../share/poster_background.dart';
 import '../../share/fixture_poster.dart';
 import '../../share/poster_share.dart';
 import '../../../core/utils/team_name.dart';
@@ -276,16 +277,25 @@ class _FixtureViewState extends State<FixtureView> {
       for (final b in byes) b.logo,
     }.where((u) => u.isNotEmpty).toList();
 
+    // Haftanın bütün maçları bittiyse afiş "Maç Sonuçları" olarak çıkar.
+    final results =
+        matches.isNotEmpty &&
+        matches.every((m) => m.status == MatchStatus.finished);
     await showPosterPreview(
       context: context,
-      fileName: 'fikstur_${week}_hafta',
+      fileName: results
+          ? 'mac_sonuclari_${week}_hafta'
+          : 'fikstur_${week}_hafta',
       imageUrls: logos,
       leagueId: league.id,
+      kind: results ? PosterKind.results : PosterKind.fixture,
       poster: FixturePoster(
         leagueName: league.name,
         leagueLogo: league.logoUrl,
-        subtitle: groupName.isEmpty ? 'Fikstür' : '$groupName Fikstür',
-        weekText: '$week. Hafta',
+        subtitle: results
+            ? (groupName.isEmpty ? 'Maç Sonuçları' : '$groupName Maç Sonuçları')
+            : (groupName.isEmpty ? 'Fikstür' : '$groupName Fikstür'),
+        weekText: results ? '$week. Hafta Maç Sonuçları' : '$week. Hafta',
         days: posterDays,
         byes: byes,
       ),
