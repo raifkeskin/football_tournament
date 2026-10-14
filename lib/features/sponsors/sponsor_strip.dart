@@ -26,11 +26,39 @@ class _SponsorStripState extends State<SponsorStrip> {
   Timer? _timer;
   bool _visible = true;
 
+  /// Son sunucu okuması; arka plandan dönüşte eskiyse yeniden okunur.
+  DateTime? _fetchedAt;
+  static const _staleAfter = Duration(minutes: 10);
+
   @override
   void initState() {
     super.initState();
-    AppActivity.foreground.addListener(_reschedule);
+    AppActivity.foreground.addListener(_onForeground);
+    SponsorFeed.changes.addListener(_onSponsorsChanged);
     _load();
+  }
+
+  void _onForeground() {
+    final at = _fetchedAt;
+    if (AppActivity.foreground.value &&
+        (at == null || DateTime.now().difference(at) > _staleAfter)) {
+      _refresh();
+    }
+    _reschedule();
+  }
+
+  /// Sponsor Yönetimi'nde bu turnuva değiştiyse hemen yenilenir.
+  void _onSponsorsChanged() {
+    if (SponsorFeed.changes.value == widget.leagueId) _refresh();
+  }
+
+  Future<void> _refresh() async {
+    final id = widget.leagueId;
+    try {
+      final fresh = await SponsorFeed.fetch(id);
+      _fetchedAt = DateTime.now();
+      if (mounted && id == widget.leagueId) _apply(fresh);
+    } catch (_) {}
   }
 
   Future<void> _load() async {
@@ -40,6 +68,7 @@ class _SponsorStripState extends State<SponsorStrip> {
     if (cached != null) _apply(cached);
     try {
       final fresh = await SponsorFeed.fetch(id);
+      _fetchedAt = DateTime.now();
       if (mounted && id == widget.leagueId) _apply(fresh);
     } catch (_) {}
   }
@@ -95,7 +124,8 @@ class _SponsorStripState extends State<SponsorStrip> {
   @override
   void dispose() {
     _timer?.cancel();
-    AppActivity.foreground.removeListener(_reschedule);
+    AppActivity.foreground.removeListener(_onForeground);
+    SponsorFeed.changes.removeListener(_onSponsorsChanged);
     super.dispose();
   }
 

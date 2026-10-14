@@ -21,6 +21,7 @@ import 'season_management_screen.dart';
 import '../widgets/league_instagram_section.dart';
 import '../widgets/league_owners_section.dart';
 import 'package:football_tournament/core/widgets/picked_image.dart';
+import '../../sponsors/sponsor.dart';
 
 class AdminManageLeaguesScreen extends StatefulWidget {
   const AdminManageLeaguesScreen({super.key});
@@ -186,6 +187,8 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
         if (isEdit && ActiveTournament.theme.value?.leagueId == league.id) {
           ActiveTournament.refresh();
         }
+        // Sponsor şeridinin süreleri bu formda; şerit yeni süreleri alsın.
+        if (isEdit) SponsorFeed.notifyChanged(league.id);
       } catch (e) {
         if (!mounted) return;
         messenger.showSnackBar(SnackBar(content: Text('Hata: $e')));
@@ -392,16 +395,14 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                               controller: shortNameController,
                               enabled: !saving,
                               maxLength: 24,
-                              textCapitalization:
-                                  TextCapitalization.words,
+                              textCapitalization: TextCapitalization.words,
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.w700,
                               ),
                               cursorColor: kAdminAccent,
                               decoration: adminInputDecoration(
-                                label:
-                                    'Bantta görünen kısa ad (isteğe bağlı)',
+                                label: 'Bantta görünen kısa ad (isteğe bağlı)',
                                 icon: Icons.short_text_rounded,
                               ).copyWith(counterText: ''),
                             ),

@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -73,6 +75,16 @@ class SponsorFeed {
 
   static SupabaseClient get _sb => Supabase.instance.client;
   static String _key(String leagueId) => 'sponsor_feed_$leagueId';
+
+  /// Sponsor Yönetimi'nde değişiklik olan turnuvanın id'si; ana sayfa şeridi
+  /// dinler ve hemen yeniden yükler.
+  static final changes = ValueNotifier<String?>(null);
+
+  static void notifyChanged(String leagueId) {
+    // Aynı turnuvada art arda değişiklikte de dinleyiciler uyansın.
+    changes.value = null;
+    changes.value = leagueId;
+  }
 
   /// Cihazdaki son hâl (şerit ilk karede çizilsin, sonradan zıplamasın).
   static Future<SponsorFeed?> cached(String leagueId) async {
