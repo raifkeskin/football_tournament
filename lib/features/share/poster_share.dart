@@ -482,12 +482,12 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
                 if (widget.scorersOption)
                   SwitchListTile.adaptive(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 2),
-                    dense: true,
+                    dense: false,
                     value: _scorers,
                     activeTrackColor: kAdminAccent,
                     onChanged: _busy ? null : (v) => _set(() => _scorers = v),
                     title: const Text(
-                      'Gol atanlar',
+                      'Gol atanlar gösterilsin',
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w700,
