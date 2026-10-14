@@ -146,56 +146,63 @@ class _SponsorStripState extends State<SponsorStrip> {
       behavior: HitTestBehavior.opaque,
       onTap: s.linkUrl == null ? null : () => _open(s),
       child: Container(
-        height: 46,
         color: Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        child: Row(
+        padding: const EdgeInsets.fromLTRB(12, 5, 12, 7),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
+            // Üstte ortalı küçük başlık; noktalar sağ üstte.
             SizedBox(
-              width: 74,
-              child: Text(
-                s.isMain ? 'ANA\nSPONSOR' : 'SPONSOR',
-                style: TextStyle(
-                  color: s.isMain
-                      ? const Color(0xFFB45309)
-                      : const Color(0xFF64748B),
-                  fontSize: 9.5,
-                  height: 1.15,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.8,
-                ),
+              height: 12,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Text(
+                    s.isMain ? 'ANA SPONSOR' : 'SPONSOR',
+                    style: TextStyle(
+                      color: s.isMain
+                          ? const Color(0xFFB45309)
+                          : const Color(0xFF64748B),
+                      fontSize: 9.5,
+                      height: 1.2,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                  if (list.length > 1 && list.length <= 8)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          for (var i = 0; i < list.length; i++)
+                            Container(
+                              width: 5,
+                              height: 5,
+                              margin: const EdgeInsets.only(left: 4),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: i == _index % list.length
+                                    ? const Color(0xFF0F172A)
+                                    : const Color(0xFFCBD5E1),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                ],
               ),
             ),
-            Expanded(
+            const SizedBox(height: 3),
+            SizedBox(
+              height: 36,
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 450),
                 child: KeyedSubtree(
                   key: ValueKey(s.id),
-                  child: Center(child: _SponsorMark(sponsor: s)),
+                  child: _SponsorMark(sponsor: s),
                 ),
               ),
-            ),
-            SizedBox(
-              width: 74,
-              child: list.length > 1 && list.length <= 8
-                  ? Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        for (var i = 0; i < list.length; i++)
-                          Container(
-                            width: 5,
-                            height: 5,
-                            margin: const EdgeInsets.only(left: 4),
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: i == _index % list.length
-                                  ? const Color(0xFF0F172A)
-                                  : const Color(0xFFCBD5E1),
-                            ),
-                          ),
-                      ],
-                    )
-                  : const SizedBox.shrink(),
             ),
           ],
         ),
@@ -204,7 +211,8 @@ class _SponsorStripState extends State<SponsorStrip> {
   }
 }
 
-/// Logo (varsa) ve yanında ad; logo yoksa yalnız ad.
+/// Logo (varsa) solda 96×36 kutuda, yanında ad. Ad sığmazsa kesilmez,
+/// sığacak kadar küçülür. Logo yoksa ad ortalanır.
 class _SponsorMark extends StatelessWidget {
   const _SponsorMark({required this.sponsor});
 
@@ -212,28 +220,32 @@ class _SponsorMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final name = Text(
-      sponsor.name,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: const TextStyle(
-        color: Color(0xFF0F172A),
-        fontSize: 15,
-        fontWeight: FontWeight.w800,
+    final name = FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: sponsor.logoUrl.isEmpty
+          ? Alignment.center
+          : Alignment.centerLeft,
+      child: Text(
+        sponsor.name,
+        maxLines: 1,
+        style: const TextStyle(
+          color: Color(0xFF0F172A),
+          fontSize: 14,
+          fontWeight: FontWeight.w800,
+        ),
       ),
     );
-    if (sponsor.logoUrl.isEmpty) return name;
+    if (sponsor.logoUrl.isEmpty) return Center(child: name);
     return Row(
-      mainAxisSize: MainAxisSize.min,
       children: [
         WebSafeImage(
           url: sponsor.logoUrl,
-          height: 32,
-          width: 80,
+          width: 96,
+          height: 36,
           fit: BoxFit.contain,
         ),
-        const SizedBox(width: 8),
-        Flexible(child: name),
+        const SizedBox(width: 10),
+        Expanded(child: name),
       ],
     );
   }
