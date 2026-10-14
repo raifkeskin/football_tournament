@@ -16,6 +16,7 @@ class Sponsor {
     this.linkUrl,
     this.sortOrder = 0,
     this.isActive = true,
+    this.logoAspect,
   });
 
   final String id;
@@ -26,6 +27,10 @@ class Sponsor {
   final String? linkUrl;
   final int sortOrder;
   final bool isActive;
+
+  /// Logonun en/boy oranı; şerit yer ayırmak için kullanır. Eski kayıtlarda
+  /// null (576×216 tuval).
+  final double? logoAspect;
 
   bool get isMain => tier == 'main';
 
@@ -40,6 +45,7 @@ class Sponsor {
         : (m['link_url'] as String).trim(),
     sortOrder: (m['sort_order'] as num?)?.toInt() ?? 0,
     isActive: m['is_active'] != false,
+    logoAspect: (m['logo_aspect'] as num?)?.toDouble(),
   );
 
   Map<String, dynamic> toMap() => {
@@ -51,6 +57,7 @@ class Sponsor {
     'link_url': linkUrl,
     'sort_order': sortOrder,
     'is_active': isActive,
+    'logo_aspect': logoAspect,
   };
 
   /// Önce ana sponsorlar, sonra alt sponsorlar; kendi içlerinde sıraya göre.

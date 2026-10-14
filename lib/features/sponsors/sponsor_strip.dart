@@ -147,13 +147,13 @@ class _SponsorStripState extends State<SponsorStrip> {
       onTap: s.linkUrl == null ? null : () => _open(s),
       child: Container(
         color: Colors.white,
-        padding: const EdgeInsets.fromLTRB(12, 5, 12, 7),
+        padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             // Üstte ortalı küçük başlık; noktalar sağ üstte.
             SizedBox(
-              height: 12,
+              height: 10,
               child: Stack(
                 alignment: Alignment.center,
                 children: [
@@ -163,8 +163,8 @@ class _SponsorStripState extends State<SponsorStrip> {
                       color: s.isMain
                           ? const Color(0xFFB45309)
                           : const Color(0xFF64748B),
-                      fontSize: 9.5,
-                      height: 1.2,
+                      fontSize: 9,
+                      height: 1.1,
                       fontWeight: FontWeight.w800,
                       letterSpacing: 1.2,
                     ),
@@ -193,9 +193,8 @@ class _SponsorStripState extends State<SponsorStrip> {
                 ],
               ),
             ),
-            const SizedBox(height: 3),
             SizedBox(
-              height: 36,
+              height: _SponsorMark.logoHeight,
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 450),
                 child: KeyedSubtree(
@@ -211,42 +210,74 @@ class _SponsorStripState extends State<SponsorStrip> {
   }
 }
 
-/// Logo (varsa) solda 96×36 kutuda, yanında ad. Ad sığmazsa kesilmez,
-/// sığacak kadar küçülür. Logo yoksa ad ortalanır.
+/// Logo ve ad yan yana, ortalı; içerik büyüdükçe kenarlara doğru açılır
+/// ama taşmaz (ad sığmazsa kesilmeden küçülür). Logo sabit yükseklikte,
+/// kendi oranında genişlikte çizilir.
 class _SponsorMark extends StatelessWidget {
   const _SponsorMark({required this.sponsor});
 
   final Sponsor sponsor;
 
+  static const logoHeight = 32.0;
+  static const _maxLogoWidth = 170.0;
+
+  /// Bu orandan yatay logolarda ad metni gösterilmez.
+  static const _wordmarkAspect = 3.5;
+
+  /// Oranı bilinmeyen eski logolar 576×216 tuvaldedir.
+  static const _legacyAspect = 576 / 216;
+
   @override
   Widget build(BuildContext context) {
-    final name = FittedBox(
-      fit: BoxFit.scaleDown,
-      alignment: sponsor.logoUrl.isEmpty
-          ? Alignment.center
-          : Alignment.centerLeft,
-      child: Text(
-        sponsor.name,
-        maxLines: 1,
-        style: const TextStyle(
-          color: Color(0xFF0F172A),
-          fontSize: 14,
-          fontWeight: FontWeight.w800,
-        ),
+    final name = Text(
+      sponsor.name,
+      maxLines: 1,
+      style: const TextStyle(
+        color: Color(0xFF0F172A),
+        fontSize: 14,
+        fontWeight: FontWeight.w800,
       ),
     );
-    if (sponsor.logoUrl.isEmpty) return Center(child: name);
-    return Row(
-      children: [
-        WebSafeImage(
-          url: sponsor.logoUrl,
-          width: 96,
-          height: 36,
-          fit: BoxFit.contain,
-        ),
-        const SizedBox(width: 10),
-        Expanded(child: name),
-      ],
+    if (sponsor.logoUrl.isEmpty) {
+      return Center(
+        child: FittedBox(fit: BoxFit.scaleDown, child: name),
+      );
+    }
+    final aspect = sponsor.logoAspect ?? _legacyAspect;
+    // Çok yatay logo (ör. 9:1) yazılı logodur, içinde ad zaten var: ad
+    // tekrar yazılmaz, logo şeridin genişliğine kadar büyür.
+    if (aspect >= _wordmarkAspect) {
+      return LayoutBuilder(
+        builder: (context, c) {
+          final w = (logoHeight * aspect).clamp(logoHeight, c.maxWidth);
+          return Center(
+            child: WebSafeImage(
+              url: sponsor.logoUrl,
+              width: w,
+              height: logoHeight,
+              fit: BoxFit.contain,
+            ),
+          );
+        },
+      );
+    }
+    final logoWidth = (logoHeight * aspect).clamp(logoHeight, _maxLogoWidth);
+    return Center(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          WebSafeImage(
+            url: sponsor.logoUrl,
+            width: logoWidth,
+            height: logoHeight,
+            fit: BoxFit.contain,
+          ),
+          const SizedBox(width: 10),
+          Flexible(
+            child: FittedBox(fit: BoxFit.scaleDown, child: name),
+          ),
+        ],
+      ),
     );
   }
 }

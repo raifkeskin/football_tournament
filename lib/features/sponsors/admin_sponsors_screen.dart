@@ -411,6 +411,7 @@ class _SponsorFormState extends State<_SponsorForm> {
   late String _tier = widget.initialTier;
   late bool _active = widget.sponsor?.isActive ?? true;
   XFile? _newLogo;
+  double? _newLogoAspect;
   bool _saving = false;
 
   @override
@@ -429,13 +430,22 @@ class _SponsorFormState extends State<_SponsorForm> {
     // Şeritteki 96×36 kutuya göre standart: kenar boşlukları kırpılır, logo
     // kutuyu en büyük hâliyle doldurur.
     var fitted = logo;
+    double? aspect;
     try {
       final png = await compute(fitSponsorLogo, await logo.readAsBytes());
-      if (png != null) fitted = preparedLogoFile(png);
+      if (png != null) {
+        fitted = preparedLogoFile(png);
+        aspect = pngAspect(png);
+      }
     } catch (e) {
       debugPrint('Sponsor logosu standarda getirilemedi: $e');
     }
-    if (mounted) setState(() => _newLogo = fitted);
+    if (mounted) {
+      setState(() {
+        _newLogo = fitted;
+        _newLogoAspect = aspect;
+      });
+    }
   }
 
   Future<void> _save() async {
@@ -470,6 +480,7 @@ class _SponsorFormState extends State<_SponsorForm> {
         'link_url': link.isEmpty ? null : link,
         'is_active': _active,
         'logo_url': ?logoUrl,
+        if (logoUrl != null) 'logo_aspect': _newLogoAspect,
         // Tür değişince yeni türün sonuna eklenir.
         if (old == null || old.tier != _tier)
           'sort_order': widget.nextOrder(_tier),
