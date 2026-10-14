@@ -164,3 +164,11 @@ _Eklendi: 2026-10-14_
   - Maç düzenleme formunda "Hakemler" bölümü: listeden seçim, listede yoksa "+ Yeni hakem".
 - **Gösterim:** Detay sekmesinin en altında "Maç Görevlileri" kartı. Hakem girilmemişse kart görünmez. Üst bant zaten dolu olduğu için oraya konmadı.
 - **Yük:** Orta (migration + yönetim ekranı + maç formu + detay kartı).
+
+## 16. VAR gol iptali: daha kısa yol
+_Eklendi: 2026-10-15_
+
+- **Şu an:** Maç olayı ekle → "VAR: Gol İptali" → gol seçimi → yeşil/kırmızı onay. Skor düzeltmesi ve "VAR: Gol iptal" bildirimi `20261020200000_var_goal_cancel.sql` tetikleyicisinde. Bu migration canlı DB'ye uygulanana kadar seçenek yalnız admin'e açık.
+- **Sonra:** Olay eklemek yerine doğrudan golün üzerinden:
+  - Maç detayında, yalnız admin ve turnuva sorumlusuna, gol satırında topun hemen yanında küçük yuvarlak "i" (bilgi) ikonu: "Gole 1 sn'den uzun basınca gol iptali yapılabilir".
+  - Gole 1 sn'den uzun basınca "VAR: Gol İptali" onay penceresi açılır (yeşil onayla / kırmızı iptal).
