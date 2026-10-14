@@ -123,6 +123,7 @@ Future<void> shareGroupStandings(
       fileName: 'puan_durumu_${group.name}'.replaceAll(' ', '_'),
       leagueId: leagueId,
       kind: PosterKind.standings,
+      formats: const [PosterFormat.post, PosterFormat.story],
       imageUrls: [
         leagueLogo,
         for (final r in rows) r.logo,

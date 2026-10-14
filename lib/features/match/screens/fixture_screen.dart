@@ -289,6 +289,7 @@ class _FixtureViewState extends State<FixtureView> {
       imageUrls: logos,
       leagueId: league.id,
       kind: results ? PosterKind.results : PosterKind.fixture,
+      formats: const [PosterFormat.post, PosterFormat.story],
       poster: FixturePoster(
         leagueName: league.name,
         leagueLogo: league.logoUrl,

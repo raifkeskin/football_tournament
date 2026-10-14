@@ -259,7 +259,8 @@ class FixturePoster extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final plain = PosterOptions.of(context).plain;
+    final st = PosterOptions.of(context);
+    final plain = st.plain;
     // Zemin: turnuvanın afiş görseli (yoksa stadyum fotoğrafı); üstünde
     // okunurluk için lacivert geçiş.
     return Container(
@@ -275,7 +276,7 @@ class FixturePoster extends StatelessWidget {
               ),
       ),
       child: Container(
-        padding: const EdgeInsets.fromLTRB(14, 16, 14, 12),
+        padding: EdgeInsets.fromLTRB(14, st.pick(16, 10), 14, st.pick(12, 8)),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
@@ -303,27 +304,27 @@ class FixturePoster extends StatelessWidget {
                   child: PosterLogo(
                     url: leagueLogo,
                     name: leagueName,
-                    size: 104,
+                    size: st.pick(104, 54),
                     shadow: true,
                   ),
                 ),
-                const SizedBox(height: 4),
+                SizedBox(height: st.pick(4, 2)),
                 Text(
                   leagueName.trUpper,
                   textAlign: TextAlign.center,
-                  maxLines: 2,
-                  style: _cond(28, w: FontWeight.w800, italic: true),
+                  maxLines: st.isPost ? 1 : 2,
+                  style: _cond(st.pick(28, 21), w: FontWeight.w800, italic: true),
                 ),
                 if (subtitle.isNotEmpty) ...[
-                  const SizedBox(height: 3),
+                  SizedBox(height: st.pick(3, 2)),
                   Text(
                     subtitle.trUpper,
                     textAlign: TextAlign.center,
-                    style: _cond(14, color: _gold, spacing: 1.6),
+                    style: _cond(st.pick(14, 12), color: _gold, spacing: 1.6),
                   ),
                 ],
                 if (weekText.isNotEmpty) ...[
-                  const SizedBox(height: 7),
+                  SizedBox(height: st.pick(7, 4)),
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 22,
