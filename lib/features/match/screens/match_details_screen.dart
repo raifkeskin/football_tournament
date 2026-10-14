@@ -2770,24 +2770,6 @@ class _NativeYoutubeScreenState extends State<_NativeYoutubeScreen> {
     return YoutubePlayerFrame(
       controller: _controller,
       title: 'Maç Yayını',
-      actions: [
-        TextButton.icon(
-          onPressed: () => _openYoutubeExternally(context, widget.url),
-          icon: const Icon(Icons.open_in_new_rounded, color: Colors.white70),
-          label: const Text(
-            "YouTube'da aç",
-            style: TextStyle(color: Colors.white70),
-          ),
-        ),
-      ],
-      footer: const Padding(
-        padding: EdgeInsets.all(16),
-        child: Text(
-          "Yayın açılmazsa sağ üstten YouTube'da açabilirsiniz.",
-          textAlign: TextAlign.center,
-          style: TextStyle(color: Colors.white54, fontSize: 12),
-        ),
-      ),
     );
   }
 }
