@@ -139,3 +139,16 @@ _Eklendi: 2026-10-14_
   - İki kamerada gol yalnız birinde (geniş açı) aranır. Her gol için diğer kameranın ±30 sn'sine bakılıp "kaleye yakın ve net olan" seçilir. Devre arası taraf değiştiği için karar gol başına verilir.
   - Maç medyasında video linkine "Kamera 1 / Kamera 2" etiketi gerekir.
 - **Önce:** Gerçek bir halısaha videosuyla maliyet ölçülecek.
+
+## 14. Haberleri ve maç sonucu kartını Instagram'a paylaşmak (Instagram B2)
+_Eklendi: 2026-10-14_
+
+- **Şu an:**
+  - Turnuvanın Instagram gönderileri Haberler'e otomatik düşüyor (Instagram A).
+  - Afişler Instagram'a tek tuşla paylaşılıyor (B1).
+- **Sonra:**
+  - Haber Yönetimi'ndeki her haberde bir "Instagram'da paylaş" düğmesi olacak. Haberin fotoğrafları (en fazla 5) çoklu gönderi olarak gidecek. Fotoğraflar 4:5 çerçeveye sığdırılacak, kırpılmayacak.
+  - Otomatik maç sonucu kartı görsele çevrilip gönderi olarak paylaşılacak.
+  - Paylaşılan haberde "Instagram'da paylaşıldı ✓" işareti görünecek. Aynı haber iki kez gönderilmeyecek.
+  - Fotoğrafsız haber için metinden otomatik görsel üretmek de düşünülebilir.
+- **Neden ertelendi:** Turnuva sahipleri genelde doğrudan Instagram'da paylaşıyor. Bu gönderilerin Haberler'e düşmesi şimdilik yetiyor.

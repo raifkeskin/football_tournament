@@ -8,6 +8,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/services/instagram_share.dart';
 import '../../core/utils/in_app_browser.dart';
 import '../../core/widgets/admin_form.dart';
 import '../../core/widgets/admin_page.dart';
@@ -24,8 +25,10 @@ const _kPrefScorers = 'poster_scorers';
 
 /// Afişi önizleme popup'ında gösterir. Pencerede boyut (hikâye / gönderi),
 /// zemin (fotoğraf / sade) ve maç sonucunda gol atanlar seçilir; "Paylaş"
-/// PNG'yi telefonun paylaşım menüsüne, "Telefona indir" galeriye (web'de
-/// dosya olarak) kaydeder. Seçimler cihazda hatırlanır.
+/// PNG'yi telefonun paylaşım menüsüne, "Instagram" seçili boyuta göre
+/// Instagram'ın hikâye ya da gönderi ekranına (yalnız Android, Instagram
+/// yüklüyse), "Telefona indir" galeriye (web'de dosya olarak) kaydeder.
+/// Seçimler cihazda hatırlanır.
 ///
 /// [imageUrls]: afişteki ağ resimleri; çizimden önce yüklenir ki PNG'de
 /// eksik kalmasın.
@@ -101,6 +104,8 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
   late final Future<void> _ready = _prepare();
   bool _sharing = false;
   bool _saving = false;
+  bool _instagramBusy = false;
+  late final Future<bool> _instagram = InstagramShare.isAvailable();
 
   /// Pencerenin altında gösterilen sonuç (snackbar popup'ın arkasında
   /// kalıyordu).
@@ -214,6 +219,27 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
     }
   }
 
+  /// Afişi Instagram'da açar: Hikâye boyutunda hikâye düzenleyicisi
+  /// (müzik, çıkartma), Gönderi boyutunda gönderi ekranı (açıklama).
+  Future<void> _shareInstagram() async {
+    setState(() {
+      _instagramBusy = true;
+      _notice = null;
+    });
+    try {
+      final bytes = await _png();
+      final ok = await InstagramShare.share(
+        bytes,
+        story: _format == PosterFormat.story,
+      );
+      if (!ok) _say('Instagram açılamadı.', error: true);
+    } catch (e) {
+      _say('Instagram\'a aktarılamadı: $e', error: true);
+    } finally {
+      if (mounted) setState(() => _instagramBusy = false);
+    }
+  }
+
   /// Telefonda galeriye kaydeder; web'de PNG dosyası olarak indirir.
   /// Instagram vb. uygulamaların içindeki tarayıcı indirmeyi sessizce
   /// engellediği için orada indirme denenmez, ne yapılacağı yazılır.
@@ -259,6 +285,58 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  /// Instagram renk geçişli düğme; seçili boyut etikette yazar.
+  Widget _instagramButton() {
+    return Opacity(
+      opacity: _busy && !_instagramBusy ? 0.5 : 1,
+      child: Material(
+        borderRadius: BorderRadius.circular(14),
+        clipBehavior: Clip.antiAlias,
+        child: Ink(
+          height: 52,
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFFF58529), Color(0xFFDD2A7B), Color(0xFF8134AF)],
+            ),
+          ),
+          child: InkWell(
+            onTap: _busy ? null : _shareInstagram,
+            child: Center(
+              child: _instagramBusy
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.camera_alt_outlined,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'INSTAGRAM',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _segment<T>({
@@ -339,7 +417,7 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
     );
   }
 
-  bool get _busy => _sharing || _saving;
+  bool get _busy => _sharing || _saving || _instagramBusy;
 
   @override
   Widget build(BuildContext context) {
@@ -447,11 +525,41 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
                   },
                 ),
                 const SizedBox(height: 14),
-                AdminPrimaryButton(
-                  label: 'PAYLAŞ',
-                  icon: Icons.ios_share_rounded,
-                  busy: _sharing,
-                  onPressed: _busy ? null : _share,
+                FutureBuilder<bool>(
+                  future: _instagram,
+                  builder: (context, snap) {
+                    final share = AdminPrimaryButton(
+                      label: 'PAYLAŞ',
+                      icon: Icons.ios_share_rounded,
+                      busy: _sharing,
+                      onPressed: _busy ? null : _share,
+                    );
+                    if (snap.data != true) return share;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(child: share),
+                            const SizedBox(width: 10),
+                            Expanded(child: _instagramButton()),
+                          ],
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(2, 8, 2, 0),
+                          child: Text(
+                            'Instagram ${_format == PosterFormat.story ? 'hikâyesi' : 'gönderisi'} '
+                            'olarak açılır; o an açık olan hesaptan paylaşılır.',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: kAdminMuted,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
                 const SizedBox(height: 10),
                 SizedBox(

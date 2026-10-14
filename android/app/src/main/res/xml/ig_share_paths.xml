@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Afişin Instagram'a aktarılan geçici kopyası (cache/ig_share). -->
+<paths>
+    <cache-path name="ig_share" path="ig_share/" />
+</paths>
