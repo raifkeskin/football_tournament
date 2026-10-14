@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -10,6 +11,7 @@ import '../../core/widgets/admin_page.dart';
 import '../../core/widgets/picked_image.dart';
 import '../../core/widgets/web_safe_image.dart';
 import 'sponsor.dart';
+import '../../core/utils/logo_background.dart';
 
 /// Sponsor Yönetimi: turnuvanın ana ve alt sponsorları (logo, ad, link,
 /// sıra). Yalnızca admin ve turnuvanın kurucu başkanları.
@@ -424,7 +426,16 @@ class _SponsorFormState extends State<_SponsorForm> {
     if (!mounted) return;
     final logo = await preparePickedLogo(context, picked);
     if (logo == null) return;
-    if (mounted) setState(() => _newLogo = logo);
+    // Şeritteki 96×36 kutuya göre standart: kenar boşlukları kırpılır, logo
+    // kutuyu en büyük hâliyle doldurur.
+    var fitted = logo;
+    try {
+      final png = await compute(fitSponsorLogo, await logo.readAsBytes());
+      if (png != null) fitted = preparedLogoFile(png);
+    } catch (e) {
+      debugPrint('Sponsor logosu standarda getirilemedi: $e');
+    }
+    if (mounted) setState(() => _newLogo = fitted);
   }
 
   Future<void> _save() async {

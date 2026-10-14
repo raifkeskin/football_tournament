@@ -23,6 +23,15 @@ ImageProvider pickedImageProvider(XFile file) {
   return kIsWeb ? NetworkImage(file.path) : FileImage(File(file.path));
 }
 
+/// Bellekte hazırlanmış (ör. standarda getirilmiş) PNG logo. Yükleme onu
+/// olduğu gibi gönderir, yeniden işlemez.
+XFile preparedLogoFile(Uint8List png) {
+  final f = XFile.fromData(png, name: 'logo.png', mimeType: 'image/png');
+  _memoryBytes[f] = png;
+  _logoChoice[f] = 'clean';
+  return f;
+}
+
 /// Logo yüklenirken: kullanıcı orijinali mi, temizlenmiş hâli mi seçti?
 /// null: seçim yapılmadı (eski akış; yükleme kendisi temizler).
 String? pickedLogoChoice(XFile file) => _logoChoice[file];
