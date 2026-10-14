@@ -749,7 +749,8 @@ class _ScopeTextState extends State<_ScopeText> {
       parts.addAll(rows.map((r) => (r['name'] ?? '').toString()));
     }
     parts.addAll(session.ownedRegions.map((r) => r.name));
-    return parts.where((p) => p.trim().isNotEmpty).join(' · ');
+    // Her turnuva/bölge ayrı satırda.
+    return parts.where((p) => p.trim().isNotEmpty).join('\n');
   }
 
   @override
@@ -758,8 +759,6 @@ class _ScopeTextState extends State<_ScopeText> {
       future: _text,
       builder: (context, snap) => Text(
         snap.data ?? '…',
-        maxLines: 3,
-        overflow: TextOverflow.ellipsis,
         style: const TextStyle(
           fontSize: 13,
           color: Colors.white70,
