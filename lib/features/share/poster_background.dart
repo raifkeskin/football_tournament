@@ -4,6 +4,82 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 /// Afişlerin varsayılan zemin fotoğrafı (maç ve fikstür afişleri).
 const kDefaultPosterPhoto = AssetImage('assets/anasayfa.jpg');
 
+/// Afiş boyutu: Instagram hikâyesi (9:16) ya da gönderisi (4:5). Mantıksal
+/// boyut 3 katı çizilir.
+enum PosterFormat {
+  story(Size(360, 640), 'Hikâye', '1080 × 1920'),
+  post(Size(360, 450), 'Gönderi', '1080 × 1350');
+
+  const PosterFormat(this.size, this.label, this.pixels);
+
+  final Size size;
+  final String label;
+  final String pixels;
+}
+
+/// Paylaşım penceresinde seçilen afiş ayarları.
+@immutable
+class PosterStyle {
+  const PosterStyle({
+    this.format = PosterFormat.story,
+    this.plain = false,
+    this.showScorers = true,
+  });
+
+  final PosterFormat format;
+
+  /// Fotoğraf yerine sade lacivert zemin.
+  final bool plain;
+
+  /// Maç sonucu afişinde gol atanlar.
+  final bool showScorers;
+
+  bool get isPost => format == PosterFormat.post;
+
+  /// Hikâyede [story], gönderide [post] değeri.
+  double pick(double story, double post) => isPost ? post : story;
+}
+
+/// Afişlere [PosterStyle] taşır; yoksa varsayılan (hikâye, fotoğraf zemin).
+class PosterOptions extends InheritedWidget {
+  const PosterOptions({super.key, required this.style, required super.child});
+
+  final PosterStyle style;
+
+  static PosterStyle of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<PosterOptions>()?.style ??
+      const PosterStyle();
+
+  @override
+  bool updateShouldNotify(PosterOptions old) =>
+      old.style.format != style.format ||
+      old.style.plain != style.plain ||
+      old.style.showScorers != style.showScorers;
+}
+
+/// Sade zemin: koyu lacivert dikey geçiş.
+const kPlainPosterGradient = LinearGradient(
+  begin: Alignment.topCenter,
+  end: Alignment.bottomCenter,
+  colors: [Color(0xFF0B1830), Color(0xFF13305A)],
+);
+
+/// Fotoğraf zeminli afişlerin en alt katmanı: turnuvanın görseli / stadyum
+/// fotoğrafı; sade seçildiyse lacivert geçiş.
+class PosterPhotoLayer extends StatelessWidget {
+  const PosterPhotoLayer({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    if (PosterOptions.of(context).plain) {
+      return const DecoratedBox(
+        decoration: BoxDecoration(gradient: kPlainPosterGradient),
+      );
+    }
+    return Image(image: PosterBackground.photoOf(context), fit: BoxFit.cover);
+  }
+}
+
 /// Arka plan alan afiş türleri. Kadro, esame ve diziliş afişleri takım
 /// rengiyle çizilir; arka plan almaz.
 enum PosterKind {

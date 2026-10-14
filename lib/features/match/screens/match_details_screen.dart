@@ -29,6 +29,7 @@ import '../../tournament/screens/formation_tab.dart';
 import '../../share/poster_background.dart';
 import '../../share/lineup_poster.dart';
 import '../../share/match_poster.dart';
+import '../../share/match_result_poster.dart';
 import '../../share/poster_share.dart';
 import '../../share/squad_poster.dart';
 import '../../../core/utils/team_colors.dart';
@@ -458,7 +459,80 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
 
   int _refreshKey = 0;
 
-  /// Tek maç afişi: turnuva logosu, grup, hafta, takımlar, saha, tarih, saat.
+  /// Golleri afiş için takım tarafına göre toplar: "Kaya 12' 58'",
+  /// dakikasız sezonda "Kaya ×2". Kendi kalesine gol rakip tarafa yazılır.
+  Future<(List<PosterScorer>, List<PosterScorer>)> _posterScorers(
+    MatchModel m,
+  ) async {
+    final db = Supabase.instance.client;
+    final rows = await db
+        .from('match_events')
+        .select('team_id, minute, player_id, is_own_goal, is_penalty')
+        .eq('match_id', m.id)
+        .eq('event_type', 'goal');
+    // match_events'te ad yok: soyadlar oyunculardan okunur.
+    final ids = {
+      for (final r in rows)
+        if ((r['player_id'] ?? '').toString().isNotEmpty) '${r['player_id']}',
+    };
+    final surnames = <String, String>{};
+    if (ids.isNotEmpty) {
+      for (final p in await db
+          .from('players')
+          .select('id, name, surname')
+          .inFilter('id', ids.toList())) {
+        final sn = (p['surname'] ?? '').toString().trim();
+        surnames['${p['id']}'] = sn.isNotEmpty
+            ? sn
+            : (p['name'] ?? '').toString().trim();
+      }
+    }
+    // taraf → oyuncu → dakikalar (null: dakikasız)
+    final sides = [<String, List<String?>>{}, <String, List<String?>>{}];
+    final firstMinute = <String, int>{};
+    for (final r in rows) {
+      final own = r['is_own_goal'] == true;
+      final team = (r['team_id'] ?? '').toString();
+      var home = team == m.homeTeamId;
+      if (own) home = !home;
+      final sn = surnames['${r['player_id']}'] ?? '';
+      final surname = sn.isEmpty ? 'Gol' : sn;
+      final name = own ? '$surname (K.K.)' : surname;
+      final minute = r['minute'] is num ? (r['minute'] as num).toInt() : null;
+      final pen = r['is_penalty'] == true && !own;
+      (sides[home ? 0 : 1][name] ??= []).add(
+        minute == null ? (pen ? '(P)' : null) : "$minute'${pen ? ' (P)' : ''}",
+      );
+      if (minute != null) {
+        firstMinute[name] = minute < (firstMinute[name] ?? 999)
+            ? minute
+            : firstMinute[name]!;
+      }
+    }
+    List<PosterScorer> build(Map<String, List<String?>> side) {
+      final names = side.keys.toList()
+        ..sort(
+          (a, b) => (firstMinute[a] ?? 999).compareTo(firstMinute[b] ?? 999),
+        );
+      return [
+        for (final n in names)
+          (
+            name: n,
+            detail: side[n]!.any((x) => x != null && x.contains("'"))
+                ? side[n]!.whereType<String>().join(' ')
+                : [
+                    if (side[n]!.length > 1) '×${side[n]!.length}',
+                    if (side[n]!.contains('(P)')) '(P)',
+                  ].join(' '),
+          ),
+      ];
+    }
+
+    return (build(sides[0]), build(sides[1]));
+  }
+
+  /// Tek maç afişi. Maç bittiyse Maç Sonucu (skor, gol atanlar), değilse
+  /// Maç Afişi (saha, tarih, saat). Gönderi ve hikâye boyutunda.
   Future<void> _shareMatchPoster({
     required MatchModel m,
     required String homeName,
@@ -467,7 +541,8 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     required String awayLogo,
   }) async {
     final messenger = ScaffoldMessenger.of(context);
-    String leagueName = '', leagueLogo = '', groupName = '';
+    String leagueName = '', leagueLogo = '', groupName = '', seasonName = '';
+    var homeScorers = <PosterScorer>[], awayScorers = <PosterScorer>[];
     var pitchName = (m.pitchName ?? '').trim();
     try {
       final db = Supabase.instance.client;
@@ -478,6 +553,15 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
           .maybeSingle();
       leagueName = (league?['name'] ?? '').toString().trim();
       leagueLogo = (league?['logo_url'] ?? '').toString().trim();
+      final season = await db
+          .from('seasons')
+          .select('name')
+          .eq('id', m.seasonId)
+          .maybeSingle();
+      seasonName = (season?['name'] ?? '').toString().trim();
+      if (m.status == MatchStatus.finished) {
+        (homeScorers, awayScorers) = await _posterScorers(m);
+      }
       final gid = (m.groupId ?? '').trim();
       if (gid.isNotEmpty) {
         // Tek gruplu sezonda grup adı turnuva adıyla aynı; başlıkta tekrar
@@ -511,12 +595,45 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
 
     final date = DateTime.tryParse((m.matchDate ?? '').trim());
     final rawTime = (m.matchTime ?? '').trim();
+    final slug = '${homeName}_$awayName'.replaceAll(RegExp(r'\s+'), '_');
+    if (m.status == MatchStatus.finished) {
+      await showPosterPreview(
+        context: context,
+        title: 'Maç Sonucunu Paylaş',
+        fileName: 'mac_sonucu_$slug',
+        imageUrls: [leagueLogo, homeLogo, awayLogo],
+        leagueId: m.leagueId,
+        kind: PosterKind.match,
+        formats: const [PosterFormat.post, PosterFormat.story],
+        scorersOption: true,
+        poster: MatchResultPoster(
+          leagueName: leagueName,
+          leagueLogo: leagueLogo,
+          subtitle: [
+            groupName,
+            seasonName,
+          ].where((e) => e.isNotEmpty).join(' · '),
+          week: m.week,
+          homeName: homeName,
+          homeLogo: homeLogo,
+          awayName: awayName,
+          awayLogo: awayLogo,
+          homeScore: m.homeScore,
+          awayScore: m.awayScore,
+          homeScorers: homeScorers,
+          awayScorers: awayScorers,
+        ),
+      );
+      return;
+    }
     await showPosterPreview(
       context: context,
-      fileName: 'mac_${homeName}_$awayName'.replaceAll(RegExp(r'\s+'), '_'),
+      title: 'Maç Afişini Paylaş',
+      fileName: 'mac_$slug',
       imageUrls: [leagueLogo, homeLogo, awayLogo],
       leagueId: m.leagueId,
       kind: PosterKind.match,
+      formats: const [PosterFormat.post, PosterFormat.story],
       poster: MatchPoster(
         leagueName: leagueName,
         leagueLogo: leagueLogo,
@@ -848,7 +965,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                 actions: [
                   if (canManageLeague)
                     IconButton(
-                      tooltip: 'Maç afişini paylaş',
+                      tooltip: m.status == MatchStatus.finished
+                          ? 'Maç sonucunu paylaş'
+                          : 'Maç afişini paylaş',
                       icon: const Icon(
                         Icons.ios_share_rounded,
                         color: Colors.white,
