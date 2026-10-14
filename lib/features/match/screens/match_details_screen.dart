@@ -4307,7 +4307,11 @@ class _DetailTabView extends StatelessWidget {
         // Dakika tutulmayan sezonda (halısaha) zaman çizelgesi yerine
         // takımların altında golcüler listelenir.
         if (!settings.tracksGoalMinutes) {
-          return _MinutelessSummary(match: match, eventsStream: eventsStream);
+          return _MinutelessSummary(
+            match: match,
+            eventsStream: eventsStream,
+            clips: clips,
+          );
         }
         return _buildFlow(context, settings.periodMinutes);
       },
@@ -4506,10 +4510,17 @@ class _DetailTabView extends StatelessWidget {
 /// Dakika tutulmayan sezonun (halısaha) maç detayı: zaman çizelgesi yok;
 /// golcüler ve kartlar her takımın altında listelenir.
 class _MinutelessSummary extends StatelessWidget {
-  const _MinutelessSummary({required this.match, required this.eventsStream});
+  const _MinutelessSummary({
+    required this.match,
+    required this.eventsStream,
+    this.clips = const {},
+  });
 
   final MatchModel match;
   final Stream<List<Map<String, dynamic>>> eventsStream;
+
+  /// Onaylı YZ gol kesitleri (olay id'sine göre); golcü satırında oynatılır.
+  final Map<String, MatchHighlight> clips;
 
   static const _muted = Color(0xFF94A3B8);
 
@@ -4569,6 +4580,8 @@ class _MinutelessSummary extends StatelessWidget {
             );
             row?.count++;
             if (e['is_penalty'] == true) row?.penalties++;
+            final clip = clips[_str(e['id'])];
+            if (clip != null) row?.clips.add(clip);
           } else if (type == 'yellow_card' || type == 'red_card') {
             final row = cards[teamId]?.putIfAbsent(
               playerId.isEmpty ? name : playerId,
@@ -4592,7 +4605,6 @@ class _MinutelessSummary extends StatelessWidget {
           children: [
             _section(
               context,
-              'GOLLER',
               goals[match.homeTeamId]!.values.toList(),
               goals[match.awayTeamId]!.values.toList(),
               emptyHome: match.homeScore > 0 ? '' : 'Gol yok',
@@ -4602,7 +4614,6 @@ class _MinutelessSummary extends StatelessWidget {
             if (hasCards)
               _section(
                 context,
-                'KARTLAR',
                 cards[match.homeTeamId]!.values.toList(),
                 cards[match.awayTeamId]!.values.toList(),
               ),
@@ -4655,7 +4666,6 @@ class _MinutelessSummary extends StatelessWidget {
 
   Widget _section(
     BuildContext context,
-    String title,
     List<_SummaryRow> home,
     List<_SummaryRow> away, {
     String emptyHome = '',
@@ -4689,30 +4699,21 @@ class _MinutelessSummary extends StatelessWidget {
       );
     }
 
+    // Başlık yok; takımlar zaman çizgisindeki gibi ortadaki ince çizgiyle
+    // ayrılır.
     return _card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: _muted,
-              fontSize: 11,
-              letterSpacing: 1.2,
-              fontWeight: FontWeight.w800,
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: column(home, false, emptyHome)),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 10),
+              child: _TimelineLine(),
             ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: column(home, false, emptyHome)),
-              const SizedBox(width: 12),
-              Expanded(child: column(away, true, emptyAway)),
-            ],
-          ),
-        ],
+            Expanded(child: column(away, true, emptyAway)),
+          ],
+        ),
       ),
     );
   }
@@ -4775,11 +4776,34 @@ class _MinutelessSummary extends StatelessWidget {
       ),
     );
     final iconRow = Row(mainAxisSize: MainAxisSize.min, children: icons);
+    final clipButtons = [
+      for (final c in r.clips)
+        Builder(
+          builder: (context) => InkWell(
+            customBorder: const CircleBorder(),
+            onTap: () => openYoutubeClip(
+              context,
+              videoId: c.videoId,
+              startSec: c.startSec,
+              endSec: c.endSec,
+              title: r.name.isEmpty ? 'Gol' : r.name,
+            ),
+            child: const Padding(
+              padding: EdgeInsets.all(2),
+              child: Icon(
+                Icons.play_circle_fill_rounded,
+                size: 20,
+                color: Color(0xFF10B981),
+              ),
+            ),
+          ),
+        ),
+    ];
     return Row(
       mainAxisAlignment: end ? MainAxisAlignment.end : MainAxisAlignment.start,
       children: end
-          ? [name, const SizedBox(width: 6), iconRow]
-          : [iconRow, const SizedBox(width: 6), name],
+          ? [...clipButtons, name, const SizedBox(width: 6), iconRow]
+          : [iconRow, const SizedBox(width: 6), name, ...clipButtons],
     );
   }
 }
@@ -4790,6 +4814,7 @@ class _SummaryRow {
   final String name;
   final String playerId;
   final bool ownGoal;
+  final clips = <MatchHighlight>[];
   int count = 0;
   int penalties = 0;
   int yellows = 0;
