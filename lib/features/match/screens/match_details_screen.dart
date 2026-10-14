@@ -43,6 +43,7 @@ import 'package:football_tournament/core/widgets/admin_page.dart';
 import 'package:football_tournament/core/widgets/admin_form.dart';
 import '../../player/services/penalty_service.dart';
 import '../../../core/widgets/app_name_band.dart';
+import '../../../core/widgets/match_event_icons.dart';
 import '../../../core/services/video_link.dart';
 import '../../../core/widgets/youtube_player_page.dart'
     show
@@ -78,7 +79,7 @@ class _MissedPenaltyIcon extends StatelessWidget {
       child: Stack(
         alignment: Alignment.center,
         children: [
-          Icon(Icons.sports_soccer, size: 18, color: Color(0xFF64748B)),
+          BallIcon(tint: BallTint.grey),
           Icon(Icons.close_rounded, size: 20, color: Colors.redAccent),
         ],
       ),
@@ -88,13 +89,7 @@ class _MissedPenaltyIcon extends StatelessWidget {
 
 /// VAR ile iptal edilen gol: soluk top, sağ altında kırmızı X rozeti.
 class _CancelledGoalIcon extends StatelessWidget {
-  const _CancelledGoalIcon({
-    this.base = const Icon(
-      Icons.sports_soccer,
-      size: 18,
-      color: Color(0xFF94A3B8),
-    ),
-  });
+  const _CancelledGoalIcon({this.base = const BallIcon(tint: BallTint.grey)});
 
   /// İptal edilen olayın soluk ikonu (varsayılan top; kartta kart).
   final Widget base;
@@ -144,7 +139,7 @@ class _PenaltyGoalIcon extends StatelessWidget {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          const Icon(Icons.sports_soccer, size: 18, color: Colors.white),
+          const BallIcon(),
           Positioned(
             right: -3,
             bottom: -3,
@@ -174,16 +169,6 @@ class _PenaltyGoalIcon extends StatelessWidget {
 class _SecondYellowCardIcon extends StatelessWidget {
   const _SecondYellowCardIcon();
 
-  Widget _card(Color c) => Container(
-    width: 11,
-    height: 15,
-    decoration: BoxDecoration(
-      color: c,
-      borderRadius: BorderRadius.circular(2),
-      boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 2)],
-    ),
-  );
-
   @override
   Widget build(BuildContext context) {
     return SizedBox(
@@ -194,12 +179,18 @@ class _SecondYellowCardIcon extends StatelessWidget {
           Positioned(
             left: 0,
             top: 0,
-            child: Transform.rotate(angle: -0.2, child: _card(Colors.yellow)),
+            child: Transform.rotate(
+              angle: -0.2,
+              child: const RefereeCardIcon.yellow(height: 15),
+            ),
           ),
           Positioned(
             right: 0,
             bottom: 0,
-            child: Transform.rotate(angle: 0.15, child: _card(Colors.red)),
+            child: Transform.rotate(
+              angle: 0.15,
+              child: const RefereeCardIcon.red(height: 15),
+            ),
           ),
         ],
       ),
@@ -4907,7 +4898,7 @@ class _MinutelessSummary extends StatelessWidget {
     if (goal) {
       Widget ball() => const Padding(
         padding: EdgeInsets.symmetric(horizontal: 1),
-        child: Icon(Icons.sports_soccer_rounded, size: 14),
+        child: BallIcon(size: 14),
       );
       if (r.count <= 2) {
         for (var i = 0; i < r.count; i++) {
@@ -4924,14 +4915,9 @@ class _MinutelessSummary extends StatelessWidget {
           );
       }
     } else {
-      Widget card(Color c) => Container(
-        width: 10,
-        height: 14,
-        margin: const EdgeInsets.symmetric(horizontal: 1.5),
-        decoration: BoxDecoration(
-          color: c,
-          borderRadius: BorderRadius.circular(2),
-        ),
+      Widget card(Color c) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 1.5),
+        child: RefereeCardIcon(color: c, height: 14),
       );
       for (var i = 0; i < r.yellows; i++) {
         icons.add(card(const Color(0xFFFACC15)));
@@ -5210,20 +5196,16 @@ class _DetailEventTile extends StatelessWidget {
       switch (type) {
         case 'goal':
           icon = isOwnGoal
-              ? const Icon(
-                  Icons.sports_soccer,
-                  size: 18,
-                  color: Colors.redAccent,
-                )
+              ? const BallIcon(tint: BallTint.red)
               : isPenalty
               ? const _PenaltyGoalIcon()
-              : const Icon(Icons.sports_soccer, size: 18, color: Colors.white);
+              : const BallIcon();
           break;
         case 'yellow_card':
-          icon = const Icon(Icons.rectangle, color: Colors.yellow, size: 18);
+          icon = const RefereeCardIcon.yellow();
           break;
         case 'red_card':
-          icon = const Icon(Icons.rectangle, color: Colors.red, size: 18);
+          icon = const RefereeCardIcon.red();
           break;
         case 'second_yellow':
           icon = const _SecondYellowCardIcon();
@@ -5243,7 +5225,7 @@ class _DetailEventTile extends StatelessWidget {
           break;
         case 'red_card_cancelled':
           icon = const _CancelledGoalIcon(
-            base: Icon(Icons.rectangle, color: Color(0xFF94A3B8), size: 18),
+            base: Center(child: RefereeCardIcon.grey()),
           );
           break;
         default:

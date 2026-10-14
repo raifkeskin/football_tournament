@@ -3,6 +3,8 @@ import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+
+import '../../../core/widgets/match_event_icons.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
 import '../../../core/utils/team_name.dart';
@@ -659,7 +661,7 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
         children: [
           Row(
             children: [
-              const Icon(Icons.sports_soccer, size: 18, color: Colors.white),
+              const BallIcon(),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
