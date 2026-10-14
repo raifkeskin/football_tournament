@@ -9,6 +9,7 @@ import 'team_squad_screen.dart';
 
 import '../../../core/widgets/web_safe_image.dart';
 import '../utils/standings.dart';
+import '../../share/poster_background.dart';
 import '../../share/poster_share.dart';
 import '../../share/standings_poster.dart';
 
@@ -121,6 +122,7 @@ Future<void> shareGroupStandings(
       context: context,
       fileName: 'puan_durumu_${group.name}'.replaceAll(' ', '_'),
       leagueId: leagueId,
+      kind: PosterKind.standings,
       imageUrls: [
         leagueLogo,
         for (final r in rows) r.logo,

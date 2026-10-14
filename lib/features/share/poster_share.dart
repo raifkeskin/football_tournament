@@ -20,8 +20,9 @@ const _kPixelRatio = 3.0;
 /// [imageUrls]: afişteki ağ resimleri; çizimden önce yüklenir ki PNG'de
 /// eksik kalmasın.
 ///
-/// [leagueId] ya da [seasonId] verilirse turnuvanın afiş arka planı
-/// (`leagues.poster_bg_url`) zemin olarak kullanılır.
+/// [kind] ve [leagueId] ya da [seasonId] verilirse turnuvanın o afiş türü
+/// için seçtiği arka plan zemin olarak kullanılır; [kind] yoksa (kadro,
+/// esame, diziliş) afiş kendi takım rengi zeminiyle çizilir.
 Future<void> showPosterPreview({
   required BuildContext context,
   required Widget poster,
@@ -30,6 +31,7 @@ Future<void> showPosterPreview({
   String? shareText,
   String? leagueId,
   String? seasonId,
+  PosterKind? kind,
 }) {
   return showDialog<void>(
     context: context,
@@ -40,6 +42,7 @@ Future<void> showPosterPreview({
       shareText: shareText,
       leagueId: leagueId,
       seasonId: seasonId,
+      kind: kind,
     ),
   );
 }
@@ -52,6 +55,7 @@ class _PosterPreviewDialog extends StatefulWidget {
     this.shareText,
     this.leagueId,
     this.seasonId,
+    this.kind,
   });
 
   final Widget poster;
@@ -60,6 +64,7 @@ class _PosterPreviewDialog extends StatefulWidget {
   final String? shareText;
   final String? leagueId;
   final String? seasonId;
+  final PosterKind? kind;
 
   @override
   State<_PosterPreviewDialog> createState() => _PosterPreviewDialogState();
@@ -76,10 +81,13 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
   Future<void> _prepare() async {
     final (_, bgUrl) = await (
       GoogleFonts.pendingFonts(),
-      PosterBackgrounds.resolve(
-        leagueId: widget.leagueId,
-        seasonId: widget.seasonId,
-      ),
+      widget.kind == null
+          ? Future<String?>.value()
+          : PosterBackgrounds.resolve(
+              kind: widget.kind!,
+              leagueId: widget.leagueId,
+              seasonId: widget.seasonId,
+            ),
     ).wait;
     if (!mounted) return;
     var ok = true;
