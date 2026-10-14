@@ -11,9 +11,9 @@ import '../services/interfaces/i_team_service.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
+import '../../../core/widgets/team_crest.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import 'package:football_tournament/core/widgets/picked_image.dart';
-import '../../../core/utils/string_utils.dart';
 import 'team_squad_screen.dart';
 
 class AdminManageTeamsScreen extends StatefulWidget {
@@ -932,7 +932,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
         ),
         child: Row(
           children: [
-            _TeamLogo(name: teamName, logoUrl: logoUrl),
+            TeamCrest(name: teamName, logoUrl: logoUrl, size: 44),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -1279,52 +1279,6 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
 }
 
 /// Takım logosu; yoksa baş harfler (Sezon / Grup listeleriyle aynı).
-class _TeamLogo extends StatelessWidget {
-  const _TeamLogo({required this.name, required this.logoUrl});
-
-  final String name;
-  final String logoUrl;
-
-  @override
-  Widget build(BuildContext context) {
-    final initials = name
-        .trim()
-        .split(RegExp(r'\s+'))
-        .where((w) => w.isNotEmpty)
-        .take(2)
-        .map((w) => w.characters.first)
-        .join()
-        .trUpper;
-    return Container(
-      width: 44,
-      height: 44,
-      decoration: logoUrl.isNotEmpty
-          ? null
-          : BoxDecoration(
-              color: const Color(0xFF064E3B),
-              borderRadius: BorderRadius.circular(12),
-            ),
-      clipBehavior: logoUrl.isNotEmpty ? Clip.none : Clip.antiAlias,
-      alignment: Alignment.center,
-      child: logoUrl.isNotEmpty
-          ? WebSafeImage(
-              url: logoUrl,
-              width: 44,
-              height: 44,
-              fit: BoxFit.contain,
-            )
-          : Text(
-              initials,
-              style: const TextStyle(
-                color: Color(0xFF6EE7B7),
-                fontSize: 15,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-    );
-  }
-}
-
 class _Pill extends StatelessWidget {
   const _Pill(this.text, this.color);
 

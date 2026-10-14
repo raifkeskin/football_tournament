@@ -92,8 +92,34 @@ class MatchPoster extends StatelessWidget {
     return Expanded(
       child: Column(
         children: [
-          // Çerçevesiz logo; gölge koyu zeminde öne çıkarır.
-          PosterLogo(url: logo, name: name, size: 124, shadow: true),
+          // Çerçevesiz logo; arkasındaki koyu hale, zemin ne kadar parlak
+          // olursa olsun logonun renklerini öne çıkarır.
+          SizedBox(
+            width: 172,
+            height: 136,
+            child: Stack(
+              alignment: Alignment.center,
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  width: 172,
+                  height: 172,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: [
+                        _navy.withValues(alpha: 0.85),
+                        _navy.withValues(alpha: 0.55),
+                        _navy.withValues(alpha: 0),
+                      ],
+                      stops: const [0, 0.55, 1],
+                    ),
+                  ),
+                ),
+                PosterLogo(url: logo, name: name, size: 124, shadow: true),
+              ],
+            ),
+          ),
           const SizedBox(height: 10),
           SizedBox(
             height: 42,
@@ -171,8 +197,8 @@ class MatchPoster extends StatelessWidget {
               end: Alignment.bottomCenter,
               colors: [
                 _navy.withValues(alpha: 0.92),
+                _navy.withValues(alpha: 0.68),
                 _navy.withValues(alpha: 0.55),
-                _navy.withValues(alpha: 0.35),
                 _navy.withValues(alpha: 0.85),
               ],
               stops: const [0, 0.38, 0.62, 1],
