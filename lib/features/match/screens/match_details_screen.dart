@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
+import '../../tournament/models/age_rules.dart';
 import '../../tournament/models/league_extras.dart';
 import '../models/match.dart';
 import '../models/match_media.dart';
@@ -3455,6 +3456,9 @@ class _RosterEditSheetState extends State<_RosterEditSheet> {
   /// Bu sezonda onaylı ve süren cezası olan oyuncular (kadroya eklenemez).
   Map<String, PlayerPenalty> _penalized = const {};
 
+  /// Sezonun yaş / kontenjan kuralları (maç günü sınırları için).
+  AgeRules _ageRules = const AgeRules();
+
   static const _green = Color(0xFF10B981);
   static const _blue = Color(0xFF3B82F6);
   static const _mid = Color(0xFF94A3B8);
@@ -3482,7 +3486,7 @@ class _RosterEditSheetState extends State<_RosterEditSheet> {
         try {
           return await Supabase.instance.client
               .from('seasons')
-              .select('starting_player_count, sub_player_count')
+              .select('starting_player_count, sub_player_count, age_rules')
               .eq('id', widget.match.seasonId)
               .maybeSingle();
         } catch (_) {
@@ -3513,6 +3517,7 @@ class _RosterEditSheetState extends State<_RosterEditSheet> {
       setState(() {
         _startingLimit = sCount;
         _subLimit = subCount;
+        _ageRules = AgeRules.fromJson(sRes?['age_rules']);
         _teamPlayers = players;
         _penalized = penalties;
         // Kayıtlı kaleci (pos_x = 0) ilk sırada: yeniden kaydedince kaleci
@@ -3540,6 +3545,75 @@ class _RosterEditSheetState extends State<_RosterEditSheet> {
   }
 
   int _tab = 0; // 0: İlk 11, 1: Yedekler
+
+  bool _isMatchQuota(PlayerModel p) => _ageRules.isMatchQuota(
+    birthYear: AgeRules.birthYearOf(p.birthDate),
+    isGk: (p.mainPosition ?? '').trim() == 'Kaleci',
+  );
+
+  /// Kontenjanlı oyuncu sayaçları: esamede (ilk 11 + yedek) ve ilk 11'de.
+  /// Sınır aşılırsa kırmızı uyarı; kayıt engellenmez.
+  Widget _quotaBar() {
+    final byId = {for (final p in _teamPlayers) p.id: p};
+    int count(Iterable<String> ids) => ids
+        .map((id) => byId[id])
+        .where((p) => p != null && _isMatchQuota(p))
+        .length;
+    final onField = count(_starterIds);
+    final inSquad = onField + count(_subIds);
+    final maxSquad = _ageRules.matchMax;
+    final maxField = _ageRules.matchFieldMax;
+    final over =
+        (maxSquad != null && inSquad > maxSquad) ||
+        (maxField != null && onField > maxField);
+    const amber = Color(0xFFFBBF24);
+    const red = Color(0xFFF87171);
+    final color = over ? red : amber;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color.withValues(alpha: 0.4)),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              over ? Icons.warning_amber_rounded : Icons.rule_rounded,
+              color: color,
+              size: 18,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                [
+                  'Kontenjan',
+                  if (maxSquad != null) 'esame $inSquad/$maxSquad',
+                  if (maxField != null) 'ilk 11 $onField/$maxField',
+                ].join(' · '),
+                style: TextStyle(
+                  color: color,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            if (over)
+              const Text(
+                'Sınır aşıldı',
+                style: TextStyle(
+                  color: red,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 
   String _norm(String s) =>
       s.replaceAll('İ', 'i').replaceAll('I', 'ı').toLowerCase().trim();
@@ -3952,6 +4026,7 @@ class _RosterEditSheetState extends State<_RosterEditSheet> {
                   ],
                 ),
               ),
+            if (!_isLoading && _ageRules.hasMatchLimits) _quotaBar(),
             if (!_isLoading)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),

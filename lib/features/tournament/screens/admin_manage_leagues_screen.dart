@@ -288,7 +288,7 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          if (tab == 0) ...[
+                          if (tab == 1) ...[
                             const SizedBox(height: 6),
                             // Büyük logo: dokununca galeri açılır; çöp kutusu logoyu kaldırır.
                             Center(
@@ -369,6 +369,9 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                               ),
                             ),
                             const SizedBox(height: 22),
+                          ],
+                          if (tab == 0) ...[
+                            const SizedBox(height: 6),
                             TextField(
                               controller: nameController,
                               // Turnuva adını yalnızca admin değiştirir.
@@ -383,6 +386,24 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                                 label: 'Turnuva Adı',
                                 icon: Icons.emoji_events_outlined,
                               ),
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: shortNameController,
+                              enabled: !saving,
+                              maxLength: 24,
+                              textCapitalization:
+                                  TextCapitalization.words,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                              ),
+                              cursorColor: kAdminAccent,
+                              decoration: adminInputDecoration(
+                                label:
+                                    'Bantta görünen kısa ad (isteğe bağlı)',
+                                icon: Icons.short_text_rounded,
+                              ).copyWith(counterText: ''),
                             ),
                           ],
                           if (tab == 1) ...[
@@ -405,24 +426,6 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                                       ),
                                     ),
                                   ),
-                                  TextField(
-                                    controller: shortNameController,
-                                    enabled: !saving,
-                                    maxLength: 24,
-                                    textCapitalization:
-                                        TextCapitalization.words,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                    cursorColor: kAdminAccent,
-                                    decoration: adminInputDecoration(
-                                      label:
-                                          'Bantta görünen kısa ad (isteğe bağlı)',
-                                      icon: Icons.short_text_rounded,
-                                    ).copyWith(counterText: ''),
-                                  ),
-                                  const SizedBox(height: 10),
                                   Row(
                                     children: [
                                       Expanded(
@@ -531,18 +534,6 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                                   ),
                                 ),
                               ],
-                            ),
-                            const Padding(
-                              padding: EdgeInsets.fromLTRB(4, 6, 4, 0),
-                              child: Text(
-                                'Takım sorumluları kendi takımlarının esamesini bu '
-                                'süreden itibaren girebilir. Yöneticiler ve gözlemci '
-                                'için süre sınırı yoktur.',
-                                style: TextStyle(
-                                  color: kAdminMuted,
-                                  fontSize: 12,
-                                ),
-                              ),
                             ),
                           ],
                           if (tab == 1) ...[

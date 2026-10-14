@@ -54,6 +54,8 @@ class _AgeRulesDialogState extends State<_AgeRulesDialog> {
   late int? _player = widget.initial.playerMaxYear;
   late int? _gk = widget.initial.gkMaxYear;
   late final List<AgeQuota> _quotas = [...widget.initial.quotas];
+  late int? _matchMax = widget.initial.matchMax;
+  late int? _matchFieldMax = widget.initial.matchFieldMax;
   bool _saving = false;
 
   Future<int?> _pickYear(String title, int? current) async {
@@ -79,6 +81,8 @@ class _AgeRulesDialogState extends State<_AgeRulesDialog> {
       playerMaxYear: _player,
       gkMaxYear: _gk,
       quotas: _quotas,
+      matchMax: _matchMax,
+      matchFieldMax: _matchFieldMax,
     );
     try {
       await Supabase.instance.client
@@ -172,7 +176,7 @@ class _AgeRulesDialogState extends State<_AgeRulesDialog> {
                         ),
                       ),
                       AdminFormSection(
-                        title: 'Kontenjanlar',
+                        title: 'Kadro Kontenjanları',
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
@@ -213,6 +217,48 @@ class _AgeRulesDialogState extends State<_AgeRulesDialog> {
                               ),
                               icon: const Icon(Icons.add_rounded),
                               label: const Text('Kontenjan Ekle'),
+                            ),
+                          ],
+                        ),
+                      ),
+                      AdminFormSection(
+                        title: 'Maç Günü',
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            AdminFieldGroup(
+                              children: [
+                                _LimitRow(
+                                  icon: Icons.assignment_outlined,
+                                  label: 'Esamede en fazla',
+                                  value: _matchMax,
+                                  addValue: 3,
+                                  onChanged: (v) =>
+                                      setState(() => _matchMax = v),
+                                ),
+                                _LimitRow(
+                                  icon: Icons.stadium_outlined,
+                                  label: 'Sahada aynı anda en fazla',
+                                  value: _matchFieldMax,
+                                  addValue: 2,
+                                  onChanged: (v) =>
+                                      setState(() => _matchFieldMax = v),
+                                ),
+                              ],
+                            ),
+                            const Padding(
+                              padding: EdgeInsets.fromLTRB(4, 6, 4, 0),
+                              child: Text(
+                                'Kaleci dışındaki tüm kontenjanlı oyuncular '
+                                'toplam sayılır. Sahadaki sınır doluyken yedekteki '
+                                'kontenjanlı oyuncu ancak kontenjanlı bir oyuncunun '
+                                'yerine girebilir.',
+                                style: TextStyle(
+                                  color: kAdminMuted,
+                                  fontSize: 12,
+                                  height: 1.35,
+                                ),
+                              ),
                             ),
                           ],
                         ),
@@ -317,8 +363,191 @@ class _QuotaTile extends StatelessWidget {
   }
 }
 
-/// Kontenjan ekle / düzenle: yıllar (çoklu), kadroda ve sahada en fazla,
-/// kaleci kontenjanı mı.
+/// Sınır satırı: sınır yoksa "Sınır yok" ve EKLE düğmesi; varsa sayaç.
+/// Sayaç 0'a inince sınır kalkar.
+class _LimitRow extends StatelessWidget {
+  const _LimitRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.addValue,
+    required this.onChanged,
+  });
+
+  final IconData icon;
+  final String label;
+  final int? value;
+
+  /// EKLE'ye basınca başlanacak değer.
+  final int addValue;
+  final ValueChanged<int?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final v = value;
+    return AdminFieldRow(
+      icon: icon,
+      label: label,
+      trailing: v == null
+          ? FilledButton(
+              onPressed: () => onChanged(addValue),
+              style: FilledButton.styleFrom(
+                backgroundColor: kAdminAccent,
+                foregroundColor: const Color(0xFF062A1C),
+                minimumSize: const Size(72, 40),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                textStyle: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              child: const Text('EKLE'),
+            )
+          : _Stepper(
+              value: v,
+              min: 0,
+              onChanged: (n) => onChanged(n == 0 ? null : n),
+            ),
+      child: Text(
+        v == null ? 'Sınır yok' : 'Kişi',
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 15,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _Stepper extends StatelessWidget {
+  const _Stepper({
+    required this.value,
+    required this.onChanged,
+    this.min = 1,
+  });
+
+  final int value;
+  final int min;
+  final ValueChanged<int> onChanged;
+
+  static const _max = 30;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          tooltip: 'Azalt',
+          onPressed: value > min ? () => onChanged(value - 1) : null,
+          icon: const Icon(Icons.remove_circle_outline, color: Colors.white70),
+        ),
+        Text(
+          '$value',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 17,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        IconButton(
+          tooltip: 'Artır',
+          onPressed: value < _max ? () => onChanged(value + 1) : null,
+          icon: const Icon(Icons.add_circle_outline, color: Colors.white70),
+        ),
+      ],
+    );
+  }
+}
+
+/// Doğum yıllarını listeden çoklu seçtirir.
+Future<Set<int>?> _pickYears(BuildContext context, Set<int> initial) {
+  final now = DateTime.now().year;
+  final options = [for (var y = now - 20; y >= now - 60; y--) y];
+  final selected = {...initial};
+  return showDialog<Set<int>>(
+    context: context,
+    builder: (ctx) => Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      child: StatefulBuilder(
+        builder: (ctx, setState) => Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(ctx).size.height * 0.75,
+          ),
+          padding: const EdgeInsets.fromLTRB(0, 16, 0, 16),
+          decoration: adminDialogDecoration(),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 4, 20, 12),
+                child: Text(
+                  'Doğum Yılları',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 18,
+                  ),
+                ),
+              ),
+              const Divider(color: Colors.white24, height: 1),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: options.length,
+                  itemBuilder: (_, i) {
+                    final y = options[i];
+                    final on = selected.contains(y);
+                    return CheckboxListTile(
+                      value: on,
+                      dense: true,
+                      activeColor: _amber,
+                      checkColor: const Color(0xFF1F1300),
+                      controlAffinity: ListTileControlAffinity.leading,
+                      title: Text(
+                        '$y',
+                        style: TextStyle(
+                          color: on ? _amber : Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      secondary: Text(
+                        '${now - y} yaş',
+                        style: const TextStyle(color: kAdminMuted),
+                      ),
+                      onChanged: (v) => setState(
+                        () => v == true ? selected.add(y) : selected.remove(y),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const Divider(color: Colors.white24, height: 1),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: AdminPrimaryButton(
+                  label: selected.isEmpty
+                      ? 'SEÇ'
+                      : 'SEÇ (${selected.length})',
+                  onPressed: () => Navigator.pop(ctx, selected),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+/// Kontenjan ekle / düzenle: yıllar (çoklu), kadroda en fazla, kaleci
+/// kontenjanı mı. Maç günü sınırları sezon genelinde girilir.
 class _QuotaDialog extends StatefulWidget {
   const _QuotaDialog({this.initial});
 
@@ -329,37 +558,13 @@ class _QuotaDialog extends StatefulWidget {
 }
 
 class _QuotaDialogState extends State<_QuotaDialog> {
-  late final Set<int> _years = {...?widget.initial?.years};
+  late Set<int> _years = {...?widget.initial?.years};
   late int _max = widget.initial?.max ?? 3;
-  late int? _field = widget.initial?.fieldMax;
   late bool _gk = widget.initial?.gk ?? false;
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now().year;
-    final options = [for (var y = now - 45; y <= now - 25; y++) y];
-    Widget stepper(int v, ValueChanged<int> set, {int min = 1}) => Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        IconButton(
-          onPressed: v > min ? () => set(v - 1) : null,
-          icon: const Icon(Icons.remove_circle_outline, color: Colors.white70),
-        ),
-        Text(
-          '$v',
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 17,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        IconButton(
-          onPressed: v < 11 ? () => set(v + 1) : null,
-          icon: const Icon(Icons.add_circle_outline, color: Colors.white70),
-        ),
-      ],
-    );
-
+    final years = _years.toList()..sort();
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
@@ -380,65 +585,42 @@ class _QuotaDialogState extends State<_QuotaDialog> {
                       : 'Kontenjan',
                 ),
                 AdminFormSection(
-                  title: 'Doğum Yılları',
-                  child: Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      for (final y in options)
-                        FilterChip(
-                          label: Text('$y'),
-                          selected: _years.contains(y),
-                          showCheckmark: false,
-                          selectedColor: _amber,
-                          backgroundColor: const Color(0xFF334155),
-                          labelStyle: TextStyle(
-                            color: _years.contains(y)
-                                ? const Color(0xFF1F1300)
-                                : Colors.white,
-                            fontWeight: FontWeight.w700,
-                          ),
-                          side: BorderSide.none,
-                          onSelected: (on) => setState(
-                            () => on ? _years.add(y) : _years.remove(y),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                AdminFormSection(
-                  title: 'Sınır',
+                  title: 'Kontenjan',
                   child: AdminFieldGroup(
                     children: [
                       AdminFieldRow(
-                        icon: Icons.groups_outlined,
-                        label: 'Kadroda en fazla',
-                        trailing: stepper(
-                          _max,
-                          (v) => setState(() => _max = v),
+                        icon: Icons.cake_outlined,
+                        label: 'Doğum yılları',
+                        onTap: () async {
+                          final v = await _pickYears(context, _years);
+                          if (v != null) setState(() => _years = v);
+                        },
+                        trailing: const Icon(
+                          Icons.chevron_right_rounded,
+                          color: kAdminMuted,
                         ),
-                        child: const Text(
-                          'Kişi',
-                          style: TextStyle(color: Colors.white, fontSize: 15),
+                        child: Text(
+                          years.isEmpty ? 'Seçilmedi' : years.join(', '),
+                          style: TextStyle(
+                            color: years.isEmpty ? kAdminMuted : Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
                       AdminFieldRow(
-                        icon: Icons.stadium_outlined,
-                        label: 'Sahada aynı anda en fazla',
-                        trailing: _field == null
-                            ? TextButton(
-                                onPressed: () => setState(() => _field = 2),
-                                child: const Text('Sınır koy'),
-                              )
-                            : stepper(
-                                _field!,
-                                (v) => setState(() => _field = v),
-                              ),
-                        child: Text(
-                          _field == null ? 'Sınır yok' : 'Kişi',
-                          style: const TextStyle(
+                        icon: Icons.groups_outlined,
+                        label: 'Kadroda en fazla',
+                        trailing: _Stepper(
+                          value: _max,
+                          onChanged: (v) => setState(() => _max = v),
+                        ),
+                        child: const Text(
+                          'Kişi',
+                          style: TextStyle(
                             color: Colors.white,
                             fontSize: 15,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),
@@ -463,17 +645,6 @@ class _QuotaDialogState extends State<_QuotaDialog> {
                     ],
                   ),
                 ),
-                if (_field != null)
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: () => setState(() => _field = null),
-                      child: const Text(
-                        'Saha sınırını kaldır',
-                        style: TextStyle(color: kAdminMuted),
-                      ),
-                    ),
-                  ),
                 const SizedBox(height: 8),
                 AdminPrimaryButton(
                   label: widget.initial == null ? 'EKLE' : 'TAMAM',
@@ -482,9 +653,9 @@ class _QuotaDialogState extends State<_QuotaDialog> {
                       : () => Navigator.pop(
                           context,
                           AgeQuota(
-                            years: _years.toList()..sort(),
+                            years: years,
                             max: _max,
-                            fieldMax: _field,
+                            fieldMax: widget.initial?.fieldMax,
                             gk: _gk,
                           ),
                         ),

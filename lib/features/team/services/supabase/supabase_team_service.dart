@@ -956,7 +956,7 @@ class SupabaseTeamService implements ITeamService {
           .from('season_team_players')
           // players içindeki gerçek UUID olan 'id'yi mutlaka çekiyoruz[cite: 2]
           .select(
-            'player_id, jersey_number, players!inner(id, name, surname, main_position)',
+            'player_id, jersey_number, players!inner(id, name, surname, main_position, birth_date)',
           )
           .eq('team_id', team)
           .eq('season_id', tId)

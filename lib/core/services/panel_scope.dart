@@ -17,16 +17,18 @@ class PanelScope {
     final regions = {for (final r in s.ownedRegions) r.id};
     final rows = await _sb
         .from('season_teams')
-        .select('team_id, groups(region_id), seasons(league_id)');
+        .select('team_id, group_id, groups(region_id), seasons(league_id)');
     return {
       for (final r in rows)
-        if (s.ownedLeagueIds.contains(
-              ((r['seasons'] as Map?)?['league_id'] ?? '').toString(),
-            ) ||
-            regions.contains(
-              ((r['groups'] as Map?)?['region_id'] ?? '').toString(),
-            ))
-          (r['team_id'] ?? '').toString(),
+        // Silinen (gizlenen) grup okunamaz: o gruptaki kayıt sayılmaz.
+        if (r['group_id'] == null || r['groups'] != null)
+          if (s.ownedLeagueIds.contains(
+                ((r['seasons'] as Map?)?['league_id'] ?? '').toString(),
+              ) ||
+              regions.contains(
+                ((r['groups'] as Map?)?['region_id'] ?? '').toString(),
+              ))
+            (r['team_id'] ?? '').toString(),
     };
   }
 
