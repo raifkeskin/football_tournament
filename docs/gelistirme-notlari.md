@@ -130,7 +130,7 @@ _Eklendi: 2026-10-13_
 ## 13. Halısaha videolarından gol kesitleri (dakikasız)
 _Eklendi: 2026-10-14_
 
-- **Şu an:** Sezonda "Gol Dakikası" kapalıysa (halısaha) YZ gol kesitleri bölümü gizli. Kesitler, maç detayındaki gol dakikalarının çevresinde aranıyor (maç başına ~0,04 $).
+- **Şu an:** Kesitler, maç detayındaki gol dakikalarının çevresinde aranıyor (maç başına ~0,04 $). Sezonda "Gol Dakikası" kapalıysa (halısaha) onaylı gol videoları herkese görünüyor, ama YZ analizini yalnız admin başlatabiliyor ve tüm video taranıyor; tahmini maliyet sınırı aşarsa analiz başlamıyor.
 - **Sorun:** Dakika yoksa 60 dakikanın tamamını taramak gerekir. Tahmini maliyet kamera başına 0,40–0,60 $, yani mevcut 0,50 $/maç limitine takılır. Bazı halısahalarda iki kamera var; bu da maliyeti ikiye katlar.
 - **Önerilen yol:**
   - Başlama vuruşu bulunur, iki kamera bununla senkronlanır.

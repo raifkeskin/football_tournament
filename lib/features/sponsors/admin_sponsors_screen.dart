@@ -120,6 +120,7 @@ class _AdminSponsorsScreenState extends State<AdminSponsorsScreen> {
               .eq('id', same[k].id);
         }
       }
+      SponsorFeed.notifyChanged(s.leagueId);
       await _loadSponsors();
     } catch (e) {
       _snack('Sıra değiştirilemedi: $e');
@@ -141,6 +142,7 @@ class _AdminSponsorsScreenState extends State<AdminSponsorsScreen> {
       if (s.logoUrl.isNotEmpty) {
         await SupabaseImageUploadService().deleteImageByUrl(s.logoUrl);
       }
+      SponsorFeed.notifyChanged(s.leagueId);
       await _loadSponsors();
     } catch (e) {
       _snack('Silinemedi: $e');
@@ -472,6 +474,7 @@ class _SponsorFormState extends State<_SponsorForm> {
           await SupabaseImageUploadService().deleteImageByUrl(old.logoUrl);
         }
       }
+      SponsorFeed.notifyChanged(widget.leagueId);
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('Kaydedilemedi: $e')));
