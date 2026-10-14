@@ -40,6 +40,10 @@ abstract class IMatchService {
   /// veritabanı tetikleyicisinde (match_events_var_cancel).
   Future<void> setGoalCancelled(String eventId, {required bool cancelled});
 
+  /// VAR: kırmızı kartı iptal eder ('red_card' → 'red_card_cancelled') ve
+  /// karttan doğan cezayı siler.
+  Future<void> cancelRedCard(String eventId);
+
   /// Maç akışını ilerletir: start | end_first_half | start_second_half |
   /// finish | undo. Saat sunucuda tutulur (advance_match_phase).
   Future<void> advanceMatchPhase({

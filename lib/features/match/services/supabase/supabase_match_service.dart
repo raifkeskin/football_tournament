@@ -495,6 +495,28 @@ class SupabaseMatchService implements IMatchService {
   }
 
   @override
+  Future<void> cancelRedCard(String eventId) async {
+    final updated = await _client
+        .from('match_events')
+        .update({'event_type': 'red_card_cancelled'})
+        .eq('id', eventId)
+        .eq('event_type', 'red_card')
+        .select('match_id');
+    if (updated.isEmpty) {
+      throw Exception('Kart güncellenemedi (yetki yok ya da zaten değişmiş).');
+    }
+    // Karttan doğan ceza (beklemede ya da onaylı) VAR kararıyla düşer.
+    // Silme yetkisi olmayan (ör. gözlemci) için ceza onay ekranında kalır.
+    try {
+      await _client
+          .from('player_penalties')
+          .delete()
+          .eq('source_event_id', eventId);
+    } catch (_) {}
+    notifyLocalChange('${updated.first['match_id']}');
+  }
+
+  @override
   Future<void> deleteMatchEvent(String eventId) async {
     final res = await _client
         .from('match_events')

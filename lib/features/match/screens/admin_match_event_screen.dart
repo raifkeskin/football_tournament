@@ -236,30 +236,13 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
       );
       return;
     }
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('VAR: Gol İptali'),
-        content: Text(
-          '$label\n\nBu gol iptal edilecek. Skor güncellenir ve maçı '
-          'takip edenlere bildirim gider.',
-        ),
-        actionsAlignment: MainAxisAlignment.spaceBetween,
-        actions: [
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFFDC2626),
-            ),
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('İPTAL'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: kAdminAccent),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('ONAYLA'),
-          ),
-        ],
-      ),
+    final ok = await showVarConfirmDialog(
+      context,
+      title: 'VAR: Gol İptali',
+      subject: label,
+      message:
+          'Bu gol iptal edilecek. Skor güncellenir ve maçı takip edenlere '
+          'bildirim gider.',
     );
     if (ok != true || !mounted) return;
     setState(() => _isLoading = true);
@@ -798,4 +781,83 @@ class _PickerOption<T> {
   const _PickerOption(this.value, this.label);
   final T value;
   final String label;
+}
+
+/// VAR kararı onayı: üstte olay, altta kırmızı İPTAL ve yeşil ONAYLA.
+/// Onaylanırsa true döner.
+Future<bool> showVarConfirmDialog(
+  BuildContext context, {
+  required String title,
+  required String subject,
+  required String message,
+}) async {
+  Widget button(String label, Color color, bool value, BuildContext ctx) =>
+      Expanded(
+        child: SizedBox(
+          height: 48,
+          child: ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: color,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            onPressed: () => Navigator.pop(ctx, value),
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.2,
+              ),
+            ),
+          ),
+        ),
+      );
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Container(
+        padding: const EdgeInsets.all(22),
+        decoration: adminDialogDecoration(),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            AdminDialogHeader(icon: Icons.tv_off_rounded, title: title),
+            const SizedBox(height: 16),
+            if (subject.isNotEmpty) ...[
+              Text(
+                subject,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white70, height: 1.4),
+            ),
+            const SizedBox(height: 22),
+            Row(
+              children: [
+                button('İPTAL', const Color(0xFFDC2626), false, ctx),
+                const SizedBox(width: 12),
+                button('ONAYLA', kAdminAccent, true, ctx),
+              ],
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+  return ok == true;
 }
