@@ -5566,7 +5566,6 @@ Future<void> shareLineupPoster(
     fileName: kind == 'Esame' ? 'esame_$slug' : 'dizilis_$slug',
     imageUrls: [data.teamLogo, data.opponentLogo, data.leagueLogo],
     leagueId: match.leagueId,
-    formats: const [PosterFormat.post, PosterFormat.story],
     poster: kind == 'Esame'
         ? LineupListPoster(data: data)
         : LineupPitchPoster(data: data),

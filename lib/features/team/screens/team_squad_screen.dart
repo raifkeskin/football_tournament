@@ -34,7 +34,6 @@ import '../../../core/widgets/web_safe_image.dart';
 import 'package:football_tournament/core/widgets/picked_image.dart';
 import 'package:football_tournament/core/widgets/admin_form.dart';
 import '../../../core/utils/string_utils.dart';
-import '../../share/poster_background.dart';
 import '../../share/poster_share.dart';
 import '../../share/squad_poster.dart';
 import '../../../core/utils/team_colors.dart';
@@ -1237,7 +1236,6 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
       imageUrls: [teamLogo, leagueLogo],
       // Sekmedeki "turnuva" sezon id'sidir.
       seasonId: tournamentId,
-      formats: const [PosterFormat.post, PosterFormat.story],
       poster: SquadPoster(
         teamName: teamName,
         teamLogo: teamLogo,
