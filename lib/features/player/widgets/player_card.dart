@@ -4,6 +4,8 @@ import '../../team/widgets/team_page_tabs.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../tournament/models/league.dart';
+import '../../tournament/screens/formation_tab.dart'
+    show positionLineLabels, positionLineOf;
 import '../../../core/widgets/web_safe_image.dart';
 import '../../../core/utils/string_utils.dart';
 
@@ -90,6 +92,7 @@ Future<void> showPlayerCard(
             number: number,
             photoUrl: str('photo_url'),
             position: _positionLabel(str('main_position'), str('sub_position')),
+            mainPosition: str('main_position'),
             birthDate: str('birth_date'),
             height: (r['height'] as num?)?.toInt(),
             weight: (r['weight'] as num?)?.toInt(),
@@ -112,6 +115,7 @@ class PlayerCard extends StatefulWidget {
     required this.number,
     required this.photoUrl,
     required this.position,
+    this.mainPosition = '',
     required this.birthDate,
     required this.height,
     required this.weight,
@@ -123,7 +127,12 @@ class PlayerCard extends StatefulWidget {
   final String name;
   final String number;
   final String photoUrl;
+
+  /// İsmin altındaki rozette alt mevki ([position]), sağdaki "Mevki"
+  /// kutusunda ana mevki (Kaleci/Defans/Orta Saha/Forvet). Boşsa
+  /// [position]'dan çıkarılır.
   final String position;
+  final String mainPosition;
   final String birthDate;
   final int? height;
   final int? weight;
@@ -782,7 +791,13 @@ class _PlayerCardState extends State<PlayerCard> {
                       info(
                         Icons.sports_soccer_outlined,
                         'Mevki',
-                        pos.isEmpty ? '-' : pos,
+                        (pos.isEmpty || pos == '-') &&
+                                widget.mainPosition.trim().isEmpty
+                            ? '-'
+                            : positionLineLabels[positionLineOf(
+                                widget.mainPosition,
+                                pos,
+                              )],
                       ),
                     ],
                   ),

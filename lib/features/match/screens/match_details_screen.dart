@@ -4872,13 +4872,11 @@ class _MinutelessSummary extends StatelessWidget {
         : r.count == 1
         ? ' (P)'
         : ' (${r.penalties} P)';
-    final name = Flexible(
-      child: Text(
-        '${r.name.isEmpty ? '-' : r.name}$suffix',
-        overflow: TextOverflow.ellipsis,
-        textAlign: end ? TextAlign.right : TextAlign.left,
-        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
-      ),
+    final nameText = Text(
+      '${r.name.isEmpty ? '-' : r.name}$suffix',
+      overflow: TextOverflow.ellipsis,
+      textAlign: end ? TextAlign.right : TextAlign.left,
+      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
     );
     final iconRow = Row(mainAxisSize: MainAxisSize.min, children: icons);
     final clipButtons = [
@@ -4904,14 +4902,16 @@ class _MinutelessSummary extends StatelessWidget {
           ),
         ),
     ];
-    // Video ikonu isme bitişik değil, orta çizgi tarafında (ev sahibinde
-    // sağda, deplasmanda solda).
-    final gap = clipButtons.isEmpty ? const SizedBox.shrink() : const Spacer();
+    // Video varsa isim kalan tüm genişliği kullanır, ikon orta çizgi
+    // tarafına yaslanır (ev sahibinde sağda, deplasmanda solda).
+    final Widget name = clipButtons.isEmpty
+        ? Flexible(child: nameText)
+        : Expanded(child: nameText);
     return Row(
       mainAxisAlignment: end ? MainAxisAlignment.end : MainAxisAlignment.start,
       children: end
-          ? [...clipButtons, gap, name, const SizedBox(width: 6), iconRow]
-          : [iconRow, const SizedBox(width: 6), name, gap, ...clipButtons],
+          ? [...clipButtons, name, const SizedBox(width: 6), iconRow]
+          : [iconRow, const SizedBox(width: 6), name, ...clipButtons],
     );
   }
 }
