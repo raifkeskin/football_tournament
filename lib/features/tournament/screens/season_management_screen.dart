@@ -1019,7 +1019,9 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
   }
 
   /// Takımları bu sezonun ilgili grubuna bağlar / gruptan çıkarır.
-  /// Hatalar yutulmaz; çağıran tarafa iletilir.
+  /// Gruptan çıkarılan takım sezondan da çıkar (season_teams satırı silinir);
+  /// sezonda kadrosu ya da maçı olan takım çıkarılamaz, hiçbir değişiklik
+  /// yapılmadan hata verilir. Hatalar yutulmaz; çağıran tarafa iletilir.
   /// `season_teams` tablosunda group_name kolonu yok; grup adı `groups`
   /// tablosundan group_id ile okunur.
   Future<void> _assignTeamsToGroup({
@@ -1028,6 +1030,43 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
     required Set<String> remove,
   }) async {
     final sid = widget.seasonId.trim();
+    if (remove.isNotEmpty) {
+      final ids = remove.toList();
+      final (rosterRows, homeRows, awayRows) = await (
+        _sb
+            .from('season_team_players')
+            .select('team_id')
+            .eq('season_id', sid)
+            .inFilter('team_id', ids),
+        _sb
+            .from('matches')
+            .select('home_team_id')
+            .eq('season_id', sid)
+            .isFilter('deleted_at', null)
+            .inFilter('home_team_id', ids),
+        _sb
+            .from('matches')
+            .select('away_team_id')
+            .eq('season_id', sid)
+            .isFilter('deleted_at', null)
+            .inFilter('away_team_id', ids),
+      ).wait;
+      final blocked = <String>{
+        for (final r in rosterRows) '${r['team_id']}',
+        for (final r in homeRows) '${r['home_team_id']}',
+        for (final r in awayRows) '${r['away_team_id']}',
+      };
+      if (blocked.isNotEmpty) {
+        final names = await _sb
+            .from('teams')
+            .select('name')
+            .inFilter('id', blocked.toList());
+        throw Exception(
+          'Bu sezonda kadrosu ya da maçı olan takım gruptan çıkarılamaz: '
+          '${names.map((r) => r['name']).join(', ')}',
+        );
+      }
+    }
     for (final teamId in add) {
       final updated = await _sb
           .from('season_teams')
@@ -1044,9 +1083,10 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
       }
     }
     if (remove.isNotEmpty) {
+      // Grupsuz satır bırakılmaz: takım sezonda kalmış sayılırdı.
       await _sb
           .from('season_teams')
-          .update({'group_id': null})
+          .delete()
           .eq('season_id', sid)
           .eq('group_id', groupId)
           .inFilter('team_id', remove.toList());
@@ -1406,7 +1446,8 @@ class _SeasonGroupsScreenState extends State<SeasonGroupsScreen> {
   }
 
   /// Grup silinmez, gizlenir; grubun maçları da listelerden kalkar.
-  /// Takımlar sezonda kalır (grupsuz görünür).
+  /// Takımların satırları gizlenen gruba bağlı kalır (geri alınabilsin diye);
+  /// yönetim listeleri gizlenen gruptaki kayıtları saymaz.
   Future<void> _deleteGroup(BuildContext sheetContext, GroupModel g) async {
     final messenger = ScaffoldMessenger.of(sheetContext);
     final name = _formatGroupName(g.name);
