@@ -287,50 +287,56 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
     }
   }
 
-  /// Instagram renk geçişli düğme; seçili boyut etikette yazar.
-  Widget _instagramButton() {
+  /// Pencerenin alt düğmeleri (İndir, Paylaş, Instagram) — dar, yan yana.
+  Widget _actionButton({
+    required String label,
+    required IconData icon,
+    required bool busy,
+    required VoidCallback onTap,
+    required BoxDecoration decoration,
+  }) {
     return Opacity(
-      opacity: _busy && !_instagramBusy ? 0.5 : 1,
+      opacity: _busy && !busy ? 0.5 : 1,
       child: Material(
-        borderRadius: BorderRadius.circular(14),
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
         clipBehavior: Clip.antiAlias,
         child: Ink(
-          height: 52,
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFFF58529), Color(0xFFDD2A7B), Color(0xFF8134AF)],
-            ),
-          ),
+          height: 46,
+          decoration: decoration,
           child: InkWell(
-            onTap: _busy ? null : _shareInstagram,
+            onTap: _busy ? null : onTap,
             child: Center(
-              child: _instagramBusy
+              child: busy
                   ? const SizedBox(
-                      width: 20,
-                      height: 20,
+                      width: 18,
+                      height: 18,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
                         color: Colors.white,
                       ),
                     )
-                  : Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.camera_alt_outlined,
-                          color: Colors.white,
-                          size: 20,
+                  : Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(icon, color: Colors.white, size: 18),
+                            const SizedBox(width: 6),
+                            Text(
+                              label,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.4,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'INSTAGRAM',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
             ),
           ),
@@ -340,7 +346,6 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
   }
 
   Widget _segment<T>({
-    required String label,
     required List<T> values,
     required T selected,
     required String Function(T) title,
@@ -350,18 +355,6 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 2, bottom: 6),
-          child: Text(
-            label,
-            style: const TextStyle(
-              color: kAdminMuted,
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.2,
-            ),
-          ),
-        ),
         Row(
           children: [
             for (var i = 0; i < values.length; i++) ...[
@@ -438,17 +431,10 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                AdminDialogHeader(
-                  icon: Icons.ios_share_rounded,
-                  title: widget.title,
-                  subtitle: widget.formats.length > 1
-                      ? 'Instagram gönderisi ya da hikâyesi'
-                      : 'Instagram hikâyesi için 1080×1920',
-                ),
-                const SizedBox(height: 12),
+                // Başlık yok; sağ üstteki kapat düğmesine yer.
+                const SizedBox(height: 34),
                 if (widget.formats.length > 1) ...[
                   _segment<PosterFormat>(
-                    label: 'BOYUT',
                     values: widget.formats,
                     selected: _format,
                     title: (f) => f.label,
@@ -459,7 +445,6 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
                 ],
                 if (_plainOption) ...[
                   _segment<bool>(
-                    label: 'ZEMİN',
                     values: const [false, true],
                     selected: _plain,
                     title: (v) => v ? 'Sade' : 'Fotoğraf',
@@ -528,66 +513,79 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
                 FutureBuilder<bool>(
                   future: _instagram,
                   builder: (context, snap) {
-                    final share = AdminPrimaryButton(
-                      label: 'PAYLAŞ',
-                      icon: Icons.ios_share_rounded,
-                      busy: _sharing,
-                      onPressed: _busy ? null : _share,
-                    );
-                    if (snap.data != true) return share;
+                    final instagram = snap.data == true;
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Row(
                           children: [
-                            Expanded(child: share),
-                            const SizedBox(width: 10),
-                            Expanded(child: _instagramButton()),
+                            Expanded(
+                              child: _actionButton(
+                                label: 'İNDİR',
+                                icon: Icons.download_rounded,
+                                busy: _saving,
+                                onTap: _download,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.04),
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.25),
+                                  ),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _actionButton(
+                                label: 'PAYLAŞ',
+                                icon: Icons.ios_share_rounded,
+                                busy: _sharing,
+                                onTap: _share,
+                                decoration: BoxDecoration(
+                                  color: kAdminAccent,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                            if (instagram) ...[
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: _actionButton(
+                                  label: 'INSTAGRAM',
+                                  icon: Icons.camera_alt_outlined,
+                                  busy: _instagramBusy,
+                                  onTap: _shareInstagram,
+                                  decoration: BoxDecoration(
+                                    gradient: const LinearGradient(
+                                      colors: [
+                                        Color(0xFFF58529),
+                                        Color(0xFFDD2A7B),
+                                        Color(0xFF8134AF),
+                                      ],
+                                    ),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ],
                         ),
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(2, 8, 2, 0),
-                          child: Text(
-                            'Instagram ${_format == PosterFormat.story ? 'hikâyesi' : 'gönderisi'} '
-                            'olarak açılır; o an açık olan hesaptan paylaşılır.',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: kAdminMuted,
-                              fontSize: 12,
+                        if (instagram)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(2, 8, 2, 0),
+                            child: Text(
+                              'Instagram ${_format == PosterFormat.story ? 'hikâyesi' : 'gönderisi'} '
+                              'olarak açılır; o an açık olan hesaptan paylaşılır.',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: kAdminMuted,
+                                fontSize: 12,
+                              ),
                             ),
                           ),
-                        ),
                       ],
                     );
                   },
-                ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  height: 48,
-                  child: OutlinedButton.icon(
-                    onPressed: _busy ? null : _download,
-                    icon: _saving
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.download_rounded),
-                    label: Text(kIsWeb ? 'İNDİR' : 'TELEFONA İNDİR'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      side: BorderSide(
-                        color: Colors.white.withValues(alpha: 0.25),
-                      ),
-                      textStyle: const TextStyle(
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.5,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                  ),
                 ),
                 if (_notice != null) ...[
                   const SizedBox(height: 12),
