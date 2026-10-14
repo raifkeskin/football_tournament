@@ -42,8 +42,9 @@ class NewsItem {
   /// Canlı kura haberi ise kuranın kimliği (kart kura görünümüyle çizilir).
   final String? liveDrawId;
 
-  /// Sistemin oluşturduğu haber: 'match_result' (tek maç skor kartı) veya
-  /// 'week_results' (haftanın sonuçları). null: elle yazılmış haber.
+  /// Sistemin oluşturduğu haber: 'match_result' (tek maç skor kartı),
+  /// 'week_results' (haftanın sonuçları) veya 'instagram' (turnuvanın
+  /// Instagram gönderisi). null: elle yazılmış haber.
   final String? autoKind;
   final String? matchId;
   final int? week;
@@ -53,6 +54,18 @@ class NewsItem {
 
   bool get isMatchResult => autoKind == 'match_result' && autoData != null;
   bool get isWeekResults => autoKind == 'week_results' && autoData != null;
+
+  /// Turnuvanın Instagram hesabından aktarılan gönderi (instagram-sync).
+  bool get isInstagram => autoKind == 'instagram';
+
+  /// Gönderinin Instagram adresi.
+  String? get igPermalink {
+    final u = (autoData?['permalink'] ?? '').toString().trim();
+    return u.isEmpty ? null : u;
+  }
+
+  /// Video/Reels: kapak gösterilir, oynatma Instagram'da.
+  bool get igIsVideo => autoData?['video'] == true;
 
   final String id;
   final String tournamentId;

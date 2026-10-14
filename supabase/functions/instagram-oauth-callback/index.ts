@@ -4,7 +4,8 @@
 //
 // Akış: state'i doğrula ve sil → code'u kısa ömürlü belirtece çevir → uzun
 // ömürlü (60 gün) belirtece çevir → /me ile hesap kimliği ve kullanıcı adı →
-// league_instagram_accounts'a yaz. Sonunda kullanıcıyı web uygulamasındaki
+// league_instagram_accounts'a yaz → son gönderileri arka planda Haberler'e
+// aktar (import_news açıksa). Sonunda kullanıcıyı web uygulamasındaki
 // /instagram-baglandi sayfasına yönlendirir (Supabase alan adında HTML
 // sunulamıyor).
 //
@@ -13,6 +14,9 @@
 // (varsayılan https://masterfutbol.web.app).
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { ACCOUNT_COLUMNS, type IgAccount, syncAccount } from "../_shared/instagram_sync.ts";
+
+declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const APP_ID = Deno.env.get("INSTAGRAM_APP_ID") ?? "1117446554321288";
@@ -116,8 +120,18 @@ Deno.serve(async (req) => {
       connected_by: st.user_id,
       connected_at: new Date().toISOString(),
       refreshed_at: null,
+      last_error: null,
     });
     if (error) return fail("kayit", error);
+
+    // İlk aktarım yönlendirmeyi bekletmesin.
+    const firstSync = admin
+      .from("league_instagram_accounts")
+      .select(ACCOUNT_COLUMNS)
+      .eq("league_id", st.league_id)
+      .single()
+      .then(({ data }) => data ? syncAccount(admin, data as IgAccount) : null);
+    if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(firstSync);
 
     const canPublish = perms.includes("instagram_business_content_publish");
     return done({
