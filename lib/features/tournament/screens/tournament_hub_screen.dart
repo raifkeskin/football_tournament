@@ -327,6 +327,7 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
                                         seasonId: season.id,
                                         groupId: group.id,
                                         shareAction: _fixtureShare,
+                                        accent: accent,
                                       ),
                                     ),
                                     _KeepAlive(
