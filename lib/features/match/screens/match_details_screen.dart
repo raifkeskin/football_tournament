@@ -47,6 +47,7 @@ import '../../../core/services/video_link.dart';
 import '../../../core/widgets/youtube_player_page.dart'
     show
         openYoutubeClip,
+        openYoutubeInApp,
         youtubePlayerOrigin,
         youtubeVideoId,
         YoutubePlayerFrame;
@@ -477,10 +478,11 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     };
     final surnames = <String, String>{};
     if (ids.isNotEmpty) {
-      for (final p in await db
-          .from('players')
-          .select('id, name, surname')
-          .inFilter('id', ids.toList())) {
+      for (final p
+          in await db
+              .from('players')
+              .select('id, name, surname')
+              .inFilter('id', ids.toList())) {
         final sn = (p['surname'] ?? '').toString().trim();
         surnames['${p['id']}'] = sn.isNotEmpty
             ? sn
@@ -2767,10 +2769,7 @@ class _NativeYoutubeScreenState extends State<_NativeYoutubeScreen> {
   @override
   Widget build(BuildContext context) {
     // Tam ekran düğmesi ya da yatay tutuş: oynatıcı ekranı doldurur.
-    return YoutubePlayerFrame(
-      controller: _controller,
-      title: 'Maç Yayını',
-    );
+    return YoutubePlayerFrame(controller: _controller, title: 'Maç Yayını');
   }
 }
 
@@ -2845,14 +2844,17 @@ class _LiveStreamPanelState extends State<_LiveStreamPanel> {
                           ),
                         ),
                         IconButton(
-                          tooltip: "YouTube'da aç",
+                          tooltip: 'Büyüt',
                           visualDensity: VisualDensity.compact,
-                          onPressed: () =>
-                              _openYoutubeExternally(context, stream.url),
+                          onPressed: () => openYoutubeInApp(
+                            context,
+                            stream.url,
+                            fullscreen: true,
+                          ),
                           icon: const Icon(
-                            Icons.open_in_new_rounded,
-                            color: Colors.white54,
-                            size: 20,
+                            Icons.fullscreen_rounded,
+                            color: Colors.white70,
+                            size: 24,
                           ),
                         ),
                         Icon(
