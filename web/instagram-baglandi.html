@@ -9,8 +9,9 @@
 :root{--bg:#0f172a;--card:#1e293b;--text:#e2e8f0;--muted:#94a3b8;--accent:#10b981;--danger:#f87171;--line:#334155}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
-header{background:linear-gradient(90deg,#064e3b,#10b981,#064e3b);padding:18px 16px;border-bottom:1.5px solid #fff}
-header a{color:#fff;text-decoration:none;font-weight:800;letter-spacing:1.5px;font-style:italic}
+header{background:linear-gradient(90deg,#064e3b,#10b981,#064e3b);padding:12px 16px;border-bottom:1.5px solid #fff}
+header a{display:flex;align-items:center;gap:12px;color:#fff;text-decoration:none;font-weight:800;letter-spacing:1.5px;font-style:italic;font-size:18px}
+header img{width:44px;height:44px}
 main{max-width:520px;margin:0 auto;padding:40px 16px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:28px 22px;text-align:center}
 .icon{width:64px;height:64px;border-radius:50%;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:800;color:#fff;background:var(--accent)}
@@ -21,13 +22,13 @@ a.btn{display:inline-block;margin-top:22px;padding:12px 22px;border-radius:12px;
 </style>
 </head>
 <body>
-<header><a href="/">LİG MASASI</a></header>
+<header><a href="/"><img src="/logo-lm.png" alt="">LİG MASASI</a></header>
 <main>
 <div class="card">
   <div class="icon" id="icon">✓</div>
   <h1 id="title">Instagram hesabı bağlandı</h1>
-  <p id="text">Bu sayfayı kapatıp uygulamaya dönebilirsiniz.</p>
-  <a class="btn" href="/">Uygulamaya dön</a>
+  <p id="text">Uygulamaya dönebilirsiniz; son gönderiler birkaç dakika içinde Haberler'de görünür.</p>
+  <a class="btn" id="back" href="/">Uygulamaya dön</a>
 </div>
 </main>
 <script>
@@ -46,6 +47,18 @@ a.btn{display:inline-block;margin-top:22px;padding:12px 22px;border-radius:12px;
     kayit: 'Bağlantı kaydedilemedi.',
     ag: 'Instagram\'a ulaşılamadı.'
   };
+  // "Uygulamaya dön": Android'de yüklü uygulamayı kaldığı ekranda öne getirir
+  // (yüklü değilse web uygulaması açılır); iOS'ta sekme kapatılıp dönülür.
+  var back = document.getElementById('back');
+  var ua = navigator.userAgent || '';
+  var ios = /iPhone|iPad|iPod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  if (/Android/i.test(ua)) {
+    back.href = 'intent://#Intent;action=android.intent.action.MAIN;' +
+      'category=android.intent.category.LAUNCHER;package=com.ligmasasi.app;' +
+      'S.browser_fallback_url=' + encodeURIComponent(location.origin + '/') + ';end';
+  } else if (ios) {
+    back.style.display = 'none';
+  }
   var icon = document.getElementById('icon');
   var title = document.getElementById('title');
   var text = document.getElementById('text');

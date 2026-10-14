@@ -11,11 +11,19 @@ class _IgStatus {
     required this.username,
     required this.expiresAt,
     required this.canPublish,
+    required this.importNews,
+    required this.lastSyncedAt,
+    required this.lastError,
   });
 
   final String username;
   final DateTime? expiresAt;
   final bool canPublish;
+
+  /// Gönderiler Haberler'e otomatik aktarılır mı ("Haberlere aktar").
+  final bool importNews;
+  final DateTime? lastSyncedAt;
+  final String? lastError;
 }
 
 /// Turnuva formundaki "Instagram Paylaşımı" bölümü (admin + kurucu başkan).
@@ -23,6 +31,8 @@ class _IgStatus {
 /// "Bağla" Instagram yetkilendirme sayfasını tarayıcıda açar; dönüşte
 /// instagram-oauth-callback belirteci kaydeder. Uygulamaya geri dönülünce
 /// durum yenilenir (bkz. migration 20261020140000_instagram_accounts).
+/// "Haberlere aktar" açıkken gönderiler 15 dakikada bir aktif sezonun
+/// haberlerine düşer (instagram-sync, migration 20261020150000).
 class LeagueInstagramSection extends StatefulWidget {
   const LeagueInstagramSection({super.key, required this.leagueId});
 
@@ -63,6 +73,11 @@ class _LeagueInstagramSectionState extends State<LeagueInstagramSection> {
       username: (r['username'] ?? '').toString(),
       expiresAt: DateTime.tryParse((r['expires_at'] ?? '').toString()),
       canPublish: r['can_publish'] == true,
+      importNews: r['import_news'] == true,
+      lastSyncedAt: DateTime.tryParse((r['last_synced_at'] ?? '').toString()),
+      lastError: (r['last_error'] ?? '').toString().trim().isEmpty
+          ? null
+          : r['last_error'].toString(),
     );
   }
 
@@ -109,8 +124,8 @@ class _LeagueInstagramSectionState extends State<LeagueInstagramSection> {
       context: context,
       title: 'Instagram Bağlantısını Kaldır',
       message:
-          '@${s.username} hesabına uygulamadan artık paylaşım yapılamayacak. '
-          'Instagram hesabınız ve paylaşımlarınız etkilenmez.',
+          '@${s.username} gönderileri artık Haberler\'e aktarılmayacak; '
+          'aktarılmış haberler kalır. Instagram hesabınız etkilenmez.',
       confirmLabel: 'KALDIR',
       icon: Icons.link_off_rounded,
     );
@@ -128,6 +143,58 @@ class _LeagueInstagramSectionState extends State<LeagueInstagramSection> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// Aktarımı aç/kapat; açılınca son gönderiler hemen çekilir.
+  Future<void> _setImport(bool on) async {
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _busy = true);
+    try {
+      await _sb.rpc(
+        'set_league_instagram_import',
+        params: {'p_league_id': widget.leagueId, 'p_on': on},
+      );
+      if (on) {
+        final res = await _sb.functions.invoke(
+          'instagram-sync',
+          body: {'league_id': widget.leagueId},
+        );
+        final n = ((res.data as Map?)?['imported'] as num?)?.toInt() ?? 0;
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              n > 0
+                  ? '$n Instagram gönderisi Haberler\'e eklendi.'
+                  : 'Yeni gönderi yok; yenileri Haberler\'e düşecek.',
+            ),
+          ),
+        );
+      }
+    } on FunctionException catch (e) {
+      final d = e.details;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            d is Map && d['error'] != null
+                ? d['error'].toString()
+                : 'Gönderiler çekilemedi (${e.status}).',
+          ),
+        ),
+      );
+    } on PostgrestException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Ayar kaydedilemedi: $e')));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+      _reload();
+    }
+  }
+
+  static String _time(DateTime d) {
+    final l = d.toLocal();
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${two(l.day)}.${two(l.month)} ${two(l.hour)}:${two(l.minute)}';
   }
 
   static String _date(DateTime d) {
@@ -163,7 +230,7 @@ class _LeagueInstagramSectionState extends State<LeagueInstagramSection> {
           } else if (s == null) {
             value = 'Bağlı değil';
             note =
-                'Haberleri bu turnuvanın Instagram hesabında yayınlamak için '
+                'Turnuvanın Instagram gönderilerini Haberler\'de göstermek için '
                 'hesabı bir kez bağlayın. Hesap profesyonel (işletme veya '
                 'içerik üreticisi) olmalı.';
           } else {
@@ -215,8 +282,49 @@ class _LeagueInstagramSectionState extends State<LeagueInstagramSection> {
                       ),
                     ),
                   ),
+                  if (s != null)
+                    AdminFieldRow(
+                      icon: Icons.newspaper_outlined,
+                      label: 'Haberlere aktar',
+                      onTap: _busy ? null : () => _setImport(!s.importNews),
+                      trailing: Switch.adaptive(
+                        value: s.importNews,
+                        activeTrackColor: kAdminAccent,
+                        onChanged: _busy ? null : _setImport,
+                      ),
+                      child: Text(
+                        s.importNews
+                            ? 'Açık · gönderiler Haberler\'e düşer'
+                            : 'Kapalı',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
                 ],
               ),
+              if (s != null && s.importNews)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
+                  child: Text(
+                    s.lastError != null
+                        ? 'Son aktarım başarısız: ${s.lastError}'
+                        : s.lastSyncedAt != null
+                        ? 'Son kontrol ${_time(s.lastSyncedAt!)} · 15 dakikada '
+                              'bir yeni gönderiler aktarılır. İstemediğiniz '
+                              'haberi Haber Yönetimi\'nden gizleyebilirsiniz.'
+                        : '15 dakikada bir yeni gönderiler aktarılır. '
+                              'İstemediğiniz haberi Haber Yönetimi\'nden '
+                              'gizleyebilirsiniz.',
+                    style: TextStyle(
+                      color: s.lastError != null ? kAdminDanger : kAdminMuted,
+                      fontSize: 12,
+                      height: 1.35,
+                    ),
+                  ),
+                ),
               if (note != null)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../match/screens/live_draw_screen.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/services/active_tournament.dart';
 import '../../../core/services/app_session.dart';
@@ -122,10 +123,26 @@ class _NewsViewState extends State<NewsView> {
 
   Future<void> _share(NewsItem n) async {
     final title = n.leagueName.isEmpty ? '' : '${n.leagueName}\n\n';
-    final images = n.imageUrls.isEmpty ? '' : '\n\n${n.imageUrls.join('\n')}';
+    // Instagram haberinde görseller yerine gönderinin kendisi paylaşılır.
+    final link = n.isInstagram ? n.igPermalink : null;
+    final images = link != null
+        ? '\n\n$link'
+        : n.imageUrls.isEmpty
+        ? ''
+        : '\n\n${n.imageUrls.join('\n')}';
     await SharePlus.instance.share(
       ShareParams(text: '$title${n.content}$images'),
     );
+  }
+
+  Future<void> _openInstagram(NewsItem n) async {
+    final link = n.igPermalink;
+    if (link == null) return;
+    final ok = await launchUrl(
+      Uri.parse(link),
+      mode: LaunchMode.externalApplication,
+    );
+    if (!ok) _snack('Instagram açılamadı.');
   }
 
   void _openGallery(List<String> urls, int index) {
@@ -234,7 +251,11 @@ class _NewsViewState extends State<NewsView> {
               onToggle: () => _toggle(n.id),
               onToggleLike: () => _toggleLike(n, liked),
               onShare: () => _share(n),
-              onOpenPhoto: (i) => _openGallery(n.imageUrls, i),
+              onOpenInstagram: () => _openInstagram(n),
+              // Video Instagram'da oynatılır; fotoğraflar galeride açılır.
+              onOpenPhoto: (i) => n.isInstagram && n.igIsVideo
+                  ? _openInstagram(n)
+                  : _openGallery(n.imageUrls, i),
             );
           },
         );
@@ -275,6 +296,7 @@ class _NewsTile extends StatelessWidget {
     required this.onToggleLike,
     required this.onShare,
     required this.onOpenPhoto,
+    required this.onOpenInstagram,
   });
 
   final NewsItem item;
@@ -286,6 +308,7 @@ class _NewsTile extends StatelessWidget {
   final VoidCallback onToggleLike;
   final VoidCallback onShare;
   final ValueChanged<int> onOpenPhoto;
+  final VoidCallback onOpenInstagram;
 
   /// İlk satır kısa ise başlık, kalanı gövde; değilse metnin tamamı.
   (String, String) _split() {
@@ -303,6 +326,7 @@ class _NewsTile extends StatelessWidget {
     final accent = _accent();
     final imgs = item.imageUrls;
     final meta = [
+      if (item.isInstagram) 'Instagram',
       _timeAgo(item.createdAt),
       if (item.regionName.isNotEmpty) item.regionName,
     ].join(' · ');
@@ -407,7 +431,11 @@ class _NewsTile extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       if (imgs.isNotEmpty)
-                        _Carousel(urls: imgs, onOpen: onOpenPhoto),
+                        _Carousel(
+                          urls: imgs,
+                          onOpen: onOpenPhoto,
+                          video: item.isInstagram && item.igIsVideo,
+                        ),
                       if (body.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
@@ -461,6 +489,23 @@ class _NewsTile extends StatelessWidget {
               ),
             ),
           const Spacer(),
+          if (item.isInstagram && item.igPermalink != null)
+            TextButton.icon(
+              onPressed: onOpenInstagram,
+              icon: const Icon(
+                Icons.open_in_new_rounded,
+                color: Colors.white,
+                size: 18,
+              ),
+              label: const Text(
+                'Instagram\'da aç',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
           IconButton(
             tooltip: 'Paylaş',
             onPressed: onShare,
@@ -504,6 +549,25 @@ class _Thumb extends StatelessWidget {
                     ? Icon(Icons.article_outlined, color: _accent(), size: 28)
                     : WebSafeImage(url: logo, fit: BoxFit.contain),
               ),
+            if (item.isInstagram && item.igIsVideo && imgs.isNotEmpty)
+              const Center(child: _PlayBadge(size: 30)),
+            if (item.isInstagram)
+              Positioned(
+                left: 4,
+                top: 4,
+                child: Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.6),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Icon(
+                    Icons.camera_alt_outlined,
+                    color: Colors.white,
+                    size: 13,
+                  ),
+                ),
+              ),
             if (imgs.length > 1)
               Positioned(
                 right: 4,
@@ -537,10 +601,17 @@ class _Thumb extends StatelessWidget {
 /// Açık haberdeki fotoğraflar: parmakla kaydırılır, altta nokta göstergesi;
 /// dokununca tam ekran.
 class _Carousel extends StatefulWidget {
-  const _Carousel({required this.urls, required this.onOpen});
+  const _Carousel({
+    required this.urls,
+    required this.onOpen,
+    this.video = false,
+  });
 
   final List<String> urls;
   final ValueChanged<int> onOpen;
+
+  /// Kapak bir videonun: ortada oynat işareti (dokununca Instagram).
+  final bool video;
 
   @override
   State<_Carousel> createState() => _CarouselState();
@@ -561,7 +632,13 @@ class _CarouselState extends State<_Carousel> {
             onPageChanged: (i) => setState(() => _page = i),
             itemBuilder: (context, i) => GestureDetector(
               onTap: () => widget.onOpen(i),
-              child: WebSafeImage(url: urls[i], fit: BoxFit.cover),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  WebSafeImage(url: urls[i], fit: BoxFit.cover),
+                  if (widget.video) const Center(child: _PlayBadge(size: 60)),
+                ],
+              ),
             ),
           ),
         ),
@@ -586,6 +663,31 @@ class _CarouselState extends State<_Carousel> {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// Video kapağındaki yuvarlak oynat işareti.
+class _PlayBadge extends StatelessWidget {
+  const _PlayBadge({required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.55),
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white70, width: 1.5),
+      ),
+      child: Icon(
+        Icons.play_arrow_rounded,
+        color: Colors.white,
+        size: size * 0.62,
+      ),
     );
   }
 }
