@@ -2161,6 +2161,11 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
             match: widget.match,
             homeName: widget.homeName,
             awayName: widget.awayName,
+            // YZ yalnız maç yayınını tarar; yayın linki yoksa kart çıkmaz.
+            hasStream: all.any(
+              (m) =>
+                  m.mediaType == 'Maç Yayın Linki' && m.url.trim().isNotEmpty,
+            ),
             canReview:
                 session.canManageLeague(widget.match.leagueId) ||
                 session.regionsInSeason(widget.match.seasonId).isNotEmpty,
