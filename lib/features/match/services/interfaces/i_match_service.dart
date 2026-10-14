@@ -31,6 +31,15 @@ abstract class IMatchService {
   /// Olayı siler; canlı maçta silinen gol skordan da düşülür.
   Future<void> deleteMatchEvent(String eventId);
 
+  /// Maçın geçerli golleri (dakika sırasıyla, oyuncu adıyla); VAR iptali
+  /// için seçilir.
+  Future<List<MatchEvent>> fetchGoalEvents(String matchId);
+
+  /// VAR: golü iptal eder (event_type 'goal' → 'goal_cancelled') ya da
+  /// iptali geri alır. Skor düzeltmesi ve "VAR: Gol iptal" bildirimi
+  /// veritabanı tetikleyicisinde (match_events_var_cancel).
+  Future<void> setGoalCancelled(String eventId, {required bool cancelled});
+
   /// Maç akışını ilerletir: start | end_first_half | start_second_half |
   /// finish | undo. Saat sunucuda tutulur (advance_match_phase).
   Future<void> advanceMatchPhase({

@@ -152,3 +152,15 @@ _Eklendi: 2026-10-14_
   - Paylaşılan haberde "Instagram'da paylaşıldı ✓" işareti görünecek. Aynı haber iki kez gönderilmeyecek.
   - Fotoğrafsız haber için metinden otomatik görsel üretmek de düşünülebilir.
 - **Neden ertelendi:** Turnuva sahipleri genelde doğrudan Instagram'da paylaşıyor. Bu gönderilerin Haberler'e düşmesi şimdilik yetiyor.
+
+## 15. Hakemler (maç görevlileri)
+_Eklendi: 2026-10-14_
+
+- **İstek:** Maçın 1. hakemi ve yardımcı hakemleri girilsin, maç detayında görünsün.
+- **Önerilen yapı:**
+  - Turnuvaya bağlı bir hakem listesi: ad soyad, isteğe bağlı telefon (yalnız yöneticiler görür) ve fotoğraf. Kurucu başkan kendi listesini yönetir.
+  - Maça üç alan: 1. hakem, 1. yardımcı, 2. yardımcı. 4. hakem isteğe bağlı.
+  - Yönetim menüsüne "Hakem Yönetimi" (ortak form tasarımıyla).
+  - Maç düzenleme formunda "Hakemler" bölümü: listeden seçim, listede yoksa "+ Yeni hakem".
+- **Gösterim:** Detay sekmesinin en altında "Maç Görevlileri" kartı. Hakem girilmemişse kart görünmez. Üst bant zaten dolu olduğu için oraya konmadı.
+- **Yük:** Orta (migration + yönetim ekranı + maç formu + detay kartı).

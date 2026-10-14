@@ -86,6 +86,43 @@ class _MissedPenaltyIcon extends StatelessWidget {
   }
 }
 
+/// VAR ile iptal edilen gol: soluk top, sağ altında kırmızı X rozeti.
+class _CancelledGoalIcon extends StatelessWidget {
+  const _CancelledGoalIcon();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 20,
+      height: 20,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          const Icon(Icons.sports_soccer, size: 18, color: Color(0xFF94A3B8)),
+          Positioned(
+            right: -3,
+            bottom: -3,
+            child: Container(
+              width: 11,
+              height: 11,
+              decoration: BoxDecoration(
+                color: const Color(0xFFDC2626),
+                shape: BoxShape.circle,
+                border: Border.all(color: const Color(0xFF0F172A), width: 1),
+              ),
+              child: const Icon(
+                Icons.close_rounded,
+                size: 8,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Penaltı golü: top, altında "P" rozeti.
 class _PenaltyGoalIcon extends StatelessWidget {
   const _PenaltyGoalIcon();
@@ -4590,7 +4627,7 @@ class _DetailTabView extends StatelessWidget {
               if (type == 'substitution') {
                 return title.isEmpty ? 'Değişiklik' : title;
               }
-              if (type == 'goal') {
+              if (type == 'goal' || type == 'goal_cancelled') {
                 // Kendi kalesine: adın altında soluk alt satırda yazılır.
                 final suffix = isPenalty && !isOwnGoal ? ' (P)' : '';
                 return '${title.isEmpty ? 'Gol' : title}$suffix';
@@ -4599,7 +4636,8 @@ class _DetailTabView extends StatelessWidget {
             }
 
             // Kendi kalesine gol, golün yazıldığı (rakip) takım tarafında.
-            final sideTeamId = type == 'goal' && isOwnGoal
+            final anyGoal = type == 'goal' || type == 'goal_cancelled';
+            final sideTeamId = anyGoal && isOwnGoal
                 ? (teamId == match.homeTeamId
                       ? match.awayTeamId
                       : match.homeTeamId)
@@ -4616,7 +4654,9 @@ class _DetailTabView extends StatelessWidget {
               type: type,
               title: displayTitle(),
               // Asist, gol atanın altında daha küçük ve soluk gösterilir.
-              subtitle: type == 'goal' && isOwnGoal
+              subtitle: type == 'goal_cancelled'
+                  ? 'VAR · Gol iptal'
+                  : type == 'goal' && isOwnGoal
                   ? 'Kendi Kalesine'
                   : type == 'goal' && assist.isNotEmpty
                   ? 'Asist: $assist'
@@ -5064,9 +5104,17 @@ class _DetailEventTile extends StatelessWidget {
       return _substitutionBlock(align == CrossAxisAlignment.start);
     }
     final sub = (subtitle ?? '').trim();
+    // VAR ile iptal edilen gol: ad soluk ve üstü çizili.
+    final cancelled = type == 'goal_cancelled';
     final name = Text(
       title.isEmpty ? '-' : title,
-      style: const TextStyle(fontWeight: FontWeight.bold),
+      style: TextStyle(
+        fontWeight: FontWeight.bold,
+        color: cancelled ? const Color(0xFF94A3B8) : null,
+        decoration: cancelled ? TextDecoration.lineThrough : null,
+        decorationColor: const Color(0xFFDC2626),
+        decorationThickness: 2,
+      ),
       overflow: TextOverflow.ellipsis,
     );
     return Column(
@@ -5096,10 +5144,12 @@ class _DetailEventTile extends StatelessWidget {
             child: Text(
               sub,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
-                color: Color(0xFF94A3B8),
-                fontWeight: FontWeight.w500,
+                color: cancelled
+                    ? const Color(0xFFF87171)
+                    : const Color(0xFF94A3B8),
+                fontWeight: cancelled ? FontWeight.w800 : FontWeight.w500,
               ),
             ),
           ),
@@ -5176,6 +5226,9 @@ class _DetailEventTile extends StatelessWidget {
           break;
         case 'man_of_the_match':
           icon = const Icon(Icons.star_rounded, size: 18, color: Colors.amber);
+          break;
+        case 'goal_cancelled':
+          icon = const _CancelledGoalIcon();
           break;
         default:
           icon = const Icon(Icons.info_outline, size: 18);
@@ -5339,6 +5392,56 @@ class _DetailEventTile extends StatelessWidget {
 
   Future<void> _confirmDelete(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
+    // VAR ile iptal edilmiş gol: yanlışlıkla iptal geri alınabilir.
+    if (type == 'goal_cancelled') {
+      final action = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('VAR: İptal edilen gol'),
+          content: Text(
+            '$minute\' ${title.isEmpty ? 'Gol' : title}\n\nİptal geri '
+            'alınırsa gol yeniden sayılır ve skor güncellenir.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Vazgeç'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, 'delete'),
+              child: const Text(
+                'Sil',
+                style: TextStyle(color: Colors.redAccent),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, 'restore'),
+              child: const Text('İptali geri al'),
+            ),
+          ],
+        ),
+      );
+      if (action == null) return;
+      try {
+        if (action == 'restore') {
+          await ServiceLocator.matchService.setGoalCancelled(
+            eventId,
+            cancelled: false,
+          );
+          messenger.showSnackBar(
+            const SnackBar(content: Text('Gol yeniden geçerli.')),
+          );
+        } else {
+          await ServiceLocator.matchService.deleteMatchEvent(eventId);
+          messenger.showSnackBar(
+            const SnackBar(content: Text('Olay silindi.')),
+          );
+        }
+      } catch (e) {
+        messenger.showSnackBar(SnackBar(content: Text('Hata: $e')));
+      }
+      return;
+    }
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
