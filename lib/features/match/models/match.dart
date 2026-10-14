@@ -396,7 +396,9 @@ class MatchEvent {
   final String matchId;
   final String teamId;
   final String eventType;
-  final int minute;
+
+  /// Dakika tutulmayan sezonda (halısaha) null.
+  final int? minute;
   final String eventName;
   final String? playerId;
   final String? assistPlayerId;
@@ -411,7 +413,7 @@ class MatchEvent {
     String? leagueId,
     required this.teamId,
     required this.eventType,
-    required this.minute,
+    this.minute,
     required this.eventName,
     this.playerId,
     this.assistPlayerId,
@@ -424,14 +426,13 @@ class MatchEvent {
     dynamic v(String camel, String snake) => map[camel] ?? map[snake];
 
     final rawMinute = v('minute', 'minute');
-    int minute = 0;
+    int? minute;
     if (rawMinute is num) {
       minute = rawMinute.toInt();
     } else if (rawMinute is String) {
       minute =
           int.tryParse(rawMinute.trim()) ??
-          double.tryParse(rawMinute.replaceAll(',', '.'))?.toInt() ??
-          0;
+          double.tryParse(rawMinute.replaceAll(',', '.'))?.toInt();
     }
     return MatchEvent(
       id: id,

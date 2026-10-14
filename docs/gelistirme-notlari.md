@@ -126,3 +126,16 @@ _Eklendi: 2026-10-13_
   - Web'de Instagram'ın gömme sayfası (iframe) kullanılabilir. Telefonda webview paketi gerekir.
   - Küçük resim (thumbnail) ve başlık için Meta oEmbed izni gerekir. Instagram yayın planındaki Meta uygulaması kurulunca yapılır.
 - **Not:** Videoyu kendimiz barındırmıyoruz. Trafik ücreti yüksek olur, akış (HLS) da yok.
+
+## 13. Halısaha videolarından gol kesitleri (dakikasız)
+_Eklendi: 2026-10-14_
+
+- **Şu an:** Sezonda "Gol Dakikası" kapalıysa (halısaha) YZ gol kesitleri bölümü gizli. Kesitler, maç detayındaki gol dakikalarının çevresinde aranıyor (maç başına ~0,04 $).
+- **Sorun:** Dakika yoksa 60 dakikanın tamamını taramak gerekir. Tahmini maliyet kamera başına 0,40–0,60 $, yani mevcut 0,50 $/maç limitine takılır. Bazı halısahalarda iki kamera var; bu da maliyeti ikiye katlar.
+- **Önerilen yol:**
+  - Başlama vuruşu bulunur, iki kamera bununla senkronlanır.
+  - Video düşük kare hızında (ör. 10 sn'de 1 kare) taranır, yalnız kutlama ve santra anları işaretlenir. Maçtaki gol sayısı ve sırası bilindiği için sonuç doğrulanabilir.
+  - Bulunan anlar çevresinde ±1 dakikalık ayrıntılı kesit alınır.
+  - İki kamerada gol yalnız birinde (geniş açı) aranır. Her gol için diğer kameranın ±30 sn'sine bakılıp "kaleye yakın ve net olan" seçilir. Devre arası taraf değiştiği için karar gol başına verilir.
+  - Maç medyasında video linkine "Kamera 1 / Kamera 2" etiketi gerekir.
+- **Önce:** Gerçek bir halısaha videosuyla maliyet ölçülecek.

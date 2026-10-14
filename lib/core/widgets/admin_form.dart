@@ -138,6 +138,67 @@ class AdminDialogHeader extends StatelessWidget {
   }
 }
 
+/// Uzun formları kısa sekmelere bölen hap görünümlü sekme satırı. Seçili
+/// sekme yeşil dolgulu; dar ekranda etiketler sığacak kadar küçülür.
+class AdminFormTabs extends StatelessWidget {
+  const AdminFormTabs({
+    super.key,
+    required this.labels,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final List<String> labels;
+  final int selected;
+  final ValueChanged<int>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B).withValues(alpha: 0.94),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Row(
+        children: [
+          for (var i = 0; i < labels.length; i++)
+            Expanded(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: onChanged == null ? null : () => onChanged!(i),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 160),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: i == selected ? kAdminAccent : Colors.transparent,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      labels[i],
+                      maxLines: 1,
+                      style: TextStyle(
+                        color: i == selected ? Colors.white : kAdminMuted,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Popup'ın sağ üst köşesindeki kapatma (X) düğmesi. Popuplarda VAZGEÇ
 /// düğmesi yerine bu kullanılır.
 class AdminDialogCloseButton extends StatelessWidget {

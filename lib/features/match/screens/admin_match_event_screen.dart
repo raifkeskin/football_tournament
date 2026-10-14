@@ -9,6 +9,7 @@ import '../../../core/services/service_locator.dart';
 import '../../../core/utils/team_name.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
+import '../utils/season_match_settings.dart';
 
 class AdminMatchEventScreen extends StatefulWidget {
   final MatchModel match;
@@ -35,6 +36,12 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
   bool _penaltyScored = true;
   bool _isLoading = false;
 
+  /// Sezonda gol/kart dakikası tutuluyor mu? Tutulmuyorsa (halısaha) dakika
+  /// alanı gösterilmez, olay dakikasız kaydedilir.
+  late bool _tracksMinutes =
+      SeasonMatchSettings.cached(widget.match.seasonId)?.tracksGoalMinutes ??
+      true;
+
   /// Olayı yapan oyuncunun takımı: kendi kalesine golde rakip takım.
   /// match_events.team_id oyuncunun takımıdır; skor rakibe yazılır.
   String? get _playerTeamId {
@@ -47,6 +54,11 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
   void initState() {
     super.initState();
     _teamId = widget.match.homeTeamId;
+    SeasonMatchSettings.of(widget.match.seasonId).then((s) {
+      if (mounted && s.tracksGoalMinutes != _tracksMinutes) {
+        setState(() => _tracksMinutes = s.tracksGoalMinutes);
+      }
+    });
   }
 
   @override
@@ -131,7 +143,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
       );
       return;
     }
-    if (player == null || minuteStr.isEmpty) {
+    if (player == null || (_tracksMinutes && minuteStr.isEmpty)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Lütfen tüm alanları doldurun.')),
       );
@@ -145,7 +157,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
     }
 
     final minute = int.tryParse(minuteStr);
-    if (minute == null) return;
+    if (_tracksMinutes && minute == null) return;
 
     setState(() => _isLoading = true);
     try {
@@ -426,7 +438,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                                   }
                                 : null,
                           ),
-                        if (_eventType != 'man_of_the_match')
+                        if (_eventType != 'man_of_the_match' && _tracksMinutes)
                           AdminFieldRow(
                             icon: Icons.timer_outlined,
                             label: 'Dakika',
