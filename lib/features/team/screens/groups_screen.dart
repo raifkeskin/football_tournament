@@ -12,8 +12,8 @@ import '../utils/standings.dart';
 import '../../share/poster_background.dart';
 import '../../share/poster_share.dart';
 import '../../share/standings_poster.dart';
-import '../../tournament/models/league_format.dart';
 import '../../../core/utils/string_utils.dart';
+import '../../tournament/models/league_format.dart';
 
 /// Bir turnuva + sezon + grubun puan durumu. Başlık çubuğu ve grup sekmesi
 /// yok; Turnuva Sayfası'nın Puan Durumu sekmesinde gösterilir.
@@ -341,6 +341,46 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
                 }
               }
 
+              // Ardışık aynı bölgedeki sıralar tek grup.
+              final groups =
+                  <
+                    ({
+                      int start,
+                      int end,
+                      ({String name, Color color, bool filled})? zone,
+                    })
+                  >[];
+              for (var i = 0; i < rows.length; i++) {
+                final z = zoneAt(i);
+                if (groups.isNotEmpty && groups.last.zone?.name == z?.name) {
+                  final last = groups.removeLast();
+                  groups.add((start: last.start, end: i + 1, zone: last.zone));
+                } else {
+                  groups.add((start: i, end: i + 1, zone: z));
+                }
+              }
+              final hasBands = groups.any((g) => g.zone != null);
+
+              Widget row(int i) => _StandingsRow(
+                index: i,
+                entry: rows[i],
+                zone: zoneAt(i),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      settings: const RouteSettings(name: 'TeamSquadScreen'),
+                      builder: (_) => TeamSquadScreen(
+                        teamId: rows[i].teamId,
+                        tournamentId: widget.leagueId,
+                        teamName: rows[i].name,
+                        teamLogoUrl: rows[i].logo,
+                      ),
+                    ),
+                  );
+                },
+              );
+
               // Kenarlardan boşluklu, yuvarlak köşeli kart.
               final table = Container(
                 margin: const EdgeInsets.fromLTRB(10, 10, 10, 0),
@@ -358,40 +398,43 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
                     // Sütun başlıkları
                     Container(
                       color: Colors.white.withValues(alpha: 0.04),
-                      padding: const EdgeInsets.fromLTRB(3, 7, 10, 7),
+                      padding: EdgeInsets.fromLTRB(
+                        3 + (hasBands ? _kZoneBand : 0),
+                        7,
+                        10,
+                        7,
+                      ),
                       child: const _StandingsHeaderRow(),
                     ),
-                    for (var i = 0; i < rows.length; i++) ...[
-                      // Formatlı tabloda bölge değişiminde başlık.
-                      if (format != null &&
-                          zoneAt(i) != null &&
-                          (i == 0 || zoneAt(i - 1)?.name != zoneAt(i)!.name))
-                        _ZoneHeader(
-                          name: zoneAt(i)!.name,
-                          color: zoneAt(i)!.color,
-                        ),
-                      _StandingsRow(
-                        index: i,
-                        entry: rows[i],
-                        zone: zoneAt(i),
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              settings: const RouteSettings(
-                                name: 'TeamSquadScreen',
-                              ),
-                              builder: (_) => TeamSquadScreen(
-                                teamId: rows[i].teamId,
-                                tournamentId: widget.leagueId,
-                                teamName: rows[i].name,
-                                teamLogoUrl: rows[i].logo,
+                    // Bölgeler: aynı bölgedeki satırlar bir arada, solda bölge
+                    // adı 90° sola yatırılmış başlıkla.
+                    for (final g in groups)
+                      Stack(
+                        children: [
+                          Padding(
+                            padding: EdgeInsets.only(
+                              left: hasBands ? _kZoneBand : 0,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                for (var i = g.start; i < g.end; i++) row(i),
+                              ],
+                            ),
+                          ),
+                          if (g.zone != null)
+                            Positioned(
+                              left: 0,
+                              top: 0,
+                              bottom: 0,
+                              width: _kZoneBand,
+                              child: _ZoneBand(
+                                name: g.zone!.name,
+                                color: g.zone!.color,
                               ),
                             ),
-                          );
-                        },
+                        ],
                       ),
-                    ],
                     // Açıklama
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
@@ -662,9 +705,13 @@ class _IfNowCard extends StatelessWidget {
   }
 }
 
-/// Formatlı puan tablosunda bölge başlığı (ör. "PRESTİJ KUPASI").
-class _ZoneHeader extends StatelessWidget {
-  const _ZoneHeader({required this.name, required this.color});
+/// Bölge şeridinin genişliği (dikey başlık).
+const double _kZoneBand = 20;
+
+/// Puan tablosunda bölge başlığı (ör. "PRESTİJ KUPASI"), satırların solunda
+/// 90° sola yatırılmış: aşağıdan yukarı okunur, adın ardından ince çizgi.
+class _ZoneBand extends StatelessWidget {
+  const _ZoneBand({required this.name, required this.color});
 
   final String name;
   final Color color;
@@ -672,29 +719,48 @@ class _ZoneHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 6, 12, 4),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.06),
         border: Border(
           top: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
         ),
       ),
-      child: Row(
-        children: [
-          Text(
-            name.trUpper,
-            style: TextStyle(
-              color: color,
-              fontSize: 10.5,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.1,
+      child: RotatedBox(
+        quarterTurns: 3,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          // Ad sığdığı kadar yazılır (kısa bölgede kısaltılır), kalan yere çizgi.
+          child: LayoutBuilder(
+            builder: (context, box) => Row(
+              children: [
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: (box.maxWidth - 16).clamp(0, double.infinity),
+                  ),
+                  child: Text(
+                    name.trUpper,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.1,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Container(
+                    height: 1,
+                    color: color.withValues(alpha: 0.35),
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Container(height: 1, color: color.withValues(alpha: 0.35)),
-          ),
-        ],
+        ),
       ),
     );
   }
