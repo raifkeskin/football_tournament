@@ -376,7 +376,11 @@ class _FixtureViewState extends State<FixtureView> {
           ? _FixtureDayStrip.done
           : _FixtureDayStrip.upcoming;
     }
-    final days = dayStatus.keys.toList()..sort();
+    // Tarihi belirlenmemiş maçlar şeritte gösterilmez (listede kendi
+    // başlıklarıyla durur); hiç tarihli maç yoksa şerit çıkmaz.
+    final days =
+        dayStatus.keys.where((k) => k != _FixtureDayStrip.noDate).toList()
+          ..sort();
     final selectedDay = days.contains(_day)
         ? _day
         : (days.isEmpty ? null : days.first);
@@ -1716,6 +1720,10 @@ class _FixtureDayStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Açık turnuva renginde (ör. beyaz) seçili kutunun yazısı koyu.
+    final light = accent.computeLuminance() > 0.6;
+    final onFg = light ? const Color(0xFF0F172A) : Colors.white;
+    final onMuted = light ? const Color(0xB30F172A) : Colors.white70;
     Widget chip(String key) {
       final on = key == selected;
       final dt = DateTime.tryParse(key);
@@ -1741,14 +1749,14 @@ class _FixtureDayStrip extends StatelessWidget {
                     Text(
                       top,
                       style: TextStyle(
-                        color: on ? Colors.white70 : Colors.white54,
+                        color: on ? onMuted : Colors.white54,
                         fontSize: 11,
                       ),
                     ),
                     Text(
                       mid,
                       style: TextStyle(
-                        color: on ? Colors.white : Colors.white70,
+                        color: on ? onFg : Colors.white70,
                         fontSize: 18,
                         fontWeight: FontWeight.w800,
                         fontFeatures: const [FontFeature.tabularFigures()],
@@ -1757,7 +1765,7 @@ class _FixtureDayStrip extends StatelessWidget {
                     Text(
                       bottom,
                       style: TextStyle(
-                        color: on ? Colors.white70 : Colors.white38,
+                        color: on ? onMuted : Colors.white38,
                         fontSize: 10,
                       ),
                     ),
@@ -1768,9 +1776,7 @@ class _FixtureDayStrip extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: dot,
                         shape: BoxShape.circle,
-                        border: on
-                            ? Border.all(color: Colors.white, width: 1)
-                            : null,
+                        border: on ? Border.all(color: onFg, width: 1) : null,
                       ),
                     ),
                   ],

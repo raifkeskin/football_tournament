@@ -334,6 +334,9 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
           AppSettings.privateLeaguesEnabled.value) {
         LeagueAccess.restoreFollows().then((changed) {
           if (changed && authUser != null) LeagueAccess.bump();
+          // Kodla takip edilen gizli turnuvalar ancak şimdi okunabilir:
+          // bant / turnuva listesi yeniden belirlensin.
+          if (changed) ActiveTournament.refresh();
         });
       }
     }
