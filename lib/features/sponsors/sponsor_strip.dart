@@ -216,6 +216,12 @@ class SponsorStripTile extends StatelessWidget {
                     sponsor: s,
                     logo: logo,
                     logoAspect: logoAspect,
+                    // Başlık + ayraç + boşluk: işaret şeridin ortasına
+                    // hizalanırken bu kadar sola kayabilir.
+                    leadingWidth:
+                        58 +
+                        (s.nameStyle == SponsorNameStyle.kurumsal ? 5 : 0) +
+                        8,
                   ),
                 ),
               ),
@@ -232,11 +238,20 @@ class SponsorStripTile extends StatelessWidget {
 /// kadar daraltılır (kare logoda ad uzak kalmasın). Ad sponsorun stiliyle:
 /// sade (yarı kalın), kurumsal (aralıklı büyük harf), spor (dar yazı).
 class _SponsorMark extends StatelessWidget {
-  const _SponsorMark({required this.sponsor, this.logo, this.logoAspect});
+  const _SponsorMark({
+    required this.sponsor,
+    this.logo,
+    this.logoAspect,
+    this.leadingWidth = 0,
+  });
 
   final Sponsor sponsor;
   final Widget? logo;
   final double? logoAspect;
+
+  /// Soldaki başlığın kapladığı genişlik; işaret bu alan dahil şeridin
+  /// ortasına hizalanır (başlığa binmeden).
+  final double leadingWidth;
 
   static const boxHeight = 48.0;
   static const logoHeight = 40.0;
@@ -281,28 +296,52 @@ class _SponsorMark extends StatelessWidget {
         ? logoMaxWidth
         : (logoHeight * aspect).clamp(logoHeight * 0.5, logoMaxWidth);
     final hasLogo = logo != null || sponsor.logoUrl.isNotEmpty;
-    return Center(
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (hasLogo) ...[
-            SizedBox(
-              width: boxWidth,
-              height: logoHeight,
-              child:
-                  logo ??
-                  WebSafeImage(
-                    url: sponsor.logoUrl,
-                    width: boxWidth,
-                    height: logoHeight,
-                    fit: BoxFit.contain,
-                  ),
-            ),
-            const SizedBox(width: 10),
-          ],
-          name,
+    final mark = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (hasLogo) ...[
+          SizedBox(
+            width: boxWidth,
+            height: logoHeight,
+            child:
+                logo ??
+                WebSafeImage(
+                  url: sponsor.logoUrl,
+                  width: boxWidth,
+                  height: logoHeight,
+                  fit: BoxFit.contain,
+                ),
+          ),
+          const SizedBox(width: 10),
         ],
-      ),
+        name,
+      ],
+    );
+    // İşaretin genişliği ölçülür; şeridin (başlık dahil) ortasına gelecek
+    // kadar sola kaydırılır, ama başlığın alanına taşmaz.
+    return LayoutBuilder(
+      builder: (context, box) {
+        final tp = TextPainter(
+          text: TextSpan(text: text, style: _style),
+          maxLines: 1,
+          textDirection: TextDirection.ltr,
+          textScaler: MediaQuery.textScalerOf(context),
+        )..layout();
+        final markWidth = ((hasLogo ? boxWidth + 10 : 0) + tp.width).clamp(
+          0.0,
+          box.maxWidth,
+        );
+        tp.dispose();
+        final centered = (box.maxWidth + leadingWidth) / 2 - leadingWidth;
+        final left = (centered - markWidth / 2).clamp(
+          0.0,
+          box.maxWidth - markWidth,
+        );
+        return Padding(
+          padding: EdgeInsets.only(left: left),
+          child: Align(alignment: Alignment.centerLeft, child: mark),
+        );
+      },
     );
   }
 }
