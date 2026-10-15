@@ -190,3 +190,18 @@ _Eklendi: 2026-10-15_
 - Olası alanlar: sponsor (sponsorlar listesinden), başlık, metin, kampanya kodu (kopyala düğmesi), geçerlilik tarihleri (bitince otomatik kalkar), görsel.
 - Haber akışında normal haberlerden ayrışan görünüm (etiket + sponsor logosu); ana sayfa sponsor şeridine dokununca o sponsorun aktif kampanyası açılabilir.
 - Yetki: admin + kurucu başkan. Mağaza beyanlarında (reklam içeriği) güncelleme gerekebilir.
+
+## 19. Takımsız futbolcu profili (serbest oyuncu) + videolarım — DEĞERLENDİRMEDE
+_Eklendi: 2026-10-15_
+
+Hiçbir takımda kaydı olmayan kişi kendi futbolcu profilini oluşturabilsin, sonra YouTube/Instagram videolarını ekleyebilsin.
+
+- **Temel karar:** Ayrı "aday" tablosu değil, mevcut `players` kaydı. Takıma girince aynı profil devam eder (geçmiş, videolar kaybolmaz).
+- **Faz 1 – Serbest oyuncu kaydı:** Telefonla hesap → "Futbolcu profilimi oluştur". Alanlar: ad soyad, doğum tarihi (herkese yalnız yaş), boy, kilo, ayak, ana + yan mevkiler, il/ilçe, fotoğraf, kısa tanıtım, "Takım arıyorum" anahtarı.
+  - Mükerrer kayıt: telefon eşleşirse "Bu sen misin?" → profili sahiplenme; eşleşme yoksa sahiplenme talebi bölge sorumlusu onayına. İleride TC hash ile kesin tekillik.
+- **Faz 2 – Videolarım:** YouTube/Instagram/diğer linkler (maç medyasındaki link altyapısı; video yükleme/MP4 çekme yok). En fazla 10 video, sıralama, başlık, "öne çıkan".
+  - Apple şartı (kullanıcı içeriği): "Şikâyet et", admin gizleme, kullanım koşulları.
+- **Faz 3 – Keşif ve davet:** Takım yöneticisi/kurucu için "Serbest oyuncular" listesi (mevki, yaş, il filtresi) → "Takıma davet et" → futbolcu kabul → bölge sorumlusu onayı (kadro talebi akışı).
+- **Dikkat:** KVKK (boy/kilo için açık rıza + görünürlük: herkese açık / yalnız yöneticiler); Play Veri güvenliği, Apple etiketi, gizlilik sayfası güncellenmeli; 18 yaş altı ilk sürümde dışarıda (öneri); yeni tablo/kolonlar → Apple onayından sonra DB.
+- **Tahmini maliyet:** Faz 1 orta, Faz 2 düşük-orta, Faz 3 orta.
+- **Netleşecek:** Profil varsayılan görünürlüğü; 18 yaş altı; önce ekran önizlemesi (mockup) istenir mi.

@@ -151,50 +151,28 @@ class _SponsorStripState extends State<SponsorStrip> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Üstte ortalı küçük başlık; noktalar sağ üstte.
+            // Üstte sağa hizalı küçük başlık. Şerit kendiliğinden döndüğü
+            // için sayfa noktaları gösterilmez.
             SizedBox(
               height: 10,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  // Sabit 10 px yükseklik: büyük yazı ayarında taşmasın.
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      s.isMain ? 'ANA SPONSOR' : 'SPONSOR',
-                      style: TextStyle(
-                        color: s.isMain
-                            ? const Color(0xFFB45309)
-                            : const Color(0xFF64748B),
-                        fontSize: 9,
-                        height: 1.1,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.2,
-                      ),
+              child: Align(
+                alignment: Alignment.centerRight,
+                // Sabit 10 px yükseklik: büyük yazı ayarında taşmasın.
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    s.isMain ? 'ANA SPONSOR' : 'SPONSOR',
+                    style: TextStyle(
+                      color: s.isMain
+                          ? const Color(0xFFB45309)
+                          : const Color(0xFF64748B),
+                      fontSize: 9,
+                      height: 1.1,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.2,
                     ),
                   ),
-                  if (list.length > 1 && list.length <= 8)
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          for (var i = 0; i < list.length; i++)
-                            Container(
-                              width: 5,
-                              height: 5,
-                              margin: const EdgeInsets.only(left: 4),
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: i == _index % list.length
-                                    ? const Color(0xFF0F172A)
-                                    : const Color(0xFFCBD5E1),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                ],
+                ),
               ),
             ),
             SizedBox(
