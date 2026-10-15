@@ -1363,7 +1363,10 @@ class _MatchCardState extends State<_MatchCard> {
                 showLogos: widget.compact,
                 compact: widget.compact,
                 // Maç bitse de yayın kaydı izlenebilsin diye ikon kalır.
-                leading: _broadcastUrl == null
+                onWatch: _broadcastUrl == null || !widget.compact
+                    ? null
+                    : () => openYoutubeInApp(context, _broadcastUrl!),
+                leading: _broadcastUrl == null || widget.compact
                     ? null
                     : InkWell(
                         onTap: () => openYoutubeInApp(context, _broadcastUrl!),
