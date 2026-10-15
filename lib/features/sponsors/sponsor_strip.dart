@@ -147,62 +147,62 @@ class _SponsorStripState extends State<SponsorStrip> {
       onTap: s.linkUrl == null ? null : () => _open(s),
       child: Container(
         color: Colors.white,
-        padding: const EdgeInsets.fromLTRB(12, 2, 12, 2),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Üstte sağa hizalı küçük başlık. Şerit kendiliğinden döndüğü
-            // için sayfa noktaları gösterilmez.
-            SizedBox(
-              height: 10,
-              child: Align(
-                alignment: Alignment.centerRight,
-                // Sabit 10 px yükseklik: büyük yazı ayarında taşmasın.
+        padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+        // Solda sabit genişlikte küçük başlık, kalan yerde logo + ad. Şerit
+        // kendiliğinden döndüğü için sayfa noktaları gösterilmez.
+        child: SizedBox(
+          height: _SponsorMark.logoHeight,
+          child: Row(
+            children: [
+              SizedBox(
+                width: 58,
+                // Büyük yazı ayarında taşmasın.
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
                   child: Text(
-                    s.isMain ? 'ANA SPONSOR' : 'SPONSOR',
+                    s.isMain ? 'ANA\nSPONSOR' : 'SPONSOR',
                     style: TextStyle(
                       color: s.isMain
                           ? const Color(0xFFB45309)
                           : const Color(0xFF64748B),
                       fontSize: 9,
-                      height: 1.1,
+                      height: 1.15,
                       fontWeight: FontWeight.w800,
                       letterSpacing: 1.2,
                     ),
                   ),
                 ),
               ),
-            ),
-            SizedBox(
-              height: _SponsorMark.logoHeight,
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 450),
-                child: KeyedSubtree(
-                  key: ValueKey(s.id),
-                  child: _SponsorMark(sponsor: s),
+              const SizedBox(width: 8),
+              Expanded(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 450),
+                  child: KeyedSubtree(
+                    key: ValueKey(s.id),
+                    child: _SponsorMark(sponsor: s),
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-/// Logo ve ad yan yana, ortalı; içerik büyüdükçe kenarlara doğru açılır
-/// ama taşmaz (ad sığmazsa kesilmeden küçülür). Logo sabit 72×42 kutuda,
-/// kutuya sığacak en büyük hâliyle çizilir (kare logoda ada uzak kalmasın
-/// diye kutu dar tutulur).
+/// Logo ve ad yan yana, başlığın sağındaki alanı olabildiğince doldurur
+/// (ad sığmazsa kesilmeden küçülür). Logo sabit 96×48 kutuda, kutuya
+/// sığacak en büyük hâliyle çizilir; oranı biliniyorsa kutu logo kadar
+/// daraltılır (kare logoda ad uzak kalmasın).
 class _SponsorMark extends StatelessWidget {
   const _SponsorMark({required this.sponsor});
 
   final Sponsor sponsor;
 
-  static const logoWidth = 72.0;
-  static const logoHeight = 42.0;
+  static const logoWidth = 96.0;
+  static const logoHeight = 48.0;
 
   @override
   Widget build(BuildContext context) {
@@ -214,12 +214,16 @@ class _SponsorMark extends StatelessWidget {
           maxLines: 1,
           style: const TextStyle(
             color: Color(0xFF0F172A),
-            fontSize: 17,
+            fontSize: 22,
             fontWeight: FontWeight.w800,
           ),
         ),
       ),
     );
+    final aspect = sponsor.logoAspect;
+    final boxWidth = aspect == null
+        ? logoWidth
+        : (logoHeight * aspect).clamp(logoHeight * 0.5, logoWidth);
     return Center(
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -227,7 +231,7 @@ class _SponsorMark extends StatelessWidget {
           if (sponsor.logoUrl.isNotEmpty) ...[
             WebSafeImage(
               url: sponsor.logoUrl,
-              width: logoWidth,
+              width: boxWidth,
               height: logoHeight,
               fit: BoxFit.contain,
             ),
