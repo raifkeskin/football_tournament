@@ -5,6 +5,22 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+/// Şeritte sponsor adının yazı stili (`sponsors.name_style`).
+enum SponsorNameStyle {
+  sade('Sade'),
+  kurumsal('Kurumsal'),
+  spor('Spor');
+
+  const SponsorNameStyle(this.label);
+
+  final String label;
+
+  static SponsorNameStyle parse(dynamic v) => values.firstWhere(
+    (e) => e.name == v,
+    orElse: () => SponsorNameStyle.sade,
+  );
+}
+
 /// Turnuva sponsoru: ana (`main`) ya da alt (`sub`) sponsor.
 class Sponsor {
   const Sponsor({
@@ -17,6 +33,7 @@ class Sponsor {
     this.sortOrder = 0,
     this.isActive = true,
     this.logoAspect,
+    this.nameStyle = SponsorNameStyle.sade,
   });
 
   final String id;
@@ -32,6 +49,9 @@ class Sponsor {
   /// null (576×216 tuval).
   final double? logoAspect;
 
+  /// Şeritte adın yazı stili.
+  final SponsorNameStyle nameStyle;
+
   bool get isMain => tier == 'main';
 
   factory Sponsor.fromMap(Map<String, dynamic> m) => Sponsor(
@@ -46,6 +66,7 @@ class Sponsor {
     sortOrder: (m['sort_order'] as num?)?.toInt() ?? 0,
     isActive: m['is_active'] != false,
     logoAspect: (m['logo_aspect'] as num?)?.toDouble(),
+    nameStyle: SponsorNameStyle.parse(m['name_style']),
   );
 
   Map<String, dynamic> toMap() => {
@@ -58,6 +79,7 @@ class Sponsor {
     'sort_order': sortOrder,
     'is_active': isActive,
     'logo_aspect': logoAspect,
+    'name_style': nameStyle.name,
   };
 
   /// Önce ana sponsorlar, sonra alt sponsorlar; kendi içlerinde sıraya göre.

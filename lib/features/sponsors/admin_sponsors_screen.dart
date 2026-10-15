@@ -11,6 +11,7 @@ import '../../core/widgets/admin_page.dart';
 import '../../core/widgets/picked_image.dart';
 import '../../core/widgets/web_safe_image.dart';
 import 'sponsor.dart';
+import 'sponsor_strip.dart';
 import '../../core/utils/logo_background.dart';
 
 /// Sponsor Yönetimi: turnuvanın ana ve alt sponsorları (logo, ad, link,
@@ -358,16 +359,17 @@ class _SponsorRow extends StatelessWidget {
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    if (!sponsor.isActive || sponsor.linkUrl != null)
-                      Text(
-                        sponsor.isActive ? sponsor.linkUrl! : 'Pasif',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: kAdminMuted,
-                          fontSize: 12,
-                        ),
-                      ),
+                    Text(
+                      [
+                        'Stil: ${sponsor.nameStyle.label}',
+                        if (!sponsor.isActive) 'Pasif',
+                        if (sponsor.isActive && sponsor.linkUrl != null)
+                          sponsor.linkUrl!,
+                      ].join(' · '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: kAdminMuted, fontSize: 12),
+                    ),
                   ],
                 ),
               ),
@@ -410,12 +412,24 @@ class _SponsorFormState extends State<_SponsorForm> {
   late final _link = TextEditingController(text: widget.sponsor?.linkUrl ?? '');
   late String _tier = widget.initialTier;
   late bool _active = widget.sponsor?.isActive ?? true;
+  late SponsorNameStyle _style =
+      widget.sponsor?.nameStyle ?? SponsorNameStyle.sade;
   XFile? _newLogo;
   double? _newLogoAspect;
   bool _saving = false;
 
   @override
+  void initState() {
+    super.initState();
+    // Önizleme ad yazıldıkça güncellenir.
+    _name.addListener(_onNameChanged);
+  }
+
+  void _onNameChanged() => setState(() {});
+
+  @override
   void dispose() {
+    _name.removeListener(_onNameChanged);
     _name.dispose();
     _link.dispose();
     super.dispose();
@@ -479,6 +493,7 @@ class _SponsorFormState extends State<_SponsorForm> {
         'tier': _tier,
         'link_url': link.isEmpty ? null : link,
         'is_active': _active,
+        'name_style': _style.name,
         'logo_url': ?logoUrl,
         if (logoUrl != null) 'logo_aspect': _newLogoAspect,
         // Tür değişince yeni türün sonuna eklenir.
@@ -556,6 +571,36 @@ class _SponsorFormState extends State<_SponsorForm> {
       );
     }
 
+    Widget styleChip(SponsorNameStyle st) {
+      final sel = _style == st;
+      return Expanded(
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: _saving ? null : () => setState(() => _style = st),
+          child: Container(
+            height: 40,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: sel ? kAdminAccent.withValues(alpha: 0.18) : null,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: sel
+                    ? kAdminAccent
+                    : Colors.white.withValues(alpha: 0.15),
+              ),
+            ),
+            child: Text(
+              st.label,
+              style: TextStyle(
+                color: sel ? Colors.white : Colors.white70,
+                fontWeight: sel ? FontWeight.w800 : FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     final viewInsets = MediaQuery.of(context).viewInsets;
     return AdminDialogCloseOverlay(
       onClose: _saving ? null : () => Navigator.of(context).pop(),
@@ -619,7 +664,54 @@ class _SponsorFormState extends State<_SponsorForm> {
                       icon: Icons.storefront_rounded,
                     ),
                   ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Yazı stili',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      for (final st in SponsorNameStyle.values) ...[
+                        if (st != SponsorNameStyle.values.first)
+                          const SizedBox(width: 8),
+                        styleChip(st),
+                      ],
+                    ],
+                  ),
                   const SizedBox(height: 12),
+                  const Text(
+                    'Önizleme (ana sayfadaki şerit)',
+                    style: TextStyle(color: kAdminMuted, fontSize: 12),
+                  ),
+                  const SizedBox(height: 6),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: SponsorStripTile(
+                      sponsor: Sponsor(
+                        id: widget.sponsor?.id ?? 'preview',
+                        leagueId: widget.leagueId,
+                        tier: _tier,
+                        name: _name.text.trim().isEmpty
+                            ? 'Sponsor Adı'
+                            : _name.text.trim(),
+                        logoUrl: existing,
+                        logoAspect: widget.sponsor?.logoAspect,
+                        nameStyle: _style,
+                      ),
+                      logo: _newLogo == null
+                          ? null
+                          : Image(
+                              image: pickedImageProvider(_newLogo!),
+                              fit: BoxFit.contain,
+                            ),
+                      logoAspect: _newLogo == null ? null : _newLogoAspect,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   TextField(
                     controller: _link,
                     enabled: !_saving,
