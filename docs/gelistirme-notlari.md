@@ -172,3 +172,21 @@ _Eklendi: 2026-10-15_
 - **Sonra:** Olay eklemek yerine doğrudan golün üzerinden:
   - Maç detayında, yalnız admin ve turnuva sorumlusuna, gol satırında topun hemen yanında küçük yuvarlak "i" (bilgi) ikonu: "Gole 1 sn'den uzun basınca gol iptali yapılabilir".
   - Gole 1 sn'den uzun basınca "VAR: Gol İptali" onay penceresi açılır (yeşil onayla / kırmızı iptal).
+
+## 17. Android ikon zemini (siyah köşeler) — KARARSIZ
+_Eklendi: 2026-10-15_
+
+- **Sorun:** Android uyarlanabilir ikonun zemini saydam (`design/app_icon_android_bg.png`), Android bunu siyah dolduruyor. Yuvarlatılmış kare kesen telefonlarda (Samsung, Pixel, Xiaomi) yuvarlak armanın köşelerinde siyah üçgenler kalıyor.
+- **Seçenekler (önizleme):** https://claude.ai/artifact/V1sLtEVR6om8exoMtLLT95
+  - Beyaz: açık duvar kâğıdında temiz, koyuda köşeler armadan çok dikkat çekiyor.
+  - Koyu yeşil #062319 (önerilen): iOS ikonu ve armanın iç zeminiyle aynı, iki platform tutarlı.
+  - Arma yeşili #0B5D41: alternatif, biraz kalabalık.
+- **Yapılacak (karar verilirse):** `tool/render_app_icons_test.dart` içinde zemin PNG'sini seçilen renkle doldur, `android/app/src/main/res/values/colors.xml` rengini eşle, `dart run flutter_launcher_icons`. Uygulama içi logo, açılış ekranı ve web ikonları değişmez. Yeni APK/AAB gerekir.
+- **Durum:** Yapılıp yapılmayacağına karar verilmedi.
+
+## 18. Sponsor reklam haberi (kampanya)
+- Sponsorlar kampanya duyurusu verebilsin; Haberler'de "REKLAM" etiketli haber olarak çıkar.
+- Örnek: "BMR Otomotiv'den %10 indirim. 1–31 Ekim tarihleri arasında INDIRIM10 koduyla gelen müşterilerimize %10 indirim uygulanacaktır."
+- Olası alanlar: sponsor (sponsorlar listesinden), başlık, metin, kampanya kodu (kopyala düğmesi), geçerlilik tarihleri (bitince otomatik kalkar), görsel.
+- Haber akışında normal haberlerden ayrışan görünüm (etiket + sponsor logosu); ana sayfa sponsor şeridine dokununca o sponsorun aktif kampanyası açılabilir.
+- Yetki: admin + kurucu başkan. Mağaza beyanlarında (reklam içeriği) güncelleme gerekebilir.

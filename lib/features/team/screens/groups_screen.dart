@@ -572,12 +572,8 @@ List<({String cup, Color color, String pairs})>? _ifNowPairs(
   bool doubleRound,
 ) {
   final n = rows.length;
+  // Anahtar açıksa hemen görünür; turnuva yetkilisi istediği hafta açar.
   if (!f.showIfNow || f.cups.isEmpty || n < 2) return null;
-  // Oynanan maç sayısı, toplam lig maçının yarısına ulaşınca görünür
-  // (ilk haftalarda sıralama anlamsız).
-  final total = n * (n - 1) ~/ 2 * (doubleRound ? 2 : 1);
-  final played = rows.fold<int>(0, (a, r) => a + r.played) ~/ 2;
-  if (total == 0 || played * 2 < total) return null;
   String name(int rank) => shortTeamName(rows[rank - 1].name);
   final out = <({String cup, Color color, String pairs})>[];
   for (var i = 0; i < f.cups.length; i++) {

@@ -420,11 +420,11 @@ class _FixtureViewState extends State<FixtureView> {
   Widget build(BuildContext context) {
     final session = AppSession.of(context).value;
     final bool isAdmin = session.isAdmin;
-    // Tarih / saat / saha düzenleme: admin, kurucu başkan ve bölge sorumlusu
-    // (veritabanı kuralı da owns_league / owns_group).
-    final canEditSchedule =
-        session.canManageLeague(_leagueId) ||
-        session.regionsInSeason(_seasonId).isNotEmpty;
+    // Tarih / saat / saha düzenleme ve maç menüsü: admin, kurucu başkan ve
+    // bölge sorumlusu görür (veritabanı kuralı owns_league / owns_group).
+    final ownsLeague = session.canManageLeague(_leagueId);
+    final myRegions = session.regionsInSeason(_seasonId);
+    final canEditSchedule = ownsLeague || myRegions.isNotEmpty;
     final cardBg = Colors.black.withValues(alpha: 0.3);
     final outline = Colors.white.withValues(alpha: 0.08);
 
@@ -542,6 +542,18 @@ class _FixtureViewState extends State<FixtureView> {
                           teamNameById: teamNameById,
                           isAdmin: isAdmin,
                           canEditSchedule: canEditSchedule,
+                          // Bölge sorumlusu yalnız kendi bölgesinin grubunda
+                          // işlem yapar; başka grupta uyarı görür.
+                          canActOnGroup:
+                              ownsLeague ||
+                              myRegions.any(
+                                (r) =>
+                                    r.id ==
+                                    groups
+                                        .where((g) => g.id == widget.groupId)
+                                        .firstOrNull
+                                        ?.regionId,
+                              ),
                           onMatchTap: (m) => Navigator.push(
                             context,
                             MaterialPageRoute(
@@ -588,10 +600,12 @@ class _FixtureList extends StatelessWidget {
     required this.outlineColor,
     required this.isAdmin,
     required this.canEditSchedule,
+    required this.canActOnGroup,
     required this.onDataChanged,
   });
 
   final bool canEditSchedule;
+  final bool canActOnGroup;
   final Widget header;
   final Map<String, GlobalKey> dayKeys;
   final List<MatchModel> matches;
@@ -714,6 +728,7 @@ class _FixtureList extends StatelessWidget {
               teamNameById: teamNameById,
               isAdmin: isAdmin,
               canEditSchedule: canEditSchedule,
+              canActOnGroup: canActOnGroup,
               onTap: () => onMatchTap(m),
               onDataChanged: onDataChanged,
             ),
@@ -733,11 +748,27 @@ class _MatchCard extends StatelessWidget {
     required this.onTap,
     required this.isAdmin,
     required this.canEditSchedule,
+    required this.canActOnGroup,
     required this.onDataChanged,
   });
 
-  /// Tarih / saat düzenleme düğmesi (admin, kurucu, bölge sorumlusu).
+  /// Tarih / saat düzenleme düğmesi ve maç menüsü (admin, kurucu, bölge
+  /// sorumlusu).
   final bool canEditSchedule;
+
+  /// Bu grupta işlem yetkisi (bölge sorumlusu yalnız kendi bölgesinde).
+  final bool canActOnGroup;
+
+  bool _guard(BuildContext context) {
+    if (canActOnGroup) return true;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Bu işlem için yetkiniz bulunmamaktadır.'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+    return false;
+  }
 
   static final IMatchService _matchService = ServiceLocator.matchService;
   static final ILeagueService _leagueService = ServiceLocator.leagueService;
@@ -766,15 +797,7 @@ class _MatchCard extends StatelessWidget {
   }
 
   void _onLongPress(BuildContext context) {
-    if (!isAdmin) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Bu işlem için yetkiniz bulunmamaktadır.'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-      return;
-    }
+    if (!canEditSchedule || !_guard(context)) return;
     _showMatchActions(context);
   }
 
@@ -1003,7 +1026,9 @@ class _MatchCard extends StatelessWidget {
                         size: 18,
                         color: mid,
                       ),
-                      onPressed: () => _showEditPopup(context),
+                      onPressed: () {
+                        if (_guard(context)) _showEditPopup(context);
+                      },
                     ),
                 ],
               ),
