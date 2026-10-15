@@ -47,8 +47,8 @@ String _clipTitle(
   return '${min}Gol${team.isEmpty ? '' : ' · $team'}';
 }
 
-/// Medya sekmesinin üstü: onaylı gol videoları (herkes) ve yetkililer için
-/// YZ gol kesitleri girişi.
+/// Medya > Gol Videoları: yetkililer için YZ gol kesitleri girişi, onaylı
+/// gol kesitleri (herkes) ve altta [trailing] (ör. video linkleri).
 class MatchHighlightsStrip extends StatefulWidget {
   const MatchHighlightsStrip({
     super.key,
@@ -57,7 +57,11 @@ class MatchHighlightsStrip extends StatefulWidget {
     required this.awayName,
     required this.canReview,
     this.hasStream = false,
+    this.trailing = const [],
   });
+
+  /// Kesitlerin altında gösterilecek diğer videolar.
+  final List<Widget> trailing;
 
   final MatchModel match;
   final String homeName;
@@ -76,6 +80,8 @@ class MatchHighlightsStrip extends StatefulWidget {
 class _MatchHighlightsStripState extends State<MatchHighlightsStrip> {
   late List<MatchHighlight> _items =
       MatchHighlightService.cached(widget.match.id) ?? const [];
+  late Map<String, HighlightScorer> _scorers =
+      MatchHighlightService.cachedScorers(widget.match.id) ?? const {};
 
   /// Sezonda gol dakikası tutulmuyorsa (halısaha) YZ tüm videoyu tarar
   /// (pahalı): analiz/inceleme yalnız admin'e görünür. Onaylı kesitler
@@ -104,15 +110,38 @@ class _MatchHighlightsStripState extends State<MatchHighlightsStrip> {
 
   void _onChanged() {
     final c = MatchHighlightService.cached(widget.match.id);
-    if (c != null && mounted) setState(() => _items = c);
+    if (c != null && mounted) {
+      setState(() => _items = c);
+      _loadScorers();
+    }
   }
 
   Future<void> _load() async {
     try {
       final list = await MatchHighlightService.fetch(widget.match.id);
       if (mounted) setState(() => _items = list);
+      await _loadScorers();
     } catch (_) {
       // Kesitler yüklenemezse Medya sekmesi yine çalışır.
+    }
+  }
+
+  Future<void> _loadScorers() async {
+    final m = widget.match;
+    try {
+      final map = await MatchHighlightService.scorers(
+        matchId: m.id,
+        seasonId: m.seasonId,
+        homeTeamId: m.homeTeamId,
+        awayTeamId: m.awayTeamId,
+        items: [
+          for (final h in _items)
+            if (h.isApproved) h,
+        ],
+      );
+      if (mounted) setState(() => _scorers = map);
+    } catch (_) {
+      // Golü atan okunamazsa kart dakika + takımla görünür.
     }
   }
 
@@ -130,73 +159,24 @@ class _MatchHighlightsStripState extends State<MatchHighlightsStrip> {
         canRun &&
         widget.hasStream &&
         widget.match.status == MatchStatus.finished;
-    if (approved.isEmpty && !showReview) return const SizedBox.shrink();
+    if (approved.isEmpty && !showReview && widget.trailing.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 48),
+        child: Center(
+          child: Text(
+            'Henüz gol videosu yok.',
+            style: TextStyle(color: Colors.white60),
+          ),
+        ),
+      );
+    }
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+    final main = Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (approved.isNotEmpty) ...[
-            const Row(
-              children: [
-                Icon(Icons.movie_outlined, size: 16, color: Colors.white54),
-                SizedBox(width: 6),
-                Text(
-                  'Gol Videoları',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: 40,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: approved.length,
-                separatorBuilder: (_, _) => const SizedBox(width: 8),
-                itemBuilder: (context, i) {
-                  final h = approved[i];
-                  final title = _clipTitle(
-                    h,
-                    widget.match,
-                    widget.homeName,
-                    widget.awayName,
-                  );
-                  return ActionChip(
-                    avatar: const Icon(
-                      Icons.play_circle_fill_rounded,
-                      size: 18,
-                      color: Color(0xFF10B981),
-                    ),
-                    label: Text(title),
-                    labelStyle: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12.5,
-                    ),
-                    backgroundColor: const Color(0xFF1E293B),
-                    side: BorderSide(
-                      color: Colors.white.withValues(alpha: 0.1),
-                    ),
-                    onPressed: () => openYoutubeClip(
-                      context,
-                      videoId: h.videoId,
-                      startSec: h.startSec,
-                      endSec: h.endSec,
-                      title: title,
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
           if (showReview) ...[
-            if (approved.isNotEmpty) const SizedBox(height: 8),
             Material(
               color: const Color(0xFF1E293B),
               borderRadius: BorderRadius.circular(14),
@@ -252,7 +232,156 @@ class _MatchHighlightsStripState extends State<MatchHighlightsStrip> {
                 ),
               ),
             ),
+            const SizedBox(height: 10),
           ],
+          for (final h in approved)
+            GoalClipCard(
+              title: _clipTitle(
+                h,
+                widget.match,
+                widget.homeName,
+                widget.awayName,
+              ),
+              scorer: _scorers[h.id],
+              description: h.description,
+              onPlay: () => openYoutubeClip(
+                context,
+                videoId: h.videoId,
+                startSec: h.startSec,
+                endSec: h.endSec,
+                title: _clipTitle(
+                  h,
+                  widget.match,
+                  widget.homeName,
+                  widget.awayName,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [main, ...widget.trailing],
+    );
+  }
+}
+
+/// Herkesin gördüğü gol kesiti kartı: dakika · Gol · takım, altında golü
+/// atan (forma no + ad) ve açıklama; "İzle" kesiti oynatır.
+class GoalClipCard extends StatelessWidget {
+  const GoalClipCard({
+    super.key,
+    required this.title,
+    required this.scorer,
+    required this.description,
+    required this.onPlay,
+    this.highlighted = false,
+    this.footer,
+  });
+
+  final String title;
+  final HighlightScorer? scorer;
+  final String? description;
+  final VoidCallback onPlay;
+  final bool highlighted;
+
+  /// Yetkili ekranındaki ek düğmeler (düzenle, onayla…).
+  final Widget? footer;
+
+  @override
+  Widget build(BuildContext context) {
+    final desc = (description ?? '').trim();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B).withValues(alpha: 0.94),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: highlighted
+              ? kAdminAccent
+              : Colors.white.withValues(alpha: 0.08),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const BallIcon(),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton.icon(
+                onPressed: onPlay,
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.white.withValues(alpha: 0.12),
+                  foregroundColor: Colors.white,
+                  visualDensity: VisualDensity.compact,
+                ),
+                icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                label: const Text('İzle'),
+              ),
+            ],
+          ),
+          if (scorer != null) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                if (scorer!.jersey != null) ...[
+                  Container(
+                    constraints: const BoxConstraints(minWidth: 24),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      '${scorer!.jersey}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                Expanded(
+                  child: Text(
+                    scorer!.name,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (desc.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              desc,
+              style: const TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+          ],
+          ?footer,
         ],
       ),
     );
@@ -285,6 +414,8 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
   late List<MatchHighlight> _items =
       MatchHighlightService.cached(widget.match.id) ?? const [];
   MatchHighlightJob? _job;
+  Map<String, HighlightScorer> _scorers = const {};
+  List<HighlightRosterPlayer>? _roster;
   bool _loading = true;
   String? _playingId;
   final Set<String> _busy = {};
@@ -336,6 +467,7 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
         _job = results[1] as MatchHighlightJob?;
         _loading = false;
       });
+      _loadScorers();
       _retry?.cancel();
       MatchHighlightService.offline.value = false;
       _selfBump = true;
@@ -354,6 +486,67 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
       _retry?.cancel();
       _retry = Timer(const Duration(seconds: 8), _refresh);
     }
+  }
+
+  Future<void> _loadScorers() async {
+    final m = widget.match;
+    try {
+      final map = await MatchHighlightService.scorers(
+        matchId: m.id,
+        seasonId: m.seasonId,
+        homeTeamId: m.homeTeamId,
+        awayTeamId: m.awayTeamId,
+        items: _items,
+      );
+      if (mounted) setState(() => _scorers = map);
+    } catch (_) {}
+  }
+
+  /// Golü atanı esameden (yoksa kadrodan) seçer; kesitin takımı biliniyorsa
+  /// yalnız o takımın oyuncuları.
+  Future<void> _pickScorer(MatchHighlight h) async {
+    final m = widget.match;
+    try {
+      _roster ??= await MatchHighlightService.roster(
+        matchId: m.id,
+        seasonId: m.seasonId,
+        teamIds: [m.homeTeamId, m.awayTeamId],
+      );
+    } catch (_) {
+      _snack('Esame okunamadı; bağlantıyı kontrol edin.');
+      return;
+    }
+    if (!mounted) return;
+    final pool = [
+      for (final p in _roster!)
+        if (h.teamId == null || p.teamId == h.teamId) p,
+    ];
+    final picked = await showAdminOptionPicker<HighlightRosterPlayer>(
+      context: context,
+      title: 'Golü Atan',
+      items: pool,
+      selected: pool
+          .where((p) => p.playerId == _scorers[h.id]?.playerId)
+          .firstOrNull,
+      labelBuilder: (p) => p.jersey == null ? p.name : '${p.jersey}  ${p.name}',
+      emptyText: 'Esamede oyuncu yok.',
+    );
+    if (picked == null) return;
+    await _update(h, playerId: picked.playerId);
+  }
+
+  Future<void> _editDescription(MatchHighlight h) async {
+    final text = await showAdminTextInputDialog(
+      context: context,
+      title: 'Gol Açıklaması',
+      icon: Icons.edit_note_rounded,
+      label: 'AÇIKLAMA',
+      fieldIcon: Icons.notes_rounded,
+      initialValue: h.description ?? '',
+      hint: 'Örn. Sağdan gelen ortaya kafa vuruşu',
+    );
+    if (text == null) return;
+    await _update(h, description: text);
   }
 
   void _snack(String msg) {
@@ -398,6 +591,8 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
     int? startSec,
     int? endSec,
     String? status,
+    String? description,
+    String? playerId,
   }) async {
     setState(() => _busy.add(h.id));
     try {
@@ -406,11 +601,14 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
         startSec: startSec,
         endSec: endSec,
         status: status,
+        description: description,
+        playerId: playerId,
       );
       if (!mounted) return;
       setState(() {
         _items = MatchHighlightService.cached(widget.match.id) ?? _items;
       });
+      if (playerId != null) _loadScorers();
       // Süre değiştiyse yeni aralık hemen izlensin.
       if ((startSec != null || endSec != null) && status == null) {
         final updated = _items.where((x) => x.id == h.id).firstOrNull;
@@ -435,6 +633,42 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
       return;
     }
     if (!mounted) return;
+    // Maç detayında hiç gol yoksa tüm video taranır (yalnız admin; dakika
+    // ve takım YZ'den, golü atan spikerden/formadan eşleştirilir).
+    final full = goals == 0 && total > 0;
+    if (full) {
+      if (!AppSession.of(context).value.isAdmin) {
+        _snack(
+          'Maç detayında gol yok; tüm video taramasını admin başlatabilir.',
+        );
+        return;
+      }
+      final ok = await showAdminConfirmDialog(
+        context: context,
+        title: 'Tüm video taranacak',
+        message:
+            'Maç detayında gol kaydı yok. YZ videonun tamamını tarar; '
+            'dakika, takım ve (spiker söylüyorsa) golü atanı bulur. '
+            'Tahmini maliyet 1,5 saatlik videoda ~0,18 \$.',
+        confirmLabel: 'TARAMAYI BAŞLAT',
+        destructive: false,
+        icon: Icons.auto_awesome_rounded,
+      );
+      if (!ok || !mounted) return;
+      final err = await MatchHighlightService.analyze(widget.match.id);
+      if (!mounted) return;
+      if (err != null) {
+        _snack(err);
+        return;
+      }
+      MatchHighlightService.watch(widget.match.id, label: _label);
+      _snack(
+        'Analiz arka planda başladı. Ekrandan çıkabilirsiniz; bitince '
+        'bildirilecek.',
+      );
+      _refresh();
+      return;
+    }
     if (total == 0 || goals != total) {
       await showAdminConfirmDialog(
         context: context,
@@ -488,23 +722,17 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(14),
-              child: AspectRatio(
-                aspectRatio: 16 / 9,
-                child: _player == null
-                    ? Container(
-                        color: Colors.black,
-                        alignment: Alignment.center,
-                        child: const Text(
-                          'Bir kesitte "İzle"ye dokunun.',
-                          style: TextStyle(color: Colors.white54),
-                        ),
-                      )
-                    : YoutubePlayer(controller: _player!),
+            // Oynatıcı ilk "İzle"de açılır; öncesinde boş siyah alan yok.
+            if (_player != null) ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: YoutubePlayer(controller: _player!),
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
+              const SizedBox(height: 16),
+            ],
             _statusCard(running),
             const SizedBox(height: 18),
             if (_loading && _items.isEmpty)
@@ -556,8 +784,8 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
     } else {
       text =
           'Maçın YouTube yayınında, maç detayına girilen gollerin '
-          'dakikaları taranır ve gol anları bulunur. Gol kayıtları skorla '
-          'eşit olmalıdır.';
+          'dakikaları taranır ve gol anları bulunur. Maç detayında gol '
+          'yoksa tüm video taranır (yalnız admin).';
     }
     return AdminFieldGroup(
       children: [
@@ -619,6 +847,49 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
     if (job.secondHalfSec != null) '2. yarı ${_clock(job.secondHalfSec!)}',
     if (job.costUsd != null) 'Maliyet ${job.costUsd!.toStringAsFixed(3)} \$',
   ].join(' · ');
+
+  /// Kartta düzenlenebilir satır: ikon + metin + sağda düğme.
+  Widget _editRow({
+    required IconData icon,
+    required String text,
+    required bool muted,
+    required String action,
+    required VoidCallback? onTap,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Icon(icon, size: 16, color: kAdminMuted),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              color: muted ? kAdminMuted : Colors.white,
+              fontSize: 13,
+              fontWeight: muted ? FontWeight.w400 : FontWeight.w600,
+            ),
+          ),
+        ),
+        TextButton(
+          onPressed: onTap,
+          style: TextButton.styleFrom(
+            foregroundColor: kAdminAccent,
+            visualDensity: VisualDensity.compact,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            minimumSize: const Size(0, 28),
+          ),
+          child: Text(
+            action,
+            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5),
+          ),
+        ),
+      ],
+    );
+  }
 
   Widget _card(MatchHighlight h) {
     final busy = _busy.contains(h.id);
@@ -697,13 +968,30 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
                 ),
             ],
           ),
-          if (h.description != null) ...[
-            const SizedBox(height: 6),
-            Text(
-              h.description!,
-              style: const TextStyle(color: Colors.white70, fontSize: 13),
-            ),
-          ],
+          const SizedBox(height: 8),
+          _editRow(
+            icon: Icons.person_rounded,
+            text: _scorers[h.id] == null
+                ? 'Golü atan seçilmedi'
+                : [
+                    if (_scorers[h.id]!.jersey != null)
+                      '${_scorers[h.id]!.jersey}',
+                    _scorers[h.id]!.name,
+                  ].join('  '),
+            muted: _scorers[h.id] == null,
+            action: _scorers[h.id] == null ? 'Seç' : 'Değiştir',
+            onTap: busy ? null : () => _pickScorer(h),
+          ),
+          const SizedBox(height: 6),
+          _editRow(
+            icon: Icons.notes_rounded,
+            text: (h.description ?? '').trim().isEmpty
+                ? 'Açıklama yok'
+                : h.description!.trim(),
+            muted: (h.description ?? '').trim().isEmpty,
+            action: 'Düzenle',
+            onTap: busy ? null : () => _editDescription(h),
+          ),
           if (h.matchEventId == null) ...[
             const SizedBox(height: 4),
             const Text(

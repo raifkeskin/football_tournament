@@ -14,6 +14,10 @@ class MatchHighlight {
   final String kind;
   final String? matchEventId;
   final String? teamId;
+
+  /// Golü atan (YZ eşleştirdi ya da yetkili seçti). Boşsa bağlı golün
+  /// oyuncusu kullanılır.
+  final String? playerId;
   final int? minute;
   final String videoId;
   final int startSec;
@@ -32,6 +36,7 @@ class MatchHighlight {
     required this.kind,
     this.matchEventId,
     this.teamId,
+    this.playerId,
     this.minute,
     required this.videoId,
     required this.startSec,
@@ -58,6 +63,7 @@ class MatchHighlight {
       kind: readStr(m['kind']) ?? 'goal',
       matchEventId: readStr(m['match_event_id']),
       teamId: readStr(m['team_id']),
+      playerId: readStr(m['player_id']),
       minute: readInt(m['minute']),
       videoId: m['video_id'].toString(),
       startSec: readInt(m['start_sec']) ?? 0,
@@ -68,6 +74,17 @@ class MatchHighlight {
     );
   }
 }
+
+/// Kesitte gösterilen golü atan: forma no + ad.
+typedef HighlightScorer = ({String playerId, String name, int? jersey});
+
+/// Golü atan seçimi için esame (yoksa kadro) satırı.
+typedef HighlightRosterPlayer = ({
+  String playerId,
+  String teamId,
+  String name,
+  int? jersey,
+});
 
 /// Maçın son YZ analiz işi.
 class MatchHighlightJob {
@@ -211,10 +228,15 @@ class MatchHighlightService {
     int? startSec,
     int? endSec,
     String? status,
+    String? description,
+    String? playerId,
   }) async {
     final patch = <String, dynamic>{
       'start_sec': ?startSec,
       'end_sec': ?endSec,
+      if (description != null)
+        'description': description.trim().isEmpty ? null : description.trim(),
+      'player_id': ?playerId,
       if (status != null) ...{
         'status': status,
         'reviewed_by': _db.auth.currentUser?.id,
@@ -225,6 +247,125 @@ class MatchHighlightService {
     await _db.from('match_highlights').update(patch).eq('id', h.id);
     await fetch(h.matchId);
     changes.value++;
+  }
+
+  /// Esame (yoksa sezon kadrosu) oyuncuları; golü atan seçimi ve gösterim
+  /// için. Forma numarası esameden, yoksa kadrodan.
+  static Future<List<HighlightRosterPlayer>> roster({
+    required String matchId,
+    required String seasonId,
+    required List<String> teamIds,
+  }) async {
+    List<HighlightRosterPlayer> read(List rows) => [
+      for (final r in rows)
+        if (r['player_id'] != null)
+          (
+            playerId: r['player_id'].toString(),
+            teamId: (r['team_id'] ?? '').toString(),
+            name: [
+              (r['players']?['name'] ?? '').toString().trim(),
+              (r['players']?['surname'] ?? '').toString().trim(),
+            ].where((x) => x.isNotEmpty).join(' '),
+            jersey: r['jersey_number'] is num
+                ? (r['jersey_number'] as num).toInt()
+                : null,
+          ),
+    ];
+    const cols = 'player_id, team_id, jersey_number, players(name, surname)';
+    final esame = read(
+      await _db
+          .from('match_rosters')
+          .select(cols)
+          .eq('match_id', matchId)
+          .inFilter('team_id', teamIds),
+    );
+    final list = esame.isNotEmpty
+        ? esame
+        : read(
+            await _db
+                .from('season_team_players')
+                .select(cols)
+                .eq('season_id', seasonId)
+                .inFilter('team_id', teamIds),
+          );
+    list.sort((a, b) => (a.jersey ?? 999).compareTo(b.jersey ?? 999));
+    return list;
+  }
+
+  static final Map<String, Map<String, HighlightScorer>> _scorers = {};
+
+  /// Bellekteki golü atanlar (kesit id → oyuncu).
+  static Map<String, HighlightScorer>? cachedScorers(String matchId) =>
+      _scorers[matchId];
+
+  /// Kesitlerin golü atanları: kesitteki oyuncu, yoksa bağlı golün oyuncusu.
+  static Future<Map<String, HighlightScorer>> scorers({
+    required String matchId,
+    required String seasonId,
+    required String homeTeamId,
+    required String awayTeamId,
+    required List<MatchHighlight> items,
+  }) async {
+    final byHighlight = <String, String>{
+      for (final h in items)
+        if (h.playerId != null) h.id: h.playerId!,
+    };
+    final eventIds = [
+      for (final h in items)
+        if (h.playerId == null && h.matchEventId != null) h.matchEventId!,
+    ];
+    if (eventIds.isNotEmpty) {
+      final rows = await _db
+          .from('match_events')
+          .select('id, player_id')
+          .inFilter('id', eventIds);
+      final byEvent = {
+        for (final r in rows)
+          if (r['player_id'] != null)
+            r['id'].toString(): r['player_id'].toString(),
+      };
+      for (final h in items) {
+        final p = h.playerId == null ? byEvent[h.matchEventId] : null;
+        if (p != null) byHighlight[h.id] = p;
+      }
+    }
+    final result = <String, HighlightScorer>{};
+    if (byHighlight.isNotEmpty) {
+      final players = {
+        for (final p in await roster(
+          matchId: matchId,
+          seasonId: seasonId,
+          teamIds: [homeTeamId, awayTeamId],
+        ))
+          p.playerId: p,
+      };
+      // Esamede olmayan oyuncu (ör. sonradan eklenen) adıyla okunur.
+      final missing = byHighlight.values
+          .where((id) => !players.containsKey(id))
+          .toSet()
+          .toList();
+      final extra = <String, String>{};
+      if (missing.isNotEmpty) {
+        final rows = await _db
+            .from('players')
+            .select('id, name, surname')
+            .inFilter('id', missing);
+        for (final r in rows) {
+          extra[r['id'].toString()] = [
+            (r['name'] ?? '').toString().trim(),
+            (r['surname'] ?? '').toString().trim(),
+          ].where((x) => x.isNotEmpty).join(' ');
+        }
+      }
+      byHighlight.forEach((hid, pid) {
+        final p = players[pid];
+        final name = p?.name ?? extra[pid] ?? '';
+        if (name.isEmpty) return;
+        result[hid] = (playerId: pid, name: name, jersey: p?.jersey);
+      });
+    }
+    _scorers[matchId] = result;
+    return result;
   }
 
   // ---- Arka plan takibi ---------------------------------------------------
