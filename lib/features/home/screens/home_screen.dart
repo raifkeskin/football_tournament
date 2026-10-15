@@ -32,7 +32,7 @@ import '../../../core/design_flags.dart';
 
 /// Maç Takvimi'nin üstündeki şerit (menü · tarihler · takvim) yüksekliği;
 /// yan menü bu şeridin altından açılır.
-const double kCalendarStripHeight = 112;
+const double kCalendarStripHeight = 84;
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, this.showCalendar = false});
@@ -649,7 +649,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Column(
                           children: [
                             Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
+                              padding: const EdgeInsets.fromLTRB(16, 4, 8, 0),
                               child: Row(
                                 children: [
                                   Expanded(
@@ -670,6 +670,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                     style: TextButton.styleFrom(
                                       foregroundColor: const Color(0xFF10B981),
                                       visualDensity: VisualDensity.compact,
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                      minimumSize: const Size(0, 26),
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 8,
                                       ),
@@ -1435,7 +1438,7 @@ class _TarihSeridi extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.only(bottom: 4),
       child: Row(
         children: List.generate(tarihler.length, (index) {
           final t = tarihler[index];
@@ -1447,54 +1450,58 @@ class _TarihSeridi extends StatelessWidget {
               onTap: () => onSec(index),
               child: Container(
                 margin: const EdgeInsets.symmetric(horizontal: 2),
-                padding: const EdgeInsets.symmetric(horizontal: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
                 decoration: BoxDecoration(
                   color: secili ? _green : Colors.transparent,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // Maç olan gün: takvim penceresindeki gibi nokta.
-                    Container(
-                      width: 5,
-                      height: 5,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: mac
-                            ? (secili ? yazi : _green)
-                            : Colors.transparent,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    // Dar ekranlarda yazılar bölünmez, gerekirse küçülür.
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        bugunMu(t) ? 'Bugün' : haftaKisa[t.weekday - 1],
-                        maxLines: 1,
-                        style: TextStyle(
-                          fontSize: 12,
-                          height: 1.1,
-                          color: secili ? yazi : Colors.white60,
-                          fontWeight: FontWeight.bold,
+                // Büyük yazı ayarında da şeride sığsın (gerekirse küçülür).
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Maç olan gün: takvim penceresindeki gibi nokta.
+                      Container(
+                        width: 5,
+                        height: 5,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: mac
+                              ? (secili ? yazi : _green)
+                              : Colors.transparent,
                         ),
                       ),
-                    ),
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        '${t.day}',
-                        maxLines: 1,
-                        style: TextStyle(
-                          fontSize: 20,
-                          height: 1.15,
-                          color: yazi,
-                          fontWeight: FontWeight.w800,
+                      const SizedBox(height: 2),
+                      // Dar ekranlarda yazılar bölünmez, gerekirse küçülür.
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          bugunMu(t) ? 'Bugün' : haftaKisa[t.weekday - 1],
+                          maxLines: 1,
+                          style: TextStyle(
+                            fontSize: 12,
+                            height: 1.1,
+                            color: secili ? yazi : Colors.white60,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          '${t.day}',
+                          maxLines: 1,
+                          style: TextStyle(
+                            fontSize: 20,
+                            height: 1.15,
+                            color: yazi,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
