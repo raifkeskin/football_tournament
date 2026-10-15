@@ -228,6 +228,10 @@ class ActiveTournament {
       await _apply(id, gen: gen);
     } catch (e) {
       debugPrint('Turnuva teması belirlenemedi: $e');
+      // Bağlantı hatası: bant genel kimlikte kalmasın, bir kez yeniden dene.
+      Future<void>.delayed(const Duration(seconds: 6), () {
+        if (gen == _generation && theme.value == null) refresh();
+      });
     }
   }
 
@@ -314,6 +318,17 @@ class ActiveTournament {
           .eq('id', leagueId!)
           .maybeSingle();
       if (row != null) next = TournamentTheme.fromRow(row);
+      // Misafirin son turnuvası artık okunamıyor (gizli turnuvanın kodu bu
+      // oturumda yok, silinmiş…): bant genel kimliğe düşmesin, varsayılan
+      // turnuvaya geçilir.
+      if (row == null && !_isRealUser) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(_kGuestLeague);
+        final fallback = await _defaultLeague(myLeagues.value);
+        if (fallback != null && fallback != leagueId) {
+          return _apply(fallback, gen: gen);
+        }
+      }
     }
     // Bu arada daha yeni bir refresh başladıysa onun sonucu geçerli.
     if (gen != null && gen != _generation) return;
