@@ -160,7 +160,8 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
   }
 
   /// Takımın kadro ekranı. Kadro sezona bağlıdır: takım tek sezondaysa
-  /// doğrudan açılır, birden fazla sezondaysa önce sezon seçilir.
+  /// doğrudan açılır; birden fazla sezondaysa üstte sezon yılı, altta o yılın
+  /// turnuvaları seçilir (aynı yıl iki turnuvada oynayan takımlar için).
   Future<void> _openSquad(
     BuildContext ctx, {
     required String teamId,
@@ -168,7 +169,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
     required String logoUrl,
   }) async {
     final sb = Supabase.instance.client;
-    List<({String id, String name})> seasons;
+    List<_SquadSeason> seasons;
     try {
       final links = await sb
           .from('season_teams')
@@ -180,12 +181,35 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
           ? const <Map<String, dynamic>>[]
           : await sb
                 .from('seasons')
-                .select('id, name, start_date')
+                .select('id, name, season_year, start_date, league_id')
                 .inFilter('id', ids.toList())
                 .order('start_date', ascending: false);
+      final leagueIds = {
+        for (final r in rows) (r['league_id'] ?? '').toString(),
+      }..remove('');
+      final leagueNames = <String, String>{};
+      if (leagueIds.isNotEmpty) {
+        final ls = await sb
+            .from('leagues')
+            .select('id, name')
+            .inFilter('id', leagueIds.toList());
+        for (final l in ls) {
+          leagueNames[(l['id'] ?? '').toString()] = (l['name'] ?? '')
+              .toString()
+              .trim();
+        }
+      }
       seasons = [
         for (final r in rows)
-          (id: (r['id'] ?? '').toString(), name: (r['name'] ?? '').toString()),
+          _SquadSeason(
+            id: (r['id'] ?? '').toString(),
+            name: (r['name'] ?? '').toString().trim(),
+            year:
+                (r['season_year'] as num?)?.toInt() ??
+                DateTime.tryParse((r['start_date'] ?? '').toString())?.year ??
+                0,
+            league: leagueNames[(r['league_id'] ?? '').toString()] ?? '',
+          ),
       ];
     } catch (e) {
       if (ctx.mounted) {
@@ -210,12 +234,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
     }
     final season = seasons.length == 1
         ? seasons.first
-        : await showAdminOptionPicker<({String id, String name})>(
-            context: ctx,
-            title: 'Sezon Seç',
-            items: seasons,
-            labelBuilder: (s) => s.name,
-          );
+        : await _pickSquadSeason(ctx, teamName: teamName, seasons: seasons);
     if (season == null || !ctx.mounted) return;
     await Navigator.of(ctx).push(
       MaterialPageRoute<void>(
@@ -225,6 +244,96 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
           tournamentId: season.id,
           teamName: teamName,
           teamLogoUrl: logoUrl,
+        ),
+      ),
+    );
+  }
+
+  /// Kadro için sezon seçimi: üstte yıllar (tek seçim), altta seçili yılın
+  /// turnuvaları. Turnuvaya dokununca o sezon döner.
+  Future<_SquadSeason?> _pickSquadSeason(
+    BuildContext ctx, {
+    required String teamName,
+    required List<_SquadSeason> seasons,
+  }) {
+    final years = {for (final s in seasons) s.year}.toList()
+      ..sort((a, b) => b.compareTo(a));
+    var year = years.first;
+    return showDialog<_SquadSeason>(
+      context: ctx,
+      builder: (dctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        child: AdminDialogCloseOverlay(
+          onClose: () => Navigator.pop(dctx),
+          child: StatefulBuilder(
+            builder: (dctx, setDState) {
+              final list = seasons.where((s) => s.year == year).toList()
+                ..sort((a, b) => _trCompare(a.league, b.league));
+              return Container(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(dctx).size.height * 0.8,
+                ),
+                padding: const EdgeInsets.fromLTRB(16, 22, 16, 16),
+                decoration: adminDialogDecoration(),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      AdminDialogHeader(
+                        icon: Icons.groups_outlined,
+                        title: 'Kadro',
+                        subtitle: teamName,
+                      ),
+                      AdminFormSection(
+                        title: 'Sezonlar',
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (final y in years)
+                              _YearChip(
+                                label: y == 0 ? 'Diğer' : '$y',
+                                selected: y == year,
+                                onTap: () => setDState(() => year = y),
+                              ),
+                          ],
+                        ),
+                      ),
+                      AdminFormSection(
+                        title: 'Turnuvalar',
+                        child: AdminFieldGroup(
+                          children: [
+                            for (final s in list)
+                              AdminFieldRow(
+                                icon: Icons.emoji_events_outlined,
+                                label: s.name,
+                                onTap: () => Navigator.pop(dctx, s),
+                                trailing: const Icon(
+                                  Icons.chevron_right_rounded,
+                                  color: Colors.white54,
+                                ),
+                                child: Text(
+                                  s.league.isEmpty ? s.name : s.league,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
         ),
       ),
     );
@@ -419,6 +528,9 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
     final nameController = TextEditingController(
       text: (existing?['name'] ?? '').toString().trim(),
     );
+    final shortNameController = TextEditingController(
+      text: (existing?['short_name'] ?? '').toString().trim(),
+    );
     final foundedController = TextEditingController(
       text: (existing?['founded_year'] ?? existing?['foundedYear'] ?? '')
           .toString()
@@ -482,6 +594,9 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
 
         final payload = <String, dynamic>{
           'name': teamName,
+          'short_name': shortNameController.text.trim().isEmpty
+              ? null
+              : shortNameController.text.trim(),
           'logo_url': logoUrl.trim(),
           'manager_id': selectedManagerId.isEmpty ? null : selectedManagerId,
           'founded_year': ?foundedYear,
@@ -717,6 +832,26 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                                     ),
                                   ),
                                   AdminFieldRow(
+                                    icon: Icons.short_text_rounded,
+                                    label: 'Kısa Ad (opsiyonel)',
+                                    child: TextField(
+                                      controller: shortNameController,
+                                      enabled: !saving,
+                                      maxLength: 16,
+                                      textCapitalization:
+                                          TextCapitalization.words,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                      cursorColor: kAdminAccent,
+                                      decoration: adminInlineInputDecoration(
+                                        hint: 'Dar ekranlar için, örn. GOP Autur',
+                                      ).copyWith(counterText: ''),
+                                    ),
+                                  ),
+                                  AdminFieldRow(
                                     icon: Icons.event_outlined,
                                     label: 'Kuruluş Yılı',
                                     child: TextField(
@@ -859,7 +994,11 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
       },
     );
 
-    _disposeControllersLater([nameController, foundedController]);
+    _disposeControllersLater([
+      nameController,
+      shortNameController,
+      foundedController,
+    ]);
   }
 
   /// Popup kapanış animasyonu sürerken TextField'lar controller'ı kullanmaya
@@ -873,12 +1012,187 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
     });
   }
 
+  /// Satırdaki ⋮ menüsü: ortada açılan, form diliyle aynı işlem listesi.
+  Future<void> _openTeamActions(Map<String, dynamic> data) async {
+    final teamId = (data['id'] ?? '').toString();
+    final teamName = (data['name'] ?? '').toString().trim();
+    final logoUrl = (data['logo_url'] ?? '').toString().trim();
+    final isAdmin = AppSession.of(context).value.isAdmin;
+    final action = await showDialog<String>(
+      context: context,
+      builder: (dctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+        child: AdminDialogCloseOverlay(
+          onClose: () => Navigator.pop(dctx),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(16, 22, 16, 0),
+            decoration: adminDialogDecoration(),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 30),
+                  child: Column(
+                    children: [
+                      TeamCrest(name: teamName, logoUrl: logoUrl, size: 56),
+                      const SizedBox(height: 10),
+                      Text(
+                        teamName,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                AdminFormSection(
+                  title: 'İşlemler',
+                  child: AdminFieldGroup(
+                    children: [
+                      _actionRow(
+                        dctx,
+                        value: 'squad',
+                        icon: Icons.groups_outlined,
+                        label: 'Kadroyu aç',
+                      ),
+                      _actionRow(
+                        dctx,
+                        value: 'edit',
+                        icon: Icons.edit_outlined,
+                        label: 'Düzenle',
+                      ),
+                      // Takım silme yalnızca admin.
+                      if (isAdmin)
+                        _actionRow(
+                          dctx,
+                          value: 'delete',
+                          icon: Icons.delete_outline_rounded,
+                          label: 'Takımı sil',
+                          danger: true,
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (!mounted) return;
+    switch (action) {
+      case 'squad':
+        await _openSquad(
+          context,
+          teamId: teamId,
+          teamName: teamName,
+          logoUrl: logoUrl,
+        );
+      case 'edit':
+        await _openTeamFormSheet(teamId: teamId, existing: data);
+      case 'delete':
+        await _takimSil(teamId, logoUrl: logoUrl);
+    }
+  }
+
+  Widget _actionRow(
+    BuildContext dctx, {
+    required String value,
+    required IconData icon,
+    required String label,
+    bool danger = false,
+  }) {
+    final color = danger ? kAdminDanger : kAdminAccent;
+    return InkWell(
+      onTap: () => Navigator.pop(dctx, value),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 12, 10, 12),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: Icon(icon, color: color, size: 19),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: danger ? kAdminDanger : Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: Colors.white38),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Takım silme yalnızca hiç sezona katılmamış ve maçı olmayan takımlar
+  /// için (ör. yanlış açılmış kayıt). Geçmişi olan takım silinirse maçları,
+  /// rakiplerin sonuçları ve puan tabloları da giderdi.
   Future<void> _takimSil(String teamId, {String? logoUrl}) async {
+    final sb = Supabase.instance.client;
+    int seasonCount;
+    int matchCount;
+    try {
+      final r = await Future.wait([
+        sb.from('season_teams').select('season_id').eq('team_id', teamId),
+        sb
+            .from('matches')
+            .select('id')
+            .or('home_team_id.eq.$teamId,away_team_id.eq.$teamId')
+            .limit(1000),
+      ]);
+      seasonCount = r[0].length;
+      matchCount = r[1].length;
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Kontrol edilemedi: $e')));
+      return;
+    }
+    if (!mounted) return;
+    if (seasonCount > 0 || matchCount > 0) {
+      final parts = [
+        if (seasonCount > 0) '$seasonCount sezonda yer aldı',
+        if (matchCount > 0) '$matchCount maçı var',
+      ].join(' ve ');
+      await showAdminInfoDialog(
+        context: context,
+        title: 'Takım Silinemez',
+        message:
+            'Bu takım $parts. Maç geçmişi, rakiplerin sonuçları ve puan '
+            'tabloları bozulmasın diye geçmişi olan takımlar silinemez.',
+        icon: Icons.block_rounded,
+        iconColor: kAdminDanger,
+      );
+      return;
+    }
+
     final ok = await showAdminConfirmDialog(
       context: context,
       title: 'Takımı Sil',
       message:
-          'Takım ve ilişkili veriler silinecektir. Devam etmek istiyor musunuz?',
+          'Takımın hiç sezonu ve maçı yok; kalıcı olarak silinecek. '
+          'Devam etmek istiyor musunuz?',
     );
     if (!ok) return;
 
@@ -980,50 +1294,22 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
               seasonCount == 0 ? 'Sezon yok' : '$seasonCount sezon',
               seasonCount == 0 ? kAdminAmber : kAdminAccent,
             ),
-            PopupMenuButton<String>(
-              tooltip: 'İşlemler',
-              color: const Color(0xFF1E293B),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-                side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+            IconButton(
+              tooltip: 'Kadro',
+              visualDensity: VisualDensity.compact,
+              onPressed: () => _openSquad(
+                context,
+                teamId: teamId,
+                teamName: teamName,
+                logoUrl: logoUrl,
               ),
-              icon: const Icon(Icons.menu_rounded, color: Colors.white54),
-              onSelected: (v) {
-                if (v == 'edit') openEdit();
-                if (v == 'delete') _takimSil(teamId, logoUrl: logoUrl);
-              },
-              itemBuilder: (_) => [
-                const PopupMenuItem(
-                  value: 'edit',
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.edit_outlined,
-                        color: Colors.white70,
-                        size: 20,
-                      ),
-                      SizedBox(width: 10),
-                      Text('Düzenle', style: TextStyle(color: Colors.white)),
-                    ],
-                  ),
-                ),
-                // Takım silme yalnızca admin.
-                if (AppSession.of(context).value.isAdmin)
-                  const PopupMenuItem(
-                    value: 'delete',
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.delete_outline_rounded,
-                          color: kAdminDanger,
-                          size: 20,
-                        ),
-                        SizedBox(width: 10),
-                        Text('Sil', style: TextStyle(color: kAdminDanger)),
-                      ],
-                    ),
-                  ),
-              ],
+              icon: const Icon(Icons.groups_outlined, color: kAdminAccent),
+            ),
+            IconButton(
+              tooltip: 'İşlemler',
+              visualDensity: VisualDensity.compact,
+              onPressed: () => _openTeamActions(data),
+              icon: const Icon(Icons.more_vert_rounded, color: Colors.white54),
             ),
           ],
         ),
@@ -1279,6 +1565,66 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
 }
 
 /// Takım logosu; yoksa baş harfler (Sezon / Grup listeleriyle aynı).
+/// Kadro seçiminde bir sezon: yılı ve bağlı olduğu turnuvanın adı.
+class _SquadSeason {
+  const _SquadSeason({
+    required this.id,
+    required this.name,
+    required this.year,
+    required this.league,
+  });
+
+  final String id;
+  final String name;
+  final int year;
+  final String league;
+}
+
+/// Tek seçimli yıl kapsülü.
+class _YearChip extends StatelessWidget {
+  const _YearChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected
+          ? kAdminAccent.withValues(alpha: 0.18)
+          : const Color(0xFF1E293B).withValues(alpha: 0.94),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(999),
+        side: BorderSide(
+          color: selected
+              ? kAdminAccent
+              : Colors.white.withValues(alpha: 0.08),
+        ),
+      ),
+      child: InkWell(
+        customBorder: const StadiumBorder(),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected ? kAdminAccent : Colors.white70,
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _Pill extends StatelessWidget {
   const _Pill(this.text, this.color);
 
