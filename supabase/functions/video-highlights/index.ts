@@ -50,6 +50,9 @@ const WIDE = 600;
 const HALFTIME_SLACK = 900;
 // Başlangıç tespitinde kare hızı (5 sn'de bir kare).
 const DETECT_FPS = 0.2;
+// Tüm video taramasında kare hızı (varsayılan 2 sn'de bir kare; görüntü
+// maliyeti yarıya iner, ses aynı kalır).
+const FULL_FPS = Number(Deno.env.get("GEMINI_FULL_FPS") ?? "0.5");
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -105,6 +108,7 @@ function fmt(sec: number): string {
 type GoalEvent = {
   no: number;
   id: string;
+  playerId: string | null;
   /** Dakika tutulmayan sezonda (halısaha) null. */
   minute: number | null;
   teamId: string | null;
@@ -116,8 +120,13 @@ type GoalEvent = {
 
 type Window = { start: number; end: number; goals: GoalEvent[] };
 
+/** Esamedeki (yoksa kadrodaki) oyuncu. */
+type RosterPlayer = { id: string; teamId: string; name: string; jersey: number | null };
+
 type FoundGoal = {
   olay_no?: number | null;
+  atan_oyuncu?: string | null;
+  forma_no?: number | null;
   atan_takim?: string | null;
   mac_dakikasi?: string | number | null;
   gol_ani?: string | null;
@@ -319,16 +328,68 @@ const GOALS_SCHEMA = {
           baslangic: { type: "STRING", nullable: true },
           bitis: { type: "STRING", nullable: true },
           aciklama: { type: "STRING", nullable: true },
+          atan_oyuncu: { type: "STRING", nullable: true },
+          forma_no: { type: "INTEGER", nullable: true },
           guven: { type: "STRING", enum: ["yuksek", "orta", "dusuk"] },
         },
         required: ["gol_ani", "guven"],
       },
     },
+    // Yalnız tüm video taramasında: maç dakikasını hesaplamak için.
+    mac_baslangic: { type: "STRING", nullable: true },
+    ikinci_yari_baslangic: { type: "STRING", nullable: true },
   },
   required: ["goller"],
 };
 
-function goalsPrompt(home: string, away: string, window: Window | null, goals: GoalEvent[]) {
+/** Türkçe harfleri sadeleştirip küçültür (ad eşleştirme için). */
+function norm(s: string) {
+  return s.toLocaleLowerCase("tr")
+    .replace(/ı/g, "i").replace(/ş/g, "s").replace(/ğ/g, "g")
+    .replace(/ü/g, "u").replace(/ö/g, "o").replace(/ç/g, "c")
+    .replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * YZ'nin verdiği ad / forma numarasını esameyle eşleştirir. Önce takım +
+ * forma no, sonra ad: tam ad, soyad ya da (tek eşleşmeyse) ad.
+ */
+function matchPlayer(
+  roster: RosterPlayer[],
+  teamId: string | null,
+  name: string | null | undefined,
+  jersey: number | null | undefined,
+): string | null {
+  const pool = teamId ? roster.filter((p) => p.teamId === teamId) : roster;
+  if (jersey != null && teamId) {
+    const byNo = pool.filter((p) => p.jersey === jersey);
+    if (byNo.length === 1) return byNo[0].id;
+  }
+  const n = norm(name ?? "");
+  if (!n) return null;
+  const words = n.split(" ");
+  const full = pool.filter((p) => norm(p.name) === n);
+  if (full.length === 1) return full[0].id;
+  const last = words[words.length - 1];
+  const bySurname = pool.filter((p) => {
+    const w = norm(p.name).split(" ");
+    return w[w.length - 1] === last;
+  });
+  if (bySurname.length === 1) return bySurname[0].id;
+  if (words.length === 1) {
+    const byFirst = pool.filter((p) => norm(p.name).split(" ")[0] === words[0]);
+    if (byFirst.length === 1) return byFirst[0].id;
+  }
+  return null;
+}
+
+function goalsPrompt(
+  home: string,
+  away: string,
+  window: Window | null,
+  goals: GoalEvent[],
+  roster: { home: RosterPlayer[]; away: RosterPlayer[] },
+) {
   const lines = [
     "Bu bir amatör futbol maçının videosudur. Görevin maçtaki GOLLERİ bulmak.",
     "",
@@ -351,7 +412,22 @@ function goalsPrompt(home: string, away: string, window: Window | null, goals: G
       "",
     );
   } else {
-    lines.push("Tüm videoyu tara; zamanları videonun başından itibaren yaz.", "");
+    lines.push(
+      "Tüm videoyu tara; zamanları videonun başından itibaren yaz.",
+      "Ayrıca maçın başlama vuruşunun (mac_baslangic) ve 2. yarının başlama",
+      "vuruşunun (ikinci_yari_baslangic) videodaki anını yaz (SS:DD:ss).",
+      "",
+    );
+  }
+  const list = (ps: RosterPlayer[]) =>
+    ps.map((p) => (p.jersey != null ? `${p.jersey} ${p.name}` : p.name)).join(", ");
+  if (roster.home.length || roster.away.length) {
+    lines.push(
+      "Kadrolar (forma no + ad):",
+      `- ${home}: ${list(roster.home) || "-"}`,
+      `- ${away}: ${list(roster.away) || "-"}`,
+      "",
+    );
   }
   if (goals.length) {
     lines.push(
@@ -381,6 +457,9 @@ function goalsPrompt(home: string, away: string, window: Window | null, goals: G
     "- atan_takim: golü atan takımın adı (yukarıdaki adlardan biri)",
     "- mac_dakikasi: tabelada okunuyorsa maç süresi, yoksa boş",
     "- aciklama: kısa Türkçe açıklama (oyuncu adı anlatımda geçiyorsa kullan)",
+    "- atan_oyuncu: golü atanın adı, yalnızca spiker söylüyorsa ya da",
+    "  formasından kesin okunuyorsa (kadrodaki yazılışla); yoksa boş",
+    "- forma_no: golü atanın forma numarası, kesin okunuyorsa; yoksa boş",
     "- guven: yuksek | orta | dusuk",
   );
   return lines.join("\n");
@@ -437,6 +516,7 @@ type RunOpts = {
   kickoff: number | null;
   secondHalf: number | null;
   limit: number;
+  roster: RosterPlayer[];
 };
 
 /** Tüm gollerin dakikası girilmiş mi? (pencereli tarama yapılabilir) */
@@ -480,7 +560,7 @@ async function run(opts: RunOpts) {
     if (timed && covered > total * 0.7) windows = [null];
 
     const plannedCost = windows.reduce(
-      (a, w) => a + estimateCost(w ? w.end - w.start : total),
+      (a, w) => a + (w ? estimateCost(w.end - w.start) : estimateCost(total, FULL_FPS)),
       0,
     );
     budget.ensure(plannedCost);
@@ -489,13 +569,22 @@ async function run(opts: RunOpts) {
       windows.map(async (w) => {
         const { data, usage } = await askGemini({
           videoId,
-          prompt: goalsPrompt(home.name, away.name, w, w ? w.goals : goals),
+          prompt: goalsPrompt(home.name, away.name, w, w ? w.goals : goals, {
+            home: opts.roster.filter((p) => p.teamId === home.id),
+            away: opts.roster.filter((p) => p.teamId === away.id),
+          }),
           schema: GOALS_SCHEMA,
           start: w?.start,
           end: w?.end,
+          fps: w ? undefined : FULL_FPS,
         });
         await budget.record(w ? "goals" : "full", usage);
         const found = Array.isArray(data.goller) ? (data.goller as FoundGoal[]) : [];
+        // Tüm video taramasında başlangıçlar bu yanıttan gelir.
+        if (!w) {
+          kickoff ??= toSec(data.mac_baslangic as string | null);
+          secondHalf ??= toSec(data.ikinci_yari_baslangic as string | null);
+        }
         return { w, found };
       }),
     );
@@ -536,12 +625,22 @@ async function run(opts: RunOpts) {
           ? away.id
           : null;
 
-        const minuteRaw = ev?.minute ?? parseInt(String(f.mac_dakikasi ?? ""), 10);
+        // Dakika: maç detayından; yoksa tabeladan; o da yoksa videodaki
+        // başlangıç anlarından hesaplanır.
+        let minuteRaw = ev?.minute ?? parseInt(String(f.mac_dakikasi ?? ""), 10);
+        if (!Number.isFinite(minuteRaw) && kickoff != null && goalSec >= kickoff) {
+          minuteRaw = secondHalf != null && goalSec >= secondHalf
+            ? period + Math.floor((goalSec - secondHalf) / 60) + 1
+            : Math.floor((goalSec - kickoff) / 60) + 1;
+        }
+        const playerId = ev?.playerId ??
+          matchPlayer(opts.roster, teamId, f.atan_oyuncu, f.forma_no);
         rows.push({
           match_id: matchId,
           kind: "goal",
           match_event_id: ev?.id ?? null,
           team_id: teamId,
+          player_id: playerId,
           minute: Number.isFinite(minuteRaw) ? minuteRaw : null,
           video_id: videoId,
           start_sec: start,
@@ -563,6 +662,8 @@ async function run(opts: RunOpts) {
     }
     await admin.from("match_highlight_jobs").update({
       status: "done",
+      kickoff_sec: kickoff,
+      second_half_sec: secondHalf,
       mode: windows[0] == null ? "full" : "events",
       found: rows.length,
       cost_usd: Number(budget.spent.toFixed(5)),
@@ -624,7 +725,7 @@ Deno.serve(async (req) => {
     admin.from("teams").select("id, name").in("id", [m.home_team_id, m.away_team_id]),
     admin.from("seasons").select("match_period_duration").eq("id", m.season_id).maybeSingle(),
     admin.from("match_events")
-      .select("id, minute, team_id, player_name, is_own_goal, is_penalty")
+      .select("id, minute, team_id, player_id, player_name, is_own_goal, is_penalty")
       .eq("match_id", matchId).eq("event_type", "goal")
       .order("minute").order("created_at"),
   ]);
@@ -638,6 +739,7 @@ Deno.serve(async (req) => {
   const goals: GoalEvent[] = (events ?? []).map((e, i) => ({
     no: i + 1,
     id: e.id,
+    playerId: e.player_id ?? null,
     minute: e.minute == null ? null : Number(e.minute) || 0,
     teamId: e.team_id,
     teamName: e.team_id === home.id ? home.name : e.team_id === away.id ? away.name : "",
@@ -645,6 +747,22 @@ Deno.serve(async (req) => {
     ownGoal: !!e.is_own_goal,
     penalty: !!e.is_penalty,
   }));
+
+  // Esame (yoksa sezon kadrosu): YZ'ye ad listesi + eşleştirme için.
+  const rosterRows = (await admin.from("match_rosters")
+    .select("player_id, team_id, jersey_number, players(name, surname)")
+    .eq("match_id", matchId)).data ?? [];
+  const squadRows = rosterRows.length ? [] : (await admin.from("season_team_players")
+    .select("player_id, team_id, jersey_number, players(name, surname)")
+    .eq("season_id", m.season_id)
+    .in("team_id", [m.home_team_id, m.away_team_id])).data ?? [];
+  // deno-lint-ignore no-explicit-any
+  const roster: RosterPlayer[] = [...rosterRows, ...squadRows].map((r: any) => ({
+    id: r.player_id,
+    teamId: r.team_id,
+    name: `${r.players?.name ?? ""} ${r.players?.surname ?? ""}`.trim(),
+    jersey: r.jersey_number ?? null,
+  })).filter((p) => p.id && p.name);
 
   // Sınırlar: en kötü durum tahmini (başlangıç bulunamazsa geniş pencereler
   // ya da tüm video) maç başı veya aylık sınırı aşıyorsa Gemini'ye gidilmez.
@@ -668,7 +786,7 @@ Deno.serve(async (req) => {
       worstWindows.reduce((a, w) => a + estimateCost(w.end - w.start), 0),
       estimateCost(total),
     )
-    : estimateCost(total);
+    : estimateCost(total, FULL_FPS);
   const worst = detectCost + worstScan;
   if (worst > limits.perMatch) {
     return json({
@@ -711,6 +829,7 @@ Deno.serve(async (req) => {
     kickoff,
     secondHalf,
     limit: limits.perMatch,
+    roster,
   });
   // deno-lint-ignore no-explicit-any
   const rt = (globalThis as any).EdgeRuntime;

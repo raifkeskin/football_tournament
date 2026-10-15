@@ -2178,6 +2178,66 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
   /// null: tümü; aksi hâlde takım id'si.
   String? _teamFilter;
 
+  /// Alt sekme: 0 Gol Videoları, 1 Fotoğraflar (null: içeriğe göre).
+  int? _section;
+
+  Widget _sectionSwitch(int selected, int photoCount) {
+    final accent = ActiveTournament.theme.value?.secondary ?? kAdminAccent;
+    Widget item(int i, IconData icon, String label) {
+      final on = selected == i;
+      return Expanded(
+        child: GestureDetector(
+          onTap: () => setState(() => _section = i),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            decoration: BoxDecoration(
+              color: on ? accent : Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 16, color: on ? Colors.white : Colors.white60),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: on ? Colors.white : Colors.white60,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+      child: Container(
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.3),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white10),
+        ),
+        child: Row(
+          children: [
+            item(0, Icons.movie_outlined, 'Gol Videoları'),
+            item(
+              1,
+              Icons.photo_outlined,
+              photoCount == 0 ? 'Fotoğraflar' : 'Fotoğraflar ($photoCount)',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<MatchMediaModel>>(
@@ -2204,22 +2264,47 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
             ),
           );
         final session = AppSession.of(context).value;
+        // YZ yalnız maç yayınını tarar; yayın linki yoksa kart çıkmaz.
+        final hasStream = all.any(
+          (m) => m.mediaType == 'Maç Yayın Linki' && m.url.trim().isNotEmpty,
+        );
+        // Varsayılan: yayın ya da video varsa Gol Videoları.
+        final section =
+            _section ??
+            (hasStream || videos.isNotEmpty || photos.isEmpty ? 0 : 1);
+        final switcher = _sectionSwitch(section, photos.length);
+        if (section == 0) {
+          return Column(
+            children: [
+              switcher,
+              Expanded(
+                child: ListView(
+                  // Altta sağdaki menü düğmesi son kartı örtmesin.
+                  padding: const EdgeInsets.only(bottom: 104),
+                  children: [
+                    MatchHighlightsStrip(
+                      match: widget.match,
+                      homeName: widget.homeName,
+                      awayName: widget.awayName,
+                      hasStream: hasStream,
+                      canReview:
+                          session.canManageLeague(widget.match.leagueId) ||
+                          session
+                              .regionsInSeason(widget.match.seasonId)
+                              .isNotEmpty,
+                      trailing: [
+                        for (final v in videos) _albumCard(context, v),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        }
         final header = <Widget>[
-          MatchHighlightsStrip(
-            match: widget.match,
-            homeName: widget.homeName,
-            awayName: widget.awayName,
-            // YZ yalnız maç yayınını tarar; yayın linki yoksa kart çıkmaz.
-            hasStream: all.any(
-              (m) =>
-                  m.mediaType == 'Maç Yayın Linki' && m.url.trim().isNotEmpty,
-            ),
-            canReview:
-                session.canManageLeague(widget.match.leagueId) ||
-                session.regionsInSeason(widget.match.seasonId).isNotEmpty,
-          ),
+          switcher,
           for (final a in albums) _albumCard(context, a),
-          for (final v in videos) _albumCard(context, v),
           if (widget.isSuperAdmin)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
