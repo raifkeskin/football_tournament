@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/utils/app_activity.dart';
+import '../../core/utils/string_utils.dart';
 import '../../core/widgets/web_safe_image.dart';
 import 'sponsor.dart';
 
@@ -145,98 +146,159 @@ class _SponsorStripState extends State<SponsorStrip> {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: s.linkUrl == null ? null : () => _open(s),
-      child: Container(
-        color: Colors.white,
-        padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
-        // Solda sabit genişlikte küçük başlık, kalan yerde logo + ad. Şerit
-        // kendiliğinden döndüğü için sayfa noktaları gösterilmez.
-        child: SizedBox(
-          height: _SponsorMark.logoHeight,
-          child: Row(
-            children: [
-              SizedBox(
-                width: 58,
-                // Büyük yazı ayarında taşmasın.
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    s.isMain ? 'ANA\nSPONSOR' : 'SPONSOR',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: s.isMain
-                          ? const Color(0xFFB45309)
-                          : const Color(0xFF64748B),
-                      fontSize: 9,
-                      height: 1.15,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.2,
-                    ),
+      child: SponsorStripTile(sponsor: s),
+    );
+  }
+}
+
+/// Şeridin tek sponsorluk görünümü: solda sabit genişlikte başlık, kalan
+/// yerde logo + ad (sponsorun yazı stiliyle). Sponsor Yönetimi'ndeki
+/// önizleme de bunu kullanır; [logo] kaydedilmemiş yeni logoyu gösterir.
+class SponsorStripTile extends StatelessWidget {
+  const SponsorStripTile({
+    super.key,
+    required this.sponsor,
+    this.logo,
+    this.logoAspect,
+  });
+
+  final Sponsor sponsor;
+  final Widget? logo;
+  final double? logoAspect;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = sponsor;
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+      // Şerit kendiliğinden döndüğü için sayfa noktaları gösterilmez.
+      child: SizedBox(
+        height: _SponsorMark.boxHeight,
+        child: Row(
+          children: [
+            SizedBox(
+              width: 58,
+              // Büyük yazı ayarında taşmasın.
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  s.isMain ? 'ANA\nSPONSOR' : 'SPONSOR',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: s.isMain
+                        ? const Color(0xFFB45309)
+                        : const Color(0xFF64748B),
+                    fontSize: 9,
+                    height: 1.15,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.2,
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 450),
-                  child: KeyedSubtree(
-                    key: ValueKey(s.id),
-                    child: _SponsorMark(sponsor: s),
+            ),
+            // Kurumsal stilde başlıkla logo arasında ince ayraç.
+            if (s.nameStyle == SponsorNameStyle.kurumsal)
+              Container(
+                width: 1,
+                height: 28,
+                margin: const EdgeInsets.only(left: 4),
+                color: const Color(0xFFE2E8F0),
+              ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 450),
+                child: KeyedSubtree(
+                  key: ValueKey('${s.id}|${s.nameStyle.name}'),
+                  child: _SponsorMark(
+                    sponsor: s,
+                    logo: logo,
+                    logoAspect: logoAspect,
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-/// Logo ve ad yan yana, başlığın sağındaki alanı olabildiğince doldurur
-/// (ad sığmazsa kesilmeden küçülür). Logo sabit 96×48 kutuda, kutuya
-/// sığacak en büyük hâliyle çizilir; oranı biliniyorsa kutu logo kadar
-/// daraltılır (kare logoda ad uzak kalmasın).
+/// Logo ve ad yan yana, başlığın sağındaki alanda ortalı (ad sığmazsa
+/// kesilmeden küçülür). Logo 40 px yükseklikte, oranı biliniyorsa kutu logo
+/// kadar daraltılır (kare logoda ad uzak kalmasın). Ad sponsorun stiliyle:
+/// sade (yarı kalın), kurumsal (aralıklı büyük harf), spor (dar yazı).
 class _SponsorMark extends StatelessWidget {
-  const _SponsorMark({required this.sponsor});
+  const _SponsorMark({required this.sponsor, this.logo, this.logoAspect});
 
   final Sponsor sponsor;
+  final Widget? logo;
+  final double? logoAspect;
 
-  static const logoWidth = 96.0;
-  static const logoHeight = 48.0;
+  static const boxHeight = 48.0;
+  static const logoHeight = 40.0;
+  static const logoMaxWidth = 84.0;
+
+  TextStyle get _style => switch (sponsor.nameStyle) {
+    SponsorNameStyle.sade => const TextStyle(
+      fontFamily: 'Barlow',
+      color: Color(0xFF0F172A),
+      fontSize: 16,
+      fontWeight: FontWeight.w600,
+      letterSpacing: 0.2,
+    ),
+    SponsorNameStyle.kurumsal => const TextStyle(
+      fontFamily: 'Barlow',
+      color: Color(0xFF334155),
+      fontSize: 13,
+      fontWeight: FontWeight.w600,
+      letterSpacing: 2.4,
+    ),
+    SponsorNameStyle.spor => const TextStyle(
+      fontFamily: 'BarlowCondensed',
+      color: Color(0xFF0F172A),
+      fontSize: 19,
+      fontWeight: FontWeight.w800,
+      letterSpacing: 0.8,
+    ),
+  };
 
   @override
   Widget build(BuildContext context) {
+    final raw = sponsor.name;
+    final text = sponsor.nameStyle == SponsorNameStyle.sade ? raw : raw.trUpper;
     final name = Flexible(
       child: FittedBox(
         fit: BoxFit.scaleDown,
-        child: Text(
-          sponsor.name,
-          maxLines: 1,
-          style: const TextStyle(
-            color: Color(0xFF0F172A),
-            fontSize: 22,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
+        child: Text(text, maxLines: 1, style: _style),
       ),
     );
-    final aspect = sponsor.logoAspect;
+    final aspect = logoAspect ?? sponsor.logoAspect;
     final boxWidth = aspect == null
-        ? logoWidth
-        : (logoHeight * aspect).clamp(logoHeight * 0.5, logoWidth);
+        ? logoMaxWidth
+        : (logoHeight * aspect).clamp(logoHeight * 0.5, logoMaxWidth);
+    final hasLogo = logo != null || sponsor.logoUrl.isNotEmpty;
     return Center(
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (sponsor.logoUrl.isNotEmpty) ...[
-            WebSafeImage(
-              url: sponsor.logoUrl,
+          if (hasLogo) ...[
+            SizedBox(
               width: boxWidth,
               height: logoHeight,
-              fit: BoxFit.contain,
+              child:
+                  logo ??
+                  WebSafeImage(
+                    url: sponsor.logoUrl,
+                    width: boxWidth,
+                    height: logoHeight,
+                    fit: BoxFit.contain,
+                  ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
           ],
           name,
         ],
