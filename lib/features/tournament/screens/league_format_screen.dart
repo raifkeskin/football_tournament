@@ -471,8 +471,8 @@ class _LeagueFormatScreenState extends State<LeagueFormatScreen> {
                     ),
                   ),
                   subtitle: const Text(
-                    'Play-off eşleşmeleri puan tablosunun altında; sezonun '
-                    'yarısı oynandıktan sonra görünür.',
+                    'Play-off eşleşmeleri puan tablosunun altında; açıkken '
+                    'hemen görünür. İstediğiniz hafta açabilirsiniz.',
                     style: TextStyle(color: kAdminMuted, fontSize: 12),
                   ),
                 ),

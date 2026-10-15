@@ -7,7 +7,7 @@ class LeagueFormat {
   const LeagueFormat({
     this.cups = const [],
     this.restOut = true,
-    this.showIfNow = true,
+    this.showIfNow = false,
     this.template,
   });
 
@@ -16,8 +16,8 @@ class LeagueFormat {
   /// Kupaya girmeyen sıralar "Lige veda" (kırmızı) mı, işaretsiz mi.
   final bool restOut;
 
-  /// Puan tablosunun altındaki "Bugün bitse" eşleşme kartı açık mı (sezonun
-  /// yarısı oynandıktan sonra görünür).
+  /// Puan tablosunun altındaki "Bugün bitse" eşleşme kartı açık mı (açıkken
+  /// hemen görünür; varsayılan kapalı).
   final bool showIfNow;
 
   /// Seçili hazır şablon (düzenlenince null: özel format).
@@ -40,7 +40,7 @@ class LeagueFormat {
     return LeagueFormat(
       cups: cups,
       restOut: (raw['rest'] ?? 'out') == 'out',
-      showIfNow: raw['show_if_now'] != false,
+      showIfNow: raw['show_if_now'] == true,
       template: raw['template']?.toString(),
     );
   }
