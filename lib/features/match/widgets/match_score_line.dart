@@ -19,6 +19,7 @@ class MatchScoreLine extends StatelessWidget {
     required this.homeLogo,
     required this.awayLogo,
     this.leading,
+    this.onWatch,
     this.showLogos = true,
     this.compact = false,
   });
@@ -31,6 +32,9 @@ class MatchScoreLine extends StatelessWidget {
 
   /// Saatin üstündeki küçük ikon (yayın, yönetici düzenleme).
   final Widget? leading;
+
+  /// Takvim düzeninde skorun altındaki "İzle" düğmesi (yayın varsa).
+  final VoidCallback? onWatch;
 
   /// Ana sayfada logolar gösterilmez (yalnızca fikstürde).
   final bool showLogos;
@@ -312,7 +316,6 @@ extension on MatchScoreLine {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  if (leading != null) ...[leading!, const SizedBox(width: 4)],
                   Flexible(
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
@@ -361,12 +364,64 @@ extension on MatchScoreLine {
                   ),
                 ),
               ),
+              if (onWatch != null) ...[
+                const SizedBox(height: 6),
+                _WatchChip(live: isLive, onTap: onWatch!),
+              ],
             ],
           ),
         ),
         const SizedBox(width: 6),
         Expanded(child: side(awayName, awayLogo, home: false)),
       ],
+    );
+  }
+}
+
+/// Skorun altında küçük çerçeveli "İzle" düğmesi: YouTube ikonu ve yazı.
+class _WatchChip extends StatelessWidget {
+  const _WatchChip({required this.live, required this.onTap});
+
+  final bool live;
+  final VoidCallback onTap;
+
+  static const _red = Color(0xFFFF0033);
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: _red.withValues(alpha: 0.10),
+      shape: StadiumBorder(
+        side: BorderSide(color: _red.withValues(alpha: 0.55)),
+      ),
+      child: InkWell(
+        customBorder: const StadiumBorder(),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(6, 3, 9, 3),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const YoutubeBrandIcon(size: 16),
+              const SizedBox(width: 4),
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    live ? 'Canlı izle' : 'İzle',
+                    maxLines: 1,
+                    style: const TextStyle(
+                      color: Color(0xFFFECDD3),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
