@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/utils/team_colors.dart';
 import '../../../core/services/app_session.dart';
 import '../../../core/services/global_filter.dart';
 import '../../../core/services/service_locator.dart';
@@ -367,7 +368,7 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
       heroTag: null,
       tooltip: 'Afişi paylaş',
       backgroundColor: accent,
-      foregroundColor: Colors.white,
+      foregroundColor: onColorOf(accent),
       onPressed: onPressed,
       child: const Icon(Icons.ios_share_rounded),
     );
@@ -455,7 +456,7 @@ class _GroupChips extends StatelessWidget {
           child: Text(
             g.name.trim().isEmpty ? 'Grup' : g.name.trim(),
             style: TextStyle(
-              color: on ? Colors.white : Colors.white70,
+              color: on ? onColorOf(accent) : Colors.white70,
               fontSize: 12.5,
               fontWeight: on ? FontWeight.w800 : FontWeight.w600,
             ),
