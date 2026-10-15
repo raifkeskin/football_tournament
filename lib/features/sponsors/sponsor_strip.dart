@@ -215,15 +215,16 @@ class _SponsorStripState extends State<SponsorStrip> {
 }
 
 /// Logo ve ad yan yana, ortalı; içerik büyüdükçe kenarlara doğru açılır
-/// ama taşmaz (ad sığmazsa kesilmeden küçülür). Logo her zaman sabit
-/// 96×36 kutuda, kutuya sığacak en büyük hâliyle çizilir.
+/// ama taşmaz (ad sığmazsa kesilmeden küçülür). Logo sabit 72×42 kutuda,
+/// kutuya sığacak en büyük hâliyle çizilir (kare logoda ada uzak kalmasın
+/// diye kutu dar tutulur).
 class _SponsorMark extends StatelessWidget {
   const _SponsorMark({required this.sponsor});
 
   final Sponsor sponsor;
 
-  static const logoWidth = 96.0;
-  static const logoHeight = 36.0;
+  static const logoWidth = 72.0;
+  static const logoHeight = 42.0;
 
   @override
   Widget build(BuildContext context) {
@@ -235,7 +236,7 @@ class _SponsorMark extends StatelessWidget {
           maxLines: 1,
           style: const TextStyle(
             color: Color(0xFF0F172A),
-            fontSize: 14,
+            fontSize: 17,
             fontWeight: FontWeight.w800,
           ),
         ),
@@ -252,7 +253,7 @@ class _SponsorMark extends StatelessWidget {
               height: logoHeight,
               fit: BoxFit.contain,
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
           ],
           name,
         ],

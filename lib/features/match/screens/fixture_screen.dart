@@ -418,7 +418,13 @@ class _FixtureViewState extends State<FixtureView> {
 
   @override
   Widget build(BuildContext context) {
-    final bool isAdmin = AppSession.of(context).value.isAdmin;
+    final session = AppSession.of(context).value;
+    final bool isAdmin = session.isAdmin;
+    // Tarih / saat / saha düzenleme: admin, kurucu başkan ve bölge sorumlusu
+    // (veritabanı kuralı da owns_league / owns_group).
+    final canEditSchedule =
+        session.canManageLeague(_leagueId) ||
+        session.regionsInSeason(_seasonId).isNotEmpty;
     final cardBg = Colors.black.withValues(alpha: 0.3);
     final outline = Colors.white.withValues(alpha: 0.08);
 
@@ -535,6 +541,7 @@ class _FixtureViewState extends State<FixtureView> {
                           teamLogoById: teamLogoById,
                           teamNameById: teamNameById,
                           isAdmin: isAdmin,
+                          canEditSchedule: canEditSchedule,
                           onMatchTap: (m) => Navigator.push(
                             context,
                             MaterialPageRoute(
@@ -580,9 +587,11 @@ class _FixtureList extends StatelessWidget {
     required this.cardColor,
     required this.outlineColor,
     required this.isAdmin,
+    required this.canEditSchedule,
     required this.onDataChanged,
   });
 
+  final bool canEditSchedule;
   final Widget header;
   final Map<String, GlobalKey> dayKeys;
   final List<MatchModel> matches;
@@ -704,6 +713,7 @@ class _FixtureList extends StatelessWidget {
               teamLogoById: teamLogoById,
               teamNameById: teamNameById,
               isAdmin: isAdmin,
+              canEditSchedule: canEditSchedule,
               onTap: () => onMatchTap(m),
               onDataChanged: onDataChanged,
             ),
@@ -722,8 +732,12 @@ class _MatchCard extends StatelessWidget {
     required this.teamNameById,
     required this.onTap,
     required this.isAdmin,
+    required this.canEditSchedule,
     required this.onDataChanged,
   });
+
+  /// Tarih / saat düzenleme düğmesi (admin, kurucu, bölge sorumlusu).
+  final bool canEditSchedule;
 
   static final IMatchService _matchService = ServiceLocator.matchService;
   static final ILeagueService _leagueService = ServiceLocator.leagueService;
@@ -979,7 +993,7 @@ class _MatchCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                  if (isAdmin)
+                  if (canEditSchedule)
                     IconButton(
                       padding: const EdgeInsets.only(top: 6),
                       constraints: const BoxConstraints(),
