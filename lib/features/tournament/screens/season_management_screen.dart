@@ -23,6 +23,7 @@ import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../widgets/league_owners_section.dart';
 import 'age_rules_dialog.dart';
+import 'league_format_screen.dart';
 import '../../match/utils/season_match_settings.dart';
 
 // Fikstür / Ana Sayfa ile ortak renkler
@@ -557,6 +558,33 @@ class SeasonManagementScreen extends StatelessWidget {
                                   : 'Her eşleşme tek maç',
                               isDoubleRound,
                               (v) => setSheetState(() => isDoubleRound = v),
+                            ),
+                          ],
+                        ),
+                      ),
+                    if (canEditAgeRules && tab == 2)
+                      AdminFormSection(
+                        title: 'Lig Formatı',
+                        child: AdminFieldGroup(
+                          children: [
+                            AdminFieldRow(
+                              icon: Icons.emoji_events_outlined,
+                              label:
+                                  'Play-off kupaları ve puan tablosu bölgeleri',
+                              onTap: () =>
+                                  openLeagueFormatScreen(context, season.id),
+                              trailing: const Icon(
+                                Icons.chevron_right_rounded,
+                                color: kAdminMuted,
+                              ),
+                              child: const Text(
+                                'Formatı düzenle',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
                             ),
                           ],
                         ),
