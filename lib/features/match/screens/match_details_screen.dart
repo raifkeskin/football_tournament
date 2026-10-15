@@ -2198,12 +2198,16 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(icon, size: 16, color: on ? Colors.white : Colors.white60),
+                Icon(
+                  icon,
+                  size: 16,
+                  color: on ? onColorOf(accent) : Colors.white60,
+                ),
                 const SizedBox(width: 6),
                 Text(
                   label,
                   style: TextStyle(
-                    color: on ? Colors.white : Colors.white60,
+                    color: on ? onColorOf(accent) : Colors.white60,
                     fontWeight: FontWeight.w800,
                     fontSize: 13,
                   ),
