@@ -162,6 +162,7 @@ class _SponsorStripState extends State<SponsorStrip> {
                   alignment: Alignment.centerLeft,
                   child: Text(
                     s.isMain ? 'ANA\nSPONSOR' : 'SPONSOR',
+                    textAlign: TextAlign.center,
                     style: TextStyle(
                       color: s.isMain
                           ? const Color(0xFFB45309)
