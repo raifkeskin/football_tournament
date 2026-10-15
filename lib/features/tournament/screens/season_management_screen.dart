@@ -176,6 +176,9 @@ class SeasonManagementScreen extends StatelessWidget {
     var isDefault = season?.isDefault ?? false;
     var isDoubleRound = season?.isDoubleRound ?? false;
     var trackGoalMinutes = season?.trackGoalMinutes ?? true;
+    // Lig Formatı kaydedilince satırda onay (popup açıkken alt mesaj
+    // görünmüyor).
+    var formatSaved = false;
     // Form sekmeleri: Genel / Maç / Gruplar.
     var tab = 0;
     var saving = false;
@@ -571,16 +574,27 @@ class SeasonManagementScreen extends StatelessWidget {
                               icon: Icons.emoji_events_outlined,
                               label:
                                   'Play-off kupaları ve puan tablosu bölgeleri',
-                              onTap: () =>
-                                  openLeagueFormatScreen(context, season.id),
+                              onTap: () async {
+                                final ok = await openLeagueFormatScreen(
+                                  context,
+                                  season.id,
+                                );
+                                if (ok) {
+                                  setSheetState(() => formatSaved = true);
+                                }
+                              },
                               trailing: const Icon(
                                 Icons.chevron_right_rounded,
                                 color: kAdminMuted,
                               ),
-                              child: const Text(
-                                'Formatı düzenle',
+                              child: Text(
+                                formatSaved
+                                    ? 'Kaydedildi ✓'
+                                    : 'Formatı düzenle',
                                 style: TextStyle(
-                                  color: Colors.white,
+                                  color: formatSaved
+                                      ? kAdminAccent
+                                      : Colors.white,
                                   fontSize: 15,
                                   fontWeight: FontWeight.w700,
                                 ),
@@ -647,7 +661,8 @@ class SeasonManagementScreen extends StatelessWidget {
               saving: saving,
               onPressed: () => submit(sheetContext, setSheetState),
             ),
-            if (isEdit)
+            // Sezon silme (gizleme) yalnız admin'de.
+            if (isEdit && isAdmin)
               _DeleteButton(
                 label: 'SEZONU SİL',
                 onPressed: saving

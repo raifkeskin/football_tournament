@@ -7,7 +7,9 @@ import '../models/league_format.dart';
 
 /// Sezonun lig formatını açar (admin ve kurucu başkan). Takım sayısı
 /// gruptaki en kalabalık takım sayısından okunur.
-Future<void> openLeagueFormatScreen(
+/// Kaydedildiyse true döner (çağıran ekran onayı kendi gösterir; sezon
+/// popup'ı açıkken alt bilgi mesajı popup'ın arkasında kalıyordu).
+Future<bool> openLeagueFormatScreen(
   BuildContext context,
   String seasonId,
 ) async {
@@ -41,11 +43,11 @@ Future<void> openLeagueFormatScreen(
         context,
       ).showSnackBar(SnackBar(content: Text('Lig formatı okunamadı: $e')));
     }
-    return;
+    return false;
   }
-  if (!context.mounted) return;
-  await Navigator.of(context).push(
-    MaterialPageRoute<void>(
+  if (!context.mounted) return false;
+  final saved = await Navigator.of(context).push<bool>(
+    MaterialPageRoute<bool>(
       builder: (_) => LeagueFormatScreen(
         seasonId: seasonId,
         teamCount: teamCount,
@@ -53,6 +55,7 @@ Future<void> openLeagueFormatScreen(
       ),
     ),
   );
+  return saved == true;
 }
 
 class LeagueFormatScreen extends StatefulWidget {
@@ -143,14 +146,7 @@ class _LeagueFormatScreenState extends State<LeagueFormatScreen> {
           .update({'league_format': reset ? null : _f.toJson()})
           .eq('id', widget.seasonId);
       if (!mounted) return;
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            reset ? 'Lig formatı kaldırıldı.' : 'Lig formatı kaydedildi.',
-          ),
-        ),
-      );
+      Navigator.pop(context, true);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
