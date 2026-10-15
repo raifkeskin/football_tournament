@@ -1342,6 +1342,8 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                       match: m,
                                       homeName: homeName,
                                       awayName: awayName,
+                                      homeColor: sides.home,
+                                      awayColor: sides.away,
                                       // Takım sorumlusu dizilişi yalnız maç
                                       // başlamadan değiştirir; paylaşım
                                       // sonra da açık.

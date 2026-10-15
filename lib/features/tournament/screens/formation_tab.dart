@@ -4,6 +4,7 @@ import 'package:football_tournament/core/widgets/pitch_token_style.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../match/models/match.dart';
+import '../../../core/utils/team_name.dart';
 import '../../../core/services/service_locator.dart';
 import '../../match/services/supabase/supabase_match_service.dart';
 
@@ -356,6 +357,8 @@ class FormationTab extends StatefulWidget {
     this.canShareAway = false,
     this.initialTeam = 0,
     this.onShare,
+    this.homeColor,
+    this.awayColor,
   });
 
   /// Diziliş afişini paylaşır (takım kimliğiyle); [canShareHome] /
@@ -365,6 +368,11 @@ class FormationTab extends StatefulWidget {
   final MatchModel match;
   final String homeName;
   final String awayName;
+
+  /// Maç başlığındaki takım renkleri (çakışma çözülmüş); seçili takım
+  /// düğmesi bu renkle boyanır. Yoksa yeşil.
+  final Color? homeColor;
+  final Color? awayColor;
 
   /// Takım başına düzenleme yetkisi: sorumlu yalnızca kendi takımını,
   /// yöneticiler ikisini de düzenler.
@@ -531,8 +539,10 @@ class _FormationTabState extends State<FormationTab>
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
       children: [
         _TeamSwitch(
-          homeName: widget.homeName,
-          awayName: widget.awayName,
+          homeName: shortTeamName(widget.homeName),
+          awayName: shortTeamName(widget.awayName),
+          homeColor: widget.homeColor ?? _accent,
+          awayColor: widget.awayColor ?? _accent,
           selected: _selected,
           onChanged: (v) => setState(() => _selected = v),
         ),
@@ -816,12 +826,16 @@ class _TeamSwitch extends StatelessWidget {
   const _TeamSwitch({
     required this.homeName,
     required this.awayName,
+    required this.homeColor,
+    required this.awayColor,
     required this.selected,
     required this.onChanged,
   });
 
   final String homeName;
   final String awayName;
+  final Color homeColor;
+  final Color awayColor;
   final int selected;
   final ValueChanged<int> onChanged;
 
@@ -829,27 +843,54 @@ class _TeamSwitch extends StatelessWidget {
   Widget build(BuildContext context) {
     Widget item(int i, String label) {
       final on = selected == i;
+      final color = i == 0 ? homeColor : awayColor;
+      // Açık renkli formada yazı koyu olsun.
+      final light = color.computeLuminance() > 0.6;
       return Expanded(
         child: GestureDetector(
           onTap: () => onChanged(i),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
             // Kadrolar sekmesindeki takım başlıklarıyla aynı yükseklik.
-            padding: const EdgeInsets.symmetric(vertical: 6),
+            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
             decoration: BoxDecoration(
-              color: on ? _accent : Colors.transparent,
+              color: on ? color : Colors.transparent,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: on ? Colors.white : Colors.white60,
-                fontWeight: FontWeight.w800,
-                fontSize: 13,
-              ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Seçili değilken takım rengi küçük noktada.
+                if (!on) ...[
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white24),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                ],
+                // Uzun ad "…" ile kesilmez; sığmazsa küçülür.
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      style: TextStyle(
+                        color: on
+                            ? (light ? const Color(0xFF0F172A) : Colors.white)
+                            : Colors.white60,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
