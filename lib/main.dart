@@ -456,8 +456,17 @@ class _MyAppState extends State<MyApp> {
         ),
         builder: (context, child) {
           if (child == null) return const SizedBox.shrink();
-          return WebResponsiveFrame(
-            child: AppNameBand(child: ErrorRecoveryOverlay(child: child)),
+          // Telefonun yazı büyütmesi en çok %130 uygulanır (küçültmeye
+          // dokunulmaz); çok büyük ayarda dar alanlar (sponsor, skor,
+          // sekmeler) taşmasın.
+          final mq = MediaQuery.of(context);
+          return MediaQuery(
+            data: mq.copyWith(
+              textScaler: mq.textScaler.clamp(maxScaleFactor: 1.3),
+            ),
+            child: WebResponsiveFrame(
+              child: AppNameBand(child: ErrorRecoveryOverlay(child: child)),
+            ),
           );
         },
         // Oturum yoksa ve misafir seçimi yapılmadıysa uygulama doğrudan giriş
