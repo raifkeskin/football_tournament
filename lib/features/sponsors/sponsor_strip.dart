@@ -157,16 +157,20 @@ class _SponsorStripState extends State<SponsorStrip> {
               child: Stack(
                 alignment: Alignment.center,
                 children: [
-                  Text(
-                    s.isMain ? 'ANA SPONSOR' : 'SPONSOR',
-                    style: TextStyle(
-                      color: s.isMain
-                          ? const Color(0xFFB45309)
-                          : const Color(0xFF64748B),
-                      fontSize: 9,
-                      height: 1.1,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.2,
+                  // Sabit 10 px yükseklik: büyük yazı ayarında taşmasın.
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      s.isMain ? 'ANA SPONSOR' : 'SPONSOR',
+                      style: TextStyle(
+                        color: s.isMain
+                            ? const Color(0xFFB45309)
+                            : const Color(0xFF64748B),
+                        fontSize: 9,
+                        height: 1.1,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.2,
+                      ),
                     ),
                   ),
                   if (list.length > 1 && list.length <= 8)
