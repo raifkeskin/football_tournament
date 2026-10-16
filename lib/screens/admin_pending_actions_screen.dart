@@ -7,8 +7,11 @@ import '../core/widgets/admin_form.dart';
 import '../core/widgets/web_safe_image.dart';
 import '../features/player/screens/my_profile_view.dart';
 import '../features/player/services/player_profile_service.dart';
+import '../features/match/services/youtube_autolink_service.dart';
+import '../features/match/widgets/youtube_find_sheet.dart';
+import '../core/utils/team_name.dart';
 
-enum _Filter { all, profile, roster, history }
+enum _Filter { all, profile, roster, broadcast, history }
 
 /// Takım sorumlularının kadro talepleri ve futbolcuların profil değişiklik
 /// talepleri; admin ve turnuva sahibi onaylar. Profil talebinde ilk karar
@@ -26,6 +29,7 @@ class AdminPendingActionsScreen extends StatefulWidget {
 class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
   final _approval = ApprovalService();
   final _profiles = PlayerProfileService();
+  final _youtube = YoutubeAutolinkService();
   final _client = Supabase.instance.client;
 
   bool _busy = false;
@@ -33,6 +37,10 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
   List<PendingAction> _actions = const [];
   List<ProfileChangeRequest> _profileRequests = const [];
   List<ProfileChangeRequest> _history = const [];
+  List<YoutubeLinkConflict> _conflicts = const [];
+
+  /// Uyuşmazlık kartındaki maç bilgisi (maç id -> başlık / alt satır).
+  Map<String, (String, String)> _conflictMatches = const {};
 
   // Listede gösterilecek adlar (id -> ad).
   Map<String, String> _teamNames = const {};
@@ -51,6 +59,7 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
       final results = await Future.wait([
         _approval.fetchPendingActions(),
         _profiles.listRequests(onlyPending: true),
+        _loadConflicts(),
         if (_filter == _Filter.history)
           _profiles.listRequests(onlyPending: false),
       ]);
@@ -60,8 +69,9 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
       setState(() {
         _actions = list;
         _profileRequests = results[1] as List<ProfileChangeRequest>;
-        if (results.length > 2) {
-          _history = (results[2] as List<ProfileChangeRequest>)
+        _conflicts = results[2] as List<YoutubeLinkConflict>;
+        if (results.length > 3) {
+          _history = (results[3] as List<ProfileChangeRequest>)
               .where((r) => r.status != ProfileChangeStatus.pending)
               .toList();
         }
@@ -72,6 +82,73 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
         context,
       ).showSnackBar(SnackBar(content: Text('Hata: $e')));
     } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Yayın linki uyuşmazlıkları + maç başlıkları. Tablo yoksa ya da hata
+  /// olursa boş liste (diğer talepler yine görünür).
+  Future<List<YoutubeLinkConflict>> _loadConflicts() async {
+    try {
+      final list = await _youtube.pendingConflicts();
+      final ids = list.map((c) => c.matchId).toSet().toList();
+      final info = <String, (String, String)>{};
+      if (ids.isNotEmpty) {
+        final rows = await _client
+            .from('matches')
+            .select(
+              'id, week, match_date, match_time, leagues(name), '
+              'home:teams!matches_home_team_id_fkey(name), '
+              'away:teams!matches_away_team_id_fkey(name)',
+            )
+            .inFilter('id', ids);
+        for (final r in rows) {
+          String name(String k) => r[k] is Map
+              ? shortTeamName(((r[k] as Map)['name'] ?? '').toString())
+              : '';
+          final date = DateTime.tryParse((r['match_date'] ?? '').toString());
+          final time = (r['match_time'] ?? '').toString();
+          info[r['id'].toString()] = (
+            '${name('home')} – ${name('away')}',
+            [
+              if (r['leagues'] is Map) (r['leagues'] as Map)['name'] ?? '',
+              if (r['week'] != null) '${r['week']}. Hafta',
+              if (date != null)
+                [
+                  broadcastDate(date).split(' · ').first,
+                  if (time.length >= 5) time.substring(0, 5),
+                ].join(' '),
+            ].where((e) => '$e'.isNotEmpty).join(' · '),
+          );
+        }
+      }
+      _conflictMatches = info;
+      return list;
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<void> _resolveConflict(
+    YoutubeLinkConflict c, {
+    required bool useAuto,
+  }) async {
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _busy = true);
+    try {
+      await _youtube.resolve(c.id, useAuto: useAuto);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            useAuto
+                ? 'Maçın yayın linki kanaldaki yayınla değiştirildi.'
+                : 'Elle girilen link korundu.',
+          ),
+        ),
+      );
+      await _reload();
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Hata: $e')));
       if (mounted) setState(() => _busy = false);
     }
   }
@@ -363,7 +440,8 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
       );
     }
 
-    final total = _actions.length + _profileRequests.length;
+    final total =
+        _actions.length + _profileRequests.length + _conflicts.length;
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
@@ -372,6 +450,7 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
           chip(_Filter.all, 'Tümü ($total)'),
           chip(_Filter.profile, 'Profil (${_profileRequests.length})'),
           chip(_Filter.roster, 'Kadro (${_actions.length})'),
+          chip(_Filter.broadcast, 'Yayın (${_conflicts.length})'),
           chip(_Filter.history, 'Geçmiş'),
         ],
       ),
@@ -383,9 +462,11 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
       _Filter.all => [
         ..._profileRequests.map(_profileCard),
         ..._actions.map(_actionCard),
+        ..._conflicts.map(_conflictCard),
       ],
       _Filter.profile => _profileRequests.map(_profileCard).toList(),
       _Filter.roster => _actions.map(_actionCard).toList(),
+      _Filter.broadcast => _conflicts.map(_conflictCard).toList(),
       _Filter.history => _history.map(_historyCard).toList(),
     };
     if (cards.isEmpty) {
@@ -674,6 +755,199 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
           _decisionButtons(
             onApprove: () => _review(a, approve: true),
             onReject: () => _review(a, approve: false),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Elle girilen ve kanalda bulunan yayın yan yana; karar ikisinden biri.
+  Widget _conflictCard(YoutubeLinkConflict c) {
+    final (title, sub) = _conflictMatches[c.matchId] ?? ('Maç', '');
+    Widget side(FoundBroadcast? b, String label, Color color, {String? url}) =>
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0B1220),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: color, width: 2),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (b != null)
+                      BroadcastThumb(videoId: b.videoId, radius: 0)
+                    else
+                      const AspectRatio(
+                        aspectRatio: 16 / 9,
+                        child: Icon(Icons.link_rounded, color: Colors.white38),
+                      ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 7, 8, 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            (b?.title ?? '').isNotEmpty
+                                ? b!.title
+                                : (url ?? 'Başlık alınamadı'),
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              height: 1.3,
+                            ),
+                          ),
+                          if (b?.at != null) ...[
+                            const SizedBox(height: 3),
+                            Text(
+                              broadcastDate(b!.at),
+                              style: const TextStyle(
+                                color: Color(0xFF94A3B8),
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: color == kAdminAccent ? kAdminAccent : Colors.white60,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        );
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: adminCardDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    if (sub.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        sub,
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              _chip('Yayın linki', const Color(0xFFFF4D6A)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              side(
+                c.manual,
+                'Elle girilen',
+                Colors.white24,
+                url: c.manualUrl,
+              ),
+              const SizedBox(width: 10),
+              side(c.auto, 'Kanalda bulunan', kAdminAccent),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+            decoration: BoxDecoration(
+              color: kAdminAmber.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Text(
+              'Elle girilen yayının başlığı bu maçın takımlarıyla uyuşmuyor. '
+              'Hangisinin doğru olduğunu seçin.',
+              style: TextStyle(color: kAdminAmber, fontSize: 12.5),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 44,
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      side: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.25),
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onPressed: _busy
+                        ? null
+                        : () => _resolveConflict(c, useAuto: false),
+                    child: const Text(
+                      'Elle gireni koru',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: SizedBox(
+                  height: 44,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: kAdminAccent,
+                      foregroundColor: const Color(0xFF04120D),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onPressed: _busy
+                        ? null
+                        : () => _resolveConflict(c, useAuto: true),
+                    child: const Text(
+                      'Kanaldakini kullan',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
