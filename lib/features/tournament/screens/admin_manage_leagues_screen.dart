@@ -107,6 +107,8 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
     var transferEnabled = league?.transferEnabled ?? false;
     // Maç sonucu haberi: varsayılan açık; yalnızca admin değiştirir.
     var autoResultNews = league?.autoResultNews ?? true;
+    // YouTube canlı yayın: kanaldaki yayınlar maçlara otomatik eklenir.
+    var youtubeLive = league?.youtubeLive ?? false;
     final isAdmin = AppSession.of(context).value.isAdmin;
     // Gizli turnuva özelliği kapalıyken alan gösterilmez; mevcut değer korunur.
     final privateOn = AppSettings.privateLeaguesEnabled.value;
@@ -158,6 +160,7 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
           'instagram_url': link(igController),
           'facebook_url': link(fbController),
           'youtube_url': link(ytController),
+          'youtube_live': youtubeLive,
           'website_url': link(webController),
           if (isAdmin) 'status': isActive ? 'active' : 'passive',
           if (isAdmin) 'transfer_enabled': transferEnabled,
@@ -666,6 +669,50 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                                     const SizedBox(height: 10),
                                   ],
                                 ],
+                              ),
+                            ),
+                            AdminFieldGroup(
+                              children: [
+                                AdminFieldRow(
+                                  icon: Icons.live_tv_rounded,
+                                  label: 'YouTube canlı yayın',
+                                  onTap: saving
+                                      ? null
+                                      : () => setPopupState(
+                                          () => youtubeLive = !youtubeLive,
+                                        ),
+                                  trailing: Switch.adaptive(
+                                    value: youtubeLive,
+                                    activeTrackColor: kAdminAccent,
+                                    onChanged: saving
+                                        ? null
+                                        : (v) => setPopupState(
+                                            () => youtubeLive = v,
+                                          ),
+                                  ),
+                                  child: Text(
+                                    youtubeLive ? 'Aktif' : 'Pasif',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const Padding(
+                              padding: EdgeInsets.fromLTRB(4, 6, 4, 10),
+                              child: Text(
+                                'Aktifken yukarıdaki YouTube kanalındaki yayınlar '
+                                'maç saatinde kendiliğinden ilgili maça eklenir '
+                                '(başlıkta iki takımın adı ya da maç kodu olmalı). '
+                                'Elle girilen link her zaman önceliklidir.',
+                                style: TextStyle(
+                                  color: kAdminMuted,
+                                  fontSize: 12,
+                                  height: 1.35,
+                                ),
                               ),
                             ),
                             if (isEdit)

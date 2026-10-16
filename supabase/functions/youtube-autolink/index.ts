@@ -1,7 +1,8 @@
 // Turnuvanın YouTube kanalındaki yayınları maçlara bağlar
 // (bkz. migration 20261021120000_youtube_autolink.sql).
 //
-// Cron (youtube_autolink_tick, 5 dk) `x-sync-secret` ile çağırır. Her
+// Cron (youtube_autolink_tick; maç saatinde 5 dk, sonra saatte bir)
+// `x-sync-secret` ile çağırır. "YouTube canlı yayın" aktif her
 // turnuva için kanalın yükleme listesi (son 25 video) YouTube Data API ile
 // okunur (istek başına 1 birim; günlük ücretsiz kota 10.000). Eşleşme:
 //   1. Başlıkta maç kodu: #LM + maç kimliğinin ilk 6 hanesi (kesin).
@@ -270,6 +271,7 @@ Deno.serve(async (req) => {
   const { data: leagues, error } = await admin
     .from("leagues")
     .select("id, youtube_url, youtube_channel_id")
+    .eq("youtube_live", true)
     .not("youtube_url", "is", null);
   if (error) return json({ error: error.message }, 500);
   const results = [];
