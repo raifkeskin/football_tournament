@@ -1573,6 +1573,92 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
       .watchMatchMedia(widget.match.id);
   int _photoCount = 0;
 
+  /// YouTube'a yapıştırılacak yayın başlığı (takım adları yüklenince dolar).
+  String _broadcastTitle = '';
+
+  @override
+  void initState() {
+    super.initState();
+    final m = widget.match;
+    _broadcastTitle = [
+      if (m.week != null) '${m.week}. Hafta',
+      broadcastCode(m.id),
+    ].join(' | ');
+    Supabase.instance.client
+        .from('teams')
+        .select('id, name')
+        .inFilter('id', [m.homeTeamId, m.awayTeamId])
+        .then((rows) {
+          final name = {for (final r in rows) r['id']: '${r['name'] ?? ''}'};
+          final home = shortTeamName(name[m.homeTeamId] ?? '');
+          final away = shortTeamName(name[m.awayTeamId] ?? '');
+          if (!mounted || home.isEmpty || away.isEmpty) return;
+          setState(() => _broadcastTitle = '$home - $away | $_broadcastTitle');
+        })
+        .catchError((_) {});
+  }
+
+  /// Canlı yayın linki seçiliyken: turnuva kanalındaki yayının başlığına
+  /// yazılırsa link kendiliğinden eklenir.
+  Widget _autoLinkHint() {
+    return Container(
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF10B981).withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: const Color(0xFF10B981).withValues(alpha: 0.35),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Otomatik eklensin',
+                  style: TextStyle(
+                    color: Color(0xFF6EE7B7),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                const Text(
+                  'Yayını turnuvanın YouTube kanalında bu başlıkla açın; '
+                  'link birkaç dakika içinde kendiliğinden eklenir.',
+                  style: TextStyle(color: Colors.white60, fontSize: 12.5),
+                ),
+                const SizedBox(height: 6),
+                SelectableText(
+                  _broadcastTitle,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Başlığı kopyala',
+            icon: const Icon(Icons.copy_rounded, color: Color(0xFF6EE7B7)),
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: _broadcastTitle));
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Yayın başlığı kopyalandı.')),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   bool get _isUrlType =>
       _selectedType == kMediaLiveLink ||
       _selectedType == kMediaAlbumLink ||
@@ -1829,6 +1915,7 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
                     ),
                   ],
                 ),
+                if (_selectedType == kMediaLiveLink) _autoLinkHint(),
                 if (isAlbum || isVideo) ...[
                   const SizedBox(height: 10),
                   Text(

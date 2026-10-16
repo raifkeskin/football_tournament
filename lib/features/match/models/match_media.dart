@@ -1,6 +1,12 @@
 /// Maç yayın linki (YouTube); skorun altında gösterilir.
 const kMediaLiveLink = 'Maç Yayın Linki';
 
+/// YouTube yayın başlığına yazılan maç kodu (#LM + kimliğin ilk 6 hanesi).
+/// Turnuva kanalındaki yayın bu kodla maça otomatik bağlanır
+/// (edge function youtube-autolink).
+String broadcastCode(String matchId) =>
+    '#LM${matchId.replaceAll('-', '').substring(0, 6).toUpperCase()}';
+
 /// Turnuvanın kendi albümü (Drive / Google Fotoğraflar); dışarıda açılır.
 const kMediaAlbumLink = 'Fotoğraf Albümü';
 
