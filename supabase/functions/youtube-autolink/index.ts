@@ -79,14 +79,41 @@ const STOP = new Set([
   "fk", "sk", "spor", "kulubu", "futbol", "takimi", "sc", "fc",
 ]);
 
-/** Başlıkta takım geçiyor mu: tam ad, kısa ad ya da tüm ayırt edici kelimeler. */
+/** İki kelime arasında en fazla bir harf farkı (ekleme/silme/değiştirme). */
+function near(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0, j = 0, diff = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      i++; j++;
+      continue;
+    }
+    if (++diff > 1) return false;
+    if (a.length > b.length) i++;
+    else if (b.length > a.length) j++;
+    else { i++; j++; }
+  }
+  return diff + (a.length - i) + (b.length - j) <= 1;
+}
+
+/**
+ * Başlıkta takım geçiyor mu: tam ad, kısa ad ya da ayırt edici kelimelerin
+ * en az yarısı. 5+ harfli kelimelerde bir harflik yazım hatası tolere edilir
+ * ("MATBAAA", "DİNOMA"); "İST. SİVAS" gibi kısaltmalar yarı kuralıyla geçer.
+ */
 function teamIn(title: string, name: string, short: string | null): boolean {
   const full = norm(name);
   if (full.trim() && title.includes(full)) return true;
   if (short && norm(short).trim() && title.includes(norm(short))) return true;
-  // Rakamlar (kuruluş yılı) zorunlu değil.
+  // Rakamlar (kuruluş yılı) sayılmaz.
   const words = full.trim().split(" ").filter((w) => w.length >= 3 && !STOP.has(w) && !/^\d+$/.test(w));
-  return words.length > 0 && words.every((w) => title.includes(` ${w} `));
+  if (!words.length) return false;
+  const titleWords = title.trim().split(" ");
+  const found = words.filter((w) =>
+    titleWords.some((t) => t === w || (w.length >= 5 && near(w, t)))
+  ).length;
+  return found * 2 >= words.length;
 }
 
 /** Maçın başlama anı (İstanbul, UTC+3); saat yoksa günün 12:00'si. */
@@ -103,7 +130,13 @@ type Match = {
   away_team_id: string;
 };
 
-async function syncLeague(league: { id: string; youtube_url: string; youtube_channel_id: string | null }) {
+// dry: hiçbir şey yazmaz; son `back` gündeki tüm maçlar (linkli olanlar da)
+// aday olur ve önerilen eşleşmeler mevcut linklerle birlikte döner.
+async function syncLeague(
+  league: { id: string; youtube_url: string; youtube_channel_id: string | null },
+  dry = false,
+  back = 2,
+) {
   let channelId = league.youtube_channel_id;
   if (!channelId) {
     channelId = await resolveChannelId(league.youtube_url);
@@ -118,17 +151,17 @@ async function syncLeague(league: { id: string; youtube_url: string; youtube_cha
     .select("id, match_date, match_time, home_team_id, away_team_id")
     .eq("league_id", league.id)
     .is("deleted_at", null)
-    .gte("match_date", day(-2))
+    .gte("match_date", day(-back))
     .lte("match_date", day(1));
   if (!matches?.length) return { league: league.id, linked: 0 };
 
   const { data: existing } = await admin
     .from("match_media")
-    .select("match_id")
+    .select("match_id, url")
     .eq("media_type", LIVE_LINK)
     .in("match_id", matches.map((m) => m.id));
   const hasLink = new Set((existing ?? []).map((r) => r.match_id));
-  const open = (matches as Match[]).filter((m) => !hasLink.has(m.id));
+  const open = (matches as Match[]).filter((m) => dry || !hasLink.has(m.id));
   if (!open.length) return { league: league.id, linked: 0 };
 
   const teamIds = [...new Set(open.flatMap((m) => [m.home_team_id, m.away_team_id]))];
@@ -139,17 +172,18 @@ async function syncLeague(league: { id: string; youtube_url: string; youtube_cha
   const list = await yt("playlistItems", {
     part: "contentDetails",
     playlistId: `UU${channelId.slice(2)}`,
-    maxResults: "25",
+    maxResults: dry ? "50" : "25",
   });
   const ids: string[] = (list.items ?? []).map((i: any) => i.contentDetails?.videoId).filter(Boolean);
   if (!ids.length) return { league: league.id, linked: 0 };
   const { data: seen } = await admin.from("youtube_video_links").select("video_id").in("video_id", ids);
   const seenIds = new Set((seen ?? []).map((r) => r.video_id));
-  const fresh = ids.filter((id) => !seenIds.has(id));
+  const fresh = ids.filter((id) => dry || !seenIds.has(id));
   if (!fresh.length) return { league: league.id, linked: 0 };
 
   const vids = await yt("videos", { part: "snippet,liveStreamingDetails", id: fresh.join(",") });
   let linked = 0;
+  const report: unknown[] = [];
   for (const v of vids.items ?? []) {
     const rawTitle: string = v.snippet?.title ?? "";
     const title = norm(rawTitle);
@@ -178,6 +212,20 @@ async function syncLeague(league: { id: string; youtube_url: string; youtube_cha
         .sort((x, y) => Math.abs(x.d) - Math.abs(y.d));
       match = cands[0]?.m;
     }
+    if (dry) {
+      const h = match && team.get(match.home_team_id)?.name;
+      const a = match && team.get(match.away_team_id)?.name;
+      report.push({
+        video: v.id,
+        title: rawTitle,
+        at: new Date(at).toISOString(),
+        match: match ? `${match.match_date} ${match.match_time ?? ""} ${h} - ${a}` : null,
+        by: match ? by : null,
+        current: match ? (existing ?? []).filter((r) => r.match_id === match!.id).map((r) => r.url) : [],
+      });
+      if (match) open.splice(open.indexOf(match), 1);
+      continue;
+    }
     if (!match) continue;
 
     const { error } = await admin.from("match_media").insert({
@@ -196,7 +244,7 @@ async function syncLeague(league: { id: string; youtube_url: string; youtube_cha
     open.splice(open.indexOf(match), 1);
     linked++;
   }
-  return { league: league.id, linked };
+  return dry ? { league: league.id, report } : { league: league.id, linked };
 }
 
 Deno.serve(async (req) => {
@@ -211,6 +259,14 @@ Deno.serve(async (req) => {
   }
   if (!API_KEY) return json({ skipped: "YOUTUBE_API_KEY yok" });
 
+  let dry = false, back = 2;
+  try {
+    const b = await req.json();
+    dry = b?.dry === true;
+    back = Math.min(Math.max(Number(b?.back) || 2, 1), 60);
+  } catch (_) {
+    // boş gövde
+  }
   const { data: leagues, error } = await admin
     .from("leagues")
     .select("id, youtube_url, youtube_channel_id")
@@ -220,7 +276,7 @@ Deno.serve(async (req) => {
   for (const l of leagues ?? []) {
     if (!l.youtube_url?.trim()) continue;
     try {
-      results.push(await syncLeague(l));
+      results.push(await syncLeague(l, dry, back));
     } catch (e) {
       results.push({ league: l.id, error: String(e) });
     }
