@@ -25,6 +25,7 @@ import '../widgets/league_owners_section.dart';
 import 'age_rules_dialog.dart';
 import 'league_format_screen.dart';
 import '../../match/utils/season_match_settings.dart';
+import '../../../core/utils/reveal_search.dart';
 
 // Fikstür / Ana Sayfa ile ortak renkler
 const _bgDark = Color(0xFF0F172A);
@@ -1710,9 +1711,7 @@ class _TeamListScreenState extends State<TeamListScreen> {
       }
     });
     if (_searchOpen) {
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _queryFocus.requestFocus(),
-      );
+      revealSearchField(_queryFocus);
     } else {
       _queryFocus.unfocus();
     }
