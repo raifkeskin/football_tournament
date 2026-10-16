@@ -8,6 +8,7 @@ import '../models/league_extras.dart';
 import '../../../core/services/app_session.dart';
 import '../services/interfaces/i_league_service.dart';
 import '../../../core/services/service_locator.dart';
+import '../../../core/utils/reveal_search.dart';
 
 class AdminPitchManagementScreen extends StatefulWidget {
   const AdminPitchManagementScreen({super.key});
@@ -712,7 +713,7 @@ class _AdminPitchManagementScreenState
                       tooltip: 'Saha ara',
                       onPressed: () {
                         setState(() => _searchOpen = true);
-                        _searchFocus.requestFocus();
+                        revealSearchField(_searchFocus);
                       },
                     ).fab(small: true),
                     const SizedBox(height: 12),

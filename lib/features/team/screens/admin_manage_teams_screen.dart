@@ -15,6 +15,7 @@ import '../../../core/widgets/team_crest.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import 'package:football_tournament/core/widgets/picked_image.dart';
 import 'team_squad_screen.dart';
+import '../../../core/utils/reveal_search.dart';
 
 class AdminManageTeamsScreen extends StatefulWidget {
   const AdminManageTeamsScreen({
@@ -847,7 +848,8 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                                       ),
                                       cursorColor: kAdminAccent,
                                       decoration: adminInlineInputDecoration(
-                                        hint: 'Dar ekranlar için, örn. GOP Autur',
+                                        hint:
+                                            'Dar ekranlar için, örn. GOP Autur',
                                       ).copyWith(counterText: ''),
                                     ),
                                   ),
@@ -1397,7 +1399,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
             tooltip: 'Takım ara',
             onPressed: () {
               setState(() => _searchOpen = true);
-              _searchFocus.requestFocus();
+              revealSearchField(_searchFocus);
             },
           ),
         AdminBarAction(
@@ -1601,9 +1603,7 @@ class _YearChip extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(999),
         side: BorderSide(
-          color: selected
-              ? kAdminAccent
-              : Colors.white.withValues(alpha: 0.08),
+          color: selected ? kAdminAccent : Colors.white.withValues(alpha: 0.08),
         ),
       ),
       child: InkWell(

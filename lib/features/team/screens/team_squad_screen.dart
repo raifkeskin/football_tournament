@@ -40,6 +40,7 @@ import '../../../core/utils/team_colors.dart';
 import '../widgets/team_page_tabs.dart';
 import '../../admin/services/approval_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show Supabase;
+import '../../../core/utils/reveal_search.dart';
 
 class TeamSquadScreen extends StatefulWidget {
   final String teamId;
@@ -1620,7 +1621,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                       foregroundColor: Colors.white,
                       onPressed: () {
                         setState(() => _rosterSearchOpen = true);
-                        _rosterSearchFocus.requestFocus();
+                        revealSearchField(_rosterSearchFocus);
                       },
                       child: const Icon(Icons.search_rounded, size: 20),
                     ),
@@ -3523,7 +3524,7 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
                 foregroundColor: Colors.white,
                 onPressed: () {
                   setState(() => _searchOpen = true);
-                  _searchFocus.requestFocus();
+                  revealSearchField(_searchFocus);
                 },
                 child: const Icon(Icons.search_rounded, size: 20),
               ),
