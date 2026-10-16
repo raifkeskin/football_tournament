@@ -175,16 +175,17 @@ class _MainNavigatorState extends State<MainNavigator> {
       // futbolcu profili (yönetim panelinin kendi bant düğmeleri var).
       homeTab:
           _aktifSekme == 0 ||
+          _aktifSekme == MainNavigator.fixtureTab ||
           _aktifSekme == 2 ||
           _aktifSekme == MainNavigator.broadcastTab ||
           (_aktifSekme == MainNavigator.profileTab &&
               signedIn &&
               !session.value.hasManagementPanel &&
               !session.value.isAdmin),
-      calendarTab: _aktifSekme == MainNavigator.fixtureTab,
-      // Yayın Rehberi (tüm turnuvalar) ve Profil turnuvaya bağlı değil:
-      // bantta turnuva yerine uygulama logosu ve adı.
+      // Maç Takvimi, Yayın Rehberi (tüm turnuvalar) ve Profil turnuvaya bağlı
+      // değil: bantta turnuva yerine uygulama logosu ve adı.
       genericTab:
+          _aktifSekme == MainNavigator.fixtureTab ||
           _aktifSekme == MainNavigator.broadcastTab ||
           _aktifSekme == MainNavigator.profileTab,
       // Yayın Rehberi: bantta sağda takvim (gün seçimi).
@@ -241,25 +242,16 @@ class _MainNavigatorState extends State<MainNavigator> {
                 onTap: (i) => setState(() => _aktifSekme = i),
               )
             : null,
-        // Maç Takvimi'nde menü düğmesi ve tarih şeridi sayfanın içinde:
-        // çekmece onların altından açılır (üstüne binmez).
-        drawer: Padding(
-          padding: EdgeInsets.only(
-            top: _aktifSekme == MainNavigator.fixtureTab
-                ? kCalendarStripHeight
-                : 0,
-          ),
-          child: _MenuDrawer(
-            activeIndex: _aktifSekme,
-            session: session.value,
-            loggedIn: loggedIn,
-            onSelect: _sekmeDegistir,
-            onLogout: () => _cikisYap(session),
-            onEnterCode: () {
-              Navigator.of(context).pop(); // çekmeceyi kapat
-              showLeagueCodeDialog(this.context);
-            },
-          ),
+        drawer: _MenuDrawer(
+          activeIndex: _aktifSekme,
+          session: session.value,
+          loggedIn: loggedIn,
+          onSelect: _sekmeDegistir,
+          onLogout: () => _cikisYap(session),
+          onEnterCode: () {
+            Navigator.of(context).pop(); // çekmeceyi kapat
+            showLeagueCodeDialog(this.context);
+          },
         ),
         // Görülebilen turnuvalar değişince (giriş/çıkış, kod) ekranlar
         // baştan kurulur ve verilerini yeniden okur.

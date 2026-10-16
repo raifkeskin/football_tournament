@@ -69,7 +69,12 @@ String? youtubeVideoId(String url) {
 
 /// Yayını uygulamanın içinde, tam ekran oynatır (kullanıcı YouTube'a
 /// gitmeden izler). Link YouTube'a ait değilse dışarıda açılır.
-Future<void> openYoutubeInApp(BuildContext context, String url) async {
+/// [fullscreen]: telefonda doğrudan yatay tam ekranda başlar.
+Future<void> openYoutubeInApp(
+  BuildContext context,
+  String url, {
+  bool fullscreen = false,
+}) async {
   final id = youtubeVideoId(url);
   if (id == null) {
     final uri = Uri.tryParse(url.trim());
@@ -87,16 +92,22 @@ Future<void> openYoutubeInApp(BuildContext context, String url) async {
     MaterialPageRoute<void>(
       settings: const RouteSettings(name: 'YoutubePlayerPage'),
       fullscreenDialog: true,
-      builder: (_) => _YoutubePlayerPage(videoId: id, url: url),
+      builder: (_) =>
+          _YoutubePlayerPage(videoId: id, url: url, fullscreen: fullscreen),
     ),
   );
 }
 
 class _YoutubePlayerPage extends StatefulWidget {
-  const _YoutubePlayerPage({required this.videoId, required this.url});
+  const _YoutubePlayerPage({
+    required this.videoId,
+    required this.url,
+    this.fullscreen = false,
+  });
 
   final String videoId;
   final String url;
+  final bool fullscreen;
 
   @override
   State<_YoutubePlayerPage> createState() => _YoutubePlayerPageState();
@@ -116,29 +127,26 @@ class _YoutubePlayerPageState extends State<_YoutubePlayerPage> {
   );
 
   @override
+  void initState() {
+    super.initState();
+    // Çerçevenin tam ekran dinleyicisi kurulduktan sonra.
+    if (widget.fullscreen && !kIsWeb) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _controller.enterFullScreen();
+      });
+    }
+  }
+
+  @override
   void dispose() {
     _controller.close();
     super.dispose();
   }
 
+  // YouTube'a geçiş videonun içindeki YouTube logosundan.
   @override
   Widget build(BuildContext context) {
-    return YoutubePlayerFrame(
-      controller: _controller,
-      title: 'Maç Yayını',
-      actions: [
-        // Video gömülemiyorsa (kanal izin vermiyorsa) YouTube'da açılır.
-        TextButton.icon(
-          onPressed: () => launchUrl(
-            Uri.parse(widget.url.trim()),
-            mode: LaunchMode.externalApplication,
-          ),
-          icon: const Icon(Icons.open_in_new_rounded, size: 18),
-          label: const Text('YouTube'),
-          style: TextButton.styleFrom(foregroundColor: Colors.white70),
-        ),
-      ],
-    );
+    return YoutubePlayerFrame(controller: _controller, title: 'Maç Yayını');
   }
 }
 
@@ -413,7 +421,17 @@ class _YoutubePlayerFrameState extends State<YoutubePlayerFrame> {
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
-                          YoutubePlayer(controller: widget.controller),
+                          YoutubePlayer(
+                            controller: widget.controller,
+                            // Tam ekranda oynatıcı sayfanın üstündeki ayrı
+                            // katmanda çizilir; çıkış düğmesi de oraya.
+                            controlsBuilder: (context, isFullscreen) =>
+                                isFullscreen
+                                ? _FullscreenExit(
+                                    onExit: widget.controller.exitFullScreen,
+                                  )
+                                : const SizedBox.shrink(),
+                          ),
                           if (widget.overlay != null) widget.overlay!,
                         ],
                       ),
@@ -423,25 +441,104 @@ class _YoutubePlayerFrameState extends State<YoutubePlayerFrame> {
                 if (!fill && widget.footer != null) widget.footer!,
               ],
             ),
-            // Çıkış düğmesi videonun dışında, sağ üstteki siyah boşlukta:
-            // Android'de video kutusu üstündeki düğmeleri örter.
-            if (_full)
-              Positioned(
-                top: 12,
-                right: 12,
-                child: IconButton.filled(
-                  tooltip: 'Tam ekrandan çık',
-                  style: IconButton.styleFrom(
-                    backgroundColor: Colors.white24,
-                    foregroundColor: Colors.white,
-                  ),
-                  icon: const Icon(Icons.fullscreen_exit_rounded),
-                  onPressed: () => widget.controller.exitFullScreen(),
-                ),
-              ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Tam ekranda sol üstte "Kapat" düğmesi; girişte birkaç saniye nasıl
+/// çıkılacağını söyleyen ipucu. Boş alanlar dokunuşu oynatıcıya bırakır.
+class _FullscreenExit extends StatefulWidget {
+  const _FullscreenExit({required this.onExit});
+
+  final VoidCallback onExit;
+
+  @override
+  State<_FullscreenExit> createState() => _FullscreenExitState();
+}
+
+class _FullscreenExitState extends State<_FullscreenExit> {
+  bool _hint = true;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _hint = false);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Positioned(
+          top: 14,
+          left: 14,
+          child: Material(
+            color: Colors.black.withValues(alpha: 0.6),
+            shape: const StadiumBorder(side: BorderSide(color: Colors.white38)),
+            child: InkWell(
+              customBorder: const StadiumBorder(),
+              onTap: widget.onExit,
+              child: const Padding(
+                padding: EdgeInsets.fromLTRB(10, 8, 14, 8),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.close_rounded, color: Colors.white, size: 22),
+                    SizedBox(width: 6),
+                    Text(
+                      'Kapat',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 28,
+          child: IgnorePointer(
+            child: AnimatedOpacity(
+              opacity: _hint ? 1 : 0,
+              duration: const Duration(milliseconds: 400),
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.7),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Text(
+                    'Çıkmak için Kapat\'a basın ya da ekranı aşağı kaydırın',
+                    style: TextStyle(color: Colors.white, fontSize: 13.5),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

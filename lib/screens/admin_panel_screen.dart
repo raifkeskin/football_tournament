@@ -156,8 +156,8 @@ class AdminPanelWidget extends StatelessWidget {
             );
           },
         ),
-      // Afiş arka planı: şimdilik yalnız admin.
-      if (isAdmin)
+      // Afiş arka planı: admin ve kurucu başkan (kendi turnuvası).
+      if (isAdmin || session.isLeagueOwner)
         _AdminMenuData(
           baslik: 'Afiş Arka Planı',
           renkler: const [Color(0xFFC4B5FD), Color(0xFF7C3AED)],

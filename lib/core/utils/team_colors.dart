@@ -143,3 +143,9 @@ bool colorsClash(Color a, Color b) {
       (2 + rm / 256) * dr * dr + 4 * dg * dg + (2 + (255 - rm) / 256) * db * db;
   return d2 < 130 * 130;
 }
+
+/// Renkli zeminin üstündeki yazı / ikon rengi: açık zeminde (ör. beyaz
+/// turnuva rengi) koyu, koyu zeminde beyaz.
+Color onColorOf(Color background) => background.computeLuminance() > 0.45
+    ? const Color(0xFF0B1220)
+    : const Color(0xFFFFFFFF);

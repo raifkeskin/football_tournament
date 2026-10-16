@@ -19,6 +19,7 @@ class MatchScoreLine extends StatelessWidget {
     required this.homeLogo,
     required this.awayLogo,
     this.leading,
+    this.onWatch,
     this.showLogos = true,
     this.compact = false,
   });
@@ -32,10 +33,14 @@ class MatchScoreLine extends StatelessWidget {
   /// Saatin üstündeki küçük ikon (yayın, yönetici düzenleme).
   final Widget? leading;
 
+  /// Takvim düzeninde skorun altındaki "İzle" düğmesi (yayın varsa).
+  final VoidCallback? onWatch;
+
   /// Ana sayfada logolar gösterilmez (yalnızca fikstürde).
   final bool showLogos;
 
-  /// Takvim listesinde daha fazla maçın görünmesi için sıkı satır ölçüleri.
+  /// Maç takvimi düzeni: logo adın üstünde, ad büyük ve en çok iki satır;
+  /// saat (canlıda dakika) skorun üstünde.
   final bool compact;
 
   static const _mid = Color(0xFF94A3B8);
@@ -66,6 +71,7 @@ class MatchScoreLine extends StatelessWidget {
   );
 
   Widget _build(BuildContext context, String? liveMinute) {
+    if (compact) return _buildStacked(liveMinute);
     final rawTime = (match.matchTime ?? '').trim();
     final time = rawTime.length >= 5 ? rawTime.substring(0, 5) : rawTime;
     final status = _statusLabel(liveMinute);
@@ -232,6 +238,190 @@ class MatchScoreLine extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+extension on MatchScoreLine {
+  /// Takvim kartı: [ev sahibi] [saat / skor] [deplasman]; her tarafta logo
+  /// üstte, ad altında ortalı.
+  Widget _buildStacked(String? liveMinute) {
+    const mid = MatchScoreLine._mid;
+    const accent = MatchScoreLine._accent;
+    const live = MatchScoreLine._live;
+    final rawTime = (match.matchTime ?? '').trim();
+    final time = rawTime.length >= 5 ? rawTime.substring(0, 5) : rawTime;
+    final status = _statusLabel(liveMinute);
+    final hs = match.homeScore;
+    final as = match.awayScore;
+    final isLive =
+        match.status == MatchStatus.live ||
+        match.status == MatchStatus.halftime;
+    final unplayed =
+        match.displayStatus == MatchStatus.cancelled ||
+        match.displayStatus == MatchStatus.postponed;
+    final showScore =
+        !unplayed &&
+        (match.status == MatchStatus.finished || isLive || hs != 0 || as != 0);
+    // Sonucu belli maçta yenen beyaz, yenilen soluk.
+    final decided = match.status == MatchStatus.finished && hs != as;
+
+    Widget side(String name, String logo, {required bool home}) {
+      final won = home ? hs > as : as > hs;
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          WebSafeImage(
+            url: logo,
+            width: 30,
+            height: 30,
+            fit: BoxFit.contain,
+            fallbackIconSize: 22,
+          ),
+          const SizedBox(height: 5),
+          Text(
+            shortTeamName(name),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontWeight: decided && !won ? FontWeight.w600 : FontWeight.w700,
+              fontSize: 15,
+              height: 1.15,
+              color: decided && !won ? mid : Colors.white,
+              fontFamily: 'Barlow',
+            ),
+          ),
+        ],
+      );
+    }
+
+    // Skorun üstü: oynanmadıysa saat, canlıda dakika / İY, bitince MS.
+    final top = match.status == MatchStatus.finished
+        ? (text: 'MS', color: accent)
+        : (status != null && !unplayed)
+        ? status
+        : (text: time.isEmpty ? '--:--' : time, color: mid);
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: side(homeName, homeLogo, home: true)),
+        const SizedBox(width: 6),
+        SizedBox(
+          width: 70,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        top.text,
+                        maxLines: 1,
+                        style: TextStyle(
+                          color: top.color,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 5),
+              Container(
+                width: 66,
+                height: 32,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: isLive
+                      ? live.withValues(alpha: 0.22)
+                      : const Color(0xFF064E3B),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: (isLive ? live : accent).withValues(alpha: 0.45),
+                  ),
+                ),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    unplayed
+                        ? (status?.text ?? '-')
+                        : (showScore ? '$hs - $as' : '-'),
+                    style: TextStyle(
+                      color: isLive
+                          ? live
+                          : (unplayed ? Colors.white70 : Colors.white),
+                      fontWeight: FontWeight.w800,
+                      fontSize: 19,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ),
+              ),
+              if (onWatch != null) ...[
+                const SizedBox(height: 6),
+                _WatchChip(live: isLive, onTap: onWatch!),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(width: 6),
+        Expanded(child: side(awayName, awayLogo, home: false)),
+      ],
+    );
+  }
+}
+
+/// Skorun altında küçük çerçeveli "İzle" düğmesi: YouTube ikonu ve yazı.
+class _WatchChip extends StatelessWidget {
+  const _WatchChip({required this.live, required this.onTap});
+
+  final bool live;
+  final VoidCallback onTap;
+
+  static const _red = Color(0xFFFF0033);
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: _red.withValues(alpha: 0.10),
+      shape: StadiumBorder(
+        side: BorderSide(color: _red.withValues(alpha: 0.55)),
+      ),
+      child: InkWell(
+        customBorder: const StadiumBorder(),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(6, 3, 9, 3),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const YoutubeBrandIcon(size: 16),
+              const SizedBox(width: 4),
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    live ? 'Canlı izle' : 'İzle',
+                    maxLines: 1,
+                    style: const TextStyle(
+                      color: Color(0xFFFECDD3),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

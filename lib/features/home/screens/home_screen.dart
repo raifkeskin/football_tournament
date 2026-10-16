@@ -27,13 +27,12 @@ import '../../../core/widgets/youtube_player_page.dart';
 import '../widgets/home_news_card.dart';
 import '../widgets/home_dashboard.dart';
 import '../../../core/design_flags.dart';
-import '../../../core/widgets/app_name_band.dart';
 
 /// Ana sayfa — günün maçları, tarih şeridi ve maç kartları.
 
 /// Maç Takvimi'nin üstündeki şerit (menü · tarihler · takvim) yüksekliği;
 /// yan menü bu şeridin altından açılır.
-const double kCalendarStripHeight = 68;
+const double kCalendarStripHeight = 84;
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, this.showCalendar = false});
@@ -641,55 +640,98 @@ class _HomeScreenState extends State<HomeScreen> {
                 }
 
                 if (_calendar) {
+                  // Üstte ortak bant (menü, uygulama adı, zil); altında ay ve
+                  // "Tarih seç", sonra oklarla gün şeridi.
                   return Column(
                     children: [
                       SizedBox(
                         height: kCalendarStripHeight,
-                        child: Row(
+                        child: Column(
                           children: [
-                            // Menü: bantla aynı futbol topu düğmesi.
-                            const Padding(
-                              padding: EdgeInsets.only(left: 4),
-                              child: BandMenuButton(),
-                            ),
-                            IconButton(
-                              visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
-                              tooltip: 'Önceki tarihler',
-                              onPressed: () => _shiftDateWindow(-1),
-                              icon: const Icon(
-                                Icons.chevron_left_rounded,
-                                color: Colors.white,
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 4, 8, 0),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      _TarihSeridi.ayBasligi(_tarihler),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 12.5,
+                                        color: _TarihSeridi.gold,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 1.4,
+                                      ),
+                                    ),
+                                  ),
+                                  TextButton.icon(
+                                    onPressed: _openModernCalendar,
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: const Color(0xFF10B981),
+                                      visualDensity: VisualDensity.compact,
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                      minimumSize: const Size(0, 26),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                      ),
+                                    ),
+                                    icon: const Icon(
+                                      Icons.calendar_month_rounded,
+                                      size: 18,
+                                    ),
+                                    label: const Text(
+                                      'Tarih seç',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                             Expanded(
-                              child: _TarihSeridi(
-                                tarihler: _tarihler,
-                                seciliIndeks: _seciliIndeks,
-                                bugunMu: _bugunMu,
-                                onSec: _tarihSec,
-                                vurguRenk: cs.primary,
-                                haftaKisa: _haftaKisa,
-                                macVar: _hasMatchOn,
+                              child: Row(
+                                children: [
+                                  IconButton(
+                                    visualDensity: VisualDensity.compact,
+                                    padding: EdgeInsets.zero,
+                                    tooltip: 'Önceki tarihler',
+                                    onPressed: () => _shiftDateWindow(-1),
+                                    icon: const Icon(
+                                      Icons.chevron_left_rounded,
+                                      color: Colors.white70,
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: _TarihSeridi(
+                                      tarihler: _tarihler,
+                                      seciliIndeks: _seciliIndeks,
+                                      bugunMu: _bugunMu,
+                                      onSec: _tarihSec,
+                                      vurguRenk: cs.primary,
+                                      haftaKisa: _haftaKisa,
+                                      macVar: _hasMatchOn,
+                                    ),
+                                  ),
+                                  IconButton(
+                                    visualDensity: VisualDensity.compact,
+                                    padding: EdgeInsets.zero,
+                                    tooltip: 'Sonraki tarihler',
+                                    onPressed: () => _shiftDateWindow(1),
+                                    icon: const Icon(
+                                      Icons.chevron_right_rounded,
+                                      color: Colors.white70,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            IconButton(
-                              visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
-                              tooltip: 'Sonraki tarihler',
-                              onPressed: () => _shiftDateWindow(1),
-                              icon: const Icon(
-                                Icons.chevron_right_rounded,
-                                color: Colors.white,
-                              ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.only(right: 4),
-                              child: BandIconButton(
-                                icon: Icons.calendar_month_rounded,
-                                tooltip: 'Takvim',
-                                onTap: _openModernCalendar,
-                              ),
+                            Container(
+                              height: 1,
+                              color: Colors.white.withValues(alpha: 0.07),
                             ),
                           ],
                         ),
@@ -1195,7 +1237,7 @@ class _MatchCardState extends State<_MatchCard> {
     final isAdmin = AppSession.of(context).value.isAdmin;
 
     return Card(
-      margin: EdgeInsets.only(bottom: widget.compact ? 5 : 10),
+      margin: EdgeInsets.only(bottom: widget.compact ? 8 : 10),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(widget.compact ? 10 : 16),
       ),
@@ -1215,8 +1257,8 @@ class _MatchCardState extends State<_MatchCard> {
         },
         child: Padding(
           padding: EdgeInsets.symmetric(
-            horizontal: widget.compact ? 7 : 8,
-            vertical: widget.compact ? 6 : 12,
+            horizontal: widget.compact ? 10 : 8,
+            vertical: widget.compact ? 10 : 12,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1227,8 +1269,8 @@ class _MatchCardState extends State<_MatchCard> {
                   borderRadius: BorderRadius.circular(7),
                   child: Container(
                     padding: EdgeInsets.symmetric(
-                      horizontal: widget.compact ? 7 : 8,
-                      vertical: widget.compact ? 5 : 7,
+                      horizontal: widget.compact ? 9 : 8,
+                      vertical: widget.compact ? 7 : 7,
                     ),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
@@ -1257,7 +1299,7 @@ class _MatchCardState extends State<_MatchCard> {
                             padding: const EdgeInsets.only(right: 6),
                             child: LeagueLogo(
                               url: widget.sectionLogoUrl ?? '',
-                              size: 18,
+                              size: 22,
                               fallbackColor: widget.sectionAccent,
                             ),
                           ),
@@ -1268,7 +1310,7 @@ class _MatchCardState extends State<_MatchCard> {
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               color: Colors.white,
-                              fontSize: widget.compact ? 12 : 13,
+                              fontSize: widget.compact ? 14 : 13,
                               fontWeight: FontWeight.w700,
                               fontFamily: 'Barlow',
                             ),
@@ -1289,7 +1331,7 @@ class _MatchCardState extends State<_MatchCard> {
                                   widget.sectionAccent,
                                   0.56,
                                 ),
-                                fontSize: widget.compact ? 9.5 : 11,
+                                fontSize: widget.compact ? 11 : 11,
                                 fontWeight: FontWeight.w500,
                                 fontFamily: 'Barlow',
                               ),
@@ -1313,7 +1355,7 @@ class _MatchCardState extends State<_MatchCard> {
                     ),
                   ),
                 ),
-                SizedBox(height: widget.compact ? 4 : 8),
+                SizedBox(height: widget.compact ? 10 : 8),
               ],
               MatchScoreLine(
                 match: widget.match,
@@ -1324,7 +1366,10 @@ class _MatchCardState extends State<_MatchCard> {
                 showLogos: widget.compact,
                 compact: widget.compact,
                 // Maç bitse de yayın kaydı izlenebilsin diye ikon kalır.
-                leading: _broadcastUrl == null
+                onWatch: _broadcastUrl == null || !widget.compact
+                    ? null
+                    : () => openYoutubeInApp(context, _broadcastUrl!),
+                leading: _broadcastUrl == null || widget.compact
                     ? null
                     : InkWell(
                         onTap: () => openYoutubeInApp(context, _broadcastUrl!),
@@ -1339,9 +1384,8 @@ class _MatchCardState extends State<_MatchCard> {
   }
 }
 
-/// Tarih şeridi: üstte ortada ay · yıl (iki aya yayılınca "EKİM–KASIM ·
-/// 2026"), gün kutularında gün adı ve gün numarası; maç olan günün üstünde
-/// yeşil nokta.
+/// Tarih şeridi: gün kutularında gün adı ve gün numarası (seçili gün
+/// yeşil); maç olan günün üstünde nokta. Ay başlığı şeridin üstünde.
 class _TarihSeridi extends StatelessWidget {
   const _TarihSeridi({
     required this.tarihler,
@@ -1375,119 +1419,94 @@ class _TarihSeridi extends StatelessWidget {
     'ARALIK',
   ];
   static const _gold = Color(0xFFE2B845);
+  static const gold = _gold;
   static const _green = Color(0xFF10B981);
-  static const _shadow = [
-    Shadow(color: Colors.black87, blurRadius: 4, offset: Offset(0, 2)),
-  ];
 
-  String _ayBasligi() {
+  /// Şeridin ayı: "EKİM 2026", iki aya yayılınca "EKİM–KASIM 2026".
+  static String ayBasligi(List<DateTime> tarihler) {
     if (tarihler.isEmpty) return '';
     final a = tarihler.first, b = tarihler.last;
     if (a.year != b.year) {
       return '${_aylar[a.month - 1]} ${a.year} – ${_aylar[b.month - 1]} ${b.year}';
     }
     if (a.month != b.month) {
-      return '${_aylar[a.month - 1]}–${_aylar[b.month - 1]} · ${a.year}';
+      return '${_aylar[a.month - 1]}–${_aylar[b.month - 1]} ${a.year}';
     }
-    return '${_aylar[a.month - 1]} · ${a.year}';
+    return '${_aylar[a.month - 1]} ${a.year}';
   }
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 64,
-      child: Column(
-        children: [
-          Text(
-            _ayBasligi(),
-            maxLines: 1,
-            style: const TextStyle(
-              fontSize: 10,
-              height: 1.2,
-              color: _gold,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.3,
-              shadows: _shadow,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Expanded(
-            child: Row(
-              children: List.generate(tarihler.length, (index) {
-                final t = tarihler[index];
-                final secili = index == seciliIndeks;
-                final mac = macVar(t);
-                return Expanded(
-                  child: GestureDetector(
-                    onTap: () => onSec(index),
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 2),
-                      padding: const EdgeInsets.symmetric(horizontal: 2),
-                      decoration: BoxDecoration(
-                        color: secili
-                            ? Colors.white.withValues(alpha: 0.15)
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(12),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: List.generate(tarihler.length, (index) {
+          final t = tarihler[index];
+          final secili = index == seciliIndeks;
+          final mac = macVar(t);
+          final yazi = secili ? const Color(0xFF04261B) : Colors.white;
+          return Expanded(
+            child: GestureDetector(
+              onTap: () => onSec(index),
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
+                decoration: BoxDecoration(
+                  color: secili ? _green : Colors.transparent,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                // Büyük yazı ayarında da şeride sığsın (gerekirse küçülür).
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Maç olan gün: takvim penceresindeki gibi nokta.
+                      Container(
+                        width: 5,
+                        height: 5,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: mac
+                              ? (secili ? yazi : _green)
+                              : Colors.transparent,
+                        ),
                       ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          // Maç olan gün: takvim penceresindeki gibi nokta.
-                          Container(
-                            width: 5,
-                            height: 5,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: mac ? _green : Colors.transparent,
-                              boxShadow: mac
-                                  ? [
-                                      BoxShadow(
-                                        color: _green.withValues(alpha: 0.8),
-                                        blurRadius: 4,
-                                      ),
-                                    ]
-                                  : null,
-                            ),
+                      const SizedBox(height: 2),
+                      // Dar ekranlarda yazılar bölünmez, gerekirse küçülür.
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          bugunMu(t) ? 'Bugün' : haftaKisa[t.weekday - 1],
+                          maxLines: 1,
+                          style: TextStyle(
+                            fontSize: 12,
+                            height: 1.1,
+                            color: secili ? yazi : Colors.white60,
+                            fontWeight: FontWeight.bold,
                           ),
-                          const SizedBox(height: 2),
-                          // Dar ekranlarda yazılar bölünmez, gerekirse küçülür.
-                          FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              bugunMu(t) ? 'Bugün' : haftaKisa[t.weekday - 1],
-                              maxLines: 1,
-                              style: TextStyle(
-                                fontSize: 10,
-                                height: 1.1,
-                                color: secili ? Colors.white : Colors.white60,
-                                fontWeight: FontWeight.bold,
-                                shadows: _shadow,
-                              ),
-                            ),
-                          ),
-                          FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              '${t.day}',
-                              maxLines: 1,
-                              style: const TextStyle(
-                                fontSize: 17,
-                                height: 1.15,
-                                color: Colors.white,
-                                fontWeight: FontWeight.w800,
-                                shadows: _shadow,
-                              ),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          '${t.day}',
+                          maxLines: 1,
+                          style: TextStyle(
+                            fontSize: 20,
+                            height: 1.15,
+                            color: yazi,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                );
-              }),
+                ),
+              ),
             ),
-          ),
-        ],
+          );
+        }),
       ),
     );
   }

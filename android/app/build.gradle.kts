@@ -68,3 +68,8 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // FileProvider (afişi Instagram'a aktarma).
+    implementation("androidx.core:core-ktx:1.13.1")
+}

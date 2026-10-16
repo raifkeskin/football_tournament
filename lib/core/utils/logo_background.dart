@@ -268,3 +268,163 @@ img.Image _trimEdgeStripes(img.Image src) {
     height: src.height - top - bottom,
   );
 }
+
+/// Sponsor logoları bu yükseklikte saklanır (şeritte 32 px; 6× yoğunluk),
+/// genişlik logonun kendi oranıyla (en fazla [_sponsorMaxWidth]).
+const sponsorLogoHeight = 192;
+const _sponsorMaxWidth = 1080;
+
+/// Sponsor logosunu standarda getirir: kenarlardaki düz renkli bantlar
+/// (ekran görüntüsündeki siyah/beyaz boşluklar, şeffaf kenar, geçiş
+/// çizgileri) katman katman kırpılır; logo kendi oranında 192 px yüksekliğe
+/// ölçeklenir. Zemin opaksa (ör. siyah kutulu logo) kenarda o renkten ince
+/// pay bırakılır. Ağır iş; `compute` ile ayrı isolate'te çağrılmalı.
+Uint8List? fitSponsorLogo(Uint8List bytes) {
+  final decoded = img.decodeImage(bytes);
+  if (decoded == null) return null;
+  var src = decoded.convert(numChannels: 4);
+  if (math.max(src.width, src.height) > 1600) {
+    src = src.width >= src.height
+        ? img.copyResize(src, width: 1600)
+        : img.copyResize(src, height: 1600);
+  }
+
+  // Katman katman: önce dış bant (ör. siyah), sonra içteki zemin (beyaz).
+  // Bulunan tüm zemin renkleri birlikte sayılır; aradaki geçiş satırları
+  // kırpmayı durdurmaz.
+  final bgs = <({int r, int g, int b, bool transparent})>[];
+  for (var pass = 0; pass < 3; pass++) {
+    final c = _cornerColor(src);
+    if (c == null) break;
+    if (!bgs.contains(c)) bgs.add(c);
+    final cropped = _trimUniform(src, bgs);
+    if (cropped == null) break;
+    src = cropped;
+  }
+  final bg = bgs.isEmpty ? null : bgs.last;
+
+  // Opak zeminde logo kutunun kenarına yapışmasın: zemin renginden ince pay.
+  if (bg != null && !bg.transparent) {
+    final pad = math.max(2, (math.min(src.width, src.height) * 0.06).round());
+    final framed = img.Image(
+      width: src.width + pad * 2,
+      height: src.height + pad * 2,
+      numChannels: 4,
+    );
+    img.fill(framed, color: img.ColorRgba8(bg.r, bg.g, bg.b, 255));
+    img.compositeImage(framed, src, dstX: pad, dstY: pad);
+    src = framed;
+  }
+
+  var scale = sponsorLogoHeight / src.height;
+  if (src.width * scale > _sponsorMaxWidth) {
+    scale = _sponsorMaxWidth / src.width;
+  }
+  final out = img.copyResize(
+    src,
+    width: math.max(1, (src.width * scale).round()),
+    height: math.max(1, (src.height * scale).round()),
+    interpolation: img.Interpolation.cubic,
+  );
+  return img.encodePng(out, level: 6);
+}
+
+/// PNG başlığından en/boy oranı (genişlik / yükseklik); okunamazsa null.
+double? pngAspect(Uint8List png) {
+  if (png.length < 24) return null;
+  final d = ByteData.sublistView(png);
+  final w = d.getUint32(16), h = d.getUint32(20);
+  return w > 0 && h > 0 ? w / h : null;
+}
+
+/// Dört köşe aynı renkteyse (ya da şeffafsa) o renk; değilse null.
+({int r, int g, int b, bool transparent})? _cornerColor(img.Image src) {
+  // Köşeden biraz içeri bakılır: kenardaki tek piksellik geçiş yanıltmasın.
+  final i = math.min(2, math.min(src.width, src.height) ~/ 4);
+  final corners = [
+    src.getPixel(i, i),
+    src.getPixel(src.width - 1 - i, i),
+    src.getPixel(i, src.height - 1 - i),
+    src.getPixel(src.width - 1 - i, src.height - 1 - i),
+  ];
+  if (corners.every((p) => p.a < 32)) {
+    return (r: 0, g: 0, b: 0, transparent: true);
+  }
+  final f = corners.first;
+  for (final p in corners) {
+    if (p.a < 200 ||
+        (p.r - f.r).abs() > 30 ||
+        (p.g - f.g).abs() > 30 ||
+        (p.b - f.b).abs() > 30) {
+      return null;
+    }
+  }
+  return (r: f.r.toInt(), g: f.g.toInt(), b: f.b.toInt(), transparent: false);
+}
+
+/// Zemin renklerinden ([bgs]) birinde olan (en az %96'sı) kenar
+/// satır/sütunlarını kırpar. Kırpacak bir şey yoksa ya da geriye neredeyse
+/// hiçbir şey kalmıyorsa null.
+img.Image? _trimUniform(
+  img.Image src,
+  List<({int r, int g, int b, bool transparent})> bgs,
+) {
+  bool isBg(img.Pixel p) {
+    for (final bg in bgs) {
+      if (bg.transparent) {
+        if (p.a < 32) return true;
+      } else if (p.a >= 200 &&
+          (p.r - bg.r).abs() <= 40 &&
+          (p.g - bg.g).abs() <= 40 &&
+          (p.b - bg.b).abs() <= 40) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Satır/sütun zemin mi: büyük kısmı zemin renginde ya da baştan sona tek
+  /// renk (bantlar arasındaki gri geçiş çizgisi gibi).
+  bool lineBg(Iterable<img.Pixel> line, int length) {
+    var n = 0, same = 0;
+    img.Pixel? first;
+    for (final p in line) {
+      if (isBg(p)) n++;
+      first ??= p;
+      if ((p.r - first.r).abs() <= 24 &&
+          (p.g - first.g).abs() <= 24 &&
+          (p.b - first.b).abs() <= 24 &&
+          (p.a - first.a).abs() <= 24) {
+        same++;
+      }
+    }
+    return n >= length * 0.96 || same >= length * 0.98;
+  }
+
+  bool rowBg(int y) => lineBg([
+    for (var x = 0; x < src.width; x++) src.getPixel(x, y),
+  ], src.width);
+
+  bool colBg(int x, int top, int bottom) => lineBg([
+    for (var y = top; y <= bottom; y++) src.getPixel(x, y),
+  ], bottom - top + 1);
+
+  var top = 0, bottom = src.height - 1;
+  while (top < bottom && rowBg(top)) {
+    top++;
+  }
+  while (bottom > top && rowBg(bottom)) {
+    bottom--;
+  }
+  var left = 0, right = src.width - 1;
+  while (left < right && colBg(left, top, bottom)) {
+    left++;
+  }
+  while (right > left && colBg(right, top, bottom)) {
+    right--;
+  }
+  final w = right - left + 1, h = bottom - top + 1;
+  if (w == src.width && h == src.height) return null;
+  if (w < 8 || h < 8) return null;
+  return img.copyCrop(src, x: left, y: top, width: w, height: h);
+}

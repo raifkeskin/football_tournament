@@ -1,10 +1,17 @@
 /// Sezonun yaş ve kontenjan kuralları (`seasons.age_rules`).
 ///
 /// Örnek 40+: oyuncular 1986 ve öncesi, kaleci 1991 ve öncesi; kaleci
-/// dışında 1988–1989 doğumlu en fazla 3 kontenjan oyuncusu (sahada aynı anda
-/// en fazla 2).
+/// dışında kadroda 1988 doğumlu en fazla 4, 1989 doğumlu en fazla 2
+/// kontenjan oyuncusu; maç günü esamede toplam en fazla 3, sahada aynı anda
+/// en fazla 2.
 class AgeRules {
-  const AgeRules({this.playerMaxYear, this.gkMaxYear, this.quotas = const []});
+  const AgeRules({
+    this.playerMaxYear,
+    this.gkMaxYear,
+    this.quotas = const [],
+    this.matchMax,
+    this.matchFieldMax,
+  });
 
   /// Oyuncular için en geç doğum yılı (null: sınır yok).
   final int? playerMaxYear;
@@ -13,8 +20,33 @@ class AgeRules {
   final int? gkMaxYear;
   final List<AgeQuota> quotas;
 
+  /// Maç günü esamede (ilk 11 + yedek) toplam en fazla kontenjanlı oyuncu;
+  /// kaleci kontenjanı hariç (null: sınır yok).
+  final int? matchMax;
+
+  /// Sahada aynı anda toplam en fazla kontenjanlı oyuncu; kaleci kontenjanı
+  /// hariç (null: sınır yok).
+  final int? matchFieldMax;
+
   bool get isEmpty =>
-      playerMaxYear == null && gkMaxYear == null && quotas.isEmpty;
+      playerMaxYear == null &&
+      gkMaxYear == null &&
+      quotas.isEmpty &&
+      matchMax == null &&
+      matchFieldMax == null;
+
+  bool get hasMatchLimits => matchMax != null || matchFieldMax != null;
+
+  /// "1988-05-12" / "12.05.1988" gibi tarihten yıl.
+  static int? birthYearOf(String? birthDate) => int.tryParse(
+    RegExp(r'(\d{4})').firstMatch(birthDate ?? '')?.group(1) ?? '',
+  );
+
+  /// Maç günü sınırlarına sayılan (kaleci dışı) kontenjan oyuncusu mu.
+  bool isMatchQuota({required int? birthYear, required bool isGk}) {
+    if (isGk) return false;
+    return check(birthYear: birthYear, isGk: false).status == AgeStatus.quota;
+  }
 
   factory AgeRules.fromJson(Object? raw) {
     if (raw is! Map) return const AgeRules();
@@ -26,6 +58,8 @@ class AgeRules {
         for (final q in (raw['quotas'] as List? ?? const []))
           if (q is Map) AgeQuota.fromJson(q),
       ],
+      matchMax: year(raw['match_max']),
+      matchFieldMax: year(raw['match_field_max']),
     );
   }
 
@@ -35,6 +69,8 @@ class AgeRules {
           'player_max_year': ?playerMaxYear,
           'gk_max_year': ?gkMaxYear,
           'quotas': [for (final q in quotas) q.toJson()],
+          'match_max': ?matchMax,
+          'match_field_max': ?matchFieldMax,
         };
 
   /// Oyuncunun kurala göre durumu. Doğum yılı bilinmiyorsa [AgeStatus.ok].
@@ -60,6 +96,8 @@ class AgeRules {
       if (playerMaxYear != null) 'Oyuncu $playerMaxYear ve öncesi',
       if (gkMaxYear != null) 'Kaleci $gkMaxYear ve öncesi',
       if (quotas.isNotEmpty) '${quotas.length} kontenjan',
+      if (matchMax != null) 'esamede en fazla $matchMax',
+      if (matchFieldMax != null) 'sahada en fazla $matchFieldMax',
     ].join(' · ');
   }
 }
@@ -78,7 +116,8 @@ class AgeQuota {
   /// Kadroda en fazla.
   final int max;
 
-  /// Sahada aynı anda en fazla (null: sınır yok).
+  /// Eski kayıtlar için: kontenjana özel saha sınırı. Yeni formda yerini
+  /// sezon geneli [AgeRules.matchFieldMax] aldı; kayıtta korunur.
   final int? fieldMax;
 
   /// true: kaleci kontenjanı; false: kaleci dışındaki oyuncular.

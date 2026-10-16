@@ -9,6 +9,7 @@ import '../../../core/services/service_locator.dart';
 import '../../../core/utils/team_name.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
+import '../utils/season_match_settings.dart';
 
 class AdminMatchEventScreen extends StatefulWidget {
   final MatchModel match;
@@ -33,7 +34,17 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
 
   /// Penaltı olayının sonucu: true gol, false kaçtı.
   bool _penaltyScored = true;
+
+  /// VAR: iptal edilecek gol ve seçilebilecek goller (tür seçilince yüklenir).
+  MatchEvent? _cancelGoal;
+  Future<List<MatchEvent>>? _goals;
   bool _isLoading = false;
+
+  /// Sezonda gol/kart dakikası tutuluyor mu? Tutulmuyorsa (halısaha) dakika
+  /// alanı gösterilmez, olay dakikasız kaydedilir.
+  late bool _tracksMinutes =
+      SeasonMatchSettings.cached(widget.match.seasonId)?.tracksGoalMinutes ??
+      true;
 
   /// Olayı yapan oyuncunun takımı: kendi kalesine golde rakip takım.
   /// match_events.team_id oyuncunun takımıdır; skor rakibe yazılır.
@@ -47,6 +58,11 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
   void initState() {
     super.initState();
     _teamId = widget.match.homeTeamId;
+    SeasonMatchSettings.of(widget.match.seasonId).then((s) {
+      if (mounted && s.tracksGoalMinutes != _tracksMinutes) {
+        setState(() => _tracksMinutes = s.tracksGoalMinutes);
+      }
+    });
   }
 
   @override
@@ -106,6 +122,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
     _PickerOption('red_card', 'Kırmızı Kart'),
     _PickerOption('man_of_the_match', 'Maçın Adamı'),
     _PickerOption('substitution', 'Oyuncu Değişikliği'),
+    _PickerOption('var_cancel', 'VAR: Gol İptali'),
   ];
 
   static IconData _eventIcon(String type) => switch (type) {
@@ -115,6 +132,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
     'yellow_card' || 'red_card' => Icons.style_outlined,
     'man_of_the_match' => Icons.star_outline_rounded,
     'substitution' => Icons.swap_horiz_rounded,
+    'var_cancel' => Icons.tv_off_rounded,
     _ => Icons.flag_outlined,
   };
 
@@ -131,7 +149,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
       );
       return;
     }
-    if (player == null || minuteStr.isEmpty) {
+    if (player == null || (_tracksMinutes && minuteStr.isEmpty)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Lütfen tüm alanları doldurun.')),
       );
@@ -145,7 +163,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
     }
 
     final minute = int.tryParse(minuteStr);
-    if (minute == null) return;
+    if (_tracksMinutes && minute == null) return;
 
     setState(() => _isLoading = true);
     try {
@@ -182,6 +200,60 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
       messenger.showSnackBar(
         const SnackBar(
           content: Text('Olay başarıyla kaydedildi.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  /// "41' Erol Sancaklı (K.K.) · Gaziosmanpaşa Autur"
+  String _goalLabel(MatchEvent g, String homeName, String awayName) {
+    final min = g.minute == null ? '' : "${g.minute}' ";
+    final name = g.eventName.trim().isEmpty ? 'Gol' : g.eventName.trim();
+    final tag = g.isOwnGoal
+        ? ' (K.K.)'
+        : g.isPenalty
+        ? ' (P)'
+        : '';
+    final team = g.teamId == widget.match.homeTeamId ? homeName : awayName;
+    return '$min$name$tag · ${shortTeamName(team)}';
+  }
+
+  /// VAR: seçilen gol son bir onaydan sonra iptal edilir; skor ve bildirim
+  /// veritabanında güncellenir.
+  Future<void> _cancelGoalFlow(String label) async {
+    final goal = _cancelGoal;
+    if (goal == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Lütfen iptal edilecek golü seçin.')),
+      );
+      return;
+    }
+    final ok = await showVarConfirmDialog(
+      context,
+      title: 'VAR: Gol İptali',
+      subject: label,
+      message:
+          'Bu gol iptal edilecek. Skor güncellenir ve maçı takip edenlere '
+          'bildirim gider.',
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _isLoading = true);
+    try {
+      await _matchService.setGoalCancelled(goal.id, cancelled: true);
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      Navigator.pop(context);
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Gol VAR kararıyla iptal edildi.'),
           backgroundColor: Colors.green,
         ),
       );
@@ -297,6 +369,123 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                     )
                     .label;
 
+                final typeRow = AdminSelectRow(
+                  icon: _eventIcon(_eventType),
+                  label: 'Olay Türü',
+                  value: eventLabel,
+                  placeholder: 'Seçiniz',
+                  onTap: _isLoading
+                      ? null
+                      : () async {
+                          final picked = await _pick<String>(
+                            title: 'Olay Türü',
+                            selected: _eventType,
+                            options: [
+                              for (final o in _eventTypes)
+                                if ((o.value != 'man_of_the_match' ||
+                                        widget.match.status ==
+                                            MatchStatus.finished) &&
+                                    // VAR yalnız başlamış maçta. Skor ve
+                                    // bildirim tetikleyicisi (20261020200000)
+                                    // canlı DB'ye uygulanana kadar yalnız
+                                    // admin.
+                                    (o.value != 'var_cancel' ||
+                                        widget.match.status !=
+                                                MatchStatus.notStarted &&
+                                            session.isAdmin))
+                                  o,
+                            ],
+                          );
+                          if (picked == null || !mounted) return;
+                          setState(() {
+                            _eventType = picked;
+                            _cancelGoal = null;
+                            if (picked == 'var_cancel') {
+                              _goals = _matchService.fetchGoalEvents(
+                                widget.match.id,
+                              );
+                            }
+                            if (picked != 'goal') {
+                              _selectedAssist = null;
+                              _isOwnGoal = false;
+                              _penaltyScored = true;
+                            }
+                            if (picked != 'substitution') {
+                              _selectedSubIn = null;
+                            }
+                          });
+                        },
+                );
+
+                if (_eventType == 'var_cancel') {
+                  return FutureBuilder<List<MatchEvent>>(
+                    future: _goals,
+                    builder: (context, goalsSnap) {
+                      final goals = goalsSnap.data ?? const <MatchEvent>[];
+                      final label = _cancelGoal == null
+                          ? null
+                          : _goalLabel(_cancelGoal!, homeName, awayName);
+                      return _frame(
+                        children: [
+                          AdminDialogHeader(
+                            icon: Icons.tv_off_rounded,
+                            title: 'VAR: Gol İptali',
+                            subtitle:
+                                '${shortTeamName(homeName)} - ${shortTeamName(awayName)}',
+                          ),
+                          const SizedBox(height: 18),
+                          AdminFieldGroup(
+                            children: [
+                              typeRow,
+                              AdminSelectRow(
+                                icon: Icons.sports_soccer_rounded,
+                                label: 'İptal Edilecek Gol',
+                                value: label,
+                                placeholder:
+                                    goalsSnap.connectionState !=
+                                        ConnectionState.done
+                                    ? 'Yükleniyor…'
+                                    : goals.isEmpty
+                                    ? 'Maçta gol yok'
+                                    : 'Seçiniz',
+                                onTap: goals.isEmpty || _isLoading
+                                    ? null
+                                    : () async {
+                                        final picked = await _pick<MatchEvent>(
+                                          title: 'İptal Edilecek Gol',
+                                          selected: _cancelGoal,
+                                          options: [
+                                            for (final g in goals)
+                                              _PickerOption(
+                                                g,
+                                                _goalLabel(
+                                                  g,
+                                                  homeName,
+                                                  awayName,
+                                                ),
+                                              ),
+                                          ],
+                                        );
+                                        if (picked == null || !mounted) {
+                                          return;
+                                        }
+                                        setState(() => _cancelGoal = picked);
+                                      },
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 22),
+                          AdminPrimaryButton(
+                            label: 'GOLÜ İPTAL ET',
+                            busy: _isLoading,
+                            onPressed: () => _cancelGoalFlow(label ?? ''),
+                          ),
+                        ],
+                      );
+                    },
+                  );
+                }
+
                 return _frame(
                   children: [
                     AdminDialogHeader(
@@ -308,39 +497,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                     const SizedBox(height: 18),
                     AdminFieldGroup(
                       children: [
-                        AdminSelectRow(
-                          icon: _eventIcon(_eventType),
-                          label: 'Olay Türü',
-                          value: eventLabel,
-                          placeholder: 'Seçiniz',
-                          onTap: _isLoading
-                              ? null
-                              : () async {
-                                  final picked = await _pick<String>(
-                                    title: 'Olay Türü',
-                                    selected: _eventType,
-                                    options: [
-                                      for (final o in _eventTypes)
-                                        if (o.value != 'man_of_the_match' ||
-                                            widget.match.status ==
-                                                MatchStatus.finished)
-                                          o,
-                                    ],
-                                  );
-                                  if (picked == null || !mounted) return;
-                                  setState(() {
-                                    _eventType = picked;
-                                    if (picked != 'goal') {
-                                      _selectedAssist = null;
-                                      _isOwnGoal = false;
-                                      _penaltyScored = true;
-                                    }
-                                    if (picked != 'substitution') {
-                                      _selectedSubIn = null;
-                                    }
-                                  });
-                                },
-                        ),
+                        typeRow,
                         AdminSelectRow(
                           icon: Icons.shield_outlined,
                           label: isGoal ? 'Golü Atan Takım' : 'Takım',
@@ -426,7 +583,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                                   }
                                 : null,
                           ),
-                        if (_eventType != 'man_of_the_match')
+                        if (_eventType != 'man_of_the_match' && _tracksMinutes)
                           AdminFieldRow(
                             icon: Icons.timer_outlined,
                             label: 'Dakika',
@@ -624,4 +781,83 @@ class _PickerOption<T> {
   const _PickerOption(this.value, this.label);
   final T value;
   final String label;
+}
+
+/// VAR kararı onayı: üstte olay, altta kırmızı İPTAL ve yeşil ONAYLA.
+/// Onaylanırsa true döner.
+Future<bool> showVarConfirmDialog(
+  BuildContext context, {
+  required String title,
+  required String subject,
+  required String message,
+}) async {
+  Widget button(String label, Color color, bool value, BuildContext ctx) =>
+      Expanded(
+        child: SizedBox(
+          height: 48,
+          child: ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: color,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            onPressed: () => Navigator.pop(ctx, value),
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.2,
+              ),
+            ),
+          ),
+        ),
+      );
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Container(
+        padding: const EdgeInsets.all(22),
+        decoration: adminDialogDecoration(),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            AdminDialogHeader(icon: Icons.tv_off_rounded, title: title),
+            const SizedBox(height: 16),
+            if (subject.isNotEmpty) ...[
+              Text(
+                subject,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white70, height: 1.4),
+            ),
+            const SizedBox(height: 22),
+            Row(
+              children: [
+                button('İPTAL', const Color(0xFFDC2626), false, ctx),
+                const SizedBox(width: 12),
+                button('ONAYLA', kAdminAccent, true, ctx),
+              ],
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+  return ok == true;
 }

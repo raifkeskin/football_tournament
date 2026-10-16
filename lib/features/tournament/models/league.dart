@@ -13,6 +13,7 @@ class League {
     this.isActive = true,
     this.transferEnabled = false,
     this.autoResultNews = true,
+    this.youtubeLive = false,
     this.isDefault = false,
     this.isPrivate = false,
     this.accessCode,
@@ -54,6 +55,10 @@ class League {
 
   /// Maç bitince / hafta tamamlanınca otomatik sonuç haberi (yalnız admin).
   final bool autoResultNews;
+
+  /// YouTube canlı yayın: açıksa kanaldaki yayınlar maçlara otomatik
+  /// bağlanır (edge function youtube-autolink).
+  final bool youtubeLive;
   final bool isDefault;
   final bool isPrivate;
   final String? accessCode;
@@ -150,6 +155,10 @@ class League {
       autoResultNews: boolFrom(
         v('autoResultNews', 'auto_result_news'),
         fallback: true,
+      ),
+      youtubeLive: boolFrom(
+        v('youtubeLive', 'youtube_live'),
+        fallback: false,
       ),
       isDefault: boolFrom(v('isDefault', 'is_default'), fallback: false),
       isPrivate: boolFrom(v('isPrivate', 'is_private'), fallback: false),

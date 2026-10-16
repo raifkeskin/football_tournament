@@ -66,9 +66,14 @@ Stream<List<Map<String, dynamic>>> watchTableRows(
 }) {
   final key =
       '$table|$column=$value|$orderBy|$ascending|${broadcastTopics?.join(',')}';
+  // Görünen satırlar hesaba bağlı (gizli turnuva vb.): bellekteki akış ve
+  // liste kullanıcıya göre ayrılır. Yoksa hesap değişince önceki hesabın
+  // listesi, yeni hesabın (değişmemiş) sürüm damgasıyla geçerli sayılıyordu.
+  final uid = client.auth.currentUser?.id ?? 'guest';
+  final memKey = '$uid|$key';
   final scopes = _scopesFor(table, column, value);
   final persist = scopes != null && !_memoryOnly.contains(table);
-  return _feeds.putIfAbsent(key, () {
+  return _feeds.putIfAbsent(memKey, () {
     Future<List<Map<String, dynamic>>> fetch() async {
       // Sürüm, veriyle aynı anda istenir (fazladan tur yok).
       final stampF = scopes == null ? null : DataVersions.stamp(scopes);
@@ -78,7 +83,7 @@ Stream<List<Map<String, dynamic>>> watchTableRows(
           ? await query
           : await query.order(orderBy, ascending: ascending);
       final list = rows.map((e) => Map<String, dynamic>.from(e)).toList();
-      _cache[key] = list;
+      _cache[memKey] = list;
       if (scopes != null) {
         final stamp = await stampF;
         unawaited(VersionedCache.save(key, list, stamp, persist: persist));
@@ -87,12 +92,12 @@ Stream<List<Map<String, dynamic>>> watchTableRows(
     }
 
     return resilientStream(() async* {
-      var cached = _cache[key];
+      var cached = _cache[memKey];
       if (cached == null && persist) {
         final disk = await VersionedCache.peek(key);
         if (disk is List) {
           cached = [for (final r in disk) Map<String, dynamic>.from(r as Map)];
-          _cache[key] = cached;
+          _cache[memKey] = cached;
         }
       }
       if (cached != null) yield cached;
@@ -125,7 +130,7 @@ Stream<List<Map<String, dynamic>>> watchTableRows(
         );
         if (next == null) continue; // bu listeyi ilgilendirmiyor
         rows = next.isEmpty && change.id == null ? await fetch() : next;
-        _cache[key] = rows;
+        _cache[memKey] = rows;
         yield rows;
       }
     });

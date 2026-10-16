@@ -1,7 +1,25 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+/// Şeritte sponsor adının yazı stili (`sponsors.name_style`).
+enum SponsorNameStyle {
+  sade('Sade'),
+  kurumsal('Kurumsal'),
+  spor('Spor');
+
+  const SponsorNameStyle(this.label);
+
+  final String label;
+
+  static SponsorNameStyle parse(dynamic v) => values.firstWhere(
+    (e) => e.name == v,
+    orElse: () => SponsorNameStyle.sade,
+  );
+}
 
 /// Turnuva sponsoru: ana (`main`) ya da alt (`sub`) sponsor.
 class Sponsor {
@@ -14,6 +32,8 @@ class Sponsor {
     this.linkUrl,
     this.sortOrder = 0,
     this.isActive = true,
+    this.logoAspect,
+    this.nameStyle = SponsorNameStyle.sade,
   });
 
   final String id;
@@ -24,6 +44,13 @@ class Sponsor {
   final String? linkUrl;
   final int sortOrder;
   final bool isActive;
+
+  /// Logonun en/boy oranı; şerit yer ayırmak için kullanır. Eski kayıtlarda
+  /// null (576×216 tuval).
+  final double? logoAspect;
+
+  /// Şeritte adın yazı stili.
+  final SponsorNameStyle nameStyle;
 
   bool get isMain => tier == 'main';
 
@@ -38,6 +65,8 @@ class Sponsor {
         : (m['link_url'] as String).trim(),
     sortOrder: (m['sort_order'] as num?)?.toInt() ?? 0,
     isActive: m['is_active'] != false,
+    logoAspect: (m['logo_aspect'] as num?)?.toDouble(),
+    nameStyle: SponsorNameStyle.parse(m['name_style']),
   );
 
   Map<String, dynamic> toMap() => {
@@ -49,6 +78,8 @@ class Sponsor {
     'link_url': linkUrl,
     'sort_order': sortOrder,
     'is_active': isActive,
+    'logo_aspect': logoAspect,
+    'name_style': nameStyle.name,
   };
 
   /// Önce ana sponsorlar, sonra alt sponsorlar; kendi içlerinde sıraya göre.
@@ -73,6 +104,16 @@ class SponsorFeed {
 
   static SupabaseClient get _sb => Supabase.instance.client;
   static String _key(String leagueId) => 'sponsor_feed_$leagueId';
+
+  /// Sponsor Yönetimi'nde değişiklik olan turnuvanın id'si; ana sayfa şeridi
+  /// dinler ve hemen yeniden yükler.
+  static final changes = ValueNotifier<String?>(null);
+
+  static void notifyChanged(String leagueId) {
+    // Aynı turnuvada art arda değişiklikte de dinleyiciler uyansın.
+    changes.value = null;
+    changes.value = leagueId;
+  }
 
   /// Cihazdaki son hâl (şerit ilk karede çizilsin, sonradan zıplamasın).
   static Future<SponsorFeed?> cached(String leagueId) async {

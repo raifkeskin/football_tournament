@@ -1,15 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../../team/widgets/team_page_tabs.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/services/active_tournament.dart';
+import '../../../core/widgets/youtube_player_page.dart';
+import '../../match/widgets/youtube_find_sheet.dart' show BroadcastThumb;
 import '../../tournament/models/league.dart';
+import '../../tournament/screens/formation_tab.dart'
+    show positionLineLabels, positionLineOf;
 import '../../../core/widgets/web_safe_image.dart';
 import '../../../core/utils/string_utils.dart';
+import '../../../core/utils/team_name.dart';
 
 // Uygulamanın ortak renkleri
 const _bgDark = Color(0xFF0F172A);
-const _surface = Color(0xFF1E293B);
 const _forest = Color(0xFF064E3B);
 const _accent = Color(0xFF10B981);
 const _mid = Color(0xFF94A3B8);
@@ -32,8 +38,17 @@ String _positionLabel(String main, String sub) {
   return main;
 }
 
-/// Oyuncu kartını popup olarak açar. [playerKey] oyuncu id'si ya da telefonu
-/// (istatistik ekranları telefonla tanımlar). Diğer bilgiler buradan okunur.
+/// Alt mevki ("Santrfor"); yalnız hat kodu (GK/DEF/ORT/FOR) girilmişse alt
+/// mevki yoktur.
+String _subPositionLabel(String sub) {
+  final s = sub.trim();
+  if (const {'GK', 'DEF', 'ORT', 'FOR'}.contains(s)) return '';
+  return s;
+}
+
+/// Oyuncu kartını tam ekran sayfa olarak açar; kapatınca açıldığı ekrana
+/// döner. [playerKey] oyuncu id'si ya da telefonu (istatistik ekranları
+/// telefonla tanımlar). Diğer bilgiler buradan okunur.
 Future<void> showPlayerCard(
   BuildContext context, {
   required String playerKey,
@@ -51,52 +66,70 @@ Future<void> showPlayerCard(
       )
       .eq(isId ? 'id' : 'phone', key)
       .limit(1);
-  return showDialog<void>(
-    context: context,
-    builder: (ctx) => Dialog(
-      insetPadding: const EdgeInsets.all(16),
-      backgroundColor: Colors.transparent,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-      child: FutureBuilder<List<Map<String, dynamic>>>(
-        future: future,
-        builder: (ctx, snap) {
-          if (snap.connectionState != ConnectionState.done) {
-            return const SizedBox(
-              height: 240,
-              child: Center(child: CircularProgressIndicator(color: _accent)),
-            );
-          }
-          final rows = snap.data ?? const [];
-          if (rows.isEmpty) {
-            return Container(
-              color: _bgDark,
-              padding: const EdgeInsets.all(24),
-              child: const Text(
-                'Oyuncu bulunamadı.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white70),
+  return Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (ctx) => Scaffold(
+        backgroundColor: _bgDark,
+        body: FutureBuilder<List<Map<String, dynamic>>>(
+          future: future,
+          builder: (ctx, snap) {
+            if (snap.connectionState != ConnectionState.done) {
+              return const Center(
+                child: CircularProgressIndicator(color: _accent),
+              );
+            }
+            final rows = snap.data ?? const [];
+            if (rows.isEmpty) {
+              return SafeArea(
+                child: Column(
+                  children: [
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: IconButton(
+                        onPressed: () => Navigator.of(ctx).maybePop(),
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          color: Colors.white70,
+                        ),
+                        tooltip: 'Kapat',
+                      ),
+                    ),
+                    const Expanded(
+                      child: Center(
+                        child: Text(
+                          'Oyuncu bulunamadı.',
+                          style: TextStyle(color: Colors.white70),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+            final r = rows.first;
+            String str(String k) => (r[k] ?? '').toString().trim();
+            return PlayerCard(
+              playerPhone: key,
+              name: [
+                str('name'),
+                str('surname'),
+              ].where((e) => e.isNotEmpty).join(' '),
+              number: number,
+              photoUrl: str('photo_url'),
+              position: _positionLabel(
+                str('main_position'),
+                str('sub_position'),
               ),
+              mainPosition: str('main_position'),
+              subPosition: _subPositionLabel(str('sub_position')),
+              birthDate: str('birth_date'),
+              height: (r['height'] as num?)?.toInt(),
+              weight: (r['weight'] as num?)?.toInt(),
+              seasons: const [],
+              initialSeasonId: '',
             );
-          }
-          final r = rows.first;
-          String str(String k) => (r[k] ?? '').toString().trim();
-          return PlayerCard(
-            playerPhone: key,
-            name: [
-              str('name'),
-              str('surname'),
-            ].where((e) => e.isNotEmpty).join(' '),
-            number: number,
-            photoUrl: str('photo_url'),
-            position: _positionLabel(str('main_position'), str('sub_position')),
-            birthDate: str('birth_date'),
-            height: (r['height'] as num?)?.toInt(),
-            weight: (r['weight'] as num?)?.toInt(),
-            seasons: const [],
-            initialSeasonId: '',
-          );
-        },
+          },
+        ),
       ),
     ),
   );
@@ -112,6 +145,8 @@ class PlayerCard extends StatefulWidget {
     required this.number,
     required this.photoUrl,
     required this.position,
+    this.mainPosition = '',
+    this.subPosition = '',
     required this.birthDate,
     required this.height,
     required this.weight,
@@ -123,7 +158,13 @@ class PlayerCard extends StatefulWidget {
   final String name;
   final String number;
   final String photoUrl;
+
+  /// "Ana Mevki" kutusunda hat (Kaleci/Defans/Orta Saha/Forvet);
+  /// [mainPosition] boşsa [position]'dan çıkarılır. "Alt Mevki" kutusunda
+  /// [subPosition] ("Santrfor"; boşsa "-").
   final String position;
+  final String mainPosition;
+  final String subPosition;
   final String birthDate;
   final int? height;
   final int? weight;
@@ -137,14 +178,35 @@ class PlayerCard extends StatefulWidget {
 class _PlayerCardState extends State<PlayerCard> {
   late final Future<_PlayerCardData> _future = _load();
 
-  /// Alt bölüm sekmesi: 0 Özet, 1 Turnuvalar (ileride yenileri eklenir).
+  late final Future<List<_GoalClip>> _goals = _loadGoals();
+
+  /// Açık gol satırı (dar listede dokununca ayrıntısı açılır).
+  String? _openGoal;
+
+  /// Alt bölüm sekmesi: 0 Özet, 1 Turnuvalar, 2 Goller.
   int _tab = 0;
-  static const _tabs = ['Özet', 'Turnuvalar'];
+
+  /// Kart, uygulamanın içinde bulunduğu turnuvanın renklerini alır; teması
+  /// olmayan turnuvada varsayılan yeşil.
+  TournamentTheme? get _theme => ActiveTournament.theme.value;
+  Color get _primary => _theme?.primary ?? _forest;
+  Color get _tone => _theme?.secondary ?? _accent;
+
+  /// Zemin rengine göre okunur yazı rengi.
+  static Color _on(Color c) =>
+      ThemeData.estimateBrightnessForColor(c) == Brightness.light
+      ? _bgDark
+      : Colors.white;
 
   /// Alt çizgili sekme çubuğu (takım sayfası ve maç detayıyla aynı).
-  Widget _tabBar() => TeamPageTabBar(
+  Widget _tabBar(int goalCount) => TeamPageTabBar(
     index: _tab,
-    labels: _tabs,
+    labels: [
+      'Özet',
+      'Turnuvalar',
+      goalCount > 0 ? 'Goller ($goalCount)' : 'Goller',
+    ],
+    indicatorColor: _tone,
     onChanged: (i) => setState(() => _tab = i),
   );
 
@@ -191,6 +253,15 @@ class _PlayerCardState extends State<PlayerCard> {
     if (m != null) return '${m[3]}/${m[2]}/${m[1]}$ageText';
     final y = RegExp(r'(\d{4})').firstMatch(s)?.group(1);
     return y == null ? '-' : '$y$ageText';
+  }
+
+  /// "175 cm · 80 kg"; biri yoksa yalnız diğeri, ikisi de yoksa "-".
+  String _bodyText() {
+    final parts = [
+      if (widget.height != null) '${widget.height} cm',
+      if (widget.weight != null) '${widget.weight} kg',
+    ];
+    return parts.isEmpty ? '-' : parts.join(' · ');
   }
 
   String _normalizeUrl(String raw) {
@@ -368,6 +439,104 @@ class _PlayerCardState extends State<PlayerCard> {
     return out;
   }
 
+  /// Oyuncunun onaylı gol videoları, en yeni maç üstte. Kesit oyuncuya
+  /// (player_id) ya da oyuncunun golüne (match_event_id) bağlıdır.
+  Future<List<_GoalClip>> _loadGoals() async {
+    final pid = await _resolvePlayerId(widget.playerPhone.trim());
+    if (pid == null || pid.isEmpty) return const [];
+    const cols =
+        'id, match_id, minute, video_id, start_sec, end_sec, description, '
+        'player_id';
+    final rows = <String, Map<String, dynamic>>{};
+    try {
+      final res = await _sb
+          .from('match_highlights')
+          .select(cols)
+          .eq('status', 'approved')
+          .eq('kind', 'goal')
+          .eq('player_id', pid);
+      for (final r in res) {
+        rows[r['id'].toString()] = r;
+      }
+    } catch (_) {}
+    try {
+      final ev = await _sb
+          .from('match_events')
+          .select('id')
+          .eq('player_id', pid)
+          .eq('event_type', 'goal')
+          .not('is_own_goal', 'is', true);
+      final ids = [for (final e in ev) e['id'].toString()];
+      if (ids.isNotEmpty) {
+        final res = await _sb
+            .from('match_highlights')
+            .select(cols)
+            .eq('status', 'approved')
+            .eq('kind', 'goal')
+            .inFilter('match_event_id', ids);
+        for (final r in res) {
+          // Kesit başka bir oyuncuya atanmışsa onun golüdür.
+          final owner = (r['player_id'] ?? '').toString();
+          if (owner.isNotEmpty && owner != pid) continue;
+          rows[r['id'].toString()] = r;
+        }
+      }
+    } catch (_) {}
+    if (rows.isEmpty) return const [];
+
+    final matchById = <String, Map<String, dynamic>>{};
+    try {
+      final res = await _sb
+          .from('matches')
+          .select(
+            'id, match_date, week, home_score, away_score, leagues(name), '
+            'home:teams!matches_home_team_id_fkey(name), '
+            'away:teams!matches_away_team_id_fkey(name)',
+          )
+          .inFilter(
+            'id',
+            {for (final r in rows.values) r['match_id']}.toList(),
+          );
+      for (final m in res) {
+        matchById[m['id'].toString()] = m;
+      }
+    } catch (_) {}
+
+    String name(dynamic v) =>
+        v is Map ? (v['name'] ?? '').toString().trim() : '';
+    final out = <_GoalClip>[];
+    for (final r in rows.values) {
+      final m = matchById[r['match_id'].toString()];
+      if (m == null) continue;
+      out.add(
+        _GoalClip(
+          id: r['id'].toString(),
+          videoId: r['video_id'].toString(),
+          startSec: _readInt(r['start_sec']),
+          endSec: _readInt(r['end_sec']),
+          minute: r['minute'] == null ? null : _readInt(r['minute']),
+          description: (r['description'] ?? '').toString().trim(),
+          home: name(m['home']),
+          away: name(m['away']),
+          homeScore: m['home_score'] == null ? null : _readInt(m['home_score']),
+          awayScore: m['away_score'] == null ? null : _readInt(m['away_score']),
+          date: DateTime.tryParse((m['match_date'] ?? '').toString()),
+          week: m['week'] == null ? null : _readInt(m['week']),
+          league: name(m['leagues']),
+        ),
+      );
+    }
+    // En yeni maç üstte; aynı maçta son gol üstte.
+    out.sort((a, b) {
+      final da = a.date, db = b.date;
+      if (da != null && db != null && da != db) return db.compareTo(da);
+      if (da == null && db != null) return 1;
+      if (da != null && db == null) return -1;
+      return (b.minute ?? b.startSec).compareTo(a.minute ?? a.startSec);
+    });
+    return out;
+  }
+
   Future<_PlayerCardData> _load() async {
     final playerKey = widget.playerPhone.trim();
     if (playerKey.isEmpty) return _PlayerCardData.empty();
@@ -494,9 +663,6 @@ class _PlayerCardState extends State<PlayerCard> {
   Widget build(BuildContext context) {
     return Material(
       color: _bgDark,
-      // Dialog şeffaf olduğundan köşeleri kart kendisi yuvarlar.
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-      clipBehavior: Clip.antiAlias,
       child: FutureBuilder<_PlayerCardData>(
         future: _future,
         builder: (context, snap) {
@@ -512,9 +678,14 @@ class _PlayerCardState extends State<PlayerCard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _tabBar(),
+                    FutureBuilder<List<_GoalClip>>(
+                      future: _goals,
+                      builder: (context, g) => _tabBar(g.data?.length ?? 0),
+                    ),
                     const SizedBox(height: 10),
-                    if (loading)
+                    if (_tab == 2)
+                      _goalsTab()
+                    else if (loading)
                       const Padding(
                         padding: EdgeInsets.all(24),
                         child: Center(child: CircularProgressIndicator()),
@@ -543,6 +714,190 @@ class _PlayerCardState extends State<PlayerCard> {
     );
   }
 
+  /// Goller: dar satırlar (dakika, maç, tarih); dokununca ayrıntı açılır,
+  /// videoya dokununca gol kesiti uygulama içi oynatıcıda açılır.
+  Widget _goalsTab() {
+    return FutureBuilder<List<_GoalClip>>(
+      future: _goals,
+      builder: (context, snap) {
+        if (snap.connectionState != ConnectionState.done) {
+          return const Padding(
+            padding: EdgeInsets.all(24),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        final goals = snap.data ?? const <_GoalClip>[];
+        if (goals.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.all(18),
+            decoration: _panel(),
+            child: const Text(
+              'Henüz gol videosu yok.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: _mid),
+            ),
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [for (final g in goals) _goalRow(g)],
+        );
+      },
+    );
+  }
+
+  Widget _goalRow(_GoalClip g) {
+    final open = _openGoal == g.id;
+    final score = g.homeScore == null || g.awayScore == null
+        ? '–'
+        : '${g.homeScore}–${g.awayScore}';
+    final when = [
+      if (g.date != null) DateFormat('d MMMM y', 'tr_TR').format(g.date!),
+      if (g.week != null && g.week! > 0) '${g.week}. Hafta',
+    ].join(' · ');
+    final title = "${g.minute != null ? "${g.minute}' " : ''}Gol";
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: Colors.white.withValues(alpha: 0.04),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(
+            color: open
+                ? _tone.withValues(alpha: 0.5)
+                : Colors.white.withValues(alpha: 0.07),
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            InkWell(
+              onTap: () => setState(() => _openGoal = open ? null : g.id),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(10, 10, 6, 10),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 46,
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      decoration: BoxDecoration(
+                        color: _tone,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        g.minute != null ? "${g.minute}'" : 'Gol',
+                        style: TextStyle(
+                          color: _on(_tone),
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${shortTeamName(g.home)} $score '
+                            '${shortTeamName(g.away)}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          if (when.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              when,
+                              style: const TextStyle(
+                                color: _mid,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    AnimatedRotation(
+                      turns: open ? 0.5 : 0,
+                      duration: const Duration(milliseconds: 180),
+                      child: const Icon(
+                        Icons.expand_more_rounded,
+                        color: Colors.white54,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (open)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    GestureDetector(
+                      onTap: () => openYoutubeClip(
+                        context,
+                        videoId: g.videoId,
+                        startSec: g.startSec,
+                        endSec: g.endSec,
+                        title: title,
+                      ),
+                      child: BroadcastThumb(videoId: g.videoId, radius: 12),
+                    ),
+                    if (g.description.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        g.description,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12.5,
+                          height: 1.35,
+                        ),
+                      ),
+                    ],
+                    if (g.league.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.emoji_events_outlined,
+                            size: 13,
+                            color: _tone,
+                          ),
+                          const SizedBox(width: 5),
+                          Expanded(
+                            child: Text(
+                              g.league,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: _mid,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   BoxDecoration _panel() => BoxDecoration(
     color: Colors.white.withValues(alpha: 0.04),
     borderRadius: BorderRadius.circular(16),
@@ -555,6 +910,7 @@ class _PlayerCardState extends State<PlayerCard> {
     final photo = _normalizeUrl(widget.photoUrl);
     final number = widget.number.trim();
     final pos = widget.position.trim();
+    final topInset = MediaQuery.paddingOf(context).top;
     final name = widget.name.trim().isEmpty ? '-' : widget.name.trim();
     final age = _ageFromBirthDate(widget.birthDate);
     final photoHeight = (MediaQuery.of(context).size.height * 0.26).clamp(
@@ -577,7 +933,7 @@ class _PlayerCardState extends State<PlayerCard> {
           children: [
             Row(
               children: [
-                Icon(icon, size: 13, color: _accent),
+                Icon(icon, size: 13, color: _tone),
                 const SizedBox(width: 5),
                 Text(
                   label,
@@ -613,16 +969,20 @@ class _PlayerCardState extends State<PlayerCard> {
     );
 
     final hero = Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
+        // Turnuva renginin koyulaştırılmış degradesi; beyaz yazı okunur kalır.
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [_surface, _forest],
+          colors: [
+            Color.lerp(_primary, _bgDark, 0.45)!,
+            Color.lerp(_primary, Colors.black, 0.5)!,
+          ],
         ),
-        // Üst köşeler de oval: popup çerçevesiyle aynı yarıçap.
-        borderRadius: BorderRadius.all(Radius.circular(28)),
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(28)),
       ),
-      padding: const EdgeInsets.fromLTRB(16, 44, 16, 16),
+      // Tam ekran: üst bölüm durum çubuğunun altına uzanır.
+      padding: EdgeInsets.fromLTRB(16, topInset + 44, 16, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -642,12 +1002,12 @@ class _PlayerCardState extends State<PlayerCard> {
                           color: _bgDark,
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
-                            color: _accent.withValues(alpha: 0.6),
+                            color: _tone.withValues(alpha: 0.6),
                             width: 1.5,
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: _accent.withValues(alpha: 0.18),
+                              color: _tone.withValues(alpha: 0.18),
                               blurRadius: 20,
                             ),
                           ],
@@ -708,27 +1068,6 @@ class _PlayerCardState extends State<PlayerCard> {
                                   ],
                                 ),
                               ),
-                              if (pos.isNotEmpty && pos != '-') ...[
-                                const SizedBox(height: 5),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 9,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: _accent.withValues(alpha: 0.9),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: Text(
-                                    pos,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                ),
-                              ],
                             ],
                           ),
                         ),
@@ -743,13 +1082,13 @@ class _PlayerCardState extends State<PlayerCard> {
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: _accent,
+                              color: _tone,
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
                               '#$number',
-                              style: const TextStyle(
-                                color: Colors.white,
+                              style: TextStyle(
+                                color: _on(_tone),
                                 fontWeight: FontWeight.w800,
                                 fontSize: 15,
                               ),
@@ -765,24 +1104,32 @@ class _PlayerCardState extends State<PlayerCard> {
                   child: Column(
                     children: [
                       // "16/09/1989 (37)"
-                      info(Icons.cake_outlined, 'Doğum', _birthText(age)),
-                      const SizedBox(height: 8),
                       info(
-                        Icons.height_rounded,
-                        'Boy',
-                        widget.height == null ? '-' : '${widget.height} cm',
+                        Icons.cake_outlined,
+                        'Doğum Tarihi',
+                        _birthText(age),
                       ),
                       const SizedBox(height: 8),
-                      info(
-                        Icons.monitor_weight_outlined,
-                        'Kilo',
-                        widget.weight == null ? '-' : '${widget.weight} kg',
-                      ),
+                      info(Icons.height_rounded, 'Boy / Kilo', _bodyText()),
                       const SizedBox(height: 8),
                       info(
                         Icons.sports_soccer_outlined,
-                        'Mevki',
-                        pos.isEmpty ? '-' : pos,
+                        'Ana Mevki',
+                        (pos.isEmpty || pos == '-') &&
+                                widget.mainPosition.trim().isEmpty
+                            ? '-'
+                            : positionLineLabels[positionLineOf(
+                                widget.mainPosition,
+                                pos,
+                              )],
+                      ),
+                      const SizedBox(height: 8),
+                      info(
+                        Icons.my_location_rounded,
+                        'Alt Mevki',
+                        widget.subPosition.trim().isEmpty
+                            ? '-'
+                            : widget.subPosition.trim(),
                       ),
                     ],
                   ),
@@ -797,7 +1144,7 @@ class _PlayerCardState extends State<PlayerCard> {
       children: [
         hero,
         Positioned(
-          top: 0,
+          top: topInset,
           right: 0,
           child: IconButton(
             onPressed: () => Navigator.of(context).maybePop(),
@@ -1061,6 +1408,39 @@ class _PlayerCardData {
     overall: _StatTotals(),
     tournaments: <_TournamentNode>[],
   );
+}
+
+/// Oyuncu kartı › Goller satırı.
+class _GoalClip {
+  const _GoalClip({
+    required this.id,
+    required this.videoId,
+    required this.startSec,
+    required this.endSec,
+    required this.minute,
+    required this.description,
+    required this.home,
+    required this.away,
+    required this.homeScore,
+    required this.awayScore,
+    required this.date,
+    required this.week,
+    required this.league,
+  });
+
+  final String id;
+  final String videoId;
+  final int startSec;
+  final int endSec;
+  final int? minute;
+  final String description;
+  final String home;
+  final String away;
+  final int? homeScore;
+  final int? awayScore;
+  final DateTime? date;
+  final int? week;
+  final String league;
 }
 
 class _TournamentNode {

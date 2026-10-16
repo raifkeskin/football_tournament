@@ -18,8 +18,10 @@ import '../../../core/widgets/app_date_picker.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../player/screens/admin_awards_screen.dart';
 import 'season_management_screen.dart';
+import '../widgets/league_instagram_section.dart';
 import '../widgets/league_owners_section.dart';
 import 'package:football_tournament/core/widgets/picked_image.dart';
+import '../../sponsors/sponsor.dart';
 
 class AdminManageLeaguesScreen extends StatefulWidget {
   const AdminManageLeaguesScreen({super.key});
@@ -105,10 +107,13 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
     var transferEnabled = league?.transferEnabled ?? false;
     // Maç sonucu haberi: varsayılan açık; yalnızca admin değiştirir.
     var autoResultNews = league?.autoResultNews ?? true;
+    // YouTube canlı yayın: kanaldaki yayınlar maçlara otomatik eklenir.
+    var youtubeLive = league?.youtubeLive ?? false;
     final isAdmin = AppSession.of(context).value.isAdmin;
     // Gizli turnuva özelliği kapalıyken alan gösterilmez; mevcut değer korunur.
     final privateOn = AppSettings.privateLeaguesEnabled.value;
     var saving = false;
+    var tab = 0;
 
     Future<void> submit(
       BuildContext popupContext,
@@ -155,6 +160,7 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
           'instagram_url': link(igController),
           'facebook_url': link(fbController),
           'youtube_url': link(ytController),
+          'youtube_live': youtubeLive,
           'website_url': link(webController),
           if (isAdmin) 'status': isActive ? 'active' : 'passive',
           if (isAdmin) 'transfer_enabled': transferEnabled,
@@ -184,6 +190,8 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
         if (isEdit && ActiveTournament.theme.value?.leagueId == league.id) {
           ActiveTournament.refresh();
         }
+        // Sponsor şeridinin süreleri bu formda; şerit yeni süreleri alsın.
+        if (isEdit) SponsorFeed.notifyChanged(league.id);
       } catch (e) {
         if (!mounted) return;
         messenger.showSnackBar(SnackBar(content: Text('Hata: $e')));
@@ -258,6 +266,22 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // Alanlar sekmelere bölünür; form aşağı doğru uzamaz.
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 56, 6),
+                    child: AdminFormTabs(
+                      labels: [
+                        'Genel',
+                        'Görünüm',
+                        'Medya',
+                        if (isAdmin) 'Yetkililer',
+                      ],
+                      selected: tab,
+                      onChanged: saving
+                          ? null
+                          : (i) => setPopupState(() => tab = i),
+                    ),
+                  ),
                   Flexible(
                     child: SingleChildScrollView(
                       padding: EdgeInsets.fromLTRB(
@@ -270,267 +294,206 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          const SizedBox(height: 6),
-                          // Büyük logo: dokununca galeri açılır; çöp kutusu logoyu kaldırır.
-                          Center(
-                            child: GestureDetector(
-                              onTap: saving ? null : pickLogo,
-                              child: Stack(
-                                clipBehavior: Clip.none,
-                                children: [
-                                  Container(
-                                    width: 168,
-                                    height: 168,
-                                    padding: const EdgeInsets.all(10),
-                                    clipBehavior: Clip.antiAlias,
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(32),
-                                      gradient: const LinearGradient(
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
-                                        colors: [
-                                          Color(0xFF0F172A),
-                                          Color(0xFF064E3B),
-                                        ],
-                                      ),
-                                      border: Border.all(
-                                        color: Colors.white.withValues(
-                                          alpha: 0.12,
+                          if (tab == 1) ...[
+                            const SizedBox(height: 6),
+                            // Büyük logo: dokununca galeri açılır; çöp kutusu logoyu kaldırır.
+                            Center(
+                              child: GestureDetector(
+                                onTap: saving ? null : pickLogo,
+                                child: Stack(
+                                  clipBehavior: Clip.none,
+                                  children: [
+                                    Container(
+                                      width: 168,
+                                      height: 168,
+                                      padding: const EdgeInsets.all(10),
+                                      clipBehavior: Clip.antiAlias,
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(32),
+                                        gradient: const LinearGradient(
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                          colors: [
+                                            Color(0xFF0F172A),
+                                            Color(0xFF064E3B),
+                                          ],
                                         ),
-                                      ),
-                                      boxShadow: const [
-                                        BoxShadow(
-                                          color: Colors.black45,
-                                          blurRadius: 18,
-                                          offset: Offset(0, 8),
-                                        ),
-                                      ],
-                                    ),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(22),
-                                      child: SizedBox.expand(child: logo),
-                                    ),
-                                  ),
-                                  if (hasLogo)
-                                    Positioned(
-                                      right: -8,
-                                      bottom: -8,
-                                      child: Material(
-                                        color: kAdminDanger,
-                                        shape: const CircleBorder(
-                                          side: BorderSide(
-                                            color: Color(0xFF1E293B),
-                                            width: 3,
+                                        border: Border.all(
+                                          color: Colors.white.withValues(
+                                            alpha: 0.12,
                                           ),
                                         ),
-                                        child: InkWell(
-                                          customBorder: const CircleBorder(),
-                                          // Logoyu tamamen kaldırır; değiştirmek için
-                                          // logoya dokunmak yeterli.
-                                          onTap: saving
-                                              ? null
-                                              : () => setPopupState(() {
-                                                  selectedLogo = null;
-                                                  removedLogo = true;
-                                                }),
-                                          child: const SizedBox(
-                                            width: 42,
-                                            height: 42,
-                                            child: Icon(
-                                              Icons.delete_outline_rounded,
-                                              size: 20,
-                                              color: Colors.white,
+                                        boxShadow: const [
+                                          BoxShadow(
+                                            color: Colors.black45,
+                                            blurRadius: 18,
+                                            offset: Offset(0, 8),
+                                          ),
+                                        ],
+                                      ),
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(22),
+                                        child: SizedBox.expand(child: logo),
+                                      ),
+                                    ),
+                                    if (hasLogo)
+                                      Positioned(
+                                        right: -8,
+                                        bottom: -8,
+                                        child: Material(
+                                          color: kAdminDanger,
+                                          shape: const CircleBorder(
+                                            side: BorderSide(
+                                              color: Color(0xFF1E293B),
+                                              width: 3,
+                                            ),
+                                          ),
+                                          child: InkWell(
+                                            customBorder: const CircleBorder(),
+                                            // Logoyu tamamen kaldırır; değiştirmek için
+                                            // logoya dokunmak yeterli.
+                                            onTap: saving
+                                                ? null
+                                                : () => setPopupState(() {
+                                                    selectedLogo = null;
+                                                    removedLogo = true;
+                                                  }),
+                                            child: const SizedBox(
+                                              width: 42,
+                                              height: 42,
+                                              child: Icon(
+                                                Icons.delete_outline_rounded,
+                                                size: 20,
+                                                color: Colors.white,
+                                              ),
                                             ),
                                           ),
                                         ),
                                       ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 22),
+                          ],
+                          if (tab == 0) ...[
+                            const SizedBox(height: 6),
+                            TextField(
+                              controller: nameController,
+                              // Turnuva adını yalnızca admin değiştirir.
+                              enabled: !saving && isAdmin,
+                              textCapitalization: TextCapitalization.words,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                              ),
+                              cursorColor: kAdminAccent,
+                              decoration: adminInputDecoration(
+                                label: 'Turnuva Adı',
+                                icon: Icons.emoji_events_outlined,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: shortNameController,
+                              enabled: !saving,
+                              maxLength: 24,
+                              textCapitalization: TextCapitalization.words,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                              ),
+                              cursorColor: kAdminAccent,
+                              decoration: adminInputDecoration(
+                                label: 'Bantta görünen kısa ad (isteğe bağlı)',
+                                icon: Icons.short_text_rounded,
+                              ).copyWith(counterText: ''),
+                            ),
+                          ],
+                          if (tab == 1) ...[
+                            AdminFormSection(
+                              title: 'Uygulama Teması',
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  const Padding(
+                                    padding: EdgeInsets.only(bottom: 10),
+                                    child: Text(
+                                      'Oyuncularınız uygulamayı açtığında üst bant, '
+                                      'açılış ve menü turnuvanızın logosu, adı ve bu '
+                                      'renklerle görünür. Ana renk boşsa genel '
+                                      'görünüm kullanılır.',
+                                      style: TextStyle(
+                                        color: Colors.white60,
+                                        fontSize: 12.5,
+                                        height: 1.35,
+                                      ),
                                     ),
+                                  ),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: AdminColorTile(
+                                          label: 'Ana Renk',
+                                          hex: themePrimary,
+                                          onTap: saving
+                                              ? null
+                                              : () async {
+                                                  final c =
+                                                      await showAdminColorPicker(
+                                                        context: context,
+                                                        title: 'Ana Renk',
+                                                        initial: themePrimary,
+                                                      );
+                                                  if (c != null) {
+                                                    setPopupState(
+                                                      () => themePrimary = c,
+                                                    );
+                                                  }
+                                                },
+                                          onClear: () => setPopupState(
+                                            () => themePrimary = null,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: AdminColorTile(
+                                          label: 'Vurgu Rengi',
+                                          hex: themeSecondary,
+                                          onTap: saving
+                                              ? null
+                                              : () async {
+                                                  final c =
+                                                      await showAdminColorPicker(
+                                                        context: context,
+                                                        title: 'Vurgu Rengi',
+                                                        initial: themeSecondary,
+                                                      );
+                                                  if (c != null) {
+                                                    setPopupState(
+                                                      () => themeSecondary = c,
+                                                    );
+                                                  }
+                                                },
+                                          onClear: () => setPopupState(
+                                            () => themeSecondary = null,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ],
                               ),
                             ),
-                          ),
-                          const SizedBox(height: 22),
-                          TextField(
-                            controller: nameController,
-                            // Turnuva adını yalnızca admin değiştirir.
-                            enabled: !saving && isAdmin,
-                            textCapitalization: TextCapitalization.words,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                            ),
-                            cursorColor: kAdminAccent,
-                            decoration: adminInputDecoration(
-                              label: 'Turnuva Adı',
-                              icon: Icons.emoji_events_outlined,
-                            ),
-                          ),
-                          AdminFormSection(
-                            title: 'Uygulama Teması',
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                          ],
+                          if (tab == 0) ...[
+                            const SizedBox(height: 12),
+                            AdminFieldGroup(
                               children: [
-                                const Padding(
-                                  padding: EdgeInsets.only(bottom: 10),
-                                  child: Text(
-                                    'Oyuncularınız uygulamayı açtığında üst bant, '
-                                    'açılış ve menü turnuvanızın logosu, adı ve bu '
-                                    'renklerle görünür. Ana renk boşsa genel '
-                                    'görünüm kullanılır.',
-                                    style: TextStyle(
-                                      color: Colors.white60,
-                                      fontSize: 12.5,
-                                      height: 1.35,
-                                    ),
-                                  ),
-                                ),
-                                TextField(
-                                  controller: shortNameController,
-                                  enabled: !saving,
-                                  maxLength: 24,
-                                  textCapitalization: TextCapitalization.words,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                  cursorColor: kAdminAccent,
-                                  decoration: adminInputDecoration(
-                                    label:
-                                        'Bantta görünen kısa ad (isteğe bağlı)',
-                                    icon: Icons.short_text_rounded,
-                                  ).copyWith(counterText: ''),
-                                ),
-                                const SizedBox(height: 10),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: AdminColorTile(
-                                        label: 'Ana Renk',
-                                        hex: themePrimary,
-                                        onTap: saving
-                                            ? null
-                                            : () async {
-                                                final c =
-                                                    await showAdminColorPicker(
-                                                      context: context,
-                                                      title: 'Ana Renk',
-                                                      initial: themePrimary,
-                                                    );
-                                                if (c != null) {
-                                                  setPopupState(
-                                                    () => themePrimary = c,
-                                                  );
-                                                }
-                                              },
-                                        onClear: () => setPopupState(
-                                          () => themePrimary = null,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: AdminColorTile(
-                                        label: 'Vurgu Rengi',
-                                        hex: themeSecondary,
-                                        onTap: saving
-                                            ? null
-                                            : () async {
-                                                final c =
-                                                    await showAdminColorPicker(
-                                                      context: context,
-                                                      title: 'Vurgu Rengi',
-                                                      initial: themeSecondary,
-                                                    );
-                                                if (c != null) {
-                                                  setPopupState(
-                                                    () => themeSecondary = c,
-                                                  );
-                                                }
-                                              },
-                                        onClear: () => setPopupState(
-                                          () => themeSecondary = null,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          AdminFieldGroup(
-                            children: [
-                              AdminFieldRow(
-                                icon: Icons.lock_clock_rounded,
-                                label: 'Esame açılışı',
-                                enabled: !saving,
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(
-                                      tooltip: 'Azalt',
-                                      icon: const Icon(
-                                        Icons.remove_circle_outline_rounded,
-                                        color: kAdminAccent,
-                                      ),
-                                      onPressed: saving || rosterOpenHours <= 0
-                                          ? null
-                                          : () => setPopupState(
-                                              () => rosterOpenHours--,
-                                            ),
-                                    ),
-                                    IconButton(
-                                      tooltip: 'Artır',
-                                      icon: const Icon(
-                                        Icons.add_circle_outline_rounded,
-                                        color: kAdminAccent,
-                                      ),
-                                      onPressed:
-                                          saving || rosterOpenHours >= 168
-                                          ? null
-                                          : () => setPopupState(
-                                              () => rosterOpenHours++,
-                                            ),
-                                    ),
-                                  ],
-                                ),
-                                child: Text(
-                                  rosterOpenHours == 0
-                                      ? 'Maç saatinde'
-                                      : 'Maçtan $rosterOpenHours saat önce',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const Padding(
-                            padding: EdgeInsets.fromLTRB(4, 6, 4, 0),
-                            child: Text(
-                              'Takım sorumluları kendi takımlarının esamesini bu '
-                              'süreden itibaren girebilir. Yöneticiler ve gözlemci '
-                              'için süre sınırı yoktur.',
-                              style: TextStyle(
-                                color: kAdminMuted,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          AdminFieldGroup(
-                            children: [
-                              for (final (label, isMain) in const [
-                                ('Ana sponsor süresi', true),
-                                ('Alt sponsor süresi', false),
-                              ])
                                 AdminFieldRow(
-                                  icon: isMain
-                                      ? Icons.workspace_premium_rounded
-                                      : Icons.handshake_rounded,
-                                  label: label,
+                                  icon: Icons.lock_clock_rounded,
+                                  label: 'Esame açılışı',
                                   enabled: !saving,
                                   trailing: Row(
                                     mainAxisSize: MainAxisSize.min,
@@ -542,19 +505,11 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                                           color: kAdminAccent,
                                         ),
                                         onPressed:
-                                            saving ||
-                                                (isMain
-                                                        ? sponsorMainSeconds
-                                                        : sponsorSubSeconds) <=
-                                                    2
+                                            saving || rosterOpenHours <= 0
                                             ? null
-                                            : () => setPopupState(() {
-                                                if (isMain) {
-                                                  sponsorMainSeconds--;
-                                                } else {
-                                                  sponsorSubSeconds--;
-                                                }
-                                              }),
+                                            : () => setPopupState(
+                                                () => rosterOpenHours--,
+                                              ),
                                       ),
                                       IconButton(
                                         tooltip: 'Artır',
@@ -563,172 +518,18 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                                           color: kAdminAccent,
                                         ),
                                         onPressed:
-                                            saving ||
-                                                (isMain
-                                                        ? sponsorMainSeconds
-                                                        : sponsorSubSeconds) >=
-                                                    60
+                                            saving || rosterOpenHours >= 168
                                             ? null
-                                            : () => setPopupState(() {
-                                                if (isMain) {
-                                                  sponsorMainSeconds++;
-                                                } else {
-                                                  sponsorSubSeconds++;
-                                                }
-                                              }),
+                                            : () => setPopupState(
+                                                () => rosterOpenHours++,
+                                              ),
                                       ),
                                     ],
                                   ),
                                   child: Text(
-                                    '${isMain ? sponsorMainSeconds : sponsorSubSeconds} saniye',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                          const Padding(
-                            padding: EdgeInsets.fromLTRB(4, 6, 4, 0),
-                            child: Text(
-                              'Ana sayfadaki sponsor şeridinde her logonun ekranda '
-                              'kalma süresi. Sponsorlar Yönetim Paneli › Sponsor '
-                              'Yönetimi\'nden eklenir.',
-                              style: TextStyle(
-                                color: kAdminMuted,
-                                fontSize: 12,
-                                height: 1.35,
-                              ),
-                            ),
-                          ),
-                          AdminFormSection(
-                            title: 'Sosyal Medya',
-                            child: Column(
-                              children: [
-                                for (final (c, label, icon) in [
-                                  (
-                                    igController,
-                                    'Instagram adresi',
-                                    Icons.camera_alt_outlined,
-                                  ),
-                                  (
-                                    fbController,
-                                    'Facebook adresi',
-                                    Icons.facebook,
-                                  ),
-                                  (
-                                    ytController,
-                                    'YouTube adresi',
-                                    Icons.smart_display_outlined,
-                                  ),
-                                  (
-                                    webController,
-                                    'Web sitesi',
-                                    Icons.language_rounded,
-                                  ),
-                                ]) ...[
-                                  TextField(
-                                    controller: c,
-                                    enabled: !saving,
-                                    keyboardType: TextInputType.url,
-                                    style: const TextStyle(color: Colors.white),
-                                    cursorColor: kAdminAccent,
-                                    decoration: adminInputDecoration(
-                                      label: label,
-                                      icon: icon,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 10),
-                                ],
-                              ],
-                            ),
-                          ),
-                          if (isAdmin) ...[
-                            const SizedBox(height: 12),
-                            AdminFieldGroup(
-                              children: [
-                                AdminFieldRow(
-                                  icon: isActive
-                                      ? Icons.check_circle_outline_rounded
-                                      : Icons.pause_circle_outline_rounded,
-                                  label: 'Durum',
-                                  onTap: saving
-                                      ? null
-                                      : () => setPopupState(
-                                          () => isActive = !isActive,
-                                        ),
-                                  trailing: Switch.adaptive(
-                                    value: isActive,
-                                    activeTrackColor: kAdminAccent,
-                                    onChanged: saving
-                                        ? null
-                                        : (v) =>
-                                              setPopupState(() => isActive = v),
-                                  ),
-                                  child: Text(
-                                    isActive
-                                        ? 'Aktif · uygulamada listelenir'
-                                        : 'Pasif · listelerde görünmez',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ),
-                                AdminFieldRow(
-                                  icon: Icons.swap_horiz_rounded,
-                                  label: 'Transfer',
-                                  onTap: saving
-                                      ? null
-                                      : () => setPopupState(
-                                          () => transferEnabled =
-                                              !transferEnabled,
-                                        ),
-                                  trailing: Switch.adaptive(
-                                    value: transferEnabled,
-                                    activeTrackColor: kAdminAccent,
-                                    onChanged: saving
-                                        ? null
-                                        : (v) => setPopupState(
-                                            () => transferEnabled = v,
-                                          ),
-                                  ),
-                                  child: Text(
-                                    transferEnabled
-                                        ? 'Aktif · tarihler sezonda girilir'
-                                        : 'Pasif',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ),
-                                AdminFieldRow(
-                                  icon: Icons.scoreboard_outlined,
-                                  label: 'Maç Sonucu Haberi',
-                                  onTap: saving
-                                      ? null
-                                      : () => setPopupState(
-                                          () =>
-                                              autoResultNews = !autoResultNews,
-                                        ),
-                                  trailing: Switch.adaptive(
-                                    value: autoResultNews,
-                                    activeTrackColor: kAdminAccent,
-                                    onChanged: saving
-                                        ? null
-                                        : (v) => setPopupState(
-                                            () => autoResultNews = v,
-                                          ),
-                                  ),
-                                  child: Text(
-                                    autoResultNews
-                                        ? 'Açık · maç ve hafta bitince haber'
-                                        : 'Kapalı',
+                                    rosterOpenHours == 0
+                                        ? 'Maç saatinde'
+                                        : 'Maçtan $rosterOpenHours saat önce',
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 15,
@@ -739,37 +540,293 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                               ],
                             ),
                           ],
-                          if (privateOn) const SizedBox(height: 12),
-                          if (privateOn)
+                          if (tab == 1) ...[
+                            const SizedBox(height: 12),
+                            AdminFieldGroup(
+                              children: [
+                                for (final (label, isMain) in const [
+                                  ('Ana sponsor süresi', true),
+                                  ('Alt sponsor süresi', false),
+                                ])
+                                  AdminFieldRow(
+                                    icon: isMain
+                                        ? Icons.workspace_premium_rounded
+                                        : Icons.handshake_rounded,
+                                    label: label,
+                                    enabled: !saving,
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        IconButton(
+                                          tooltip: 'Azalt',
+                                          icon: const Icon(
+                                            Icons.remove_circle_outline_rounded,
+                                            color: kAdminAccent,
+                                          ),
+                                          onPressed:
+                                              saving ||
+                                                  (isMain
+                                                          ? sponsorMainSeconds
+                                                          : sponsorSubSeconds) <=
+                                                      2
+                                              ? null
+                                              : () => setPopupState(() {
+                                                  if (isMain) {
+                                                    sponsorMainSeconds--;
+                                                  } else {
+                                                    sponsorSubSeconds--;
+                                                  }
+                                                }),
+                                        ),
+                                        IconButton(
+                                          tooltip: 'Artır',
+                                          icon: const Icon(
+                                            Icons.add_circle_outline_rounded,
+                                            color: kAdminAccent,
+                                          ),
+                                          onPressed:
+                                              saving ||
+                                                  (isMain
+                                                          ? sponsorMainSeconds
+                                                          : sponsorSubSeconds) >=
+                                                      60
+                                              ? null
+                                              : () => setPopupState(() {
+                                                  if (isMain) {
+                                                    sponsorMainSeconds++;
+                                                  } else {
+                                                    sponsorSubSeconds++;
+                                                  }
+                                                }),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Text(
+                                      '${isMain ? sponsorMainSeconds : sponsorSubSeconds} saniye',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const Padding(
+                              padding: EdgeInsets.fromLTRB(4, 6, 4, 0),
+                              child: Text(
+                                'Ana sayfadaki sponsor şeridinde her logonun ekranda '
+                                'kalma süresi. Sponsorlar Yönetim Paneli › Sponsor '
+                                'Yönetimi\'nden eklenir.',
+                                style: TextStyle(
+                                  color: kAdminMuted,
+                                  fontSize: 12,
+                                  height: 1.35,
+                                ),
+                              ),
+                            ),
+                          ],
+                          if (tab == 2) ...[
+                            AdminFormSection(
+                              title: 'Sosyal Medya',
+                              child: Column(
+                                children: [
+                                  for (final (c, label, icon) in [
+                                    (
+                                      igController,
+                                      'Instagram adresi',
+                                      Icons.camera_alt_outlined,
+                                    ),
+                                    (
+                                      fbController,
+                                      'Facebook adresi',
+                                      Icons.facebook,
+                                    ),
+                                    (
+                                      ytController,
+                                      'YouTube adresi',
+                                      Icons.smart_display_outlined,
+                                    ),
+                                    (
+                                      webController,
+                                      'Web sitesi',
+                                      Icons.language_rounded,
+                                    ),
+                                  ]) ...[
+                                    TextField(
+                                      controller: c,
+                                      enabled: !saving,
+                                      keyboardType: TextInputType.url,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                      ),
+                                      cursorColor: kAdminAccent,
+                                      decoration: adminInputDecoration(
+                                        label: label,
+                                        icon: icon,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 10),
+                                  ],
+                                ],
+                              ),
+                            ),
                             AdminFieldGroup(
                               children: [
                                 AdminFieldRow(
-                                  icon: isPrivate
-                                      ? Icons.lock_outline_rounded
-                                      : Icons.public_rounded,
-                                  label: 'Gizli turnuva',
+                                  icon: Icons.live_tv_rounded,
+                                  label: 'YouTube canlı yayın',
                                   onTap: saving
                                       ? null
-                                      : () => setPopupState(() {
-                                          isPrivate = !isPrivate;
-                                          if (isPrivate &&
-                                              accessCodeController.text
-                                                  .trim()
-                                                  .isEmpty) {
-                                            accessCodeController.text =
-                                                _newAccessCode();
-                                          }
-                                          if (!isPrivate) {
-                                            accessCodeController.clear();
-                                          }
-                                        }),
+                                      : () => setPopupState(
+                                          () => youtubeLive = !youtubeLive,
+                                        ),
                                   trailing: Switch.adaptive(
-                                    value: isPrivate,
+                                    value: youtubeLive,
                                     activeTrackColor: kAdminAccent,
                                     onChanged: saving
                                         ? null
-                                        : (v) => setPopupState(() {
-                                            isPrivate = v;
+                                        : (v) => setPopupState(
+                                            () => youtubeLive = v,
+                                          ),
+                                  ),
+                                  child: Text(
+                                    youtubeLive ? 'Aktif' : 'Pasif',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const Padding(
+                              padding: EdgeInsets.fromLTRB(4, 6, 4, 10),
+                              child: Text(
+                                'Aktifken yukarıdaki YouTube kanalındaki yayınlar '
+                                'maç saatinde kendiliğinden ilgili maça eklenir '
+                                '(başlıkta iki takımın adı ya da maç kodu olmalı). '
+                                'Elle girilen link her zaman önceliklidir.',
+                                style: TextStyle(
+                                  color: kAdminMuted,
+                                  fontSize: 12,
+                                  height: 1.35,
+                                ),
+                              ),
+                            ),
+                            if (isEdit)
+                              LeagueInstagramSection(leagueId: league.id),
+                          ],
+                          if (tab == 0) ...[
+                            if (isAdmin) ...[
+                              const SizedBox(height: 12),
+                              AdminFieldGroup(
+                                children: [
+                                  AdminFieldRow(
+                                    icon: isActive
+                                        ? Icons.check_circle_outline_rounded
+                                        : Icons.pause_circle_outline_rounded,
+                                    label: 'Durum',
+                                    onTap: saving
+                                        ? null
+                                        : () => setPopupState(
+                                            () => isActive = !isActive,
+                                          ),
+                                    trailing: Switch.adaptive(
+                                      value: isActive,
+                                      activeTrackColor: kAdminAccent,
+                                      onChanged: saving
+                                          ? null
+                                          : (v) => setPopupState(
+                                              () => isActive = v,
+                                            ),
+                                    ),
+                                    child: Text(
+                                      isActive
+                                          ? 'Aktif · uygulamada listelenir'
+                                          : 'Pasif · listelerde görünmez',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                  AdminFieldRow(
+                                    icon: Icons.swap_horiz_rounded,
+                                    label: 'Transfer',
+                                    onTap: saving
+                                        ? null
+                                        : () => setPopupState(
+                                            () => transferEnabled =
+                                                !transferEnabled,
+                                          ),
+                                    trailing: Switch.adaptive(
+                                      value: transferEnabled,
+                                      activeTrackColor: kAdminAccent,
+                                      onChanged: saving
+                                          ? null
+                                          : (v) => setPopupState(
+                                              () => transferEnabled = v,
+                                            ),
+                                    ),
+                                    child: Text(
+                                      transferEnabled
+                                          ? 'Aktif · tarihler sezonda girilir'
+                                          : 'Pasif',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                  AdminFieldRow(
+                                    icon: Icons.scoreboard_outlined,
+                                    label: 'Maç Sonucu Haberi',
+                                    onTap: saving
+                                        ? null
+                                        : () => setPopupState(
+                                            () => autoResultNews =
+                                                !autoResultNews,
+                                          ),
+                                    trailing: Switch.adaptive(
+                                      value: autoResultNews,
+                                      activeTrackColor: kAdminAccent,
+                                      onChanged: saving
+                                          ? null
+                                          : (v) => setPopupState(
+                                              () => autoResultNews = v,
+                                            ),
+                                    ),
+                                    child: Text(
+                                      autoResultNews
+                                          ? 'Açık · maç ve hafta bitince haber'
+                                          : 'Kapalı',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                            if (privateOn) const SizedBox(height: 12),
+                            if (privateOn)
+                              AdminFieldGroup(
+                                children: [
+                                  AdminFieldRow(
+                                    icon: isPrivate
+                                        ? Icons.lock_outline_rounded
+                                        : Icons.public_rounded,
+                                    label: 'Gizli turnuva',
+                                    onTap: saving
+                                        ? null
+                                        : () => setPopupState(() {
+                                            isPrivate = !isPrivate;
                                             if (isPrivate &&
                                                 accessCodeController.text
                                                     .trim()
@@ -781,95 +838,116 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                                               accessCodeController.clear();
                                             }
                                           }),
-                                  ),
-                                  child: Text(
-                                    isPrivate
-                                        ? 'Açık · yalnızca üyeler ve kodu girenler görür'
-                                        : 'Kapalı · herkes görür',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          if (privateOn && isPrivate) ...[
-                            const SizedBox(height: 12),
-                            TextField(
-                              controller: accessCodeController,
-                              enabled: !saving,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 2,
-                              ),
-                              cursorColor: kAdminAccent,
-                              decoration:
-                                  adminInputDecoration(
-                                    label: 'Erişim Kodu',
-                                    icon: Icons.key_rounded,
-                                  ).copyWith(
-                                    suffixIcon: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        IconButton(
-                                          tooltip: 'Kodu paylaş',
-                                          icon: const Icon(
-                                            Icons.share_rounded,
-                                            color: kAdminAccent,
-                                          ),
-                                          onPressed: saving
-                                              ? null
-                                              : () => _shareLeagueCode(
-                                                  nameController.text.trim(),
+                                    trailing: Switch.adaptive(
+                                      value: isPrivate,
+                                      activeTrackColor: kAdminAccent,
+                                      onChanged: saving
+                                          ? null
+                                          : (v) => setPopupState(() {
+                                              isPrivate = v;
+                                              if (isPrivate &&
                                                   accessCodeController.text
-                                                      .trim(),
-                                                ),
-                                        ),
-                                        IconButton(
-                                          tooltip: 'Kodu yenile',
-                                          icon: const Icon(
-                                            Icons.refresh_rounded,
-                                            color: Colors.white54,
-                                          ),
-                                          onPressed: saving
-                                              ? null
-                                              : () async {
-                                                  final code =
-                                                      await _regenerateCode(
-                                                        league,
-                                                      );
-                                                  if (code != null) {
-                                                    setPopupState(
-                                                      () =>
-                                                          accessCodeController
-                                                                  .text =
-                                                              code,
-                                                    );
-                                                  }
-                                                },
-                                        ),
-                                      ],
+                                                      .trim()
+                                                      .isEmpty) {
+                                                accessCodeController.text =
+                                                    _newAccessCode();
+                                              }
+                                              if (!isPrivate) {
+                                                accessCodeController.clear();
+                                              }
+                                            }),
+                                    ),
+                                    child: Text(
+                                      isPrivate
+                                          ? 'Açık · yalnızca üyeler ve kodu girenler görür'
+                                          : 'Kapalı · herkes görür',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w700,
+                                      ),
                                     ),
                                   ),
-                            ),
-                          ],
-                          // Sahipler yalnız admin tarafından, kayıtlı turnuvaya eklenir.
-                          if (AppSession.of(context).value.isAdmin) ...[
-                            const SizedBox(height: 18),
-                            if (isEdit)
-                              LeagueOwnersSection(leagueId: league.id)
-                            else
-                              const Text(
-                                'Turnuva sahiplerini, turnuvayı kaydettikten sonra '
-                                'düzenle ekranından ekleyebilirsiniz.',
-                                style: TextStyle(
-                                  color: kAdminMuted,
-                                  fontSize: 12,
-                                ),
+                                ],
                               ),
+                            if (privateOn && isPrivate) ...[
+                              const SizedBox(height: 12),
+                              TextField(
+                                controller: accessCodeController,
+                                enabled: !saving,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 2,
+                                ),
+                                cursorColor: kAdminAccent,
+                                decoration:
+                                    adminInputDecoration(
+                                      label: 'Erişim Kodu',
+                                      icon: Icons.key_rounded,
+                                    ).copyWith(
+                                      suffixIcon: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          IconButton(
+                                            tooltip: 'Kodu paylaş',
+                                            icon: const Icon(
+                                              Icons.share_rounded,
+                                              color: kAdminAccent,
+                                            ),
+                                            onPressed: saving
+                                                ? null
+                                                : () => _shareLeagueCode(
+                                                    nameController.text.trim(),
+                                                    accessCodeController.text
+                                                        .trim(),
+                                                  ),
+                                          ),
+                                          IconButton(
+                                            tooltip: 'Kodu yenile',
+                                            icon: const Icon(
+                                              Icons.refresh_rounded,
+                                              color: Colors.white54,
+                                            ),
+                                            onPressed: saving
+                                                ? null
+                                                : () async {
+                                                    final code =
+                                                        await _regenerateCode(
+                                                          league,
+                                                        );
+                                                    if (code != null) {
+                                                      setPopupState(
+                                                        () =>
+                                                            accessCodeController
+                                                                    .text =
+                                                                code,
+                                                      );
+                                                    }
+                                                  },
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                              ),
+                            ],
+                          ],
+                          if (tab == 3) ...[
+                            // Sahipler yalnız admin tarafından, kayıtlı turnuvaya eklenir.
+                            if (AppSession.of(context).value.isAdmin) ...[
+                              const SizedBox(height: 18),
+                              if (isEdit)
+                                LeagueOwnersSection(leagueId: league.id)
+                              else
+                                const Text(
+                                  'Turnuva sahiplerini, turnuvayı kaydettikten sonra '
+                                  'düzenle ekranından ekleyebilirsiniz.',
+                                  style: TextStyle(
+                                    color: kAdminMuted,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                            ],
                           ],
                         ],
                       ),

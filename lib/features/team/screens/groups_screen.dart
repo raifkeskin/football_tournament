@@ -9,8 +9,11 @@ import 'team_squad_screen.dart';
 
 import '../../../core/widgets/web_safe_image.dart';
 import '../utils/standings.dart';
+import '../../share/poster_background.dart';
 import '../../share/poster_share.dart';
 import '../../share/standings_poster.dart';
+import '../../../core/utils/string_utils.dart';
+import '../../tournament/models/league_format.dart';
 
 /// Bir turnuva + sezon + grubun puan durumu. Başlık çubuğu ve grup sekmesi
 /// yok; Turnuva Sayfası'nın Puan Durumu sekmesinde gösterilir.
@@ -121,6 +124,8 @@ Future<void> shareGroupStandings(
       context: context,
       fileName: 'puan_durumu_${group.name}'.replaceAll(' ', '_'),
       leagueId: leagueId,
+      kind: PosterKind.standings,
+      formats: const [PosterFormat.post, PosterFormat.story],
       imageUrls: [
         leagueLogo,
         for (final r in rows) r.logo,
@@ -167,10 +172,36 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
   Stream<List<Map<String, dynamic>>>? _matchesStream;
   Stream<List<Team>>? _teamsStream;
 
+  /// Sezonun lig formatı (bellekte; ekran beklemeden çizilsin).
+  static final Map<String, ({LeagueFormat? format, bool doubleRound})>
+  _formats = {};
+  late ({LeagueFormat? format, bool doubleRound})? _format =
+      _formats[widget.seasonId];
+
   @override
   void initState() {
     super.initState();
     _initStreams();
+    _loadFormat();
+  }
+
+  Future<void> _loadFormat() async {
+    final id = widget.seasonId;
+    try {
+      final row = await Supabase.instance.client
+          .from('seasons')
+          .select('league_format, is_double_round')
+          .eq('id', id)
+          .maybeSingle();
+      final v = (
+        format: LeagueFormat.fromJson(row?['league_format']),
+        doubleRound: row?['is_double_round'] == true,
+      );
+      _formats[id] = v;
+      if (mounted && widget.seasonId == id) setState(() => _format = v);
+    } catch (_) {
+      // Format okunamazsa eski görünüm.
+    }
   }
 
   @override
@@ -180,6 +211,10 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
         oldWidget.seasonId != widget.seasonId ||
         oldWidget.fetchGroupId != widget.fetchGroupId) {
       _initStreams();
+    }
+    if (oldWidget.seasonId != widget.seasonId) {
+      _format = _formats[widget.seasonId];
+      _loadFormat();
     }
   }
 
@@ -274,11 +309,80 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
                 );
               }
 
-              // 4'ten az takımda bölge şeritleri anlamsız (hepsi yeşil olur).
-              final showZones = rows.length > 4;
+              // Lig formatı varsa bölgeler ondan; yoksa eski görünüm (4'ten
+              // az takımda bölge şeritleri anlamsız, hepsi yeşil olur).
+              final format = _format?.format;
+              final showZones = format != null || rows.length > 4;
+              const classOrange = Color(0xFFF59E0B);
+              ({String name, Color color, bool filled})? zoneAt(int i) {
+                if (format != null) {
+                  final z = format.zoneOf(i + 1, rows.length);
+                  if (z == null) return null;
+                  final first =
+                      format.cups.isNotEmpty &&
+                      z.color == LeagueFormat.colors.first;
+                  return (name: z.name, color: z.color, filled: first);
+                }
+                if (!showZones) return null;
+                if (i < 4) {
+                  return (name: 'Üst tur', color: _kAccent, filled: true);
+                }
+                if (i >= rows.length - 4) {
+                  return (name: 'Klasman', color: classOrange, filled: false);
+                }
+                return null;
+              }
+
+              final legend = <({String name, Color color})>[];
+              for (var i = 0; i < rows.length; i++) {
+                final z = zoneAt(i);
+                if (z != null && !legend.any((l) => l.name == z.name)) {
+                  legend.add((name: z.name, color: z.color));
+                }
+              }
+
+              // Ardışık aynı bölgedeki sıralar tek grup.
+              final groups =
+                  <
+                    ({
+                      int start,
+                      int end,
+                      ({String name, Color color, bool filled})? zone,
+                    })
+                  >[];
+              for (var i = 0; i < rows.length; i++) {
+                final z = zoneAt(i);
+                if (groups.isNotEmpty && groups.last.zone?.name == z?.name) {
+                  final last = groups.removeLast();
+                  groups.add((start: last.start, end: i + 1, zone: last.zone));
+                } else {
+                  groups.add((start: i, end: i + 1, zone: z));
+                }
+              }
+              final hasBands = groups.any((g) => g.zone != null);
+
+              Widget row(int i) => _StandingsRow(
+                index: i,
+                entry: rows[i],
+                zone: zoneAt(i),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      settings: const RouteSettings(name: 'TeamSquadScreen'),
+                      builder: (_) => TeamSquadScreen(
+                        teamId: rows[i].teamId,
+                        tournamentId: widget.leagueId,
+                        teamName: rows[i].name,
+                        teamLogoUrl: rows[i].logo,
+                      ),
+                    ),
+                  );
+                },
+              );
 
               // Kenarlardan boşluklu, yuvarlak köşeli kart.
-              return Container(
+              final table = Container(
                 margin: const EdgeInsets.fromLTRB(10, 10, 10, 0),
                 clipBehavior: Clip.antiAlias,
                 decoration: BoxDecoration(
@@ -294,31 +398,42 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
                     // Sütun başlıkları
                     Container(
                       color: Colors.white.withValues(alpha: 0.04),
-                      padding: const EdgeInsets.fromLTRB(3, 7, 10, 7),
+                      padding: EdgeInsets.fromLTRB(
+                        3 + (hasBands ? _kZoneBand : 0),
+                        7,
+                        10,
+                        7,
+                      ),
                       child: const _StandingsHeaderRow(),
                     ),
-                    for (var i = 0; i < rows.length; i++)
-                      _StandingsRow(
-                        index: i,
-                        entry: rows[i],
-                        totalCount: rows.length,
-                        showZones: showZones,
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              settings: const RouteSettings(
-                                name: 'TeamSquadScreen',
-                              ),
-                              builder: (_) => TeamSquadScreen(
-                                teamId: rows[i].teamId,
-                                tournamentId: widget.leagueId,
-                                teamName: rows[i].name,
-                                teamLogoUrl: rows[i].logo,
+                    // Bölgeler: aynı bölgedeki satırlar bir arada, solda bölge
+                    // adı 90° sola yatırılmış başlıkla.
+                    for (final g in groups)
+                      Stack(
+                        children: [
+                          Padding(
+                            padding: EdgeInsets.only(
+                              left: hasBands ? _kZoneBand : 0,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                for (var i = g.start; i < g.end; i++) row(i),
+                              ],
+                            ),
+                          ),
+                          if (g.zone != null)
+                            Positioned(
+                              left: 0,
+                              top: 0,
+                              bottom: 0,
+                              width: _kZoneBand,
+                              child: _ZoneBand(
+                                name: g.zone!.name,
+                                color: g.zone!.color,
                               ),
                             ),
-                          );
-                        },
+                        ],
                       ),
                     // Açıklama
                     Padding(
@@ -327,16 +442,8 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
                         spacing: 14,
                         runSpacing: 6,
                         children: [
-                          if (showZones) ...[
-                            const _LegendDot(
-                              color: accentGreen,
-                              label: 'Üst tur',
-                            ),
-                            const _LegendDot(
-                              color: Color(0xFFF59E0B),
-                              label: 'Klasman',
-                            ),
-                          ],
+                          for (final l in legend)
+                            _LegendDot(color: l.color, label: l.name),
                           const _LegendDot(
                             color: accentGreen,
                             label: 'Galibiyet',
@@ -362,6 +469,17 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
                     ),
                   ],
                 ),
+              );
+              final ifNow = format == null
+                  ? null
+                  : _ifNowPairs(format, rows, _format?.doubleRound ?? false);
+              if (ifNow == null) return table;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  table,
+                  _IfNowCard(lines: ifNow),
+                ],
               );
             },
           );
@@ -489,25 +607,184 @@ class _LegendDot extends StatelessWidget {
   }
 }
 
+/// "Bugün bitse" satırları (kupa adı, rengi, eşleşmeler). Kart kapalıysa,
+/// geçerli kupa yoksa ya da sezonun yarısı oynanmadıysa null.
+List<({String cup, Color color, String pairs})>? _ifNowPairs(
+  LeagueFormat f,
+  List<StandingEntry> rows,
+  bool doubleRound,
+) {
+  final n = rows.length;
+  // Anahtar açıksa hemen görünür; turnuva yetkilisi istediği hafta açar.
+  if (!f.showIfNow || f.cups.isEmpty || n < 2) return null;
+  String name(int rank) => shortTeamName(rows[rank - 1].name);
+  final out = <({String cup, Color color, String pairs})>[];
+  for (var i = 0; i < f.cups.length; i++) {
+    if (f.errorsOf(i, n).isNotEmpty) continue;
+    final c = f.cups[i];
+    final parts = <String>[];
+    final byes = <String>[];
+    for (final (a, b) in c.firstRound()) {
+      if (a != null && b != null) {
+        parts.add('${name(a)} – ${name(b)}');
+      } else if (a != null || b != null) {
+        byes.add(name((a ?? b)!));
+      }
+    }
+    out.add((
+      cup: c.name,
+      color: LeagueFormat.colors[i % LeagueFormat.colors.length],
+      pairs: [
+        parts.join(' · '),
+        if (byes.isNotEmpty) '(bay: ${byes.join(', ')})',
+      ].join(' '),
+    ));
+  }
+  return out.isEmpty ? null : out;
+}
+
+class _IfNowCard extends StatelessWidget {
+  const _IfNowCard({required this.lines});
+
+  final List<({String cup, Color color, String pairs})> lines;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(10, 10, 10, 0),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        gradient: LinearGradient(
+          colors: [
+            _kAccent.withValues(alpha: 0.12),
+            _kAccent.withValues(alpha: 0.03),
+          ],
+        ),
+        border: Border.all(color: _kAccent.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'BUGÜN BİTSE',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w900,
+              fontSize: 13,
+              letterSpacing: 1.2,
+            ),
+          ),
+          const SizedBox(height: 6),
+          for (final l in lines)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: '${l.cup}: ',
+                      style: TextStyle(
+                        color: l.color,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    TextSpan(text: l.pairs),
+                  ],
+                ),
+                style: const TextStyle(
+                  color: Color(0xFFE2E8F0),
+                  fontSize: 13,
+                  height: 1.4,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Bölge şeridinin genişliği (dikey başlık).
+const double _kZoneBand = 20;
+
+/// Puan tablosunda bölge başlığı (ör. "PRESTİJ KUPASI"), satırların solunda
+/// 90° sola yatırılmış: aşağıdan yukarı okunur, adın ardından ince çizgi.
+class _ZoneBand extends StatelessWidget {
+  const _ZoneBand({required this.name, required this.color});
+
+  final String name;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.06),
+        border: Border(
+          top: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
+        ),
+      ),
+      child: RotatedBox(
+        quarterTurns: 3,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          // Ad sığdığı kadar yazılır (kısa bölgede kısaltılır), kalan yere çizgi.
+          child: LayoutBuilder(
+            builder: (context, box) => Row(
+              children: [
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: (box.maxWidth - 16).clamp(0, double.infinity),
+                  ),
+                  child: Text(
+                    name.trUpper,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.1,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Container(
+                    height: 1,
+                    color: color.withValues(alpha: 0.35),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _StandingsRow extends StatelessWidget {
   const _StandingsRow({
     required this.index,
     required this.entry,
-    required this.totalCount,
-    required this.showZones,
+    required this.zone,
     required this.onTap,
   });
 
   final int index;
   final StandingEntry entry;
-  final int totalCount;
-  final bool showZones;
+
+  /// Sıranın bölgesi (kupa / üst tur / klasman / lige veda); yoksa null.
+  /// [filled]: sıra dairesi dolu (ilk bölge), değilse çerçeveli.
+  final ({String name, Color color, bool filled})? zone;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     const teamText = Color(0xFFF8FAFC);
-    const classOrange = Color(0xFFF59E0B);
     const negative = Color(0xFFF87171);
     final c = _StandingsCols.of(context);
 
@@ -534,14 +811,7 @@ class _StandingsRow extends StatelessWidget {
 
     final isLeader = index == 0 && entry.played > 0;
 
-    Color zoneColor = Colors.transparent;
-    if (showZones) {
-      if (index < 4) {
-        zoneColor = _kAccent;
-      } else if (index >= totalCount - 4) {
-        zoneColor = classOrange;
-      }
-    }
+    final z = zone;
 
     final av = entry.goalDiff;
     final avText = av > 0 ? '+$av' : '$av';
@@ -578,24 +848,24 @@ class _StandingsRow extends StatelessWidget {
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: zoneColor == _kAccent
-                          ? _kAccent
-                          : zoneColor == classOrange
-                          ? classOrange.withValues(alpha: 0.18)
-                          : const Color(0xFF334155),
-                      border: zoneColor == classOrange
-                          ? Border.all(color: classOrange, width: 1.5)
+                      color: z == null
+                          ? const Color(0xFF334155)
+                          : z.filled
+                          ? z.color
+                          : z.color.withValues(alpha: 0.18),
+                      border: z != null && !z.filled
+                          ? Border.all(color: z.color, width: 1.5)
                           : null,
                     ),
                     child: Text(
                       '${index + 1}',
                       style: TextStyle(
                         fontWeight: FontWeight.w800,
-                        color: zoneColor == _kAccent
+                        color: z == null
+                            ? teamText
+                            : z.filled
                             ? const Color(0xFF052E20)
-                            : zoneColor == classOrange
-                            ? classOrange
-                            : teamText,
+                            : z.color,
                         fontSize: 11.5,
                         fontFeatures: _tabular,
                       ),

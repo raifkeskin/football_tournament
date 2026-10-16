@@ -277,6 +277,8 @@ class SquadPoster extends StatelessWidget {
                   ),
                 ),
               ),
+              const SizedBox(height: 6),
+              const PosterAppMark(),
             ],
           ),
         ],

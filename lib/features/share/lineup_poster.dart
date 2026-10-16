@@ -151,7 +151,14 @@ class _PosterFrame extends StatelessWidget {
             ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 18, 16, 12),
-            child: child,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: child),
+                const SizedBox(height: 6),
+                const PosterAppMark(),
+              ],
+            ),
           ),
         ],
       ),
@@ -326,7 +333,7 @@ Widget _numberBox(TeamPalette p, String? number, {double size = 22}) =>
       ),
     );
 
-Widget _sectionTitle(TeamPalette p, String title, int count) => Row(
+Widget _sectionTitle(TeamPalette p, String title) => Row(
   children: [
     Text(
       title,
@@ -340,15 +347,6 @@ Widget _sectionTitle(TeamPalette p, String title, int count) => Row(
     const SizedBox(width: 8),
     Expanded(
       child: Container(height: 1, color: p.accent.withValues(alpha: 0.4)),
-    ),
-    const SizedBox(width: 8),
-    Text(
-      '$count',
-      style: _cond(
-        color: Colors.white60,
-        fontSize: 12,
-        fontWeight: FontWeight.w600,
-      ),
     ),
   ],
 );
@@ -435,17 +433,20 @@ class LineupListPoster extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          Text(
-            d.teamName.trUpper,
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: _cond(
-              color: Colors.white,
-              fontSize: 30,
-              height: 1,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.5,
+          // "..." ile kesilmez; sığmazsa küçülür.
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              d.teamName.trUpper,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              style: _cond(
+                color: Colors.white,
+                fontSize: 30,
+                height: 1,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.5,
+              ),
             ),
           ),
           const SizedBox(height: 6),
@@ -496,7 +497,7 @@ class LineupListPoster extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               const SizedBox(height: 12),
-                              _sectionTitle(p, 'İLK 11', d.starters.length),
+                              _sectionTitle(p, 'İLK 11'),
                               const SizedBox(height: 7),
                               for (final pl in d.starters) _row(pl),
                             ],
@@ -516,7 +517,7 @@ class LineupListPoster extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 const SizedBox(height: 12),
-                                _sectionTitle(p, 'YEDEKLER', d.subs.length),
+                                _sectionTitle(p, 'YEDEKLER'),
                                 const SizedBox(height: 7),
                                 for (final pl in d.subs) _row(pl, small: true),
                               ],
@@ -694,7 +695,7 @@ class LineupPitchPoster extends StatelessWidget {
           ),
           if (data.subs.isNotEmpty) ...[
             const SizedBox(height: 8),
-            _sectionTitle(p, 'YEDEKLER', data.subs.length),
+            _sectionTitle(p, 'YEDEKLER'),
             const SizedBox(height: 5),
             Wrap(
               alignment: WrapAlignment.center,

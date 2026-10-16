@@ -126,3 +126,92 @@ _Eklendi: 2026-10-13_
   - Web'de Instagram'ın gömme sayfası (iframe) kullanılabilir. Telefonda webview paketi gerekir.
   - Küçük resim (thumbnail) ve başlık için Meta oEmbed izni gerekir. Instagram yayın planındaki Meta uygulaması kurulunca yapılır.
 - **Not:** Videoyu kendimiz barındırmıyoruz. Trafik ücreti yüksek olur, akış (HLS) da yok.
+
+## 13. Halısaha videolarından gol kesitleri (dakikasız)
+_Eklendi: 2026-10-14_
+
+- **Şu an:** Kesitler, maç detayındaki gol dakikalarının çevresinde aranıyor (maç başına ~0,04 $). Sezonda "Gol Dakikası" kapalıysa (halısaha) onaylı gol videoları herkese görünüyor, ama YZ analizini yalnız admin başlatabiliyor ve tüm video taranıyor; tahmini maliyet sınırı aşarsa analiz başlamıyor.
+- **Sorun:** Dakika yoksa 60 dakikanın tamamını taramak gerekir. Tahmini maliyet kamera başına 0,40–0,60 $, yani mevcut 0,50 $/maç limitine takılır. Bazı halısahalarda iki kamera var; bu da maliyeti ikiye katlar.
+- **Önerilen yol:**
+  - Başlama vuruşu bulunur, iki kamera bununla senkronlanır.
+  - Video düşük kare hızında (ör. 10 sn'de 1 kare) taranır, yalnız kutlama ve santra anları işaretlenir. Maçtaki gol sayısı ve sırası bilindiği için sonuç doğrulanabilir.
+  - Bulunan anlar çevresinde ±1 dakikalık ayrıntılı kesit alınır.
+  - İki kamerada gol yalnız birinde (geniş açı) aranır. Her gol için diğer kameranın ±30 sn'sine bakılıp "kaleye yakın ve net olan" seçilir. Devre arası taraf değiştiği için karar gol başına verilir.
+  - Maç medyasında video linkine "Kamera 1 / Kamera 2" etiketi gerekir.
+- **Önce:** Gerçek bir halısaha videosuyla maliyet ölçülecek.
+
+## 14. Haberleri ve maç sonucu kartını Instagram'a paylaşmak (Instagram B2)
+_Eklendi: 2026-10-14_
+
+- **Şu an:**
+  - Turnuvanın Instagram gönderileri Haberler'e otomatik düşüyor (Instagram A).
+  - Afişler Instagram'a tek tuşla paylaşılıyor (B1).
+- **Sonra:**
+  - Haber Yönetimi'ndeki her haberde bir "Instagram'da paylaş" düğmesi olacak. Haberin fotoğrafları (en fazla 5) çoklu gönderi olarak gidecek. Fotoğraflar 4:5 çerçeveye sığdırılacak, kırpılmayacak.
+  - Otomatik maç sonucu kartı görsele çevrilip gönderi olarak paylaşılacak.
+  - Paylaşılan haberde "Instagram'da paylaşıldı ✓" işareti görünecek. Aynı haber iki kez gönderilmeyecek.
+  - Fotoğrafsız haber için metinden otomatik görsel üretmek de düşünülebilir.
+- **Neden ertelendi:** Turnuva sahipleri genelde doğrudan Instagram'da paylaşıyor. Bu gönderilerin Haberler'e düşmesi şimdilik yetiyor.
+
+## 15. Hakemler (maç görevlileri)
+_Eklendi: 2026-10-14_
+
+- **İstek:** Maçın 1. hakemi ve yardımcı hakemleri girilsin, maç detayında görünsün.
+- **Önerilen yapı:**
+  - Turnuvaya bağlı bir hakem listesi: ad soyad, isteğe bağlı telefon (yalnız yöneticiler görür) ve fotoğraf. Kurucu başkan kendi listesini yönetir.
+  - Maça üç alan: 1. hakem, 1. yardımcı, 2. yardımcı. 4. hakem isteğe bağlı.
+  - Yönetim menüsüne "Hakem Yönetimi" (ortak form tasarımıyla).
+  - Maç düzenleme formunda "Hakemler" bölümü: listeden seçim, listede yoksa "+ Yeni hakem".
+- **Gösterim:** Detay sekmesinin en altında "Maç Görevlileri" kartı. Hakem girilmemişse kart görünmez. Üst bant zaten dolu olduğu için oraya konmadı.
+- **Yük:** Orta (migration + yönetim ekranı + maç formu + detay kartı).
+
+## 16. VAR gol iptali: daha kısa yol
+_Eklendi: 2026-10-15_
+
+- **Şu an:** Maç olayı ekle → "VAR: Gol İptali" → gol seçimi → yeşil/kırmızı onay. Skor düzeltmesi ve "VAR: Gol iptal" bildirimi `20261020200000_var_goal_cancel.sql` tetikleyicisinde. Bu migration canlı DB'ye uygulanana kadar seçenek yalnız admin'e açık.
+- **Sonra:** Olay eklemek yerine doğrudan golün üzerinden:
+  - Maç detayında, yalnız admin ve turnuva sorumlusuna, gol satırında topun hemen yanında küçük yuvarlak "i" (bilgi) ikonu: "Gole 1 sn'den uzun basınca gol iptali yapılabilir".
+  - Gole 1 sn'den uzun basınca "VAR: Gol İptali" onay penceresi açılır (yeşil onayla / kırmızı iptal).
+
+## 17. Android ikon zemini (siyah köşeler) — KARARSIZ
+_Eklendi: 2026-10-15_
+
+- **Sorun:** Android uyarlanabilir ikonun zemini saydam (`design/app_icon_android_bg.png`), Android bunu siyah dolduruyor. Yuvarlatılmış kare kesen telefonlarda (Samsung, Pixel, Xiaomi) yuvarlak armanın köşelerinde siyah üçgenler kalıyor.
+- **Seçenekler (önizleme):** https://claude.ai/artifact/V1sLtEVR6om8exoMtLLT95
+  - Beyaz: açık duvar kâğıdında temiz, koyuda köşeler armadan çok dikkat çekiyor.
+  - Koyu yeşil #062319 (önerilen): iOS ikonu ve armanın iç zeminiyle aynı, iki platform tutarlı.
+  - Arma yeşili #0B5D41: alternatif, biraz kalabalık.
+- **Yapılacak (karar verilirse):** `tool/render_app_icons_test.dart` içinde zemin PNG'sini seçilen renkle doldur, `android/app/src/main/res/values/colors.xml` rengini eşle, `dart run flutter_launcher_icons`. Uygulama içi logo, açılış ekranı ve web ikonları değişmez. Yeni APK/AAB gerekir.
+- **Durum:** Yapılıp yapılmayacağına karar verilmedi.
+
+## 18. Sponsor reklam haberi (kampanya)
+- Sponsorlar kampanya duyurusu verebilsin; Haberler'de "REKLAM" etiketli haber olarak çıkar.
+- Örnek: "BMR Otomotiv'den %10 indirim. 1–31 Ekim tarihleri arasında INDIRIM10 koduyla gelen müşterilerimize %10 indirim uygulanacaktır."
+- Olası alanlar: sponsor (sponsorlar listesinden), başlık, metin, kampanya kodu (kopyala düğmesi), geçerlilik tarihleri (bitince otomatik kalkar), görsel.
+- Haber akışında normal haberlerden ayrışan görünüm (etiket + sponsor logosu); ana sayfa sponsor şeridine dokununca o sponsorun aktif kampanyası açılabilir.
+- Yetki: admin + kurucu başkan. Mağaza beyanlarında (reklam içeriği) güncelleme gerekebilir.
+
+## 19. Takımsız futbolcu profili (serbest oyuncu) + videolarım — DEĞERLENDİRMEDE
+_Eklendi: 2026-10-15_
+
+Hiçbir takımda kaydı olmayan kişi kendi futbolcu profilini oluşturabilsin, sonra YouTube/Instagram videolarını ekleyebilsin.
+
+- **Temel karar:** Ayrı "aday" tablosu değil, mevcut `players` kaydı. Takıma girince aynı profil devam eder (geçmiş, videolar kaybolmaz).
+- **Faz 1 – Serbest oyuncu kaydı:** Telefonla hesap → "Futbolcu profilimi oluştur". Alanlar: ad soyad, doğum tarihi (herkese yalnız yaş), boy, kilo, ayak, ana + yan mevkiler, il/ilçe, fotoğraf, kısa tanıtım, "Takım arıyorum" anahtarı.
+  - Mükerrer kayıt: telefon eşleşirse "Bu sen misin?" → profili sahiplenme; eşleşme yoksa sahiplenme talebi bölge sorumlusu onayına. İleride TC hash ile kesin tekillik.
+- **Faz 2 – Videolarım:** YouTube/Instagram/diğer linkler (maç medyasındaki link altyapısı; video yükleme/MP4 çekme yok). En fazla 10 video, sıralama, başlık, "öne çıkan".
+  - Apple şartı (kullanıcı içeriği): "Şikâyet et", admin gizleme, kullanım koşulları.
+- **Faz 3 – Keşif ve davet:** Takım yöneticisi/kurucu için "Serbest oyuncular" listesi (mevki, yaş, il filtresi) → "Takıma davet et" → futbolcu kabul → bölge sorumlusu onayı (kadro talebi akışı).
+- **Dikkat:** KVKK (boy/kilo için açık rıza + görünürlük: herkese açık / yalnız yöneticiler); Play Veri güvenliği, Apple etiketi, gizlilik sayfası güncellenmeli; 18 yaş altı ilk sürümde dışarıda (öneri); yeni tablo/kolonlar → Apple onayından sonra DB.
+- **Tahmini maliyet:** Faz 1 orta, Faz 2 düşük-orta, Faz 3 orta.
+- **Netleşecek:** Profil varsayılan görünürlüğü; 18 yaş altı; önce ekran önizlemesi (mockup) istenir mi.
+
+## 20. Instagram → Haberler: #ligmasasi etiketiyle seçmeli aktarım — YAPILACAK
+
+Bugün aktarım açıksa turnuvanın Instagram hesabındaki her yeni gönderi sorulmadan haber olarak yayınlanıyor. İstek: her gönderi uygulamada görünmesin.
+
+- Açıklamada `#ligmasasi` varsa (büyük/küçük harf ve İ/ı duyarsız) → haber hemen yayınlanır; etiket haber metninden çıkarılır.
+- Etiket yoksa → haber `is_published = false` kaydedilir; kurucu başkana bildirim, Bekleyen Onaylar'da yeni "Haber" filtresi: görsel + açıklama + tarih, "Yayınla" / "Haberlere alma".
+- Değişecek yer: `supabase/functions/_shared/instagram_sync.ts` (insert), onay ekranı (`admin_pending_actions_screen.dart`), bildirim tetikleyicisi.
+- Eski sürümler etkilenmez (yayınlanmamış haber kullanıcılara görünmez).
+- Maliyet: düşük-orta.

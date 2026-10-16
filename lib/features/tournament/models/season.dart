@@ -21,6 +21,7 @@ class Season {
     this.matchPeriodDuration = 25,
     this.numberOfPlayerChanges = 3,
     this.isDoubleRound = false,
+    this.trackGoalMinutes = true,
   });
 
   final String id;
@@ -46,6 +47,10 @@ class Season {
 
   /// Lig aşaması rövanşlı mı (her eşleşme iki kez, ev sahibi değişerek)?
   final bool isDoubleRound;
+
+  /// Gol/kart dakikası tutuluyor mu? Halısahada çoğunlukla false: dakika
+  /// alanı gizlenir, maç detayında golcüler takım altında listelenir.
+  final bool trackGoalMinutes;
 
   factory Season.fromMap(Map<String, dynamic> map) {
     dynamic v(String camel, String snake) => map[camel] ?? map[snake];
@@ -109,6 +114,10 @@ class Season {
         v('isDoubleRound', 'is_double_round'),
         fallback: false,
       ),
+      trackGoalMinutes: boolFrom(
+        v('trackGoalMinutes', 'track_goal_minutes'),
+        fallback: true,
+      ),
       transferStartDate: _readDate(
         v('transferStartDate', 'transfer_start_date'),
       ),
@@ -154,6 +163,7 @@ class Season {
       'match_period_duration': matchPeriodDuration,
       'number_of_player_changes': numberOfPlayerChanges,
       'is_double_round': isDoubleRound,
+      'track_goal_minutes': trackGoalMinutes,
       'league_id': leagueId.trim().isEmpty ? null : leagueId.trim(),
     };
   }
@@ -189,6 +199,7 @@ class Season {
         'numberOfGroups': numberOfGroups,
         'numberOfPlayerChanges': numberOfPlayerChanges,
         'isDoubleRound': isDoubleRound,
+        'trackGoalMinutes': trackGoalMinutes,
         'teamsPerGroup': teamsPerGroup,
       };
     }

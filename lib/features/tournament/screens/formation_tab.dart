@@ -4,6 +4,7 @@ import 'package:football_tournament/core/widgets/pitch_token_style.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../match/models/match.dart';
+import '../../../core/utils/team_name.dart';
 import '../../../core/services/service_locator.dart';
 import '../../match/services/supabase/supabase_match_service.dart';
 
@@ -128,6 +129,61 @@ List<_PitchPlayer> _arrangeLine(List<_PitchPlayer> line) {
   return [...wide.take(half), ...center, ...wide.skip(half)];
 }
 
+const _classic10 = [
+  '4-4-2',
+  '4-3-3',
+  '4-2-3-1',
+  '4-5-1',
+  '4-1-4-1',
+  '3-5-2',
+  '3-4-3',
+  '5-3-2',
+  '5-4-1',
+];
+
+/// Saha oyuncusu sayısına uygun diziliş seçenekleri. 11'li maçta yalnız
+/// klasik dizilişler; küçük sahada üç hatlı tüm kombinasyonlar.
+List<String> _formationOptions(int outfield) {
+  if (outfield == 10) return [..._classic10];
+  final out = <String>[];
+  if (outfield >= 3) {
+    for (var d = 1; d <= outfield - 2; d++) {
+      for (var m = 1; m <= outfield - d - 1; m++) {
+        out.add('$d-$m-${outfield - d - m}');
+      }
+    }
+  }
+  return out;
+}
+
+/// Mevkilerden çıkan diziliş (ör. 2-1-8) seçeneklerde yoksa ona en yakın
+/// geçerli dizilişi döner: defans, orta saha toplamı ve hücum farkı en az
+/// olan; eşitlikte listede önce gelen (daha yaygın) seçilir.
+String _snapFormation(String formation, int outfield) {
+  final options = _formationOptions(outfield);
+  if (options.isEmpty || options.contains(formation)) return formation;
+  (int, int, int) shape(String f) {
+    final c = _parseFormation(f);
+    if (c.isEmpty) return (0, 0, 0);
+    if (c.length == 1) return (c.first, 0, 0);
+    final mid = c.sublist(1, c.length - 1).fold<int>(0, (a, b) => a + b);
+    return (c.first, mid, c.last);
+  }
+
+  final (d, m, a) = shape(formation);
+  var best = options.first;
+  var bestDist = 1 << 30;
+  for (final o in options) {
+    final (od, om, oa) = shape(o);
+    final dist = (od - d).abs() + (om - m).abs() + (oa - a).abs();
+    if (dist < bestDist) {
+      best = o;
+      bestDist = dist;
+    }
+  }
+  return best;
+}
+
 class _Layout {
   const _Layout({
     required this.lines,
@@ -198,17 +254,21 @@ _Layout? _computeLayout(
     }
     natural[0].add(gk);
   }
-  final autoFormation = natural
-      .skip(1)
-      .map((l) => l.length)
-      .where((c) => c > 0)
-      .join('-');
   final outfieldCount = starters.length - 1;
+  // Mevkiler gerçek dışı bir diziliş verirse (ör. 8 forvet → 2-1-8) en
+  // yakın geçerli dizilişe yuvarlanır.
+  final autoFormation = _snapFormation(
+    natural.skip(1).map((l) => l.length).where((c) => c > 0).join('-'),
+    outfieldCount,
+  );
 
   var f = (formation ?? '').trim().isEmpty ? autoFormation : formation!.trim();
   var counts = _parseFormation(f);
-  if (counts.fold<int>(0, (a, b) => a + b) != outfieldCount) {
-    f = autoFormation; // kadro değiştiyse kayıtlı diziliş geçersiz
+  final options = _formationOptions(outfieldCount);
+  if (counts.fold<int>(0, (a, b) => a + b) != outfieldCount ||
+      (options.isNotEmpty && !options.contains(f))) {
+    // Kadro değiştiyse ya da kayıtlı diziliş geçersizse otomatik olan.
+    f = autoFormation;
     counts = _parseFormation(f);
   }
 
@@ -293,22 +353,33 @@ class FormationTab extends StatefulWidget {
     required this.awayName,
     required this.canEditHome,
     required this.canEditAway,
+    this.canShareHome = false,
+    this.canShareAway = false,
     this.initialTeam = 0,
     this.onShare,
+    this.homeColor,
+    this.awayColor,
   });
 
-  /// Diziliş afişini paylaşır (takım kimliğiyle); düzenleme yetkisi olana
-  /// görünür.
+  /// Diziliş afişini paylaşır (takım kimliğiyle); [canShareHome] /
+  /// [canShareAway] olana görünür (maç başladıktan sonra da).
   final ValueChanged<String>? onShare;
 
   final MatchModel match;
   final String homeName;
   final String awayName;
 
+  /// Maç başlığındaki takım renkleri (çakışma çözülmüş); seçili takım
+  /// düğmesi bu renkle boyanır. Yoksa yeşil.
+  final Color? homeColor;
+  final Color? awayColor;
+
   /// Takım başına düzenleme yetkisi: sorumlu yalnızca kendi takımını,
   /// yöneticiler ikisini de düzenler.
   final bool canEditHome;
   final bool canEditAway;
+  final bool canShareHome;
+  final bool canShareAway;
 
   /// Açılışta seçili takım (0: ev sahibi, 1: deplasman); sorumlu kendi
   /// takımıyla açar.
@@ -355,6 +426,8 @@ class _FormationTabState extends State<FormationTab>
   late int _selected = widget.initialTeam; // 0: ev sahibi, 1: deplasman
 
   bool get _canEdit => _selected == 0 ? widget.canEditHome : widget.canEditAway;
+  bool get _canShare =>
+      _canEdit || (_selected == 0 ? widget.canShareHome : widget.canShareAway);
 
   /// Kullanıcının bu oturumda seçtiği dizilişler (teamIndex -> "4-4-2").
   final Map<int, String> _chosen = {};
@@ -442,31 +515,10 @@ class _FormationTabState extends State<FormationTab>
     return s.isEmpty ? null : s;
   }
 
-  static const _classic10 = [
-    '4-4-2',
-    '4-3-3',
-    '4-2-3-1',
-    '4-5-1',
-    '4-1-4-1',
-    '3-5-2',
-    '3-4-3',
-    '5-3-2',
-    '5-4-1',
-  ];
-
   /// Saha oyuncusu sayısına uygun diziliş seçenekleri.
   static List<String> _optionsFor(int outfield, String auto) {
-    final out = <String>[];
-    if (outfield == 10) {
-      out.addAll(_classic10);
-    } else if (outfield >= 3) {
-      for (var d = 1; d <= outfield - 2; d++) {
-        for (var m = 1; m <= outfield - d - 1; m++) {
-          out.add('$d-$m-${outfield - d - m}');
-        }
-      }
-    }
-    if (auto.isNotEmpty && !out.contains(auto)) out.insert(0, auto);
+    final out = _formationOptions(outfield);
+    if (out.isEmpty && auto.isNotEmpty) out.add(auto);
     return out;
   }
 
@@ -487,8 +539,10 @@ class _FormationTabState extends State<FormationTab>
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
       children: [
         _TeamSwitch(
-          homeName: widget.homeName,
-          awayName: widget.awayName,
+          homeName: shortTeamName(widget.homeName),
+          awayName: shortTeamName(widget.awayName),
+          homeColor: widget.homeColor ?? _accent,
+          awayColor: widget.awayColor ?? _accent,
           selected: _selected,
           onChanged: (v) => setState(() => _selected = v),
         ),
@@ -577,7 +631,7 @@ class _FormationTabState extends State<FormationTab>
                         // Gösterim tercihi diziliş afişine de uygulanır.
                         // Kaydet butonu da varsa yer açmak için yalnız ikon.
                         PitchTokenStyleToggle(compact: _canEdit),
-                        if (_canEdit && widget.onShare != null)
+                        if (_canShare && widget.onShare != null)
                           IconButton(
                             tooltip: 'Diziliş afişini paylaş',
                             visualDensity: VisualDensity.compact,
@@ -772,12 +826,16 @@ class _TeamSwitch extends StatelessWidget {
   const _TeamSwitch({
     required this.homeName,
     required this.awayName,
+    required this.homeColor,
+    required this.awayColor,
     required this.selected,
     required this.onChanged,
   });
 
   final String homeName;
   final String awayName;
+  final Color homeColor;
+  final Color awayColor;
   final int selected;
   final ValueChanged<int> onChanged;
 
@@ -785,27 +843,54 @@ class _TeamSwitch extends StatelessWidget {
   Widget build(BuildContext context) {
     Widget item(int i, String label) {
       final on = selected == i;
+      final color = i == 0 ? homeColor : awayColor;
+      // Açık renkli formada yazı koyu olsun.
+      final light = color.computeLuminance() > 0.6;
       return Expanded(
         child: GestureDetector(
           onTap: () => onChanged(i),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
             // Kadrolar sekmesindeki takım başlıklarıyla aynı yükseklik.
-            padding: const EdgeInsets.symmetric(vertical: 6),
+            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
             decoration: BoxDecoration(
-              color: on ? _accent : Colors.transparent,
+              color: on ? color : Colors.transparent,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: on ? Colors.white : Colors.white60,
-                fontWeight: FontWeight.w800,
-                fontSize: 13,
-              ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Seçili değilken takım rengi küçük noktada.
+                if (!on) ...[
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white24),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                ],
+                // Uzun ad "…" ile kesilmez; sığmazsa küçülür.
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      style: TextStyle(
+                        color: on
+                            ? (light ? const Color(0xFF0F172A) : Colors.white)
+                            : Colors.white60,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),

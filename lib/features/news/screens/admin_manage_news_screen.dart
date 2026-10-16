@@ -773,7 +773,11 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  '${doc.autoKind != null ? 'Otomatik · ' : ''}$createdAtText$likes',
+                  '${doc.isInstagram
+                      ? 'Instagram · '
+                      : doc.autoKind != null
+                      ? 'Otomatik · '
+                      : ''}$createdAtText$likes',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -803,7 +807,7 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
                   color: isPublished ? draft : published,
                   onTap: () => _toggle(doc.id, !isPublished),
                 ),
-                // Otomatik sonuç haberi maçtan yeniden yazılır; düzenlenmez.
+                // Otomatik haber maçtan / Instagram'dan gelir; düzenlenmez.
                 if (doc.autoKind == null) ...[
                   const SizedBox(width: 6),
                   AdminSmallAction(

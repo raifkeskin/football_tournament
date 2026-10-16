@@ -84,7 +84,7 @@ class NotificationRouter {
   static Future<void> _openNews(BuildContext context, String id) async {
     final row = await Supabase.instance.client
         .from('news')
-        .select('season_id, seasons(league_id)')
+        .select('season_id, region_id, seasons(league_id)')
         .eq('id', id)
         .maybeSingle();
     final leagueId = ((row?['seasons'] as Map?)?['league_id'] ?? '').toString();
@@ -94,6 +94,7 @@ class NotificationRouter {
       context,
       leagueId: leagueId,
       seasonId: row?['season_id']?.toString(),
+      regionId: row?['region_id']?.toString(),
       initialTab: TournamentHubTab.news,
     );
   }
