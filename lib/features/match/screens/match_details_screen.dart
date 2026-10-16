@@ -38,6 +38,8 @@ import 'package:football_tournament/core/widgets/picked_image.dart';
 import '../utils/match_clock.dart';
 import '../services/match_highlight_service.dart';
 import '../widgets/match_highlights_section.dart';
+import '../widgets/youtube_find_sheet.dart';
+import '../services/youtube_autolink_service.dart';
 import '../../team/screens/team_squad_screen.dart';
 import 'package:football_tournament/core/widgets/admin_page.dart';
 import 'package:football_tournament/core/widgets/admin_form.dart';
@@ -470,6 +472,12 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
       if (mounted) setState(() {});
     });
     _matchStream = _matchService.watchMatch(widget.match.id);
+    YoutubeAutolinkService()
+        .isEnabled(widget.match.leagueId)
+        .then((on) {
+          if (mounted && on) setState(() => _youtubeLive = true);
+        })
+        .catchError((_) {});
     _teamsStream = _teamService.watchAllTeams();
     _pitchesStream = _leagueService.watchPitches();
     _prefetchLineups(widget.match);
@@ -706,6 +714,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     }
   }
 
+  /// Turnuvada "YouTube canlı yayın" açık mı (menüde "Yayını Bul" için).
+  bool _youtubeLive = false;
+
   /// Medya sekmesindeki menüde "Canlı Yayını Kaldır" için.
   late final Stream<List<MatchMediaModel>> _fabMediaStream = ServiceLocator
       .matchService
@@ -901,6 +912,18 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                 icon: Icons.perm_media_rounded,
                 onTap: () => _openHighlightMediaAdder(match, _triggerRefresh),
               ),
+              if (links.isEmpty && _youtubeLive)
+                _SpeedDialAction(
+                  label: 'YouTube\'da Yayını Bul',
+                  icon: Icons.travel_explore_rounded,
+                  onTap: () => showYoutubeFindSheet(
+                    context: context,
+                    matchId: match.id,
+                    onAttached: _triggerRefresh,
+                    onManual: () =>
+                        _openHighlightMediaAdder(match, _triggerRefresh),
+                  ),
+                ),
               if (links.isNotEmpty)
                 _SpeedDialAction(
                   label: 'Canlı Yayını Kaldır',
@@ -1029,7 +1052,11 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                     ),
                 ],
               ),
-              floatingActionButton: !isSuperAdmin
+              // Bölge sorumlusu yalnızca Medya sekmesinde menüyü görür.
+              floatingActionButton:
+                  !(isSuperAdmin ||
+                      (_tabController.index == 2 &&
+                          session.regionsInSeason(m.seasonId).isNotEmpty))
                   ? null
                   : _buildTabFab(
                       match: m,
