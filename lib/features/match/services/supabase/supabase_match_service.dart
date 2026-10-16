@@ -345,6 +345,9 @@ class SupabaseMatchService implements IMatchService {
       // açılmaz (arka plandan dönüşte de yeniden okunmaz).
       // Önbellek yoksa olaylar durumla aynı anda istenir (tek tur).
       final early = cached == null ? _fetchInlineMatchEvents(id) : null;
+      // Durum beklenirken bu istek hata verirse (ör. 504) "yakalanmamış"
+      // sayılmasın; hata aşağıdaki await ile akışa iletilir, akış yeniden dener.
+      early?.ignore();
       final finished = await _matchStatus(id) == 'finished';
       if (early != null) {
         yield await early;
@@ -1091,6 +1094,9 @@ class SupabaseMatchService implements IMatchService {
     // açılmaz (arka plandan dönüşte de yeniden okunmaz).
     // Önbellek yoksa esame durumla aynı anda istenir (tek tur).
     final early = cached == null ? _fetchMatchRosters(matchId) : null;
+    // Durum beklenirken bu istek hata verirse (ör. 504) "yakalanmamış"
+    // sayılmasın; hata aşağıdaki await ile akışa iletilir, akış yeniden dener.
+    early?.ignore();
     final started = _startedStatuses.contains(await _matchStatus(matchId));
     if (early != null) {
       yield await early;
