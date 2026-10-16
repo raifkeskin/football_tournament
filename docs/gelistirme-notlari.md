@@ -205,3 +205,13 @@ Hiçbir takımda kaydı olmayan kişi kendi futbolcu profilini oluşturabilsin, 
 - **Dikkat:** KVKK (boy/kilo için açık rıza + görünürlük: herkese açık / yalnız yöneticiler); Play Veri güvenliği, Apple etiketi, gizlilik sayfası güncellenmeli; 18 yaş altı ilk sürümde dışarıda (öneri); yeni tablo/kolonlar → Apple onayından sonra DB.
 - **Tahmini maliyet:** Faz 1 orta, Faz 2 düşük-orta, Faz 3 orta.
 - **Netleşecek:** Profil varsayılan görünürlüğü; 18 yaş altı; önce ekran önizlemesi (mockup) istenir mi.
+
+## 20. Instagram → Haberler: #ligmasasi etiketiyle seçmeli aktarım — YAPILACAK
+
+Bugün aktarım açıksa turnuvanın Instagram hesabındaki her yeni gönderi sorulmadan haber olarak yayınlanıyor. İstek: her gönderi uygulamada görünmesin.
+
+- Açıklamada `#ligmasasi` varsa (büyük/küçük harf ve İ/ı duyarsız) → haber hemen yayınlanır; etiket haber metninden çıkarılır.
+- Etiket yoksa → haber `is_published = false` kaydedilir; kurucu başkana bildirim, Bekleyen Onaylar'da yeni "Haber" filtresi: görsel + açıklama + tarih, "Yayınla" / "Haberlere alma".
+- Değişecek yer: `supabase/functions/_shared/instagram_sync.ts` (insert), onay ekranı (`admin_pending_actions_screen.dart`), bildirim tetikleyicisi.
+- Eski sürümler etkilenmez (yayınlanmamış haber kullanıcılara görünmez).
+- Maliyet: düşük-orta.
