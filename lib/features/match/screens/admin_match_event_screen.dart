@@ -385,14 +385,10 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                                 if ((o.value != 'man_of_the_match' ||
                                         widget.match.status ==
                                             MatchStatus.finished) &&
-                                    // VAR yalnız başlamış maçta. Skor ve
-                                    // bildirim tetikleyicisi (20261020200000)
-                                    // canlı DB'ye uygulanana kadar yalnız
-                                    // admin.
+                                    // VAR yalnız başlamış maçta.
                                     (o.value != 'var_cancel' ||
                                         widget.match.status !=
-                                                MatchStatus.notStarted &&
-                                            session.isAdmin))
+                                            MatchStatus.notStarted))
                                   o,
                             ],
                           );
