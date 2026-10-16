@@ -1285,87 +1285,12 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     return age < 0 ? null : age;
   }
 
-  Future<void> _openPlayerCard(PlayerModel rosterPlayer) async {
+  Future<void> _openPlayerCard(PlayerModel rosterPlayer) {
     final phone = (rosterPlayer.phone ?? '').trim();
-    final cachedPhoto = phone.isEmpty
-        ? ''
-        : (_playerPhotoUrlByPhone[phone] ?? '').trim();
-
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: true,
-      builder: (context) {
-        return Dialog(
-          insetPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 16,
-          ),
-          backgroundColor: Colors.transparent,
-          child: FutureBuilder<PlayerModel?>(
-            future: phone.isEmpty
-                ? Future.value(null)
-                : _teamService.getPlayerByPhoneOnce(phone),
-            builder: (context, snap) {
-              final profile = snap.data;
-              final resolvedPhotoUrl =
-                  ((profile?.photoUrl ?? '').trim().isNotEmpty)
-                  ? (profile!.photoUrl ?? '').trim()
-                  : cachedPhoto;
-              final resolvedName = rosterPlayer.name.trim().isNotEmpty
-                  ? rosterPlayer.name.trim()
-                  : (profile?.name ?? '').trim();
-              final resolvedBirthDate =
-                  (profile?.birthDate ?? rosterPlayer.birthDate ?? '').trim();
-              final mainPos =
-                  (profile?.mainPosition ?? rosterPlayer.mainPosition ?? '')
-                      .trim();
-              final subPos = (profile?.position ?? rosterPlayer.position ?? '')
-                  .trim();
-
-              String displayPos() {
-                final sub = subPos;
-                if (sub.isNotEmpty) {
-                  switch (sub) {
-                    case 'GK':
-                      return 'Kaleci';
-                    case 'DEF':
-                      return 'Defans';
-                    case 'ORT':
-                      return 'Orta Saha';
-                    case 'FOR':
-                      return 'Forvet';
-                  }
-                  return sub;
-                }
-                if (mainPos.isNotEmpty) return mainPos;
-                return '-';
-              }
-
-              final number = (rosterPlayer.number ?? profile?.number ?? '')
-                  .toString()
-                  .trim();
-              final initialSeasonId =
-                  (_selectedTournamentId ?? widget.tournamentId)
-                      .toString()
-                      .trim();
-
-              return PlayerCard(
-                playerPhone: phone.isEmpty ? rosterPlayer.id : phone,
-                name: resolvedName,
-                number: number,
-                photoUrl: resolvedPhotoUrl,
-                position: displayPos(),
-                mainPosition: mainPos,
-                birthDate: resolvedBirthDate,
-                height: profile?.height ?? rosterPlayer.height,
-                weight: profile?.weight ?? rosterPlayer.weight,
-                seasons: _teamTournaments,
-                initialSeasonId: initialSeasonId,
-              );
-            },
-          ),
-        );
-      },
+    return showPlayerCard(
+      context,
+      playerKey: phone.isEmpty ? rosterPlayer.id : phone,
+      number: (rosterPlayer.number ?? '').trim(),
     );
   }
 
@@ -3354,38 +3279,13 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
     );
   }
 
-  Future<void> _openPlayerCard(PlayerModel p) async {
+  Future<void> _openPlayerCard(PlayerModel p) {
     final phoneOrId = ((p.phone ?? '').trim().isNotEmpty ? p.phone! : p.id)
         .trim();
-    final h = MediaQuery.of(context).size.height * 0.95;
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      constraints: BoxConstraints(maxHeight: h),
-      showDragHandle: true,
-      clipBehavior: Clip.antiAlias,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) {
-        return SizedBox(
-          height: h,
-          child: PlayerCard(
-            playerPhone: phoneOrId,
-            name: p.name,
-            number: (p.number ?? '').trim(),
-            photoUrl: (p.photoUrl ?? '').trim(),
-            position: (p.position ?? p.mainPosition ?? '').trim(),
-            mainPosition: (p.mainPosition ?? '').trim(),
-            birthDate: birthDateDbToUi(p.birthDate),
-            height: p.height,
-            weight: p.weight,
-            seasons: const <League>[],
-            initialSeasonId: '',
-          ),
-        );
-      },
+    return showPlayerCard(
+      context,
+      playerKey: phoneOrId,
+      number: (p.number ?? '').trim(),
     );
   }
 

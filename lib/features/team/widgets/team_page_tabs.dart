@@ -20,11 +20,15 @@ class TeamPageTabBar extends StatelessWidget {
     required this.index,
     required this.onChanged,
     this.labels = const ['Kadro', 'Fikstür', 'İstatistik'],
+    this.indicatorColor = _accent,
   });
 
   final int index;
   final ValueChanged<int> onChanged;
   final List<String> labels;
+
+  /// Seçili sekmenin alt çizgisi (oyuncu kartında turnuva rengi).
+  final Color indicatorColor;
 
   @override
   Widget build(BuildContext context) {
@@ -45,7 +49,7 @@ class TeamPageTabBar extends StatelessWidget {
                   decoration: BoxDecoration(
                     border: Border(
                       bottom: BorderSide(
-                        color: i == index ? _accent : Colors.transparent,
+                        color: i == index ? indicatorColor : Colors.transparent,
                         width: 3,
                       ),
                     ),
