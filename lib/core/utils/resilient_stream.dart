@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -8,6 +9,15 @@ import 'stream_scope.dart';
 /// Arka planda bu süre kalınca canlı bağlantı kapatılır (kısa uygulama
 /// geçişlerinde bağlantı kurup kapatmakla uğraşılmasın).
 const _backgroundGrace = Duration(seconds: 30);
+
+/// Art arda kopmalarda bekleme en fazla bu kadar uzar.
+const _maxRetryDelay = Duration(seconds: 30);
+
+/// Bu süreden uzun ayakta kalan bağlantı sağlıklı sayılır; sonraki kopmada
+/// bekleme baştan başlar.
+const _healthyAfter = Duration(seconds: 60);
+
+final _random = Random();
 
 /// Supabase realtime akışlarını kopmalara karşı dayanıklı hale getirir.
 ///
@@ -27,6 +37,11 @@ const _backgroundGrace = Duration(seconds: 30);
 /// Sorgu hatası (PostgrestException: ör. kaldırılmış sütun, yetki) bağlantı
 /// kopması değildir; henüz veri yoksa ekrana iletilir ki "yükleniyor"da
 /// sonsuza dek takılmasın. Yeniden deneme daha seyrek sürer.
+///
+/// Kopmadan sonraki bekleme her denemede ikiye katlanır (en fazla
+/// [_maxRetryDelay]) ve ±%50 rastgele kaydırılır: maç günü yüzlerce kişi
+/// aynı anda koptuğunda hepsi aynı saniyede geri bağlanmaya çalışmasın
+/// (2026-10-17 yük testi: sabit 2 sn'lik deneme kanal katılımını tıkıyordu).
 Stream<T> resilientStream<T>(
   Stream<T> Function() create, {
   Duration retryDelay = const Duration(seconds: 2),
@@ -41,6 +56,17 @@ Stream<T> resilientStream<T>(
   Timer? sleep;
   late T last;
   var hasLast = false;
+  var failures = 0;
+  DateTime? connectedAt;
+
+  Duration nextDelay(Duration base) {
+    final ms = min(
+      base.inMilliseconds * (1 << min(failures, 5)),
+      _maxRetryDelay.inMilliseconds,
+    );
+    failures++;
+    return Duration(milliseconds: (ms * (0.5 + _random.nextDouble())).round());
+  }
 
   void closeConnection() {
     scope?.cancel();
@@ -53,6 +79,7 @@ Stream<T> resilientStream<T>(
     retry = null;
     if (listeners.isEmpty || !AppActivity.foreground.value) return;
     final s = scope = StreamScope();
+    connectedAt = DateTime.now();
     sub = s.run(
       () => create().listen(
         (value) {
@@ -64,6 +91,11 @@ Stream<T> resilientStream<T>(
         },
         onError: (Object e, StackTrace st) {
           if (scope != s) return; // eski bağlantının geç gelen hatası
+          final since = connectedAt;
+          if (since != null &&
+              DateTime.now().difference(since) > _healthyAfter) {
+            failures = 0;
+          }
           closeConnection();
           if (listeners.isEmpty) return;
           final queryError = e is PostgrestException;
@@ -74,7 +106,7 @@ Stream<T> resilientStream<T>(
           }
           retry?.cancel();
           retry = Timer(
-            queryError ? queryErrorRetryDelay : retryDelay,
+            nextDelay(queryError ? queryErrorRetryDelay : retryDelay),
             connect,
           );
         },
@@ -114,6 +146,7 @@ Stream<T> resilientStream<T>(
         sleep = null;
         disconnect();
         hasLast = false;
+        failures = 0;
       }
     }
 
