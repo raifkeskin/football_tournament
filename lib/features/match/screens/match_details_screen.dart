@@ -55,6 +55,7 @@ import '../../../core/widgets/youtube_player_page.dart'
         youtubeVideoId,
         YoutubePlayerFrame;
 import '../utils/season_match_settings.dart';
+import '../../team/screens/groups_screen.dart' show StandingsView;
 
 // --- YARDIMCI WIDGETLAR ---
 
@@ -448,6 +449,11 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
   late final TabController _tabController;
   ModalRoute<dynamic>? _bandRoute;
 
+  /// Gruplu maçta 5. sekme: canlı puan durumu.
+  late final bool _hasStandings = (widget.match.groupId ?? '')
+      .trim()
+      .isNotEmpty;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -464,7 +470,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
   void initState() {
     super.initState();
     _tabController = TabController(
-      length: 4,
+      length: _hasStandings ? 5 : 4,
       vsync: this,
       initialIndex: widget.initialTabIndex,
     );
@@ -1297,7 +1303,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                             // Tam genişlikte sekme satırı: başlığın altında
                             // ayrı bir şerit, seçili sekmenin altı çizili.
                             Container(
-                              height: 46,
+                              height: 50,
                               margin: EdgeInsets.only(
                                 top: compactHeader ? 4 : 10,
                               ),
@@ -1326,18 +1332,40 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                 labelStyle: const TextStyle(
                                   fontFamily: 'Batangas',
                                   fontWeight: FontWeight.w800,
-                                  fontSize: 13.5,
+                                  fontSize: 11.5,
                                 ),
                                 unselectedLabelStyle: const TextStyle(
                                   fontFamily: 'Batangas',
                                   fontWeight: FontWeight.w600,
-                                  fontSize: 13.5,
+                                  fontSize: 11.5,
                                 ),
-                                tabs: const [
-                                  Tab(text: 'Detay'),
-                                  Tab(text: 'Kadrolar'),
-                                  Tab(text: 'Medya'),
-                                  Tab(text: 'Diziliş'),
+                                tabs: [
+                                  const _IconTab(
+                                    icon: Icons.schedule_rounded,
+                                    label: 'Detay',
+                                  ),
+                                  const _IconTab(
+                                    icon: Icons.groups_rounded,
+                                    label: 'Kadro',
+                                  ),
+                                  const _IconTab(
+                                    icon: Icons.play_circle_outline_rounded,
+                                    label: 'Medya',
+                                  ),
+                                  const _IconTab(
+                                    icon: Icons.sports_soccer_rounded,
+                                    label: 'Diziliş',
+                                  ),
+                                  if (_hasStandings)
+                                    _IconTab(
+                                      icon: Icons.format_list_numbered_rounded,
+                                      label: 'Puan',
+                                      // Maç oynanırken kırmızı nokta yanıp
+                                      // söner.
+                                      live:
+                                          m.status == MatchStatus.live ||
+                                          m.status == MatchStatus.halftime,
+                                    ),
                                 ],
                               ),
                             ),
@@ -1398,6 +1426,17 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                           ? 1
                                           : 0,
                                     ),
+                                    if (_hasStandings)
+                                      StandingsView(
+                                        leagueId: m.leagueId,
+                                        seasonId: m.seasonId,
+                                        groupId: m.groupId ?? '',
+                                        includeLive: true,
+                                        highlightTeamIds: {
+                                          m.homeTeamId,
+                                          m.awayTeamId,
+                                        },
+                                      ),
                                   ],
                                 ),
                               ),
@@ -5983,4 +6022,67 @@ Future<void> shareLineupPoster(
         ? LineupListPoster(data: data)
         : LineupPitchPoster(data: data),
   );
+}
+
+/// Sekme: üstte ikon, altında kısa ad; [live] ise ikonun köşesinde yanıp
+/// sönen kırmızı nokta.
+class _IconTab extends StatelessWidget {
+  const _IconTab({required this.icon, required this.label, this.live = false});
+
+  final IconData icon;
+  final String label;
+  final bool live;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tab(
+      height: 50,
+      iconMargin: const EdgeInsets.only(bottom: 2),
+      icon: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Icon(icon, size: 19),
+          if (live) const Positioned(top: -2, right: -6, child: _LiveDot()),
+        ],
+      ),
+      text: label,
+    );
+  }
+}
+
+class _LiveDot extends StatefulWidget {
+  const _LiveDot();
+
+  @override
+  State<_LiveDot> createState() => _LiveDotState();
+}
+
+class _LiveDotState extends State<_LiveDot>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _blink = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1200),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _blink.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: Tween<double>(begin: 0.25, end: 1).animate(_blink),
+      child: Container(
+        width: 8,
+        height: 8,
+        decoration: BoxDecoration(
+          color: const Color(0xFFEF4444),
+          shape: BoxShape.circle,
+          border: Border.all(color: const Color(0xFF111A2E), width: 1.5),
+        ),
+      ),
+    );
+  }
 }

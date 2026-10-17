@@ -23,11 +23,20 @@ class StandingsView extends StatefulWidget {
     required this.leagueId,
     required this.seasonId,
     required this.groupId,
+    this.includeLive = false,
+    this.highlightTeamIds = const {},
   });
 
   final String leagueId;
   final String seasonId;
   final String groupId;
+
+  /// Oynanmakta olan maçlar o anki skorla sayılır; sıra değişimi okla
+  /// gösterilir (maç detayındaki canlı puan durumu).
+  final bool includeLive;
+
+  /// Vurgulanan takımlar (ör. açık olan maçın iki takımı).
+  final Set<String> highlightTeamIds;
 
   @override
   State<StandingsView> createState() => _StandingsViewState();
@@ -63,6 +72,8 @@ class _StandingsViewState extends State<StandingsView> {
               groupId: widget.groupId,
               groupName: group?.name ?? '',
               fetchGroupId: null,
+              includeLive: widget.includeLive,
+              highlightTeamIds: widget.highlightTeamIds,
             ),
           ],
         );
@@ -154,6 +165,8 @@ class _GroupStandingsTable extends StatefulWidget {
   final String groupId;
   final String groupName;
   final String? fetchGroupId;
+  final bool includeLive;
+  final Set<String> highlightTeamIds;
 
   const _GroupStandingsTable({
     super.key,
@@ -162,6 +175,8 @@ class _GroupStandingsTable extends StatefulWidget {
     required this.groupId,
     required this.groupName,
     required this.fetchGroupId,
+    this.includeLive = false,
+    this.highlightTeamIds = const {},
   });
 
   @override
@@ -295,7 +310,34 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
                 groupName: widget.groupName,
                 seasonMatches: seasonMatches,
                 allTeams: teamsSnapshot.data ?? const <Team>[],
+                includeLive: widget.includeLive,
               );
+
+              // Canlı modda gruptaki oynanan maçlar; varsa maç öncesi
+              // sıraya göre değişim (▲/▼) hesaplanır.
+              final liveInGroup =
+                  widget.includeLive &&
+                  seasonMatches.any(
+                    (m) =>
+                        isLiveMatchRow(m) &&
+                        ((m['group_id'] ?? '').toString().trim() ==
+                                widget.groupId ||
+                            (m['group_id'] ?? '').toString().trim() ==
+                                widget.groupName.trim()),
+                  );
+              final rankBefore = <String, int>{};
+              if (liveInGroup) {
+                final before = computeGroupStandings(
+                  leagueId: widget.leagueId,
+                  groupId: widget.groupId,
+                  groupName: widget.groupName,
+                  seasonMatches: seasonMatches,
+                  allTeams: teamsSnapshot.data ?? const <Team>[],
+                );
+                for (var i = 0; i < before.length; i++) {
+                  rankBefore[before[i].teamId] = i;
+                }
+              }
 
               if (rows.isEmpty) {
                 return Padding(
@@ -365,6 +407,10 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
                 index: i,
                 entry: rows[i],
                 zone: zoneAt(i),
+                highlight: widget.highlightTeamIds.contains(rows[i].teamId),
+                rankDelta: rankBefore.containsKey(rows[i].teamId)
+                    ? rankBefore[rows[i].teamId]! - i
+                    : 0,
                 onTap: () {
                   Navigator.push(
                     context,
@@ -473,12 +519,13 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
               final ifNow = format == null
                   ? null
                   : _ifNowPairs(format, rows, _format?.doubleRound ?? false);
-              if (ifNow == null) return table;
+              if (ifNow == null && !liveInGroup) return table;
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  if (liveInGroup) const _LiveCaption(),
                   table,
-                  _IfNowCard(lines: ifNow),
+                  if (ifNow != null) _IfNowCard(lines: ifNow),
                 ],
               );
             },
@@ -643,6 +690,55 @@ List<({String cup, Color color, String pairs})>? _ifNowPairs(
   return out.isEmpty ? null : out;
 }
 
+/// Canlı puan durumunun üstündeki "● CANLI" yazısı (yanıp söner).
+class _LiveCaption extends StatefulWidget {
+  const _LiveCaption();
+
+  @override
+  State<_LiveCaption> createState() => _LiveCaptionState();
+}
+
+class _LiveCaptionState extends State<_LiveCaption>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _blink = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1200),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _blink.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const red = Color(0xFFEF4444);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          FadeTransition(
+            opacity: Tween<double>(begin: 0.25, end: 1).animate(_blink),
+            child: const Icon(Icons.circle, size: 8, color: red),
+          ),
+          const SizedBox(width: 6),
+          const Text(
+            'CANLI',
+            style: TextStyle(
+              color: red,
+              fontWeight: FontWeight.w800,
+              fontSize: 11.5,
+              letterSpacing: 1.2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _IfNowCard extends StatelessWidget {
   const _IfNowCard({required this.lines});
 
@@ -772,10 +868,18 @@ class _StandingsRow extends StatelessWidget {
     required this.entry,
     required this.zone,
     required this.onTap,
+    this.highlight = false,
+    this.rankDelta = 0,
   });
 
   final int index;
   final StandingEntry entry;
+
+  /// Satır vurgulu (açık olan maçın takımı).
+  final bool highlight;
+
+  /// Maç öncesine göre sıra değişimi: + yukarı, − aşağı.
+  final int rankDelta;
 
   /// Sıranın bölgesi (kupa / üst tur / klasman / lige veda); yoksa null.
   /// [filled]: sıra dairesi dolu (ilk bölge), değilse çerçeveli.
@@ -817,7 +921,9 @@ class _StandingsRow extends StatelessWidget {
     final avText = av > 0 ? '+$av' : '$av';
     final avColor = av > 0 ? _kAccent : (av < 0 ? negative : _kMidText);
 
-    final rowColor = isLeader
+    final rowColor = highlight
+        ? _kAccent.withValues(alpha: 0.16)
+        : isLeader
         ? _kAccent.withValues(alpha: 0.08)
         : (index.isOdd
               ? Colors.white.withValues(alpha: 0.025)
@@ -888,12 +994,31 @@ class _StandingsRow extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      shortTeamName(entry.name),
+                    Text.rich(
+                      TextSpan(
+                        text: shortTeamName(entry.name),
+                        children: [
+                          if (rankDelta != 0)
+                            TextSpan(
+                              text: rankDelta > 0
+                                  ? '  ▲$rankDelta'
+                                  : '  ▼${-rankDelta}',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w800,
+                                color: rankDelta > 0
+                                    ? const Color(0xFF22C55E)
+                                    : negative,
+                              ),
+                            ),
+                        ],
+                      ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w600,
+                      style: TextStyle(
+                        fontWeight: highlight
+                            ? FontWeight.w800
+                            : FontWeight.w600,
                         color: teamText,
                         fontSize: 12,
                         height: 1.15,
