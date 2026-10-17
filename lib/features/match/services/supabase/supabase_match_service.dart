@@ -689,6 +689,58 @@ class SupabaseMatchService implements IMatchService {
   }
 
   @override
+  Future<void> shootoutKick({
+    required String matchId,
+    required bool? home,
+    bool scored = false,
+  }) async {
+    await _client.rpc(
+      'shootout_kick',
+      params: {
+        'p_match_id': matchId,
+        'p_side': home == null ? null : (home ? 'h' : 'a'),
+        'p_scored': scored,
+      },
+    );
+  }
+
+  @override
+  Future<void> setMatchKnockout({
+    required String matchId,
+    required String? tiebreak,
+    String? cupName,
+    String? cupRound,
+  }) async {
+    String? clean(String? v) => (v ?? '').trim().isEmpty ? null : v!.trim();
+    await _client
+        .from('matches')
+        .update({
+          'tiebreak': tiebreak,
+          'cup_name': tiebreak == null ? null : clean(cupName),
+          'cup_round': tiebreak == null ? null : clean(cupRound),
+        })
+        .eq('id', matchId);
+  }
+
+  @override
+  Future<void> setPenaltyScore({
+    required String matchId,
+    required int? home,
+    required int? away,
+  }) async {
+    final clear = home == null || away == null;
+    await _client
+        .from('matches')
+        .update({
+          'home_pens': clear ? null : home,
+          'away_pens': clear ? null : away,
+          // Elle girilen sonuçta atış sırası tutulmaz.
+          'shootout': null,
+        })
+        .eq('id', matchId);
+  }
+
+  @override
   Future<void> setMatchObserver({
     required String matchId,
     required String? userId,

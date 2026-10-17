@@ -4,6 +4,7 @@ import '../../../core/utils/team_name.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../models/match.dart';
 import '../utils/match_clock.dart';
+import 'penalty_badge.dart';
 
 /// Ana sayfa ve fikstürde ortak tek satırlık maç görünümü:
 /// `saat | Ev Sahibi [logo]  2 - 1  [logo] Deplasman`
@@ -90,9 +91,11 @@ class MatchScoreLine extends StatelessWidget {
         (match.status == MatchStatus.finished || isLive || hs != 0 || as != 0);
     // Ad, kendi alanında logoya yaslı durur; iki satıra inerse satırlar da
     // logo tarafına hizalanır. Sonucu belli maçta yenen kalın, yenilen ince.
-    final decided = match.status == MatchStatus.finished && hs != as;
+    // Eleme maçında berabere skor penaltılarla belirlenir.
+    final winner = match.homeWins;
+    final decided = match.status == MatchStatus.finished && winner != null;
     Widget name(String text, {required bool home}) {
-      final won = home ? hs > as : as > hs;
+      final won = winner == home;
       return Align(
         alignment: home ? Alignment.centerRight : Alignment.centerLeft,
         child: Text(
@@ -199,34 +202,25 @@ class MatchScoreLine extends StatelessWidget {
           ),
         ),
         // Skor kapsülü: isimlerden boşlukla ayrılır; canlı maçta kırmızı.
+        // Penaltılı maçta altında iki sarı "4 P" kutusu.
         Padding(
           padding: EdgeInsets.symmetric(horizontal: compact ? 4 : 10),
-          child: Container(
-            width: compact ? 46 : 56,
-            height: compact ? 24 : 28,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: isLive
-                  ? _live.withValues(alpha: 0.22)
-                  : const Color(0xFF064E3B),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: (isLive ? _live : _accent).withValues(alpha: 0.35),
-              ),
-            ),
-            child: Text(
-              unplayed
-                  ? (status?.text ?? '-')
-                  : (showScore ? '$hs - $as' : '-'),
-              style: TextStyle(
-                color: isLive
-                    ? _live
-                    : (unplayed ? Colors.white70 : Colors.white),
-                fontWeight: FontWeight.w800,
-                fontSize: compact ? 12 : 14,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _scoreCapsule(isLive, unplayed, showScore, status, hs, as),
+              if (match.hasPens && !unplayed) ...[
+                const SizedBox(height: 3),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    PenaltyBadge(match.homePens!, size: 9.5),
+                    const SizedBox(width: 4),
+                    PenaltyBadge(match.awayPens!, size: 9.5),
+                  ],
+                ),
+              ],
+            ],
           ),
         ),
         Expanded(
@@ -238,6 +232,37 @@ class MatchScoreLine extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _scoreCapsule(
+    bool isLive,
+    bool unplayed,
+    bool showScore,
+    ({String text, Color color})? status,
+    int hs,
+    int as,
+  ) {
+    return Container(
+      width: compact ? 46 : 56,
+      height: compact ? 24 : 28,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: isLive ? _live.withValues(alpha: 0.22) : const Color(0xFF064E3B),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: (isLive ? _live : _accent).withValues(alpha: 0.35),
+        ),
+      ),
+      child: Text(
+        unplayed ? (status?.text ?? '-') : (showScore ? '$hs - $as' : '-'),
+        style: TextStyle(
+          color: isLive ? _live : (unplayed ? Colors.white70 : Colors.white),
+          fontWeight: FontWeight.w800,
+          fontSize: compact ? 12 : 14,
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ),
+      ),
     );
   }
 }
@@ -263,11 +288,12 @@ extension on MatchScoreLine {
     final showScore =
         !unplayed &&
         (match.status == MatchStatus.finished || isLive || hs != 0 || as != 0);
-    // Sonucu belli maçta yenen beyaz, yenilen soluk.
-    final decided = match.status == MatchStatus.finished && hs != as;
+    // Sonucu belli maçta yenen beyaz, yenilen soluk (penaltılar dahil).
+    final winner = match.homeWins;
+    final decided = match.status == MatchStatus.finished && winner != null;
 
     Widget side(String name, String logo, {required bool home}) {
-      final won = home ? hs > as : as > hs;
+      final won = winner == home;
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -364,6 +390,17 @@ extension on MatchScoreLine {
                   ),
                 ),
               ),
+              if (match.hasPens && !unplayed) ...[
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    PenaltyBadge(match.homePens!, size: 10.5),
+                    const SizedBox(width: 6),
+                    PenaltyBadge(match.awayPens!, size: 10.5),
+                  ],
+                ),
+              ],
               if (onWatch != null) ...[
                 const SizedBox(height: 6),
                 _WatchChip(live: isLive, onTap: onWatch!),

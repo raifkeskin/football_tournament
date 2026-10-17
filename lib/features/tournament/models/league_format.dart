@@ -161,6 +161,7 @@ class FormatCup {
     required this.to,
     this.legs = 1,
     this.third = false,
+    this.tiebreak = 'et_pens',
   });
 
   final String name;
@@ -173,6 +174,10 @@ class FormatCup {
   /// 3.lük maçı oynanır mı.
   final bool third;
 
+  /// Beraberlikte: 'et_pens' uzatma sonra penaltı, 'pens' doğrudan penaltı.
+  /// Kupanın maçlarına varsayılan olarak verilir.
+  final String tiebreak;
+
   int get size => to - from + 1;
 
   factory FormatCup.fromJson(Map raw) {
@@ -184,6 +189,7 @@ class FormatCup {
       to: read(raw['to'], 4),
       legs: read(raw['legs'], 1) == 2 ? 2 : 1,
       third: raw['third'] == true,
+      tiebreak: raw['tiebreak'] == 'pens' ? 'pens' : 'et_pens',
     );
   }
 
@@ -193,6 +199,7 @@ class FormatCup {
     'to': to,
     'legs': legs,
     'third': third,
+    'tiebreak': tiebreak,
   };
 
   FormatCup copyWith({
@@ -201,12 +208,14 @@ class FormatCup {
     int? to,
     int? legs,
     bool? third,
+    String? tiebreak,
   }) => FormatCup(
     name: name ?? this.name,
     from: from ?? this.from,
     to: to ?? this.to,
     legs: legs ?? this.legs,
     third: third ?? this.third,
+    tiebreak: tiebreak ?? this.tiebreak,
   );
 
   /// Ağaç boyu (2'nin kuvveti).

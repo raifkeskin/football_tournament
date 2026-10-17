@@ -13,6 +13,8 @@ import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 import '../../tournament/models/age_rules.dart';
 import '../../tournament/models/league_extras.dart';
 import '../models/match.dart';
+import '../widgets/penalty_badge.dart';
+import '../widgets/shootout_board.dart';
 import '../models/match_media.dart';
 import '../../team/models/team.dart';
 import '../../../core/utils/team_name.dart';
@@ -292,8 +294,16 @@ class _MatchPhaseLabel extends StatelessWidget {
       match: match,
       builder: (context, liveMinute) {
         final (String? text, Color color) = switch (match.status) {
+          MatchStatus.live when match.shootout != null => (
+            'PENALTILAR',
+            const Color(0xFFFBBF24),
+          ),
           MatchStatus.live => (liveMinute ?? 'CANLI', const Color(0xFFF87171)),
           MatchStatus.halftime => ('İY', const Color(0xFFFBBF24)),
+          // Uzatmada biten eleme maçı (penaltıya kalmadan).
+          MatchStatus.finished
+              when match.extraTimeAt != null && !match.hasPens =>
+            ('MS · UZATMADA', const Color(0xFF10B981)),
           MatchStatus.finished => ('MS', const Color(0xFF10B981)),
           // Yeni güne alınmış ertelenen maç: "Ertelenen Maç".
           MatchStatus.postponed => (
@@ -368,6 +378,35 @@ class _MatchFlowBarState extends State<_MatchFlowBar> {
             icon: Icons.play_circle_outline_rounded,
             color: const Color(0xFF10B981),
           ),
+          // Eleme maçı berabere: önce uzatma (kural izin veriyorsa), sonra
+          // penaltılar. Atışlar sürerken düğme yerine atış paneli görünür.
+          MatchStatus.live
+              when m.isKnockout &&
+                  m.homeScore == m.awayScore &&
+                  m.shootout == null &&
+                  m.tiebreak == 'et_pens' &&
+                  m.extraTimeAt == null =>
+            (
+              action: 'start_extra_time',
+              label: 'Uzatmaya Geç',
+              icon: Icons.more_time_rounded,
+              color: const Color(0xFFF59E0B),
+            ),
+          MatchStatus.live
+              when m.isKnockout &&
+                  m.homeScore == m.awayScore &&
+                  m.shootout == null =>
+            (
+              action: 'start_shootout',
+              label: 'Penaltılara Geç',
+              icon: Icons.sports_soccer_rounded,
+              color: const Color(0xFFF59E0B),
+            ),
+          MatchStatus.live
+              when m.shootout != null &&
+                  m.homeScore == m.awayScore &&
+                  !shootoutDecided(m.shootout!) =>
+            null,
           MatchStatus.live => (
             action: 'finish',
             label: 'Maçı Bitir',
@@ -1285,6 +1324,29 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                                       shadows: _hdrShadow,
                                                     ),
                                                   ),
+                                                  if (m.hasPens)
+                                                    Padding(
+                                                      padding:
+                                                          const EdgeInsets.only(
+                                                            bottom: 3,
+                                                          ),
+                                                      child: Row(
+                                                        mainAxisAlignment:
+                                                            MainAxisAlignment
+                                                                .center,
+                                                        children: [
+                                                          PenaltyBadge(
+                                                            m.homePens!,
+                                                          ),
+                                                          const SizedBox(
+                                                            width: 8,
+                                                          ),
+                                                          PenaltyBadge(
+                                                            m.awayPens!,
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
                                                   _MatchPhaseLabel(match: m),
                                                 ],
                                               ),
@@ -1321,6 +1383,18 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                 match: m,
                                 onAction: (action) =>
                                     _runPhaseAction(m, action),
+                              ),
+                            if (m.shootout != null &&
+                                (isSuperAdmin || m.shootout!.isNotEmpty))
+                              ShootoutBoard(
+                                match: m,
+                                homeName: homeName,
+                                awayName: awayName,
+                                canEdit:
+                                    isSuperAdmin &&
+                                    m.status == MatchStatus.live,
+                                onKick: (home, scored) =>
+                                    _shootoutKick(m, home, scored),
                               ),
                             _LiveStreamPanel(
                               key: ValueKey('live_${m.id}_$_refreshKey'),
@@ -1486,8 +1560,12 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
         context: context,
         title: action == 'finish' ? 'Maçı Bitir' : 'Son Adımı Geri Al',
         message: action == 'finish'
-            ? 'Skor ${m.homeScore} - ${m.awayScore} olarak kaydedilecek ve '
-                  'maç puan durumuna yansıyacak. Onaylıyor musunuz?'
+            ? (m.isKnockout
+                  ? 'Skor ${m.homeScore} - ${m.awayScore}'
+                        '${m.hasPens ? ' (penaltılar ${m.homePens} - ${m.awayPens})' : ''}'
+                        ' olarak kaydedilecek. Onaylıyor musunuz?'
+                  : 'Skor ${m.homeScore} - ${m.awayScore} olarak kaydedilecek ve '
+                        'maç puan durumuna yansıyacak. Onaylıyor musunuz?')
             : 'Maç bir önceki aşamaya döner.',
         confirmLabel: action == 'finish' ? 'BİTİR' : 'GERİ AL',
         destructive: action == 'undo',
@@ -1499,6 +1577,21 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     }
     try {
       await _matchService.advanceMatchPhase(matchId: m.id, action: action);
+    } catch (e) {
+      if (!mounted) return;
+      final msg = e is PostgrestException ? e.message : '$e';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    }
+  }
+
+  /// Penaltı atışı ekler; [home] null ise son atışı geri alır.
+  Future<void> _shootoutKick(MatchModel m, bool? home, bool scored) async {
+    try {
+      await _matchService.shootoutKick(
+        matchId: m.id,
+        home: home,
+        scored: scored,
+      );
     } catch (e) {
       if (!mounted) return;
       final msg = e is PostgrestException ? e.message : '$e';

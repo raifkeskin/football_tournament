@@ -78,6 +78,8 @@ List<StandingEntry> computeGroupStandings({
   bool includeLive = false,
 }) {
   final groupMatches = seasonMatches.where((m) {
+    // Eleme (play-off) maçları puan tablosuna sayılmaz.
+    if (m['tiebreak'] != null) return false;
     final g = (m['group_id'] ?? m['groupId'] ?? m['groupName'] ?? '')
         .toString()
         .trim();

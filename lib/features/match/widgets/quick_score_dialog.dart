@@ -33,6 +33,13 @@ Future<void> showQuickScoreDialog(
   );
   final homeFocus = FocusNode();
   final awayFocus = FocusNode();
+  // Eleme maçı berabere girilirse penaltı skoru da istenir.
+  final homePensCtrl = TextEditingController(
+    text: match.homePens?.toString() ?? '',
+  );
+  final awayPensCtrl = TextEditingController(
+    text: match.awayPens?.toString() ?? '',
+  );
   var saving = false;
 
   void selectAllOnFocus(FocusNode node, TextEditingController ctrl) {
@@ -53,15 +60,39 @@ Future<void> showQuickScoreDialog(
     context: context,
     builder: (c) => StatefulBuilder(
       builder: (c, setDialogState) {
+        final homeScore = int.tryParse(homeScoreCtrl.text) ?? 0;
+        final awayScore = int.tryParse(awayScoreCtrl.text) ?? 0;
+        final needsPens = match.isKnockout && homeScore == awayScore;
+
         Future<void> save() async {
           if (saving) return;
+          final hp = int.tryParse(homePensCtrl.text);
+          final ap = int.tryParse(awayPensCtrl.text);
+          if (needsPens && (hp == null || ap == null || hp == ap)) {
+            ScaffoldMessenger.of(c).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Eleme maçı berabere bitemez: penaltı skorunu girin.',
+                ),
+                backgroundColor: Colors.redAccent,
+              ),
+            );
+            return;
+          }
           setDialogState(() => saving = true);
           try {
             await matchService.completeMatchWithScoreAndDefaultEvents(
               matchId: match.id,
-              homeScore: int.tryParse(homeScoreCtrl.text) ?? 0,
-              awayScore: int.tryParse(awayScoreCtrl.text) ?? 0,
+              homeScore: homeScore,
+              awayScore: awayScore,
             );
+            if (match.isKnockout) {
+              await matchService.setPenaltyScore(
+                matchId: match.id,
+                home: needsPens ? hp : null,
+                away: needsPens ? ap : null,
+              );
+            }
             if (!c.mounted) return;
             Navigator.pop(c);
             onSaved?.call();
@@ -107,6 +138,10 @@ Future<void> showQuickScoreDialog(
                       ? TextInputAction.next
                       : TextInputAction.done,
                   onSubmitted: (_) => first ? awayFocus.requestFocus() : save(),
+                  // Eleme maçında beraberlik penaltı alanlarını açar.
+                  onChanged: match.isKnockout
+                      ? (_) => setDialogState(() {})
+                      : null,
                   textAlign: TextAlign.center,
                   inputFormatters: [
                     FilteringTextInputFormatter.digitsOnly,
@@ -222,6 +257,10 @@ Future<void> showQuickScoreDialog(
                         ),
                       ],
                     ),
+                    if (needsPens) ...[
+                      const SizedBox(height: 16),
+                      _PensRow(home: homePensCtrl, away: awayPensCtrl),
+                    ],
                     const SizedBox(height: 12),
                     Text(
                       'Kaydedildiğinde maç "Bitti" olarak işaretlenir.',
@@ -280,5 +319,83 @@ Future<void> showQuickScoreDialog(
     awayScoreCtrl.dispose();
     homeFocus.dispose();
     awayFocus.dispose();
+    homePensCtrl.dispose();
+    awayPensCtrl.dispose();
   });
+}
+
+/// Eleme maçında berabere skorun altında: "Penaltılar" ve iki küçük kutu.
+class _PensRow extends StatelessWidget {
+  const _PensRow({required this.home, required this.away});
+
+  final TextEditingController home;
+  final TextEditingController away;
+
+  static const _gold = Color(0xFFFBBF24);
+
+  Widget _box(TextEditingController ctrl) => SizedBox(
+    width: 64,
+    child: TextField(
+      controller: ctrl,
+      keyboardType: TextInputType.number,
+      textAlign: TextAlign.center,
+      inputFormatters: [
+        FilteringTextInputFormatter.digitsOnly,
+        LengthLimitingTextInputFormatter(2),
+      ],
+      style: const TextStyle(
+        color: _gold,
+        fontSize: 22,
+        fontWeight: FontWeight.w800,
+      ),
+      decoration: InputDecoration(
+        isDense: true,
+        hintText: '0',
+        hintStyle: TextStyle(color: _gold.withValues(alpha: 0.3)),
+        filled: true,
+        fillColor: Colors.black.withValues(alpha: 0.4),
+        contentPadding: const EdgeInsets.symmetric(vertical: 10),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: _gold.withValues(alpha: 0.4)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: _gold, width: 2),
+        ),
+      ),
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        const Text(
+          'PENALTILAR',
+          style: TextStyle(
+            color: _gold,
+            fontWeight: FontWeight.w800,
+            fontSize: 12,
+            letterSpacing: 0.8,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _box(home),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 14),
+              child: Text(
+                '-',
+                style: TextStyle(color: Colors.white70, fontSize: 20),
+              ),
+            ),
+            _box(away),
+          ],
+        ),
+      ],
+    );
+  }
 }
