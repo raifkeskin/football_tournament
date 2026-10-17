@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
+import '../../../core/widgets/app_name_band.dart';
 import '../../player/services/penalty_service.dart';
 import '../../tournament/models/age_rules.dart';
 import '../../tournament/screens/formation_tab.dart';
@@ -78,8 +79,22 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
     _loadData();
   }
 
+  /// Esame ekranında üstteki ortak bant gizlenir.
+  Route<dynamic>? _bandRoute;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route == _bandRoute) return;
+    LeagueSwitchScope.setBandHidden(_bandRoute, false);
+    _bandRoute = route;
+    LeagueSwitchScope.setBandHidden(route, true);
+  }
+
   @override
   void dispose() {
+    LeagueSwitchScope.setBandHidden(_bandRoute, false);
     for (final c in _jersey.values) {
       c.dispose();
     }
@@ -467,12 +482,10 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
                         padding: EdgeInsets.fromLTRB(14, 0, 14, 4),
                         child: Text.rich(
                           TextSpan(
-                            text:
-                                'Satırı kutuya sürükleyin ya da düğmeye '
-                                'dokunun · ',
+                            text: 'Sürükleyin ya da düğmeye dokunun · ',
                             children: [
                               TextSpan(
-                                text: '✎ numaraya dokunup değiştirin',
+                                text: '✎ numarayı değiştirin',
                                 style: TextStyle(color: _gold),
                               ),
                             ],
@@ -534,24 +547,22 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
       child: Row(
         children: [
           Expanded(child: quota ?? const SizedBox()),
-          GestureDetector(
-            onTap: _autoNumber,
-            child: CustomPaint(
-              painter: _DashedBorder(color: _gold.withValues(alpha: 0.6)),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _gold.withValues(alpha: 0.07),
-                  borderRadius: BorderRadius.circular(7),
-                ),
-                child: const Text(
-                  "#1'den otomatik ver",
-                  style: TextStyle(
-                    color: _gold,
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
+          OutlinedButton.icon(
+            onPressed: _autoNumber,
+            icon: const Icon(Icons.format_list_numbered_rounded, size: 16),
+            label: const Text(
+              'Otomatik Forma No',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+            ),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _gold,
+              backgroundColor: _gold.withValues(alpha: 0.1),
+              side: BorderSide(color: _gold.withValues(alpha: 0.6)),
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              minimumSize: const Size(0, 32),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(9),
               ),
             ),
           ),
@@ -1138,9 +1149,16 @@ class _JerseyBox extends StatelessWidget {
                     fontSize: small ? 11 : 13.5,
                     fontFeatures: const [FontFeature.tabularFigures()],
                   ),
+                  // Tema dolgu ve boşluk vermesin (küçük kutuda numara
+                  // görünmez oluyordu).
                   decoration: InputDecoration(
                     isCollapsed: true,
+                    isDense: true,
+                    filled: false,
+                    contentPadding: EdgeInsets.zero,
                     border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
                     hintText: '#',
                     hintStyle: TextStyle(color: c.withValues(alpha: 0.7)),
                   ),

@@ -1161,13 +1161,29 @@ class SupabaseMatchService implements IMatchService {
       }
       return;
     }
-    await for (final _ in realtimeChangeSignal(
-      _client,
-      table: 'match_rosters',
-      column: 'match_id',
-      value: matchId,
-      knownIds: () => {for (final r in _rosterCache[matchId] ?? const []) r.id},
-    )) {
+    // Kendi kaydımız canlı bağlantıyı beklemeden yansısın (bağlantı gecikir
+    // ya da koparsa esame eski görünmesin).
+    final signals = StreamController<void>();
+    final subs = <StreamSubscription<void>>[
+      realtimeChangeSignal(
+        _client,
+        table: 'match_rosters',
+        column: 'match_id',
+        value: matchId,
+        knownIds: () => {
+          for (final r in _rosterCache[matchId] ?? const []) r.id,
+        },
+      ).listen(signals.add, onError: signals.addError, onDone: signals.close),
+      _localChanges.stream
+          .where((m) => m == matchId)
+          .listen((_) => signals.add(null)),
+    ];
+    signals.onCancel = () {
+      for (final s in subs) {
+        s.cancel();
+      }
+    };
+    await for (final _ in signals.stream) {
       yield await _fetchMatchRosters(matchId);
     }
   }
