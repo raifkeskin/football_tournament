@@ -980,6 +980,7 @@ class _MatchCard extends StatelessWidget {
     final unplayed =
         match.displayStatus == MatchStatus.postponed ||
         match.displayStatus == MatchStatus.cancelled;
+    final cancelled = match.displayStatus == MatchStatus.cancelled;
     final showScore =
         !unplayed &&
         (match.status == MatchStatus.finished || isLive || hs != 0 || as != 0);
@@ -1085,24 +1086,61 @@ class _MatchCard extends StatelessWidget {
                   onLongPress: () => _onLongPress(context),
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(12, 7, 12, 7),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                    child: Row(
                       children: [
-                        _teamLine(
-                          homeName,
-                          (teamLogoById[match.homeTeamId] ?? '').trim(),
-                          showScore ? '$hs' : '-',
-                          !showScore || hs >= as,
-                          isLive,
+                        Expanded(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              _teamLine(
+                                homeName,
+                                (teamLogoById[match.homeTeamId] ?? '').trim(),
+                                showScore ? '$hs' : '-',
+                                !showScore || hs >= as,
+                                isLive,
+                                scoreBox: !cancelled,
+                              ),
+                              const SizedBox(height: 4),
+                              _teamLine(
+                                awayName,
+                                (teamLogoById[match.awayTeamId] ?? '').trim(),
+                                showScore ? '$as' : '-',
+                                !showScore || as >= hs,
+                                isLive,
+                                scoreBox: !cancelled,
+                              ),
+                            ],
+                          ),
                         ),
-                        const SizedBox(height: 4),
-                        _teamLine(
-                          awayName,
-                          (teamLogoById[match.awayTeamId] ?? '').trim(),
-                          showScore ? '$as' : '-',
-                          !showScore || as >= hs,
-                          isLive,
-                        ),
+                        // İptal maçta "-" kutuları yerine tek "İPTAL" etiketi.
+                        if (cancelled)
+                          Container(
+                            margin: const EdgeInsets.only(left: 12),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 9,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(
+                                0xFFEF4444,
+                              ).withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: const Color(
+                                  0xFFEF4444,
+                                ).withValues(alpha: 0.4),
+                              ),
+                            ),
+                            child: const Text(
+                              'İPTAL',
+                              style: TextStyle(
+                                color: Color(0xFFFCA5A5),
+                                fontWeight: FontWeight.w800,
+                                fontSize: 12,
+                                letterSpacing: 0.6,
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -1120,8 +1158,9 @@ class _MatchCard extends StatelessWidget {
     String logo,
     String score,
     bool strong,
-    bool isLive,
-  ) {
+    bool isLive, {
+    bool scoreBox = true,
+  }) {
     return Row(
       children: [
         WebSafeImage(
@@ -1145,35 +1184,36 @@ class _MatchCard extends StatelessWidget {
           ),
         ),
         // Uzun ad kesilse bile "…" skora yapışmasın.
-        const SizedBox(width: 12),
+        if (scoreBox) const SizedBox(width: 12),
         // Skor kutusu: yeşil kare; canlı maçta kırmızı.
-        Container(
-          width: 30,
-          height: 25,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: isLive
-                ? const Color(0xFFF87171).withValues(alpha: 0.22)
-                : const Color(0xFF064E3B),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color:
-                  (isLive ? const Color(0xFFF87171) : const Color(0xFF10B981))
-                      .withValues(alpha: 0.35),
-            ),
-          ),
-          child: Text(
-            score,
-            style: TextStyle(
+        if (scoreBox)
+          Container(
+            width: 30,
+            height: 25,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
               color: isLive
-                  ? const Color(0xFFF87171)
-                  : (strong ? Colors.white : Colors.white60),
-              fontWeight: FontWeight.w800,
-              fontSize: 14,
-              fontFeatures: const [FontFeature.tabularFigures()],
+                  ? const Color(0xFFF87171).withValues(alpha: 0.22)
+                  : const Color(0xFF064E3B),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color:
+                    (isLive ? const Color(0xFFF87171) : const Color(0xFF10B981))
+                        .withValues(alpha: 0.35),
+              ),
+            ),
+            child: Text(
+              score,
+              style: TextStyle(
+                color: isLive
+                    ? const Color(0xFFF87171)
+                    : (strong ? Colors.white : Colors.white60),
+                fontWeight: FontWeight.w800,
+                fontSize: 14,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
             ),
           ),
-        ),
       ],
     );
   }
