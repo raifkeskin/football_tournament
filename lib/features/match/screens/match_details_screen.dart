@@ -15,6 +15,7 @@ import '../../tournament/models/league_extras.dart';
 import '../models/match.dart';
 import '../widgets/penalty_badge.dart';
 import '../widgets/shootout_board.dart';
+import '../widgets/esame_scan.dart';
 import '../models/match_media.dart';
 import '../../team/models/team.dart';
 import '../../../core/utils/team_name.dart';
@@ -4228,6 +4229,64 @@ class _RosterEditSheetState extends State<_RosterEditSheet> {
     return showAdminInfoDialog(context: context, title: 'Hata', message: msg);
   }
 
+  /// Esame kağıdının fotoğrafını okutur; onaylanan satırlar formdaki
+  /// seçimin yerine geçer (forma numaraları da). Kayıt yine Kaydet ile.
+  Future<void> _readFromPaper() async {
+    final picks = await scanEsameFromPhoto(
+      context,
+      matchId: widget.match.id,
+      teamId: widget.teamId,
+      teamName: widget.teamName,
+      players: _teamPlayers,
+    );
+    if (picks == null || !mounted) return;
+    final skipped = <String>[];
+    var overflow = 0;
+    setState(() {
+      _starterIds.clear();
+      _subIds.clear();
+      for (final pick in picks) {
+        final pid = pick.playerId;
+        final p = _penalized[pid];
+        if (p != null) {
+          skipped.add(_teamPlayers.firstWhere((x) => x.id == pid).name);
+          continue;
+        }
+        if (pick.starting && _starterIds.length < _startingLimit) {
+          _starterIds.add(pid);
+        } else if (_subIds.length < _subLimit) {
+          _subIds.add(pid);
+        } else {
+          overflow++;
+          continue;
+        }
+        final no = (pick.jersey ?? '').trim();
+        if (RegExp(r'^\d+$').hasMatch(no)) {
+          _jerseyControllers[pid]?.text = no;
+        }
+      }
+      if (_captainId != null && !_starterIds.contains(_captainId)) {
+        _captainId = null;
+      }
+      _tab = 0;
+    });
+    final notes = [
+      'Esame kağıttan dolduruldu: ilk 11 ${_starterIds.length}, '
+          'yedek ${_subIds.length}.',
+      if (skipped.isNotEmpty) 'Cezalı, eklenmedi: ${skipped.join(', ')}.',
+      if (overflow > 0) '$overflow oyuncu kontenjanı aştığı için eklenmedi.',
+      'Kontrol edip Kaydet\'e basın.',
+    ];
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(notes.join(' ')),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+  }
+
   Future<void> _save() async {
     final selectedIds = {..._starterIds, ..._subIds};
     final numericRegExp = RegExp(r'^\d+$');
@@ -4535,6 +4594,22 @@ class _RosterEditSheetState extends State<_RosterEditSheet> {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
+                  if (!_isLoading && _teamPlayers.isNotEmpty)
+                    TextButton.icon(
+                      style: TextButton.styleFrom(
+                        foregroundColor: _green,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      onPressed: _isSaving ? null : _readFromPaper,
+                      icon: const Icon(
+                        Icons.document_scanner_outlined,
+                        size: 18,
+                      ),
+                      label: const Text(
+                        'Kağıttan oku',
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                    ),
                 ],
               ),
             ),
