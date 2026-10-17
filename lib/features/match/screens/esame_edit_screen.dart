@@ -382,7 +382,7 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
         rosters: rosters,
       );
       _dirty = false;
-      if (mounted) Navigator.pop(context);
+      if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) _toast('Hata: $e');
     } finally {
