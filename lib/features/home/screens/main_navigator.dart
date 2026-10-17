@@ -182,10 +182,11 @@ class _MainNavigatorState extends State<MainNavigator> {
               signedIn &&
               !session.value.hasManagementPanel &&
               !session.value.isAdmin),
-      // Maç Takvimi, Yayın Rehberi (tüm turnuvalar) ve Profil turnuvaya bağlı
-      // değil: bantta turnuva yerine uygulama logosu ve adı.
+      // Maç Takvimi, Puan Durumu ve Yayın Rehberi (tüm turnuvalar) ve Profil
+      // turnuvaya bağlı değil: bantta turnuva yerine uygulama logosu ve adı.
       genericTab:
           _aktifSekme == MainNavigator.fixtureTab ||
+          _aktifSekme == 2 ||
           _aktifSekme == MainNavigator.broadcastTab ||
           _aktifSekme == MainNavigator.profileTab,
       // Yayın Rehberi: bantta sağda takvim (gün seçimi).
@@ -584,11 +585,19 @@ class _MenuDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<TournamentTheme?>(
-      valueListenable: ActiveTournament.theme,
-      builder: (context, t, _) {
-        final primary = t?.primary ?? const Color(0xFF064E3B);
-        final accent = t?.secondary ?? const Color(0xFF10B981);
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        ActiveTournament.theme,
+        LeagueSwitchScope.genericTab,
+      ]),
+      builder: (context, _) {
+        final theme = ActiveTournament.theme.value;
+        // Başlık banttakiyle aynı: turnuvaya bağlı olmayan sekmede uygulama
+        // logosu ve adı (renkler yine seçili turnuvanın).
+        final generic = LeagueSwitchScope.genericTab.value || theme == null;
+        final t = generic ? null : theme;
+        final primary = theme?.primary ?? const Color(0xFF064E3B);
+        final accent = theme?.secondary ?? const Color(0xFF10B981);
         final logo = (t?.logoUrl ?? '').trim();
         return Drawer(
           backgroundColor: _ground,
@@ -641,30 +650,33 @@ class _MenuDrawer extends StatelessWidget {
                         ],
                       ),
                     ),
-                    // Bildirim ayarları (misafir dahil herkes).
-                    TextButton.icon(
-                      style: TextButton.styleFrom(foregroundColor: accent),
-                      icon: const Icon(
-                        Icons.notifications_active_outlined,
-                        size: 20,
-                      ),
-                      label: const Text(
-                        'Bildirim Ayarları',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      onPressed: () {
-                        final nav = Navigator.of(context);
-                        nav.pop(); // çekmeceyi kapat
-                        nav.push(
-                          MaterialPageRoute<void>(
-                            settings: const RouteSettings(
-                              name: 'NotificationSettingsScreen',
+                    // Bildirim ayarları: yalnız misafire (giriş yapan profil
+                    // ekranından açar).
+                    if (!loggedIn)
+                      TextButton.icon(
+                        style: TextButton.styleFrom(foregroundColor: accent),
+                        icon: const Icon(
+                          Icons.notifications_active_outlined,
+                          size: 20,
+                        ),
+                        label: const Text(
+                          'Bildirim Ayarları',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () {
+                          final nav = Navigator.of(context);
+                          nav.pop(); // çekmeceyi kapat
+                          nav.push(
+                            MaterialPageRoute<void>(
+                              settings: const RouteSettings(
+                                name: 'NotificationSettingsScreen',
+                              ),
+                              builder: (_) =>
+                                  const NotificationSettingsScreen(),
                             ),
-                            builder: (_) => const NotificationSettingsScreen(),
-                          ),
-                        );
-                      },
-                    ),
+                          );
+                        },
+                      ),
                     if (AppSettings.privateLeaguesEnabled.value)
                       TextButton.icon(
                         style: TextButton.styleFrom(foregroundColor: accent),
@@ -690,6 +702,9 @@ class _MenuDrawer extends StatelessWidget {
       },
     );
   }
+
+  /// Uygulamanın Instagram hesabı (başlık uygulama kimliğindeyken).
+  static const _appInstagram = 'https://www.instagram.com/ligmasasi';
 
   Widget _header(TournamentTheme? t, Color primary, Color accent, String logo) {
     final links = [
@@ -739,7 +754,7 @@ class _MenuDrawer extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  t?.name ?? (kShowAppName ? kAppName : 'Turnuva'),
+                  t?.name ?? kAppName,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -749,6 +764,35 @@ class _MenuDrawer extends StatelessWidget {
                     height: 1.15,
                   ),
                 ),
+                if (t == null) ...[
+                  const SizedBox(height: 6),
+                  InkWell(
+                    onTap: () => _open(_appInstagram),
+                    borderRadius: BorderRadius.circular(8),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 3),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.camera_alt_rounded,
+                            size: 16,
+                            color: Color(0xFFE1306C),
+                          ),
+                          SizedBox(width: 6),
+                          Text(
+                            '@ligmasasi',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
                 if (links.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   Row(
