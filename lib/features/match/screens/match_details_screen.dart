@@ -207,7 +207,6 @@ class _TeamInfo extends StatelessWidget {
   final String logoUrl;
   final String teamId;
   final String seasonId;
-  final bool compact;
   final String? firstColor;
   final String? secondColor;
 
@@ -216,7 +215,6 @@ class _TeamInfo extends StatelessWidget {
     required this.logoUrl,
     required this.teamId,
     required this.seasonId,
-    this.compact = false,
     this.firstColor,
     this.secondColor,
   });
@@ -252,12 +250,13 @@ class _TeamInfo extends StatelessWidget {
         // Şeffaf logolar kırpılmadan, çerçevesiz gösterilir.
         WebSafeImage(
           url: logoUrl,
-          width: compact ? 42 : 64,
-          height: compact ? 42 : 64,
+          // Her sekmede aynı boy (Diziliş'te küçülmez).
+          width: 46,
+          height: 46,
           fit: BoxFit.contain,
-          fallbackIconSize: compact ? 20 : 26,
+          fallbackIconSize: 24,
         ),
-        SizedBox(height: compact ? 1 : 4),
+        const SizedBox(height: 3),
         Text(
           shortTeamName(name),
           textAlign: TextAlign.center,
@@ -267,7 +266,7 @@ class _TeamInfo extends StatelessWidget {
             color: Colors.white,
             // 700: uzun adlar da okunur kalsın.
             fontWeight: FontWeight.w700,
-            fontSize: compact ? 13 : 15,
+            fontSize: 14,
             height: 1.15,
             letterSpacing: 0.2,
             shadows: [
@@ -818,25 +817,159 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     }
   }
 
-  /// "12/10/2026  |  20:00"; saat yoksa yalnızca tarih ("Tarih Belirlenmedi").
-  String _dateTimeText(MatchModel m) {
-    final date = _formatDate(m.matchDate ?? '');
-    final time = (m.matchTime ?? '').trim();
-    if (time.isEmpty || time == 'null') return date;
-    return '$date  |  $time';
+  static const _hdrShadow = [
+    Shadow(color: Colors.black, blurRadius: 10, offset: Offset(0, 2)),
+  ];
+
+  /// Başlamamış maç, skor yerinde: büyük saat, altında tarih ve gün.
+  Widget _kickoffBlock(MatchModel m) {
+    final time = _kickoffTime(m);
+    final d = DateTime.tryParse((m.matchDate ?? '').trim());
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          time ?? '–',
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+            fontSize: 27,
+            height: 1.1,
+            fontFeatures: [FontFeature.tabularFigures()],
+            shadows: _hdrShadow,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          d == null
+              ? 'Tarih Belirlenmedi'
+              : DateFormat('d MMMM y', 'tr_TR').format(d),
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            shadows: _hdrShadow,
+          ),
+        ),
+        if (d != null)
+          Text(
+            DateFormat('EEEE', 'tr_TR').format(d),
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 10.5,
+              fontWeight: FontWeight.w600,
+              shadows: _hdrShadow,
+            ),
+          ),
+      ],
+    );
   }
 
-  String _formatDate(String dateStr) {
-    if (dateStr.isEmpty || dateStr == '__NO_DATE__') {
-      return 'Tarih Belirlenmedi';
-    }
-    try {
-      final p = dateStr.split('-');
-      if (p.length != 3) return dateStr;
-      return "${p[2]}/${p[1]}/${p[0]}";
-    } catch (e) {
-      return dateStr;
-    }
+  /// Bandın alt satırı: solda tarih · saat (maç başladıysa), sağda stad ve
+  /// haritaya götüren "Yol tarifi ›".
+  Widget _headerFooter(MatchModel m, bool showKickoff) {
+    const small = TextStyle(
+      color: Colors.white,
+      fontSize: 10.5,
+      fontWeight: FontWeight.w700,
+      shadows: _hdrShadow,
+    );
+    final pitchId = (m.pitchId ?? '').trim();
+    return SizedBox(
+      height: 18,
+      child: Row(
+        children: [
+          Expanded(
+            child: showKickoff
+                ? const SizedBox.shrink()
+                : Text(
+                    _dateTimeLine(m),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: small,
+                  ),
+          ),
+          if (pitchId.isNotEmpty)
+            Flexible(
+              child: StreamBuilder<List<Pitch>>(
+                stream: _pitchesStream,
+                builder: (context, snap) {
+                  Pitch? pitch;
+                  for (final p in snap.data ?? const <Pitch>[]) {
+                    if (p.id == pitchId) {
+                      pitch = p;
+                      break;
+                    }
+                  }
+                  final name = pitch?.name ?? (m.pitchName ?? '').trim();
+                  final location = (pitch?.location ?? '').trim();
+                  if (name.isEmpty) return const SizedBox.shrink();
+                  return Row(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      const Icon(
+                        Icons.location_on_rounded,
+                        size: 12,
+                        color: Colors.white70,
+                      ),
+                      const SizedBox(width: 2),
+                      Flexible(
+                        child: Text(
+                          name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: small,
+                        ),
+                      ),
+                      if (location.isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        InkWell(
+                          onTap: () => _openPitchLocation(context, location),
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 1),
+                            child: Text(
+                              'Yol tarifi ›',
+                              style: TextStyle(
+                                color: Color(0xFF34D399),
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w800,
+                                shadows: _hdrShadow,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// "6 Ekim 2026 Pazartesi" (kısaltmasız); tarih yoksa null.
+  String? _fullDate(MatchModel m) {
+    final d = DateTime.tryParse((m.matchDate ?? '').trim());
+    if (d == null) return null;
+    return DateFormat('d MMMM y EEEE', 'tr_TR').format(d);
+  }
+
+  /// "20:00"; saat girilmemişse null.
+  String? _kickoffTime(MatchModel m) {
+    final t = (m.matchTime ?? '').trim();
+    if (t.isEmpty || t == 'null') return null;
+    return t;
+  }
+
+  /// Alt sol köşe: "6 Ekim 2026 Pazartesi · 22:00".
+  String _dateTimeLine(MatchModel m) {
+    final date = _fullDate(m) ?? 'Tarih Belirlenmedi';
+    final time = _kickoffTime(m);
+    return time == null ? date : '$date · $time';
   }
 
   Widget? _buildTabFab({
@@ -1027,7 +1160,8 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
             final awayName = (nameMap[m.awayTeamId] ?? '').trim().isEmpty
                 ? 'Deplasman'
                 : (nameMap[m.awayTeamId] ?? '').trim();
-            final compactHeader = _tabController.index == 3;
+            // Başlamamış maçta ortada skor yerine maç saati ve tarihi.
+            final showKickoff = m.status == MatchStatus.notStarted;
 
             return Scaffold(
               extendBodyBehindAppBar: true,
@@ -1104,13 +1238,12 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                             // (44px) hemen altından başlar.
                             top: MediaQuery.of(context).padding.top + 50,
                           ),
+                          // Bant her sekmede aynı boyda (Diziliş'te de
+                          // küçülmez). Altta iki uç: solda tarih/saat
+                          // (başlamamış maçta ortada), sağda stad + yol
+                          // tarifi.
                           child: Padding(
-                            padding: EdgeInsets.fromLTRB(
-                              14,
-                              0,
-                              14,
-                              compactHeader ? 6 : 10,
-                            ),
+                            padding: const EdgeInsets.fromLTRB(14, 0, 14, 9),
                             child: Column(
                               children: [
                                 Row(
@@ -1125,39 +1258,31 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                         logoUrl: homeLogo,
                                         teamId: m.homeTeamId,
                                         seasonId: m.seasonId,
-                                        compact: compactHeader,
                                         firstColor: homeTeam?.firstColor,
                                         secondColor: homeTeam?.secondColor,
                                       ),
                                     ),
-                                    Padding(
-                                      // Skor, büyütülen logoların ortasına
-                                      // denk gelir.
-                                      padding: EdgeInsets.fromLTRB(
-                                        10,
-                                        compactHeader ? 5 : 12,
-                                        10,
-                                        0,
-                                      ),
-                                      child: Column(
-                                        children: [
-                                          Text(
-                                            "${m.homeScore} - ${m.awayScore}",
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.w800,
-                                              fontSize: compactHeader ? 23 : 30,
-                                              shadows: const [
-                                                Shadow(
-                                                  color: Colors.black,
-                                                  blurRadius: 10,
-                                                  offset: Offset(0, 2),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          _MatchPhaseLabel(match: m),
-                                        ],
+                                    SizedBox(
+                                      width: 118,
+                                      child: Padding(
+                                        padding: const EdgeInsets.only(top: 6),
+                                        child: showKickoff
+                                            ? _kickoffBlock(m)
+                                            : Column(
+                                                children: [
+                                                  Text(
+                                                    "${m.homeScore} - ${m.awayScore}",
+                                                    style: const TextStyle(
+                                                      color: Colors.white,
+                                                      fontWeight:
+                                                          FontWeight.w800,
+                                                      fontSize: 27,
+                                                      shadows: _hdrShadow,
+                                                    ),
+                                                  ),
+                                                  _MatchPhaseLabel(match: m),
+                                                ],
+                                              ),
                                       ),
                                     ),
                                     Expanded(
@@ -1166,118 +1291,14 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                         logoUrl: awayLogo,
                                         teamId: m.awayTeamId,
                                         seasonId: m.seasonId,
-                                        compact: compactHeader,
                                         firstColor: awayTeam?.firstColor,
                                         secondColor: awayTeam?.secondColor,
                                       ),
                                     ),
                                   ],
                                 ),
-                                SizedBox(height: compactHeader ? 4 : 10),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.access_time_filled_rounded,
-                                      size: compactHeader ? 12 : 14,
-                                      color: Colors.white70,
-                                    ),
-                                    SizedBox(width: compactHeader ? 4 : 8),
-                                    Text(
-                                      _dateTimeText(m),
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: compactHeader ? 9.5 : 11,
-                                        fontWeight: FontWeight.w700,
-                                        shadows: const [
-                                          Shadow(
-                                            color: Colors.black,
-                                            blurRadius: 10,
-                                            offset: Offset(0, 2),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    if ((m.pitchId ?? '').isNotEmpty) ...[
-                                      SizedBox(width: compactHeader ? 6 : 12),
-                                      const Text(
-                                        "|",
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w700,
-                                          shadows: [
-                                            Shadow(
-                                              color: Colors.black,
-                                              blurRadius: 10,
-                                              offset: Offset(0, 2),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      SizedBox(width: compactHeader ? 6 : 12),
-                                      Icon(
-                                        Icons.location_on_rounded,
-                                        size: compactHeader ? 12 : 14,
-                                        color: Colors.white70,
-                                      ),
-                                      const SizedBox(width: 3),
-                                      Flexible(
-                                        child: StreamBuilder<List<Pitch>>(
-                                          stream: _pitchesStream,
-                                          builder: (context, pitchSnap) {
-                                            final pitchId = (m.pitchId ?? '')
-                                                .trim();
-                                            final pitches =
-                                                pitchSnap.data ??
-                                                const <Pitch>[];
-
-                                            // pitchId ile eşleşen stadı bul
-                                            String displayPitchName =
-                                                'Bilinmeyen Saha';
-                                            String location = '';
-
-                                            for (final p in pitches) {
-                                              if (p.id == pitchId) {
-                                                displayPitchName = p.name;
-                                                location = p.location;
-                                                break;
-                                              }
-                                            }
-
-                                            return InkWell(
-                                              onTap: location.isEmpty
-                                                  ? null
-                                                  : () => _openPitchLocation(
-                                                      context,
-                                                      location,
-                                                    ),
-                                              child: Text(
-                                                displayPitchName,
-                                                style: TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: compactHeader
-                                                      ? 9.5
-                                                      : 11,
-                                                  fontWeight: FontWeight.w700,
-                                                  shadows: const [
-                                                    Shadow(
-                                                      color: Colors.black,
-                                                      blurRadius: 10,
-                                                      offset: Offset(0, 2),
-                                                    ),
-                                                  ],
-                                                ),
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
+                                const SizedBox(height: 4),
+                                _headerFooter(m, showKickoff),
                               ],
                             ),
                           ),
@@ -1304,9 +1325,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                             // ayrı bir şerit, seçili sekmenin altı çizili.
                             Container(
                               height: 50,
-                              margin: EdgeInsets.only(
-                                top: compactHeader ? 4 : 10,
-                              ),
+                              margin: const EdgeInsets.only(top: 6),
                               decoration: BoxDecoration(
                                 color: const Color(0xFF111A2E),
                                 border: Border(
