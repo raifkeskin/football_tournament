@@ -7,6 +7,8 @@ Kullanım:
       Uygulama, sürümler ve son derlemeler.
   python3 -I tool/asc.py prepare <sürüm> <derleme> "<yenilikler>"
       Sürümü açar (yoksa), derlemeyi seçer, tr yenilikler metnini yazar.
+  python3 -I tool/asc.py screenshots <sürüm> <klasör>
+      Ekran görüntüsü setlerini klasördeki iphone63_N/ipad13_N.png ile değiştirir.
   python3 -I tool/asc.py submit <sürüm>
       Hazırlanan sürümü incelemeye gönderir (yalnız kullanıcı onayıyla).
 
@@ -14,6 +16,7 @@ Kimlik: ~/.config/football_tournament/asc.env (ASC_KEY_ID, ASC_ISSUER_ID) ve
 AuthKey_<KEY_ID>.p8. JWT openssl ile imzalanır (ek Python paketi gerekmez).
 """
 import base64
+import hashlib
 import json
 import os
 import subprocess
@@ -183,6 +186,64 @@ def prepare(version, build_no, notes):
         print('Yenilikler yazıldı:', loc['attributes']['locale'])
 
 
+SHOT_TYPES = {'iphone63': 'APP_IPHONE_61', 'iphone69': 'APP_IPHONE_67',
+              'ipad13': 'APP_IPAD_PRO_3GEN_129'}
+
+
+def _upload_shot(set_id, path):
+    data = open(path, 'rb').read()
+    shot = call('POST', '/appScreenshots', {'data': {
+        'type': 'appScreenshots',
+        'attributes': {'fileName': os.path.basename(path), 'fileSize': len(data)},
+        'relationships': {'appScreenshotSet': {
+            'data': {'type': 'appScreenshotSets', 'id': set_id}}},
+    }})['data']
+    for op in shot['attributes']['uploadOperations']:
+        req = urllib.request.Request(op['url'], method=op['method'],
+                                     data=data[op['offset']:op['offset'] + op['length']])
+        for h in op['requestHeaders']:
+            req.add_header(h['name'], h['value'])
+        urllib.request.urlopen(req).read()
+    call('PATCH', f"/appScreenshots/{shot['id']}", {'data': {
+        'type': 'appScreenshots', 'id': shot['id'],
+        'attributes': {'uploaded': True,
+                       'sourceFileChecksum': hashlib.md5(data).hexdigest()},
+    }})
+    return shot['id']
+
+
+def screenshots(version, folder):
+    """<önek>_<sıra>.png dosyalarıyla (iphone63_1.png …) setleri değiştirir."""
+    aid = app_id()
+    v = next((x for x in versions(aid)
+              if x['attributes']['versionString'] == version), None)
+    if v is None:
+        sys.exit('Sürüm yok: ' + version)
+    files = sorted(f for f in os.listdir(folder) if f.endswith('.png'))
+    for loc in call('GET', f"/appStoreVersions/{v['id']}/appStoreVersionLocalizations")['data']:
+        sets = {s['attributes']['screenshotDisplayType']: s['id'] for s in call(
+            'GET', f"/appStoreVersionLocalizations/{loc['id']}/appScreenshotSets")['data']}
+        for prefix, dtype in SHOT_TYPES.items():
+            mine = sorted((f for f in files if f.startswith(prefix + '_')),
+                          key=lambda f: int(f.rsplit('_', 1)[1].split('.')[0]))
+            if not mine:
+                continue
+            sid = sets.get(dtype)
+            if sid is None:
+                sid = call('POST', '/appScreenshotSets', {'data': {
+                    'type': 'appScreenshotSets',
+                    'attributes': {'screenshotDisplayType': dtype},
+                    'relationships': {'appStoreVersionLocalization': {
+                        'data': {'type': 'appStoreVersionLocalizations', 'id': loc['id']}}},
+                }})['data']['id']
+            for old in call('GET', f'/appScreenshotSets/{sid}/appScreenshots')['data']:
+                call('DELETE', f"/appScreenshots/{old['id']}")
+            ids = [_upload_shot(sid, os.path.join(folder, f)) for f in mine]
+            call('PATCH', f'/appScreenshotSets/{sid}/relationships/appScreenshots',
+                 {'data': [{'type': 'appScreenshots', 'id': i} for i in ids]})
+            print(f"{loc['attributes']['locale']} {dtype}: {len(ids)} görüntü yüklendi")
+
+
 def submit(version):
     aid = app_id()
     v = next((x for x in versions(aid)
@@ -214,6 +275,8 @@ if __name__ == '__main__':
         status()
     elif cmd == 'prepare' and len(sys.argv) == 5:
         prepare(sys.argv[2], sys.argv[3], sys.argv[4])
+    elif cmd == 'screenshots' and len(sys.argv) == 4:
+        screenshots(sys.argv[2], sys.argv[3])
     elif cmd == 'submit' and len(sys.argv) == 3:
         submit(sys.argv[2])
     else:
