@@ -156,10 +156,7 @@ class League {
         v('autoResultNews', 'auto_result_news'),
         fallback: true,
       ),
-      youtubeLive: boolFrom(
-        v('youtubeLive', 'youtube_live'),
-        fallback: false,
-      ),
+      youtubeLive: boolFrom(v('youtubeLive', 'youtube_live'), fallback: false),
       isDefault: boolFrom(v('isDefault', 'is_default'), fallback: false),
       isPrivate: boolFrom(v('isPrivate', 'is_private'), fallback: false),
       accessCode: nullableTrimmed(v('accessCode', 'access_code')),

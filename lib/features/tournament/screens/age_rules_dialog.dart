@@ -423,11 +423,7 @@ class _LimitRow extends StatelessWidget {
 }
 
 class _Stepper extends StatelessWidget {
-  const _Stepper({
-    required this.value,
-    required this.onChanged,
-    this.min = 1,
-  });
+  const _Stepper({required this.value, required this.onChanged, this.min = 1});
 
   final int value;
   final int min;
@@ -532,9 +528,7 @@ Future<Set<int>?> _pickYears(BuildContext context, Set<int> initial) {
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                 child: AdminPrimaryButton(
-                  label: selected.isEmpty
-                      ? 'SEÇ'
-                      : 'SEÇ (${selected.length})',
+                  label: selected.isEmpty ? 'SEÇ' : 'SEÇ (${selected.length})',
                   onPressed: () => Navigator.pop(ctx, selected),
                 ),
               ),

@@ -312,6 +312,33 @@ class _LeagueFormatScreenState extends State<LeagueFormatScreen> {
                 ),
             ],
           ),
+          const SizedBox(height: 10),
+          const Text(
+            'BERABERLİKTE',
+            style: TextStyle(
+              color: kAdminMuted,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.6,
+            ),
+          ),
+          const SizedBox(height: 6),
+          SegmentedButton<String>(
+            showSelectedIcon: false,
+            style: SegmentedButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              foregroundColor: Colors.white70,
+              selectedForegroundColor: Colors.white,
+              selectedBackgroundColor: const Color(0xFF334155),
+            ),
+            segments: const [
+              ButtonSegment(value: 'et_pens', label: Text('Uzatma + penaltı')),
+              ButtonSegment(value: 'pens', label: Text('Doğrudan penaltı')),
+            ],
+            selected: {c.tiebreak},
+            onSelectionChanged: (s) =>
+                _setCup(i, c.copyWith(tiebreak: s.first)),
+          ),
           const SizedBox(height: 8),
           Text(
             errs.isNotEmpty ? errs.join('\n') : _info(c),

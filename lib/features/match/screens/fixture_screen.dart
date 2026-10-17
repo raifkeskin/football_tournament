@@ -6,6 +6,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/utils/resilient_stream.dart';
 import '../../tournament/models/league.dart';
 import '../models/match.dart';
+import '../widgets/knockout_fields.dart';
+import '../widgets/penalty_badge.dart';
+import '../../tournament/models/league_format.dart';
 import '../../team/models/team.dart';
 import '../../../core/services/app_session.dart';
 import '../../tournament/services/interfaces/i_league_service.dart';
@@ -981,6 +984,8 @@ class _MatchCard extends StatelessWidget {
         match.displayStatus == MatchStatus.postponed ||
         match.displayStatus == MatchStatus.cancelled;
     final cancelled = match.displayStatus == MatchStatus.cancelled;
+    // Kazanan (eleme maçında penaltılarla); berabere ise null.
+    final winner = match.homeWins;
     final showScore =
         !unplayed &&
         (match.status == MatchStatus.finished || isLive || hs != 0 || as != 0);
@@ -1092,22 +1097,39 @@ class _MatchCard extends StatelessWidget {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
+                              if (match.cupLabel != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 4),
+                                  child: Text(
+                                    match.cupLabel!.toUpperCase(),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Color(0xFF60A5FA),
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 10,
+                                      letterSpacing: 0.6,
+                                    ),
+                                  ),
+                                ),
                               _teamLine(
                                 homeName,
                                 (teamLogoById[match.homeTeamId] ?? '').trim(),
                                 showScore ? '$hs' : '-',
-                                !showScore || hs >= as,
+                                !showScore || (winner ?? true),
                                 isLive,
                                 scoreBox: !cancelled,
+                                pens: showScore ? match.homePens : null,
                               ),
                               const SizedBox(height: 4),
                               _teamLine(
                                 awayName,
                                 (teamLogoById[match.awayTeamId] ?? '').trim(),
                                 showScore ? '$as' : '-',
-                                !showScore || as >= hs,
+                                !showScore || !(winner ?? false),
                                 isLive,
                                 scoreBox: !cancelled,
+                                pens: showScore ? match.awayPens : null,
                               ),
                             ],
                           ),
@@ -1160,6 +1182,7 @@ class _MatchCard extends StatelessWidget {
     bool strong,
     bool isLive, {
     bool scoreBox = true,
+    int? pens,
   }) {
     return Row(
       children: [
@@ -1185,6 +1208,11 @@ class _MatchCard extends StatelessWidget {
         ),
         // Uzun ad kesilse bile "…" skora yapışmasın.
         if (scoreBox) const SizedBox(width: 12),
+        // Penaltı skoru: skor kutusunun solunda sarı "4 P".
+        if (scoreBox && pens != null) ...[
+          PenaltyBadge(pens, size: 11),
+          const SizedBox(width: 6),
+        ],
         // Skor kutusu: yeşil kare; canlı maçta kırmızı.
         if (scoreBox)
           Container(
@@ -1254,6 +1282,23 @@ class _MatchCard extends StatelessWidget {
 
     final pitches = [...await _leagueService.watchPitches().first]
       ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+
+    // Eleme maçı ayarı; kupalar sezonun lig formatından gelir.
+    final initialKo = KnockoutValue(
+      tiebreak: match.tiebreak,
+      cupName: match.cupName,
+      cupRound: match.cupRound,
+    );
+    var ko = initialKo;
+    var cups = const <FormatCup>[];
+    try {
+      final row = await Supabase.instance.client
+          .from('seasons')
+          .select('league_format')
+          .eq('id', match.seasonId)
+          .maybeSingle();
+      cups = LeagueFormat.fromJson(row?['league_format'])?.cups ?? const [];
+    } catch (_) {}
 
     if (pitches.length == 1) {
       selectedPitchId = pitches.first.id;
@@ -1538,6 +1583,12 @@ class _MatchCard extends StatelessWidget {
                         ),
                       ),
                     ),
+                    const SizedBox(height: 12),
+                    KnockoutFields(
+                      value: ko,
+                      cups: cups,
+                      onChanged: (v) => setDialogState(() => ko = v),
+                    ),
                     const SizedBox(height: 24),
                     SizedBox(
                       height: 50,
@@ -1592,6 +1643,14 @@ class _MatchCard extends StatelessWidget {
                               pitchId: selectedPitchId,
                               pitchName: selectedPitchName,
                             );
+                            if (!ko.sameAs(initialKo)) {
+                              await _matchService.setMatchKnockout(
+                                matchId: match.id,
+                                tiebreak: ko.tiebreak,
+                                cupName: ko.cupName,
+                                cupRound: ko.cupRound,
+                              );
+                            }
                             if (c.mounted) Navigator.pop(c);
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
