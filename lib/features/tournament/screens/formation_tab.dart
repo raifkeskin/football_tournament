@@ -356,6 +356,7 @@ class FormationTab extends StatefulWidget {
     this.canShareHome = false,
     this.canShareAway = false,
     this.initialTeam = 0,
+    this.singleTeam = false,
     this.onShare,
     this.homeColor,
     this.awayColor,
@@ -384,6 +385,10 @@ class FormationTab extends StatefulWidget {
   /// Açılışta seçili takım (0: ev sahibi, 1: deplasman); sorumlu kendi
   /// takımıyla açar.
   final int initialTeam;
+
+  /// Takım seçimi gizlenir; yalnız [initialTeam] gösterilir (esame
+  /// ekranındaki diziliş penceresi).
+  final bool singleTeam;
 
   @override
   State<FormationTab> createState() => _FormationTabState();
@@ -538,15 +543,17 @@ class _FormationTabState extends State<FormationTab>
       // Üst sekmelere yakın başlar; takım seçimi + gösterim seçimi bir arada.
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
       children: [
-        _TeamSwitch(
-          homeName: shortTeamName(widget.homeName),
-          awayName: shortTeamName(widget.awayName),
-          homeColor: widget.homeColor ?? _accent,
-          awayColor: widget.awayColor ?? _accent,
-          selected: _selected,
-          onChanged: (v) => setState(() => _selected = v),
-        ),
-        const SizedBox(height: 10),
+        if (!widget.singleTeam) ...[
+          _TeamSwitch(
+            homeName: shortTeamName(widget.homeName),
+            awayName: shortTeamName(widget.awayName),
+            homeColor: widget.homeColor ?? _accent,
+            awayColor: widget.awayColor ?? _accent,
+            selected: _selected,
+            onChanged: (v) => setState(() => _selected = v),
+          ),
+          const SizedBox(height: 10),
+        ],
         StreamBuilder<List<PlayerModel>>(
           key: ValueKey('players_$_teamId'),
           stream: ServiceLocator.teamService.watchPlayers(

@@ -1480,8 +1480,6 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                       isSuperAdmin: isSuperAdmin,
                                       homeName: homeName,
                                       awayName: awayName,
-                                      onOpenFormation: () =>
-                                          _tabController.animateTo(3),
                                     ),
 
                                     _HighlightsTab(
@@ -3317,11 +3315,7 @@ class _LineupTab extends StatefulWidget {
     required this.isSuperAdmin,
     required this.homeName,
     required this.awayName,
-    this.onOpenFormation,
   });
-
-  /// Diziliş sekmesine geçer ("Dizilişi ayarla").
-  final VoidCallback? onOpenFormation;
 
   @override
   State<_LineupTab> createState() => _LineupTabState();
@@ -3530,31 +3524,6 @@ class _LineupTabState extends State<_LineupTab>
             ),
           ],
         ),
-        if (widget.onOpenFormation != null &&
-            (widget.isSuperAdmin ||
-                _beforeKickoff(m) &&
-                    (_managesTeam(m.homeTeamId) || _managesTeam(m.awayTeamId))))
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: SizedBox(
-              height: 36,
-              child: OutlinedButton.icon(
-                onPressed: widget.onOpenFormation,
-                icon: const Icon(Icons.sports_soccer_rounded, size: 17),
-                label: const Text(
-                  'Dizilişi Ayarla',
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
-                ),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  side: BorderSide(color: Colors.white.withValues(alpha: 0.25)),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-              ),
-            ),
-          ),
         const SizedBox(height: 10),
         // İki kadro yan yana
         IntrinsicHeight(
