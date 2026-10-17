@@ -329,7 +329,8 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
       );
   }
 
-  Future<void> _save() async {
+  /// Esameyi kaydeder; [close] ise ekranı kapatır. Başarılıysa true.
+  Future<bool> _save({bool close = true}) async {
     FocusScope.of(context).unfocus();
     final ids = [..._starters, ..._subs];
     final used = <String>{};
@@ -341,9 +342,9 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
           title: 'Forma numarası eksik',
           message:
               '${_byId[id]?.name ?? 'Bir oyuncu'} için forma numarası girin. '
-              "Numara önemsizse \"1'den otomatik ver\" düğmesini kullanın.",
+              'Numara önemsizse "Otomatik Forma No" düğmesini kullanın.',
         );
-        return;
+        return false;
       }
       if (!used.add(n)) {
         await showAdminInfoDialog(
@@ -351,7 +352,7 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
           title: 'Aynı forma numarası',
           message: '$n numarası birden fazla oyuncuda var.',
         );
-        return;
+        return false;
       }
     }
 
@@ -382,12 +383,84 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
         rosters: rosters,
       );
       _dirty = false;
-      if (mounted) Navigator.pop(context, true);
+      if (mounted && close) Navigator.pop(context, true);
+      return true;
     } catch (e) {
       if (mounted) _toast('Hata: $e');
+      return false;
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  /// Diziliş penceresi. Diziliş kayıtlı esameden çizilir: kaydedilmemiş
+  /// değişiklik varsa önce esame kaydedilir.
+  Future<void> _openFormation() async {
+    if (_starters.isEmpty) {
+      _toast("Önce ilk 11'i seçin.");
+      return;
+    }
+    if (_dirty) {
+      if (!await _save(close: false)) return;
+      if (!mounted) return;
+      setState(() {});
+      _toast('Esame kaydedildi.');
+    }
+    if (!mounted) return;
+    final home = widget.isHome;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: _bg,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SizedBox(
+        height: MediaQuery.of(ctx).size.height * 0.9,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 4, 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Diziliş · ${widget.teamName}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      color: Colors.white70,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: FormationTab(
+                match: widget.match,
+                homeName: widget.teamName,
+                awayName: widget.teamName,
+                canEditHome: home,
+                canEditAway: !home,
+                initialTeam: home ? 0 : 1,
+                singleTeam: true,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _confirmLeave() async {
@@ -542,29 +615,53 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
         ),
       );
     }
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
-      child: Row(
-        children: [
-          Expanded(child: quota ?? const SizedBox()),
-          OutlinedButton.icon(
-            onPressed: _autoNumber,
-            icon: const Icon(Icons.format_list_numbered_rounded, size: 16),
-            label: const Text(
-              'Otomatik Forma No',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+    Widget button(String label, IconData icon, Color c, VoidCallback onTap) =>
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: _isSaving ? null : onTap,
+            icon: Icon(icon, size: 16),
+            label: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
             ),
             style: OutlinedButton.styleFrom(
-              foregroundColor: _gold,
-              backgroundColor: _gold.withValues(alpha: 0.1),
-              side: BorderSide(color: _gold.withValues(alpha: 0.6)),
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              minimumSize: const Size(0, 32),
+              foregroundColor: c,
+              backgroundColor: c.withValues(alpha: 0.1),
+              side: BorderSide(color: c.withValues(alpha: 0.6)),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: const Size(0, 34),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(9),
               ),
             ),
+          ),
+        );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (quota != null)
+            Padding(padding: const EdgeInsets.only(bottom: 6), child: quota),
+          Row(
+            children: [
+              button(
+                'Dizilişi Ayarla',
+                Icons.sports_soccer_rounded,
+                _green,
+                _openFormation,
+              ),
+              const SizedBox(width: 8),
+              button(
+                'Otomatik Forma No',
+                Icons.format_list_numbered_rounded,
+                _gold,
+                _autoNumber,
+              ),
+            ],
           ),
         ],
       ),
