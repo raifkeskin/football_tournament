@@ -215,3 +215,12 @@ Bugün aktarım açıksa turnuvanın Instagram hesabındaki her yeni gönderi so
 - Değişecek yer: `supabase/functions/_shared/instagram_sync.ts` (insert), onay ekranı (`admin_pending_actions_screen.dart`), bildirim tetikleyicisi.
 - Eski sürümler etkilenmez (yayınlanmamış haber kullanıcılara görünmez).
 - Maliyet: düşük-orta.
+
+## 21. Esame kağıdını kamerayla okutma — YAPILACAK
+
+Fotoğraf yükleyerek esame okuma 2026-10-17'de yapıldı (galeriden seçme, Gemini ile okuma, kadroyla eşleştirme, onay ekranı). Sıradaki adım: aynı akışa "Kameraya okut" seçeneği.
+
+- iOS'ta `NSCameraUsageDescription` gerekir → yeni iOS derlemesi + Apple incelemesi (inceleme notuna özelliği yaz).
+- Android/web'de image_picker kamera kaynağı ek izin istemeden çalışır.
+- Turnuva ayarı: "Esame girişi: Elle / Kağıttan oku (kamera + galeri)".
+- Sonraki aşama: maç sonu kağıttaki gol / SK / KK sütunlarını okuma.
