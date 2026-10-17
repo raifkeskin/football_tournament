@@ -41,6 +41,7 @@ import '../utils/match_clock.dart';
 import '../services/match_highlight_service.dart';
 import '../widgets/match_highlights_section.dart';
 import '../widgets/youtube_find_sheet.dart';
+import '../widgets/match_weather.dart';
 import '../services/youtube_autolink_service.dart';
 import '../../team/screens/team_squad_screen.dart';
 import 'package:football_tournament/core/widgets/admin_page.dart';
@@ -900,6 +901,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
               shadows: _hdrShadow,
             ),
           ),
+        MatchWeatherHeaderLine(matchId: m.id, shadows: _hdrShadow),
       ],
     );
   }
@@ -4113,6 +4115,25 @@ class _DetailTabView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final time = (match.matchTime ?? '').trim();
+    final played =
+        match.status != MatchStatus.notStarted &&
+        match.status != MatchStatus.postponed;
+    // Hava paneli (veri yoksa hiç yer kaplamaz) + olay akışı.
+    return Column(
+      children: [
+        if (match.status != MatchStatus.cancelled)
+          MatchWeatherPanel(
+            matchId: match.id,
+            kickoffLabel: time.isEmpty || time == 'null' ? null : time,
+            played: played,
+          ),
+        Expanded(child: _events(context)),
+      ],
+    );
+  }
+
+  Widget _events(BuildContext context) {
     return FutureBuilder<SeasonMatchSettings>(
       future: settingsFuture,
       initialData: SeasonMatchSettings.cached(match.seasonId),
