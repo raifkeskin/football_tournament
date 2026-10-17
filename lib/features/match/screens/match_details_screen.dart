@@ -866,9 +866,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     );
   }
 
-  /// Bandın alt satırı: solda tarih · saat (maç başladıysa), sağda stad ve
-  /// haritaya götüren "Yol tarifi ›".
-  Widget _headerFooter(MatchModel m, bool showKickoff) {
+  /// Bandın alt satırı: ortalı stad ve haritaya götüren "Yol tarifi ›".
+  /// (Tarih/saat başlamamış maçta ortada, başlamışta üst çubukta.)
+  Widget _headerFooter(MatchModel m) {
     const small = TextStyle(
       color: Colors.white,
       fontSize: 10.5,
@@ -879,17 +879,8 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     return SizedBox(
       height: 18,
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Expanded(
-            child: showKickoff
-                ? const SizedBox.shrink()
-                : Text(
-                    _dateTimeLine(m),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: small,
-                  ),
-          ),
           if (pitchId.isNotEmpty)
             Flexible(
               child: StreamBuilder<List<Pitch>>(
@@ -1168,6 +1159,20 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
               backgroundColor: const Color(0xFF0F172A),
               appBar: AppBar(
                 toolbarHeight: 44,
+                // Başlamış/bitmiş maçta tarih ve saat üst çubukta ortalı.
+                centerTitle: true,
+                title: showKickoff
+                    ? null
+                    : Text(
+                        _dateTimeLine(m),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.3,
+                          shadows: _hdrShadow,
+                        ),
+                      ),
                 backgroundColor: Colors.transparent,
                 surfaceTintColor: Colors.transparent,
                 elevation: 0,
@@ -1298,7 +1303,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                   ],
                                 ),
                                 const SizedBox(height: 4),
-                                _headerFooter(m, showKickoff),
+                                _headerFooter(m),
                               ],
                             ),
                           ),
