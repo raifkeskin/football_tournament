@@ -26,6 +26,7 @@ import '../../../core/widgets/web_safe_image.dart';
 import '../../../core/widgets/youtube_player_page.dart';
 import '../widgets/home_news_card.dart';
 import '../widgets/home_dashboard.dart';
+import '../home_warmup.dart';
 import '../../../core/design_flags.dart';
 
 /// Ana sayfa — günün maçları, tarih şeridi ve maç kartları.
@@ -546,6 +547,8 @@ class _HomeScreenState extends State<HomeScreen> {
           Positioned.fill(
             child: StreamBuilder<List<League>>(
               stream: _leagueService.watchLeagues(),
+              // Açılış ekranında hazırlandıysa ilk kare bekleme göstermez.
+              initialData: HomeWarmup.leagues,
               builder: (context, leagueSnapshot) {
                 if (!leagueSnapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());

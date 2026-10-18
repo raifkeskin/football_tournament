@@ -10,10 +10,12 @@ import '../../match/screens/live_draw_screen.dart';
 import '../../news/screens/news_feed_screen.dart';
 import '../../tournament/models/league_extras.dart';
 import '../../tournament/screens/tournament_hub_screen.dart';
+import '../home_warmup.dart';
 
 /// Ana sayfanın üstündeki haber kartı: en son haberler (yaşına bakılmadan)
 /// sırayla döner; dokununca Haberler sekmesi açılır. Haber yoksa hiç
 /// görünmez. Son 24 saatin haberi "SON DAKİKA", daha eskisi "HABERLER".
+
 class HomeNewsCard extends StatefulWidget {
   const HomeNewsCard({super.key, this.leagueId, this.regionId});
 
@@ -82,6 +84,8 @@ class _HomeNewsCardState extends State<HomeNewsCard> {
   Widget build(BuildContext context) {
     return StreamBuilder<List<NewsItem>>(
       stream: _stream,
+      // Açılış ekranında hazırlandıysa kart ilk karede yerinde.
+      initialData: HomeWarmup.news,
       builder: (context, snap) {
         final items = (snap.data ?? const <NewsItem>[])
             .where(

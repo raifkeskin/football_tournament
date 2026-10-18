@@ -36,6 +36,7 @@ class _SponsorStripState extends State<SponsorStrip> {
     super.initState();
     AppActivity.foreground.addListener(_onForeground);
     SponsorFeed.changes.addListener(_onSponsorsChanged);
+    _feed = SponsorFeed.memory(widget.leagueId);
     _load();
   }
 
@@ -87,7 +88,7 @@ class _SponsorStripState extends State<SponsorStrip> {
     super.didUpdateWidget(old);
     if (old.leagueId != widget.leagueId) {
       _timer?.cancel();
-      _feed = null;
+      _feed = SponsorFeed.memory(widget.leagueId);
       _index = 0;
       _load();
     }

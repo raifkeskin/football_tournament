@@ -9,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/config/app_config.dart';
 import 'features/auth/screens/login_screen.dart';
 import 'features/home/screens/main_navigator.dart';
+import 'features/home/home_warmup.dart';
 import 'core/services/app_session.dart';
 import 'core/services/active_tournament.dart';
 import 'core/services/app_settings.dart';
@@ -88,6 +89,22 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   @override
+  void initState() {
+    super.initState();
+    // Dokunma beklenmez: ana sayfa hazırlanınca (en fazla ~2,5 sn)
+    // kendiliğinden geçilir; ana sayfa ilk karede dolu açılır.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await Future.wait([
+        HomeWarmup.run(context, AppSession.of(context)),
+        // Logo bir an görünsün (göz kırpar gibi geçmesin).
+        Future<void>.delayed(const Duration(milliseconds: 500)),
+      ]);
+      if (mounted) _continueToApp();
+    });
+  }
+
+  @override
   void dispose() {
     _anim.dispose();
     super.dispose();
@@ -111,6 +128,7 @@ class _SplashScreenState extends State<SplashScreen>
         transitionDuration: const Duration(milliseconds: 350),
       ),
     );
+    HomeWarmup.release();
   }
 
   Widget _reveal({required double start, required Widget child}) {
@@ -138,116 +156,90 @@ class _SplashScreenState extends State<SplashScreen>
 
     return Scaffold(
       backgroundColor: bgDark,
-      body: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: _continueToApp,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            const DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Color(0xCC0F172A),
-                    Color(0x660F172A),
-                    Color(0xF20F172A),
-                  ],
-                ),
-              ),
-            ),
-            SafeArea(
-              child: Column(
-                children: [
-                  const Spacer(flex: 3),
-                  // Kişinin turnuvası temalıysa açılış o turnuvanın logosu
-                  // ve adıyla; altında küçük uygulama adı.
-                  _reveal(
-                    start: 0,
-                    child: theme == null
-                        ? const AppLogo(size: 150)
-                        : WebSafeImage(
-                            url: theme.logoUrl,
-                            width: 170,
-                            height: 170,
-                            fit: BoxFit.contain,
-                          ),
-                  ),
-                  const SizedBox(height: 28),
-                  if (theme != null || kShowAppName)
-                    _reveal(
-                      start: 0.15,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
-                        child: Text(
-                          theme?.name ?? kAppName,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 34,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ),
-                    ),
-                  const SizedBox(height: 10),
-                  _reveal(
-                    start: 0.3,
-                    child: Container(
-                      width: 40,
-                      height: 3,
-                      decoration: BoxDecoration(
-                        color: theme?.secondary ?? accent,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  if (theme == null || kShowAppName)
-                    _reveal(
-                      start: 0.4,
-                      child: Text(
-                        theme == null ? 'Hoş Geldiniz' : kAppName,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.8),
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                          letterSpacing: 0.3,
-                        ),
-                      ),
-                    ),
-                  const Spacer(flex: 4),
-                  _reveal(
-                    start: 0.6,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.touch_app_outlined,
-                          color: Colors.white.withValues(alpha: 0.55),
-                          size: 18,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Devam etmek için dokunun',
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.55),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 28),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0xCC0F172A),
+                  Color(0x660F172A),
+                  Color(0xF20F172A),
                 ],
               ),
             ),
-          ],
-        ),
+          ),
+          SafeArea(
+            child: Column(
+              children: [
+                const Spacer(flex: 3),
+                // Kişinin turnuvası temalıysa açılış o turnuvanın logosu
+                // ve adıyla; altında küçük uygulama adı.
+                _reveal(
+                  start: 0,
+                  child: theme == null
+                      ? const AppLogo(size: 150)
+                      : WebSafeImage(
+                          url: theme.logoUrl,
+                          width: 170,
+                          height: 170,
+                          fit: BoxFit.contain,
+                        ),
+                ),
+                const SizedBox(height: 28),
+                if (theme != null || kShowAppName)
+                  _reveal(
+                    start: 0.15,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Text(
+                        theme?.name ?? kAppName,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 34,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 10),
+                _reveal(
+                  start: 0.3,
+                  child: Container(
+                    width: 40,
+                    height: 3,
+                    decoration: BoxDecoration(
+                      color: theme?.secondary ?? accent,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                if (theme == null || kShowAppName)
+                  _reveal(
+                    start: 0.4,
+                    child: Text(
+                      theme == null ? 'Hoş Geldiniz' : kAppName,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.8),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ),
+                const Spacer(flex: 4),
+                const SizedBox(height: 28),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -121,3 +121,6 @@ Widget _htmlImage(
     ),
   );
 }
+
+Future<void> precacheWebSafeImageImpl(BuildContext context, String url) =>
+    precacheImage(NetworkImage(url), context, onError: (_, _) {});

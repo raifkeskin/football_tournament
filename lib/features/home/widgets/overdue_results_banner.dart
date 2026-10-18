@@ -44,6 +44,18 @@ class OverdueResultsBanner extends StatefulWidget {
   /// Ana sayfa yenilenince uyarı da yeniden okunur.
   static final refresh = ValueNotifier<int>(0);
 
+  /// Açılış ekranında okunur: uyarı ana sayfanın ilk karesinde yerinde
+  /// (sonradan gelip içeriği aşağı itmez).
+  static Future<void> warmUp(String leagueId, AppSessionState s) async {
+    if (!_canSeeFor(s)) return;
+    try {
+      await _OverdueResultsBannerState._fetch(leagueId);
+    } catch (_) {}
+  }
+
+  static bool _canSeeFor(AppSessionState s) =>
+      s.isAdmin || s.isLeagueOwner || s.ownedRegions.isNotEmpty;
+
   @override
   State<OverdueResultsBanner> createState() => _OverdueResultsBannerState();
 }
@@ -53,6 +65,19 @@ class _OverdueResultsBannerState extends State<OverdueResultsBanner> {
 
   /// Turnuva başına son liste: ekrana dönüşte uyarı beklemeden görünür.
   static final Map<String, List<_Overdue>> _cache = {};
+
+  static Future<List<_Overdue>> _fetch(String league) async {
+    final rows = await Supabase.instance.client.rpc(
+      'overdue_result_matches',
+      params: {'p_league_id': league},
+    );
+    final list = [
+      for (final r in (rows as List? ?? const []))
+        _Overdue(Map<String, dynamic>.from(r as Map)),
+    ];
+    _cache[league] = list;
+    return list;
+  }
 
   List<_Overdue> _items = const [];
   Timer? _timer;
@@ -70,8 +95,9 @@ class _OverdueResultsBannerState extends State<OverdueResultsBanner> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final s = AppSession.of(context).value;
-    final canSee = s.isAdmin || s.isLeagueOwner || s.ownedRegions.isNotEmpty;
+    final canSee = OverdueResultsBanner._canSeeFor(
+      AppSession.of(context).value,
+    );
     if (canSee != _canSee) {
       _canSee = canSee;
       _load();
@@ -101,15 +127,7 @@ class _OverdueResultsBannerState extends State<OverdueResultsBanner> {
     }
     final league = widget.leagueId;
     try {
-      final rows = await Supabase.instance.client.rpc(
-        'overdue_result_matches',
-        params: {'p_league_id': league},
-      );
-      final list = [
-        for (final r in (rows as List? ?? const []))
-          _Overdue(Map<String, dynamic>.from(r as Map)),
-      ];
-      _cache[league] = list;
+      final list = await _fetch(league);
       if (mounted && league == widget.leagueId) setState(() => _items = list);
     } catch (_) {
       // Uyarı gösterilemezse ana sayfa etkilenmez.
