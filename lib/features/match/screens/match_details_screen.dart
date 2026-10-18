@@ -12,6 +12,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 import '../../tournament/models/league_extras.dart';
 import '../models/match.dart';
+import '../widgets/attendance_card.dart';
 import '../widgets/penalty_badge.dart';
 import '../widgets/shootout_board.dart';
 import 'esame_edit_screen.dart';
@@ -3479,6 +3480,22 @@ class _LineupTabState extends State<_LineupTab>
                 _managesTeam(m.awayTeamId))) ...[
           _RosterInfoNote(hours: _openHours),
           const SizedBox(height: 10),
+        ],
+        // Katılım Durum Sorgulama: yalnızca takımın sorumlusu ve kadrosu
+        // görür (yetkisizde kart çizilmez).
+        if (AppSession.of(context).value.user != null) ...[
+          AttendanceCard(
+            match: m,
+            teamId: m.homeTeamId,
+            teamName: widget.homeName,
+            rivalName: widget.awayName,
+          ),
+          AttendanceCard(
+            match: m,
+            teamId: m.awayTeamId,
+            teamName: widget.awayName,
+            rivalName: widget.homeName,
+          ),
         ],
         // Takım başlıkları + VS
         Row(

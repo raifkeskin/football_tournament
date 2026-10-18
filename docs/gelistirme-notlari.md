@@ -50,19 +50,11 @@ _Eklendi: 2026-10-03_
 - Uygulama markete çıkıp yeni turnuvalar açıldığında: KVKK + sağlık onayı vermemiş oyuncu **maç esamesine eklenemez**.
 - Mevcut turnuvalara geriye dönük uygulanıp uygulanmayacağı o zaman kararlaştırılacak (turnuva bazlı ayar olabilir).
 
-## 5. Bildirime dokununca ilgili sayfanın açılması (deep link)
-_Eklendi: 2026-10-03_
+## 5. Bildirime dokununca ilgili sayfanın açılması (deep link) — BÜYÜK ÖLÇÜDE YAPILDI
+_Eklendi: 2026-10-03 · Güncellendi: 2026-10-18_
 
-- Şu an bildirime dokununca uygulamanın ana sayfası açılıyor; uygulamada sayfa adresleri (route) tanımlı değil.
-- Yapılacak: maç bildirimi → ilgili maç detayı, haber bildirimi → haber, saat/hatırlatma → maç detayı.
-- Gerekenler: uygulamaya adres yapısı (ör. `/mac/<id>`, `/haber/<id>`), push-sw.js'te tıklamada adresin açılması, veritabanındaki push tetikleyicilerinde `url` alanının doldurulması.
-
-## 6. Champions Master tanıtım sayfasını kendi alan adımızda yayınlamak
-_Eklendi: 2026-10-06_
-
-- Tanıtım sayfası hazır: `docs/tanitim/champions-master-tanitim.html` (görseller içine gömülü, tek dosya). Kaynak şablon: `docs/tanitim/champions-master-tanitim.src.html`. Şu an claude.ai'de de duruyor: https://claude.ai/artifact/MWikmZChsDdT2FmW7a8u3n
-- Yapılacak: sayfayı Firebase hosting'e koymak (ör. `/tanitim/champions`), turnuva sahiplerine uygulamanın kendi adresiyle bağlantı göndermek. Hareketli haber galerisi aynen çalışır.
-- PDF sürümü şimdilik gerekmiyor; istenirse galeri bölümü 5 küçük kare olarak basılacak.
+- **Çalışıyor** (`notification_router.dart`, web + APK): maç bildirimleri (gol, canlı, sonuç, saat değişikliği, hatırlatma) → maç detayı; haber → Turnuva Sayfası Haberler (haber açık); kadro talebi, Instagram onayı, yayın uyuşmazlığı → Bekleyen Onaylar; ceza → Ceza Yönetimi.
+- **Kalan (düşük):** "haftanın fikstürü açıklandı" gibi bir bildirim henüz yok; eklenirse `fixture-<sezon>:<hafta>` türüyle Turnuva Sayfası Fikstür sekmesinin o haftası açılır. `roster-` (talebiniz onaylandı) ve `penaltyok-` bildirimleri yalnız uygulamayı açar.
 
 ## 7. Sponsor bölümü — YAPILDI (2026-10-07)
 _Eklendi: 2026-10-07_
@@ -82,6 +74,13 @@ _Eklendi: 2026-10-07_
 - Deneme `app_errors` tablosuna ve Telegram'a "yetkisiz ekran denemesi: ekran, rol" diye düşer (gözden kaçan menü/düğme hemen fark edilir).
 - Veritabanı "yetkiniz yok" (RLS) dediğinde teknik mesaj yerine anlaşılır uyarı.
 - Kapsam: ~15 yönetim ekranı, tahmini yarım gün. Sponsor ekranı bu yapıyla kurulabilir.
+
+**Yapılacaklar özeti (2026-10-18):**
+1. `AccessGate(roles: [...], child: ...)` bileşeni: `AppSession` rolüne bakar; yetki yoksa ekran yerine "Bu ekrana erişim yetkiniz yok" kartı + Geri düğmesi.
+2. Her yönetim ekranının girişine sarılır (Turnuva / Takım / Lisans / Fikstür Planlama / Canlı Kura / Ceza / Haber / Sponsor / Hakem / Bekleyen Onaylar / admin panelleri). Rol listesi rol hiyerarşisine göre (admin > kurucu başkan > bölge sorumlusu > futbolcu > misafir; üst rol alttakinin yetkisini taşır, yalnız kendi turnuvası).
+3. Yetkisiz deneme `app_errors`'a `screen` + `last_role` ile yazılır, Telegram'a düşer.
+4. Ortak hata çevirisi: PostgrestException 42501 / RLS → "Bu işlem için yetkiniz yok."
+5. Veritabanı tarafı değişmez (RLS zaten asıl koruma); bu katman kullanıcı deneyimi ve erken uyarı içindir.
 
 ## 9. App Store incelemesi: ekran kaydı + bilgi cevabı (iOS 1.0)
 _Eklendi: 2026-10-08_
@@ -108,24 +107,6 @@ _Eklendi: 2026-10-11_
   - Gizli ve demo turnuvalar herkese açık CDN'den sunulamaz; onlar veritabanından okumaya devam eder.
   - Dosyayı her değişiklikte yeniden üreten bir mekanizma gerekir (tetikleyici → Edge Function → Storage).
 - **Tahmini iş:** ~1 gün.
-
-## 11. Demo turnuvalara oyuncu fotoğrafları + fotoğraf standardı
-_Eklendi: 2026-10-13_
-
-- **Sorun:** Demo turnuvalarda oyuncu profil fotoğrafı yok. "Demoyu Gez" ile gelen organizatör profilleri boş görüyor.
-- **Yapılacak:**
-  - Demo oyunculara örnek, vesikalık tarzı fotoğraflar eklenecek.
-  - Oyuncunun fotoğraf yüklediği yerde örnek bir fotoğraf gösterilecek: "Fotoğrafın bu standartta olsun". Standart: vesikalık gibi, yüz ortada, düz arka plan, dik çekim.
-- **Neden:** Profiller tutarlı ve şık görünür. Demo, gerçek kullanımı daha iyi anlatır.
-
-## 12. Röportaj videolarını uygulama içinde oynatmak
-_Eklendi: 2026-10-13_
-
-- **Şu an:** Maç medyasında "Video Linki" türü var. Instagram veya YouTube linki ekleniyor, dokununca video o uygulamada açılıyor.
-- **Sonra:** Video uygulamanın içinde oynasın.
-  - Web'de Instagram'ın gömme sayfası (iframe) kullanılabilir. Telefonda webview paketi gerekir.
-  - Küçük resim (thumbnail) ve başlık için Meta oEmbed izni gerekir. Instagram yayın planındaki Meta uygulaması kurulunca yapılır.
-- **Not:** Videoyu kendimiz barındırmıyoruz. Trafik ücreti yüksek olur, akış (HLS) da yok.
 
 ## 13. Halısaha videolarından gol kesitleri (dakikasız)
 _Eklendi: 2026-10-14_
@@ -165,25 +146,6 @@ _Eklendi: 2026-10-14_
 - **Gösterim:** Detay sekmesinin en altında "Maç Görevlileri" kartı. Hakem girilmemişse kart görünmez. Üst bant zaten dolu olduğu için oraya konmadı.
 - **Yük:** Orta (migration + yönetim ekranı + maç formu + detay kartı).
 
-## 16. VAR gol iptali: daha kısa yol
-_Eklendi: 2026-10-15_
-
-- **Şu an:** Maç olayı ekle → "VAR: Gol İptali" → gol seçimi → yeşil/kırmızı onay. Skor düzeltmesi ve "VAR: Gol iptal" bildirimi `20261020200000_var_goal_cancel.sql` tetikleyicisinde. Bu migration canlı DB'ye uygulanana kadar seçenek yalnız admin'e açık.
-- **Sonra:** Olay eklemek yerine doğrudan golün üzerinden:
-  - Maç detayında, yalnız admin ve turnuva sorumlusuna, gol satırında topun hemen yanında küçük yuvarlak "i" (bilgi) ikonu: "Gole 1 sn'den uzun basınca gol iptali yapılabilir".
-  - Gole 1 sn'den uzun basınca "VAR: Gol İptali" onay penceresi açılır (yeşil onayla / kırmızı iptal).
-
-## 17. Android ikon zemini (siyah köşeler) — KARARSIZ
-_Eklendi: 2026-10-15_
-
-- **Sorun:** Android uyarlanabilir ikonun zemini saydam (`design/app_icon_android_bg.png`), Android bunu siyah dolduruyor. Yuvarlatılmış kare kesen telefonlarda (Samsung, Pixel, Xiaomi) yuvarlak armanın köşelerinde siyah üçgenler kalıyor.
-- **Seçenekler (önizleme):** https://claude.ai/artifact/V1sLtEVR6om8exoMtLLT95
-  - Beyaz: açık duvar kâğıdında temiz, koyuda köşeler armadan çok dikkat çekiyor.
-  - Koyu yeşil #062319 (önerilen): iOS ikonu ve armanın iç zeminiyle aynı, iki platform tutarlı.
-  - Arma yeşili #0B5D41: alternatif, biraz kalabalık.
-- **Yapılacak (karar verilirse):** `tool/render_app_icons_test.dart` içinde zemin PNG'sini seçilen renkle doldur, `android/app/src/main/res/values/colors.xml` rengini eşle, `dart run flutter_launcher_icons`. Uygulama içi logo, açılış ekranı ve web ikonları değişmez. Yeni APK/AAB gerekir.
-- **Durum:** Yapılıp yapılmayacağına karar verilmedi.
-
 ## 18. Sponsor reklam haberi (kampanya)
 - Sponsorlar kampanya duyurusu verebilsin; Haberler'de "REKLAM" etiketli haber olarak çıkar.
 - Örnek: "BMR Otomotiv'den %10 indirim. 1–31 Ekim tarihleri arasında INDIRIM10 koduyla gelen müşterilerimize %10 indirim uygulanacaktır."
@@ -206,7 +168,10 @@ Hiçbir takımda kaydı olmayan kişi kendi futbolcu profilini oluşturabilsin, 
 - **Tahmini maliyet:** Faz 1 orta, Faz 2 düşük-orta, Faz 3 orta.
 - **Netleşecek:** Profil varsayılan görünürlüğü; 18 yaş altı; önce ekran önizlemesi (mockup) istenir mi.
 
-## 20. Instagram → Haberler: #ligmasasi etiketiyle seçmeli aktarım — YAPILACAK
+## 20. Instagram → Haberler: #ligmasasi etiketiyle seçmeli aktarım — CANLI (2026-10-18)
+
+Kalan: migration 20261023100000 uygulanacak, `instagram-sync` edge function deploy edilecek, web + APK yayınlanacak.
+
 
 Bugün aktarım açıksa turnuvanın Instagram hesabındaki her yeni gönderi sorulmadan haber olarak yayınlanıyor. İstek: her gönderi uygulamada görünmesin.
 

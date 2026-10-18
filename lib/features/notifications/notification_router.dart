@@ -61,9 +61,15 @@ class NotificationRouter {
       case 'live':
       case 'goal':
         if (ref != null) await _openMatch(context, ref);
+      // Katılım Durum Sorgulama: maçın Kadro sekmesi (kart orada).
+      case 'attend':
+        if (ref != null) await _openMatch(context, ref, tab: 1);
       case 'news':
         if (ref != null) await _openNews(context, ref);
+      // Kadro talebi, etiketsiz Instagram gönderisi (approval-ig…) ve
+      // yayın linki uyuşmazlığı (yt-conflict-…) Bekleyen Onaylar'da.
       case 'approval':
+      case 'yt':
         await Navigator.of(context).push(
           MaterialPageRoute<void>(
             settings: const RouteSettings(name: 'AdminPendingActionsScreen'),
@@ -99,7 +105,11 @@ class NotificationRouter {
     );
   }
 
-  static Future<void> _openMatch(BuildContext context, String id) async {
+  static Future<void> _openMatch(
+    BuildContext context,
+    String id, {
+    int tab = 0,
+  }) async {
     final isAdmin = AppSession.of(context).value.isAdmin;
     final nav = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
@@ -123,7 +133,11 @@ class NotificationRouter {
       await nav.push(
         MaterialPageRoute<void>(
           settings: const RouteSettings(name: 'MatchDetailsScreen'),
-          builder: (_) => MatchDetailsScreen(match: match, isAdmin: isAdmin),
+          builder: (_) => MatchDetailsScreen(
+            match: match,
+            isAdmin: isAdmin,
+            initialTabIndex: tab,
+          ),
         ),
       );
     } catch (_) {

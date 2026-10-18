@@ -60,6 +60,7 @@ class SquadPoster extends StatelessWidget {
   final TeamPalette palette;
 
   /// Mevki adı → oyuncular (sıra korunur).
+  /// Mevki başlığı → oyuncular. Boş başlıklı grup başlıksız düz listedir.
   final Map<String, List<PosterPlayer>> groups;
 
   @override
@@ -73,36 +74,37 @@ class SquadPoster extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                Text(
-                  title.trUpper,
-                  style: cond(
-                    color: p.accent,
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 2,
+            if (title.isNotEmpty)
+              Row(
+                children: [
+                  Text(
+                    title.trUpper,
+                    style: cond(
+                      color: p.accent,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 2,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Container(
-                    height: 1,
-                    color: p.accent.withValues(alpha: 0.4),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Container(
+                      height: 1,
+                      color: p.accent.withValues(alpha: 0.4),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  '${players.length}',
-                  style: cond(
-                    color: Colors.white60,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+                  const SizedBox(width: 8),
+                  Text(
+                    '${players.length}',
+                    style: cond(
+                      color: Colors.white60,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
+                ],
+              ),
+            if (title.isNotEmpty) const SizedBox(height: 6),
             Wrap(
               runSpacing: 5,
               children: [

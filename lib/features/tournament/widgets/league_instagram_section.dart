@@ -31,6 +31,11 @@ class _IgStatus {
 /// "Bağla" Instagram yetkilendirme sayfasını tarayıcıda açar; dönüşte
 /// instagram-oauth-callback belirteci kaydeder. Uygulamaya geri dönülünce
 /// durum yenilenir (bkz. migration 20261020140000_instagram_accounts).
+const _importHint =
+    '15 dakikada bir yeni gönderiler kontrol edilir. Açıklamasında #ligmasasi '
+    'olan gönderi hemen haber olur; olmayan, Bekleyen Onaylar\'da onayınızı '
+    'bekler.';
+
 /// "Haberlere aktar" açıkken gönderiler 15 dakikada bir aktif sezonun
 /// haberlerine düşer (instagram-sync, migration 20261020150000).
 class LeagueInstagramSection extends StatefulWidget {
@@ -312,12 +317,8 @@ class _LeagueInstagramSectionState extends State<LeagueInstagramSection> {
                     s.lastError != null
                         ? 'Son aktarım başarısız: ${s.lastError}'
                         : s.lastSyncedAt != null
-                        ? 'Son kontrol ${_time(s.lastSyncedAt!)} · 15 dakikada '
-                              'bir yeni gönderiler aktarılır. İstemediğiniz '
-                              'haberi Haber Yönetimi\'nden gizleyebilirsiniz.'
-                        : '15 dakikada bir yeni gönderiler aktarılır. '
-                              'İstemediğiniz haberi Haber Yönetimi\'nden '
-                              'gizleyebilirsiniz.',
+                        ? 'Son kontrol ${_time(s.lastSyncedAt!)} · $_importHint'
+                        : _importHint,
                     style: TextStyle(
                       color: s.lastError != null ? kAdminDanger : kAdminMuted,
                       fontSize: 12,

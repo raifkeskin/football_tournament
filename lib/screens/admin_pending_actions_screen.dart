@@ -11,10 +11,11 @@ import '../features/match/services/youtube_autolink_service.dart';
 import '../features/match/widgets/youtube_find_sheet.dart';
 import '../core/utils/team_name.dart';
 
-enum _Filter { all, profile, roster, broadcast, history }
+enum _Filter { all, profile, roster, broadcast, news, history }
 
-/// Takım sorumlularının kadro talepleri ve futbolcuların profil değişiklik
-/// talepleri; admin ve turnuva sahibi onaylar. Profil talebinde ilk karar
+/// Takım sorumlularının kadro talepleri, futbolcuların profil değişiklik
+/// talepleri ve #ligmasasi etiketsiz Instagram gönderileri; admin ve turnuva
+/// sahibi onaylar. Profil talebinde ilk karar
 /// geçerlidir, sonuçlanan talepler "Geçmiş"te kalır.
 /// Hangi taleplerin görüneceğini veritabanı belirler: admin hepsini, turnuva
 /// sahibi yalnızca kendi turnuvalarınınkini görür.
@@ -38,6 +39,7 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
   List<ProfileChangeRequest> _profileRequests = const [];
   List<ProfileChangeRequest> _history = const [];
   List<YoutubeLinkConflict> _conflicts = const [];
+  List<_IgNews> _igNews = const [];
 
   /// Uyuşmazlık kartındaki maç bilgisi (maç id -> başlık / alt satır).
   Map<String, (String, String)> _conflictMatches = const {};
@@ -60,6 +62,7 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
         _approval.fetchPendingActions(),
         _profiles.listRequests(onlyPending: true),
         _loadConflicts(),
+        _loadIgNews(),
         if (_filter == _Filter.history)
           _profiles.listRequests(onlyPending: false),
       ]);
@@ -70,8 +73,9 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
         _actions = list;
         _profileRequests = results[1] as List<ProfileChangeRequest>;
         _conflicts = results[2] as List<YoutubeLinkConflict>;
-        if (results.length > 3) {
-          _history = (results[3] as List<ProfileChangeRequest>)
+        _igNews = results[3] as List<_IgNews>;
+        if (results.length > 4) {
+          _history = (results[4] as List<ProfileChangeRequest>)
               .where((r) => r.status != ProfileChangeStatus.pending)
               .toList();
         }
@@ -82,6 +86,50 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
         context,
       ).showSnackBar(SnackBar(content: Text('Hata: $e')));
     } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Etiketsiz (yayınlanmamış) Instagram haberleri. Hangi turnuvanınkilerin
+  /// görüneceğini RLS belirler. Hata olursa boş liste.
+  Future<List<_IgNews>> _loadIgNews() async {
+    try {
+      final rows = await _client
+          .from('news')
+          .select(
+            'id, content, image_url, created_at, auto_data, '
+            'seasons(leagues(name))',
+          )
+          .eq('auto_kind', 'instagram')
+          .eq('is_published', false)
+          .order('created_at', ascending: false)
+          .limit(50);
+      return [for (final r in rows) _IgNews.fromMap(r)];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<void> _decideIgNews(_IgNews n, {required bool publish}) async {
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _busy = true);
+    try {
+      if (publish) {
+        await _client.from('news').update({'is_published': true}).eq('id', n.id);
+      } else {
+        // Gönderi instagram_seen_media'da kaldığı için tekrar aktarılmaz.
+        await _client.from('news').delete().eq('id', n.id);
+      }
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            publish ? 'Haber yayınlandı.' : 'Gönderi Haberler\'e alınmadı.',
+          ),
+        ),
+      );
+      await _reload();
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Hata: $e')));
       if (mounted) setState(() => _busy = false);
     }
   }
@@ -441,7 +489,10 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
     }
 
     final total =
-        _actions.length + _profileRequests.length + _conflicts.length;
+        _actions.length +
+        _profileRequests.length +
+        _conflicts.length +
+        _igNews.length;
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
@@ -451,6 +502,7 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
           chip(_Filter.profile, 'Profil (${_profileRequests.length})'),
           chip(_Filter.roster, 'Kadro (${_actions.length})'),
           chip(_Filter.broadcast, 'Yayın (${_conflicts.length})'),
+          chip(_Filter.news, 'Haber (${_igNews.length})'),
           chip(_Filter.history, 'Geçmiş'),
         ],
       ),
@@ -463,10 +515,12 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
         ..._profileRequests.map(_profileCard),
         ..._actions.map(_actionCard),
         ..._conflicts.map(_conflictCard),
+        ..._igNews.map(_igNewsCard),
       ],
       _Filter.profile => _profileRequests.map(_profileCard).toList(),
       _Filter.roster => _actions.map(_actionCard).toList(),
       _Filter.broadcast => _conflicts.map(_conflictCard).toList(),
+      _Filter.news => _igNews.map(_igNewsCard).toList(),
       _Filter.history => _history.map(_historyCard).toList(),
     };
     if (cards.isEmpty) {
@@ -655,6 +709,8 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
   Widget _decisionButtons({
     required VoidCallback onApprove,
     required VoidCallback onReject,
+    String approveLabel = 'Onayla',
+    String rejectLabel = 'Reddet',
   }) {
     return Row(
       children: [
@@ -670,9 +726,9 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
                 ),
               ),
               onPressed: _busy ? null : onApprove,
-              child: const Text(
-                'Onayla',
-                style: TextStyle(fontWeight: FontWeight.w800),
+              child: Text(
+                approveLabel,
+                style: const TextStyle(fontWeight: FontWeight.w800),
               ),
             ),
           ),
@@ -690,9 +746,9 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
                 ),
               ),
               onPressed: _busy ? null : onReject,
-              child: const Text(
-                'Reddet',
-                style: TextStyle(fontWeight: FontWeight.w800),
+              child: Text(
+                rejectLabel,
+                style: const TextStyle(fontWeight: FontWeight.w800),
               ),
             ),
           ),
@@ -755,6 +811,95 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
           _decisionButtons(
             onApprove: () => _review(a, approve: true),
             onReject: () => _review(a, approve: false),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Etiketsiz Instagram gönderisi: görsel + açıklama; yayınla ya da alma.
+  Widget _igNewsCard(_IgNews n) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: adminCardDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  [
+                    if (n.league != null) n.league!,
+                    if (n.username != null) '@${n.username}',
+                  ].join(' · '),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _chip(
+                n.video ? 'Instagram video' : 'Instagram',
+                const Color(0xFFE1306C),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'Paylaşım: ${_formatDate(n.createdAt)}',
+            style: const TextStyle(color: Colors.white54, fontSize: 12),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (n.imageUrl != null) ...[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: SizedBox(
+                    width: 96,
+                    height: 120,
+                    child: WebSafeImage(url: n.imageUrl!),
+                  ),
+                ),
+                const SizedBox(width: 12),
+              ],
+              Expanded(
+                child: Text(
+                  n.content,
+                  maxLines: 7,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    height: 1.35,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+            decoration: BoxDecoration(
+              color: kAdminAmber.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Text(
+              'Açıklamada #ligmasasi etiketi yok. Haberlere alınsın mı? '
+              'Etiketli gönderiler onay beklemeden yayınlanır.',
+              style: TextStyle(color: kAdminAmber, fontSize: 12.5),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _decisionButtons(
+            onApprove: () => _decideIgNews(n, publish: true),
+            onReject: () => _decideIgNews(n, publish: false),
+            approveLabel: 'Yayınla',
+            rejectLabel: 'Haberlere alma',
           ),
         ],
       ),
@@ -951,6 +1096,43 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Onay bekleyen (etiketsiz) Instagram haberi.
+class _IgNews {
+  const _IgNews({
+    required this.id,
+    required this.content,
+    this.imageUrl,
+    this.createdAt,
+    this.league,
+    this.username,
+    this.video = false,
+  });
+
+  final String id;
+  final String content;
+  final String? imageUrl;
+  final DateTime? createdAt;
+  final String? league;
+  final String? username;
+  final bool video;
+
+  factory _IgNews.fromMap(Map<String, dynamic> r) {
+    final data = r['auto_data'] is Map ? r['auto_data'] as Map : const {};
+    final season = r['seasons'] is Map ? r['seasons'] as Map : const {};
+    final league = season['leagues'] is Map ? season['leagues'] as Map : const {};
+    String? text(dynamic v) => (v ?? '').toString().trim().isEmpty ? null : '$v';
+    return _IgNews(
+      id: r['id'].toString(),
+      content: (r['content'] ?? '').toString(),
+      imageUrl: text(r['image_url']),
+      createdAt: DateTime.tryParse((r['created_at'] ?? '').toString()),
+      league: text(league['name']),
+      username: text(data['username']),
+      video: data['video'] == true,
     );
   }
 }
