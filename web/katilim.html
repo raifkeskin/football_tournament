@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Katılım Durumu · Lig Masası</title>
+<meta property="og:title" content="Katılım Durum Sorgulama">
+<meta property="og:description" content="Maça katılım durumunu bildir.">
+<meta property="og:image" content="https://ligmasasi.com/logo-lm.png">
+<style>
+:root{--bg:#0f172a;--card:#1e293b;--text:#e2e8f0;--muted:#94a3b8;--accent:#10b981;--danger:#f87171;--line:#334155}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+header{background:linear-gradient(90deg,#064e3b,#10b981,#064e3b);padding:12px 16px;border-bottom:1.5px solid #fff}
+header a{display:flex;align-items:center;gap:12px;color:#fff;text-decoration:none;font-weight:800;letter-spacing:1.5px;font-style:italic;font-size:18px}
+header img{width:40px;height:40px}
+main{max-width:520px;margin:0 auto;padding:22px 16px 40px}
+h1{font-size:20px;margin:0 0 4px}
+.sub{color:var(--muted);margin:0 0 18px;font-size:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;margin-bottom:14px}
+.team{display:flex;align-items:center;gap:8px;color:var(--accent);font-size:12px;font-weight:800;letter-spacing:1px;text-transform:uppercase}
+.team img{width:22px;height:22px;object-fit:contain}
+.vs{font-size:18px;font-weight:800;margin:8px 0 2px}
+.when{color:var(--muted);font-size:14px}
+.btns{display:flex;gap:10px;margin-top:14px}
+.btns button{flex:1;padding:13px 8px;border-radius:12px;border:1.5px solid var(--line);background:transparent;color:var(--text);font:700 15px/1 inherit;cursor:pointer}
+.btns button.yes.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.btns button.no.on{background:var(--danger);border-color:var(--danger);color:#fff}
+.btns button:disabled{opacity:.6}
+.count{margin-top:10px;color:var(--muted);font-size:13px}
+.msg{text-align:center;padding:28px 18px}
+.msg .icon{font-size:40px;margin-bottom:8px}
+.msg p{color:var(--muted);margin:6px 0 0}
+a.app{display:block;text-align:center;margin-top:22px;color:var(--accent);font-weight:700;text-decoration:none}
+</style>
+</head>
+<body>
+<header><a href="/"><img src="/logo-lm.png" alt="">LİG MASASI</a></header>
+<main id="root"><div class="card msg"><p>Yükleniyor…</p></div></main>
+<script>
+(function () {
+  // Kişisel bağlantı: ?k=<anahtar>. Anahtar cihazda saklanır; sonraki
+  // sorgularda grup mesajındaki /katilim bağlantısı da kişiyi tanır.
+  var URL_ = 'https://qxdjebzszikeslobrozf.supabase.co/rest/v1/rpc/';
+  var KEY = '__SUPABASE_ANON_KEY__';
+  var root = document.getElementById('root');
+  var q = new URLSearchParams(location.search);
+  var token = q.get('k');
+  try {
+    if (token) localStorage.setItem('lm_k', token);
+    else token = localStorage.getItem('lm_k');
+  } catch (e) {}
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c];
+    });
+  }
+  function rpc(name, body) {
+    return fetch(URL_ + name, {
+      method: 'POST',
+      headers: {'apikey': KEY, 'Authorization': 'Bearer ' + KEY, 'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    }).then(function (r) {
+      return r.json().then(function (j) {
+        if (!r.ok) throw new Error((j && j.message) || 'Hata');
+        return j;
+      });
+    });
+  }
+  function message(icon, title, text) {
+    root.innerHTML = '<div class="card msg"><div class="icon">' + icon + '</div><h1>' + esc(title) +
+      '</h1><p>' + esc(text) + '</p></div><a class="app" href="/">Lig Masası\'nı aç</a>';
+  }
+  function when(p) {
+    if (!p.date) return 'Tarih belirlenmedi';
+    var d = new Date(p.date + 'T12:00:00');
+    var s = d.toLocaleDateString('tr-TR', {day: 'numeric', month: 'long', weekday: 'long'});
+    if (p.time) s += ' · ' + String(p.time).slice(0, 5);
+    if (p.pitch) s += ' · ' + p.pitch;
+    return s;
+  }
+  function render(data) {
+    var first = String(data.name || '').split(' ')[0];
+    var html = '<h1>Merhaba ' + esc(first) + '</h1><p class="sub">Katılım Durum Sorgulama</p>';
+    if (!data.polls || !data.polls.length) {
+      html += '<div class="card msg"><div class="icon">✓</div><p>Şu an açık katılım sorgusu yok.</p></div>';
+    }
+    (data.polls || []).forEach(function (p) {
+      html += '<div class="card" data-id="' + esc(p.id) + '">' +
+        '<div class="team">' + (p.team_logo ? '<img src="' + esc(p.team_logo) + '" alt="">' : '') + esc(p.team) + '</div>' +
+        '<div class="vs">' + esc(p.home) + ' – ' + esc(p.away) + '</div>' +
+        '<div class="when">' + esc(when(p)) + '</div>' +
+        '<div class="btns">' +
+        '<button class="yes' + (p.status === 'yes' ? ' on' : '') + '" data-s="yes">Geliyorum</button>' +
+        '<button class="no' + (p.status === 'no' ? ' on' : '') + '" data-s="no">Gelemiyorum</button>' +
+        '</div>' +
+        '<div class="count">' + p.yes + ' geliyor · ' + p.no + ' gelemiyor</div>' +
+        '</div>';
+    });
+    html += '<a class="app" href="/">Lig Masası\'nı aç</a>';
+    root.innerHTML = html;
+  }
+  function load() {
+    rpc('attendance_link_view', {p_token: token}).then(function (data) {
+      if (!data) {
+        message('🔒', 'Bağlantı geçersiz', 'Takım sorumlundan kişisel bağlantını yeniden iste.');
+        return;
+      }
+      render(data);
+    }).catch(function () {
+      message('⚠️', 'Yüklenemedi', 'İnternet bağlantını kontrol edip sayfayı yenile.');
+    });
+  }
+
+  root.addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-s]');
+    if (!b) return;
+    var card = b.closest('.card');
+    card.querySelectorAll('button').forEach(function (x) { x.disabled = true; });
+    rpc('attendance_link_answer', {p_token: token, p_poll_id: card.getAttribute('data-id'), p_status: b.getAttribute('data-s')})
+      .then(load)
+      .catch(function (err) {
+        alert(err.message || 'Kaydedilemedi.');
+        load();
+      });
+  });
+
+  if (!token) {
+    message('🔗', 'Kişisel bağlantı gerekli', 'Katılım durumunu bildirmek için takım sorumlunun sana gönderdiği kişisel bağlantıyı bir kez aç; sonra bu sayfa seni tanır.');
+  } else {
+    load();
+  }
+})();
+</script>
+</body>
+</html>
