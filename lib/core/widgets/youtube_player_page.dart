@@ -27,7 +27,14 @@ void landscapeOnFullscreen(
       ]);
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     } else {
-      resetPlayerOrientation();
+      // Yönler yalnız serbest bırakılırsa iOS (ve yatay tutulan Android)
+      // ekranı yatayda bırakır: bar ve Kapat düğmesi gelmez, tam ekrandan
+      // çıkılmamış görünür. Çıkışta dikeye döndürülür; sayfa kapanınca
+      // resetPlayerOrientation serbest bırakır.
+      SystemChrome.setPreferredOrientations(const [
+        DeviceOrientation.portraitUp,
+      ]);
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     }
   });
 }
