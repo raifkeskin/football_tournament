@@ -45,6 +45,12 @@ class MatchClock {
     if (kickoff == null) return m.minute == null ? null : "${m.minute}'";
 
     final t = (now ?? DateTime.now()).toUtc();
+    // Eleme maçı: penaltılar "PEN", uzatma kendi dakikasıyla ("UZT 4'").
+    if (m.shootout != null) return 'PEN';
+    final extra = m.extraTimeAt;
+    if (extra != null) {
+      return "UZT ${t.difference(extra).inMinutes.clamp(0, 999) + 1}'";
+    }
     final period = periodOf(m.seasonId);
     final secondHalf = m.secondHalfAt;
     final start = secondHalf ?? kickoff;

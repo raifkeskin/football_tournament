@@ -45,10 +45,35 @@ abstract class IMatchService {
   Future<void> cancelRedCard(String eventId);
 
   /// Maç akışını ilerletir: start | end_first_half | start_second_half |
-  /// finish | undo. Saat sunucuda tutulur (advance_match_phase).
+  /// start_extra_time | start_shootout | finish | undo. Saat sunucuda
+  /// tutulur (advance_match_phase).
   Future<void> advanceMatchPhase({
     required String matchId,
     required String action,
+  });
+
+  /// Penaltı atışı ekler ([home]: ev sahibi mi, [scored]: gol mü); [home]
+  /// null ise son atışı geri alır (shootout_kick).
+  Future<void> shootoutKick({
+    required String matchId,
+    required bool? home,
+    bool scored = false,
+  });
+
+  /// Maçı eleme maçı yapar ([tiebreak]: 'et_pens' | 'pens') ya da lig
+  /// maçına döndürür (null).
+  Future<void> setMatchKnockout({
+    required String matchId,
+    required String? tiebreak,
+    String? cupName,
+    String? cupRound,
+  });
+
+  /// Hızlı skor girişinde penaltı skoru; null ikisini de siler.
+  Future<void> setPenaltyScore({
+    required String matchId,
+    required int? home,
+    required int? away,
   });
 
   /// Maçın gözlemcisini atar; null ise kaldırır (admin / turnuva sahibi).

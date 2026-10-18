@@ -2442,9 +2442,12 @@ Future<_SeasonOverview> _loadSeasonOverview(String seasonId) async {
     sb
         .from('matches')
         .select(
-          'group_id, home_team_id, away_team_id, home_score, away_score, status',
+          'group_id, home_team_id, away_team_id, home_score, away_score, '
+          'status, tiebreak',
         )
-        .eq('season_id', sid),
+        .eq('season_id', sid)
+        // Eleme (play-off) maçları puan tablosuna sayılmaz.
+        .isFilter('tiebreak', null),
     sb
         .from('season_team_players')
         .select('team_id, is_active')

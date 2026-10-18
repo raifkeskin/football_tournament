@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -14,9 +16,20 @@ import '../../news/screens/news_feed_screen.dart';
 import '../../player/screens/stats_screen.dart';
 import '../../team/screens/groups_screen.dart';
 import '../models/league.dart';
+import '../models/league_format.dart';
+import 'playoff_view.dart';
 import '../models/season.dart';
 
-enum TournamentHubTab { standings, fixture, stats, news }
+enum TournamentHubTab { standings, playoff, fixture, stats, news }
+
+/// Sekme adları.
+const _tabLabels = {
+  TournamentHubTab.standings: 'Puan Durumu',
+  TournamentHubTab.playoff: 'Play-Off',
+  TournamentHubTab.fixture: 'Fikstür',
+  TournamentHubTab.stats: 'İstatistik',
+  TournamentHubTab.news: 'Haberler',
+};
 
 /// Turnuva Sayfası: bir turnuva + sezon + grubun Puan Durumu, Fikstür,
 /// İstatistik ve Haberler sekmeleri. Bantta sezon seçici (aktif sezon seçili
@@ -76,11 +89,67 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
     with SingleTickerProviderStateMixin {
   static const _bgDark = Color(0xFF0F172A);
 
-  late final TabController _tabs = TabController(
-    length: TournamentHubTab.values.length,
+  /// Görünen sekmeler: Play-Off yalnız sezonun lig formatında kupa varsa
+  /// ve ("Bugün bitse" açık, eşleşme oluşturulmuş ya da yetkili) görünür.
+  List<TournamentHubTab> _visible = [
+    for (final t in TournamentHubTab.values)
+      if (t != TournamentHubTab.playoff) t,
+  ];
+
+  late TabController _tabs = TabController(
+    length: _visible.length,
     vsync: this,
-    initialIndex: widget.initialTab.index,
+    initialIndex: math.max(0, _visible.indexOf(widget.initialTab)),
   )..addListener(_onTab);
+
+  TournamentHubTab get _current => _visible[_tabs.index];
+
+  /// Seçili sezonun lig formatı ve oluşturulmuş eşleşme var mı.
+  LeagueFormat? _format;
+  bool _hasBrackets = false;
+  String? _playoffSeason;
+
+  Future<void> _loadPlayoff(String seasonId) async {
+    _playoffSeason = seasonId;
+    try {
+      final row = await Supabase.instance.client
+          .from('seasons')
+          .select('league_format')
+          .eq('id', seasonId)
+          .maybeSingle();
+      final brackets = await loadCupBrackets(seasonId);
+      if (!mounted || _playoffSeason != seasonId) return;
+      _format = LeagueFormat.fromJson(row?['league_format']);
+      _hasBrackets = brackets.isNotEmpty;
+      _syncTabs();
+    } catch (_) {}
+  }
+
+  void _syncTabs() {
+    final f = _format;
+    final show =
+        f != null &&
+        f.cups.isNotEmpty &&
+        (f.showIfNow ||
+            _hasBrackets ||
+            AppSession.of(context).value.canManageLeague(widget.leagueId));
+    final next = [
+      for (final t in TournamentHubTab.values)
+        if (t != TournamentHubTab.playoff || show) t,
+    ];
+    if (next.length == _visible.length) return;
+    final current = _current;
+    final old = _tabs;
+    setState(() {
+      _visible = next;
+      _tabs = TabController(
+        length: next.length,
+        vsync: this,
+        initialIndex: math.max(0, next.indexOf(current)),
+      )..addListener(_onTab);
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
+  }
 
   late final Stream<League?> _leagueStream = ServiceLocator.leagueService
       .watchLeagueById(widget.leagueId);
@@ -107,6 +176,7 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
     _groupId = widget.groupId;
     if (_seasonId != null) {
       _groupsStream = ServiceLocator.leagueService.watchGroups(_seasonId!);
+      _loadPlayoff(_seasonId!);
     }
   }
 
@@ -163,6 +233,7 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
   void _useSeason(String seasonId) {
     _seasonId = seasonId;
     _groupsStream = ServiceLocator.leagueService.watchGroups(seasonId);
+    _loadPlayoff(seasonId);
   }
 
   /// Başka sezona geçiş: aynı adlı grup varsa o, yoksa ilk grup açılır.
@@ -293,7 +364,11 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
                             accent: accent,
                             onSelect: (id) => setState(() => _groupId = id),
                           ),
-                        _HubTabBar(controller: _tabs, accent: accent),
+                        _HubTabBar(
+                          controller: _tabs,
+                          accent: accent,
+                          tabs: _visible,
+                        ),
                         Expanded(
                           child: season == null || group == null
                               ? Center(
@@ -309,43 +384,8 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
                               : TabBarView(
                                   controller: _tabs,
                                   children: [
-                                    _KeepAlive(
-                                      child: StandingsView(
-                                        key: ValueKey(
-                                          'st|${season.id}|${group.id}',
-                                        ),
-                                        leagueId: widget.leagueId,
-                                        seasonId: season.id,
-                                        groupId: group.id,
-                                      ),
-                                    ),
-                                    _KeepAlive(
-                                      child: FixtureView(
-                                        key: ValueKey(
-                                          'fx|${season.id}|${group.id}',
-                                        ),
-                                        leagueId: widget.leagueId,
-                                        seasonId: season.id,
-                                        groupId: group.id,
-                                        shareAction: _fixtureShare,
-                                        accent: accent,
-                                      ),
-                                    ),
-                                    _KeepAlive(
-                                      child: StatsView(
-                                        key: ValueKey('ss|${season.id}'),
-                                        seasonId: season.id,
-                                      ),
-                                    ),
-                                    _KeepAlive(
-                                      child: NewsView(
-                                        key: ValueKey(
-                                          'nw|${season.id}|${group.regionId}',
-                                        ),
-                                        seasonId: season.id,
-                                        regionId: group.regionId,
-                                      ),
-                                    ),
+                                    for (final t in _visible)
+                                      _tabView(t, season, group, accent),
                                   ],
                                 ),
                         ),
@@ -361,6 +401,66 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
     );
   }
 
+  Widget _tabView(
+    TournamentHubTab tab,
+    Season season,
+    GroupModel group,
+    Color accent,
+  ) {
+    switch (tab) {
+      case TournamentHubTab.standings:
+        return _KeepAlive(
+          child: StandingsView(
+            key: ValueKey('st|${season.id}|${group.id}'),
+            leagueId: widget.leagueId,
+            seasonId: season.id,
+            groupId: group.id,
+          ),
+        );
+      case TournamentHubTab.playoff:
+        return _KeepAlive(
+          child: PlayoffView(
+            key: ValueKey('po|${season.id}|${group.id}'),
+            leagueId: widget.leagueId,
+            seasonId: season.id,
+            groupId: group.id,
+            groupName: group.name,
+            format: _format ?? const LeagueFormat(),
+            canManage: AppSession.of(
+              context,
+            ).value.canManageLeague(widget.leagueId),
+            onBracketsChanged: () => _loadPlayoff(season.id),
+          ),
+        );
+      case TournamentHubTab.fixture:
+        return _KeepAlive(
+          child: FixtureView(
+            key: ValueKey('fx|${season.id}|${group.id}'),
+            leagueId: widget.leagueId,
+            seasonId: season.id,
+            groupId: group.id,
+            shareAction: _fixtureShare,
+            accent: accent,
+          ),
+        );
+      case TournamentHubTab.stats:
+        return _KeepAlive(
+          child: StatsView(
+            key: ValueKey('ss|${season.id}'),
+            seasonId: season.id,
+          ),
+        );
+      case TournamentHubTab.news:
+        return _KeepAlive(
+          child: NewsView(
+            key: ValueKey('nw|${season.id}|${group.regionId}'),
+            seasonId: season.id,
+            regionId: group.regionId,
+          ),
+        );
+    }
+  }
+
   /// Puan Durumu ve Fikstür sekmelerinde sağ altta yüzen afiş paylaşma
   /// düğmesi.
   Widget? _shareButton(GroupModel? group, Color accent) {
@@ -373,7 +473,7 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
       child: const Icon(Icons.ios_share_rounded),
     );
     final seasonId = _seasonId;
-    switch (TournamentHubTab.values[_tabs.index]) {
+    switch (_current) {
       case TournamentHubTab.standings:
         // Afişi yalnızca giriş yapmış kullanıcılar paylaşabilir.
         if (group == null ||
@@ -395,6 +495,7 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
           builder: (context, share, _) =>
               share == null ? const SizedBox.shrink() : fab(share),
         );
+      case TournamentHubTab.playoff:
       case TournamentHubTab.stats:
       case TournamentHubTab.news:
         return null;
@@ -551,10 +652,15 @@ class _BandSeasonButton extends StatelessWidget {
 }
 
 class _HubTabBar extends StatelessWidget {
-  const _HubTabBar({required this.controller, required this.accent});
+  const _HubTabBar({
+    required this.controller,
+    required this.accent,
+    required this.tabs,
+  });
 
   final TabController controller;
   final Color accent;
+  final List<TournamentHubTab> tabs;
 
   @override
   Widget build(BuildContext context) {
@@ -579,20 +685,16 @@ class _HubTabBar extends StatelessWidget {
         labelColor: Colors.white,
         unselectedLabelColor: Colors.white60,
         labelPadding: EdgeInsets.zero,
-        labelStyle: const TextStyle(
-          fontSize: 12.5,
+        // Beş sekmede yazı biraz küçülür (dar ekranda sığsın).
+        labelStyle: TextStyle(
+          fontSize: tabs.length > 4 ? 11.5 : 12.5,
           fontWeight: FontWeight.w800,
         ),
-        unselectedLabelStyle: const TextStyle(
-          fontSize: 12.5,
+        unselectedLabelStyle: TextStyle(
+          fontSize: tabs.length > 4 ? 11.5 : 12.5,
           fontWeight: FontWeight.w600,
         ),
-        tabs: const [
-          Tab(text: 'Puan Durumu', height: 40),
-          Tab(text: 'Fikstür', height: 40),
-          Tab(text: 'İstatistik', height: 40),
-          Tab(text: 'Haberler', height: 40),
-        ],
+        tabs: [for (final t in tabs) Tab(text: _tabLabels[t], height: 40)],
       ),
     );
   }

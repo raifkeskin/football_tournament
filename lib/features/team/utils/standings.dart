@@ -56,18 +56,30 @@ bool _isCompleted(Map<String, dynamic> m) {
       status == 'completed';
 }
 
+/// Oynanmakta olan maç (devre arası dahil).
+bool isLiveMatchRow(Map<String, dynamic> m) {
+  final status = (m['status'] ?? '').toString().trim().toLowerCase();
+  return status == 'live' || status == 'halftime';
+}
+
 /// Bir grubun puan tablosu (ekran ve paylaşım afişi aynı hesabı kullanır).
 ///
 /// Takımlar: grupta maçı olanlar ve gruba atanmış olanlar. Sıralama: puan,
 /// ikili averaj (puan, gol farkı), genel averaj, atılan gol, ad.
+///
+/// [includeLive]: oynanmakta olan maçlar o anki skorla bitmiş sayılır
+/// (maç detayındaki canlı puan durumu).
 List<StandingEntry> computeGroupStandings({
   required String leagueId,
   required String groupId,
   required String groupName,
   required List<Map<String, dynamic>> seasonMatches,
   required List<Team> allTeams,
+  bool includeLive = false,
 }) {
   final groupMatches = seasonMatches.where((m) {
+    // Eleme (play-off) maçları puan tablosuna sayılmaz.
+    if (m['tiebreak'] != null) return false;
     final g = (m['group_id'] ?? m['groupId'] ?? m['groupName'] ?? '')
         .toString()
         .trim();
@@ -100,7 +112,8 @@ List<StandingEntry> computeGroupStandings({
   for (final m in groupMatches) {
     final h = table[_homeId(m)];
     final a = table[_awayId(m)];
-    if (!_isCompleted(m) || h == null || a == null) continue;
+    final counted = _isCompleted(m) || (includeLive && isLiveMatchRow(m));
+    if (!counted || h == null || a == null) continue;
     final hs = _score(m, 'home');
     final as = _score(m, 'away');
     final key = playedKey(m);
@@ -155,7 +168,7 @@ List<StandingEntry> computeGroupStandings({
       var ptsX = 0, ptsY = 0, gdX = 0, gdY = 0;
       for (final m in groupMatches) {
         final hId = _homeId(m), aId = _awayId(m);
-        if (!_isCompleted(m)) continue;
+        if (!_isCompleted(m) && !(includeLive && isLiveMatchRow(m))) continue;
         final xHome = hId == x.teamId && aId == y.teamId;
         final yHome = hId == y.teamId && aId == x.teamId;
         if (!xHome && !yHome) continue;

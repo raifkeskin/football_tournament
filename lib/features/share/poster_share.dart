@@ -171,8 +171,13 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
       for (final u in widget.imageUrls.where((u) => u.trim().isNotEmpty))
         precacheImage(NetworkImage(u), context, onError: (_, _) {}),
     ]);
-    // Görsel inmezse varsayılan zemin kullanılır.
-    if (bg != null && ok) _background = bg;
+    // Görsel inmezse varsayılan zemin kullanılır. Kayıtlı boyut (gönderi /
+    // hikâye) da burada okunduğu için bütün ekran yeniden çizilir; yoksa
+    // düğmeler eski boyutu, afiş yeni boyutu gösteriyordu.
+    if (!mounted) return;
+    setState(() {
+      if (bg != null && ok) _background = bg;
+    });
   }
 
   /// Son seçilen boyut / zemin / gol atanlar (cihazda).

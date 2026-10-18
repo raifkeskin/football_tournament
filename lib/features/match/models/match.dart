@@ -102,6 +102,29 @@ class MatchScore {
   }
 }
 
+/// Penaltı atışlarında tek atış.
+class ShootoutKick {
+  const ShootoutKick({required this.home, required this.scored});
+
+  final bool home;
+  final bool scored;
+
+  static List<ShootoutKick>? listFrom(dynamic raw) {
+    if (raw is String) {
+      try {
+        raw = jsonDecode(raw);
+      } catch (_) {
+        return null;
+      }
+    }
+    if (raw is! List) return null;
+    return [
+      for (final e in raw)
+        if (e is Map) ShootoutKick(home: e['t'] == 'h', scored: e['g'] == true),
+    ];
+  }
+}
+
 class MatchModel {
   final String id;
   final String leagueId;
@@ -134,6 +157,20 @@ class MatchModel {
   final List<String>? homeOrder;
   final List<String>? awayOrder;
 
+  /// Eleme maçında beraberlik kuralı: null → lig maçı; 'et_pens' → uzatma
+  /// sonra penaltı; 'pens' → doğrudan penaltı.
+  final String? tiebreak;
+  final String? cupName;
+  final String? cupRound;
+
+  /// Uzatmanın başladığı an (sunucu saati).
+  final DateTime? extraTimeAt;
+
+  /// Penaltı atışları sırasıyla (true: gol); null → atışlar başlamadı.
+  final List<ShootoutKick>? shootout;
+  final int? homePens;
+  final int? awayPens;
+
   MatchModel({
     required this.id,
     required this.leagueId,
@@ -161,7 +198,37 @@ class MatchModel {
     this.awayFormation,
     this.homeOrder,
     this.awayOrder,
+    this.tiebreak,
+    this.cupName,
+    this.cupRound,
+    this.extraTimeAt,
+    this.shootout,
+    this.homePens,
+    this.awayPens,
   });
+
+  /// Beraberliğin olmadığı eleme maçı (puan tablosuna sayılmaz).
+  bool get isKnockout => tiebreak != null;
+
+  /// Penaltı atışlarıyla sonuçlanmış ya da atışları süren maç.
+  bool get hasPens => homePens != null && awayPens != null;
+
+  /// Sonucu belirleyen taraf: true ev sahibi, false deplasman; berabere ya
+  /// da penaltılar sürüyorsa null.
+  bool? get homeWins {
+    if (homeScore != awayScore) return homeScore > awayScore;
+    if (hasPens && homePens != awayPens) return homePens! > awayPens!;
+    return null;
+  }
+
+  /// Kupa ve tur etiketi ("Şampiyonluk Kupası · Yarı Final").
+  String? get cupLabel {
+    final parts = [
+      (cupName ?? '').trim(),
+      (cupRound ?? '').trim(),
+    ].where((e) => e.isNotEmpty).toList();
+    return parts.isEmpty ? null : parts.join(' · ');
+  }
 
   /// Ertelenip yeni bir güne (bugün ya da ileri) alınmış maç. Durum yine
   /// 'postponed'dır (puan/istatistik akışı değişmez); listelerde oynanacak
@@ -329,6 +396,17 @@ class MatchModel {
       awayFormation: v('awayFormation', 'away_formation')?.toString(),
       homeOrder: readStringList(v('homeOrder', 'home_order')),
       awayOrder: readStringList(v('awayOrder', 'away_order')),
+      tiebreak: switch (v('tiebreak', 'tiebreak')?.toString()) {
+        'pens' => 'pens',
+        'et_pens' => 'et_pens',
+        _ => null,
+      },
+      cupName: v('cupName', 'cup_name')?.toString(),
+      cupRound: v('cupRound', 'cup_round')?.toString(),
+      extraTimeAt: readDate(v('extraTimeAt', 'extra_time_at'))?.toUtc(),
+      shootout: ShootoutKick.listFrom(map['shootout']),
+      homePens: readScore(v('homePens', 'home_pens')),
+      awayPens: readScore(v('awayPens', 'away_pens')),
     );
   }
 

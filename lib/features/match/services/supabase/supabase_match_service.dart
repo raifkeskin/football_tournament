@@ -345,6 +345,9 @@ class SupabaseMatchService implements IMatchService {
       // açılmaz (arka plandan dönüşte de yeniden okunmaz).
       // Önbellek yoksa olaylar durumla aynı anda istenir (tek tur).
       final early = cached == null ? _fetchInlineMatchEvents(id) : null;
+      // Durum beklenirken bu istek hata verirse (ör. 504) "yakalanmamış"
+      // sayılmasın; hata aşağıdaki await ile akışa iletilir, akış yeniden dener.
+      early?.ignore();
       final finished = await _matchStatus(id) == 'finished';
       if (early != null) {
         yield await early;
@@ -683,6 +686,58 @@ class SupabaseMatchService implements IMatchService {
       params: {'p_match_id': matchId, 'p_action': action},
     );
     AppConfig.sqlLogResult(table: 'matches', operation: 'RPC', count: 1);
+  }
+
+  @override
+  Future<void> shootoutKick({
+    required String matchId,
+    required bool? home,
+    bool scored = false,
+  }) async {
+    await _client.rpc(
+      'shootout_kick',
+      params: {
+        'p_match_id': matchId,
+        'p_side': home == null ? null : (home ? 'h' : 'a'),
+        'p_scored': scored,
+      },
+    );
+  }
+
+  @override
+  Future<void> setMatchKnockout({
+    required String matchId,
+    required String? tiebreak,
+    String? cupName,
+    String? cupRound,
+  }) async {
+    String? clean(String? v) => (v ?? '').trim().isEmpty ? null : v!.trim();
+    await _client
+        .from('matches')
+        .update({
+          'tiebreak': tiebreak,
+          'cup_name': tiebreak == null ? null : clean(cupName),
+          'cup_round': tiebreak == null ? null : clean(cupRound),
+        })
+        .eq('id', matchId);
+  }
+
+  @override
+  Future<void> setPenaltyScore({
+    required String matchId,
+    required int? home,
+    required int? away,
+  }) async {
+    final clear = home == null || away == null;
+    await _client
+        .from('matches')
+        .update({
+          'home_pens': clear ? null : home,
+          'away_pens': clear ? null : away,
+          // Elle girilen sonuçta atış sırası tutulmaz.
+          'shootout': null,
+        })
+        .eq('id', matchId);
   }
 
   @override
@@ -1091,6 +1146,9 @@ class SupabaseMatchService implements IMatchService {
     // açılmaz (arka plandan dönüşte de yeniden okunmaz).
     // Önbellek yoksa esame durumla aynı anda istenir (tek tur).
     final early = cached == null ? _fetchMatchRosters(matchId) : null;
+    // Durum beklenirken bu istek hata verirse (ör. 504) "yakalanmamış"
+    // sayılmasın; hata aşağıdaki await ile akışa iletilir, akış yeniden dener.
+    early?.ignore();
     final started = _startedStatuses.contains(await _matchStatus(matchId));
     if (early != null) {
       yield await early;
@@ -1103,13 +1161,29 @@ class SupabaseMatchService implements IMatchService {
       }
       return;
     }
-    await for (final _ in realtimeChangeSignal(
-      _client,
-      table: 'match_rosters',
-      column: 'match_id',
-      value: matchId,
-      knownIds: () => {for (final r in _rosterCache[matchId] ?? const []) r.id},
-    )) {
+    // Kendi kaydımız canlı bağlantıyı beklemeden yansısın (bağlantı gecikir
+    // ya da koparsa esame eski görünmesin).
+    final signals = StreamController<void>();
+    final subs = <StreamSubscription<void>>[
+      realtimeChangeSignal(
+        _client,
+        table: 'match_rosters',
+        column: 'match_id',
+        value: matchId,
+        knownIds: () => {
+          for (final r in _rosterCache[matchId] ?? const []) r.id,
+        },
+      ).listen(signals.add, onError: signals.addError, onDone: signals.close),
+      _localChanges.stream
+          .where((m) => m == matchId)
+          .listen((_) => signals.add(null)),
+    ];
+    signals.onCancel = () {
+      for (final s in subs) {
+        s.cancel();
+      }
+    };
+    await for (final _ in signals.stream) {
       yield await _fetchMatchRosters(matchId);
     }
   }

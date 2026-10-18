@@ -1807,6 +1807,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
             'home_score': m.homeScore,
             'away_score': m.awayScore,
             'status': m.status == MatchStatus.finished ? 'finished' : '',
+            'tiebreak': m.tiebreak,
           },
       ],
       allTeams: [
