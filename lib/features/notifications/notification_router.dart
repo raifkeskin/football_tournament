@@ -63,7 +63,10 @@ class NotificationRouter {
         if (ref != null) await _openMatch(context, ref);
       case 'news':
         if (ref != null) await _openNews(context, ref);
+      // Kadro talebi, etiketsiz Instagram gönderisi (approval-ig…) ve
+      // yayın linki uyuşmazlığı (yt-conflict-…) Bekleyen Onaylar'da.
       case 'approval':
+      case 'yt':
         await Navigator.of(context).push(
           MaterialPageRoute<void>(
             settings: const RouteSettings(name: 'AdminPendingActionsScreen'),
