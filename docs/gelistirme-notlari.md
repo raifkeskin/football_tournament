@@ -50,12 +50,11 @@ _Eklendi: 2026-10-03_
 - Uygulama markete çıkıp yeni turnuvalar açıldığında: KVKK + sağlık onayı vermemiş oyuncu **maç esamesine eklenemez**.
 - Mevcut turnuvalara geriye dönük uygulanıp uygulanmayacağı o zaman kararlaştırılacak (turnuva bazlı ayar olabilir).
 
-## 5. Bildirime dokununca ilgili sayfanın açılması (deep link)
-_Eklendi: 2026-10-03_
+## 5. Bildirime dokununca ilgili sayfanın açılması (deep link) — BÜYÜK ÖLÇÜDE YAPILDI
+_Eklendi: 2026-10-03 · Güncellendi: 2026-10-18_
 
-- Şu an bildirime dokununca uygulamanın ana sayfası açılıyor; uygulamada sayfa adresleri (route) tanımlı değil.
-- Yapılacak: maç bildirimi → ilgili maç detayı, haber bildirimi → haber, saat/hatırlatma → maç detayı.
-- Gerekenler: uygulamaya adres yapısı (ör. `/mac/<id>`, `/haber/<id>`), push-sw.js'te tıklamada adresin açılması, veritabanındaki push tetikleyicilerinde `url` alanının doldurulması.
+- **Çalışıyor** (`notification_router.dart`, web + APK): maç bildirimleri (gol, canlı, sonuç, saat değişikliği, hatırlatma) → maç detayı; haber → Turnuva Sayfası Haberler (haber açık); kadro talebi, Instagram onayı, yayın uyuşmazlığı → Bekleyen Onaylar; ceza → Ceza Yönetimi.
+- **Kalan (düşük):** "haftanın fikstürü açıklandı" gibi bir bildirim henüz yok; eklenirse `fixture-<sezon>:<hafta>` türüyle Turnuva Sayfası Fikstür sekmesinin o haftası açılır. `roster-` (talebiniz onaylandı) ve `penaltyok-` bildirimleri yalnız uygulamayı açar.
 
 ## 7. Sponsor bölümü — YAPILDI (2026-10-07)
 _Eklendi: 2026-10-07_
