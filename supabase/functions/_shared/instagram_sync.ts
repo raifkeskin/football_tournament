@@ -18,6 +18,10 @@ import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
 
 const GRAPH = `https://graph.instagram.com/${Deno.env.get("INSTAGRAM_GRAPH_VERSION") ?? "v23.0"}`;
 const MAX_PER_RUN = 10;
+// Uygulama etiketi: #ligmasasi / #LigMasası / #lig_masasi (büyük-küçük, İ/ı duyarsız).
+const APP_TAG_SRC = "#l[iİıI]g[ _]?masas[ıiIİ](?![\\p{L}\\p{N}_])";
+const APP_TAG = new RegExp(APP_TAG_SRC, "iu");
+const APP_TAG_ALL = new RegExp(APP_TAG_SRC, "giu");
 const MAX_IMAGES = 5;
 const REFRESH_BEFORE_MS = 10 * 24 * 3600_000;
 const DAY_MS = 24 * 3600_000;
@@ -168,12 +172,16 @@ export async function syncAccount(admin: SupabaseClient, a: IgAccount): Promise<
         const u = await copyImage(admin, srcs[i], `news/ig/${a.league_id}/${id}_${i}.jpg`);
         if (u) urls.push(u);
       }
-      const caption = String(m.caption ?? "").trim();
+      const raw = String(m.caption ?? "");
+      // #ligmasasi etiketli gönderi hemen yayınlanır; etiketsiz olan onay bekler.
+      const tagged = APP_TAG.test(raw);
+      const caption = raw.replace(APP_TAG_ALL, " ").replace(/[ \t]+\n/g, "\n")
+        .replace(/[ \t]{2,}/g, " ").trim();
       const isVideo = m.media_type === "VIDEO";
       const { error } = await admin.from("news").insert({
         season_id: seasonId,
         content: caption || (isVideo ? "Instagram'da yeni video" : "Instagram'da yeni gönderi"),
-        is_published: true,
+        is_published: tagged,
         image_url: urls[0] ?? null,
         image_urls: urls,
         auto_kind: "instagram",
