@@ -169,7 +169,10 @@ Hiçbir takımda kaydı olmayan kişi kendi futbolcu profilini oluşturabilsin, 
 - **Tahmini maliyet:** Faz 1 orta, Faz 2 düşük-orta, Faz 3 orta.
 - **Netleşecek:** Profil varsayılan görünürlüğü; 18 yaş altı; önce ekran önizlemesi (mockup) istenir mi.
 
-## 20. Instagram → Haberler: #ligmasasi etiketiyle seçmeli aktarım — YAPILACAK
+## 20. Instagram → Haberler: #ligmasasi etiketiyle seçmeli aktarım — KODLANDI (2026-10-18), canlıya alınmayı bekliyor
+
+Kalan: migration 20261023100000 uygulanacak, `instagram-sync` edge function deploy edilecek, web + APK yayınlanacak.
+
 
 Bugün aktarım açıksa turnuvanın Instagram hesabındaki her yeni gönderi sorulmadan haber olarak yayınlanıyor. İstek: her gönderi uygulamada görünmesin.
 
