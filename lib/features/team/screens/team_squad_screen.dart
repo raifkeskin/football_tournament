@@ -1212,20 +1212,33 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     for (final t in _teamTournaments) {
       if (t.id == tournamentId.trim()) league = t;
     }
+    PosterPlayer posterPlayer(PlayerModel p) {
+      final parts = p.name.trim().split(RegExp(r'\s+'));
+      return PosterPlayer(
+        firstName: parts.length > 1
+            ? parts.sublist(0, parts.length - 1).join(' ')
+            : parts.first,
+        lastName: parts.length > 1 ? parts.last : '',
+        number: (p.number ?? '').trim(),
+      );
+    }
+
+    // Mevkiye göre gruplar yalnız herkesin mevkisi girilmişse; tek bir
+    // eksik bile varsa başlıksız tek liste (forma numarasına göre).
+    final sections = _positionSections(players);
+    final complete = sections.every((sec) => sec.key != _unknownPosition);
     final groups = <String, List<PosterPlayer>>{
-      for (final sec in _positionSections(players))
-        sec.key: [
-          for (final p in sec.value)
-            () {
-              final parts = p.name.trim().split(RegExp(r'\s+'));
-              return PosterPlayer(
-                firstName: parts.length > 1
-                    ? parts.sublist(0, parts.length - 1).join(' ')
-                    : parts.first,
-                lastName: parts.length > 1 ? parts.last : '',
-                number: (p.number ?? '').trim(),
-              );
-            }(),
+      if (complete)
+        for (final sec in sections)
+          sec.key: [for (final p in sec.value) posterPlayer(p)]
+      else
+        '': [
+          for (final p
+              in [...players]..sort(
+                (a, b) => (int.tryParse((a.number ?? '').trim()) ?? 999)
+                    .compareTo(int.tryParse((b.number ?? '').trim()) ?? 999),
+              ))
+            posterPlayer(p),
         ],
     };
     final teamLogo = widget.teamLogoUrl.trim();
@@ -3803,12 +3816,14 @@ const _squadAccent = Color(0xFF10B981);
 const _squadMuted = Color(0xFF94A3B8);
 const _squadCard = Color(0xFF1E293B);
 
+const _unknownPosition = 'Mevkisi belirtilmemiş';
+
 const _positionOrder = [
   'Kaleci',
   'Defans',
   'Orta Saha',
   'Forvet',
-  'Mevkisi belirtilmemiş',
+  _unknownPosition,
 ];
 
 String _positionGroup(PlayerModel p) {
@@ -3825,7 +3840,7 @@ String _positionGroup(PlayerModel p) {
   if (s.contains('orta') || s.contains('kanat') || s.contains('numara')) {
     return 'Orta Saha';
   }
-  return 'Mevkisi belirtilmemiş';
+  return _unknownPosition;
 }
 
 /// Mevkiye göre bölümler; bölüm içinde forma numarası olanlar önce.
@@ -4027,29 +4042,39 @@ class _SquadSummaryCard extends StatelessWidget {
             Stack(
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 11),
+                  // Paylaş düğmesi varken iki yanda eşit boşluk: ad ortada
+                  // kalır, düğmenin altına girmez.
+                  padding: EdgeInsets.fromLTRB(
+                    onShare != null ? 60 : 16,
+                    12,
+                    onShare != null ? 60 : 16,
+                    11,
+                  ),
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      SizedBox(
-                        width: 68,
-                        height: 68,
-                        child: logoUrl.trim().isNotEmpty
-                            ? WebSafeImage(
-                                url: logoUrl,
-                                width: 68,
-                                height: 68,
-                                fit: BoxFit.contain,
-                              )
-                            : Center(
-                                child: Text(
-                                  initials,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 26,
-                                    fontWeight: FontWeight.w800,
+                      Center(
+                        child: SizedBox(
+                          width: 68,
+                          height: 68,
+                          child: logoUrl.trim().isNotEmpty
+                              ? WebSafeImage(
+                                  url: logoUrl,
+                                  width: 68,
+                                  height: 68,
+                                  fit: BoxFit.contain,
+                                )
+                              : Center(
+                                  child: Text(
+                                    initials,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 26,
+                                      fontWeight: FontWeight.w800,
+                                    ),
                                   ),
                                 ),
-                              ),
+                        ),
                       ),
                       const SizedBox(height: 5),
                       Text(
