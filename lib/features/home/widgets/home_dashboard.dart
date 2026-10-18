@@ -234,6 +234,48 @@ class HomeDashboard extends StatefulWidget {
   final League league;
   final VoidCallback onOpenMenu;
 
+  /// Açılış ekranı görünürken çağrılır: pano verisi (cihazdaki hal + sunucu
+  /// eşitlemesi) ve görselleri belleğe alınır; pano ilk karede dolu çizilir.
+  static Future<void> warmUp(
+    BuildContext context,
+    League league,
+    AppSessionState session,
+  ) async {
+    final key = 'dash_cache_${league.id}_${session.user?.id ?? 'guest'}';
+    final prefs = await SharedPreferences.getInstance();
+    _HomeDashboardState._followedCache[league.id] = prefs.getString(
+      'followed_team_${league.id}',
+    );
+    if (_HomeDashboardState._memCache[key] == null) {
+      try {
+        final raw = prefs.getString(key);
+        if (raw != null) {
+          _HomeDashboardState._memCache[key] = Map<String, dynamic>.from(
+            jsonDecode(raw) as Map,
+          );
+        }
+      } catch (_) {}
+    }
+    try {
+      await _HomeDashboardState._sync(key, league.id, session);
+    } catch (_) {
+      // Bağlantı yoksa cihazdaki hal gösterilir; pano sonra yeniden dener.
+    }
+    final raw = _HomeDashboardState._memCache[key];
+    if (!context.mounted) return;
+    final urls = <String>{
+      league.logoUrl,
+      for (final r in (raw?['season_teams'] as List? ?? const []))
+        ((r['teams'] as Map?)?['logo_url'] ?? '').toString(),
+      // Gol/asist krallığı fotoğrafları (yalnız ilk sıralar görünür).
+      for (final e in (raw?['events'] as List? ?? const []).take(40)) ...[
+        ((e['scorer'] as Map?)?['photo_url'] ?? '').toString(),
+        ((e['assister'] as Map?)?['photo_url'] ?? '').toString(),
+      ],
+    }..removeWhere((u) => u.trim().isEmpty);
+    await Future.wait([for (final u in urls) precacheWebSafeImage(context, u)]);
+  }
+
   @override
   State<HomeDashboard> createState() => _HomeDashboardState();
 }
@@ -250,6 +292,9 @@ class _HomeDashboardState extends State<HomeDashboard> {
   /// (sekme değişimi vb.) tüm sezon verisi yeniden indirilmez. Aşağı çekip
   /// yenileme her zaman sunucudan okur.
   static final Map<String, DateTime> _fetchedAt = {};
+
+  /// Turnuva başına takip edilen takım (cihaz ayarı), bellekte.
+  static final Map<String, String?> _followedCache = {};
   static const _freshFor = Duration(minutes: 2);
 
   _DashData? _data;
@@ -294,6 +339,10 @@ class _HomeDashboardState extends State<HomeDashboard> {
     _loadedFor = key;
     final mem = _memCache[key];
     _data = mem == null ? null : _build(mem, session);
+    // Açılışta okunan takip edilen takım: kart ilk karede yerinde.
+    if (_followedCache.containsKey(widget.league.id)) {
+      _followedTeamId = _followedCache[widget.league.id];
+    }
     final at = _fetchedAt[key];
     if (mem != null &&
         at != null &&
@@ -325,6 +374,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
   }) async {
     final prefs = await SharedPreferences.getInstance();
     _followedTeamId = prefs.getString(_followKey);
+    _followedCache[widget.league.id] = _followedTeamId;
     // Cihazda kalmış eski takip bir kez DB'ye taşınır (bildirim gitsin).
     final followed = _followedTeamId;
     if (followed != null && !_followSynced) {
@@ -348,28 +398,12 @@ class _HomeDashboardState extends State<HomeDashboard> {
         }
       } catch (_) {}
     }
-    // Sunucudaki sürüm saklanan veriyle aynıysa sezon yeniden indirilmez
-    // (açılışta tek küçük istek).
-    final scopes = _versionScopes(_memCache[key]);
-    if (_memCache[key] != null && await VersionedCache.unchanged(key, scopes)) {
-      _fetchedAt[key] = DateTime.now();
-      if (mounted && _loadedFor == key) setState(() => _loadedOnce = true);
-      return;
-    }
     try {
-      // Sürüm, veriyle aynı anda istenir (fazladan tur yok).
-      final stampF = DataVersions.stamp(scopes);
-      final raw = await _fetchRaw(session);
-      final stamp = await stampF;
-      // Sezon değiştiyse (yeni sezon) damga yeni sezona göre alınır.
-      final fresh = _versionScopes(raw);
-      final savedStamp = _sameScopes(fresh, scopes)
-          ? stamp
-          : await DataVersions.stamp(fresh);
-      // Yalnızca damga saklanır (veri zaten panonun kendi önbelleğinde).
-      unawaited(VersionedCache.save(key, true, savedStamp));
-      _memCache[key] = raw;
-      _fetchedAt[key] = DateTime.now();
+      final raw = await _sync(key, widget.league.id, session);
+      if (raw == null) {
+        if (mounted && _loadedFor == key) setState(() => _loadedOnce = true);
+        return;
+      }
       if (mounted && _loadedFor == key) {
         setState(() {
           _data = _build(raw, session);
@@ -377,9 +411,6 @@ class _HomeDashboardState extends State<HomeDashboard> {
           _loadedOnce = true;
         });
       }
-      try {
-        await prefs.setString(key, jsonEncode(raw));
-      } catch (_) {}
     } catch (e) {
       debugPrint('Pano yüklenemedi: $e');
       if (mounted) {
@@ -389,6 +420,38 @@ class _HomeDashboardState extends State<HomeDashboard> {
         });
       }
     }
+  }
+
+  /// Sunucuyla eşitler: sürüm saklanan veriyle aynıysa (açılışta tek küçük
+  /// istek) null döner; değilse veriyi indirip saklar ve döndürür.
+  static Future<Map<String, dynamic>?> _sync(
+    String key,
+    String leagueId,
+    AppSessionState session,
+  ) async {
+    final scopes = _versionScopes(_memCache[key]);
+    if (_memCache[key] != null && await VersionedCache.unchanged(key, scopes)) {
+      _fetchedAt[key] = DateTime.now();
+      return null;
+    }
+    // Sürüm, veriyle aynı anda istenir (fazladan tur yok).
+    final stampF = DataVersions.stamp(scopes);
+    final raw = await _fetchRaw(leagueId, session);
+    final stamp = await stampF;
+    // Sezon değiştiyse (yeni sezon) damga yeni sezona göre alınır.
+    final fresh = _versionScopes(raw);
+    final savedStamp = _sameScopes(fresh, scopes)
+        ? stamp
+        : await DataVersions.stamp(fresh);
+    // Yalnızca damga saklanır (veri zaten panonun kendi önbelleğinde).
+    unawaited(VersionedCache.save(key, true, savedStamp));
+    _memCache[key] = raw;
+    _fetchedAt[key] = DateTime.now();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(key, jsonEncode(raw));
+    } catch (_) {}
+    return raw;
   }
 
   /// Panonun bağlı olduğu veri sürümleri: sezonun verisi + genel tablolar.
@@ -409,8 +472,10 @@ class _HomeDashboardState extends State<HomeDashboard> {
       a.length == b.length && a.every(b.contains);
 
   /// Sorgular: sezon (1 tur), ardından geri kalan her şey paralel (1 tur).
-  Future<Map<String, dynamic>> _fetchRaw(AppSessionState session) async {
-    final leagueId = widget.league.id;
+  static Future<Map<String, dynamic>> _fetchRaw(
+    String leagueId,
+    AppSessionState session,
+  ) async {
     final seasons = await _sb
         .from('seasons')
         .select('id, name, is_active, start_date')

@@ -3,6 +3,14 @@ import 'package:flutter/widgets.dart';
 import 'web_safe_image_stub.dart'
     if (dart.library.html) 'web_safe_image_web.dart';
 
+/// Görseli belleğe önceden yükler: sonra çizilen [WebSafeImage] ilk karede
+/// hazır görünür (geç oturan logo yok). Yüklenemezse sessizce geçer.
+Future<void> precacheWebSafeImage(BuildContext context, String url) {
+  final u = url.trim();
+  if (u.isEmpty) return Future<void>.value();
+  return precacheWebSafeImageImpl(context, u);
+}
+
 class WebSafeImage extends StatelessWidget {
   const WebSafeImage({
     super.key,

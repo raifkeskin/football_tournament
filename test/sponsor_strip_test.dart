@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:football_tournament/features/sponsors/sponsor.dart';
 import 'package:football_tournament/features/sponsors/sponsor_strip.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -16,6 +17,8 @@ Map<String, dynamic> _s(String id, String tier, String name, int order) => {
 };
 
 void main() {
+  setUp(SponsorFeed.clearMemory);
+
   testWidgets('önce ana sponsorlar kendi süreleriyle, sonra alt sponsor', (
     tester,
   ) async {

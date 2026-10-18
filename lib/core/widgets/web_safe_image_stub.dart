@@ -49,3 +49,6 @@ Widget buildWebSafeImage(
   }
   return img;
 }
+
+Future<void> precacheWebSafeImageImpl(BuildContext context, String url) =>
+    precacheImage(CachedNetworkImageProvider(url), context, onError: (_, _) {});

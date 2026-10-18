@@ -115,13 +115,25 @@ class SponsorFeed {
     changes.value = leagueId;
   }
 
+  static final _memory = <String, SponsorFeed>{};
+
+  /// Bellekteki son hâl (açılışta hazırlanır): şerit ilk karede çizilir.
+  static SponsorFeed? memory(String leagueId) => _memory[leagueId];
+
+  @visibleForTesting
+  static void clearMemory() => _memory.clear();
+
   /// Cihazdaki son hâl (şerit ilk karede çizilsin, sonradan zıplamasın).
   static Future<SponsorFeed?> cached(String leagueId) async {
+    final mem = _memory[leagueId];
+    if (mem != null) return mem;
     try {
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString(_key(leagueId));
       if (raw == null) return null;
-      return _fromJson(jsonDecode(raw) as Map<String, dynamic>);
+      return _memory[leagueId] = _fromJson(
+        jsonDecode(raw) as Map<String, dynamic>,
+      );
     } catch (_) {
       return null;
     }
@@ -149,6 +161,7 @@ class SponsorFeed {
       mainSeconds: (l?['sponsor_main_seconds'] as num?)?.toInt() ?? 8,
       subSeconds: (l?['sponsor_sub_seconds'] as num?)?.toInt() ?? 4,
     );
+    _memory[leagueId] = feed;
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_key(leagueId), jsonEncode(feed._toJson()));
