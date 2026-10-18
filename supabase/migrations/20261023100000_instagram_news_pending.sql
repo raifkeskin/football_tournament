@@ -29,7 +29,7 @@ begin
     'Yeni gönderi #ligmasasi etiketi olmadığı için Haberler''e alınmadı. '
       || 'Bekleyen Onaylar''dan yayınlayabilirsiniz.',
     '/',
-    'ig-news-' || new.id
+    'approval-ig' || new.id
   );
   return new;
 exception when others then
