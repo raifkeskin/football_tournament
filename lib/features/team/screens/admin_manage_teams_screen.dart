@@ -551,6 +551,8 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
     XFile? selectedLogo;
     var removeLogo = false;
     var saving = false;
+    // Açık sekme: 0 Genel, 1 Görünüm.
+    var tab = 0;
 
     Future<void> pickLogo(void Function(void Function()) setSheetState) async {
       final picked = await _picker.pickImage(source: ImageSource.gallery);
@@ -570,6 +572,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
     ) async {
       final teamName = nameController.text.trim();
       if (teamName.isEmpty) {
+        setSheetState(() => tab = 0);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Lütfen takım adını girin.')),
         );
@@ -706,279 +709,285 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
             }
 
             // Kaydet butonu içerik kaysa da hep görünür; kapatma sağ üstte.
+            // Alanlar sekmelere bölünür; form aşağı doğru uzamaz.
             return Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Flexible(
-                  child: Stack(
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 4, 6),
+                  child: Row(
                     children: [
-                      SingleChildScrollView(
-                        padding: const EdgeInsets.fromLTRB(16, 6, 16, 8),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Center(
-                              child: GestureDetector(
-                                onTap: saving
-                                    ? null
-                                    : () => pickLogo(setSheetState),
-                                child: Stack(
-                                  clipBehavior: Clip.none,
-                                  children: [
-                                    Container(
-                                      width: 112,
-                                      height: 112,
-                                      // Zemin (decoration) yokken kırpma
-                                      // yapılamaz; Flutter hata verir.
-                                      clipBehavior: hasLogo
-                                          ? Clip.none
-                                          : Clip.antiAlias,
-                                      alignment: Alignment.center,
-                                      // Logo varsa zemin yok; logo kendi
-                                      // şekliyle görünür.
-                                      decoration: hasLogo
-                                          ? null
-                                          : BoxDecoration(
-                                              color: const Color(0xFF064E3B),
-                                              borderRadius:
-                                                  BorderRadius.circular(28),
-                                              border: Border.all(
-                                                color: Colors.white.withValues(
-                                                  alpha: 0.12,
-                                                ),
+                      Expanded(
+                        child: AdminFormTabs(
+                          labels: const ['Genel', 'Görünüm'],
+                          selected: tab,
+                          onChanged: saving
+                              ? null
+                              : (i) => setSheetState(() => tab = i),
+                        ),
+                      ),
+                      AdminDialogCloseButton(
+                        onPressed: saving
+                            ? null
+                            : () => Navigator.of(context).pop(),
+                      ),
+                    ],
+                  ),
+                ),
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (tab == 1) ...[
+                          Center(
+                            child: GestureDetector(
+                              onTap: saving
+                                  ? null
+                                  : () => pickLogo(setSheetState),
+                              child: Stack(
+                                clipBehavior: Clip.none,
+                                children: [
+                                  Container(
+                                    width: 112,
+                                    height: 112,
+                                    // Zemin (decoration) yokken kırpma
+                                    // yapılamaz; Flutter hata verir.
+                                    clipBehavior: hasLogo
+                                        ? Clip.none
+                                        : Clip.antiAlias,
+                                    alignment: Alignment.center,
+                                    // Logo varsa zemin yok; logo kendi
+                                    // şekliyle görünür.
+                                    decoration: hasLogo
+                                        ? null
+                                        : BoxDecoration(
+                                            color: const Color(0xFF064E3B),
+                                            borderRadius: BorderRadius.circular(
+                                              28,
+                                            ),
+                                            border: Border.all(
+                                              color: Colors.white.withValues(
+                                                alpha: 0.12,
                                               ),
                                             ),
-                                      child: SizedBox.expand(child: logo),
-                                    ),
-                                    Positioned(
-                                      right: -6,
-                                      bottom: -6,
-                                      child: Container(
-                                        width: 36,
-                                        height: 36,
-                                        decoration: BoxDecoration(
-                                          color: kAdminAccent,
-                                          shape: BoxShape.circle,
-                                          border: Border.all(
-                                            color: const Color(0xFF1E293B),
-                                            width: 3,
                                           ),
-                                        ),
-                                        child: const Icon(
-                                          Icons.photo_camera_outlined,
-                                          size: 17,
-                                          color: Colors.white,
+                                    child: SizedBox.expand(child: logo),
+                                  ),
+                                  Positioned(
+                                    right: -6,
+                                    bottom: -6,
+                                    child: Container(
+                                      width: 36,
+                                      height: 36,
+                                      decoration: BoxDecoration(
+                                        color: kAdminAccent,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: const Color(0xFF1E293B),
+                                          width: 3,
                                         ),
                                       ),
+                                      child: const Icon(
+                                        Icons.photo_camera_outlined,
+                                        size: 17,
+                                        color: Colors.white,
+                                      ),
                                     ),
-                                  ],
-                                ),
+                                  ),
+                                ],
                               ),
                             ),
-                            const SizedBox(height: 8),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              TextButton(
+                                onPressed: saving
+                                    ? null
+                                    : () => pickLogo(setSheetState),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: kAdminAccent,
+                                ),
+                                child: Text(
+                                  hasLogo ? 'Logoyu değiştir' : 'Logo seç',
+                                ),
+                              ),
+                              if (hasLogo)
                                 TextButton(
                                   onPressed: saving
                                       ? null
-                                      : () => pickLogo(setSheetState),
+                                      : () => setSheetState(() {
+                                          selectedLogo = null;
+                                          removeLogo = true;
+                                        }),
                                   style: TextButton.styleFrom(
-                                    foregroundColor: kAdminAccent,
+                                    foregroundColor: kAdminDanger,
                                   ),
-                                  child: Text(
-                                    hasLogo ? 'Logoyu değiştir' : 'Logo seç',
+                                  child: const Text('Kaldır'),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                        if (tab == 0)
+                          AdminFormSection(
+                            title: 'Takım',
+                            child: AdminFieldGroup(
+                              children: [
+                                AdminFieldRow(
+                                  icon: Icons.shield_outlined,
+                                  label: 'Takım Adı',
+                                  child: TextField(
+                                    controller: nameController,
+                                    enabled: !saving,
+                                    maxLength: 30,
+                                    textCapitalization:
+                                        TextCapitalization.words,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                    cursorColor: kAdminAccent,
+                                    decoration: adminInlineInputDecoration(
+                                      hint: 'Örn. Yeşil FK',
+                                    ).copyWith(counterText: ''),
                                   ),
                                 ),
-                                if (hasLogo)
-                                  TextButton(
-                                    onPressed: saving
-                                        ? null
-                                        : () => setSheetState(() {
-                                            selectedLogo = null;
-                                            removeLogo = true;
-                                          }),
-                                    style: TextButton.styleFrom(
-                                      foregroundColor: kAdminDanger,
+                                AdminFieldRow(
+                                  icon: Icons.short_text_rounded,
+                                  label: 'Kısa Ad (opsiyonel)',
+                                  child: TextField(
+                                    controller: shortNameController,
+                                    enabled: !saving,
+                                    maxLength: 16,
+                                    textCapitalization:
+                                        TextCapitalization.words,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
                                     ),
-                                    child: const Text('Kaldır'),
+                                    cursorColor: kAdminAccent,
+                                    decoration: adminInlineInputDecoration(
+                                      hint: 'Dar ekranlar için, örn. GOP Autur',
+                                    ).copyWith(counterText: ''),
+                                  ),
+                                ),
+                                AdminFieldRow(
+                                  icon: Icons.event_outlined,
+                                  label: 'Kuruluş Yılı',
+                                  child: TextField(
+                                    controller: foundedController,
+                                    enabled: !saving,
+                                    keyboardType: TextInputType.number,
+                                    inputFormatters: [
+                                      FilteringTextInputFormatter.digitsOnly,
+                                      LengthLimitingTextInputFormatter(4),
+                                    ],
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                    cursorColor: kAdminAccent,
+                                    decoration: adminInlineInputDecoration(
+                                      hint: 'Örn. 1966',
+                                    ),
+                                  ),
+                                ),
+                                AdminSelectRow(
+                                  icon: Icons.badge_outlined,
+                                  label: 'Takım Sorumlusu',
+                                  value: managerName,
+                                  placeholder: 'Sorumlu seçin',
+                                  onTap: saving ? null : openManagerPicker,
+                                  onClear: () => setSheetState(() {
+                                    selectedManagerId = '';
+                                    managerName = '';
+                                  }),
+                                ),
+                                if (isEdit)
+                                  AdminSelectRow(
+                                    icon: Icons.groups_outlined,
+                                    label: 'Kadro',
+                                    value: 'Kadroyu aç',
+                                    placeholder: 'Kadroyu aç',
+                                    onTap: saving
+                                        ? null
+                                        : () => _openSquad(
+                                            context,
+                                            teamId: teamId!,
+                                            teamName: nameController.text
+                                                .trim(),
+                                            logoUrl: existingLogoUrl,
+                                          ),
                                   ),
                               ],
                             ),
-                            const SizedBox(height: 12),
-                            AdminFormSection(
-                              title: 'Takım',
-                              child: AdminFieldGroup(
-                                children: [
-                                  AdminFieldRow(
-                                    icon: Icons.shield_outlined,
-                                    label: 'Takım Adı',
-                                    child: TextField(
-                                      controller: nameController,
-                                      enabled: !saving,
-                                      maxLength: 30,
-                                      textCapitalization:
-                                          TextCapitalization.words,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                      cursorColor: kAdminAccent,
-                                      decoration: adminInlineInputDecoration(
-                                        hint: 'Örn. Yeşil FK',
-                                      ).copyWith(counterText: ''),
-                                    ),
-                                  ),
-                                  AdminFieldRow(
-                                    icon: Icons.short_text_rounded,
-                                    label: 'Kısa Ad (opsiyonel)',
-                                    child: TextField(
-                                      controller: shortNameController,
-                                      enabled: !saving,
-                                      maxLength: 16,
-                                      textCapitalization:
-                                          TextCapitalization.words,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                      cursorColor: kAdminAccent,
-                                      decoration: adminInlineInputDecoration(
-                                        hint:
-                                            'Dar ekranlar için, örn. GOP Autur',
-                                      ).copyWith(counterText: ''),
-                                    ),
-                                  ),
-                                  AdminFieldRow(
-                                    icon: Icons.event_outlined,
-                                    label: 'Kuruluş Yılı',
-                                    child: TextField(
-                                      controller: foundedController,
-                                      enabled: !saving,
-                                      keyboardType: TextInputType.number,
-                                      inputFormatters: [
-                                        FilteringTextInputFormatter.digitsOnly,
-                                        LengthLimitingTextInputFormatter(4),
-                                      ],
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                      cursorColor: kAdminAccent,
-                                      decoration: adminInlineInputDecoration(
-                                        hint: 'Örn. 1966',
-                                      ),
-                                    ),
-                                  ),
-                                  AdminSelectRow(
-                                    icon: Icons.badge_outlined,
-                                    label: 'Takım Sorumlusu',
-                                    value: managerName,
-                                    placeholder: 'Sorumlu seçin',
-                                    onTap: saving ? null : openManagerPicker,
-                                    onClear: () => setSheetState(() {
-                                      selectedManagerId = '';
-                                      managerName = '';
-                                    }),
-                                  ),
-                                  if (isEdit)
-                                    AdminSelectRow(
-                                      icon: Icons.groups_outlined,
-                                      label: 'Kadro',
-                                      value: 'Kadroyu aç',
-                                      placeholder: 'Kadroyu aç',
-                                      onTap: saving
-                                          ? null
-                                          : () => _openSquad(
-                                              context,
-                                              teamId: teamId!,
-                                              teamName: nameController.text
-                                                  .trim(),
-                                              logoUrl: existingLogoUrl,
-                                            ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                            AdminFormSection(
-                              title: 'Renkler',
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: AdminColorTile(
-                                      label: 'Ana Renk',
-                                      hex: firstColor,
-                                      onTap: saving
-                                          ? null
-                                          : () async {
-                                              final c =
-                                                  await showAdminColorPicker(
-                                                    context: context,
-                                                    title: 'Ana Renk',
-                                                    initial: firstColor,
-                                                  );
-                                              if (c != null) {
-                                                setSheetState(
-                                                  () => firstColor = c,
-                                                );
-                                              }
-                                            },
-                                      onClear: () => setSheetState(
-                                        () => firstColor = null,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: AdminColorTile(
-                                      label: 'İkinci Renk',
-                                      hex: secondColor,
-                                      onTap: saving
-                                          ? null
-                                          : () async {
-                                              final c =
-                                                  await showAdminColorPicker(
-                                                    context: context,
-                                                    title: 'İkinci Renk',
-                                                    initial: secondColor,
-                                                  );
-                                              if (c != null) {
-                                                setSheetState(
-                                                  () => secondColor = c,
-                                                );
-                                              }
-                                            },
-                                      onClear: () => setSheetState(
-                                        () => secondColor = null,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Positioned(
-                        top: -8,
-                        right: 4,
-                        child: IconButton(
-                          tooltip: 'Kapat',
-                          onPressed: saving
-                              ? null
-                              : () => Navigator.of(context).pop(),
-                          icon: const Icon(
-                            Icons.close_rounded,
-                            color: Colors.white70,
                           ),
-                        ),
-                      ),
-                    ],
+                        if (tab == 1)
+                          AdminFormSection(
+                            title: 'Renkler',
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: AdminColorTile(
+                                    label: 'Ana Renk',
+                                    hex: firstColor,
+                                    onTap: saving
+                                        ? null
+                                        : () async {
+                                            final c =
+                                                await showAdminColorPicker(
+                                                  context: context,
+                                                  title: 'Ana Renk',
+                                                  initial: firstColor,
+                                                );
+                                            if (c != null) {
+                                              setSheetState(
+                                                () => firstColor = c,
+                                              );
+                                            }
+                                          },
+                                    onClear: () =>
+                                        setSheetState(() => firstColor = null),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: AdminColorTile(
+                                    label: 'İkinci Renk',
+                                    hex: secondColor,
+                                    onTap: saving
+                                        ? null
+                                        : () async {
+                                            final c =
+                                                await showAdminColorPicker(
+                                                  context: context,
+                                                  title: 'İkinci Renk',
+                                                  initial: secondColor,
+                                                );
+                                            if (c != null) {
+                                              setSheetState(
+                                                () => secondColor = c,
+                                              );
+                                            }
+                                          },
+                                    onClear: () =>
+                                        setSheetState(() => secondColor = null),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
                 Padding(

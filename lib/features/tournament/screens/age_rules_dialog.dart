@@ -58,6 +58,9 @@ class _AgeRulesDialogState extends State<_AgeRulesDialog> {
   late int? _matchFieldMax = widget.initial.matchFieldMax;
   bool _saving = false;
 
+  /// Açık sekme: 0 Yaş Kuralı, 1 Kontenjan.
+  int _tab = 0;
+
   Future<int?> _pickYear(String title, int? current) async {
     const none = 0;
     final v = await showAdminOptionPicker<int>(
@@ -133,136 +136,152 @@ class _AgeRulesDialogState extends State<_AgeRulesDialog> {
                 title: 'Yaş ve Kontenjan',
                 subtitle: 'Sezon başında bir kez girilir',
               ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 14),
+                child: AdminFormTabs(
+                  labels: const ['Yaş Kuralı', 'Kontenjan'],
+                  selected: _tab,
+                  onChanged: _saving ? null : (i) => setState(() => _tab = i),
+                ),
+              ),
               Flexible(
                 child: SingleChildScrollView(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      AdminFormSection(
-                        title: 'Yaş Kuralı',
-                        child: AdminFieldGroup(
-                          children: [
-                            AdminFieldRow(
-                              icon: Icons.cake_outlined,
-                              label: 'Oyuncular (en geç doğum yılı)',
-                              onTap: () async {
-                                final y = await _pickYear('Oyuncular', _player);
-                                setState(() => _player = y);
-                              },
-                              trailing: const Icon(
-                                Icons.chevron_right_rounded,
-                                color: kAdminMuted,
-                              ),
-                              child: value(yearText(_player)),
-                            ),
-                            AdminFieldRow(
-                              icon: Icons.sports_handball_outlined,
-                              label: 'Kaleci (en geç doğum yılı)',
-                              onTap: () async {
-                                final y = await _pickYear('Kaleci', _gk);
-                                setState(() => _gk = y);
-                              },
-                              trailing: const Icon(
-                                Icons.chevron_right_rounded,
-                                color: kAdminMuted,
-                              ),
-                              child: value(
-                                _gk == null
-                                    ? 'Oyuncu sınırı geçerli'
-                                    : yearText(_gk),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      AdminFormSection(
-                        title: 'Kadro Kontenjanları',
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            for (var i = 0; i < _quotas.length; i++)
-                              _QuotaTile(
-                                quota: _quotas[i],
+                      if (_tab == 0)
+                        AdminFormSection(
+                          title: 'Yaş Kuralı',
+                          child: AdminFieldGroup(
+                            children: [
+                              AdminFieldRow(
+                                icon: Icons.cake_outlined,
+                                label: 'Oyuncular (en geç doğum yılı)',
                                 onTap: () async {
+                                  final y = await _pickYear(
+                                    'Oyuncular',
+                                    _player,
+                                  );
+                                  setState(() => _player = y);
+                                },
+                                trailing: const Icon(
+                                  Icons.chevron_right_rounded,
+                                  color: kAdminMuted,
+                                ),
+                                child: value(yearText(_player)),
+                              ),
+                              AdminFieldRow(
+                                icon: Icons.sports_handball_outlined,
+                                label: 'Kaleci (en geç doğum yılı)',
+                                onTap: () async {
+                                  final y = await _pickYear('Kaleci', _gk);
+                                  setState(() => _gk = y);
+                                },
+                                trailing: const Icon(
+                                  Icons.chevron_right_rounded,
+                                  color: kAdminMuted,
+                                ),
+                                child: value(
+                                  _gk == null
+                                      ? 'Oyuncu sınırı geçerli'
+                                      : yearText(_gk),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (_tab == 1)
+                        AdminFormSection(
+                          title: 'Kadro Kontenjanları',
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              for (var i = 0; i < _quotas.length; i++)
+                                _QuotaTile(
+                                  quota: _quotas[i],
+                                  onTap: () async {
+                                    final q = await showDialog<AgeQuota>(
+                                      context: context,
+                                      builder: (_) =>
+                                          _QuotaDialog(initial: _quotas[i]),
+                                    );
+                                    if (q != null) {
+                                      setState(() => _quotas[i] = q);
+                                    }
+                                  },
+                                  onRemove: () =>
+                                      setState(() => _quotas.removeAt(i)),
+                                ),
+                              const SizedBox(height: 4),
+                              OutlinedButton.icon(
+                                onPressed: () async {
                                   final q = await showDialog<AgeQuota>(
                                     context: context,
-                                    builder: (_) =>
-                                        _QuotaDialog(initial: _quotas[i]),
+                                    builder: (_) => const _QuotaDialog(),
                                   );
-                                  if (q != null) setState(() => _quotas[i] = q);
+                                  if (q != null) setState(() => _quotas.add(q));
                                 },
-                                onRemove: () =>
-                                    setState(() => _quotas.removeAt(i)),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: kAdminAccent,
+                                  side: BorderSide(
+                                    color: kAdminAccent.withValues(alpha: 0.5),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                icon: const Icon(Icons.add_rounded),
+                                label: const Text('Kontenjan Ekle'),
                               ),
-                            const SizedBox(height: 4),
-                            OutlinedButton.icon(
-                              onPressed: () async {
-                                final q = await showDialog<AgeQuota>(
-                                  context: context,
-                                  builder: (_) => const _QuotaDialog(),
-                                );
-                                if (q != null) setState(() => _quotas.add(q));
-                              },
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: kAdminAccent,
-                                side: BorderSide(
-                                  color: kAdminAccent.withValues(alpha: 0.5),
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 12,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              icon: const Icon(Icons.add_rounded),
-                              label: const Text('Kontenjan Ekle'),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                      AdminFormSection(
-                        title: 'Maç Günü',
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            AdminFieldGroup(
-                              children: [
-                                _LimitRow(
-                                  icon: Icons.assignment_outlined,
-                                  label: 'Esamede en fazla',
-                                  value: _matchMax,
-                                  addValue: 3,
-                                  onChanged: (v) =>
-                                      setState(() => _matchMax = v),
-                                ),
-                                _LimitRow(
-                                  icon: Icons.stadium_outlined,
-                                  label: 'Sahada aynı anda en fazla',
-                                  value: _matchFieldMax,
-                                  addValue: 2,
-                                  onChanged: (v) =>
-                                      setState(() => _matchFieldMax = v),
-                                ),
-                              ],
-                            ),
-                            const Padding(
-                              padding: EdgeInsets.fromLTRB(4, 6, 4, 0),
-                              child: Text(
-                                'Kaleci dışındaki tüm kontenjanlı oyuncular '
-                                'toplam sayılır. Sahadaki sınır doluyken yedekteki '
-                                'kontenjanlı oyuncu ancak kontenjanlı bir oyuncunun '
-                                'yerine girebilir.',
-                                style: TextStyle(
-                                  color: kAdminMuted,
-                                  fontSize: 12,
-                                  height: 1.35,
+                      if (_tab == 1)
+                        AdminFormSection(
+                          title: 'Maç Günü',
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              AdminFieldGroup(
+                                children: [
+                                  _LimitRow(
+                                    icon: Icons.assignment_outlined,
+                                    label: 'Esamede en fazla',
+                                    value: _matchMax,
+                                    addValue: 3,
+                                    onChanged: (v) =>
+                                        setState(() => _matchMax = v),
+                                  ),
+                                  _LimitRow(
+                                    icon: Icons.stadium_outlined,
+                                    label: 'Sahada aynı anda en fazla',
+                                    value: _matchFieldMax,
+                                    addValue: 2,
+                                    onChanged: (v) =>
+                                        setState(() => _matchFieldMax = v),
+                                  ),
+                                ],
+                              ),
+                              const Padding(
+                                padding: EdgeInsets.fromLTRB(4, 6, 4, 0),
+                                child: Text(
+                                  'Kaleci dışındaki tüm kontenjanlı oyuncular '
+                                  'toplam sayılır. Sahadaki sınır doluyken yedekteki '
+                                  'kontenjanlı oyuncu ancak kontenjanlı bir oyuncunun '
+                                  'yerine girebilir.',
+                                  style: TextStyle(
+                                    color: kAdminMuted,
+                                    fontSize: 12,
+                                    height: 1.35,
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
                     ],
                   ),
                 ),
