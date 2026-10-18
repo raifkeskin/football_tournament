@@ -60,6 +60,9 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
   bool _repeat = false;
   int _repeatCount = 5;
 
+  /// Açık sekme: 0 Turnuva, 1 Eşleşme, 2 Zaman.
+  int _tab = 0;
+
   bool get _canRepeat => _teams.length == 2;
 
   List<League> _leagues = const [];
@@ -393,350 +396,390 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
             ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: kAdminAccent))
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                AdminFormSection(
-                  title: 'Turnuva',
-                  child: StreamBuilder<List<League>>(
-                    stream: _leaguesStream,
-                    builder: (context, snapshot) {
-                      _leagues = snapshot.data ?? _leagues;
-                      final leagueOptions = [
-                        for (final l in _leagues)
-                          if (panelLeagueIds == null ||
-                              panelLeagueIds.contains(l.id))
-                            (id: l.id, name: l.name, isDefault: false),
-                      ];
-                      if (session.hasManagementPanel &&
-                          leagueOptions.length == 1 &&
-                          _selectedLeagueId == null &&
-                          !_autoSelectingSingleLeague) {
-                        final onlyLeagueId = leagueOptions.single.id;
-                        _autoSelectingSingleLeague = true;
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          if (mounted && _selectedLeagueId == null) {
-                            _selectLeague(onlyLeagueId);
-                          }
-                        });
-                      }
-                      return AdminFieldGroup(
-                        children: [
-                          AdminSelectRow(
-                            icon: Icons.emoji_events_outlined,
-                            label: 'Turnuva',
-                            value: _nameOf(leagueOptions, _selectedLeagueId),
-                            placeholder: 'Turnuva seçin',
-                            locked: widget.lockLeagueSelection,
-                            loading: !snapshot.hasData,
-                            onTap: () => _pickOption(
-                              title: 'Turnuva Seçin',
-                              options: leagueOptions,
-                              selected: _selectedLeagueId,
-                              onPicked: _selectLeague,
-                            ),
-                          ),
-                          AdminSelectRow(
-                            icon: Icons.calendar_month_outlined,
-                            label: 'Sezon',
-                            value: _nameOf(_seasons, _selectedSeasonId),
-                            placeholder: leagueChosen
-                                ? (_seasons.isEmpty && !_loadingSeasons
-                                      ? 'Bu turnuvada sezon yok'
-                                      : 'Sezon seçin')
-                                : 'Önce turnuva seçin',
-                            loading: _loadingSeasons,
-                            onTap: leagueChosen && _seasons.isNotEmpty
-                                ? () => _pickOption(
-                                    title: 'Sezon Seçin',
-                                    options: _seasons,
-                                    selected: _selectedSeasonId,
-                                    onPicked: _selectSeason,
-                                  )
-                                : null,
-                          ),
-                          AdminSelectRow(
-                            icon: Icons.grid_view_rounded,
-                            label: 'Grup',
-                            value: _nameOf(_groups, _selectedGroupId),
-                            placeholder: seasonChosen
-                                ? (_groups.isEmpty && !_loadingGroups
-                                      ? 'Bu sezonda grup yok'
-                                      : 'Grup seçin')
-                                : 'Önce sezon seçin',
-                            loading: _loadingGroups,
-                            onTap: seasonChosen && _groups.isNotEmpty
-                                ? () => _pickOption(
-                                    title: 'Grup Seçin',
-                                    options: _groups,
-                                    selected: _selectedGroupId,
-                                    onPicked: _selectGroup,
-                                  )
-                                : null,
-                          ),
-                        ],
-                      );
-                    },
+                // Alanlar sekmelere bölünür; form aşağı doğru uzamaz.
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                  child: AdminFormTabs(
+                    labels: const ['Turnuva', 'Eşleşme', 'Zaman'],
+                    selected: _tab,
+                    onChanged: (i) => setState(() => _tab = i),
                   ),
                 ),
-                if (groupChosen)
-                  AdminFormSection(
-                    title: 'Kura',
-                    child: AdminFieldGroup(
-                      children: [
-                        AdminSelectRow(
-                          icon: Icons.shuffle_rounded,
-                          label: 'Fikstür kurası',
-                          value: null,
-                          placeholder: _teams.length < 2
-                              ? 'Grupta en az 2 takım olmalı'
-                              : 'Tüm lig maçlarını kurayla oluştur',
-                          loading: _loadingTeams,
-                          onTap: _teams.length < 2 ? null : _openDraw,
-                        ),
-                      ],
-                    ),
-                  ),
-                AdminFormSection(
-                  title: 'Eşleşme',
-                  child: AdminFieldGroup(
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                     children: [
-                      AdminSelectRow(
-                        icon: Icons.home_outlined,
-                        label: 'Ev Sahibi',
-                        value: _teamName(_homeTeamId),
-                        placeholder: groupChosen
-                            ? 'Takım seçin'
-                            : 'Önce grup seçin',
-                        loading: _loadingTeams,
-                        onTap: groupChosen && _teams.isNotEmpty
-                            ? () => _pickTeam(home: true)
-                            : null,
-                      ),
-                      AdminSelectRow(
-                        icon: Icons.flight_takeoff_rounded,
-                        label: 'Deplasman',
-                        value: _teamName(_awayTeamId),
-                        placeholder: groupChosen
-                            ? 'Takım seçin'
-                            : 'Önce grup seçin',
-                        loading: _loadingTeams,
-                        onTap: groupChosen && _teams.isNotEmpty
-                            ? () => _pickTeam(home: false)
-                            : null,
-                      ),
-                    ],
-                  ),
-                ),
-                AdminFormSection(
-                  title: 'Hafta ve Saha',
-                  child: AdminFieldGroup(
-                    children: [
-                      AdminFieldRow(
-                        icon: Icons.format_list_numbered_rounded,
-                        label: 'Hafta',
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            _StepButton(
-                              icon: Icons.remove_rounded,
-                              onTap: () => _stepWeek(-1),
-                            ),
-                            SizedBox(
-                              width: 52,
-                              child: TextField(
-                                controller: _weekController,
-                                onChanged: (_) => setState(() {}),
-                                textAlign: TextAlign.center,
-                                keyboardType: TextInputType.number,
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly,
-                                  LengthLimitingTextInputFormatter(3),
+                      if (_tab == 0)
+                        AdminFormSection(
+                          title: 'Turnuva',
+                          child: StreamBuilder<List<League>>(
+                            stream: _leaguesStream,
+                            builder: (context, snapshot) {
+                              _leagues = snapshot.data ?? _leagues;
+                              final leagueOptions = [
+                                for (final l in _leagues)
+                                  if (panelLeagueIds == null ||
+                                      panelLeagueIds.contains(l.id))
+                                    (id: l.id, name: l.name, isDefault: false),
+                              ];
+                              if (session.hasManagementPanel &&
+                                  leagueOptions.length == 1 &&
+                                  _selectedLeagueId == null &&
+                                  !_autoSelectingSingleLeague) {
+                                final onlyLeagueId = leagueOptions.single.id;
+                                _autoSelectingSingleLeague = true;
+                                WidgetsBinding.instance.addPostFrameCallback((
+                                  _,
+                                ) {
+                                  if (mounted && _selectedLeagueId == null) {
+                                    _selectLeague(onlyLeagueId);
+                                  }
+                                });
+                              }
+                              return AdminFieldGroup(
+                                children: [
+                                  AdminSelectRow(
+                                    icon: Icons.emoji_events_outlined,
+                                    label: 'Turnuva',
+                                    value: _nameOf(
+                                      leagueOptions,
+                                      _selectedLeagueId,
+                                    ),
+                                    placeholder: 'Turnuva seçin',
+                                    locked: widget.lockLeagueSelection,
+                                    loading: !snapshot.hasData,
+                                    onTap: () => _pickOption(
+                                      title: 'Turnuva Seçin',
+                                      options: leagueOptions,
+                                      selected: _selectedLeagueId,
+                                      onPicked: _selectLeague,
+                                    ),
+                                  ),
+                                  AdminSelectRow(
+                                    icon: Icons.calendar_month_outlined,
+                                    label: 'Sezon',
+                                    value: _nameOf(_seasons, _selectedSeasonId),
+                                    placeholder: leagueChosen
+                                        ? (_seasons.isEmpty && !_loadingSeasons
+                                              ? 'Bu turnuvada sezon yok'
+                                              : 'Sezon seçin')
+                                        : 'Önce turnuva seçin',
+                                    loading: _loadingSeasons,
+                                    onTap: leagueChosen && _seasons.isNotEmpty
+                                        ? () => _pickOption(
+                                            title: 'Sezon Seçin',
+                                            options: _seasons,
+                                            selected: _selectedSeasonId,
+                                            onPicked: _selectSeason,
+                                          )
+                                        : null,
+                                  ),
+                                  AdminSelectRow(
+                                    icon: Icons.grid_view_rounded,
+                                    label: 'Grup',
+                                    value: _nameOf(_groups, _selectedGroupId),
+                                    placeholder: seasonChosen
+                                        ? (_groups.isEmpty && !_loadingGroups
+                                              ? 'Bu sezonda grup yok'
+                                              : 'Grup seçin')
+                                        : 'Önce sezon seçin',
+                                    loading: _loadingGroups,
+                                    onTap: seasonChosen && _groups.isNotEmpty
+                                        ? () => _pickOption(
+                                            title: 'Grup Seçin',
+                                            options: _groups,
+                                            selected: _selectedGroupId,
+                                            onPicked: _selectGroup,
+                                          )
+                                        : null,
+                                  ),
                                 ],
-                                cursorColor: kAdminAccent,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                                decoration: const InputDecoration(
-                                  isDense: true,
-                                  border: InputBorder.none,
-                                  enabledBorder: InputBorder.none,
-                                  focusedBorder: InputBorder.none,
-                                  filled: false,
-                                  hintText: '-',
-                                  hintStyle: TextStyle(color: Colors.white38),
-                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      if (_tab == 0 && groupChosen)
+                        AdminFormSection(
+                          title: 'Kura',
+                          child: AdminFieldGroup(
+                            children: [
+                              AdminSelectRow(
+                                icon: Icons.shuffle_rounded,
+                                label: 'Fikstür kurası',
+                                value: null,
+                                placeholder: _teams.length < 2
+                                    ? 'Grupta en az 2 takım olmalı'
+                                    : 'Tüm lig maçlarını kurayla oluştur',
+                                loading: _loadingTeams,
+                                onTap: _teams.length < 2 ? null : _openDraw,
                               ),
-                            ),
-                            _StepButton(
-                              icon: Icons.add_rounded,
-                              onTap: () => _stepWeek(1),
-                            ),
-                          ],
-                        ),
-                        child: const Text(
-                          'Maç haftası',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
+                            ],
                           ),
                         ),
-                      ),
-                      StreamBuilder<List<Pitch>>(
-                        stream: _pitchesStream,
-                        builder: (context, snapshot) {
-                          final pitches = snapshot.data ?? const <Pitch>[];
-                          // '' = "Saha Seçilmedi"
-                          final options = <AdminOption>[
-                            (id: '', name: 'Saha Seçilmedi', isDefault: false),
-                            for (final p in pitches)
-                              (id: p.id, name: p.name, isDefault: false),
-                          ];
-                          return AdminSelectRow(
-                            icon: Icons.stadium_outlined,
-                            label: 'Saha',
-                            value: _selectedPitchName,
-                            placeholder: 'Saha seçilmedi',
-                            onTap: () => _pickOption(
-                              title: 'Saha Seçin',
-                              options: options,
-                              selected: _selectedPitchId ?? '',
-                              onPicked: (id) => setState(() {
-                                final name = (_nameOf(options, id) ?? '')
-                                    .trim();
-                                _selectedPitchId = id.isEmpty ? null : id;
-                                _selectedPitchName = id.isEmpty || name.isEmpty
-                                    ? null
-                                    : name;
-                              }),
-                            ),
-                            onClear: () => setState(() {
-                              _selectedPitchId = null;
-                              _selectedPitchName = null;
-                            }),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-                AdminFormSection(
-                  title: 'Tarih ve Saat',
-                  child: AdminFieldGroup(
-                    children: [
-                      AdminFieldRow(
-                        icon: Icons.event_busy_outlined,
-                        label: 'Planlama',
-                        onTap: () => setState(
-                          () => _unknownDateTime = !_unknownDateTime,
-                        ),
-                        trailing: Switch.adaptive(
-                          value: _unknownDateTime,
-                          activeTrackColor: kAdminAccent,
-                          onChanged: (v) =>
-                              setState(() => _unknownDateTime = v),
-                        ),
-                        child: const Text(
-                          'Tarih ve saat belirlenmedi',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
+                      if (_tab == 1)
+                        AdminFormSection(
+                          title: 'Eşleşme',
+                          child: AdminFieldGroup(
+                            children: [
+                              AdminSelectRow(
+                                icon: Icons.home_outlined,
+                                label: 'Ev Sahibi',
+                                value: _teamName(_homeTeamId),
+                                placeholder: groupChosen
+                                    ? 'Takım seçin'
+                                    : 'Önce grup seçin',
+                                loading: _loadingTeams,
+                                onTap: groupChosen && _teams.isNotEmpty
+                                    ? () => _pickTeam(home: true)
+                                    : null,
+                              ),
+                              AdminSelectRow(
+                                icon: Icons.flight_takeoff_rounded,
+                                label: 'Deplasman',
+                                value: _teamName(_awayTeamId),
+                                placeholder: groupChosen
+                                    ? 'Takım seçin'
+                                    : 'Önce grup seçin',
+                                loading: _loadingTeams,
+                                onTap: groupChosen && _teams.isNotEmpty
+                                    ? () => _pickTeam(home: false)
+                                    : null,
+                              ),
+                            ],
                           ),
                         ),
-                      ),
-                      AdminSelectRow(
-                        icon: Icons.calendar_today_outlined,
-                        label: 'Tarih',
-                        value:
-                            '${_two(_selectedDate.day)}.${_two(_selectedDate.month)}.${_selectedDate.year}',
-                        placeholder: '',
-                        onTap: _unknownDateTime ? null : _pickDate,
-                      ),
-                      AdminSelectRow(
-                        icon: Icons.access_time_rounded,
-                        label: 'Saat',
-                        value:
-                            '${_two(_selectedTime.hour)}:${_two(_selectedTime.minute)}',
-                        placeholder: '',
-                        onTap: _unknownDateTime ? null : _pickTime,
-                      ),
-                    ],
-                  ),
-                ),
-                if (_canRepeat)
-                  AdminFormSection(
-                    title: 'Tekrar',
-                    child: AdminFieldGroup(
-                      children: [
-                        AdminFieldRow(
-                          icon: Icons.repeat_rounded,
-                          label: 'Haftalık tekrarla',
-                          onTap: () => setState(() => _repeat = !_repeat),
-                          trailing: Checkbox(
-                            value: _repeat,
-                            activeColor: kAdminAccent,
-                            onChanged: (v) =>
-                                setState(() => _repeat = v ?? false),
-                          ),
-                          child: const Text(
-                            'Ev sahibi her hafta değişir',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                        if (_repeat)
-                          AdminFieldRow(
-                            icon: Icons.format_list_numbered_rounded,
-                            label: 'Toplam maç sayısı',
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                _StepButton(
-                                  icon: Icons.remove_rounded,
-                                  onTap: () => setState(
-                                    () => _repeatCount = (_repeatCount - 1)
-                                        .clamp(2, 52),
+                      if (_tab == 1)
+                        AdminFormSection(
+                          title: 'Hafta ve Saha',
+                          child: AdminFieldGroup(
+                            children: [
+                              AdminFieldRow(
+                                icon: Icons.format_list_numbered_rounded,
+                                label: 'Hafta',
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    _StepButton(
+                                      icon: Icons.remove_rounded,
+                                      onTap: () => _stepWeek(-1),
+                                    ),
+                                    SizedBox(
+                                      width: 52,
+                                      child: TextField(
+                                        controller: _weekController,
+                                        onChanged: (_) => setState(() {}),
+                                        textAlign: TextAlign.center,
+                                        keyboardType: TextInputType.number,
+                                        inputFormatters: [
+                                          FilteringTextInputFormatter
+                                              .digitsOnly,
+                                          LengthLimitingTextInputFormatter(3),
+                                        ],
+                                        cursorColor: kAdminAccent,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                        decoration: const InputDecoration(
+                                          isDense: true,
+                                          border: InputBorder.none,
+                                          enabledBorder: InputBorder.none,
+                                          focusedBorder: InputBorder.none,
+                                          filled: false,
+                                          hintText: '-',
+                                          hintStyle: TextStyle(
+                                            color: Colors.white38,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    _StepButton(
+                                      icon: Icons.add_rounded,
+                                      onTap: () => _stepWeek(1),
+                                    ),
+                                  ],
+                                ),
+                                child: const Text(
+                                  'Maç haftası',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
-                                SizedBox(
-                                  width: 44,
+                              ),
+                              StreamBuilder<List<Pitch>>(
+                                stream: _pitchesStream,
+                                builder: (context, snapshot) {
+                                  final pitches =
+                                      snapshot.data ?? const <Pitch>[];
+                                  // '' = "Saha Seçilmedi"
+                                  final options = <AdminOption>[
+                                    (
+                                      id: '',
+                                      name: 'Saha Seçilmedi',
+                                      isDefault: false,
+                                    ),
+                                    for (final p in pitches)
+                                      (
+                                        id: p.id,
+                                        name: p.name,
+                                        isDefault: false,
+                                      ),
+                                  ];
+                                  return AdminSelectRow(
+                                    icon: Icons.stadium_outlined,
+                                    label: 'Saha',
+                                    value: _selectedPitchName,
+                                    placeholder: 'Saha seçilmedi',
+                                    onTap: () => _pickOption(
+                                      title: 'Saha Seçin',
+                                      options: options,
+                                      selected: _selectedPitchId ?? '',
+                                      onPicked: (id) => setState(() {
+                                        final name =
+                                            (_nameOf(options, id) ?? '').trim();
+                                        _selectedPitchId = id.isEmpty
+                                            ? null
+                                            : id;
+                                        _selectedPitchName =
+                                            id.isEmpty || name.isEmpty
+                                            ? null
+                                            : name;
+                                      }),
+                                    ),
+                                    onClear: () => setState(() {
+                                      _selectedPitchId = null;
+                                      _selectedPitchName = null;
+                                    }),
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (_tab == 2)
+                        AdminFormSection(
+                          title: 'Tarih ve Saat',
+                          child: AdminFieldGroup(
+                            children: [
+                              AdminFieldRow(
+                                icon: Icons.event_busy_outlined,
+                                label: 'Planlama',
+                                onTap: () => setState(
+                                  () => _unknownDateTime = !_unknownDateTime,
+                                ),
+                                trailing: Switch.adaptive(
+                                  value: _unknownDateTime,
+                                  activeTrackColor: kAdminAccent,
+                                  onChanged: (v) =>
+                                      setState(() => _unknownDateTime = v),
+                                ),
+                                child: const Text(
+                                  'Tarih ve saat belirlenmedi',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              AdminSelectRow(
+                                icon: Icons.calendar_today_outlined,
+                                label: 'Tarih',
+                                value:
+                                    '${_two(_selectedDate.day)}.${_two(_selectedDate.month)}.${_selectedDate.year}',
+                                placeholder: '',
+                                onTap: _unknownDateTime ? null : _pickDate,
+                              ),
+                              AdminSelectRow(
+                                icon: Icons.access_time_rounded,
+                                label: 'Saat',
+                                value:
+                                    '${_two(_selectedTime.hour)}:${_two(_selectedTime.minute)}',
+                                placeholder: '',
+                                onTap: _unknownDateTime ? null : _pickTime,
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (_tab == 2 && _canRepeat)
+                        AdminFormSection(
+                          title: 'Tekrar',
+                          child: AdminFieldGroup(
+                            children: [
+                              AdminFieldRow(
+                                icon: Icons.repeat_rounded,
+                                label: 'Haftalık tekrarla',
+                                onTap: () => setState(() => _repeat = !_repeat),
+                                trailing: Checkbox(
+                                  value: _repeat,
+                                  activeColor: kAdminAccent,
+                                  onChanged: (v) =>
+                                      setState(() => _repeat = v ?? false),
+                                ),
+                                child: const Text(
+                                  'Ev sahibi her hafta değişir',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              if (_repeat)
+                                AdminFieldRow(
+                                  icon: Icons.format_list_numbered_rounded,
+                                  label: 'Toplam maç sayısı',
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      _StepButton(
+                                        icon: Icons.remove_rounded,
+                                        onTap: () => setState(
+                                          () => _repeatCount =
+                                              (_repeatCount - 1).clamp(2, 52),
+                                        ),
+                                      ),
+                                      SizedBox(
+                                        width: 44,
+                                        child: Text(
+                                          '$_repeatCount',
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
+                                      ),
+                                      _StepButton(
+                                        icon: Icons.add_rounded,
+                                        onTap: () => setState(
+                                          () => _repeatCount =
+                                              (_repeatCount + 1).clamp(2, 52),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                   child: Text(
-                                    '$_repeatCount',
-                                    textAlign: TextAlign.center,
+                                    _repeatSummary(),
                                     style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w800,
+                                      color: kAdminMuted,
+                                      fontSize: 13,
                                     ),
                                   ),
                                 ),
-                                _StepButton(
-                                  icon: Icons.add_rounded,
-                                  onTap: () => setState(
-                                    () => _repeatCount = (_repeatCount + 1)
-                                        .clamp(2, 52),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            child: Text(
-                              _repeatSummary(),
-                              style: const TextStyle(
-                                color: kAdminMuted,
-                                fontSize: 13,
-                              ),
-                            ),
+                            ],
                           ),
-                      ],
-                    ),
+                        ),
+                    ],
                   ),
+                ),
               ],
             ),
     );
@@ -775,18 +818,21 @@ class _AdminFixtureEntryScreenState extends State<AdminFixtureEntryScreen> {
         _selectedGroupId == null ||
         _homeTeamId == null ||
         _awayTeamId == null) {
+      setState(() => _tab = _selectedGroupId == null ? 0 : 1);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Lütfen tüm alanları seçin.')),
       );
       return;
     }
     if (week == null || week < 1) {
+      setState(() => _tab = 1);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Lütfen geçerli bir hafta girin.')),
       );
       return;
     }
     if (_homeTeamId == _awayTeamId) {
+      setState(() => _tab = 1);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Ev sahibi ve deplasman aynı olamaz.')),
       );
