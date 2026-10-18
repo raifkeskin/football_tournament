@@ -506,6 +506,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
+      // Ana ekranda yazı alanı yok; takılı kalan klavye boşluğu ekranı
+      // kısaltmasın (içerik yarıda kesiliyordu).
+      resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
           // Sade zemin; altta turnuvanın logosu silik filigran olarak.

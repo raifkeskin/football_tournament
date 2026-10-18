@@ -1,4 +1,5 @@
 import 'core/services/screen_trail.dart';
+import 'core/services/keyboard_dismiss_observer.dart';
 import 'core/app_navigator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
@@ -319,7 +320,11 @@ class _MyAppState extends State<MyApp> {
       controller: _sessionController,
       child: MaterialApp(
         navigatorKey: appNavigatorKey,
-        navigatorObservers: [LeagueSwitchScope.observer, ScreenTrail.instance],
+        navigatorObservers: [
+          LeagueSwitchScope.observer,
+          ScreenTrail.instance,
+          KeyboardDismissObserver.instance,
+        ],
         title: kAppName,
         debugShowCheckedModeBanner: false,
         localizationsDelegates: const [
