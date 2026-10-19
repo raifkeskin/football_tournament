@@ -13,6 +13,7 @@ class League {
     this.isActive = true,
     this.transferEnabled = false,
     this.autoResultNews = true,
+    this.autoPreviewNews = true,
     this.youtubeLive = false,
     this.isDefault = false,
     this.isPrivate = false,
@@ -55,6 +56,9 @@ class League {
 
   /// Maç bitince / hafta tamamlanınca otomatik sonuç haberi (yalnız admin).
   final bool autoResultNews;
+
+  /// Maç günü sabahı otomatik maç kartı / günün programı (yalnız admin).
+  final bool autoPreviewNews;
 
   /// YouTube canlı yayın: açıksa kanaldaki yayınlar maçlara otomatik
   /// bağlanır (edge function youtube-autolink).
@@ -154,6 +158,10 @@ class League {
       ),
       autoResultNews: boolFrom(
         v('autoResultNews', 'auto_result_news'),
+        fallback: true,
+      ),
+      autoPreviewNews: boolFrom(
+        v('autoPreviewNews', 'auto_preview_news'),
         fallback: true,
       ),
       youtubeLive: boolFrom(v('youtubeLive', 'youtube_live'), fallback: false),

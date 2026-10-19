@@ -75,6 +75,8 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
     final seasonCounts = <String, int>{};
     // Sorumlu telefonu ayrı tabloda; yalnız yönetilebilen takımlar döner.
     final managerPhones = <String, String>{};
+    // Sorumlusu henüz hesap açmamış takımlar.
+    final pendingAccounts = <String>{};
     await Future.wait([
       client.from('season_teams').select('team_id').then((rows) {
         for (final r in rows) {
@@ -82,20 +84,26 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
           seasonCounts[tid] = (seasonCounts[tid] ?? 0) + 1;
         }
       }),
-      client.from('team_manager_contacts').select('team_id, phone_raw10').then(
-        (rows) {
-          for (final r in rows) {
-            managerPhones[(r['team_id'] ?? '').toString()] =
-                (r['phone_raw10'] ?? '').toString();
-          }
-        },
-      ),
+      client.from('team_manager_contacts').select('team_id, phone_raw10').then((
+        rows,
+      ) {
+        for (final r in rows) {
+          managerPhones[(r['team_id'] ?? '').toString()] =
+              (r['phone_raw10'] ?? '').toString();
+        }
+      }),
+      client.rpc('team_manager_pending_accounts').then((rows) {
+        for (final r in (rows as List? ?? const [])) {
+          pendingAccounts.add(r.toString());
+        }
+      }),
     ]);
 
     for (final t in teams) {
       final id = (t['id'] ?? '').toString();
       t['manager_name'] = (t['manager_name'] ?? '').toString().trim();
       t['manager_phone'] = managerPhones[id] ?? '';
+      t['manager_pending'] = pendingAccounts.contains(id);
       t['season_count'] = seasonCounts[id] ?? 0;
     }
     return teams;
@@ -903,7 +911,8 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                                       : managerPhone.isEmpty
                                       ? managerName
                                       : '$managerName · '
-                                            '${formatPhoneRaw10(managerPhone)}',
+                                            '${formatPhoneRaw10(managerPhone)}'
+                                            '${existing?['manager_pending'] == true && managerPhone == initialManagerPhone ? ' · Hesap bekliyor' : ''}',
                                   placeholder: 'Sorumlu ekle',
                                   onTap: saving ? null : openManagerEditor,
                                   onClear: () => setSheetState(() {
@@ -1234,6 +1243,8 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
     final manager = (data['manager_name'] ?? '').toString().trim();
     final founded = (data['founded_year'] ?? '').toString().trim();
     final seasonCount = (data['season_count'] as int?) ?? 0;
+    final managerPending =
+        manager.isNotEmpty && data['manager_pending'] == true;
     final sub = [
       manager.isEmpty ? 'Sorumlu atanmadı' : manager,
       if (founded.isNotEmpty) 'Kuruluş $founded',
@@ -1283,7 +1294,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                         color: manager.isEmpty ? kAdminAmber : kAdminMuted,
                       ),
                       const SizedBox(width: 4),
-                      Expanded(
+                      Flexible(
                         child: Text(
                           sub,
                           maxLines: 1,
@@ -1294,6 +1305,17 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                           ),
                         ),
                       ),
+                      if (managerPending) ...[
+                        const SizedBox(width: 6),
+                        const Text(
+                          'Hesap bekliyor',
+                          style: TextStyle(
+                            color: kAdminAmber,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ],

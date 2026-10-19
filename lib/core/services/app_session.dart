@@ -490,13 +490,13 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
     try {
       var res = await _supabase
           .from('players')
-          .select('id, name, surname')
+          .select('id, name, surname, photo_url')
           .eq('auth_uid', user.id)
           .limit(1);
       if (res.isEmpty && phone.isNotEmpty) {
         res = await _supabase
             .from('players')
-            .select('id, name, surname')
+            .select('id, name, surname, photo_url')
             .eq('phone', phone)
             .limit(1);
       }
@@ -508,6 +508,9 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
           (r['surname'] ?? '').toString().trim(),
         ].where((e) => e.isNotEmpty).join(' ');
         if ((name ?? '').isEmpty && full.isNotEmpty) name = full;
+        // Hesapta fotoğraf yoksa futbolcu kaydındaki (menüdeki profil kartı).
+        final pp = (r['photo_url'] ?? '').toString().trim();
+        if ((photoUrl ?? '').isEmpty && pp.isNotEmpty) photoUrl = pp;
       }
     } catch (_) {}
 

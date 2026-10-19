@@ -35,7 +35,10 @@ class AgeRules {
       matchMax == null &&
       matchFieldMax == null;
 
-  bool get hasMatchLimits => matchMax != null || matchFieldMax != null;
+  bool get hasMatchLimits =>
+      matchMax != null ||
+      matchFieldMax != null ||
+      quotas.any((q) => !q.gk && q.matchMax != null);
 
   /// "1988-05-12" / "12.05.1988" gibi tarihten yıl.
   static int? birthYearOf(String? birthDate) => int.tryParse(
@@ -107,6 +110,7 @@ class AgeQuota {
     required this.years,
     required this.max,
     this.fieldMax,
+    this.matchMax,
     this.gk = false,
   });
 
@@ -120,6 +124,10 @@ class AgeQuota {
   /// sezon geneli [AgeRules.matchFieldMax] aldı; kayıtta korunur.
   final int? fieldMax;
 
+  /// Maç günü esamede bu kontenjandan en fazla (null: yalnız sezon geneli
+  /// [AgeRules.matchMax] geçerli).
+  final int? matchMax;
+
   /// true: kaleci kontenjanı; false: kaleci dışındaki oyuncular.
   final bool gk;
 
@@ -132,6 +140,7 @@ class AgeQuota {
       ]..sort(),
       max: n(raw['max']) ?? 1,
       fieldMax: n(raw['field_max']),
+      matchMax: n(raw['match_max']),
       gk: raw['gk'] == true,
     );
   }
@@ -140,6 +149,7 @@ class AgeQuota {
     'years': years,
     'max': max,
     'field_max': ?fieldMax,
+    'match_max': ?matchMax,
     'gk': gk,
   };
 

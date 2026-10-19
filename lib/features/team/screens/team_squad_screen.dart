@@ -633,7 +633,6 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
             ),
           if (violations > 0)
             tile('Kural dışı', '$violations', const Color(0xFFF87171)),
-          tile('Yaş kuralı', _ageRules.summary, Colors.white70),
         ],
       ),
     );

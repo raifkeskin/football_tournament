@@ -3,5 +3,11 @@
         "allow": [
             "Bash(psql:*)"
         ]
+    },
+    "autoMode": {
+        "allow": [
+            "$defaults",
+            "Running psql against this project's Supabase database (connection URL read with head -1 from ~/.config/football_tournament/db.env) is allowed: reading data, running verification queries (including SET ROLE tests in rolled-back transactions), and applying migration files from supabase/migrations/ with --single-transaction. Destructive bulk operations (DROP TABLE, TRUNCATE, mass DELETE of live data) still need explicit user approval."
+        ]
     }
 }

@@ -213,6 +213,33 @@ class _NewsViewState extends State<NewsView> {
                   0,
                   1 << 31,
                 );
+            if (n.isMatchPreview || n.isDayPreview) {
+              final meta = [
+                if (n.isMatchPreview && n.week != null) '${n.week}. Hafta',
+                if (n.regionName.isNotEmpty) n.regionName,
+              ].join(' · ');
+              return n.isMatchPreview
+                  ? MatchPreviewNewsCard(
+                      key: _keys.putIfAbsent(n.id, GlobalKey.new),
+                      item: n,
+                      meta: meta,
+                      loggedIn: loggedIn,
+                      liked: liked,
+                      likeCount: count,
+                      onToggleLike: () => _toggleLike(n, liked),
+                      onShare: () => _share(n),
+                    )
+                  : DayPreviewNewsCard(
+                      key: _keys.putIfAbsent(n.id, GlobalKey.new),
+                      item: n,
+                      meta: meta,
+                      loggedIn: loggedIn,
+                      liked: liked,
+                      likeCount: count,
+                      onToggleLike: () => _toggleLike(n, liked),
+                      onShare: () => _share(n),
+                    );
+            }
             if (n.isMatchResult || n.isWeekResults) {
               final meta = [
                 if (n.isMatchResult && n.week != null) '${n.week}. Hafta',

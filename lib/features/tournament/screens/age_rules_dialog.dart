@@ -316,6 +316,8 @@ class _QuotaTile extends StatelessWidget {
     final detail = [
       quota.gk ? 'Kaleci kontenjanı' : 'Kaleci hariç',
       'kadroda en fazla ${quota.max}',
+      if (!quota.gk && quota.matchMax != null)
+        'esamede en fazla ${quota.matchMax}',
       if (quota.fieldMax != null) 'sahada en fazla ${quota.fieldMax}',
     ].join(' · ');
     return Padding(
@@ -574,6 +576,7 @@ class _QuotaDialogState extends State<_QuotaDialog> {
   late Set<int> _years = {...?widget.initial?.years};
   late int _max = widget.initial?.max ?? 3;
   late bool _gk = widget.initial?.gk ?? false;
+  late int? _matchMax = widget.initial?.matchMax;
 
   @override
   Widget build(BuildContext context) {
@@ -637,6 +640,14 @@ class _QuotaDialogState extends State<_QuotaDialog> {
                           ),
                         ),
                       ),
+                      if (!_gk)
+                        _LimitRow(
+                          icon: Icons.assignment_outlined,
+                          label: 'Esamede en fazla',
+                          value: _matchMax,
+                          addValue: 1,
+                          onChanged: (v) => setState(() => _matchMax = v),
+                        ),
                       AdminFieldRow(
                         icon: Icons.sports_handball_outlined,
                         label: 'Kimler için',
@@ -669,6 +680,7 @@ class _QuotaDialogState extends State<_QuotaDialog> {
                             years: years,
                             max: _max,
                             fieldMax: widget.initial?.fieldMax,
+                            matchMax: _gk ? null : _matchMax,
                             gk: _gk,
                           ),
                         ),
