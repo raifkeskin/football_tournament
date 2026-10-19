@@ -283,6 +283,28 @@ button.tile:hover { border-color: #33476e; }
   .split.open .detail { position: static; max-height: none; overflow: visible; }
 }
 
+/* ---- Onaylar ---- */
+.agrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; padding: 4px 16px 16px; }
+.appr2 { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; background: var(--card-2); display: grid; gap: 6px; align-content: start; cursor: pointer; }
+.appr2.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.appr2 .ah { font-weight: 700; font-size: 13.5px; display: flex; gap: 8px; align-items: center; color: var(--muted); }
+.appr2 p { margin: 0; }
+.appr2 .t { font-weight: 700; }
+.appr2 .sub { margin: 0; font-size: 12.5px; }
+.appr2 .acts { justify-content: start; margin-top: 4px; }
+.appr2 .acts .kbd { margin-left: 4px; }
+.appr2 a { color: var(--accent); }
+.pill.info { background: rgba(96,165,250,.15); color: #93c5fd; }
+.chg { display: grid; gap: 4px; font-size: 13.5px; }
+.chg b { color: var(--muted); font-weight: 600; margin-right: 4px; }
+.chg img { width: 38px; height: 38px; border-radius: 8px; object-fit: cover; vertical-align: middle; }
+.ig { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 10px; }
+.ig img { width: 72px; height: 72px; border-radius: 10px; object-fit: cover; }
+.clamp { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; font-weight: 500 !important; }
+.pen-n { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
+.pen-n input { width: 46px; padding: 5px; text-align: center; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font: 800 16px/1 var(--display); }
+.dlg textarea { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font: inherit; resize: vertical; }
+
 /* Henüz yapılmayan bölüm */
 .soon { padding: 40px 20px; text-align: center; color: var(--muted); }
 .soon b { display: block; color: var(--fg); font: 800 22px/1.2 var(--display); margin-bottom: 6px; }
@@ -337,7 +359,8 @@ button.tile:hover { border-color: #33476e; }
   var session = null;   // {access_token, refresh_token, expires_at, user}
   var state = {view: 'today', date: today(), data: null, sel: -1, dlg: null, league: null,
     // Canlı maç: seçili maç, verisi, seçili olay türü ve yarım kalan seçim.
-    liveId: null, live: null, liveSig: '', mode: null, pick: null, minuteManual: false, offset: 0};
+    liveId: null, live: null, liveSig: '', mode: null, pick: null, minuteManual: false, offset: 0,
+    appr: null, apprSel: -1};
   try { state.league = localStorage.getItem(LKEY); } catch (e) {}
 
   var ICON = {
@@ -371,7 +394,6 @@ button.tile:hover { border-color: #33476e; }
   var SOON = {
     live: 'Canlı maçta gol, kart, değişiklik ve devreler tek tuşla girilecek.',
     fixture: 'Haftanın maçları tabloda; tarih, saat ve saha hızlıca düzenlenecek.',
-    approvals: 'Kadro, lisans, profil ve ceza onayları tek listede.',
     standings: 'Puan durumu ve gruplar.',
     teams: 'Takımlar ve kadrolar.',
     licenses: 'Lisans başvuruları ve süreleri.',
@@ -590,6 +612,8 @@ button.tile:hover { border-color: #33476e; }
       }).catch(function () {});
       saveSession(null);
       state.data = null;
+      state.appr = null;
+      clearInterval(apprTimer);
       closeLive();
       render();
     };
@@ -597,6 +621,7 @@ button.tile:hover { border-color: #33476e; }
     renderContent();
     if (!state.data) load();
     if (state.liveId) startPoll();
+    startApprPoll();
   }
 
   // Bugün ve Canlı maç aynı ekrandır (liste + sağda maç); Canlı maç menüsü
@@ -654,7 +679,9 @@ button.tile:hover { border-color: #33476e; }
       state.sel = -1;
       syncSel();
       renderTop();
-      renderList();
+      updateApprCount();
+      if (state.view === 'approvals') renderContent();
+      else renderList();
     };
   }
 
@@ -668,6 +695,7 @@ button.tile:hover { border-color: #33476e; }
       renderDetail();
       return;
     }
+    if (state.view === 'approvals') return renderApprovals(el);
     var n = NAV.filter(function (x) { return x.id === state.view; })[0];
     el.innerHTML = '<div class="h-row"><div><h1>' + esc(n.name) + '</h1></div></div>' +
       '<div class="box"><div class="soon"><b>Sıradaki aşamada</b>' + esc(SOON[state.view] || '') + '</div></div>';
@@ -1480,12 +1508,255 @@ button.tile:hover { border-color: #33476e; }
     return false;
   }
 
+  // ---------- Onaylar ----------
+  // Uygulamadaki "Bekleyen Onaylar" ile aynı talepler ve aynı karar
+  // RPC'leri. Kartlar arasında ↑ ↓, O onayla, X reddet.
+  var APPR_TYPES = {roster_add: 'Kadroya ekleme', roster_remove: 'Kadrodan çıkarma', jersey_change: 'Forma numarası'};
+  var PROFILE_LABEL = {photo_url: 'Fotoğraf', height: 'Boy', weight: 'Kilo', main_position: 'Mevki', sub_position: 'Alt mevki', birth_date: 'Doğum tarihi'};
+  var apprTimer = null;
+
+  function loadApprovals() {
+    return api('rpc/desk_approvals', {method: 'POST', body: {}}).then(function (j) {
+      state.appr = j;
+      updateApprCount();
+      if (state.view === 'approvals') renderContent();
+    }, function (e) { if (state.view === 'approvals') toast(e.message, true); });
+  }
+  function apprItems() {
+    var a = state.appr;
+    if (!a) return [];
+    var lg = state.league;
+    function inLeague(x) { return !lg || !x.league_id || x.league_id === lg; }
+    var out = [];
+    a.roster.filter(inLeague).forEach(function (x) { out.push({kind: 'roster', x: x}); });
+    a.penalties.filter(inLeague).forEach(function (x) { out.push({kind: 'penalty', x: x}); });
+    a.profile.forEach(function (x) { out.push({kind: 'profile', x: x}); });
+    a.conflicts.filter(inLeague).forEach(function (x) { out.push({kind: 'conflict', x: x}); });
+    a.instagram.filter(inLeague).forEach(function (x) { out.push({kind: 'instagram', x: x}); });
+    return out;
+  }
+  // Menüdeki sayı (taslaktaki sarı rozet); 60 sn'de bir tazelenir.
+  function updateApprCount() {
+    var n = apprItems().length;
+    var b = root.querySelector('.nav-btn[data-view="approvals"]');
+    if (!b) return;
+    var c = b.querySelector('.count');
+    if (!n) { if (c) c.remove(); return; }
+    if (!c) { c = document.createElement('span'); c.className = 'count'; b.appendChild(c); }
+    c.textContent = n;
+  }
+  function startApprPoll() {
+    clearInterval(apprTimer);
+    loadApprovals();
+    apprTimer = setInterval(function () { if (!document.hidden && session) loadApprovals(); }, 60000);
+  }
+
+  function ago(t) {
+    var s = Math.max(0, (Date.now() - Date.parse(t)) / 1000);
+    if (s < 3600) return Math.max(1, Math.round(s / 60)) + ' dk önce';
+    if (s < 86400) return Math.round(s / 3600) + ' saat önce';
+    return Math.round(s / 86400) + ' gün önce';
+  }
+  function profVal(k, v) {
+    if (v == null || v === '') return '–';
+    if (k === 'height') return v + ' cm';
+    if (k === 'weight') return v + ' kg';
+    if (k === 'birth_date') { var p = String(v).slice(0, 10).split('-'); return p.length === 3 ? p[2] + '.' + p[1] + '.' + p[0] : v; }
+    return String(v);
+  }
+  function ytLink(id, title) {
+    if (!id) return '<span class="sub">–</span>';
+    return '<a href="https://www.youtube.com/watch?v=' + esc(id) + '" target="_blank" rel="noopener">' + esc(title || id) + '</a>';
+  }
+
+  function apprCard(it, i) {
+    var x = it.x, head, body = '', acts;
+    var sel = i === state.apprSel ? ' sel' : '';
+    if (it.kind === 'roster') {
+      head = '<span class="pill info">Kadro</span> ' + esc(APPR_TYPES[x.type] || x.type);
+      body = '<p class="t">' + esc(x.player || '–') + (x.new_player ? ' <span class="pill mute">yeni oyuncu</span>' : '') +
+        (x.type === 'jersey_change' && x.jersey ? ' → ' + esc(x.jersey) + ' numara' : (x.jersey ? ' · ' + esc(x.jersey) + ' numara' : '')) + '</p>' +
+        '<p class="sub">' + esc([x.team, x.season, x.by ? 'Gönderen: ' + x.by : '', ago(x.created_at)].filter(Boolean).join(' · ')) + '</p>';
+      acts = '<button class="btn primary" data-ok="' + i + '">Onayla <span class="kbd">O</span></button><button class="btn" data-no="' + i + '">Reddet <span class="kbd">X</span></button>';
+    } else if (it.kind === 'penalty') {
+      head = '<span class="pill warn">Ceza</span> ' + (x.kind === 'second_yellow' ? 'İkinci sarı kart' : 'Kırmızı kart');
+      body = '<p class="t">' + esc(x.player || '–') + '</p><p class="sub">' + esc([x.team, x.match, ago(x.created_at)].filter(Boolean).join(' · ')) + '</p>' +
+        '<label class="pen-n">Ceza <input class="num" inputmode="numeric" maxlength="2" value="' + esc(x.match_count || 1) + '" data-cnt="' + i + '"> maç</label>';
+      acts = '<button class="btn primary" data-ok="' + i + '">Onayla <span class="kbd">O</span></button><button class="btn" data-no="' + i + '">Reddet <span class="kbd">X</span></button>';
+    } else if (it.kind === 'profile') {
+      head = '<span class="pill ok">Profil</span> Profil değişikliği';
+      var ch = x.changes || {}, pr = x.previous || {};
+      body = '<p class="t">' + esc(x.player || '–') + '</p><p class="sub">' + esc([x.team, ago(x.created_at)].filter(Boolean).join(' · ')) + '</p>' +
+        '<div class="chg">' + Object.keys(ch).map(function (k) {
+          if (k === 'photo_url') {
+            return '<div><b>Fotoğraf</b> ' + (pr[k] ? '<img src="' + esc(pr[k]) + '" alt="">' : '–') + ' → ' + (ch[k] ? '<img src="' + esc(ch[k]) + '" alt="">' : '–') + '</div>';
+          }
+          return '<div><b>' + esc(PROFILE_LABEL[k] || k) + '</b> ' + esc(profVal(k, pr[k])) + ' → ' + esc(profVal(k, ch[k])) + '</div>';
+        }).join('') + '</div>';
+      acts = '<button class="btn primary" data-ok="' + i + '">Onayla <span class="kbd">O</span></button><button class="btn" data-no="' + i + '">Reddet <span class="kbd">X</span></button>';
+    } else if (it.kind === 'conflict') {
+      head = '<span class="pill live">Yayın</span> Yayın linki uyuşmazlığı';
+      body = '<p class="t">' + esc(x.match) + '</p>' +
+        '<div class="chg"><div><b>Elle girilen</b> ' + ytLink(x.manual_video, x.manual_title) + '</div><div><b>Kanalda bulunan</b> ' + ytLink(x.auto_video, x.auto_title) + '</div></div>';
+      acts = '<button class="btn primary" data-ok="' + i + '">Kanaldakini kullan <span class="kbd">O</span></button><button class="btn" data-no="' + i + '">Elle gireni koru <span class="kbd">X</span></button>';
+    } else {
+      head = '<span class="pill mute">Instagram</span> Haberlere alınsın mı?';
+      body = '<div class="ig">' + (x.image ? '<img src="' + esc(x.image) + '" alt="">' : '') +
+        '<div><p class="t clamp">' + esc(x.content || '') + '</p><p class="sub">' + esc([x.league, ago(x.created_at)].filter(Boolean).join(' · ')) + '</p></div></div>';
+      acts = '<button class="btn primary" data-ok="' + i + '">Haberlere al <span class="kbd">O</span></button><button class="btn" data-no="' + i + '">Alma <span class="kbd">X</span></button>';
+    }
+    return '<div class="appr2' + sel + '" data-ai="' + i + '"><div class="ah">' + head + '</div>' + body + '<div class="acts">' + acts + '</div></div>';
+  }
+
+  function renderApprovals(el) {
+    if (!state.appr) {
+      el.innerHTML = '<div class="h-row"><div><h1>Onaylar</h1></div></div><div class="box"><div class="empty" style="border:0">Yükleniyor…</div></div>';
+      loadApprovals();
+      return;
+    }
+    var items = apprItems();
+    if (state.apprSel >= items.length) state.apprSel = items.length - 1;
+    var groups = [['roster', 'Kadro talepleri'], ['penalty', 'Ceza onayları'], ['profile', 'Profil değişiklikleri'], ['conflict', 'Yayın linki uyuşmazlıkları'], ['instagram', 'Instagram gönderileri']];
+    var html = '';
+    groups.forEach(function (g) {
+      var idx = [];
+      items.forEach(function (it, i) { if (it.kind === g[0]) idx.push(i); });
+      if (!idx.length) return;
+      html += '<section class="box"><div class="box-head"><h2 class="label">' + g[1] + '</h2><span class="hint">' + idx.length + '</span></div>' +
+        '<div class="agrid">' + idx.map(function (i) { return apprCard(items[i], i); }).join('') + '</div></section>';
+    });
+    el.innerHTML = '<div class="h-row"><div><h1>Onaylar</h1><p class="sub">' + (items.length ? items.length + ' talep bekliyor' : 'Bekleyen talep yok') + '</p></div>' +
+      '<div class="day"><button class="btn" id="aref">Yenile</button></div></div>' +
+      (html || '<div class="box"><div class="empty" style="border:0">Bekleyen talep yok. 🎉</div></div>') +
+      '<div class="keys"><span><span class="kbd">↑</span> <span class="kbd">↓</span> talep</span><span><span class="kbd">O</span> onayla</span><span><span class="kbd">X</span> reddet</span></div>';
+    document.getElementById('aref').onclick = loadApprovals;
+    Array.prototype.forEach.call(el.querySelectorAll('.appr2'), function (c) {
+      var i = +c.getAttribute('data-ai');
+      c.onclick = function (e) {
+        state.apprSel = i;
+        var t = e.target.closest('button');
+        if (t && t.hasAttribute('data-ok')) return decide(items[i], true, t);
+        if (t && t.hasAttribute('data-no')) return decide(items[i], false, t);
+        if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'A') apprHighlight();
+      };
+    });
+  }
+  function apprHighlight() {
+    Array.prototype.forEach.call(document.querySelectorAll('.appr2'), function (c) {
+      var on = +c.getAttribute('data-ai') === state.apprSel;
+      c.classList.toggle('sel', on);
+      if (on) c.scrollIntoView({block: 'nearest'});
+    });
+  }
+
+  // Not soran pencere (uygulamadaki gibi; onayda isteğe bağlı, retde
+  // sorumluya gösterilir).
+  function noteBox(title, placeholder, okLabel, danger) {
+    return new Promise(function (resolve) {
+      var ov = document.createElement('div');
+      ov.className = 'ov';
+      ov.innerHTML = '<div class="dlg" role="dialog" aria-modal="true"><h3>' + esc(title) + '</h3>' +
+        '<textarea id="nt" rows="3" placeholder="' + esc(placeholder) + '"></textarea>' +
+        '<div class="acts"><span class="hint"><span class="kbd">Enter</span> ' + esc(okLabel) + ' · <span class="kbd">Esc</span> vazgeç</span>' +
+        '<button class="btn" data-n>Vazgeç</button><button class="btn ' + (danger ? 'live' : 'primary') + '" data-y>' + esc(okLabel) + '</button></div></div>';
+      document.body.appendChild(ov);
+      state.dlg = ov;
+      var ta = ov.querySelector('#nt');
+      function done(v) { ov.remove(); state.dlg = null; resolve(v); }
+      ov.querySelector('[data-n]').onclick = function () { done(null); };
+      ov.querySelector('[data-y]').onclick = function () { done(ta.value.trim()); };
+      ov.onclick = function (e) { if (e.target === ov) done(null); };
+      ov.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') { e.preventDefault(); done(null); }
+        else if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); done(ta.value.trim()); }
+      });
+      ta.focus();
+    });
+  }
+
+  // Depoda boşta dosya kalmasın (uygulamadaki gibi): reddedilen yeni
+  // fotoğraf ya da onayla yerini yenisine bırakan eski talep fotoğrafı
+  // silinir. Silinemezse karar yine geçerlidir.
+  function dropUnusedPhoto(x, ok) {
+    var ch = x.changes || {}, pr = x.previous || {};
+    if (!('photo_url' in ch)) return null;
+    var url = String((ok ? pr.photo_url : ch.photo_url) || '');
+    var m = /\/object\/public\/media\/(.+)$/.exec(url);
+    if (!m || url.indexOf('/media/profile_requests/') < 0) return null;
+    return token().then(function (t) {
+      return fetch(BASE + '/storage/v1/object/media', {
+        method: 'DELETE',
+        headers: {apikey: KEY, Authorization: 'Bearer ' + t, 'Content-Type': 'application/json'},
+        body: JSON.stringify({prefixes: [decodeURIComponent(m[1].split('?')[0])]})
+      });
+    }).then(function () { return null; }, function () { return null; });
+  }
+
+  // Vazgeçilen karar (boş yanıt veren kayıtlardan ayırmak için).
+  var CANCEL = {};
+  function decide(it, ok, btn) {
+    var x = it.x, p;
+    if (it.kind === 'roster' || it.kind === 'profile') {
+      p = noteBox(ok ? 'Talebi onayla' : 'Talebi reddet', ok ? 'Not (isteğe bağlı)' : 'Red nedeni (sorumluya gösterilir)', ok ? 'Onayla' : 'Reddet', !ok)
+        .then(function (note) {
+          if (note === null) return CANCEL;
+          return it.kind === 'roster'
+            ? api('rpc/review_pending_action', {method: 'POST', body: {p_action_id: x.id, p_approve: ok, p_note: note || null}})
+            : api('rpc/review_profile_change', {method: 'POST', body: {p_id: x.id, p_approve: ok, p_note: note || null}})
+                .then(function () { return dropUnusedPhoto(x, ok); });
+        });
+    } else if (it.kind === 'penalty') {
+      var inp = document.querySelector('[data-cnt="' + state.apprSel + '"]');
+      var n = inp ? parseInt(inp.value, 10) : x.match_count;
+      if (ok && !(n >= 1)) { toast('Ceza en az 1 maç olmalı.', true); if (inp) inp.focus(); return; }
+      p = confirmBox(ok ? 'Cezayı onayla' : 'Cezayı reddet', (x.player || '') + (ok ? ' · ' + n + ' maç ceza' : ' · ceza düşer'), ok ? 'Onayla' : 'Reddet', !ok)
+        .then(function (yes) {
+          if (!yes) return CANCEL;
+          return api('rpc/review_player_penalty', {method: 'POST', body: {p_penalty_id: x.id, p_approve: ok, p_match_count: ok ? n : null}});
+        });
+    } else if (it.kind === 'conflict') {
+      p = api('rpc/resolve_youtube_conflict', {method: 'POST', body: {p_id: x.id, p_use_auto: ok}});
+    } else {
+      // Alınmayan gönderi silinir; instagram_seen_media'da kaldığı için
+      // tekrar aktarılmaz (uygulamadaki gibi).
+      p = ok
+        ? api('news?id=eq.' + x.id, {method: 'PATCH', body: {is_published: true}})
+        : confirmBox('Haberlere alma', 'Gönderi Haberler\'e alınmayacak.', 'Alma', true).then(function (yes) {
+            return yes ? api('news?id=eq.' + x.id, {method: 'DELETE'}) : CANCEL;
+          });
+    }
+    if (btn) btn.disabled = true;
+    p.then(function (r) {
+      if (btn) btn.disabled = false;
+      if (r === CANCEL) return;
+      toast(ok ? 'Onaylandı.' : 'Karar kaydedildi.');
+      return loadApprovals();
+    }, function (e) {
+      if (btn) btn.disabled = false;
+      toast(e.message, true);
+    });
+  }
+
+  function apprKey(e) {
+    var items = apprItems();
+    if (!items.length) return;
+    var k = e.key.length === 1 ? e.key.toLocaleUpperCase('tr') : e.key;
+    if (k === 'ArrowDown') { e.preventDefault(); state.apprSel = Math.min(items.length - 1, state.apprSel + 1); apprHighlight(); }
+    else if (k === 'ArrowUp') { e.preventDefault(); state.apprSel = Math.max(0, state.apprSel - 1); apprHighlight(); }
+    else if ((k === 'O' || k === 'X') && state.apprSel >= 0) {
+      e.preventDefault();
+      var b = document.querySelector('.appr2[data-ai="' + state.apprSel + '"] [data-' + (k === 'O' ? 'ok' : 'no') + ']');
+      decide(items[state.apprSel], k === 'O', b);
+    }
+  }
+
   // ---------- klavye ----------
   var arrowTimer = null;
   document.addEventListener('keydown', function (e) {
     if (!session || state.dlg || e.metaKey || e.ctrlKey || e.altKey) return;
     var tag = (e.target.tagName || '').toLowerCase();
     if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+    if (state.view === 'approvals') return apprKey(e);
     if (state.view !== 'today' && state.view !== 'live') return;
     if (liveKey(e)) return;
     var all = rows();
