@@ -61,7 +61,7 @@ begin
   if v_uid is not null then
     select nullif(btrim(u.name), ''), nullif(btrim(u.phone), '')
       into v_name, v_phone
-      from public.app_users u where u.auth_uid = v_uid limit 1;
+      from public.app_users u where u.auth_uid = v_uid::text limit 1;
     if v_name is null then
       select nullif(btrim(concat_ws(' ', p.name, p.surname)), '')
         into v_name
