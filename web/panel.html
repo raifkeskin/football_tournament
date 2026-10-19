@@ -283,6 +283,25 @@ button.tile:hover { border-color: #33476e; }
   .split.open .detail { position: static; max-height: none; overflow: visible; }
 }
 
+/* ---- Maç yönetimi şeridi ---- */
+.ctl { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; font-size: 13.5px; flex-wrap: wrap; }
+.ctl .tx { flex: 1; min-width: 180px; display: grid; }
+.ctl .tx small { color: var(--muted); }
+.ctl .tx i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+.ctl .tx i.on { background: var(--accent); } .ctl .tx i.off { background: #64748b; }
+.ctl .av { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 800; flex: none; }
+.ctl.free { background: var(--card); border: 1px dashed var(--line); }
+.ctl.mine { background: rgba(16,185,129,.12); border: 1px solid rgba(16,185,129,.45); }
+.ctl.mine .av { background: var(--accent); color: var(--accent-ink); }
+.ctl.other { background: rgba(96,165,250,.1); border: 1px solid rgba(96,165,250,.4); }
+.ctl.other .av { background: rgba(96,165,250,.25); }
+.ctl.wait { background: rgba(251,191,36,.08); border: 1px solid rgba(251,191,36,.45); }
+.ctl.wait .av { background: var(--warn); color: #3b2a00; }
+.btn.info { background: #60a5fa; border-color: #60a5fa; color: #06213f; }
+.cbar { height: 5px; border-radius: 99px; background: var(--card-2); overflow: hidden; margin-top: 4px; }
+.cbar i { display: block; height: 100%; background: var(--warn); transition: width 1s linear; }
+.tool:disabled { opacity: .35; }
+
 /* ---- Onaylar ---- */
 .agrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; padding: 4px 16px 16px; }
 .appr2 { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; background: var(--card-2); display: grid; gap: 6px; align-content: start; cursor: pointer; }
@@ -419,7 +438,9 @@ button.tile:hover { border-color: #33476e; }
     liveId: null, live: null, liveSig: '', mode: null, pick: null, minuteManual: false, offset: 0,
     appr: null, apprSel: -1,
     // Sezon bölümleri: sezon verisi, fikstürde hafta, takım, lisans araması.
-    season: null, fxWeek: null, teamSel: null, lisQ: '', lisTeam: null};
+    season: null, fxWeek: null, teamSel: null, lisQ: '', lisTeam: null,
+    // Maç yönetimi: açık maçın yönetim durumu, devir isteği penceresi açık mı.
+    ctl: null, ctlSig: '', ctlAsk: false};
   try { state.league = localStorage.getItem(LKEY); } catch (e) {}
 
   var ICON = {
@@ -1079,6 +1100,8 @@ button.tile:hover { border-color: #33476e; }
       state.mode = null;
       state.pick = null;
       state.minuteManual = false;
+      state.ctl = null;
+      state.ctlSig = '';
     }
     syncSel();
     highlight();
@@ -1112,6 +1135,7 @@ button.tile:hover { border-color: #33476e; }
         state.liveSig = sig;
         renderDetail();
       }
+      if (!state.ctl || state.ctl.match !== d.id) loadCtl();
       // Listedeki satır da güncel kalsın (skor, durum).
       var m = ((state.data && state.data.matches) || []).filter(function (x) { return x.id === d.id; })[0];
       if (m && m.status !== d.status) load();
@@ -1129,11 +1153,13 @@ button.tile:hover { border-color: #33476e; }
       loadLive();
     }, 10000);
     tickTimer = setInterval(tick, 5000);
+    startCtlPoll();
   }
   function stopPoll() {
     clearInterval(liveTimer);
     clearInterval(tickTimer);
-    liveTimer = tickTimer = null;
+    clearInterval(ctlTimer);
+    liveTimer = tickTimer = ctlTimer = null;
   }
 
   // Maçın dakikası (uygulamadaki canlı dakika gibi): ilk yarı başlangıçtan,
@@ -1161,7 +1187,7 @@ button.tile:hover { border-color: #33476e; }
   }
   function tick() {
     var d = state.live;
-    if (!d || state.view !== 'live') return;
+    if (!d || !state.liveId) return;
     var c = document.getElementById('lclock');
     if (c && d.status === 'live' && !d.shootout) {
       var part = d.extra_time_at ? 'UZATMA' : d.second_half_at ? '2. YARI' : '1. YARI';
@@ -1218,7 +1244,7 @@ button.tile:hover { border-color: #33476e; }
       var chosen = pk && (pk.player === id);
       // Asist ve giren oyuncu yalnız aynı takımdan seçilir. Değişiklikte
       // çıkan sahadan, giren kenardan seçilir.
-      var lock = pk && pk.team !== teamId;
+      var lock = isLocked() || (pk && pk.team !== teamId);
       if (sub && !pk) lock = !on[id];
       else if (sub && pk && pk.step === 'in') lock = lock || !!on[id] || !!sentOff[id];
       return '<button class="pl' + (sentOff[id] ? ' off' : '') + (chosen ? ' chosen' : '') + '" data-pl="' + esc(id) + '" data-team="' + esc(teamId) + '"' + (lock ? ' disabled' : '') + '>' +
@@ -1262,16 +1288,21 @@ button.tile:hover { border-color: #33476e; }
   function eventsHtml(d) {
     var ev = d.events.slice().reverse();
     if (!ev.length) return '<div class="empty">Henüz olay yok.</div>';
+    var locked = isLocked();
     return ev.map(function (e) {
       var acts = '';
+      if (locked) return evRow(e, d, '');
       if (e.type === 'goal' && d.status !== 'notStarted') acts += '<button class="btn ghost" data-var="' + e.id + '" title="VAR: gol iptali">VAR</button>';
       if (e.type === 'red_card') acts += '<button class="btn ghost" data-varr="' + e.id + '" title="VAR: kart iptali">VAR</button>';
       acts += '<button class="btn ghost" data-del="' + e.id + '" title="Yanlış girildiyse sil">Sil</button>';
-      var cancelled = /_cancelled$/.test(e.type);
-      return '<div class="ev' + (e.team_id === d.away_id ? ' away' : '') + (cancelled ? ' cancelled' : '') + '">' +
-        '<span class="m num">' + (e.minute == null || e.minute === 999 ? '' : e.minute + '\'') + '</span>' +
-        '<span>' + evIcon(e) + '</span><div class="tx">' + evText(e, d) + '</div><div class="acts">' + acts + '</div></div>';
+      return evRow(e, d, acts);
     }).join('');
+  }
+  function evRow(e, d, acts) {
+    var cancelled = /_cancelled$/.test(e.type);
+    return '<div class="ev' + (e.team_id === d.away_id ? ' away' : '') + (cancelled ? ' cancelled' : '') + '">' +
+      '<span class="m num">' + (e.minute == null || e.minute === 999 ? '' : e.minute + '\'') + '</span>' +
+      '<span>' + evIcon(e) + '</span><div class="tx">' + evText(e, d) + '</div><div class="acts">' + acts + '</div></div>';
   }
 
   function phaseHtml(d) {
@@ -1301,6 +1332,125 @@ button.tile:hover { border-color: #33476e; }
       (kicks ? '<button class="btn ghost" data-kick="undo">Son atışı geri al</button>' : '') + '</div>';
   }
 
+  // ---------- Maç yönetimi (tek yönetici + devir) ----------
+  // Uygulamadaki MatchControlBar ile aynı kurallar (match_control_* RPC):
+  // olay girişi, devreler, penaltılar ve skor yalnız yönetende açık;
+  // gözlemci girince yönetim boşsa ona geçer; devir isteğine 30 sn cevap
+  // gelmezse ya da yöneten 2 dk görünmezse onaysız devralınır. Bitmiş ve
+  // iptal maçta kilit yok.
+  var ctlTimer = null, ctlAuto = {};
+  function needsControl(d) { return d && d.status !== 'finished' && d.status !== 'cancelled'; }
+  function isLocked() {
+    var d = state.live;
+    return needsControl(d) && !(state.ctl && state.ctl.mine);
+  }
+  function applyCtl(c, id) {
+    if (id !== state.liveId || !c) return;
+    var was = state.ctl && state.ctl.match === id ? state.ctl.mine : null;
+    c.match = id;
+    var sig = JSON.stringify(c, function (k, v) { return k === 'now' || k === 'req_left' ? undefined : v; });
+    var changed = sig !== state.ctlSig;
+    state.ctl = c;
+    state.ctlSig = sig;
+    if (was === true && !c.mine) {
+      state.mode = null;
+      state.pick = null;
+      toast('Maçın yönetimi ' + (c.controller_name || 'başka bir sorumluya') + ' geçti.');
+    }
+    if (!c.controller && c.observer && !ctlAuto[id]) {
+      ctlAuto[id] = true;
+      ctlCall('match_control_take');
+    }
+    if (c.mine && c.req_user && !state.ctlAsk) showCtlRequest(c);
+    if (changed) renderDetail();
+    else {
+      var w = document.getElementById('ctlwait');
+      if (w && c.req_left != null) w.textContent = c.req_left + ' sn';
+    }
+  }
+  function loadCtl() {
+    var id = state.liveId;
+    if (!id || !state.live || !needsControl(state.live)) return Promise.resolve();
+    return api('rpc/match_control_state', {method: 'POST', body: {p_match_id: id}})
+      .then(function (c) { applyCtl(c, id); }, function () {});
+  }
+  function ctlCall(fn, extra) {
+    var id = state.liveId;
+    var body = {p_match_id: id};
+    for (var k in extra || {}) body[k] = extra[k];
+    return api('rpc/' + fn, {method: 'POST', body: body})
+      .then(function (c) { applyCtl(c, id); }, function (e) { toast(e.message, true); });
+  }
+  function startCtlPoll() {
+    clearInterval(ctlTimer);
+    ctlTimer = setInterval(function () { if (!document.hidden) loadCtl(); }, 5000);
+  }
+  function ctlHtml(d) {
+    var c = state.ctl;
+    if (!needsControl(d)) return '';
+    if (!c || c.match !== d.id) return '<div class="ctl free"><span class="tx"><b>Yönetim bilgisi yükleniyor…</b></span></div>';
+    if (!c.controller) {
+      return '<div class="ctl free"><span class="tx"><b>Maçı şu an kimse yönetmiyor</b><small>Olay girmek için yönetimi alın.</small></span>' +
+        '<button class="btn primary" data-ctl="take">Maçı yönet</button></div>';
+    }
+    if (c.mine) {
+      return '<div class="ctl mine"><span class="av">●</span><span class="tx"><b>Maçı sen yönetiyorsun</b><small>Olay girişi, devreler ve skor sende.</small></span>' +
+        '<button class="btn ghost" data-ctl="release">Yönetimi bırak</button></div>';
+    }
+    if (c.req_mine) {
+      return '<div class="ctl wait"><span class="av">…</span><span class="tx"><b>' + esc(c.controller_name) + ' onayı bekleniyor</b><small>Devir isteği gönderildi · <span id="ctlwait">' + (c.req_left || 0) + ' sn</span></small></span>' +
+        '<button class="btn ghost" data-ctl="cancel">İsteği geri çek</button></div>';
+    }
+    return '<div class="ctl other"><span class="av">🔒</span><span class="tx"><b>Maçı ' + esc(c.controller_name) + ' yönetiyor</b><small>' +
+      (c.online ? '<i class="on"></i>Çevrimiçi · giriş düğmeleri yalnız onda açık' : '<i class="off"></i>2 dakikadır görünmüyor') + '</small></span>' +
+      (c.can_force
+        ? '<button class="btn primary" data-ctl="take">Yönetimi devral (onay gerekmiyor)</button>'
+        : '<button class="btn info" data-ctl="request">Yönetimi devral</button>') + '</div>';
+  }
+  function bindCtl(el) {
+    Array.prototype.forEach.call(el.querySelectorAll('[data-ctl]'), function (b) {
+      b.onclick = function () {
+        b.disabled = true;
+        ctlCall({take: 'match_control_take', release: 'match_control_release', cancel: 'match_control_cancel', request: 'match_control_request'}[b.getAttribute('data-ctl')]);
+      };
+    });
+  }
+  // Yönetenin ekranında devir isteği (30 sn geri sayım).
+  function showCtlRequest(c) {
+    if (state.dlg) return;
+    state.ctlAsk = true;
+    var left = c.req_left || 30;
+    var ov = document.createElement('div');
+    ov.className = 'ov';
+    ov.innerHTML = '<div class="dlg" role="dialog" aria-modal="true"><h3>' + esc(c.req_name) + ' yönetimi devralmak istiyor</h3>' +
+      '<div class="sub">Onaylarsan olay girişi ' + esc(c.req_name) + '\'e geçer; sen maçı izlemeye devam edersin. Cevap vermezsen süre dolunca onaysız devralabilir.</div>' +
+      '<div class="cbar"><i id="cbar" style="width:' + (left / 30 * 100) + '%"></i></div>' +
+      '<div class="acts"><span class="hint"><span class="kbd">Enter</span> onayla · <span class="kbd">Esc</span> reddet</span>' +
+      '<button class="btn" data-n>Reddet</button><button class="btn primary" data-y>Onayla, devret</button></div></div>';
+    document.body.appendChild(ov);
+    state.dlg = ov;
+    var t = setInterval(function () {
+      left--;
+      var b = document.getElementById('cbar');
+      if (b) b.style.width = Math.max(0, left / 30 * 100) + '%';
+      if (left <= 0) done(null);
+    }, 1000);
+    function done(v) {
+      clearInterval(t);
+      ov.remove();
+      state.dlg = null;
+      state.ctlAsk = false;
+      if (v !== null) ctlCall('match_control_answer', {p_approve: v});
+    }
+    ov.querySelector('[data-n]').onclick = function () { done(false); };
+    ov.querySelector('[data-y]').onclick = function () { done(true); };
+    ov.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { e.preventDefault(); done(false); }
+      else if (e.key === 'Enter') { e.preventDefault(); done(true); }
+    });
+    ov.querySelector('[data-y]').focus();
+  }
+
   function renderDetail() {
     var el = document.getElementById('detail');
     if (!el) return;
@@ -1312,6 +1462,8 @@ button.tile:hover { border-color: #33476e; }
       return;
     }
     var keepScroll = el.scrollTop;
+    var locked = isLocked();
+    if (locked) { state.mode = null; state.pick = null; }
     var finished = d.status === 'finished';
     var started = d.status !== 'notStarted' && d.status !== 'postponed';
     var mk = marks(d);
@@ -1323,12 +1475,14 @@ button.tile:hover { border-color: #33476e; }
       hint = '<div class="hintbar">↔️ Çıkan: ' + esc(state.pick.name) + ' · giren oyuncuyu seçin (kenardakiler)<button class="btn ghost" id="cancelpick">Vazgeç <span class="kbd">Esc</span></button></div>';
     } else if (mode) {
       hint = '<div class="hintbar">' + esc(MODE_HINT[mode]) + '<button class="btn ghost" id="cancelpick">Vazgeç <span class="kbd">Esc</span></button></div>';
+    } else if (locked) {
+      hint = '<div class="hintbar idle">Olay girişi, devreler ve skor yalnız maçı yöneten kişide açık.</div>';
     } else {
       hint = '<div class="hintbar idle">Olay türünü seçin (harf tuşu ya da düğme), sonra oyuncuya tıklayın.' +
         (started ? '' : ' Maç başlamadan da olay girilebilir; dakikayı elle yazın.') + '</div>';
     }
     var tools = MODES.map(function (x) {
-      var dis = x.id === 'motm' && !finished;
+      var dis = locked || (x.id === 'motm' && !finished);
       return '<button class="tool" data-mode="' + x.id + '" aria-pressed="' + (mode === x.id) + '"' + (dis ? ' disabled title="Maç bittikten sonra"' : '') + '>' +
         x.icon + ' ' + esc(x.name) + ' <span class="kbd">' + x.key + '</span></button>';
     }).join('');
@@ -1350,8 +1504,8 @@ button.tile:hover { border-color: #33476e; }
       '<div class="mid"><div class="score num">' + (d.hs || 0) + ' – ' + (d.as || 0) + '</div>' +
       '<div class="clock">' + clockText(d) + (d.hp != null && d.ap != null ? '<span class="pens-s">Pen. ' + d.hp + '–' + d.ap + '</span>' : '') + '</div></div>' +
       side(d.away, d.away_logo, false) + '</div>' +
-      '<div class="phase">' + phaseHtml(d) + '</div>' + shootHtml(d) +
-      '</section>' +
+      (locked ? '' : '<div class="phase">' + phaseHtml(d) + '</div>' + shootHtml(d)) +
+      '</section>' + ctlHtml(d) +
       '<div class="tools">' + tools + minute + '</div>' + hint +
       '<div class="lgrid' + (mode ? ' armed' : '') + '">' +
       '<section class="box"><div class="box-head"><h2 class="label">' + esc(d.home) + '</h2></div>' + rosterHtml(d, d.home_id, mk) + '</section>' +
@@ -1360,6 +1514,7 @@ button.tile:hover { border-color: #33476e; }
       '</div>' +
       '<div class="keys"><span><span class="kbd">G</span> gol</span><span><span class="kbd">P</span> penaltı</span><span><span class="kbd">O</span> kendi kalesine</span><span><span class="kbd">S</span> sarı</span><span><span class="kbd">R</span> kırmızı</span><span><span class="kbd">D</span> değişiklik</span><span><span class="kbd">M</span> dakika</span><span><span class="kbd">Esc</span> vazgeç / kapat</span></div>';
     el.scrollTop = keepScroll;
+    bindCtl(el);
 
     document.getElementById('lclose').onclick = closeLive;
     document.getElementById('lref').onclick = function () { loadLive(); };
@@ -1564,6 +1719,7 @@ button.tile:hover { border-color: #33476e; }
       else closeLive();
       return true;
     }
+    if (isLocked()) return false;
     if (k === 'Enter' && state.pick && state.pick.step === 'assist') { e.preventDefault(); finishGoal(null); return true; }
     if (k === 'M') {
       var mi = document.getElementById('lmin');
