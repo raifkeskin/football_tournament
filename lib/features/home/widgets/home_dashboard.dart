@@ -10,6 +10,7 @@ import '../../../core/services/data_versions.dart';
 
 import '../../../core/services/active_tournament.dart';
 import '../../../core/services/app_session.dart';
+import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../match/models/match.dart';
 import '../../match/screens/match_details_screen.dart';
@@ -1525,11 +1526,16 @@ class _HomeDashboardState extends State<HomeDashboard> {
         ? null
         : kickoff.subtract(Duration(hours: d.openHours));
     final now = DateTime.now().toUtc();
-    final managesThis =
+    // Sorumlusu olunan takım (iki takımın da sorumlusuysa ev sahibi).
+    final managedTeamId =
         d.myTeamIds.contains(m.homeTeamId) &&
-            session.managesTeam(m.seasonId, m.homeTeamId) ||
-        d.myTeamIds.contains(m.awayTeamId) &&
-            session.managesTeam(m.seasonId, m.awayTeamId);
+            session.managesTeam(m.seasonId, m.homeTeamId)
+        ? m.homeTeamId
+        : d.myTeamIds.contains(m.awayTeamId) &&
+              session.managesTeam(m.seasonId, m.awayTeamId)
+        ? m.awayTeamId
+        : null;
+    final managesThis = managedTeamId != null;
 
     String esame;
     var esameOpen = false;
@@ -1541,7 +1547,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
           'Esame ${_days[t.weekday - 1]} ${DateFormat('HH:mm').format(t)}\'de açılır';
     } else {
       esameOpen = true;
-      esame = managesThis ? 'Esame açık · kadronu gir' : 'Esame açık';
+      esame = '';
     }
 
     Widget side(_TeamInfo? t) => Expanded(
@@ -1677,55 +1683,124 @@ class _HomeDashboardState extends State<HomeDashboard> {
           const SizedBox(height: 12),
           Container(height: 1, color: Colors.white.withValues(alpha: 0.08)),
           const SizedBox(height: 10),
-          Row(
-            children: [
-              Icon(
-                esameOpen ? Icons.lock_open_rounded : Icons.lock_clock_rounded,
-                size: 16,
-                color: esameOpen ? accent : DashColors.muted,
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  esame,
-                  style: _barlow(
-                    size: 12.5,
-                    weight: FontWeight.w700,
-                    color: esameOpen ? DashColors.text : DashColors.muted,
+          if (managesThis) ...[
+            // Takım sorumlusu: Esame (açılınca etkin) + katılım anketi.
+            Row(
+              children: [
+                Expanded(
+                  child: _cardButton(
+                    label: 'Esame',
+                    icon: esameOpen
+                        ? Icons.assignment_outlined
+                        : Icons.lock_clock_rounded,
+                    accent: accent,
+                    onPressed: esameOpen ? () => _openMatch(m, tab: 1) : null,
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                height: 36,
-                child: FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: accent,
-                    foregroundColor: DashColors.onAccent(),
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  // Esame açıksa takım sorumlusu doğrudan Kadrolar sekmesine.
-                  onPressed: () =>
-                      _openMatch(m, tab: managesThis && esameOpen ? 1 : 0),
-                  child: Text(
-                    managesThis && esameOpen ? 'Esame' : 'Maç detayı',
-                    style: _barlow(
-                      size: 12.5,
-                      weight: FontWeight.w800,
-                      color: DashColors.onAccent(),
-                    ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _HomePollButton(
+                    key: ValueKey('poll-${m.id}-$managedTeamId'),
+                    matchId: m.id,
+                    teamId: managedTeamId,
+                    accent: accent,
+                    onOpenRoster: () => _openMatch(m, tab: 1),
                   ),
                 ),
+              ],
+            ),
+            if (!esameOpen) ...[
+              const SizedBox(height: 8),
+              Text(
+                esame,
+                textAlign: TextAlign.center,
+                style: _barlow(size: 12, color: DashColors.muted),
               ),
             ],
-          ),
+          ] else
+            Row(
+              children: [
+                if (!esameOpen) ...[
+                  const Icon(
+                    Icons.lock_clock_rounded,
+                    size: 16,
+                    color: DashColors.muted,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      esame,
+                      style: _barlow(
+                        size: 12.5,
+                        weight: FontWeight.w700,
+                        color: DashColors.muted,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ] else
+                  const Spacer(),
+                SizedBox(
+                  height: 36,
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: accent,
+                      foregroundColor: DashColors.onAccent(),
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    onPressed: () => _openMatch(m),
+                    child: Text(
+                      'Maç detayı',
+                      style: _barlow(
+                        size: 12.5,
+                        weight: FontWeight.w800,
+                        color: DashColors.onAccent(),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
     );
   }
+
+  /// Sıradaki maç kartındaki düğme; onPressed null ise pasif.
+  Widget _cardButton({
+    required String label,
+    required IconData icon,
+    required Color accent,
+    required VoidCallback? onPressed,
+  }) => SizedBox(
+    height: 38,
+    child: FilledButton.icon(
+      style: FilledButton.styleFrom(
+        backgroundColor: accent,
+        foregroundColor: DashColors.onAccent(),
+        disabledBackgroundColor: Colors.white.withValues(alpha: 0.08),
+        disabledForegroundColor: DashColors.muted,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+      onPressed: onPressed,
+      icon: Icon(icon, size: 17),
+      label: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        // Renk düğmeden gelir (etkin / pasif).
+        style: const TextStyle(
+          fontFamily: 'Barlow',
+          fontSize: 13,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    ),
+  );
 
   Widget _pill(String text, Color bg) => Container(
     height: 24,
@@ -2103,6 +2178,134 @@ class _HomeDashboardState extends State<HomeDashboard> {
                 height: 35,
                 fit: BoxFit.cover,
               ),
+      ),
+    );
+  }
+}
+
+/// Sıradaki maç kartı, takım sorumlusu: katılım anketini başlatır; anket
+/// açıksa maçın Kadro sekmesini (sorgu kartı orada) açar.
+class _HomePollButton extends StatefulWidget {
+  const _HomePollButton({
+    super.key,
+    required this.matchId,
+    required this.teamId,
+    required this.accent,
+    required this.onOpenRoster,
+  });
+
+  final String matchId;
+  final String teamId;
+  final Color accent;
+  final VoidCallback onOpenRoster;
+
+  @override
+  State<_HomePollButton> createState() => _HomePollButtonState();
+}
+
+class _HomePollButtonState extends State<_HomePollButton> {
+  final _sb = Supabase.instance.client;
+
+  /// null: yükleniyor; true: anket açık; false: başlatılabilir.
+  bool? _active;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final raw = await _sb.rpc(
+        'attendance_summary',
+        params: {'p_match_id': widget.matchId, 'p_team_id': widget.teamId},
+      );
+      if (!mounted || raw is! Map) return;
+      setState(
+        () => _active = raw['poll_id'] != null && raw['closed'] != true,
+      );
+    } catch (_) {
+      if (mounted) setState(() => _active = false);
+    }
+  }
+
+  Future<void> _start() async {
+    final ok = await showAdminConfirmDialog(
+      context: context,
+      title: 'Anketi Başlat',
+      message:
+          'Kadrona maça gelip gelemeyeceği sorulur. Hesabı olan oyunculara '
+          'bildirim gider; diğerlerine maç detayından WhatsApp ile kişisel '
+          'bağlantı gönderebilirsin.',
+      confirmLabel: 'BAŞLAT',
+      icon: Icons.how_to_reg_rounded,
+    );
+    if (!ok || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _busy = true);
+    try {
+      await _sb.rpc(
+        'attendance_open',
+        params: {'p_match_id': widget.matchId, 'p_team_id': widget.teamId},
+      );
+      if (!mounted) return;
+      setState(() => _active = true);
+      AttendanceHomeCard.refresh.value++;
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Anket başlatıldı; kadrona bildirim gitti.')),
+      );
+    } on PostgrestException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Başlatılamadı: $e')));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final active = _active;
+    final style = FilledButton.styleFrom(
+      backgroundColor: active == true
+          ? Colors.transparent
+          : Colors.white.withValues(alpha: 0.10),
+      foregroundColor: DashColors.text,
+      disabledBackgroundColor: Colors.white.withValues(alpha: 0.06),
+      disabledForegroundColor: DashColors.muted,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(
+          color: active == true ? widget.accent : Colors.white24,
+        ),
+      ),
+    );
+    return SizedBox(
+      height: 38,
+      child: FilledButton.icon(
+        style: style,
+        onPressed: active == null || _busy
+            ? null
+            : active
+            ? widget.onOpenRoster
+            : _start,
+        icon: Icon(
+          active == true ? Icons.how_to_reg_rounded : Icons.campaign_outlined,
+          size: 17,
+        ),
+        label: Text(
+          active == true ? 'Anket Açık' : 'Anketi Başlat',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontFamily: 'Barlow',
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
       ),
     );
   }
