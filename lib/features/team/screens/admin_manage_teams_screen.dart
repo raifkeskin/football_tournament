@@ -16,6 +16,7 @@ import '../../../core/widgets/web_safe_image.dart';
 import 'package:football_tournament/core/widgets/picked_image.dart';
 import 'team_squad_screen.dart';
 import '../../../core/utils/reveal_search.dart';
+import '../../auth/widgets/phone_input.dart';
 
 class AdminManageTeamsScreen extends StatefulWidget {
   const AdminManageTeamsScreen({
@@ -50,8 +51,8 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
     _teamsFuture ??= _fetchTeamsOnce();
   }
 
-  /// Takımlar + sorumlu adları + kaç sezonda yer aldıkları (liste kartları
-  /// için; toplam 3 sorgu).
+  /// Takımlar + sorumlu telefonları + kaç sezonda yer aldıkları (liste
+  /// kartları için; toplam 3 sorgu).
   Future<List<Map<String, dynamic>>> _fetchTeamsOnce() async {
     final client = Supabase.instance.client;
     // Kurucu / bölge sorumlusu yalnızca kendi takımlarını görür.
@@ -71,45 +72,34 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
             ),
           );
 
-    final managerIds = <String>{
-      for (final t in teams)
-        if ((t['manager_id'] ?? '').toString().trim().isNotEmpty)
-          t['manager_id'].toString().trim(),
-    };
-    final managerNames = <String, String>{};
     final seasonCounts = <String, int>{};
+    // Sorumlu telefonu ayrı tabloda; yalnız yönetilebilen takımlar döner.
+    final managerPhones = <String, String>{};
     await Future.wait([
-      if (managerIds.isNotEmpty)
-        client
-            .from('players')
-            .select('id, name, surname')
-            .inFilter('id', managerIds.toList())
-            .then((rows) {
-              for (final r in rows) {
-                managerNames[(r['id'] ?? '').toString()] = _fullName(r);
-              }
-            }),
       client.from('season_teams').select('team_id').then((rows) {
         for (final r in rows) {
           final tid = (r['team_id'] ?? '').toString();
           seasonCounts[tid] = (seasonCounts[tid] ?? 0) + 1;
         }
       }),
+      client.from('team_manager_contacts').select('team_id, phone_raw10').then(
+        (rows) {
+          for (final r in rows) {
+            managerPhones[(r['team_id'] ?? '').toString()] =
+                (r['phone_raw10'] ?? '').toString();
+          }
+        },
+      ),
     ]);
 
     for (final t in teams) {
       final id = (t['id'] ?? '').toString();
-      t['manager_name'] =
-          managerNames[(t['manager_id'] ?? '').toString().trim()] ?? '';
+      t['manager_name'] = (t['manager_name'] ?? '').toString().trim();
+      t['manager_phone'] = managerPhones[id] ?? '';
       t['season_count'] = seasonCounts[id] ?? 0;
     }
     return teams;
   }
-
-  static String _fullName(Map<String, dynamic> row) => [
-    (row['name'] ?? '').toString().trim(),
-    (row['surname'] ?? '').toString().trim(),
-  ].where((e) => e.isNotEmpty).join(' ');
 
   /// Arama için küçük harf; i / ı / İ / I eşdeğer sayılır.
   String _toTurkishLow(String input) {
@@ -340,185 +330,168 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
     );
   }
 
-  /// Takım sorumlusu seçimi: tüm futbolcular arasından (aramayla).
-  Future<Map<String, String>?> _pickManager() async {
-    // Controller ve sorgu builder dışında bir kez oluşturulur; klavye
-    // açılıp popup yeniden build edildiğinde sıfırlanmaz / tekrar çekilmez.
-    final searchController = TextEditingController();
-    final future = Supabase.instance.client
-        .from('players')
-        .select('id, name, surname, photo_url')
-        .order('name', ascending: true);
-    final picked = await showAdminPopup<Map<String, String>>(
+  /// Takım sorumlusu: önce telefon yazılır. Telefon bir futbolcuya ya da
+  /// hesaba kayıtlıysa ad soyad kendiliğinden gelir ve değiştirilemez;
+  /// kayıtlı değilse elle yazılır. İptalde null.
+  Future<({String phone, String name})?> _editManager({
+    required String phone,
+    required String name,
+  }) async {
+    final phoneCtrl = TextEditingController(
+      text: PhoneMaskFormatter.formatFromRaw(phone),
+    );
+    final nameCtrl = TextEditingController(text: name);
+    var lookedUp = '';
+    var found = false;
+    var looking = false;
+
+    final result = await showDialog<({String phone, String name})>(
       context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setPickerState) {
-            final h = MediaQuery.of(context).size.height * 0.75;
-            final q = _toTurkishLow(searchController.text.trim());
-            return SizedBox(
-              height: h,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 6, 16, 16),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) {
+          final raw = normalizePhoneToRaw10(phoneCtrl.text);
+          final phoneOk = RegExp(r'^5\d{9}$').hasMatch(raw);
+
+          Future<void> lookup() async {
+            lookedUp = raw;
+            setState(() => looking = true);
+            String? hit;
+            try {
+              final res = await Supabase.instance.client.rpc(
+                'lookup_person_by_phone',
+                params: {'p_phone': raw},
+              );
+              if (res is Map) hit = (res['name'] ?? '').toString().trim();
+            } catch (_) {
+              // Sorgu başarısızsa ad elle yazılabilir.
+            }
+            // Bu arada telefon değiştiyse eski sonuç yazılmaz.
+            if (!ctx.mounted || lookedUp != raw) return;
+            setState(() {
+              looking = false;
+              found = (hit ?? '').isNotEmpty;
+              if (found) nameCtrl.text = hit!;
+            });
+          }
+
+          // Telefon tamamlanınca bir kez sorulur; değişince ad sıfırlanır.
+          if (phoneOk && lookedUp != raw && !looking) {
+            Future.microtask(lookup);
+          } else if (!phoneOk && lookedUp.isNotEmpty) {
+            lookedUp = '';
+            if (found) nameCtrl.clear();
+            found = false;
+          }
+
+          final ready =
+              phoneOk &&
+              lookedUp == raw &&
+              !looking &&
+              nameCtrl.text.trim().length >= 3;
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+            child: AdminDialogCloseOverlay(
+              onClose: () => Navigator.pop(ctx),
+              child: Container(
+                padding: const EdgeInsets.all(22),
+                decoration: adminDialogDecoration(),
                 child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const AdminDialogHeader(
                       icon: Icons.badge_outlined,
-                      title: 'Takım Sorumlusu Seç',
+                      title: 'Takım Sorumlusu',
+                      subtitle:
+                          'Önce telefonu yazın. Kayıtlı kişinin adı '
+                          'kendiliğinden gelir. Kişi bu telefonla kayıt olup '
+                          'onaylandığında takımı yönetebilir.',
                     ),
-                    const SizedBox(height: 14),
-                    TextField(
-                      controller: searchController,
-                      style: const TextStyle(color: Colors.white),
-                      cursorColor: kAdminAccent,
-                      decoration: adminInputDecoration(
-                        hint: 'İsimle ara',
-                        icon: Icons.search_rounded,
-                      ),
-                      onChanged: (_) => setPickerState(() {}),
-                    ),
-                    const SizedBox(height: 12),
-                    Expanded(
-                      child: FutureBuilder(
-                        future: future,
-                        builder: (context, snap) {
-                          if (snap.connectionState == ConnectionState.waiting) {
-                            return const Center(
-                              child: CircularProgressIndicator(
-                                color: kAdminAccent,
-                              ),
-                            );
-                          }
-                          if (snap.hasError) {
-                            return Center(
-                              child: Text(
-                                'Hata: ${snap.error}',
-                                style: const TextStyle(color: Colors.white70),
-                              ),
-                            );
-                          }
-                          final rows =
-                              (snap.data as List?)
-                                  ?.cast<Map<String, dynamic>>() ??
-                              const <Map<String, dynamic>>[];
-                          final filtered = q.isEmpty
-                              ? rows
-                              : rows
-                                    .where(
-                                      (r) => _toTurkishLow(
-                                        _fullName(r),
-                                      ).contains(q),
-                                    )
-                                    .toList();
-                          if (filtered.isEmpty) {
-                            return const Center(
-                              child: Text(
-                                'Takım sorumlusu bulunamadı.',
-                                style: TextStyle(color: Colors.white54),
-                              ),
-                            );
-                          }
-                          return ListView.separated(
-                            itemCount: filtered.length,
-                            separatorBuilder: (_, _) =>
-                                const SizedBox(height: 8),
-                            itemBuilder: (context, index) {
-                              final r = filtered[index];
-                              final id = (r['id'] ?? '').toString().trim();
-                              final n = _fullName(r);
-                              final photo = (r['photo_url'] ?? '')
-                                  .toString()
-                                  .trim();
-                              return Material(
-                                color: Colors.transparent,
-                                child: InkWell(
-                                  borderRadius: BorderRadius.circular(14),
-                                  onTap: () => Navigator.of(
-                                    context,
-                                  ).pop({'id': id, 'name': n}),
-                                  child: Ink(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 10,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.black.withValues(
-                                        alpha: 0.25,
-                                      ),
-                                      borderRadius: BorderRadius.circular(14),
-                                      border: Border.all(
-                                        color: Colors.white.withValues(
-                                          alpha: 0.08,
-                                        ),
+                    const SizedBox(height: 16),
+                    AdminFieldGroup(
+                      children: [
+                        AdminFieldRow(
+                          icon: Icons.phone_iphone_rounded,
+                          label: 'Cep Telefonu',
+                          child: TextField(
+                            controller: phoneCtrl,
+                            autofocus: true,
+                            keyboardType: TextInputType.phone,
+                            inputFormatters: [PhoneMaskFormatter()],
+                            onChanged: (_) => setState(() {}),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            cursorColor: kAdminAccent,
+                            decoration: adminInlineInputDecoration(
+                              hint: '(5XX) XXX XX XX',
+                            ),
+                          ),
+                        ),
+                        if (phoneOk)
+                          AdminFieldRow(
+                            icon: found
+                                ? Icons.verified_user_outlined
+                                : Icons.person_outline_rounded,
+                            label: found ? 'Ad Soyad (kayıtlı)' : 'Ad Soyad',
+                            child: looking
+                                ? const Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: kAdminAccent,
                                       ),
                                     ),
-                                    child: Row(
-                                      children: [
-                                        ClipOval(
-                                          child: Container(
-                                            width: 40,
-                                            height: 40,
-                                            color: Colors.white.withValues(
-                                              alpha: 0.08,
-                                            ),
-                                            child: photo.isEmpty
-                                                ? const Icon(
-                                                    Icons.person_rounded,
-                                                    color: Colors.white54,
-                                                  )
-                                                : WebSafeImage(
-                                                    url: photo,
-                                                    width: 40,
-                                                    height: 40,
-                                                    isCircle: true,
-                                                    fit: BoxFit.cover,
-                                                    fallbackIconSize: 20,
-                                                  ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                n.isEmpty ? id : n,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontWeight: FontWeight.w800,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        const Icon(
-                                          Icons.chevron_right_rounded,
-                                          color: Colors.white38,
-                                        ),
-                                      ],
+                                  )
+                                : TextField(
+                                    controller: nameCtrl,
+                                    readOnly: found,
+                                    autofocus: !found,
+                                    maxLength: 80,
+                                    textCapitalization:
+                                        TextCapitalization.words,
+                                    onChanged: (_) => setState(() {}),
+                                    style: TextStyle(
+                                      color: found
+                                          ? Colors.white70
+                                          : Colors.white,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
                                     ),
+                                    cursorColor: kAdminAccent,
+                                    decoration: adminInlineInputDecoration(
+                                      hint: 'Örn. Ahmet Yılmaz',
+                                    ).copyWith(counterText: ''),
                                   ),
-                                ),
-                              );
-                            },
-                          );
-                        },
-                      ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 22),
+                    AdminPrimaryButton(
+                      label: 'TAMAM',
+                      onPressed: !ready
+                          ? null
+                          : () => Navigator.pop(ctx, (
+                              phone: raw,
+                              name: nameCtrl.text.trim(),
+                            )),
                     ),
                   ],
                 ),
               ),
-            );
-          },
-        );
-      },
+            ),
+          );
+        },
+      ),
     );
-    _disposeControllersLater([searchController]);
-    return picked;
+    _disposeControllersLater([phoneCtrl, nameCtrl]);
+    return result;
   }
 
   Future<void> _openTeamFormSheet({
@@ -539,11 +512,10 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
     );
     final existingLogoUrl =
         (existing?['logo_url'] ?? existing?['logoUrl'] ?? '').toString().trim();
-    String selectedManagerId =
-        (existing?['manager_id'] ?? existing?['managerId'] ?? '')
-            .toString()
-            .trim();
+    String managerPhone = (existing?['manager_phone'] ?? '').toString().trim();
     String managerName = (existing?['manager_name'] ?? '').toString().trim();
+    final initialManagerPhone = managerPhone;
+    final initialManagerName = managerName;
     String? firstColor = (existing?['first_color'] ?? '').toString().trim();
     String? secondColor = (existing?['second_color'] ?? '').toString().trim();
     if (firstColor.isEmpty) firstColor = null;
@@ -602,12 +574,12 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
               ? null
               : shortNameController.text.trim(),
           'logo_url': logoUrl.trim(),
-          'manager_id': selectedManagerId.isEmpty ? null : selectedManagerId,
           'founded_year': ?foundedYear,
           'first_color': firstColor,
           'second_color': secondColor,
         };
 
+        var savedTeamId = teamId ?? '';
         Future<void> doUpdateInsert({required bool includeFounded}) async {
           final p = Map<String, dynamic>.from(payload);
           if (!includeFounded) {
@@ -620,7 +592,12 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                 .eq('id', teamId!);
           } else {
             p['created_at'] = DateTime.now().toIso8601String();
-            await Supabase.instance.client.from('teams').insert(p);
+            final row = await Supabase.instance.client
+                .from('teams')
+                .insert(p)
+                .select('id')
+                .single();
+            savedTeamId = (row['id'] ?? '').toString();
           }
         }
 
@@ -632,6 +609,20 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
           } else {
             rethrow;
           }
+        }
+
+        // Sorumlu telefonla atanır; futbolcu eşleşmesi ve kayıtlı ad
+        // veritabanında kurulur (set_team_manager).
+        if (managerPhone != initialManagerPhone ||
+            managerName != initialManagerName) {
+          await Supabase.instance.client.rpc(
+            'set_team_manager',
+            params: {
+              'p_team_id': savedTeamId,
+              'p_phone': managerPhone.isEmpty ? null : managerPhone,
+              'p_full_name': managerName.isEmpty ? null : managerName,
+            },
+          );
         }
 
         if (isEdit &&
@@ -677,12 +668,15 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                 : '';
             final hasLogo = selectedLogo != null || showLogoUrl.isNotEmpty;
 
-            Future<void> openManagerPicker() async {
-              final picked = await _pickManager();
+            Future<void> openManagerEditor() async {
+              final picked = await _editManager(
+                phone: managerPhone,
+                name: managerName,
+              );
               if (picked == null) return;
               setSheetState(() {
-                selectedManagerId = (picked['id'] ?? '').trim();
-                managerName = (picked['name'] ?? '').trim();
+                managerPhone = picked.phone;
+                managerName = picked.name;
               });
             }
 
@@ -904,11 +898,16 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                                 AdminSelectRow(
                                   icon: Icons.badge_outlined,
                                   label: 'Takım Sorumlusu',
-                                  value: managerName,
-                                  placeholder: 'Sorumlu seçin',
-                                  onTap: saving ? null : openManagerPicker,
+                                  value: managerName.isEmpty
+                                      ? ''
+                                      : managerPhone.isEmpty
+                                      ? managerName
+                                      : '$managerName · '
+                                            '${formatPhoneRaw10(managerPhone)}',
+                                  placeholder: 'Sorumlu ekle',
+                                  onTap: saving ? null : openManagerEditor,
                                   onClear: () => setSheetState(() {
-                                    selectedManagerId = '';
+                                    managerPhone = '';
                                     managerName = '';
                                   }),
                                 ),

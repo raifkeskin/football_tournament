@@ -250,7 +250,10 @@ Kalıcı maliyet: sonrasında her yeni özellik iki dilde yazılır.
 Uygulamada yapılan ve panele de dokunan değişiklikler buraya yazılır. Kullanıcı "web'e uygula" deyince toplu olarak işlenir, sonra liste temizlenir. Veritabanı kuralları (RPC, tetikleyici, RLS) iki tarafa kendiliğinden yansır, buraya yazılmaz.
 - (boş)
 
-## 24. Takım sorumlusu davetle + ikinci yetkili (kaptan) — DEĞERLENDİRMEDE (2026-10-19)
-- Takım sorumlusu oyuncu listesinden değil telefonla atanır: eşleşen hesap ya da kayıt varsa ad soyad otomatik gelir, yoksa elle yazılır. Kadroda olmayan kişi de atanabilir (ör. teknik sorumlu). Kurucu başkan davet yapısıyla aynı.
-- **Fikir (sonra karar verilecek):** takım sorumlusuyla aynı yetkide ikinci bir kişi, örneğin kaptan. Uygulamadan esame girişi vb. yapabilir. Davet yapısı birden çok sorumluya zaten izin verir.
-- Kurucu başkan ve bölge sorumlusu ekleme pencerelerine de telefonla otomatik ad soyad gelecek.
+## 24. Takım sorumlusu telefonla — YAPILDI (2026-10-19)
+- Takım Yönetimi › Takım Sorumlusu: önce telefon yazılır. Telefon bir futbolcuya, hesaba ya da sahip/sorumlu davetine kayıtlıysa ad soyad kendiliğinden gelir ve değiştirilemez; kayıtlı değilse elle yazılır. Kadroda olmayan kişi de (ör. teknik sorumlu) atanabilir.
+- Veritabanı: `set_team_manager` RPC, `lookup_person_by_phone`. Telefon herkese açık `teams` tablosunda değil, `team_manager_contacts` tablosunda durur (yalnız takımı yönetebilenler okur). Ad `teams.manager_name`'de.
+- Futbolcu olmayan sorumlu bu telefonla kayıt olabilir. Hesap açılınca yetkisi kendiliğinden bağlanır.
+- Eski derlemeler futbolcu seçerek `manager_id` yazmaya devam edebilir; ad ve telefon futbolcudan doldurulur.
+- **Vazgeçildi:** ikinci yetkili (kaptan).
+- **Sonra:** kurucu başkan ve bölge sorumlusu ekleme pencerelerinde de telefonla otomatik ad.
