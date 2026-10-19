@@ -1,0 +1,262 @@
+<title>Katılım Kartı Önizleme</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=Barlow+Condensed:wght@600;700;800&display=swap">
+<style>
+/* Layout: ana sayfadaki katılım bölümü akordiyon; telefon kareleri yan yana, her biri bir durum. Tek koyu görünüm (uygulama gibi). */
+:root {
+  color-scheme: dark;
+  --page: #0B1120;
+  --screen: #0F172A;
+  --card: #1E293B;
+  --row: #172033;
+  --line: #334155;
+  --fg: #F1F5F9;
+  --muted: #94A3B8;
+  --green: #10B981;
+  --red: #F87171;
+  --amber: #FBBF24;
+  --orange: #F97316;
+  --display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--page); color: var(--fg); font-family: var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 48px;
+}
+.wrap { max-width: 1480px; margin: 0 auto; display: grid; gap: 26px; }
+header h1 { font-family: var(--display); font-size: 30px; letter-spacing: .02em; margin: 0 0 6px; text-wrap: balance; }
+header p { margin: 0; color: var(--muted); max-width: 72ch; line-height: 1.5; }
+.frames { display: flex; flex-wrap: wrap; gap: 22px; align-items: flex-start; }
+.frame { width: 340px; max-width: 100%; display: grid; gap: 10px; }
+.cap { display: grid; gap: 3px; min-height: 58px; align-content: start; }
+.cap b { font-family: var(--display); font-size: 15px; letter-spacing: .08em; text-transform: uppercase; color: var(--amber); }
+.cap span { color: var(--muted); font-size: 13.5px; line-height: 1.45; }
+.phone {
+  position: relative; overflow: hidden; border-radius: 30px; border: 1px solid var(--line);
+  background: var(--screen); padding: 18px 14px 22px; min-height: 470px;
+  display: grid; align-content: start; gap: 14px;
+}
+.hello { font-weight: 800; font-size: 19px; }
+.hello small { display: block; font-weight: 500; font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+
+/* Akordiyon kutusu */
+.box { background: var(--card); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
+.boxhead { display: flex; align-items: center; gap: 8px; padding: 11px 14px 9px; color: var(--green); font-weight: 700; font-size: 13.5px; }
+.boxhead .n { margin-left: auto; color: var(--muted); font-weight: 600; font-size: 12.5px; }
+.item { border-top: 1px solid var(--line); }
+.box.single .item { border-top: 0; }
+.sum {
+  width: 100%; display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: none; border: 0;
+  color: var(--fg); font: inherit; text-align: left; cursor: pointer;
+}
+.sum:focus-visible { outline: 2px solid var(--amber); outline-offset: -2px; }
+.sum .ttl { display: grid; gap: 1px; min-width: 0; flex: 1; }
+.sum .ttl b { font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sum .ttl span { color: var(--muted); font-size: 12px; }
+.pill { flex: none; display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; border-radius: 999px; font-weight: 700; font-size: 12.5px; }
+.pill.todo { background: var(--amber); color: #1a1204; }
+.pill.yes { background: color-mix(in srgb, var(--green) 18%, transparent); color: var(--green); }
+.pill.no { background: color-mix(in srgb, var(--red) 16%, transparent); color: var(--red); }
+.chev { flex: none; color: var(--muted); transition: transform .2s; }
+.open .chev { transform: rotate(180deg); }
+.body { display: grid; gap: 10px; padding: 0 14px 14px; }
+.meta { color: var(--muted); font-size: 12.5px; }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.btn { height: 44px; border-radius: 12px; font: 700 14.5px var(--body); cursor: pointer; border: 1px solid var(--line); background: transparent; color: var(--fg); }
+.btn.go { background: var(--green); border-color: var(--green); color: #fff; }
+.btn.sel-no { background: color-mix(in srgb, var(--red) 22%, transparent); border-color: var(--red); color: var(--red); }
+.btn:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.foot { display: flex; align-items: center; gap: 10px; }
+.link { background: none; border: 0; color: var(--muted); font: 600 13.5px var(--body); cursor: pointer; padding: 4px 0; text-decoration: underline; text-underline-offset: 3px; }
+.link:hover, .link:focus-visible { color: var(--fg); outline: none; }
+.listbtn {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border-radius: 10px;
+  border: 1px solid var(--line); background: transparent; color: var(--fg); font: 600 13px var(--body); cursor: pointer; font-variant-numeric: tabular-nums;
+}
+.listbtn:hover, .listbtn:focus-visible { border-color: var(--green); outline: none; }
+.cnt { display: inline-flex; align-items: center; gap: 5px; font-variant-numeric: tabular-nums; }
+.cnt .dot + * { margin-right: 2px; }
+.listbtn.hd { height: 28px; padding: 0 9px; }
+.dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.more { width: 100%; border: 0; border-top: 1px solid var(--line); background: none; color: var(--green); font: 700 13px var(--body); padding: 11px; cursor: pointer; }
+.next { background: var(--card); border: 1px solid color-mix(in srgb, var(--orange) 60%, var(--line)); border-radius: 18px; padding: 14px; display: grid; gap: 6px; opacity: .55; }
+.next .k { color: var(--orange); font-family: var(--display); letter-spacing: .08em; font-size: 13px; }
+.next .m { font-weight: 800; }
+
+/* Liste popup'ı */
+.sheet-bg { position: absolute; inset: 0; background: rgb(2 6 23 / .6); display: grid; align-items: end; z-index: 2; }
+.sheet { background: var(--card); border-radius: 22px 22px 0 0; border-top: 1px solid var(--line); padding: 10px 16px 18px; display: grid; gap: 12px; max-height: 92%; overflow: auto; }
+.grab { width: 40px; height: 4px; border-radius: 4px; background: var(--line); justify-self: center; }
+.sheet h3 { margin: 0; font-size: 17px; display: flex; align-items: center; gap: 8px; }
+.sheet h3 small { color: var(--muted); font-weight: 500; font-size: 13px; }
+.close { margin-left: auto; background: none; border: 0; color: var(--muted); font-size: 22px; cursor: pointer; line-height: 1; }
+.tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.tab { border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 10px; padding: 7px 4px; font: 600 12.5px var(--body); cursor: pointer; font-variant-numeric: tabular-nums; }
+.tab b { display: block; font: 800 20px var(--display); }
+.tab.on[data-k="yes"] { border-color: var(--green); color: var(--green); }
+.tab.on[data-k="no"] { border-color: var(--red); color: var(--red); }
+.tab.on[data-k="none"] { border-color: var(--muted); color: var(--fg); }
+.names { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.names li { display: flex; align-items: center; gap: 10px; padding: 8px 4px; border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); font-weight: 600; font-size: 14.5px; }
+.av { width: 28px; height: 28px; border-radius: 50%; background: var(--line); display: grid; place-items: center; font-size: 11px; color: var(--muted); flex: none; }
+.me { margin-left: auto; font-size: 11px; color: var(--amber); font-weight: 700; letter-spacing: .06em; }
+.notes { display: grid; gap: 8px; max-width: 82ch; color: var(--muted); line-height: 1.5; font-size: 14px; }
+.notes h2 { font-family: var(--display); color: var(--fg); font-size: 20px; margin: 0; letter-spacing: .02em; }
+.notes ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+@media (prefers-reduced-motion: no-preference) { .sheet { animation: up .22s ease-out; } @keyframes up { from { transform: translateY(30px); opacity: .4; } } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Ana sayfa · Katılım sorguları (akordiyon)</h1>
+    <p>Önizleme, gerçek veri yok; düğmeler çalışır. Kapalı satıra basınca açılır, cevap verince kendiliğinden kapanır ve cevap satırda görünür. İsimler ve maçlar örnek.</p>
+  </header>
+
+  <div class="frames" id="frames"></div>
+
+  <section class="notes">
+    <h2>Kurallar</h2>
+    <ul>
+      <li>Her sorgu tek satır: maç, tarih ve sağda durum. Cevapsızsa sarı <b>Yanıtla</b>, cevaplıysa yeşil <b>Geliyorsun</b> ya da kırmızı <b>Gelemiyorsun</b>.</li>
+      <li>Tek sorguda gelen/gelemeyen sayıları başlığın sağında durur; basınca liste açılır. Birden çok sorguda sayılar her satırda tarihin yanında, liste düğmesi satır açılınca görünür.</li>
+      <li>Satıra basınca açılır. Cevap verilince satır kapanır. Cevaplı satır açılınca <b>Yanıtı değiştir</b> görünür.</li>
+      <li>Aynı anda yalnız bir satır açık olur; başka satıra basınca önceki kapanır.</li>
+      <li>Birden çok sorgu tek kutuda alt alta durur; cevapsızlar üstte, sonra maç tarihine göre. Üçten fazlaysa ilk üçü görünür, altta “+2 sorgu daha”.</li>
+      <li>Ana sayfa açıldığında cevapsız tek sorgu varsa o satır açık gelir; birden çoksa hepsi kapalı gelir.</li>
+      <li>Maç başlayınca ya da sorumlu sorguyu kapatınca satır kalkar; sorgu kalmazsa kutu da kalkar.</li>
+    </ul>
+  </section>
+</div>
+
+<script>
+const ME = "Raif Keskin";
+const BASE = {
+  yes: ["Ahmet Akar", "Engin Hitayca", "Volkan Yalçın"],
+  no: ["Mustafa Avcı", "Oğuz Aksu"],
+  none: ["Adem Kandemir", "Caner Yılmaz", "Emir Yüzük", "Emre Ayakdaş", "Enis Çalkın", "Fatih Ülker", "Kazım Kahya", "Şamil Güler", "Şenol Alemdar", "Umut Şahin", "Yusuf Akdeniz"]
+};
+const P = (id, team, home, away, when, pitch, answer) => ({ id, team, home, away, when, pitch, answer });
+const FRAMES = [
+  { title: "1 · Tek sorgu, kapalı", sub: "Kısa satır ve Yanıtla.", polls: [P("a", "Yeşil FK", "Beyaz FK", "Yeşil FK", "20 Eki Sal · 22:00", "Erok Stadı", null)], open: null },
+  { title: "2 · Satır açık", sub: "Basınca açılır; seçince kapanır.", polls: [P("a", "Yeşil FK", "Beyaz FK", "Yeşil FK", "20 Eki Sal · 22:00", "Erok Stadı", null)], open: "a" },
+  { title: "3 · Cevaplandı, kapalı", sub: "Cevap satırda görünür.", polls: [P("a", "Yeşil FK", "Beyaz FK", "Yeşil FK", "20 Eki Sal · 22:00", "Erok Stadı", "yes")], open: null },
+  { title: "4 · Cevaplı satır açık", sub: "Yanıtı değiştir + liste düğmesi.", polls: [P("a", "Yeşil FK", "Beyaz FK", "Yeşil FK", "20 Eki Sal · 22:00", "Erok Stadı", "yes")], open: "a" },
+  { title: "5 · Üç sorgu", sub: "Tek kutu, alt alta; cevapsızlar üstte.", polls: [
+    P("a", "Yeşil FK", "Beyaz FK", "Yeşil FK", "20 Eki Sal · 22:00", "Erok Stadı", null),
+    P("b", "Kuzey Masterler", "Kuzey Masterler", "Galata Veteranlar", "22 Eki Per · 21:00", "Fulya Halısaha", null),
+    P("c", "Yeşil FK", "Yeşil FK", "Kırmızı FK", "27 Eki Sal · 22:00", "Erok Stadı", "no")
+  ], open: null },
+  { title: "6 · Üç sorgu, biri açık", sub: "Yalnız biri açık kalır.", polls: [
+    P("a", "Yeşil FK", "Beyaz FK", "Yeşil FK", "20 Eki Sal · 22:00", "Erok Stadı", null),
+    P("b", "Kuzey Masterler", "Kuzey Masterler", "Galata Veteranlar", "22 Eki Per · 21:00", "Fulya Halısaha", null),
+    P("c", "Yeşil FK", "Yeşil FK", "Kırmızı FK", "27 Eki Sal · 22:00", "Erok Stadı", "no")
+  ], open: "b" },
+  { title: "7 · Beş sorgu", sub: "İlk üçü görünür, altta kalan sayı.", polls: [
+    P("a", "Yeşil FK", "Beyaz FK", "Yeşil FK", "20 Eki Sal · 22:00", "Erok Stadı", null),
+    P("b", "Kuzey Masterler", "Kuzey Masterler", "Galata Veteranlar", "22 Eki Per · 21:00", "Fulya Halısaha", "yes"),
+    P("c", "Yeşil FK", "Yeşil FK", "Kırmızı FK", "27 Eki Sal · 22:00", "Erok Stadı", "no"),
+    P("d", "Kuzey Masterler", "Mavi Yıldız", "Kuzey Masterler", "29 Eki Per · 21:00", "Fulya Halısaha", "yes"),
+    P("e", "Yeşil FK", "Sarı FK", "Yeşil FK", "3 Kas Sal · 22:00", "Erok Stadı", "yes")
+  ], open: null, limit: 3 },
+  { title: "8 · Liste", sub: "Liste düğmesine basınca alttan açılır.", polls: [P("a", "Yeşil FK", "Beyaz FK", "Yeşil FK", "20 Eki Sal · 22:00", "Erok Stadı", "yes")], open: "a", sheet: { id: "a", k: "yes" } }
+];
+
+const esc = s => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const CHEV = '<svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+const LIST = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg>';
+const OK = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+const NO = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+const PEOPLE = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M3 19c.8-3.2 3.2-5 6-5s5.2 1.8 6 5"/><path d="M15.5 12.5l2 2 4-4"/></svg>';
+
+function lists(p) {
+  const l = { yes: [...BASE.yes], no: [...BASE.no], none: [...BASE.none] };
+  l[p.answer || "none"].push(ME);
+  for (const k in l) l[k].sort((a, b) => a.localeCompare(b, "tr"));
+  return l;
+}
+function counts(p) {
+  const l = lists(p);
+  return `<span class="cnt"><span class="dot" style="background:var(--green)"></span>${l.yes.length}<span class="dot" style="background:var(--red)"></span>${l.no.length}</span>`;
+}
+function pill(p) {
+  if (!p.answer) return '<span class="pill todo">Yanıtla</span>';
+  return p.answer === "yes" ? `<span class="pill yes">${OK}Geliyorsun</span>` : `<span class="pill no">${NO}Gelemiyorsun</span>`;
+}
+function item(f, p) {
+  const isOpen = f.open === p.id;
+  const editing = f.editing === p.id;
+  const l = lists(p);
+  let body = "";
+  if (isOpen) {
+    const choose = !p.answer || editing;
+    body = `<div class="body">
+      <div class="meta">${esc(p.team)} · ${esc(p.pitch)}</div>
+      ${choose ? `<div class="row">
+          <button class="btn ${p.answer === "yes" || !p.answer ? "go" : ""}" data-a="yes" data-id="${p.id}">Geliyorum</button>
+          <button class="btn ${p.answer === "no" ? "sel-no" : ""}" data-a="no" data-id="${p.id}">Gelemiyorum</button>
+        </div>` : ""}
+      <div class="foot">
+        ${p.answer && !editing ? `<button class="link" data-edit="${p.id}">Yanıtı değiştir</button>` : ""}
+        ${editing ? `<button class="link" data-cancel="${p.id}">Vazgeç</button>` : ""}
+        ${f.polls.length > 1 ? `<button class="listbtn" data-list="${p.id}" aria-label="Katılım listesini aç">${LIST}Liste</button>` : ""}
+      </div>
+    </div>`;
+  }
+  return `<div class="item ${isOpen ? "open" : ""}">
+    <button class="sum" data-toggle="${p.id}" aria-expanded="${isOpen}">
+      <span class="ttl"><b>${esc(p.home)} – ${esc(p.away)}</b><span>${esc(p.when)}${f.polls.length > 1 ? " · " + counts(p) : ""}</span></span>
+      ${pill(p)}${CHEV}
+    </button>${body}</div>`;
+}
+function sheet(f) {
+  const p = f.polls.find(x => x.id === f.sheet.id);
+  const l = lists(p), k = f.sheet.k;
+  const lab = { yes: "Geliyor", no: "Gelemiyor", none: "Cevapsız" };
+  const names = l[k].map(n => `<li><span class="av">${esc(n.split(" ").map(s => s[0]).join(""))}</span>${esc(n)}${n === ME ? '<span class="me">SEN</span>' : ""}</li>`).join("");
+  return `<div class="sheet-bg"><div class="sheet" role="dialog" aria-label="Katılım listesi">
+    <div class="grab"></div>
+    <h3>Katılım Listesi <small>${esc(p.team)} · ${esc(p.home)} – ${esc(p.away)}</small><button class="close" aria-label="Kapat">×</button></h3>
+    <div class="tabs">${["yes", "no", "none"].map(t => `<button class="tab ${t === k ? "on" : ""}" data-k="${t}"><b>${l[t].length}</b>${lab[t]}</button>`).join("")}</div>
+    <ul class="names">${names || '<li style="color:var(--muted)">Kimse yok.</li>'}</ul>
+  </div></div>`;
+}
+function render(f, el) {
+  // Cevapsızlar üstte, sonra tarih sırası (örnekte verilen sıra).
+  const sorted = [...f.polls].sort((a, b) => (!!a.answer) - (!!b.answer));
+  const shown = f.limit && !f.all ? sorted.slice(0, f.limit) : sorted;
+  const rest = sorted.length - shown.length;
+  const todo = f.polls.filter(p => !p.answer).length;
+  const single = f.polls.length === 1;
+  el.innerHTML = `
+    <div class="cap"><b>${f.title}</b><span>${f.sub}</span></div>
+    <div class="phone">
+      <div class="hello">Merhaba, Raif Keskin<small>2026 Sezonu · Hürriyet Gençlik</small></div>
+      <div class="box ${single ? "single" : ""}">
+        <div class="boxhead">${PEOPLE}Katılım Durum Sorgulama${single ? `<button class="listbtn hd" data-list="${f.polls[0].id}" aria-label="Katılım listesini aç">${LIST}${counts(f.polls[0])}</button>` : `<span class="n">${todo ? todo + " yanıt bekliyor" : "Hepsi yanıtlandı"}</span>`}</div>
+        ${shown.map(p => item(f, p)).join("")}
+        ${rest > 0 ? `<button class="more" data-more>+${rest} sorgu daha</button>` : ""}
+      </div>
+      <div class="next"><span class="k">SIRADAKİ MAÇIN · 5. HAFTA</span><span class="m">Beyaz FK 22:00 Yeşil FK</span></div>
+      ${f.sheet ? sheet(f) : ""}
+    </div>`;
+  const rr = () => render(f, el);
+  el.querySelectorAll("[data-toggle]").forEach(b => b.onclick = () => { f.open = f.open === b.dataset.toggle ? null : b.dataset.toggle; f.editing = null; rr(); });
+  el.querySelectorAll("[data-a]").forEach(b => b.onclick = () => { f.polls.find(p => p.id === b.dataset.id).answer = b.dataset.a; f.open = null; f.editing = null; rr(); });
+  el.querySelectorAll("[data-edit]").forEach(b => b.onclick = () => { f.editing = b.dataset.edit; rr(); });
+  el.querySelectorAll("[data-cancel]").forEach(b => b.onclick = () => { f.editing = null; rr(); });
+  el.querySelectorAll("[data-list]").forEach(b => b.onclick = () => { f.sheet = { id: b.dataset.list, k: "yes" }; rr(); });
+  const more = el.querySelector("[data-more]"); if (more) more.onclick = () => { f.all = true; rr(); };
+  const bg = el.querySelector(".sheet-bg");
+  if (bg) {
+    bg.onclick = e => { if (e.target === bg) { f.sheet = null; rr(); } };
+    el.querySelector(".close").onclick = () => { f.sheet = null; rr(); };
+    el.querySelectorAll(".tab").forEach(t => t.onclick = () => { f.sheet.k = t.dataset.k; rr(); });
+  }
+}
+const host = document.getElementById("frames");
+FRAMES.forEach(f => { const d = document.createElement("div"); d.className = "frame"; host.appendChild(d); render(f, d); });
+</script>
