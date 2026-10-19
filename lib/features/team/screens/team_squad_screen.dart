@@ -29,6 +29,7 @@ import '../services/supabase/supabase_team_service.dart';
 import '../../../core/utils/resilient_stream.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/app_date_picker.dart';
+import '../../../core/widgets/tc_masked_field.dart';
 import '../../../core/widgets/app_name_band.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import 'package:football_tournament/core/widgets/picked_image.dart';
@@ -2812,16 +2813,24 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                             hint: 'Soyad',
                             capitalization: TextCapitalization.words,
                           ),
-                          _textRow(
+                          // İlk 2 ve son 3 hane dışı gizli; yazılan
+                          // rakam 1 sn görünür.
+                          AdminFieldRow(
                             icon: Icons.badge_outlined,
                             label: 'Kimlik No',
-                            controller: _identityNoController,
-                            keyboardType: TextInputType.number,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly,
-                              LengthLimitingTextInputFormatter(11),
-                            ],
-                            hint: '11 haneli',
+                            child: TcMaskedField(
+                              controller: _identityNoController,
+                              enabled: !_saving,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 1,
+                              ),
+                              decoration: adminInlineInputDecoration(
+                                hint: '11 haneli',
+                              ),
+                            ),
                           ),
                           _textRow(
                             icon: Icons.cake_outlined,

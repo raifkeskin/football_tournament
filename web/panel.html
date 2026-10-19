@@ -566,13 +566,29 @@ button.tile:hover { border-color: #33476e; }
       '<div class="login"><form id="lf">' +
       '<div class="brand" style="padding:0"><img src="/logo-lm.png" alt=""><b>LİG MASASI</b></div>' +
       '<h1>Yönetim Masası</h1>' +
-      '<p>Turnuva ve bölge sorumluları için. Uygulamadaki hesabınızla girin.</p>' +
-      '<label for="lp">Telefon</label><input id="lp" autocomplete="username" inputmode="tel" placeholder="5xx xxx xx xx" required>' +
+      '<p>Turnuva ve bölge sorumluları için.<br>Uygulamadaki hesabınızla girin.</p>' +
+      '<label for="lp">Telefon</label><input id="lp" autocomplete="username" inputmode="tel" placeholder="(5XX) XXX XX XX" required>' +
       '<label for="lw">Şifre</label><input id="lw" type="password" autocomplete="current-password" required>' +
       '<button class="btn primary" id="lb">Giriş yap</button>' +
       '<div class="err" id="le"></div>' +
       '</form></div>';
-    document.getElementById('lp').focus();
+    var lp = document.getElementById('lp');
+    lp.focus();
+    // Uygulamadaki telefon alanı gibi: (5XX) XXX XX XX; baştaki 0 / 90
+    // atılır, 10 haneden fazlası alınmaz. E-posta yazılırsa dokunulmaz.
+    lp.addEventListener('input', function () {
+      if (/[a-zA-Z@]/.test(lp.value)) return;
+      var d = lp.value.replace(/\D/g, '');
+      if (d.length > 10 && d.slice(0, 2) === '90') d = d.slice(2);
+      if (d[0] === '0') d = d.slice(1);
+      d = d.slice(0, 10);
+      // Ayraç yalnız sonraki hane yazılınca eklenir (silerken takılmasın).
+      var out = d.length ? '(' + d.slice(0, 3) : '';
+      if (d.length > 3) out += ') ' + d.slice(3, 6);
+      if (d.length > 6) out += ' ' + d.slice(6, 8);
+      if (d.length > 8) out += ' ' + d.slice(8);
+      lp.value = out;
+    });
     document.getElementById('lf').onsubmit = function (e) {
       e.preventDefault();
       var b = document.getElementById('lb');
