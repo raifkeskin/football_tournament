@@ -39,11 +39,30 @@ as $$
     'can', public.is_admin()
            or exists (select 1 from public.league_owners o where o.user_id = auth.uid())
            or exists (select 1 from public.region_owners r where r.user_id = auth.uid()),
+    -- Kişinin yönettiği turnuvalar (üst banttaki seçici; renk ve logo).
+    'leagues', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', l.id, 'name', l.name, 'logo', l.logo_url,
+        'primary', l.theme_primary, 'secondary', l.theme_secondary
+      ) order by l.is_demo, l.name)
+      from public.leagues l
+      where coalesce(l.status, 'active') = 'active'
+        and (
+          public.is_admin()
+          or exists (select 1 from public.league_owners o
+                     where o.league_id = l.id and o.user_id = auth.uid())
+          or exists (select 1 from public.region_owners ro
+                     join public.season_regions sr on sr.id = ro.region_id
+                     join public.seasons s on s.id = sr.season_id
+                     where s.league_id = l.id and ro.user_id = auth.uid())
+        )
+    ), '[]'::jsonb),
     'matches', coalesce((
       select jsonb_agg(jsonb_build_object(
         'id', m.id,
         'league_id', m.lid,
         'league', l.name,
+        'league_logo', l.logo_url,
         'season', m.season_name,
         'group', m.group_name,
         'week', m.week,

@@ -2,111 +2,231 @@
 <html lang="tr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>Yönetim Masası · Lig Masası</title>
 <link rel="icon" href="/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=Barlow+Condensed:ital,wght@0,700;0,800;1,800&display=swap">
 <style>
-:root{--bg:#0f172a;--side:#0b1222;--card:#1e293b;--card2:#162032;--text:#e2e8f0;--muted:#94a3b8;--accent:#10b981;--accent2:#064e3b;--danger:#f87171;--warn:#f59e0b;--live:#ef4444;--line:#334155}
-*{box-sizing:border-box}
-html,body{height:100%}
-body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
-button{font:inherit;color:inherit;cursor:pointer}
-input{font:inherit}
-kbd{display:inline-block;min-width:18px;padding:0 5px;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;font:600 11px/16px ui-monospace,Menlo,monospace;color:var(--muted);text-align:center}
+/* Yönetim Masası taslağının (yonetim-masasi) görünümü: solda sabit menü,
+   üstte turnuva bandı, sağda iş alanı; telefonda menü alta iner. */
+:root {
+  color-scheme: dark;
+  --bg: #0b1220;
+  --panel: #111a2c;
+  --card: #16213a;
+  --card-2: #1c2944;
+  --line: #24314d;
+  --fg: #e6ecf5;
+  --muted: #8d9bb4;
+  --accent: #10b981;
+  --accent-ink: #052e22;
+  --live: #f43f5e;
+  --warn: #fbbf24;
+  --danger: #f87171;
+  --lg1: #6d0f22;
+  --lg2: #8f1430;
+  --display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.45 var(--body); }
+button { font: inherit; color: inherit; cursor: pointer; }
+input, select { font: inherit; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; }
+.kbd {
+  display: inline-block; padding: 1px 6px; border: 1px solid var(--line); border-bottom-width: 2px;
+  border-radius: 6px; font: 600 11.5px/1.4 var(--body); color: var(--fg); background: var(--card);
+}
 
-/* Giriş */
-.login{min-height:100%;display:flex;align-items:center;justify-content:center;padding:24px 16px}
-.login form{width:100%;max-width:360px;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:26px 22px}
-.brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:1.5px;font-style:italic;font-size:17px;color:#fff}
-.brand img{width:34px;height:34px}
-.login h1{font-size:18px;margin:18px 0 4px}
-.login p{color:var(--muted);margin:0 0 18px;font-size:13px}
-.login label{display:block;font-size:12px;color:var(--muted);margin:12px 0 5px;font-weight:600}
-.login input{width:100%;padding:11px 12px;border-radius:10px;border:1.5px solid var(--line);background:var(--bg);color:var(--text);outline:none}
-.login input:focus{border-color:var(--accent)}
-.btn{padding:10px 16px;border-radius:10px;border:1.5px solid var(--line);background:transparent;font-weight:700}
-.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
-.btn:disabled{opacity:.55;cursor:default}
-.login .btn{width:100%;margin-top:20px;padding:12px}
-.err{color:var(--danger);font-size:13px;margin-top:12px;min-height:18px}
+/* ---- Giriş ---- */
+.login { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 24px 16px; }
+.login form { width: 100%; max-width: 380px; background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 26px 22px; }
+.login h1 { font: 800 28px/1.05 var(--display); margin: 20px 0 4px; }
+.login p { color: var(--muted); margin: 0 0 18px; font-size: 14px; }
+.login label { display: block; font-size: 12.5px; color: var(--muted); margin: 12px 0 5px; font-weight: 600; }
+.login input { width: 100%; padding: 11px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); outline: none; }
+.login input:focus { border-color: var(--accent); }
+.login .btn { width: 100%; margin-top: 20px; padding: 12px; font-size: 15px; }
+.err { color: var(--danger); font-size: 13px; margin-top: 12px; min-height: 18px; }
 
-/* Yerleşim */
-.app{display:grid;grid-template-columns:220px 1fr;min-height:100%}
-aside{background:var(--side);border-right:1px solid var(--line);padding:16px 12px;display:flex;flex-direction:column;gap:4px}
-aside .brand{padding:4px 8px 18px}
-.nav{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;color:var(--muted);font-weight:600;border:0;background:none;text-align:left;width:100%}
-.nav.on{background:var(--card);color:#fff}
-.nav[disabled]{opacity:.45;cursor:default}
-.nav small{margin-left:auto;font-size:10px;font-weight:700;color:var(--muted)}
-aside .me{margin-top:auto;padding:10px 8px 0;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
-aside .me button{background:none;border:0;color:var(--danger);padding:6px 0 0;font-weight:700}
-main{padding:20px 28px 40px;min-width:0}
-.top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:18px}
-.top h1{font-size:20px;margin:0 12px 0 0}
-.day{display:flex;align-items:center;gap:6px}
-.day .btn{padding:7px 11px}
-.day input{padding:6px 8px;border-radius:9px;border:1.5px solid var(--line);background:var(--card);color:var(--text);color-scheme:dark}
-.keys{margin-left:auto;color:var(--muted);font-size:12px;display:flex;gap:12px;flex-wrap:wrap}
+.app { display: grid; grid-template-columns: 236px minmax(0, 1fr); min-height: 100%; }
 
-.section{margin-bottom:22px}
-.section h2{font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin:0 0 8px;display:flex;align-items:center;gap:8px}
-.section.warn h2{color:var(--warn)}
-.list{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
-.row{display:grid;grid-template-columns:74px 1fr 92px 1fr 96px 110px;align-items:center;gap:10px;padding:10px 14px;border-top:1px solid var(--line);cursor:pointer}
-.row:first-child{border-top:0}
-.row:hover{background:var(--card2)}
-.row.sel{background:#1b3a35;box-shadow:inset 3px 0 0 var(--accent)}
-.when{color:var(--muted);font-variant-numeric:tabular-nums;font-size:13px}
-.when b{display:block;color:var(--text);font-size:14px}
-.tm{display:flex;align-items:center;gap:8px;min-width:0;font-weight:600}
-.tm span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.tm.r{justify-content:flex-end;text-align:right}
-.tm img{width:24px;height:24px;object-fit:contain;flex:none}
-.sc{text-align:center;font-weight:800;font-size:17px;font-variant-numeric:tabular-nums}
-.sc small{display:block;font-size:11px;color:var(--muted);font-weight:600}
-.sc.none{color:var(--muted);font-weight:600;font-size:13px}
-.st{font-size:11px;font-weight:800;letter-spacing:.5px;padding:3px 8px;border-radius:20px;justify-self:center;white-space:nowrap}
-.st.notStarted{color:var(--muted);border:1px solid var(--line)}
-.st.live,.st.halftime{background:var(--live);color:#fff}
-.st.finished{background:var(--accent2);color:#6ee7b7}
-.st.postponed,.st.cancelled{color:var(--warn);border:1px solid var(--warn)}
-.row .btn{padding:7px 10px;font-size:13px;justify-self:end}
-.meta{grid-column:2/5;color:var(--muted);font-size:12px;margin-top:-6px}
-.empty{padding:34px 16px;text-align:center;color:var(--muted)}
-.lg{display:flex;align-items:center;gap:8px;padding:9px 14px;background:var(--card2);font-weight:700;font-size:13px;border-top:1px solid var(--line)}
-.lg:first-child{border-top:0}
+/* ---- Menü ---- */
+.side {
+  background: var(--panel); border-right: 1px solid var(--line);
+  padding-block: 18px; padding-left: max(14px, env(safe-area-inset-left, 0px)); padding-right: 14px;
+  display: flex; flex-direction: column; gap: 4px;
+  position: sticky; top: 0; height: 100vh;
+}
+.brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 18px; }
+.brand img { width: 34px; height: 34px; }
+.brand b { font: italic 800 19px/1 var(--display); letter-spacing: 1.6px; }
+.nav-btn {
+  display: flex; align-items: center; gap: 11px;
+  width: 100%; padding: 9px 10px; border: 0; border-radius: 10px;
+  background: transparent; color: var(--muted); font-weight: 600; text-align: left;
+}
+.nav-btn svg { width: 18px; height: 18px; flex: none; }
+.nav-btn:hover { background: var(--card); color: var(--fg); }
+.nav-btn[aria-current="page"] { background: rgba(16,185,129,.14); color: var(--fg); }
+.nav-btn[aria-current="page"] svg { color: var(--accent); }
+.nav-btn .count {
+  margin-left: auto; min-width: 22px; padding: 1px 7px; border-radius: 999px;
+  background: var(--warn); color: #3b2a00; font-size: 12px; font-weight: 800; text-align: center;
+}
+.side .sep { height: 1px; background: var(--line); margin: 10px 4px; }
+.side .foot { margin-top: auto; color: var(--muted); font-size: 12.5px; padding: 0 8px; display: grid; gap: 6px; }
+.side .foot button { background: none; border: 0; padding: 0; color: var(--danger); font-weight: 700; text-align: left; }
+
+/* ---- Üst bant (seçili turnuvanın rengi) ---- */
+.main { min-width: 0; display: flex; flex-direction: column; }
+.top {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; gap: 12px;
+  padding-block: 12px;
+  padding-left: max(22px, env(safe-area-inset-left, 0px));
+  padding-right: max(22px, env(safe-area-inset-right, 0px));
+  background: linear-gradient(90deg, var(--lg1), var(--lg2) 55%, var(--lg1));
+  border-bottom: 1px solid rgba(255,255,255,.18);
+}
+.league { display: flex; align-items: center; gap: 10px; min-width: 0; position: relative; }
+.league img { width: 32px; height: 32px; object-fit: contain; flex: none; }
+.league .shield {
+  width: 30px; height: 34px; flex: none;
+  clip-path: polygon(0 0, 100% 0, 100% 62%, 50% 100%, 0 62%);
+  background: linear-gradient(var(--lg2), var(--lg1)); border: 2px solid #fff;
+}
+.league b { font: italic 800 20px/1 var(--display); letter-spacing: 1.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: uppercase; }
+.league select {
+  position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%;
+}
+.league .chev { opacity: .8; flex: none; }
+.search {
+  margin-left: auto; display: flex; align-items: center; gap: 8px;
+  padding: 7px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,.25);
+  background: rgba(0,0,0,.22); color: rgba(255,255,255,.85); min-width: 0;
+}
+.search span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.who { display: flex; align-items: center; gap: 8px; font-weight: 700; white-space: nowrap; }
+.who i { width: 30px; height: 30px; border-radius: 50%; background: #0f172a; display: grid; place-items: center; font-style: normal; font-size: 12px; border: 2px solid var(--accent); }
+
+.content {
+  padding-block: 22px 40px;
+  padding-left: max(22px, env(safe-area-inset-left, 0px));
+  padding-right: max(22px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 22px; align-content: start;
+}
+h1 { font: 800 30px/1.05 var(--display); letter-spacing: .3px; margin: 0; text-wrap: balance; }
+.sub { color: var(--muted); margin: 4px 0 0; }
+.h-row { display: flex; align-items: end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.label { font: 800 12px/1 var(--body); letter-spacing: 1.2px; text-transform: uppercase; color: var(--accent); margin: 0; }
+.label.warn { color: var(--warn); }
+.day { display: flex; align-items: center; gap: 6px; }
+.day input { padding: 6px 8px; border-radius: 9px; border: 1px solid var(--line); background: var(--card-2); color: var(--fg); }
+.keys { color: var(--muted); font-size: 12.5px; display: flex; gap: 12px; flex-wrap: wrap; }
+
+/* Özet kutuları */
+.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.tile { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: grid; gap: 2px; text-align: left; }
+button.tile:hover { border-color: #33476e; }
+.tile .big { font: 800 34px/1 var(--display); }
+.tile .cap { color: var(--muted); font-size: 13.5px; }
+.tile.live .big { color: var(--live); }
+.tile.warn { border-color: rgba(251,191,36,.45); }
+.tile.warn .big { color: var(--warn); }
+.tile.ok .big { color: var(--accent); }
+.tile.off .big { color: var(--muted); }
+
+.box { background: var(--card); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+.box-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 16px 10px; }
+.box-head .hint { color: var(--muted); font-size: 13px; }
+.lg-head { padding: 8px 16px; background: var(--panel); border-top: 1px solid var(--line); font-weight: 700; font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+.lg-head img { width: 18px; height: 18px; object-fit: contain; }
+
+/* Maç satırları */
+.match {
+  display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 12px; align-items: center;
+  padding: 12px 16px; border-top: 1px solid var(--line); cursor: pointer;
+}
+.match:hover { background: rgba(255,255,255,.02); }
+.match.sel { background: rgba(16,185,129,.08); box-shadow: inset 3px 0 0 var(--accent); }
+.match .time { font: 800 18px/1.05 var(--display); color: var(--muted); }
+.match .time small { display: block; font-size: 13px; }
+.match.is-live .time { color: var(--live); }
+.teams { display: grid; gap: 4px; min-width: 0; }
+.team { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.team img, .team .dot { width: 20px; height: 20px; flex: none; object-fit: contain; }
+.team .dot { border-radius: 50%; display: grid; place-items: center; font-size: 9px; font-weight: 800; color: #fff; background: var(--card-2); }
+.team span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.team em { margin-left: auto; font-style: normal; font: 800 18px/1 var(--display); padding-left: 10px; }
+.acts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: end; align-items: center; }
+.btn { border: 1px solid var(--line); background: var(--card-2); border-radius: 9px; padding: 7px 11px; font-weight: 700; font-size: 13.5px; white-space: nowrap; }
+.btn:hover { border-color: #3a5180; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.live { background: var(--live); border-color: var(--live); color: #fff; }
+.btn.ghost { background: transparent; }
+.btn:disabled { opacity: .55; cursor: default; }
+.pill { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 800; }
+.pill.live { background: rgba(244,63,94,.15); color: #ff8aa0; }
+.pill.live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--live); animation: blink 1.2s infinite; }
+.pill.warn { background: rgba(251,191,36,.15); color: var(--warn); }
+.pill.ok { background: rgba(16,185,129,.15); color: #6ee7b7; }
+.pill.mute { background: var(--card-2); color: var(--muted); }
+@keyframes blink { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .pill.live::before { animation: none; } }
+.meta { color: var(--muted); font-size: 12.5px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 2px; }
+
+/* Satır içi sonuç girişi */
+.score-in { display: flex; align-items: center; gap: 6px; }
+.score-in input {
+  width: 44px; padding: 6px 4px; text-align: center; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--fg); font: 800 17px/1 var(--display);
+}
+.score-in input:focus { border-color: var(--accent); outline: none; }
+.empty { padding: 22px 16px; color: var(--muted); border-top: 1px solid var(--line); text-align: center; }
+
+/* Henüz yapılmayan bölüm */
+.soon { padding: 40px 20px; text-align: center; color: var(--muted); }
+.soon b { display: block; color: var(--fg); font: 800 22px/1.2 var(--display); margin-bottom: 6px; }
 
 /* Skor penceresi */
-.ov{position:fixed;inset:0;background:rgba(2,6,23,.7);display:flex;align-items:center;justify-content:center;padding:16px;z-index:10}
-.dlg{width:100%;max-width:440px;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px}
-.dlg h3{margin:0 0 4px;font-size:16px}
-.dlg .sub{color:var(--muted);font-size:12px;margin-bottom:18px}
-.pair{display:grid;grid-template-columns:1fr 24px 1fr;gap:10px;align-items:end}
-.pair .t{text-align:center;font-weight:700;font-size:13px;margin-bottom:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pair input{width:100%;text-align:center;font-size:30px;font-weight:800;padding:10px 0;border-radius:12px;border:1.5px solid var(--line);background:var(--bg);color:var(--text);outline:none}
-.pair input:focus{border-color:var(--accent)}
-.pair .dash{text-align:center;font-size:26px;color:var(--muted);padding-bottom:14px}
-.pens{margin-top:16px;padding-top:14px;border-top:1px dashed var(--line)}
-.pens .lbl{font-size:12px;color:var(--warn);font-weight:700;margin-bottom:8px}
-.pens input{font-size:20px;padding:7px 0}
-.acts{display:flex;gap:10px;justify-content:flex-end;margin-top:20px;align-items:center}
-.acts .hint{margin-right:auto;color:var(--muted);font-size:12px}
-.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;padding:10px 18px;border-radius:10px;font-weight:700;z-index:20}
-.toast.bad{background:var(--danger)}
+.ov { position: fixed; inset: 0; background: rgba(2,6,23,.7); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 10; }
+.dlg { width: 100%; max-width: 440px; background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 22px; }
+.dlg h3 { margin: 0 0 4px; font: 800 22px/1.1 var(--display); }
+.dlg .sub { font-size: 13px; margin-bottom: 18px; }
+.pair { display: grid; grid-template-columns: 1fr 24px 1fr; gap: 10px; align-items: end; }
+.pair .t { text-align: center; font-weight: 700; font-size: 13.5px; margin-bottom: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pair input { width: 100%; text-align: center; font: 800 34px/1 var(--display); padding: 10px 0; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); outline: none; }
+.pair input:focus { border-color: var(--accent); }
+.pair .dash { text-align: center; font-size: 26px; color: var(--muted); padding-bottom: 14px; }
+.pens { margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--line); }
+.pens .lbl { font-size: 12.5px; color: var(--warn); font-weight: 700; margin-bottom: 8px; }
+.pens input { font-size: 22px; padding: 7px 0; }
+.dlg .acts { margin-top: 20px; }
+.dlg .acts .hint { margin-right: auto; color: var(--muted); font-size: 12.5px; }
+.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--accent); color: var(--accent-ink); padding: 10px 18px; border-radius: 10px; font-weight: 700; z-index: 20; }
+.toast.bad { background: var(--danger); color: #fff; }
 
-@media (max-width:820px){
-  .app{grid-template-columns:1fr}
-  aside{flex-direction:row;flex-wrap:wrap;padding:10px 16px;border-right:0;border-bottom:1px solid var(--line)}
-  aside .brand{padding:4px 8px;width:100%}
-  .nav{width:auto}
-  aside .me{margin:0 0 0 auto;border:0;padding:0}
-  main{padding:16px}
-  .keys{display:none}
-  .row{grid-template-columns:52px 1fr 60px 1fr;row-gap:6px}
-  .row .st{grid-column:1/2}
-  .row .btn{grid-column:4/5}
-  .meta{grid-column:2/4;margin:0}
+@media (max-width: 1100px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 820px) {
+  .app { grid-template-columns: 1fr; }
+  .side {
+    position: fixed; inset: auto 0 0 0; height: auto; z-index: 6; flex-direction: row; gap: 2px;
+    padding: 6px max(8px, env(safe-area-inset-left, 0px)) max(6px, env(safe-area-inset-bottom, 0px));
+    border-right: 0; border-top: 1px solid var(--line); overflow-x: auto;
+  }
+  .brand, .side .sep, .side .foot, .nav-btn.more { display: none; }
+  .nav-btn { flex-direction: column; gap: 3px; font-size: 11px; padding: 6px 8px; min-width: 64px; align-items: center; position: relative; }
+  .nav-btn .count { position: absolute; top: 0; right: 6px; margin: 0; font-size: 10px; min-width: 17px; padding: 0 4px; }
+  .content { padding: 16px 16px 90px; }
+  .top { padding: 10px 16px; }
+  .search, .keys { display: none; }
+  .who span { display: none; }
 }
 </style>
 </head>
@@ -119,10 +239,51 @@ main{padding:20px 28px 40px;min-width:0}
   // veritabanındadır (tetikleyiciler, RLS, desk_matches).
   var BASE = 'https://qxdjebzszikeslobrozf.supabase.co';
   var KEY = '__SUPABASE_ANON_KEY__';
-  var SKEY = 'lm_panel';
+  var SKEY = 'lm_panel', LKEY = 'lm_panel_league';
   var root = document.getElementById('root');
   var session = null;   // {access_token, refresh_token, expires_at, user}
-  var state = {date: today(), data: null, sel: -1, busy: false, dlg: null};
+  var state = {view: 'today', date: today(), data: null, sel: -1, dlg: null, league: null};
+  try { state.league = localStorage.getItem(LKEY); } catch (e) {}
+
+  var ICON = {
+    today: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M8 2v4M16 2v4M3 10h18"/><circle cx="12" cy="15" r="2" fill="currentColor"/></svg>',
+    live: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3" fill="currentColor"/><path d="M5.6 5.6a9 9 0 0 0 0 12.8M18.4 5.6a9 9 0 0 1 0 12.8"/></svg>',
+    fixture: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>',
+    approvals: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>',
+    standings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/></svg>',
+    teams: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg>',
+    licenses: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="12" r="2.5"/><path d="M14 10h4M14 14h3"/></svg>',
+    news: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h10M7 12h10M7 16h6"/></svg>',
+    penalties: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="3" width="10" height="14" rx="1.5"/><path d="M12 21v-4"/></svg>',
+    sponsors: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 6 6 .9-4.5 4.3 1 6.3L12 16.6 6.5 19.5l1-6.3L3 8.9 9 8z"/></svg>',
+    search: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>',
+    chev: '<svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M6 9l6 6 6-6"/></svg>'
+  };
+  // Menü taslaktakiyle aynı sırada; ilk dördü telefonda alt menüde kalır.
+  var NAV = [
+    {id: 'today', name: 'Bugün'},
+    {id: 'live', name: 'Canlı maç'},
+    {id: 'fixture', name: 'Fikstür'},
+    {id: 'approvals', name: 'Onaylar'},
+    {sep: true},
+    {id: 'standings', name: 'Puan Durumu', more: true},
+    {id: 'teams', name: 'Takımlar', more: true},
+    {id: 'licenses', name: 'Lisanslar', more: true},
+    {id: 'news', name: 'Haberler', more: true},
+    {id: 'penalties', name: 'Cezalar', more: true},
+    {id: 'sponsors', name: 'Sponsorlar', more: true}
+  ];
+  var SOON = {
+    live: 'Canlı maçta gol, kart, değişiklik ve devreler tek tuşla girilecek.',
+    fixture: 'Haftanın maçları tabloda; tarih, saat ve saha hızlıca düzenlenecek.',
+    approvals: 'Kadro, lisans, profil ve ceza onayları tek listede.',
+    standings: 'Puan durumu ve gruplar.',
+    teams: 'Takımlar ve kadrolar.',
+    licenses: 'Lisans başvuruları ve süreleri.',
+    news: 'Haber ekleme ve düzenleme.',
+    penalties: 'Kart ve disiplin cezaları.',
+    sponsors: 'Ana ve alt sponsorlar.'
+  };
 
   // ---------- yardımcılar ----------
   function esc(s) {
@@ -140,22 +301,29 @@ main{padding:20px 28px 40px;min-width:0}
   }
   var DAYS = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
   var MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
-  function dayTitle(s) {
-    var p = s.split('-'), d = new Date(+p[0], +p[1] - 1, +p[2]);
-    var t = s === today() ? 'Bugün' : s === addDays(today(), -1) ? 'Dün' : s === addDays(today(), 1) ? 'Yarın' : DAYS[d.getDay()];
-    return t + ', ' + d.getDate() + ' ' + MONTHS[d.getMonth()];
+  function dateOf(s) { var p = s.split('-'); return new Date(+p[0], +p[1] - 1, +p[2]); }
+  function dayWord(s) {
+    return s === today() ? 'Bugün' : s === addDays(today(), -1) ? 'Dün' : s === addDays(today(), 1) ? 'Yarın' : DAYS[dateOf(s).getDay()];
   }
-  function shortDate(s) {
-    var p = s.split('-');
-    return +p[2] + ' ' + MONTHS[+p[1] - 1].slice(0, 3);
+  function longDate(s) { var d = dateOf(s); return d.getDate() + ' ' + MONTHS[d.getMonth()] + ' ' + DAYS[d.getDay()]; }
+  function shortDate(s) { var d = dateOf(s); return DAYS[d.getDay()].slice(0, 3) + ' ' + d.getDate() + ' ' + MONTHS[d.getMonth()].slice(0, 3); }
+  function initials(name) {
+    return String(name || '').split(/\s+/).filter(Boolean).slice(0, 2).map(function (w) { return w[0]; }).join('').toLocaleUpperCase('tr');
   }
-  var STATUS = {notStarted: 'BAŞLAMADI', live: 'CANLI', halftime: 'DEVRE ARASI', finished: 'BİTTİ', postponed: 'ERTELENDİ', cancelled: 'İPTAL'};
   function toast(msg, bad) {
     var t = document.createElement('div');
     t.className = 'toast' + (bad ? ' bad' : '');
     t.textContent = msg;
     document.body.appendChild(t);
     setTimeout(function () { t.remove(); }, 2600);
+  }
+  // Turnuva renginden üst bant: ana renk ve biraz koyusu.
+  function shade(hex, f) {
+    var m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+    if (!m) return null;
+    var n = parseInt(m[1], 16);
+    var c = [n >> 16, (n >> 8) & 255, n & 255].map(function (v) { return Math.round(v * f); });
+    return 'rgb(' + c.join(',') + ')';
   }
 
   // ---------- oturum ----------
@@ -227,20 +395,19 @@ main{padding:20px 28px 40px;min-width:0}
   }
 
   // ---------- giriş ekranı ----------
-  function renderLogin(msg) {
+  function renderLogin() {
     root.innerHTML =
       '<div class="login"><form id="lf">' +
-      '<div class="brand"><img src="/logo-lm.png" alt="">LİG MASASI</div>' +
+      '<div class="brand" style="padding:0"><img src="/logo-lm.png" alt=""><b>LİG MASASI</b></div>' +
       '<h1>Yönetim Masası</h1>' +
       '<p>Turnuva ve bölge sorumluları için. Uygulamadaki hesabınızla girin.</p>' +
       '<label for="lp">Telefon</label><input id="lp" autocomplete="username" inputmode="tel" placeholder="5xx xxx xx xx" required>' +
       '<label for="lw">Şifre</label><input id="lw" type="password" autocomplete="current-password" required>' +
       '<button class="btn primary" id="lb">Giriş yap</button>' +
-      '<div class="err" id="le">' + esc(msg || '') + '</div>' +
+      '<div class="err" id="le"></div>' +
       '</form></div>';
-    var f = document.getElementById('lf');
     document.getElementById('lp').focus();
-    f.onsubmit = function (e) {
+    document.getElementById('lf').onsubmit = function (e) {
       e.preventDefault();
       var b = document.getElementById('lb');
       b.disabled = true;
@@ -258,47 +425,63 @@ main{padding:20px 28px 40px;min-width:0}
     };
   }
 
-  // ---------- panel ----------
+  // ---------- veri ----------
   function load() {
-    state.busy = true;
     var d = state.date;
     return api('rpc/desk_matches', {method: 'POST', body: {p_date: d}}).then(function (j) {
       if (d !== state.date) return;
       state.data = j;
-      state.busy = false;
+      var ls = j.leagues || [];
+      // Seçili turnuva artık listede yoksa: tek turnuvaysa o, değilse tümü.
+      if (state.league && !ls.some(function (l) { return l.id === state.league; })) state.league = null;
+      if (!state.league && ls.length === 1) state.league = ls[0].id;
       var n = rows().length;
       if (state.sel >= n) state.sel = n - 1;
-      renderMain();
+      renderTop();
+      renderContent();
     }, function (e) {
-      state.busy = false;
       if (session) toast(e.message, true);
     });
   }
-  function rows() {
+  function currentLeague() {
+    var ls = (state.data && state.data.leagues) || [];
+    for (var i = 0; i < ls.length; i++) if (ls[i].id === state.league) return ls[i];
+    return null;
+  }
+  function matches() {
     var m = (state.data && state.data.matches) || [];
-    // Sırası: önce sonucu bekleyen eski maçlar, sonra günün maçları.
-    return m.filter(function (x) { return x.overdue; }).concat(m.filter(function (x) { return !x.overdue; }));
+    return state.league ? m.filter(function (x) { return x.league_id === state.league; }) : m;
+  }
+  // Klavyeyle gezilen sıra: önce günün maçları, sonra sonucu bekleyenler.
+  function rows() {
+    var m = matches();
+    return m.filter(function (x) { return !x.overdue; }).concat(m.filter(function (x) { return x.overdue; }));
   }
   function setDate(d) {
     state.date = d;
     state.sel = -1;
-    renderMain();
+    renderContent();
     load();
   }
 
+  // ---------- iskelet ----------
   function render() {
     if (!session) return renderLogin();
+    var nav = NAV.map(function (n) {
+      if (n.sep) return '<div class="sep"></div>';
+      return '<button class="nav-btn' + (n.more ? ' more' : '') + '" data-view="' + n.id + '"' +
+        (state.view === n.id ? ' aria-current="page"' : '') + '>' + ICON[n.id] + esc(n.name) + '</button>';
+    }).join('');
     var u = session.user || {};
     var who = (u.email || '').replace('@masterclass.com', '') || u.phone || '';
     root.innerHTML =
-      '<div class="app"><aside>' +
-      '<div class="brand"><img src="/logo-lm.png" alt="">LİG MASASI</div>' +
-      '<button class="nav on">📅 Bugün</button>' +
-      '<button class="nav" disabled>⚽ Canlı giriş <small>YAKINDA</small></button>' +
-      '<button class="nav" disabled>✅ Onaylar <small>YAKINDA</small></button>' +
-      '<button class="nav" disabled>🗓️ Fikstür <small>YAKINDA</small></button>' +
-      '<div class="me">' + esc(who) + '<br><button id="lo">Çıkış yap</button></div>' +
-      '</aside><main id="main"></main></div>';
+      '<div class="app"><nav class="side" aria-label="Menü">' +
+      '<div class="brand"><img src="/logo-lm.png" alt=""><b>LİG MASASI</b></div>' + nav +
+      '<div class="foot"><span>' + esc(who) + '</span><button id="lo">Çıkış yap</button></div>' +
+      '</nav><div class="main"><header class="top" id="top"></header><main class="content" id="content"></main></div></div>';
+    Array.prototype.forEach.call(root.querySelectorAll('.nav-btn'), function (b) {
+      b.onclick = function () { go(b.getAttribute('data-view')); };
+    });
     document.getElementById('lo').onclick = function () {
       token().then(function (t) {
         fetch(BASE + '/auth/v1/logout', {method: 'POST', headers: {apikey: KEY, Authorization: 'Bearer ' + t}});
@@ -307,112 +490,251 @@ main{padding:20px 28px 40px;min-width:0}
       state.data = null;
       render();
     };
-    renderMain();
+    renderTop();
+    renderContent();
     if (!state.data) load();
   }
 
-  function rowHtml(m, i) {
-    var played = m.status === 'finished' || m.status === 'live' || m.status === 'halftime';
-    var score = played
-      ? '<div class="sc">' + m.hs + ' – ' + m.as + (m.hp != null && m.ap != null ? '<small>pen. ' + m.hp + '–' + m.ap + '</small>' : '') + '</div>'
-      : '<div class="sc none">–</div>';
-    var meta = [m.season, m.group, m.cup_round || (m.week ? m.week + '. hafta' : '')].filter(Boolean).join(' · ');
-    return '<div class="row' + (i === state.sel ? ' sel' : '') + '" data-i="' + i + '">' +
-      '<div class="when"><b>' + esc((m.time || '').slice(0, 5) || '--:--') + '</b>' + (m.overdue ? esc(shortDate(m.date)) : '') + '</div>' +
-      '<div class="tm r"><span>' + esc(m.home) + '</span>' + (m.home_logo ? '<img src="' + esc(m.home_logo) + '" alt="">' : '') + '</div>' +
-      score +
-      '<div class="tm">' + (m.away_logo ? '<img src="' + esc(m.away_logo) + '" alt="">' : '') + '<span>' + esc(m.away) + '</span></div>' +
-      '<span class="st ' + esc(m.status) + '">' + (STATUS[m.status] || esc(m.status)) + '</span>' +
-      '<button class="btn' + (m.status === 'finished' ? '' : ' primary') + '" data-score="' + i + '">' + (m.status === 'finished' ? 'Düzelt' : 'Skor gir') + '</button>' +
-      '<div class="meta">' + esc(meta) + '</div>' +
-      '</div>';
+  function go(view) {
+    state.view = view;
+    Array.prototype.forEach.call(root.querySelectorAll('.nav-btn'), function (b) {
+      if (b.getAttribute('data-view') === view) b.setAttribute('aria-current', 'page');
+      else b.removeAttribute('aria-current');
+    });
+    renderContent();
   }
 
-  function listHtml(list, offset) {
+  function renderTop() {
+    var top = document.getElementById('top');
+    if (!top) return;
+    var ls = (state.data && state.data.leagues) || [];
+    var cur = currentLeague();
+    var r = document.documentElement.style;
+    var c1 = cur && shade(cur.primary, .55), c2 = cur && shade(cur.primary, .8);
+    r.setProperty('--lg1', c1 || '#0a3b2c');
+    r.setProperty('--lg2', c2 || '#0d6b4c');
+    var name = cur ? cur.name : (ls.length ? 'Tüm turnuvalarım' : 'Yönetim Masası');
+    var u = session.user || {};
+    var meta = u.user_metadata || {};
+    var full = meta.full_name || meta.name || '';
+    var opts = ls.length > 1
+      ? '<select id="ls" aria-label="Turnuva seç"><option value="">Tüm turnuvalarım</option>' +
+        ls.map(function (l) {
+          return '<option value="' + esc(l.id) + '"' + (l.id === state.league ? ' selected' : '') + '>' + esc(l.name) + '</option>';
+        }).join('') + '</select>'
+      : '';
+    top.innerHTML =
+      '<div class="league">' +
+      (cur && cur.logo ? '<img src="' + esc(cur.logo) + '" alt="">' : '<div class="shield"></div>') +
+      '<b>' + esc(name) + '</b>' + (opts ? ICON.chev + opts : '') + '</div>' +
+      '<div class="search" title="Arama sonraki aşamada">' + ICON.search + '<span>Maç, takım, oyuncu ara</span><span class="kbd">Ctrl K</span></div>' +
+      (full ? '<div class="who"><i>' + esc(initials(full)) + '</i><span>' + esc(full) + '</span></div>' : '');
+    var sel = document.getElementById('ls');
+    if (sel) sel.onchange = function () {
+      state.league = sel.value || null;
+      try {
+        if (state.league) localStorage.setItem(LKEY, state.league);
+        else localStorage.removeItem(LKEY);
+      } catch (e) {}
+      state.sel = -1;
+      renderTop();
+      renderContent();
+    };
+  }
+
+  function renderContent() {
+    var el = document.getElementById('content');
+    if (!el) return;
+    if (state.view !== 'today') {
+      var n = NAV.filter(function (x) { return x.id === state.view; })[0];
+      el.innerHTML = '<div class="h-row"><div><h1>' + esc(n.name) + '</h1></div></div>' +
+        '<div class="box"><div class="soon"><b>Sıradaki aşamada</b>' + esc(SOON[state.view] || '') + '</div></div>';
+      return;
+    }
+    renderToday(el);
+  }
+
+  // ---------- Bugün ----------
+  function teamHtml(name, logo, score) {
+    return '<div class="team">' +
+      (logo ? '<img src="' + esc(logo) + '" alt="">' : '<span class="dot">' + esc(initials(name)) + '</span>') +
+      '<span>' + esc(name) + '</span>' + (score == null ? '' : '<em class="num">' + score + '</em>') + '</div>';
+  }
+  function metaOf(m) {
+    var bits = [];
+    if (m.status === 'live' || m.status === 'halftime') bits.push('<span class="pill live">' + (m.status === 'live' ? 'CANLI' : 'DEVRE ARASI') + '</span>');
+    else if (m.status === 'finished') bits.push('<span class="pill ok">BİTTİ</span>');
+    else if (m.status === 'postponed') bits.push('<span class="pill warn">ERTELENDİ</span>');
+    else if (m.status === 'cancelled') bits.push('<span class="pill warn">İPTAL</span>');
+    var t = [state.league ? '' : m.league, m.group, m.cup_round || (m.week ? m.week + '. hafta' : '')].filter(Boolean).join(' · ');
+    if (t) bits.push('<span>' + esc(t) + '</span>');
+    if (m.hp != null && m.ap != null) bits.push('<span class="pill mute">Penaltı ' + m.hp + '–' + m.ap + '</span>');
+    return '<div class="meta">' + bits.join('') + '</div>';
+  }
+  function matchRow(m, i) {
+    var played = m.status === 'finished' || m.status === 'live' || m.status === 'halftime';
+    var live = m.status === 'live' || m.status === 'halftime';
+    var btn = m.status === 'finished'
+      ? '<button class="btn ghost" data-score="' + i + '">Düzelt</button>'
+      : '<button class="btn' + (live ? ' live' : ' primary') + '" data-score="' + i + '">Skor gir</button>';
+    return '<div class="match' + (live ? ' is-live' : '') + (i === state.sel ? ' sel' : '') + '" data-i="' + i + '">' +
+      '<div class="time num">' + esc((m.time || '').slice(0, 5) || '--:--') + '</div>' +
+      '<div class="teams">' + teamHtml(m.home, m.home_logo, played ? m.hs : null) + teamHtml(m.away, m.away_logo, played ? m.as : null) + metaOf(m) + '</div>' +
+      '<div class="acts">' + btn + '</div></div>';
+  }
+  function overdueRow(m, i) {
+    return '<div class="match' + (i === state.sel ? ' sel' : '') + '" data-i="' + i + '">' +
+      '<div class="time num"><small>' + esc(shortDate(m.date)) + '</small>' + esc((m.time || '').slice(0, 5)) + '</div>' +
+      '<div class="teams">' + teamHtml(m.home, m.home_logo) + teamHtml(m.away, m.away_logo) + metaOf(m) + '</div>' +
+      '<div class="acts"><div class="score-in"><input class="num" inputmode="numeric" maxlength="2" placeholder="–" aria-label="' + esc(m.home) + ' skoru" data-h="' + i + '">' +
+      '<span>–</span><input class="num" inputmode="numeric" maxlength="2" placeholder="–" aria-label="' + esc(m.away) + ' skoru" data-a="' + i + '"></div>' +
+      '<button class="btn primary" data-quick="' + i + '">Kaydet</button></div></div>';
+  }
+  // Turnuva seçili değilse maçlar turnuva başlıklarıyla ayrılır.
+  function grouped(list, offset, fn) {
     var html = '', last = null;
     list.forEach(function (m, k) {
-      if (m.league !== last) {
-        html += '<div class="lg">' + esc(m.league || 'Turnuva') + '</div>';
-        last = m.league;
+      if (!state.league && m.league_id !== last) {
+        html += '<div class="lg-head">' + (m.league_logo ? '<img src="' + esc(m.league_logo) + '" alt="">' : '') + esc(m.league || 'Turnuva') + '</div>';
+        last = m.league_id;
       }
-      html += rowHtml(m, offset + k);
+      html += fn(m, offset + k);
     });
-    return '<div class="list">' + html + '</div>';
+    return html;
   }
 
-  function renderMain() {
-    var main = document.getElementById('main');
-    if (!main) return;
+  function renderToday(el) {
     var all = rows();
-    var over = all.filter(function (m) { return m.overdue; });
     var day = all.filter(function (m) { return !m.overdue; });
+    var over = all.filter(function (m) { return m.overdue; });
+    var liveN = day.filter(function (m) { return m.status === 'live' || m.status === 'halftime'; }).length;
+    var waitN = day.filter(function (m) { return m.status === 'notStarted'; }).length;
+    var doneN = day.filter(function (m) { return m.status === 'finished'; }).length;
+    var cur = currentLeague();
+    var sub = cur ? cur.name : 'Yönettiğiniz turnuvalar';
     var body;
     if (!state.data) {
-      body = '<div class="list"><div class="empty">Yükleniyor…</div></div>';
+      body = '<div class="box"><div class="empty" style="border:0">Yükleniyor…</div></div>';
     } else if (!state.data.can) {
-      body = '<div class="list"><div class="empty">Bu panel turnuva ve bölge sorumluları içindir.<br>Hesabınızda yönetim yetkisi görünmüyor.</div></div>';
+      body = '<div class="box"><div class="empty" style="border:0">Bu panel turnuva ve bölge sorumluları içindir.<br>Hesabınızda yönetim yetkisi görünmüyor.</div></div>';
     } else {
-      body = '';
+      body =
+        '<div class="tiles">' +
+        '<div class="tile live"><span class="big num">' + liveN + '</span><span class="cap">maç şu an canlı</span></div>' +
+        '<div class="tile"><span class="big num">' + waitN + '</span><span class="cap">maç oynanacak</span></div>' +
+        '<div class="tile ok"><span class="big num">' + doneN + '</span><span class="cap">maç bitti</span></div>' +
+        '<div class="tile' + (over.length ? ' warn' : ' off') + '"><span class="big num">' + over.length + '</span><span class="cap">maçın sonucu girilmedi</span></div>' +
+        '</div>' +
+        '<section class="box"><div class="box-head"><h2 class="label"></h2>' +
+        '<span class="hint">' + day.length + ' maç</span></div>' +
+        (day.length ? grouped(day, 0, matchRow) : '<div class="empty">Bu gün yönettiğiniz maç yok.</div>') +
+        '</section>';
       if (over.length) {
-        body += '<div class="section warn"><h2>⚠️ Sonucu girilmemiş maçlar (' + over.length + ')</h2>' + listHtml(over, 0) + '</div>';
+        body += '<section class="box"><div class="box-head"><h2 class="label warn">Sonucu girilmemiş maçlar</h2>' +
+          '<span class="hint">Skoru yazıp kaydedin; olaylar sonra eklenebilir</span></div>' +
+          grouped(over, day.length, overdueRow) + '</section>';
       }
-      body += '<div class="section"><h2>' + esc(dayTitle(state.date)) + ' · ' + day.length + ' maç</h2>' +
-        (day.length ? listHtml(day, over.length) : '<div class="list"><div class="empty">Bu gün yönettiğiniz maç yok.</div></div>') +
-        '</div>';
     }
-    main.innerHTML =
-      '<div class="top"><h1>Bugün</h1>' +
+    el.innerHTML =
+      '<div class="h-row"><div><h1>' + esc(dayWord(state.date)) + ' · ' + esc(longDate(state.date)) + '</h1>' +
+      '<p class="sub">' + esc(sub) + '</p></div>' +
       '<div class="day"><button class="btn" id="dp" title="Önceki gün (←)">‹</button>' +
       '<input type="date" id="dd" value="' + state.date + '">' +
       '<button class="btn" id="dn" title="Sonraki gün (→)">›</button>' +
-      (state.date !== today() ? '<button class="btn" id="dt">Bugün</button>' : '') + '</div>' +
-      '<div class="keys"><span><kbd>←</kbd><kbd>→</kbd> gün</span><span><kbd>↑</kbd><kbd>↓</kbd> maç seç</span><span><kbd>Enter</kbd> skor</span><span><kbd>B</kbd> bugün</span><span><kbd>R</kbd> yenile</span></div>' +
-      '</div>' + body;
+      (state.date !== today() ? '<button class="btn" id="dt">Bugün</button>' : '') + '</div></div>' +
+      body +
+      '<div class="keys"><span><span class="kbd">←</span> <span class="kbd">→</span> gün</span><span><span class="kbd">↑</span> <span class="kbd">↓</span> maç seç</span><span><span class="kbd">Enter</span> skor</span><span><span class="kbd">B</span> bugün</span><span><span class="kbd">R</span> yenile</span></div>';
+    // Başlık "Bugünün maçları", "Dünün maçları", "Pazartesi maçları" gibi.
+    var h = el.querySelector('.box-head .label');
+    if (h && !h.classList.contains('warn')) {
+      var w = dayWord(state.date);
+      h.textContent = (w === 'Bugün' ? 'Bugünün' : w === 'Dün' ? 'Dünün' : w === 'Yarın' ? 'Yarının' : w) + ' maçları';
+    }
     document.getElementById('dp').onclick = function () { setDate(addDays(state.date, -1)); };
     document.getElementById('dn').onclick = function () { setDate(addDays(state.date, 1)); };
     var dt = document.getElementById('dt');
     if (dt) dt.onclick = function () { setDate(today()); };
     document.getElementById('dd').onchange = function (e) { if (e.target.value) setDate(e.target.value); };
-    Array.prototype.forEach.call(main.querySelectorAll('.row'), function (el) {
-      el.onclick = function (e) {
-        var i = +el.getAttribute('data-i');
+
+    Array.prototype.forEach.call(el.querySelectorAll('.match'), function (row) {
+      var i = +row.getAttribute('data-i');
+      row.onclick = function (e) {
+        var t = e.target;
+        if (t.tagName === 'INPUT') return;
         state.sel = i;
-        if (e.target.hasAttribute('data-score')) return openScore(all[i]);
+        if (t.hasAttribute('data-score')) return openScore(all[i]);
+        if (t.hasAttribute('data-quick')) return quickSave(all[i], row, t);
         highlight();
       };
-      el.ondblclick = function () { openScore(all[+el.getAttribute('data-i')]); };
+      if (!all[i].overdue) row.ondblclick = function () { openScore(all[i]); };
+    });
+    Array.prototype.forEach.call(el.querySelectorAll('.score-in input'), function (inp) {
+      inp.addEventListener('input', function () {
+        inp.value = inp.value.replace(/\D/g, '');
+        if (inp.value.length === 1 && inp.hasAttribute('data-h')) inp.parentNode.querySelector('[data-a]').focus();
+      });
+      inp.addEventListener('focus', function () { inp.select(); });
+      inp.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        var row = inp.closest('.match');
+        quickSave(all[+row.getAttribute('data-i')], row, row.querySelector('[data-quick]'));
+      });
     });
   }
 
   function highlight() {
-    Array.prototype.forEach.call(document.querySelectorAll('.row'), function (el) {
+    Array.prototype.forEach.call(document.querySelectorAll('.match'), function (el) {
       var on = +el.getAttribute('data-i') === state.sel;
       el.classList.toggle('sel', on);
       if (on) el.scrollIntoView({block: 'nearest'});
     });
   }
 
-  // ---------- skor girişi ----------
+  // Sonucu girilmemiş maç: satırdaki kutulardan kaydet. Eleme maçı berabere
+  // yazılırsa penaltı için skor penceresi açılır.
+  function quickSave(m, row, btn) {
+    var h = row.querySelector('[data-h]'), a = row.querySelector('[data-a]');
+    if (h.value === '' || a.value === '') {
+      toast('İki skoru da yazın.', true);
+      (h.value === '' ? h : a).focus();
+      return;
+    }
+    var hs = +h.value, as = +a.value;
+    if (m.knockout && hs === as) return openScore(m, hs, as);
+    btn.disabled = true;
+    saveScore(m, hs, as, null, null).then(function () {
+      toast('Kaydedildi: ' + m.home + ' ' + hs + '–' + as + ' ' + m.away);
+      load();
+    }, function (e) {
+      btn.disabled = false;
+      toast(e.message, true);
+    });
+  }
+
+  // ---------- skor penceresi ----------
   // Uygulamadaki hızlı skor girişiyle aynı: skor yazılır, maç "Bitti" olur;
   // eleme maçı berabereyse penaltı skoru istenir. Haber, bildirim, puan
   // tablosu veritabanı tetikleyicileriyle güncellenir.
-  function openScore(m) {
+  function openScore(m, preH, preA) {
     if (!m) return;
     var has = m.status === 'finished' || m.hs || m.as;
+    var vh = preH != null ? preH : has ? m.hs : '';
+    var va = preA != null ? preA : has ? m.as : '';
     var ov = document.createElement('div');
     ov.className = 'ov';
     ov.innerHTML =
-      '<div class="dlg" role="dialog">' +
+      '<div class="dlg" role="dialog" aria-modal="true">' +
       '<h3>' + esc(m.home) + ' – ' + esc(m.away) + '</h3>' +
       '<div class="sub">' + esc([m.league, shortDate(m.date) + ' ' + (m.time || '').slice(0, 5)].join(' · ')) +
       (m.status !== 'finished' ? ' · kaydedince maç bitmiş sayılır' : '') + '</div>' +
-      '<div class="pair"><div><div class="t">' + esc(m.home) + '</div><input id="sh" inputmode="numeric" maxlength="2" value="' + (has ? m.hs : '') + '"></div>' +
+      '<div class="pair"><div><div class="t">' + esc(m.home) + '</div><input id="sh" class="num" inputmode="numeric" maxlength="2" value="' + vh + '"></div>' +
       '<div class="dash">–</div>' +
-      '<div><div class="t">' + esc(m.away) + '</div><input id="sa" inputmode="numeric" maxlength="2" value="' + (has ? m.as : '') + '"></div></div>' +
+      '<div><div class="t">' + esc(m.away) + '</div><input id="sa" class="num" inputmode="numeric" maxlength="2" value="' + va + '"></div></div>' +
       '<div class="pens" id="pens" hidden><div class="lbl">Eleme maçı berabere bitemez: penaltı skoru</div>' +
-      '<div class="pair"><input id="ph" inputmode="numeric" maxlength="2" value="' + (m.hp != null ? m.hp : '') + '"><div class="dash">–</div>' +
-      '<input id="pa" inputmode="numeric" maxlength="2" value="' + (m.ap != null ? m.ap : '') + '"></div></div>' +
-      '<div class="acts"><span class="hint"><kbd>Enter</kbd> kaydet · <kbd>Esc</kbd> vazgeç</span>' +
+      '<div class="pair"><input id="ph" class="num" inputmode="numeric" maxlength="2" value="' + (m.hp != null ? m.hp : '') + '"><div class="dash">–</div>' +
+      '<input id="pa" class="num" inputmode="numeric" maxlength="2" value="' + (m.ap != null ? m.ap : '') + '"></div></div>' +
+      '<div class="acts"><span class="hint"><span class="kbd">Enter</span> kaydet · <span class="kbd">Esc</span> vazgeç</span>' +
       '<button class="btn" id="sc">Vazgeç</button><button class="btn primary" id="ss">Kaydet</button></div>' +
       '</div>';
     document.body.appendChild(ov);
@@ -427,9 +749,11 @@ main{padding:20px 28px 40px;min-width:0}
       el.addEventListener('input', function () {
         el.value = el.value.replace(/\D/g, '');
         sync();
-        // Tek hane yazılınca sıradaki kutuya geçilir (10+ gol nadir; ikinci
-        // hane yine yazılabilir, odak geçtikten sonra Shift+Tab ile dönülür).
-        if (el.value.length === 1 && el === sh) sa.focus();
+        // Tek hane yazılınca sıradaki kutuya geçilir.
+        if (el.value.length === 1) {
+          if (el === sh) sa.focus();
+          else if (el === ph) pa.focus();
+        }
       });
     });
     sync();
@@ -442,13 +766,14 @@ main{padding:20px 28px 40px;min-width:0}
       if (btn.disabled) return;
       var hs = num(sh) || 0, as = num(sa) || 0;
       var hp = num(ph), ap = num(pa);
-      if (needsPens() && (hp == null || ap == null || hp === ap)) {
+      var pens = needsPens();
+      if (pens && (hp == null || ap == null || hp === ap)) {
         toast('Eleme maçı berabere bitemez: penaltı skorunu girin.', true);
         (hp == null ? ph : pa).focus();
         return;
       }
       btn.disabled = true;
-      saveScore(m, hs, as, m.knockout && needsPens() ? hp : null, m.knockout && needsPens() ? ap : null).then(function () {
+      saveScore(m, hs, as, pens ? hp : null, pens ? ap : null).then(function () {
         close();
         toast('Kaydedildi: ' + m.home + ' ' + hs + '–' + as + ' ' + m.away);
         load();
@@ -464,7 +789,7 @@ main{padding:20px 28px 40px;min-width:0}
       if (e.key === 'Escape') { e.preventDefault(); close(); }
       else if (e.key === 'Enter') { e.preventDefault(); save(); }
     });
-    sh.focus();
+    if (preH != null) { sync(); ph.focus(); } else sh.focus();
   }
 
   function saveScore(m, hs, as, hp, ap) {
@@ -499,13 +824,21 @@ main{padding:20px 28px 40px;min-width:0}
   document.addEventListener('keydown', function (e) {
     if (!session || state.dlg || e.metaKey || e.ctrlKey || e.altKey) return;
     var tag = (e.target.tagName || '').toLowerCase();
-    if (tag === 'input' || tag === 'textarea') return;
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+    if (state.view !== 'today') return;
     var all = rows();
     if (e.key === 'ArrowLeft') { e.preventDefault(); setDate(addDays(state.date, -1)); }
     else if (e.key === 'ArrowRight') { e.preventDefault(); setDate(addDays(state.date, 1)); }
     else if (e.key === 'ArrowDown' && all.length) { e.preventDefault(); state.sel = Math.min(all.length - 1, state.sel + 1); highlight(); }
     else if (e.key === 'ArrowUp' && all.length) { e.preventDefault(); state.sel = Math.max(0, state.sel - 1); highlight(); }
-    else if (e.key === 'Enter' && state.sel >= 0) { e.preventDefault(); openScore(all[state.sel]); }
+    else if (e.key === 'Enter' && state.sel >= 0) {
+      e.preventDefault();
+      var m = all[state.sel];
+      if (m.overdue) {
+        var row = document.querySelector('.match[data-i="' + state.sel + '"] [data-h]');
+        if (row) row.focus();
+      } else openScore(m);
+    }
     else if (e.key === 'b' || e.key === 'B') { setDate(today()); }
     else if (e.key === 'r' || e.key === 'R') { load(); }
   });
