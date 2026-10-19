@@ -91,6 +91,7 @@ begin
         'player', trim(coalesce(p.name, '') || ' ' || coalesce(p.surname, '')),
         'assist', trim(coalesce(pa.name, '') || ' ' || coalesce(pa.surname, '')),
         'sub_in', trim(coalesce(pi.name, '') || ' ' || coalesce(pi.surname, '')),
+        'sub_in_id', e.sub_in_player_id,
         'own', coalesce(e.is_own_goal, false), 'pen', coalesce(e.is_penalty, false)
       ) order by e.minute nulls last, e.created_at)
       from public.match_events e
