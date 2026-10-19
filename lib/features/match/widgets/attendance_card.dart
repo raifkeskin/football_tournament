@@ -568,14 +568,14 @@ class _AttendanceList extends StatelessWidget {
               children: [
                 Expanded(
                   child: AdminSecondaryButton(
-                    label: summary.closed ? 'YENİDEN AÇ' : 'SORGUYU SONLANDIR',
+                    label: summary.closed ? 'BAŞLAT' : 'SONLANDIR',
                     onPressed: summary.matchOpen ? onToggleClosed : null,
                   ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: AdminPrimaryButton(
-                    label: 'GRUBA PAYLAŞ',
+                    label: 'PAYLAŞ',
                     icon: Icons.share_outlined,
                     onPressed: onShareGroup,
                   ),
