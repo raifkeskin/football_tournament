@@ -231,7 +231,20 @@ Kalıcı maliyet: sonrasında her yeni özellik iki dilde yazılır.
   - Menüde talep sayısı rozeti görünür.
   - Kısayollar: O onayla, X reddet.
   - Kayıtlar `desk_approvals` RPC'sinden gelir (security invoker).
-- **Sıradakiler:** Fikstür tablosu, Puan Durumu, Cezalar, Sponsorlar, Takımlar, Lisanslar, Haberler, Ctrl+K arama.
+- **Kalan bölümler YAPILDI (2026-10-19):** tek RPC `desk_season`'dan beslenirler.
+  - **Fikstür:** haftalık tablo; tarih, saat, saha ve durum yerinde değişir.
+  - **Puan Durumu:** uygulamadaki sıralama kuralıyla.
+  - **Takımlar:** kadro ve sorumlu.
+  - **Lisanslar:** oyuncu arama.
+  - **Cezalar:** liste.
+  - **Sponsorlar:** ekle, düzenle, gizle, sil; logo yüklenir.
+  - **Haberler:** yeni haber (en çok 5 fotoğraf), yayınla/kaldır, sil.
+  - **Ctrl+K arama.**
+- **Panelde olmayanlar** (uygulamadan yapılır):
+  - oyuncu lisansı ekleme
+  - kadro düzenleme
+  - esame
+  - sponsor logosunun arka plan temizliği
 
 ### Web'e taşınacaklar
 Uygulamada yapılan ve panele de dokunan değişiklikler buraya yazılır. Kullanıcı "web'e uygula" deyince toplu olarak işlenir, sonra liste temizlenir. Veritabanı kuralları (RPC, tetikleyici, RLS) iki tarafa kendiliğinden yansır, buraya yazılmaz.

@@ -305,9 +305,66 @@ button.tile:hover { border-color: #33476e; }
 .pen-n input { width: 46px; padding: 5px; text-align: center; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font: 800 16px/1 var(--display); }
 .dlg textarea { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font: inherit; resize: vertical; }
 
-/* Henüz yapılmayan bölüm */
-.soon { padding: 40px 20px; text-align: center; color: var(--muted); }
-.soon b { display: block; color: var(--fg); font: 800 22px/1.2 var(--display); margin-bottom: 6px; }
+/* ---- Sezon bölümleri ---- */
+.sel, .inp { padding: 7px 10px; border-radius: 9px; border: 1px solid var(--line); background: var(--card-2); color: var(--fg); font: inherit; }
+.inp.big { width: 100%; font-size: 17px; padding: 12px 14px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 5px 12px; font-weight: 700; font-size: 13px; color: var(--muted); }
+.chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.table-wrap { overflow-x: auto; }
+.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
+.tbl th, .tbl td { padding: 8px 12px; border-top: 1px solid var(--line); text-align: left; white-space: nowrap; }
+.tbl th { color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: .8px; border-top: 0; background: var(--panel); }
+.tbl .c { text-align: center; } .tbl .r { text-align: right; } .tbl .b { font-weight: 700; } .tbl .mut { color: var(--muted); }
+.tbl input, .tbl select { padding: 5px 7px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font: inherit; font-size: 13.5px; }
+.tbl tr:hover td { background: rgba(255,255,255,.02); }
+.tbl .empty { border-top: 0; }
+.tcell { display: inline-flex; align-items: center; gap: 8px; }
+.tcell img { width: 22px; height: 22px; object-fit: contain; }
+.tcell img.ph { border-radius: 50%; object-fit: cover; }
+.frm { display: inline-flex; gap: 3px; }
+.frm i { width: 18px; height: 18px; border-radius: 4px; display: grid; place-items: center; font: 800 10px/1 var(--body); font-style: normal; color: #fff; }
+.frm .fG { background: #16a34a; } .frm .fB { background: #64748b; } .frm .fM { background: #dc2626; }
+.two { display: grid; grid-template-columns: minmax(260px, .7fr) minmax(0, 1.6fr); gap: 18px; align-items: start; }
+.tlist { display: grid; gap: 6px; }
+.tcard { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); text-align: left; }
+.tcard.sel { border-color: var(--accent); background: rgba(16,185,129,.1); }
+.tcard img, .tcard .dot { width: 30px; height: 30px; object-fit: contain; flex: none; }
+.tcard .dot { border-radius: 50%; background: var(--card-2); display: grid; place-items: center; font-size: 11px; font-weight: 800; }
+.tcard .tx { display: grid; min-width: 0; }
+.tcard .tx b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tcard small { color: var(--muted); }
+.filters { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.filters .inp { min-width: 260px; }
+.spgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; padding: 4px 16px 16px; }
+.spc { border: 1px solid var(--line); border-radius: 14px; padding: 12px; background: var(--card-2); display: grid; gap: 4px; }
+.spc.off { opacity: .5; }
+.spc .lg { height: 70px; display: grid; place-items: center; background: #fff; border-radius: 10px; margin-bottom: 6px; }
+.spc .lg img { max-height: 60px; max-width: 90%; object-fit: contain; }
+.spc small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.spc .acts { justify-content: start; margin-top: 6px; }
+.form { display: grid; gap: 12px; }
+.form.pad { padding: 4px 16px 16px; }
+.form label { display: grid; gap: 5px; font-size: 13px; color: var(--muted); font-weight: 600; }
+.form label.chk { display: flex; align-items: center; gap: 8px; }
+.form textarea { resize: vertical; }
+.dlg .form { margin: 14px 0 4px; }
+.nlist { display: grid; }
+.nw { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 16px; border-top: 1px solid var(--line); }
+.nw.off { opacity: .6; }
+.nw img, .nw .noimg { width: 64px; height: 64px; border-radius: 10px; object-fit: cover; background: var(--card-2); }
+.nw p { margin: 0 0 3px; }
+.nw .acts { flex-direction: column; align-items: stretch; }
+.nw .acts .btn { padding: 4px 9px; font-size: 12.5px; }
+.top-ov { align-items: flex-start; padding-top: 12vh; }
+.sbox { max-width: 560px; display: grid; gap: 10px; }
+.qr { display: grid; gap: 4px; max-height: 50vh; overflow: auto; }
+.qi { display: grid; text-align: left; padding: 9px 12px; border-radius: 10px; border: 1px solid transparent; background: transparent; }
+.qi small { color: var(--muted); }
+.qi.sel, .qi:hover { background: rgba(16,185,129,.12); border-color: rgba(16,185,129,.4); }
+.search { cursor: pointer; }
+@media (max-width: 900px) { .two { grid-template-columns: 1fr; } }
+
 
 /* Skor penceresi */
 .ov { position: fixed; inset: 0; background: rgba(2,6,23,.7); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 10; }
@@ -360,7 +417,9 @@ button.tile:hover { border-color: #33476e; }
   var state = {view: 'today', date: today(), data: null, sel: -1, dlg: null, league: null,
     // Canlı maç: seçili maç, verisi, seçili olay türü ve yarım kalan seçim.
     liveId: null, live: null, liveSig: '', mode: null, pick: null, minuteManual: false, offset: 0,
-    appr: null, apprSel: -1};
+    appr: null, apprSel: -1,
+    // Sezon bölümleri: sezon verisi, fikstürde hafta, takım, lisans araması.
+    season: null, fxWeek: null, teamSel: null, lisQ: '', lisTeam: null};
   try { state.league = localStorage.getItem(LKEY); } catch (e) {}
 
   var ICON = {
@@ -391,16 +450,6 @@ button.tile:hover { border-color: #33476e; }
     {id: 'penalties', name: 'Cezalar', more: true},
     {id: 'sponsors', name: 'Sponsorlar', more: true}
   ];
-  var SOON = {
-    live: 'Canlı maçta gol, kart, değişiklik ve devreler tek tuşla girilecek.',
-    fixture: 'Haftanın maçları tabloda; tarih, saat ve saha hızlıca düzenlenecek.',
-    standings: 'Puan durumu ve gruplar.',
-    teams: 'Takımlar ve kadrolar.',
-    licenses: 'Lisans başvuruları ve süreleri.',
-    news: 'Haber ekleme ve düzenleme.',
-    penalties: 'Kart ve disiplin cezaları.',
-    sponsors: 'Ana ve alt sponsorlar.'
-  };
 
   // ---------- yardımcılar ----------
   function esc(s) {
@@ -667,8 +716,9 @@ button.tile:hover { border-color: #33476e; }
       '<div class="league">' +
       (cur && cur.logo ? '<img src="' + esc(cur.logo) + '" alt="">' : '<div class="shield"></div>') +
       '<b>' + esc(name) + '</b>' + (opts ? ICON.chev + opts : '') + '</div>' +
-      '<div class="search" title="Arama sonraki aşamada">' + ICON.search + '<span>Maç, takım, oyuncu ara</span><span class="kbd">Ctrl K</span></div>' +
+      '<div class="search" role="button" tabindex="0" title="Ara (Ctrl K)">' + ICON.search + '<span>Maç, takım, oyuncu ara</span><span class="kbd">Ctrl K</span></div>' +
       (full ? '<div class="who"><i>' + esc(initials(full)) + '</i><span>' + esc(full) + '</span></div>' : '');
+    top.querySelector('.search').onclick = openSearch;
     var sel = document.getElementById('ls');
     if (sel) sel.onchange = function () {
       state.league = sel.value || null;
@@ -680,8 +730,11 @@ button.tile:hover { border-color: #33476e; }
       syncSel();
       renderTop();
       updateApprCount();
-      if (state.view === 'approvals') renderContent();
-      else renderList();
+      state.season = null;
+      state.fxWeek = null;
+      state.teamSel = null;
+      if (state.view === 'today' || state.view === 'live') renderList();
+      else renderContent();
     };
   }
 
@@ -696,9 +749,9 @@ button.tile:hover { border-color: #33476e; }
       return;
     }
     if (state.view === 'approvals') return renderApprovals(el);
-    var n = NAV.filter(function (x) { return x.id === state.view; })[0];
-    el.innerHTML = '<div class="h-row"><div><h1>' + esc(n.name) + '</h1></div></div>' +
-      '<div class="box"><div class="soon"><b>Sıradaki aşamada</b>' + esc(SOON[state.view] || '') + '</div></div>';
+    if (SEASON_VIEWS[state.view]) return renderSeasonView(el);
+    state.view = 'today';
+    renderContent();
   }
 
   // ---------- Maç listesi ----------
@@ -1750,9 +1803,508 @@ button.tile:hover { border-color: #33476e; }
     }
   }
 
+  // ---------- Sezon bölümleri ----------
+  // Fikstür, Puan Durumu, Takımlar, Lisanslar, Cezalar, Sponsorlar ve
+  // Haberler aynı sezon verisini kullanır (desk_season, tek istek).
+  var SEASON_VIEWS = {fixture: 1, standings: 1, teams: 1, licenses: 1, penalties: 1, sponsors: 1, news: 1};
+  var STATUS_TR = {notStarted: 'Başlamadı', live: 'Canlı', halftime: 'Devre arası', finished: 'Bitti', postponed: 'Ertelendi', cancelled: 'İptal'};
+  var POS_TR = {GK: 'Kaleci', DF: 'Defans', MF: 'Orta saha', FW: 'Forvet'};
+
+  // Turnuva seçili değilse ilk turnuva kullanılır.
+  function seasonLeague() {
+    var ls = (state.data && state.data.leagues) || [];
+    return state.league || (ls[0] && ls[0].id) || null;
+  }
+  function loadSeason(seasonId) {
+    var lg = seasonLeague();
+    if (!lg) return Promise.resolve();
+    return api('rpc/desk_season', {method: 'POST', body: {p_league_id: lg, p_season_id: seasonId || null}}).then(function (j) {
+      if (lg !== seasonLeague()) return;
+      state.season = {league: lg, data: j};
+      if (SEASON_VIEWS[state.view]) renderContent();
+    }, function (e) { toast(e.message, true); });
+  }
+  function S() { return state.season && state.season.league === seasonLeague() ? state.season.data : null; }
+  function teamById(id) {
+    var d = S();
+    return d ? d.teams.filter(function (t) { return t.id === id; })[0] : null;
+  }
+  function teamName(id) { var t = teamById(id); return t ? t.name : '–'; }
+  function groupName(id) {
+    var d = S(), g = d && d.groups.filter(function (x) { return x.id === id; })[0];
+    return g ? g.name : '';
+  }
+  function seasonBar(title, right) {
+    var d = S();
+    var opts = d.seasons.map(function (s) {
+      return '<option value="' + esc(s.id) + '"' + (s.id === d.season_id ? ' selected' : '') + '>' + esc(s.name) + (s.active ? '' : ' (pasif)') + '</option>';
+    }).join('');
+    var lg = currentLeague() || ((state.data && state.data.leagues) || []).filter(function (l) { return l.id === seasonLeague(); })[0];
+    return '<div class="h-row"><div><h1>' + esc(title) + '</h1><p class="sub">' + esc(lg ? lg.name : '') +
+      (!state.league && (state.data.leagues || []).length > 1 ? ' · başka turnuva için üst banttan seçin' : '') + '</p></div>' +
+      '<div class="day">' + (right || '') + '<select id="ssel" class="sel">' + opts + '</select></div></div>';
+  }
+  function bindSeasonBar(el) {
+    var s = el.querySelector('#ssel');
+    if (s) s.onchange = function () { state.season = null; renderContent(); loadSeason(s.value); };
+  }
+
+  function renderSeasonView(el) {
+    if (!state.data) { el.innerHTML = '<div class="box"><div class="empty" style="border:0">Yükleniyor…</div></div>'; return; }
+    if (!seasonLeague()) { el.innerHTML = '<div class="box"><div class="empty" style="border:0">Yönettiğiniz turnuva yok.</div></div>'; return; }
+    if (!S()) {
+      el.innerHTML = '<div class="box"><div class="empty" style="border:0">Yükleniyor…</div></div>';
+      loadSeason();
+      return;
+    }
+    ({fixture: renderFixture, standings: renderStandings, teams: renderTeams, licenses: renderLicenses,
+      penalties: renderPenalties, sponsors: renderSponsors, news: renderNews})[state.view](el);
+    bindSeasonBar(el);
+  }
+
+  // ----- Fikstür: hafta hafta tablo; tarih, saat, saha ve durum yerinde
+  // değişir (her değişiklik hemen kaydedilir).
+  function renderFixture(el) {
+    var d = S();
+    var weeks = [];
+    d.matches.forEach(function (m) { var w = m.week == null ? 0 : m.week; if (weeks.indexOf(w) < 0) weeks.push(w); });
+    weeks.sort(function (a, b) { return a - b; });
+    if (state.fxWeek == null || weeks.indexOf(state.fxWeek) < 0) {
+      // Varsayılan: oynanmamış maçı olan ilk hafta.
+      var open = d.matches.filter(function (m) { return m.status === 'notStarted' || m.status === 'live' || m.status === 'halftime'; })[0];
+      state.fxWeek = open ? (open.week == null ? 0 : open.week) : weeks[weeks.length - 1];
+    }
+    var list = d.matches.filter(function (m) { return (m.week == null ? 0 : m.week) === state.fxWeek; });
+    var multiGroup = d.groups.length > 1;
+    var pitchOpts = function (sel) {
+      return '<option value="">—</option>' + d.pitches.map(function (p) {
+        return '<option value="' + esc(p.id) + '"' + (p.id === sel ? ' selected' : '') + '>' + esc(p.name) + '</option>';
+      }).join('');
+    };
+    var rowsHtml = list.map(function (m) {
+      var editable = m.status === 'notStarted' || m.status === 'postponed' || m.status === 'cancelled';
+      var played = m.status === 'finished' || m.status === 'live' || m.status === 'halftime';
+      var st = editable
+        ? '<select data-f="status" data-id="' + m.id + '">' + ['notStarted', 'postponed', 'cancelled'].map(function (s) {
+            return '<option value="' + s + '"' + (s === m.status ? ' selected' : '') + '>' + STATUS_TR[s] + '</option>';
+          }).join('') + '</select>'
+        : '<span class="pill ' + (m.status === 'finished' ? 'ok' : 'live') + '">' + STATUS_TR[m.status] + '</span>';
+      return '<tr>' +
+        (multiGroup ? '<td class="mut">' + esc(groupName(m.group_id) || m.cup_round || '') + '</td>' : '') +
+        '<td><input type="date" data-f="match_date" data-id="' + m.id + '" value="' + esc(m.date || '') + '"></td>' +
+        '<td><input type="time" data-f="match_time" data-id="' + m.id + '" value="' + esc((m.time || '').slice(0, 5)) + '"></td>' +
+        '<td><select data-f="pitch_id" data-id="' + m.id + '">' + pitchOpts(m.pitch_id) + '</select></td>' +
+        '<td class="r b">' + esc(teamName(m.home_id)) + '</td>' +
+        '<td class="c b num">' + (played ? m.hs + ' – ' + m.as : '–') + '</td>' +
+        '<td class="b">' + esc(teamName(m.away_id)) + '</td>' +
+        '<td>' + st + '</td>' +
+        '<td><button class="btn ghost" data-open="' + m.id + '">Maç</button></td></tr>';
+    }).join('');
+    el.innerHTML = seasonBar('Fikstür') +
+      '<div class="chips">' + weeks.map(function (w) {
+        return '<button class="chip' + (w === state.fxWeek ? ' on' : '') + '" data-w="' + w + '">' + (w === 0 ? 'Haftasız' : w + '. hafta') + '</button>';
+      }).join('') + '</div>' +
+      '<section class="box"><div class="table-wrap"><table class="tbl"><thead><tr>' + (multiGroup ? '<th>Grup</th>' : '') +
+      '<th>Tarih</th><th>Saat</th><th>Saha</th><th class="r">Ev sahibi</th><th class="c">Skor</th><th>Deplasman</th><th>Durum</th><th></th></tr></thead><tbody>' +
+      (rowsHtml || '<tr><td colspan="9" class="empty">Bu haftada maç yok.</td></tr>') + '</tbody></table></div></section>' +
+      '<p class="sub">Değişiklikler hemen kaydedilir. Skor ve olaylar için Bugün ekranında maçı açın.</p>';
+    Array.prototype.forEach.call(el.querySelectorAll('[data-w]'), function (b) {
+      b.onclick = function () { state.fxWeek = +b.getAttribute('data-w'); renderContent(); };
+    });
+    Array.prototype.forEach.call(el.querySelectorAll('[data-f]'), function (inp) {
+      inp.onchange = function () { saveFixture(inp); };
+    });
+    Array.prototype.forEach.call(el.querySelectorAll('[data-open]'), function (b) {
+      b.onclick = function () {
+        var m = d.matches.filter(function (x) { return x.id === b.getAttribute('data-open'); })[0];
+        if (m && m.date) state.date = m.date;
+        go('today');
+        load().then(function () { openLive(m.id); });
+      };
+    });
+  }
+  function saveFixture(inp) {
+    var f = inp.getAttribute('data-f'), id = inp.getAttribute('data-id');
+    var body = {};
+    body[f] = inp.value || null;
+    if (f === 'status') body.is_completed = false;
+    inp.disabled = true;
+    api('matches?id=eq.' + id + '&select=id', {method: 'PATCH', body: body, prefer: 'return=representation'}).then(function (r) {
+      inp.disabled = false;
+      if (!r || !r.length) throw new Error('Maç güncellenemedi: bu maçı düzenleme yetkiniz yok.');
+      var m = S().matches.filter(function (x) { return x.id === id; })[0];
+      if (m) { if (f === 'match_date') m.date = body[f]; else if (f === 'match_time') m.time = body[f]; else if (f === 'pitch_id') m.pitch_id = body[f]; else m.status = body[f]; }
+      toast('Kaydedildi.');
+      state.data && load();
+    }).catch(function (e) { inp.disabled = false; toast(e.message, true); });
+  }
+
+  // ----- Puan Durumu (uygulamadaki hesapla aynı: puan, ikili averaj,
+  // genel averaj, atılan gol, ad; eleme maçları sayılmaz).
+  function standingsOf(groupId) {
+    var d = S();
+    var ms = d.matches.filter(function (m) { return !m.knockout && (groupId ? m.group_id === groupId : true); });
+    var played = function (m) { return m.status === 'finished'; };
+    var table = {};
+    d.teams.forEach(function (t) {
+      if (!groupId || t.group_id === groupId) table[t.id] = {id: t.id, name: t.name, logo: t.logo, o: 0, g: 0, b: 0, m: 0, a: 0, y: 0, p: 0, form: []};
+    });
+    ms.forEach(function (m) {
+      if (!table[m.home_id] && groupId) return;
+      [m.home_id, m.away_id].forEach(function (id) { if (!table[id]) { var t = teamById(id); table[id] = {id: id, name: t ? t.name : '–', logo: t && t.logo, o: 0, g: 0, b: 0, m: 0, a: 0, y: 0, p: 0, form: []}; } });
+    });
+    var done = ms.filter(played).sort(function (x, y) { return ((x.date || '') + (x.time || '')).localeCompare((y.date || '') + (y.time || '')); });
+    done.forEach(function (m) {
+      var h = table[m.home_id], a = table[m.away_id];
+      if (!h || !a) return;
+      var hs = m.hs || 0, as = m.as || 0;
+      h.o++; a.o++; h.a += hs; h.y += as; a.a += as; a.y += hs;
+      if (hs > as) { h.g++; h.p += 3; a.m++; h.form.push('G'); a.form.push('M'); }
+      else if (as > hs) { a.g++; a.p += 3; h.m++; h.form.push('M'); a.form.push('G'); }
+      else { h.b++; a.b++; h.p++; a.p++; h.form.push('B'); a.form.push('B'); }
+    });
+    function h2h(x, y) {
+      var px = 0, py = 0, gx = 0, gy = 0;
+      done.forEach(function (m) {
+        var xh = m.home_id === x.id && m.away_id === y.id, yh = m.home_id === y.id && m.away_id === x.id;
+        if (!xh && !yh) return;
+        var xg = xh ? m.hs : m.as, yg = xh ? m.as : m.hs;
+        gx += xg - yg; gy += yg - xg;
+        if (xg > yg) px += 3; else if (yg > xg) py += 3; else { px++; py++; }
+      });
+      return [px, py, gx, gy];
+    }
+    return Object.keys(table).map(function (k) { return table[k]; }).sort(function (x, y) {
+      if (y.p !== x.p) return y.p - x.p;
+      var h = h2h(x, y);
+      if (h[1] !== h[0]) return h[1] - h[0];
+      if (h[3] !== h[2]) return h[3] - h[2];
+      if ((y.a - y.y) !== (x.a - x.y)) return (y.a - y.y) - (x.a - x.y);
+      if (y.a !== x.a) return y.a - x.a;
+      return x.name.localeCompare(y.name, 'tr');
+    });
+  }
+  function renderStandings(el) {
+    var d = S();
+    var groups = d.groups.length ? d.groups : [{id: null, name: 'Puan durumu'}];
+    var html = groups.map(function (g) {
+      var rows = standingsOf(g.id);
+      return '<section class="box"><div class="box-head"><h2 class="label">' + esc(g.name) + '</h2></div><div class="table-wrap"><table class="tbl st"><thead><tr>' +
+        '<th class="c">#</th><th>Takım</th><th class="c">O</th><th class="c">G</th><th class="c">B</th><th class="c">M</th><th class="c">A</th><th class="c">Y</th><th class="c">Av</th><th class="c">P</th><th>Form</th></tr></thead><tbody>' +
+        rows.map(function (t, i) {
+          return '<tr><td class="c mut">' + (i + 1) + '</td><td class="b"><span class="tcell">' + (t.logo ? '<img src="' + esc(t.logo) + '" alt="">' : '') + esc(t.name) + '</span></td>' +
+            '<td class="c">' + t.o + '</td><td class="c">' + t.g + '</td><td class="c">' + t.b + '</td><td class="c">' + t.m + '</td><td class="c">' + t.a + '</td><td class="c">' + t.y + '</td>' +
+            '<td class="c">' + (t.a - t.y > 0 ? '+' : '') + (t.a - t.y) + '</td><td class="c b">' + t.p + '</td>' +
+            '<td><span class="frm">' + t.form.slice(-5).map(function (f) { return '<i class="f' + f + '">' + f + '</i>'; }).join('') + '</span></td></tr>';
+        }).join('') + '</tbody></table></div></section>';
+    }).join('');
+    el.innerHTML = seasonBar('Puan Durumu') + html +
+      '<p class="sub">Biten maçlar sayılır; eleme maçları puan tablosuna girmez. Sıralama: puan, ikili averaj, genel averaj, atılan gol.</p>';
+  }
+
+  // ----- Takımlar: solda takımlar, sağda seçilen takımın kadrosu.
+  function renderTeams(el) {
+    var d = S();
+    if (!state.teamSel || !teamById(state.teamSel)) state.teamSel = d.teams[0] && d.teams[0].id;
+    var counts = {};
+    d.players.forEach(function (p) { counts[p.team_id] = (counts[p.team_id] || 0) + 1; });
+    var list = d.teams.map(function (t) {
+      return '<button class="tcard' + (t.id === state.teamSel ? ' sel' : '') + '" data-t="' + t.id + '">' +
+        (t.logo ? '<img src="' + esc(t.logo) + '" alt="">' : '<span class="dot">' + esc(initials(t.name)) + '</span>') +
+        '<span class="tx"><b>' + esc(t.name) + '</b><small>' + esc([groupName(t.group_id), (counts[t.id] || 0) + ' oyuncu'].filter(Boolean).join(' · ')) + '</small></span></button>';
+    }).join('');
+    var t = teamById(state.teamSel);
+    var roster = t ? d.players.filter(function (p) { return p.team_id === t.id; }).sort(function (a, b) { return (a.no == null ? 999 : a.no) - (b.no == null ? 999 : b.no); }) : [];
+    var right = t ? '<section class="box"><div class="box-head"><h2 class="label">' + esc(t.name) + '</h2><span class="hint">' + esc(t.managers ? 'Sorumlu: ' + t.managers : 'Sorumlu atanmamış') + '</span></div>' +
+      '<div class="table-wrap"><table class="tbl"><thead><tr><th class="c">No</th><th>Oyuncu</th><th>Mevki</th><th class="c">Doğum yılı</th></tr></thead><tbody>' +
+      (roster.map(function (p) {
+        return '<tr><td class="c b num">' + (p.no == null ? '–' : p.no) + '</td><td class="b"><span class="tcell">' + (p.photo ? '<img class="ph" src="' + esc(p.photo) + '" alt="">' : '') + esc(p.name) + '</span></td>' +
+          '<td class="mut">' + esc(POS_TR[p.pos] || p.pos || '') + '</td><td class="c mut">' + esc(p.birth_year || '') + '</td></tr>';
+      }).join('') || '<tr><td colspan="4" class="empty">Kadro boş.</td></tr>') + '</tbody></table></div></section>' : '';
+    el.innerHTML = seasonBar('Takımlar') + '<div class="two"><div class="tlist">' + (list || '<div class="empty">Takım yok.</div>') + '</div><div>' + right + '</div></div>' +
+      '<p class="sub">Kadro ekleme ve çıkarma takım sorumlusunun talebiyle yapılır (Onaylar).</p>';
+    Array.prototype.forEach.call(el.querySelectorAll('[data-t]'), function (b) {
+      b.onclick = function () { state.teamSel = b.getAttribute('data-t'); renderContent(); };
+    });
+  }
+
+  // ----- Lisanslar: sezonun bütün lisanslı oyuncuları; ad ya da takımla ara.
+  function renderLicenses(el) {
+    var d = S();
+    var q = (state.lisQ || '').toLocaleLowerCase('tr');
+    var list = d.players.filter(function (p) {
+      if (state.lisTeam && p.team_id !== state.lisTeam) return false;
+      return !q || p.name.toLocaleLowerCase('tr').indexOf(q) >= 0 || teamName(p.team_id).toLocaleLowerCase('tr').indexOf(q) >= 0;
+    });
+    var teamOpts = '<option value="">Bütün takımlar</option>' + d.teams.map(function (t) {
+      return '<option value="' + esc(t.id) + '"' + (t.id === state.lisTeam ? ' selected' : '') + '>' + esc(t.name) + '</option>';
+    }).join('');
+    el.innerHTML = seasonBar('Lisanslar') +
+      '<div class="filters"><input id="lq" class="inp" placeholder="Oyuncu ya da takım ara" value="' + esc(state.lisQ || '') + '"><select id="lt" class="sel">' + teamOpts + '</select><span class="sub">' + list.length + ' oyuncu</span></div>' +
+      '<section class="box"><div class="table-wrap"><table class="tbl"><thead><tr><th>Oyuncu</th><th>Takım</th><th class="c">No</th><th>Mevki</th><th class="c">Doğum yılı</th></tr></thead><tbody>' +
+      (list.slice(0, 400).map(function (p) {
+        return '<tr><td class="b"><span class="tcell">' + (p.photo ? '<img class="ph" src="' + esc(p.photo) + '" alt="">' : '') + esc(p.name) + '</span></td><td>' + esc(teamName(p.team_id)) + '</td>' +
+          '<td class="c num">' + (p.no == null ? '–' : p.no) + '</td><td class="mut">' + esc(POS_TR[p.pos] || p.pos || '') + '</td><td class="c mut">' + esc(p.birth_year || '') + '</td></tr>';
+      }).join('') || '<tr><td colspan="5" class="empty">Oyuncu bulunamadı.</td></tr>') + '</tbody></table></div></section>' +
+      '<p class="sub">Yeni oyuncu lisansı ve kimlik bilgileri uygulamadan girilir (TC ve telefon gizli tutulur).</p>';
+    var lq = el.querySelector('#lq');
+    lq.oninput = function () {
+      state.lisQ = lq.value;
+      var pos = lq.selectionStart;
+      renderContent();
+      var n = document.getElementById('lq');
+      n.focus();
+      n.setSelectionRange(pos, pos);
+    };
+    el.querySelector('#lt').onchange = function (e) { state.lisTeam = e.target.value || null; renderContent(); };
+  }
+
+  // ----- Cezalar: sezonun kart cezaları; bekleyenler Onaylar'dan onaylanır.
+  function renderPenalties(el) {
+    var d = S();
+    var teamOf = {};
+    d.players.forEach(function (p) { teamOf[p.id] = p.team_id; });
+    var stTr = {pending: ['Onay bekliyor', 'warn'], approved: ['Onaylı', 'ok'], rejected: ['Reddedildi', 'mute']};
+    var rowsHtml = d.penalties.map(function (p) {
+      var st = stTr[p.status] || [p.status, 'mute'];
+      var served = p.status === 'approved' && !p.active;
+      return '<tr><td class="b">' + esc(p.player || '–') + '</td><td>' + esc(teamName(teamOf[p.player_id])) + '</td>' +
+        '<td>' + (p.kind === 'second_yellow' ? '<i class="card-ic" style="background:#facc15"></i><i class="card-ic" style="background:#ef4444;margin-left:2px"></i> İkinci sarı' : '<i class="card-ic" style="background:#ef4444"></i> Kırmızı kart') + '</td>' +
+        '<td class="c num">' + (p.match_count || '–') + '</td><td class="c num">' + (p.status === 'approved' ? (p.remaining || 0) : '–') + '</td>' +
+        '<td><span class="pill ' + (served ? 'mute' : st[1]) + '">' + (served ? 'Tamamlandı' : st[0]) + '</span></td><td class="mut">' + esc(new Date(p.created_at).toLocaleDateString('tr-TR')) + '</td></tr>';
+    }).join('');
+    var pend = d.penalties.filter(function (p) { return p.status === 'pending'; }).length;
+    el.innerHTML = seasonBar('Cezalar', pend ? '<button class="btn primary" id="topend">' + pend + ' ceza onay bekliyor</button>' : '') +
+      '<section class="box"><div class="table-wrap"><table class="tbl"><thead><tr><th>Oyuncu</th><th>Takım</th><th>Kart</th><th class="c">Ceza</th><th class="c">Kalan</th><th>Durum</th><th>Tarih</th></tr></thead><tbody>' +
+      (rowsHtml || '<tr><td colspan="7" class="empty">Bu sezonda ceza yok.</td></tr>') + '</tbody></table></div></section>' +
+      '<p class="sub">Cezalar kart girilince otomatik oluşur; kalan maç sayısı oynanan maçlarla düşer.</p>';
+    var tp = el.querySelector('#topend');
+    if (tp) tp.onclick = function () { go('approvals'); };
+  }
+
+  // ----- Görsel yükleme (uygulamadaki gibi küçültülür): media/<klasör>/.
+  function shrinkImage(file, maxSide, keepPng) {
+    return new Promise(function (resolve, reject) {
+      var img = new Image();
+      img.onload = function () {
+        var s = Math.min(1, maxSide / Math.max(img.width, img.height));
+        var c = document.createElement('canvas');
+        c.width = Math.round(img.width * s);
+        c.height = Math.round(img.height * s);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        var png = keepPng && /png|webp|gif/.test(file.type);
+        c.toBlob(function (b) { b ? resolve({blob: b, ext: png ? 'png' : 'jpg', aspect: img.width / img.height}) : reject(new Error('Görsel işlenemedi.')); },
+          png ? 'image/png' : 'image/jpeg', .85);
+        URL.revokeObjectURL(img.src);
+      };
+      img.onerror = function () { reject(new Error('Görsel okunamadı.')); };
+      img.src = URL.createObjectURL(file);
+    });
+  }
+  function uploadImage(file, folder, maxSide, keepPng) {
+    var info;
+    return shrinkImage(file, maxSide, keepPng).then(function (r) {
+      info = r;
+      return token();
+    }).then(function (t) {
+      var path = folder + '/' + (crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(36).slice(2)) + '.' + info.ext;
+      return fetch(BASE + '/storage/v1/object/media/' + path, {
+        method: 'POST',
+        headers: {apikey: KEY, Authorization: 'Bearer ' + t, 'Content-Type': info.ext === 'png' ? 'image/png' : 'image/jpeg', 'x-upsert': 'false'},
+        body: info.blob
+      }).then(function (r) {
+        if (!r.ok) throw new Error('Görsel yüklenemedi (' + r.status + ').');
+        return {url: BASE + '/storage/v1/object/public/media/' + path, aspect: info.aspect};
+      });
+    });
+  }
+
+  // ----- Sponsorlar: ana ve alt sponsorlar; ekle, düzenle, yayından kaldır.
+  function renderSponsors(el) {
+    var d = S();
+    function card(s) {
+      return '<div class="spc' + (s.active ? '' : ' off') + '">' +
+        '<div class="lg">' + (s.logo ? '<img src="' + esc(s.logo) + '" alt="">' : '<span class="sub">Logo yok</span>') + '</div>' +
+        '<b>' + esc(s.name || '') + '</b><small class="sub">' + (s.link ? esc(s.link) : 'Bağlantı yok') + '</small>' +
+        '<div class="acts"><button class="btn" data-sedit="' + s.id + '">Düzenle</button>' +
+        '<button class="btn ghost" data-stog="' + s.id + '">' + (s.active ? 'Gizle' : 'Göster') + '</button>' +
+        '<button class="btn ghost" data-sdel="' + s.id + '">Sil</button></div></div>';
+    }
+    var main = d.sponsors.filter(function (s) { return s.tier === 'main'; });
+    var sub = d.sponsors.filter(function (s) { return s.tier !== 'main'; });
+    el.innerHTML = seasonBar('Sponsorlar', '<button class="btn primary" id="snew">+ Sponsor ekle</button>') +
+      '<section class="box"><div class="box-head"><h2 class="label">Ana sponsorlar</h2><span class="hint">' + main.length + '</span></div><div class="spgrid">' + (main.map(card).join('') || '<div class="empty" style="border:0">Ana sponsor yok.</div>') + '</div></section>' +
+      '<section class="box"><div class="box-head"><h2 class="label">Alt sponsorlar</h2><span class="hint">' + sub.length + '</span></div><div class="spgrid">' + (sub.map(card).join('') || '<div class="empty" style="border:0">Alt sponsor yok.</div>') + '</div></section>';
+    el.querySelector('#snew').onclick = function () { sponsorForm(null); };
+    function byId(id) { return d.sponsors.filter(function (s) { return s.id === id; })[0]; }
+    Array.prototype.forEach.call(el.querySelectorAll('[data-sedit]'), function (b) { b.onclick = function () { sponsorForm(byId(b.getAttribute('data-sedit'))); }; });
+    Array.prototype.forEach.call(el.querySelectorAll('[data-stog]'), function (b) {
+      b.onclick = function () {
+        var s = byId(b.getAttribute('data-stog'));
+        api('sponsors?id=eq.' + s.id, {method: 'PATCH', body: {is_active: !s.active}}).then(function () { toast('Kaydedildi.'); loadSeason(d.season_id); }, function (e) { toast(e.message, true); });
+      };
+    });
+    Array.prototype.forEach.call(el.querySelectorAll('[data-sdel]'), function (b) {
+      b.onclick = function () {
+        var s = byId(b.getAttribute('data-sdel'));
+        confirmBox('Sponsoru sil', (s.name || 'Sponsor') + ' kalıcı olarak silinecek.', 'Sil', true).then(function (ok) {
+          if (!ok) return;
+          api('sponsors?id=eq.' + s.id, {method: 'DELETE'}).then(function () { toast('Silindi.'); loadSeason(d.season_id); }, function (e) { toast(e.message, true); });
+        });
+      };
+    });
+  }
+  function sponsorForm(s) {
+    var d = S();
+    var ov = document.createElement('div');
+    ov.className = 'ov';
+    ov.innerHTML = '<div class="dlg" role="dialog" aria-modal="true"><h3>' + (s ? 'Sponsoru düzenle' : 'Sponsor ekle') + '</h3>' +
+      '<div class="form"><label>Ad<input id="sn" class="inp" value="' + esc(s ? s.name : '') + '"></label>' +
+      '<label>Bağlantı (isteğe bağlı)<input id="sl" class="inp" placeholder="https://" value="' + esc(s && s.link || '') + '"></label>' +
+      '<label>Tür<select id="st" class="sel"><option value="main"' + (s && s.tier !== 'main' ? '' : ' selected') + '>Ana sponsor</option><option value="sub"' + (s && s.tier === 'sub' ? ' selected' : '') + '>Alt sponsor</option></select></label>' +
+      '<label>Logo' + (s && s.logo ? ' (değiştirmek için seçin)' : '') + '<input id="sf" type="file" accept="image/*"></label></div>' +
+      '<div class="acts"><button class="btn" data-n>Vazgeç</button><button class="btn primary" data-y>Kaydet</button></div></div>';
+    document.body.appendChild(ov);
+    state.dlg = ov;
+    function close() { ov.remove(); state.dlg = null; }
+    ov.querySelector('[data-n]').onclick = close;
+    ov.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+    ov.querySelector('#sn').focus();
+    ov.querySelector('[data-y]').onclick = function () {
+      var btn = this;
+      var name = ov.querySelector('#sn').value.trim();
+      var file = ov.querySelector('#sf').files[0];
+      if (!name && !file && !(s && s.logo)) { toast('Ad ya da logo girin.', true); return; }
+      btn.disabled = true;
+      var tier = ov.querySelector('#st').value;
+      var up = file ? uploadImage(file, 'sponsors', 800, true) : Promise.resolve(null);
+      up.then(function (img) {
+        var body = {name: name, link_url: ov.querySelector('#sl').value.trim() || null, tier: tier};
+        if (img) { body.logo_url = img.url; body.logo_aspect = Math.round(img.aspect * 1000) / 1000; }
+        if (!s || s.tier !== tier) {
+          body.sort_order = d.sponsors.filter(function (x) { return x.tier === tier; }).reduce(function (mx, x) { return Math.max(mx, x.sort || 0); }, -1) + 1;
+        }
+        if (s) return api('sponsors?id=eq.' + s.id, {method: 'PATCH', body: body});
+        body.league_id = state.season.league;
+        body.is_active = true;
+        return api('sponsors', {method: 'POST', body: body, prefer: 'return=minimal'});
+      }).then(function () {
+        close();
+        toast('Kaydedildi.');
+        loadSeason(d.season_id);
+      }, function (e) { btn.disabled = false; toast(e.message, true); });
+    };
+  }
+
+  // ----- Haberler: yeni haber (metin + en çok 5 fotoğraf) ve son haberler.
+  function renderNews(el) {
+    var d = S();
+    var list = d.news.map(function (n) {
+      return '<div class="nw' + (n.published ? '' : ' off') + '">' + (n.image ? '<img src="' + esc(n.image) + '" alt="">' : '<span class="noimg"></span>') +
+        '<div class="tx"><p class="clamp">' + esc(n.content || '') + '</p><small class="sub">' + esc(new Date(n.created_at).toLocaleString('tr-TR', {dateStyle: 'medium', timeStyle: 'short'})) +
+        (n.auto ? ' · otomatik' : '') + (n.published ? '' : ' · yayında değil') + '</small></div>' +
+        '<div class="acts"><button class="btn ghost" data-npub="' + n.id + '">' + (n.published ? 'Yayından kaldır' : 'Yayınla') + '</button><button class="btn ghost" data-ndel="' + n.id + '">Sil</button></div></div>';
+    }).join('');
+    el.innerHTML = seasonBar('Haberler') +
+      '<div class="two"><section class="box"><div class="box-head"><h2 class="label">Yeni haber</h2></div><div class="form pad">' +
+      '<textarea id="nt" rows="7" class="inp" placeholder="Haber metni"></textarea>' +
+      '<label>Fotoğraflar (en çok 5)<input id="nf" type="file" accept="image/*" multiple></label>' +
+      '<label class="chk"><input id="np" type="checkbox" checked> Hemen yayınla</label>' +
+      '<button class="btn primary" id="ns">Haberi kaydet</button></div></section>' +
+      '<section class="box"><div class="box-head"><h2 class="label">Son haberler</h2><span class="hint">' + d.news.length + '</span></div><div class="nlist">' + (list || '<div class="empty">Haber yok.</div>') + '</div></section></div>';
+    el.querySelector('#ns').onclick = function () {
+      var btn = this;
+      var text = el.querySelector('#nt').value.trim();
+      var files = Array.prototype.slice.call(el.querySelector('#nf').files, 0, 5);
+      if (!text) { toast('Haber metnini yazın.', true); return; }
+      btn.disabled = true;
+      Promise.all(files.map(function (f) { return uploadImage(f, 'news', 1600, false); })).then(function (imgs) {
+        // Kapak (image_url) veritabanında ilk fotoğraftan doldurulur.
+        return api('news', {method: 'POST', prefer: 'return=minimal', body: {
+          season_id: d.season_id, content: text, is_published: el.querySelector('#np').checked,
+          image_urls: imgs.map(function (i) { return i.url; })
+        }});
+      }).then(function () {
+        toast('Haber kaydedildi.');
+        loadSeason(d.season_id);
+      }, function (e) { btn.disabled = false; toast(e.message, true); });
+    };
+    function byId(id) { return d.news.filter(function (n) { return n.id === id; })[0]; }
+    Array.prototype.forEach.call(el.querySelectorAll('[data-npub]'), function (b) {
+      b.onclick = function () {
+        var n = byId(b.getAttribute('data-npub'));
+        api('news?id=eq.' + n.id, {method: 'PATCH', body: {is_published: !n.published}}).then(function () { toast('Kaydedildi.'); loadSeason(d.season_id); }, function (e) { toast(e.message, true); });
+      };
+    });
+    Array.prototype.forEach.call(el.querySelectorAll('[data-ndel]'), function (b) {
+      b.onclick = function () {
+        var n = byId(b.getAttribute('data-ndel'));
+        confirmBox('Haberi sil', 'Haber kalıcı olarak silinecek.', 'Sil', true).then(function (ok) {
+          if (!ok) return;
+          api('news?id=eq.' + n.id, {method: 'DELETE'}).then(function () { toast('Silindi.'); loadSeason(d.season_id); }, function (e) { toast(e.message, true); });
+        });
+      };
+    });
+  }
+
+  // ---------- Ctrl+K arama ----------
+  // Takım, oyuncu ve günün maçları; seçince ilgili ekran açılır.
+  function openSearch() {
+    if (state.dlg) return;
+    if (!S()) loadSeason();
+    var ov = document.createElement('div');
+    ov.className = 'ov top-ov';
+    ov.innerHTML = '<div class="dlg sbox"><input id="q" class="inp big" placeholder="Maç, takım, oyuncu ara" autocomplete="off"><div id="qr" class="qr"></div>' +
+      '<div class="sub"><span class="kbd">↑</span> <span class="kbd">↓</span> seç · <span class="kbd">Enter</span> aç · <span class="kbd">Esc</span> kapat</div></div>';
+    document.body.appendChild(ov);
+    state.dlg = ov;
+    var q = ov.querySelector('#q'), qr = ov.querySelector('#qr'), res = [], sel = 0;
+    function close() { ov.remove(); state.dlg = null; }
+    function search() {
+      var t = q.value.trim().toLocaleLowerCase('tr');
+      res = [];
+      if (t) {
+        var d = S();
+        rows().forEach(function (m) {
+          if ((m.home + ' ' + m.away).toLocaleLowerCase('tr').indexOf(t) >= 0) res.push({k: 'match', m: m, label: m.home + ' – ' + m.away, sub: 'Maç · ' + shortDate(m.date) + ' ' + (m.time || '').slice(0, 5)});
+        });
+        if (d) {
+          d.teams.forEach(function (x) { if (x.name.toLocaleLowerCase('tr').indexOf(t) >= 0) res.push({k: 'team', id: x.id, label: x.name, sub: 'Takım'}); });
+          d.players.forEach(function (p) { if (p.name.toLocaleLowerCase('tr').indexOf(t) >= 0) res.push({k: 'player', p: p, label: p.name, sub: 'Oyuncu · ' + teamName(p.team_id)}); });
+        }
+        res = res.slice(0, 12);
+      }
+      sel = 0;
+      draw();
+    }
+    function draw() {
+      qr.innerHTML = res.map(function (r, i) {
+        return '<button class="qi' + (i === sel ? ' sel' : '') + '" data-q="' + i + '"><b>' + esc(r.label) + '</b><small>' + esc(r.sub) + '</small></button>';
+      }).join('') || (q.value.trim() ? '<div class="empty" style="border:0">Sonuç yok.</div>' : '');
+      Array.prototype.forEach.call(qr.querySelectorAll('[data-q]'), function (b) { b.onclick = function () { pick(res[+b.getAttribute('data-q')]); }; });
+    }
+    function pick(r) {
+      if (!r) return;
+      close();
+      if (r.k === 'match') { go('today'); openLive(r.m.id); }
+      else if (r.k === 'team') { state.teamSel = r.id; go('teams'); }
+      else { state.lisQ = r.p.name; state.lisTeam = null; go('licenses'); }
+    }
+    q.oninput = search;
+    ov.onclick = function (e) { if (e.target === ov) close(); };
+    ov.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { e.preventDefault(); close(); }
+      else if (e.key === 'ArrowDown') { e.preventDefault(); sel = Math.min(res.length - 1, sel + 1); draw(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); sel = Math.max(0, sel - 1); draw(); }
+      else if (e.key === 'Enter') { e.preventDefault(); pick(res[sel]); }
+    });
+    q.focus();
+  }
+
   // ---------- klavye ----------
   var arrowTimer = null;
   document.addEventListener('keydown', function (e) {
+    if (session && (e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); openSearch(); return; }
     if (!session || state.dlg || e.metaKey || e.ctrlKey || e.altKey) return;
     var tag = (e.target.tagName || '').toLowerCase();
     if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
