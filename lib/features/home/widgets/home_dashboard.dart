@@ -20,6 +20,7 @@ import '../../tournament/models/league.dart';
 import '../../tournament/screens/admin_penalty_management_screen.dart';
 import '../../tournament/screens/tournament_hub_screen.dart';
 import 'home_news_card.dart';
+import 'attendance_home_card.dart';
 import 'overdue_results_banner.dart';
 import '../../sponsors/sponsor_strip.dart';
 import '../../../core/utils/team_name.dart';
@@ -316,9 +317,19 @@ class _HomeDashboardState extends State<HomeDashboard> {
   @override
   void initState() {
     super.initState();
-    // Geri sayım ve canlı durum dakikada bir yenilensin.
+    // Geri sayım ve canlı durum dakikada bir yenilensin. Maç günü (canlı ya
+    // da 3 saat içinde başlayacak maç varken) sunucu da sorulur: başka
+    // cihazdan başlatılan / geri alınan maç ekranda eski kalmasın (sürüm
+    // aynıysa tek küçük istek).
     _tick = Timer.periodic(const Duration(minutes: 1), (_) {
-      if (mounted) setState(() {});
+      if (!mounted) return;
+      setState(() {});
+      final key = _loadedFor;
+      if (key != null && _isMatchTime(_memCache[key])) {
+        unawaited(
+          _revalidate(AppSession.of(context).value, key, fromDisk: false),
+        );
+      }
     });
   }
 
@@ -346,7 +357,8 @@ class _HomeDashboardState extends State<HomeDashboard> {
     final at = _fetchedAt[key];
     if (mem != null &&
         at != null &&
-        DateTime.now().difference(at) < _freshFor) {
+        DateTime.now().difference(at) < _freshFor &&
+        !_isMatchTime(mem)) {
       _loadedOnce = true;
       scheduleMicrotask(() async {
         final prefs = await SharedPreferences.getInstance();
@@ -363,6 +375,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
 
   Future<void> _refresh() async {
     OverdueResultsBanner.refresh.value++;
+    AttendanceHomeCard.refresh.value++;
     final session = AppSession.of(context).value;
     await _revalidate(session, _cacheKey(session), fromDisk: false);
   }
@@ -420,6 +433,31 @@ class _HomeDashboardState extends State<HomeDashboard> {
         });
       }
     }
+  }
+
+  /// Canlı maç var ya da bir maç 3 saat içinde başlıyor / başladı: veri
+  /// sık değişir, önbellek taze sayılmaz.
+  static bool _isMatchTime(Map<String, dynamic>? raw) {
+    final now = DateTime.now();
+    for (final m in (raw?['matches'] as List? ?? const [])) {
+      if (m is! Map) continue;
+      final status = (m['status'] ?? '').toString();
+      if (status == 'live' || status == 'halftime') return true;
+      if (status != 'notStarted') continue;
+      final date = DateTime.tryParse('${m['match_date'] ?? ''}');
+      final time = '${m['match_time'] ?? ''}';
+      if (date == null || time.length < 5) continue;
+      final hm = time.substring(0, 5).split(':');
+      final start = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        int.tryParse(hm[0]) ?? 0,
+        int.tryParse(hm.length > 1 ? hm[1] : '') ?? 0,
+      );
+      if (start.difference(now).inMinutes.abs() <= 180) return true;
+    }
+    return false;
   }
 
   /// Sunucuyla eşitler: sürüm saklanan veriyle aynıysa (açılışta tek küçük
@@ -864,6 +902,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
               children: [
                 _greeting(session, data),
                 OverdueResultsBanner(leagueId: widget.league.id),
+                AttendanceHomeCard(leagueId: widget.league.id),
                 content,
               ],
             ),

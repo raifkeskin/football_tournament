@@ -174,11 +174,12 @@ class _AttendanceCardState extends State<AttendanceCard> {
     }
     final ok = await showAdminConfirmDialog(
       context: context,
-      title: 'Sorguyu kapat',
+      title: 'Sorguyu sonlandır',
       message:
-          'Oyuncular artık işaretleme yapamaz. Siz yine de '
-          'düzeltebilir ve sorguyu yeniden açabilirsiniz.',
-      confirmLabel: 'KAPAT',
+          'Sorgu maç detayından ve oyuncuların ana sayfasından kalkar; '
+          'artık işaretleme yapılamaz. Gerekirse yeniden başlatabilirsiniz '
+          '(verilen cevaplar korunur).',
+      confirmLabel: 'SONLANDIR',
       destructive: false,
       icon: Icons.lock_outline_rounded,
     );
@@ -216,8 +217,10 @@ class _AttendanceCardState extends State<AttendanceCard> {
   Widget build(BuildContext context) {
     final s = _s;
     if (s == null) return const SizedBox.shrink();
-    if (s.pollId == null) {
-      // Sorgu yok: yalnızca sorumlu, maç başlamadıysa başlatabilir.
+    if (s.pollId == null || s.closed) {
+      // Sorgu yok ya da sonlandırıldı: kart kalkar; yalnızca sorumlu, maç
+      // başlamadıysa (yeniden) başlatabilir. Sonlanan sorgunun cevapları
+      // yeniden başlatınca korunur.
       if (!s.canManage || !s.matchOpen) return const SizedBox.shrink();
       return _frame(
         children: [
@@ -231,7 +234,7 @@ class _AttendanceCardState extends State<AttendanceCard> {
           ),
           const SizedBox(height: 10),
           _button(
-            label: 'Sorguyu başlat',
+            label: s.closed ? 'Sorguyu yeniden başlat' : 'Sorguyu başlat',
             icon: Icons.campaign_outlined,
             filled: true,
             onTap: _open,
@@ -295,6 +298,14 @@ class _AttendanceCardState extends State<AttendanceCard> {
             ],
           ],
         ),
+        if (s.canManage && s.matchOpen) ...[
+          const SizedBox(height: 8),
+          _button(
+            label: 'Sorguyu sonlandır',
+            icon: Icons.stop_circle_outlined,
+            onTap: _toggleClosed,
+          ),
+        ],
       ],
     );
   }
@@ -557,7 +568,7 @@ class _AttendanceList extends StatelessWidget {
               children: [
                 Expanded(
                   child: AdminSecondaryButton(
-                    label: summary.closed ? 'YENİDEN AÇ' : 'SORGUYU KAPAT',
+                    label: summary.closed ? 'YENİDEN AÇ' : 'SORGUYU SONLANDIR',
                     onPressed: summary.matchOpen ? onToggleClosed : null,
                   ),
                 ),
