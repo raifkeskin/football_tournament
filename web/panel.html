@@ -567,17 +567,16 @@ button.tile:hover { border-color: #33476e; }
       '<div class="brand" style="padding:0"><img src="/logo-lm.png" alt=""><b>LİG MASASI</b></div>' +
       '<h1>Yönetim Masası</h1>' +
       '<p>Turnuva ve bölge sorumluları için.<br>Uygulamadaki hesabınızla girin.</p>' +
-      '<label for="lp">Telefon</label><input id="lp" autocomplete="username" inputmode="tel" placeholder="(5XX) XXX XX XX" required>' +
+      '<label for="lp">Telefon</label><input id="lp" autocomplete="username" inputmode="numeric" placeholder="(5XX) XXX XX XX" maxlength="15" required>' +
       '<label for="lw">Şifre</label><input id="lw" type="password" autocomplete="current-password" required>' +
       '<button class="btn primary" id="lb">Giriş yap</button>' +
       '<div class="err" id="le"></div>' +
       '</form></div>';
     var lp = document.getElementById('lp');
     lp.focus();
-    // Uygulamadaki telefon alanı gibi: (5XX) XXX XX XX; baştaki 0 / 90
-    // atılır, 10 haneden fazlası alınmaz. E-posta yazılırsa dokunulmaz.
+    // Uygulamadaki telefon alanı gibi: yalnız rakam, (5XX) XXX XX XX;
+    // baştaki 0 / 90 atılır, 10 haneden fazlası alınmaz.
     lp.addEventListener('input', function () {
-      if (/[a-zA-Z@]/.test(lp.value)) return;
       var d = lp.value.replace(/\D/g, '');
       if (d.length > 10 && d.slice(0, 2) === '90') d = d.slice(2);
       if (d[0] === '0') d = d.slice(1);
