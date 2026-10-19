@@ -1,0 +1,204 @@
+<title>Esame ve Maç Günü</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: koyu uygulama zemini; her öneri bir başlık + yan yana telefon kesitleri */
+:root{
+  --bg:#0B1220; --card:#162235; --card2:#1E2D44; --line:rgba(255,255,255,.08);
+  --fg:#F1F5F9; --mid:#94A3B8; --gold:#FBBF24; --green:#22C55E; --blue:#60A5FA; --red:#F87171;
+  --display:"Barlow Condensed","Arial Narrow",sans-serif; --body:"Barlow",system-ui,sans-serif;
+  color-scheme:dark;
+}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.45}
+.wrap{max-width:1100px;margin:0 auto;padding-block:28px 60px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1{font-family:var(--display);font-size:34px;letter-spacing:.5px;margin:0 0 6px;text-wrap:balance}
+.lead{color:var(--mid);max-width:68ch;margin:0 0 30px}
+section{border-top:1px solid var(--line);padding-top:26px;margin-top:30px}
+h2{font-family:var(--display);font-size:24px;margin:0 0 4px;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+h2 .tag{font-family:var(--body);font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;padding:3px 8px;border-radius:6px;background:rgba(34,197,94,.15);color:var(--green)}
+h2 .tag.q{background:rgba(251,191,36,.15);color:var(--gold)}
+.desc{color:var(--mid);max-width:70ch;margin:0 0 18px}
+.row{display:flex;flex-wrap:wrap;gap:22px;align-items:flex-start}
+.opt{flex:1 1 300px;min-width:0;max-width:360px}
+.opt h3{font-size:13px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--mid);margin:0 0 10px}
+.opt h3 b{color:var(--gold)}
+.opt p{color:var(--mid);font-size:13.5px;margin:10px 0 0}
+.phone{background:#0F1A2B;border:1px solid var(--line);border-radius:22px;padding:14px;position:relative;overflow:hidden}
+.rec{display:inline-block;font-size:11px;font-weight:800;letter-spacing:.6px;color:#062A1C;background:var(--green);padding:2px 7px;border-radius:5px;margin-left:6px;vertical-align:middle}
+
+/* Dialog */
+.dim{background:rgba(0,0,0,.55);border-radius:14px;padding:40px 14px}
+.dlg{background:var(--card2);border:1px solid var(--line);border-radius:18px;padding:20px;position:relative}
+.dlg .x{position:absolute;top:12px;right:14px;color:var(--mid);font-size:18px}
+.dlg .t{display:flex;gap:8px;justify-content:center;align-items:center;font-weight:800;font-size:18px}
+.dlg .t i{color:var(--gold);font-style:normal}
+.dlg hr{border:0;border-top:1px solid rgba(255,255,255,.2);margin:14px 0}
+.dlg .m{text-align:center;color:#CBD5E1;font-size:14px;margin-bottom:18px}
+.btn{display:block;width:100%;height:46px;border-radius:12px;border:0;font:800 14px var(--body);letter-spacing:.4px;margin-top:8px}
+.btn.g{background:var(--green);color:#062A1C}
+.btn.o{background:transparent;color:var(--red);border:1.5px solid rgba(248,113,113,.6)}
+
+/* Esame kutuları */
+.boxes{display:flex;gap:6px}
+.box{flex:1;min-width:0;border-radius:10px;padding:5px;background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.4)}
+.box.s{background:rgba(96,165,250,.07);border-color:rgba(96,165,250,.4)}
+.box .h{font-size:10.5px;font-weight:800;color:var(--green);padding:2px 3px 5px;letter-spacing:.4px}
+.box.s .h{color:var(--blue)}
+.slot{display:flex;align-items:center;gap:4px;height:26px;border-radius:5px;background:rgba(255,255,255,.05);margin-bottom:2px;padding-left:3px;font-size:12px;border:1.5px solid transparent}
+.no{width:24px;height:20px;border-radius:4px;border:1px solid rgba(251,191,36,.55);display:grid;place-items:center;font-weight:700;font-size:11.5px;color:var(--gold);flex:none;font-variant-numeric:tabular-nums}
+.nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+.slot.on{border-color:var(--gold);background:rgba(251,191,36,.16)}
+.slot.on .no{background:var(--gold);color:#1F1300;border-color:var(--gold)}
+.slot.on .nm{color:var(--gold);font-weight:700}
+.kb{margin-top:10px;border-radius:12px;background:#1B2638;padding:8px}
+.kb .bar{display:flex;justify-content:space-between;align-items:center;background:rgba(251,191,36,.14);border:1px solid rgba(251,191,36,.5);border-radius:9px;padding:7px 10px;font-size:13px;margin-bottom:8px}
+.kb .bar b{color:var(--gold)}
+.keys{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+.keys span{background:#2A3850;border-radius:6px;height:28px;display:grid;place-items:center;font-weight:600;font-size:14px}
+.grid{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-top:6px}
+.grid span{height:34px;border-radius:8px;background:#26354D;display:grid;place-items:center;font-weight:700;font-variant-numeric:tabular-nums;font-size:14px}
+.grid span.used{opacity:.3;text-decoration:line-through}
+.grid span.cur{background:var(--gold);color:#1F1300}
+.who{display:flex;gap:10px;align-items:center;margin-bottom:12px}
+.who .big{width:44px;height:44px;border-radius:10px;background:var(--gold);color:#1F1300;display:grid;place-items:center;font:800 22px var(--display)}
+
+/* Haber kartı */
+.news{background:var(--card);border-radius:16px;overflow:hidden;border:1px solid var(--line)}
+.news .top{background:linear-gradient(160deg,#14365A 0%,#0F1A2B 70%);padding:14px 14px 16px;position:relative}
+.eye{display:flex;justify-content:space-between;align-items:center;font-size:11px;font-weight:800;letter-spacing:1px;color:var(--gold);text-transform:uppercase}
+.eye span:last-child{color:var(--mid);letter-spacing:.3px;text-transform:none;font-weight:600}
+.vs{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:6px;margin-top:14px;text-align:center}
+.crest{width:52px;height:52px;border-radius:50%;margin:0 auto 6px;display:grid;place-items:center;font:800 18px var(--display);color:#fff}
+.tn{font-weight:700;font-size:13.5px;line-height:1.2}
+.pos{font-size:11.5px;color:var(--mid);margin-top:2px}
+.time{font:800 30px var(--display);letter-spacing:.5px}
+.time small{display:block;font:600 11px var(--body);color:var(--mid);letter-spacing:.4px}
+.facts{display:flex;flex-wrap:wrap;gap:6px;padding:12px 14px 4px}
+.chip{font-size:12px;background:rgba(255,255,255,.06);border-radius:8px;padding:4px 8px;color:#CBD5E1}
+.form{display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:center;padding:10px 14px;font-size:12px;color:var(--mid)}
+.dots{display:flex;gap:3px}
+.dots.r{justify-content:flex-end}
+.dots i{width:16px;height:16px;border-radius:4px;font:700 10px/16px var(--body);text-align:center;color:#06130B;font-style:normal}
+.W{background:var(--green)}.D{background:#94A3B8}.L{background:var(--red);color:#fff!important}
+.h2h{padding:2px 14px 14px;font-size:12.5px;color:var(--mid)}
+.h2h b{color:var(--fg)}
+.feed{display:flex;flex-direction:column;gap:10px}
+.mini{display:flex;gap:10px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px}
+.mini .th{width:64px;height:48px;border-radius:8px;flex:none;background:linear-gradient(160deg,#14365A,#0F1A2B);display:grid;place-items:center;font:800 15px var(--display);color:var(--gold)}
+.mini .tt{font-weight:700;font-size:13.5px;line-height:1.25}
+.mini .ss{font-size:11.5px;color:var(--mid)}
+.prog{padding:12px 14px 14px;display:flex;flex-direction:column;gap:6px}
+.pm{display:grid;grid-template-columns:44px 1fr;gap:8px;align-items:center;font-size:13px;background:rgba(255,255,255,.04);border-radius:8px;padding:7px 8px}
+.pm b{font:800 16px var(--display);color:var(--gold);font-variant-numeric:tabular-nums}
+.pm span small{display:block;color:var(--mid);font-size:11px}
+.plan{margin-top:18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+.plan div{background:var(--card);border-radius:12px;padding:12px 14px;font-size:13.5px;color:#CBD5E1}
+.plan b{display:block;color:var(--fg);margin-bottom:3px;font-size:14px}
+</style>
+
+<div class="wrap">
+<h1>Esame ve Maç Günü Önizlemesi</h1>
+<p class="lead">Üç konu: esamede geri tuşunda “Kaydet ve çık”, forma numarası seçiminin görünmesi ve maç günü haberi. Görseller örnek verilerle hazırlandı.</p>
+
+<section>
+<h2>1 · Kaydedilmedi penceresi <span class="tag">Doğrudan yapılabilir</span></h2>
+<p class="desc">Geri tuşuna basınca değişiklik kaybolmasın. Ana düğme kaydedip çıkar; numara eksik ya da aynıysa uyarı verip ekranda kalır. Sağ üstteki çarpı pencereyi kapatıp esameye döner.</p>
+<div class="row">
+ <div class="opt"><h3>Yeni hali</h3>
+  <div class="phone"><div class="dim"><div class="dlg">
+   <span class="x">✕</span>
+   <div class="t"><i>●</i> Kaydedilmedi</div><hr>
+   <div class="m">Esamede yaptığınız değişiklikler kaydedilmedi.</div>
+   <button class="btn g" type="button">KAYDET VE ÇIK</button>
+   <button class="btn o" type="button">KAYDETMEDEN ÇIK</button>
+  </div></div></div>
+ </div>
+</div>
+</section>
+
+<section>
+<h2>2 · Forma numarası seçimi <span class="tag q">Karar senin</span></h2>
+<p class="desc">Şu an numaraya dokununca yalnız klavye açılıyor; hangi oyuncunun numarasını değiştirdiğin belli olmuyor.</p>
+<div class="row">
+ <div class="opt"><h3>A · Satır vurgusu + klavye üstü şerit <span class="rec">ÖNERİM</span></h3>
+  <div class="phone">
+   <div class="boxes">
+    <div class="box"><div class="h">İLK 11 · 11/11</div>
+     <div class="slot"><span class="no">1</span><span class="nm">Mehmet Kaya</span></div>
+     <div class="slot"><span class="no">4</span><span class="nm">Ali Demir</span></div>
+     <div class="slot on"><span class="no">7</span><span class="nm">Hakan Yıldız</span></div>
+     <div class="slot"><span class="no">8</span><span class="nm">Serkan Öz</span></div>
+     <div class="slot"><span class="no">10</span><span class="nm">Murat Aksoy</span></div>
+    </div>
+    <div class="box s"><div class="h">YEDEK · 6/11</div>
+     <div class="slot"><span class="no">12</span><span class="nm">Emre Can</span></div>
+     <div class="slot"><span class="no">14</span><span class="nm">Burak Tan</span></div>
+     <div class="slot"><span class="no">17</span><span class="nm">Onur Er</span></div>
+    </div>
+   </div>
+   <div class="kb">
+    <div class="bar"><span>Forma no · <b>Hakan Yıldız</b></span><b>7</b></div>
+    <div class="keys"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span></div>
+   </div>
+  </div>
+  <p>Seçilen satır baştan sona sarı çerçeve alır, numara kutusu dolu sarı olur, ad sarıya döner. Klavye kutuyu kapatsa bile üstündeki şeritte kimin numarasını yazdığın görünür. Ek dokunuş yok, bugünkü hız korunur.</p>
+ </div>
+ <div class="opt"><h3>B · Numara penceresi</h3>
+  <div class="phone"><div class="dim" style="padding:18px 10px"><div class="dlg">
+   <span class="x">✕</span>
+   <div class="who"><div class="big">7</div><div><b>Hakan Yıldız</b><div style="color:var(--mid);font-size:12px">İlk 11 · Orta saha</div></div></div>
+   <div class="grid">
+    <span class="used">1</span><span>2</span><span>3</span><span class="used">4</span><span>5</span><span>6</span>
+    <span class="cur">7</span><span class="used">8</span><span>9</span><span class="used">10</span><span>11</span><span class="used">12</span>
+    <span>13</span><span class="used">14</span><span>15</span><span>16</span><span class="used">17</span><span>18</span>
+   </div>
+   <button class="btn g" type="button">TAMAM</button>
+  </div></div></div>
+  <p>Kullanılan numaralar soluk, aynı numarayı iki kişiye vermek imkânsız. Daha net ama her oyuncu için pencere aç-kapa gerekir; 22 kişide yavaşlatır.</p>
+ </div>
+</div>
+</section>
+
+<section>
+<h2>3 · Maç günü haberi <span class="tag q">Karar senin</span></h2>
+<p class="desc">Maç sonucu haberinin “maç öncesi” eşi. Sabah otomatik oluşur, bildirim göndermez (sonuç haberindeki gibi). Maç bitip sonuç haberi gelince bu kart haberlerden kalkar, akış şişmez.</p>
+<div class="row">
+ <div class="opt"><h3>A · Maç kartı (her maç için)</h3>
+  <div class="news">
+   <div class="top">
+    <div class="eye"><span>Maç Günü · 5. Hafta</span><span>Champions Master Lig</span></div>
+    <div class="vs">
+     <div><div class="crest" style="background:#B91C1C">GC</div><div class="tn">Galata City Masterlar</div><div class="pos">3. sıra · 10 puan</div></div>
+     <div class="time">20:30<small>BUGÜN</small></div>
+     <div><div class="crest" style="background:#1D4ED8">TK</div><div class="tn">Triokablo Masterlar</div><div class="pos">5. sıra · 7 puan</div></div>
+    </div>
+   </div>
+   <div class="facts"><span class="chip">Bahçeşehir Halı Saha</span><span class="chip">⛅ 14° · rüzgâr hafif</span><span class="chip">Gözlemci atandı</span></div>
+   <div class="form"><div class="dots"><i class="W">G</i><i class="W">G</i><i class="D">B</i><i class="L">M</i></div><span>Son maçlar</span><div class="dots r"><i class="L">M</i><i class="W">G</i><i class="D">B</i><i class="W">G</i></div></div>
+   <div class="h2h">Aralarındaki son maç: <b>Galata City 2–1 Triokablo</b> (2025)</div>
+  </div>
+ </div>
+ <div class="opt"><h3>C · Günün programı (2+ maç varsa)</h3>
+  <div class="news">
+   <div class="top" style="padding-bottom:12px"><div class="eye"><span>Bugünün Maçları · 5. Hafta</span><span>4 maç</span></div></div>
+   <div class="prog">
+    <div class="pm"><b>19:00</b><span>Gaziosmanpaşa Autur – Kuzeyin Aslanları<small>Bahçeşehir Halı Saha</small></span></div>
+    <div class="pm"><b>20:30</b><span>Galata City – Triokablo<small>Bahçeşehir Halı Saha</small></span></div>
+    <div class="pm"><b>21:00</b><span>Fenerbahçe 1907 – Zirve Enerji<small>Ataköy Tesisleri</small></span></div>
+    <div class="pm"><b>22:00</b><span>Beşiktaş Masterlar – Yeşil Vadi<small>Ataköy Tesisleri</small></span></div>
+   </div>
+  </div>
+  <p>Haber listesinde ise tek satır görünür:</p>
+  <div class="feed">
+   <div class="mini"><div class="th">20:30</div><div><div class="tt">Maç günü: Galata City – Triokablo</div><div class="ss">Bugün · Bahçeşehir Halı Saha</div></div></div>
+  </div>
+ </div>
+</div>
+<div class="plan">
+ <div><b>Ne zaman?</b>Maç günü sabah 09:00. Gece yarısından sonraki erken maçlar için en geç maçtan 3 saat önce.</div>
+ <div><b>Hangisi?</b>Önerim: sonuç haberindeki gibi A + C. Gün tek maçsa yalnız A; 2+ maçsa A'lar ve bir C.</div>
+ <div><b>Ayar</b>Turnuva düzenle formundaki “otomatik sonuç haberi” anahtarının yanına “maç günü haberi” anahtarı.</div>
+ <div><b>Saat/saha değişirse</b>Haber kendini günceller; maç ertelenir ya da iptal olursa kart gizlenir.</div>
+</div>
+</section>
+</div>

@@ -56,6 +56,10 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
   bool _isSaving = false;
   bool _dirty = false;
 
+  /// Numarası yazılan oyuncu: satırı vurgulanır, klavyenin üstündeki
+  /// şeritte adı görünür.
+  String? _editingId;
+
   int _startingLimit = 11;
   int _subLimit = 7;
   Map<String, PlayerPenalty> _penalized = const {};
@@ -463,15 +467,85 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
     );
   }
 
+  /// Geri tuşu: kaydedip çık (numara eksik/aynıysa uyarı verir, ekranda
+  /// kalır), kaydetmeden çık ya da çarpıyla esameye dön.
   Future<void> _confirmLeave() async {
-    final ok = await showAdminConfirmDialog(
+    final choice = await showDialog<bool>(
       context: context,
-      title: 'Kaydedilmedi',
-      message: 'Esamede yaptığınız değişiklikler kaydedilmedi. Çıkılsın mı?',
-      confirmLabel: 'ÇIK',
-      icon: Icons.logout_rounded,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+        child: AdminDialogCloseOverlay(
+          onClose: () => Navigator.pop(ctx),
+          child: Container(
+            padding: const EdgeInsets.all(22),
+            decoration: adminDialogDecoration(),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 30),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.circle, color: kAdminAmber, size: 12),
+                      SizedBox(width: 8),
+                      Text(
+                        'Kaydedilmedi',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const Divider(color: Colors.white24, height: 1),
+                const SizedBox(height: 16),
+                const Text(
+                  'Esamede yaptığınız değişiklikler kaydedilmedi.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white70, height: 1.4),
+                ),
+                const SizedBox(height: 22),
+                AdminPrimaryButton(
+                  label: 'KAYDET VE ÇIK',
+                  onPressed: () => Navigator.pop(ctx, true),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 48,
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: kAdminDanger,
+                      side: BorderSide(
+                        color: kAdminDanger.withValues(alpha: 0.6),
+                        width: 1.5,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text(
+                      'KAYDETMEDEN ÇIK',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
-    if (ok && mounted) {
+    if (!mounted || choice == null) return;
+    if (choice) {
+      await _save(); // başarılıysa kendisi kapatır
+    } else {
       _dirty = false;
       Navigator.pop(context);
     }
@@ -530,48 +604,61 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
             const SizedBox(width: 4),
           ],
         ),
-        body: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : _players.isEmpty
-            ? const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(24),
-                  child: Text(
-                    'Bu takımın sezon kadrosunda oyuncu yok.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white54),
-                  ),
-                ),
-              )
-            : Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 600),
-                  child: Column(
-                    children: [
-                      _topLine(),
-                      _boxes(),
-                      _tabs(),
-                      const Padding(
-                        padding: EdgeInsets.fromLTRB(14, 0, 14, 4),
-                        child: Text.rich(
-                          TextSpan(
-                            text: 'Sürükleyin ya da düğmeye dokunun · ',
-                            children: [
-                              TextSpan(
-                                text: '✎ numarayı değiştirin',
-                                style: TextStyle(color: _gold),
-                              ),
-                            ],
-                          ),
-                          style: TextStyle(color: _mid, fontSize: 11),
+        body: Stack(
+          children: [
+            Positioned.fill(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _players.isEmpty
+                  ? const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Text(
+                          'Bu takımın sezon kadrosunda oyuncu yok.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.white54),
                         ),
                       ),
-                      Expanded(child: _squadList(keyboard)),
-                      if (keyboard == 0) _footer(),
-                    ],
-                  ),
-                ),
+                    )
+                  : Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 600),
+                        child: Column(
+                          children: [
+                            _topLine(),
+                            _boxes(),
+                            _tabs(),
+                            const Padding(
+                              padding: EdgeInsets.fromLTRB(14, 0, 14, 4),
+                              child: Text.rich(
+                                TextSpan(
+                                  text: 'Sürükleyin ya da düğmeye dokunun · ',
+                                  children: [
+                                    TextSpan(
+                                      text: '✎ numarayı değiştirin',
+                                      style: TextStyle(color: _gold),
+                                    ),
+                                  ],
+                                ),
+                                style: TextStyle(color: _mid, fontSize: 11),
+                              ),
+                            ),
+                            Expanded(child: _squadList(keyboard)),
+                            if (keyboard == 0) _footer(),
+                          ],
+                        ),
+                      ),
+                    ),
+            ),
+            if (keyboard > 0 && _byId[_editingId] != null)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: keyboard,
+                child: _numberStrip(_byId[_editingId]!),
               ),
+          ],
+        ),
       ),
     );
   }
@@ -777,7 +864,9 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
                 controller: _jersey[id]!,
                 bad: bad.contains(id),
                 small: true,
+                active: id == _editingId,
                 onChanged: _onJerseyChanged,
+                onFocusChange: (f) => _onJerseyFocus(id, f),
               ),
               const SizedBox(width: 4),
               Expanded(child: _slotName(box, i, p)),
@@ -792,6 +881,7 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
             ],
           );
         }
+        final editing = id != null && id == _editingId;
         final row = Container(
           height: _slotH,
           margin: const EdgeInsets.only(bottom: 1),
@@ -800,10 +890,16 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
           decoration: BoxDecoration(
             color: hover
                 ? Colors.white.withValues(alpha: 0.14)
+                : editing
+                ? _gold.withValues(alpha: 0.16)
                 : id == null
                 ? Colors.white.withValues(alpha: 0.02)
                 : Colors.white.withValues(alpha: 0.05),
             borderRadius: BorderRadius.circular(5),
+            border: Border.all(
+              color: editing ? _gold : Colors.transparent,
+              width: 1.5,
+            ),
           ),
           child: content,
         );
@@ -862,8 +958,8 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
               p.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: p.id == _editingId ? _gold : Colors.white,
                 fontSize: 11.5,
                 fontWeight: FontWeight.w700,
               ),
@@ -921,6 +1017,14 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
 
   void _onJerseyChanged() => setState(() => _dirty = true);
 
+  void _onJerseyFocus(String id, bool focused) {
+    if (focused) {
+      setState(() => _editingId = id);
+    } else if (_editingId == id) {
+      setState(() => _editingId = null);
+    }
+  }
+
   List<PlayerModel> get _remaining =>
       _players.where((p) => !_selected(p.id)).toList();
 
@@ -975,6 +1079,49 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
     );
   }
 
+  /// Klavyenin üstünde: kimin numarası yazılıyor (klavye kutuyu örtse de).
+  Widget _numberStrip(PlayerModel p) {
+    final no = _jersey[p.id]?.text.trim() ?? '';
+    return Container(
+      margin: const EdgeInsets.fromLTRB(10, 0, 10, 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: Color.lerp(_bg, _gold, 0.16),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _gold.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        children: [
+          const Text(
+            'Forma no · ',
+            style: TextStyle(color: _mid, fontSize: 13),
+          ),
+          Expanded(
+            child: Text(
+              p.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: _gold,
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          Text(
+            no.isEmpty ? '–' : no,
+            style: const TextStyle(
+              color: _gold,
+              fontSize: 17,
+              fontWeight: FontWeight.w900,
+              fontFeatures: [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _squadList(double keyboard) {
     final left = _remaining;
     final shown = _tab < 0
@@ -1021,7 +1168,12 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
       builder: (context, cand, _) => Container(
         color: cand.isNotEmpty ? Colors.white.withValues(alpha: 0.04) : null,
         child: ListView(
-          padding: EdgeInsets.fromLTRB(10, 0, 10, 12 + keyboard),
+          padding: EdgeInsets.fromLTRB(
+            10,
+            0,
+            10,
+            12 + keyboard + (keyboard > 0 ? 50 : 0),
+          ),
           children: children,
         ),
       ),
@@ -1031,13 +1183,20 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
   Widget _squadRow(PlayerModel p) {
     final pen = _penalized[p.id];
     final sub = (p.position ?? '').trim();
+    final editing = p.id == _editingId;
     final row = Container(
       height: 38,
       margin: const EdgeInsets.only(bottom: 3),
       padding: const EdgeInsets.only(right: 6),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
+        color: editing
+            ? _gold.withValues(alpha: 0.16)
+            : Colors.white.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(9),
+        border: Border.all(
+          color: editing ? _gold : Colors.transparent,
+          width: 1.5,
+        ),
       ),
       child: Row(
         children: [
@@ -1060,7 +1219,9 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
             controller: _jersey[p.id]!,
             bad: false,
             small: false,
+            active: editing,
             onChanged: _onJerseyChanged,
+            onFocusChange: (f) => _onJerseyFocus(p.id, f),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -1082,7 +1243,11 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: pen != null ? Colors.white38 : Colors.white,
+                color: editing
+                    ? _gold
+                    : pen != null
+                    ? Colors.white38
+                    : Colors.white,
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
               ),
@@ -1207,12 +1372,18 @@ class _JerseyBox extends StatelessWidget {
     required this.bad,
     required this.small,
     required this.onChanged,
+    required this.onFocusChange,
+    this.active = false,
   });
 
   final TextEditingController controller;
   final bool bad;
   final bool small;
   final VoidCallback onChanged;
+  final ValueChanged<bool> onFocusChange;
+
+  /// Numarası şu an yazılıyor: kutu dolu sarı.
+  final bool active;
 
   static const _gold = Color(0xFFFBBF24);
   static const _red = Color(0xFFF87171);
@@ -1240,44 +1411,51 @@ class _JerseyBox extends StatelessWidget {
               painter: _DashedBorder(color: c.withValues(alpha: 0.7)),
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: c.withValues(alpha: bad ? 0.14 : 0.07),
+                  color: active ? c : c.withValues(alpha: bad ? 0.14 : 0.07),
                   borderRadius: BorderRadius.circular(small ? 4 : 6),
                 ),
-                child: TextField(
-                  controller: controller,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(2),
-                  ],
-                  textAlign: TextAlign.center,
-                  textAlignVertical: TextAlignVertical.center,
-                  onTap: () {
-                    _selectAll();
-                    // Odak alınca imleç sona gidebilir; bir kare sonra yine seç.
-                    WidgetsBinding.instance.addPostFrameCallback(
-                      (_) => _selectAll(),
-                    );
-                  },
-                  onChanged: (_) => onChanged(),
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: small ? 11 : 13.5,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
-                  // Tema dolgu ve boşluk vermesin (küçük kutuda numara
-                  // görünmez oluyordu).
-                  decoration: InputDecoration(
-                    isCollapsed: true,
-                    isDense: true,
-                    filled: false,
-                    contentPadding: EdgeInsets.zero,
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    hintText: '#',
-                    hintStyle: TextStyle(color: c.withValues(alpha: 0.7)),
+                child: Focus(
+                  onFocusChange: onFocusChange,
+                  child: TextField(
+                    controller: controller,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(2),
+                    ],
+                    textAlign: TextAlign.center,
+                    textAlignVertical: TextAlignVertical.center,
+                    onTap: () {
+                      _selectAll();
+                      // Odak alınca imleç sona gidebilir; bir kare sonra yine seç.
+                      WidgetsBinding.instance.addPostFrameCallback(
+                        (_) => _selectAll(),
+                      );
+                    },
+                    onChanged: (_) => onChanged(),
+                    style: TextStyle(
+                      color: active ? const Color(0xFF1F1300) : Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: small ? 11 : 13.5,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                    // Tema dolgu ve boşluk vermesin (küçük kutuda numara
+                    // görünmez oluyordu).
+                    decoration: InputDecoration(
+                      isCollapsed: true,
+                      isDense: true,
+                      filled: false,
+                      contentPadding: EdgeInsets.zero,
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      hintText: '#',
+                      hintStyle: TextStyle(
+                        color: active
+                            ? const Color(0xFF1F1300)
+                            : c.withValues(alpha: 0.7),
+                      ),
+                    ),
                   ),
                 ),
               ),
