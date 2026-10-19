@@ -1277,9 +1277,10 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                 backgroundColor: Colors.transparent,
                 surfaceTintColor: Colors.transparent,
                 elevation: 0,
-                // Maç afişi: diğer afişler gibi admin ve turnuva sahibine.
+                // Maç afişi (öncesi ve sonucu): admin, turnuva sahibi ve
+                // maçtaki takımların sorumluları.
                 actions: [
-                  if (canManageLeague)
+                  if (canManageLeague || managesHome || managesAway)
                     IconButton(
                       tooltip: m.status == MatchStatus.finished
                           ? 'Maç sonucunu paylaş'
