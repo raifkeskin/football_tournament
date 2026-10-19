@@ -596,17 +596,37 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
           onField + _subs.where((id) => _isQuota(_byId[id]!)).length;
       final maxSquad = _ageRules.matchMax;
       final maxField = _ageRules.matchFieldMax;
+      // Kontenjan bazında esame sınırı (ör. 1988 en fazla 2, 1989 en fazla 1).
+      final perQuota = <String>[];
+      var quotaOver = false;
+      for (var i = 0; i < _ageRules.quotas.length; i++) {
+        final q = _ageRules.quotas[i];
+        final qMax = q.matchMax;
+        if (q.gk || qMax == null) continue;
+        final n = [..._starters, ..._subs].where((id) {
+          final p = _byId[id]!;
+          final c = _ageRules.check(
+            birthYear: AgeRules.birthYearOf(p.birthDate),
+            isGk: (p.mainPosition ?? '').trim() == 'Kaleci',
+          );
+          return c.status == AgeStatus.quota && c.quotaIndex == i;
+        }).length;
+        if (n > qMax) quotaOver = true;
+        perQuota.add('${q.yearsLabel} $n/$qMax');
+      }
       final over =
+          quotaOver ||
           (maxSquad != null && inSquad > maxSquad) ||
           (maxField != null && onField > maxField);
       quota = Text(
         [
           'Kontenjan',
           if (maxSquad != null) 'esame $inSquad/$maxSquad',
+          ...perQuota,
           if (maxField != null) 'ilk 11 $onField/$maxField',
           if (over) 'sınır aşıldı',
         ].join(' · '),
-        maxLines: 1,
+        maxLines: 2,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
           color: over ? _red : _gold,
