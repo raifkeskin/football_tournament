@@ -6,6 +6,7 @@ import '../../../core/services/app_session.dart';
 import '../../../core/utils/team_colors.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../match/models/match.dart';
+import '../../match/widgets/match_weather.dart';
 import '../../match/screens/match_details_screen.dart';
 import '../../tournament/models/league_extras.dart';
 
@@ -641,6 +642,486 @@ class _WeekRow extends StatelessWidget {
                 ),
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Maç günü haberleri (maç öncesi): A tek maç kartı, C günün programı.
+// ---------------------------------------------------------------------------
+
+/// Maç kartındaki takım: sonuç kartındaki takıma ek olarak puan, sıra, form.
+class _PreviewTeam extends _Team {
+  _PreviewTeam(super.m)
+    : points = (m?['points'] as num?)?.toInt(),
+      rank = (m?['rank'] as num?)?.toInt(),
+      form = [for (final f in (m?['form'] as List? ?? const [])) '$f'];
+
+  final int? points;
+  final int? rank;
+  final List<String> form;
+
+  /// "3. sıra · 10 puan" (eşit puanlı takım varsa yalnız puan).
+  String get standing => [
+    if (rank != null) '$rank. sıra',
+    if (points != null) '$points puan',
+  ].join(' · ');
+}
+
+/// "BUGÜN", "YARIN" ya da "24.10".
+String _dayLabel(String? date, String? status) {
+  if (status == 'live' || status == 'halftime') return 'CANLI';
+  final d = DateTime.tryParse(date ?? '');
+  if (d == null) return '';
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final diff = DateTime(d.year, d.month, d.day).difference(today).inDays;
+  if (diff == 0) return 'BUGÜN';
+  if (diff == 1) return 'YARIN';
+  return '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}';
+}
+
+String _windLabel(num kmh) => kmh < 12
+    ? 'rüzgâr hafif'
+    : kmh < 29
+    ? 'rüzgâr orta'
+    : 'rüzgâr sert';
+
+class _Chip extends StatelessWidget {
+  const _Chip({required this.icon, required this.text});
+
+  final Widget icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          icon,
+          const SizedBox(width: 5),
+          Flexible(
+            child: Text(
+              text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: _soft,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Son maçlar: G yeşil, B gri, M kırmızı.
+class _FormRow extends StatelessWidget {
+  const _FormRow(this.form, {required this.end});
+
+  final List<String> form;
+  final bool end;
+
+  @override
+  Widget build(BuildContext context) {
+    Color c(String r) => switch (r) {
+      'G' => const Color(0xFF22C55E),
+      'M' => const Color(0xFFEF4444),
+      _ => const Color(0xFF64748B),
+    };
+    return Row(
+      mainAxisAlignment: end ? MainAxisAlignment.end : MainAxisAlignment.start,
+      children: [
+        for (final r in form)
+          Container(
+            width: 20,
+            height: 20,
+            margin: const EdgeInsets.symmetric(horizontal: 1.5),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: c(r),
+              borderRadius: BorderRadius.circular(5),
+            ),
+            child: Text(
+              r,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 10.5,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// A: maç günü sabah oluşan tek maç kartı. Maç bitince sistem gizler (yerine
+/// sonuç kartı gelir).
+class MatchPreviewNewsCard extends StatelessWidget {
+  const MatchPreviewNewsCard({
+    super.key,
+    required this.item,
+    required this.meta,
+    required this.loggedIn,
+    required this.liked,
+    required this.likeCount,
+    required this.onToggleLike,
+    required this.onShare,
+  });
+
+  final NewsItem item;
+  final String meta;
+  final bool loggedIn;
+  final bool liked;
+  final int likeCount;
+  final VoidCallback onToggleLike;
+  final VoidCallback onShare;
+
+  @override
+  Widget build(BuildContext context) {
+    final d = item.autoData!;
+    final home = _PreviewTeam(d['home'] as Map?);
+    final away = _PreviewTeam(d['away'] as Map?);
+    final matchId = (d['match_id'] ?? item.matchId ?? '').toString();
+    final time = (d['time'] ?? '').toString().trim();
+    final day = _dayLabel(d['date']?.toString(), d['status']?.toString());
+    final pitch = (d['pitch'] ?? '').toString().trim();
+    final cup = (d['cup'] ?? '').toString().trim();
+    final w = d['weather'] is Map ? d['weather'] as Map : null;
+    final h2h = d['h2h'] is Map ? d['h2h'] as Map : null;
+
+    Widget team(_PreviewTeam t) => Column(
+      children: [
+        _Crest(t),
+        const SizedBox(height: 6),
+        Text(
+          t.name.toUpperCase(),
+          textAlign: TextAlign.center,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 11,
+            height: 1.2,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        if (t.standing.isNotEmpty) ...[
+          const SizedBox(height: 2),
+          Text(
+            t.standing,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: _soft, fontSize: 10.5),
+          ),
+        ],
+      ],
+    );
+
+    String? h2hText;
+    if (h2h != null) {
+      final homeFirst = (h2h['home_id'] ?? '').toString() == home.id;
+      final a = homeFirst ? home.name : away.name;
+      final b = homeFirst ? away.name : home.name;
+      final year = h2h['year'];
+      h2hText =
+          '$a ${h2h['hs'] ?? 0}–${h2h['as'] ?? 0} $b'
+          '${year == null ? '' : ' ($year)'}';
+    }
+
+    final chips = <Widget>[
+      if (pitch.isNotEmpty)
+        _Chip(
+          icon: const Icon(Icons.stadium_rounded, size: 14, color: _muted),
+          text: pitch,
+        ),
+      if (w != null && w['temp'] != null)
+        _Chip(
+          icon: WeatherGlyph(
+            code: (w['code'] as num?)?.toInt() ?? 800,
+            isDay: w['day'] != false,
+            size: 16,
+          ),
+          text: [
+            '${w['temp']}°',
+            if ((w['pop'] as num? ?? 0) >= 20) '%${w['pop']} yağmur',
+            if (w['wind'] is num) _windLabel(w['wind'] as num),
+          ].join(' · '),
+        ),
+    ];
+
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: _cardDecoration(),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _openMatch(context, matchId),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _Header(
+                label: 'Maç günü',
+                meta: [if (cup.isNotEmpty) cup, meta].join(' · '),
+              ),
+              Container(
+                padding: const EdgeInsets.fromLTRB(10, 16, 10, 14),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [home.band, _center, _center, away.band],
+                    stops: const [0, 0.42, 0.58, 1],
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: team(home)),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                      child: Column(
+                        children: [
+                          Text(
+                            time.isEmpty ? '–' : time,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 32,
+                              height: 1,
+                              fontWeight: FontWeight.w900,
+                              fontFeatures: [FontFeature.tabularFigures()],
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            day,
+                            style: TextStyle(
+                              color: day == 'CANLI'
+                                  ? const Color(0xFFF87171)
+                                  : _soft,
+                              fontSize: 10,
+                              letterSpacing: 1.2,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(child: team(away)),
+                  ],
+                ),
+              ),
+              if (chips.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+                  child: Wrap(spacing: 6, runSpacing: 6, children: chips),
+                ),
+              if (home.form.isNotEmpty || away.form.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+                  child: Row(
+                    children: [
+                      Expanded(child: _FormRow(home.form, end: false)),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 8),
+                        child: Text(
+                          'Son maçlar',
+                          style: TextStyle(color: _muted, fontSize: 11),
+                        ),
+                      ),
+                      Expanded(child: _FormRow(away.form, end: true)),
+                    ],
+                  ),
+                ),
+              if (h2hText != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+                  child: Text.rich(
+                    TextSpan(
+                      text: 'Aralarındaki son maç: ',
+                      children: [
+                        TextSpan(
+                          text: h2hText,
+                          style: const TextStyle(
+                            color: _soft,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    style: const TextStyle(color: _muted, fontSize: 12),
+                  ),
+                ),
+              const SizedBox(height: 10),
+              _Actions(
+                loggedIn: loggedIn,
+                liked: liked,
+                likeCount: likeCount,
+                onToggleLike: onToggleLike,
+                onShare: onShare,
+                linkText: 'Maç detayı',
+                onLink: () => _openMatch(context, matchId),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// C: o gün bölgede 2+ maç varsa günün programı. Satıra dokununca maç açılır.
+class DayPreviewNewsCard extends StatelessWidget {
+  const DayPreviewNewsCard({
+    super.key,
+    required this.item,
+    required this.meta,
+    required this.loggedIn,
+    required this.liked,
+    required this.likeCount,
+    required this.onToggleLike,
+    required this.onShare,
+  });
+
+  final NewsItem item;
+  final String meta;
+  final bool loggedIn;
+  final bool liked;
+  final int likeCount;
+  final VoidCallback onToggleLike;
+  final VoidCallback onShare;
+
+  @override
+  Widget build(BuildContext context) {
+    final d = item.autoData!;
+    final week = (d['week'] as num?)?.toInt() ?? item.week;
+    final day = _dayLabel(d['date']?.toString(), null);
+    final matches = [
+      for (final m in (d['matches'] as List? ?? const []))
+        if (m is Map) m,
+    ];
+    final title = switch (day) {
+      'BUGÜN' => 'Bugünün Maçları',
+      'YARIN' => 'Yarının Maçları',
+      _ => 'Günün Maçları',
+    };
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: _cardDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _Header(
+            label: week == null ? 'Maç günü' : '$week. Hafta',
+            meta: meta,
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 19,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                Text(
+                  '${matches.length} maç',
+                  style: const TextStyle(color: _muted, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          for (final m in matches) _DayRow(m),
+          _Actions(
+            loggedIn: loggedIn,
+            liked: liked,
+            likeCount: likeCount,
+            onToggleLike: onToggleLike,
+            onShare: onShare,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DayRow extends StatelessWidget {
+  const _DayRow(this.m);
+
+  final Map m;
+
+  @override
+  Widget build(BuildContext context) {
+    final home = _Team(m['home'] as Map?);
+    final away = _Team(m['away'] as Map?);
+    final time = (m['time'] ?? '').toString().trim();
+    final pitch = (m['pitch'] ?? '').toString().trim();
+    final status = (m['status'] ?? '').toString();
+    final live = status == 'live' || status == 'halftime';
+    final done = status == 'finished';
+    return InkWell(
+      onTap: () => _openMatch(context, (m['match_id'] ?? '').toString()),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+        decoration: BoxDecoration(
+          border: Border(
+            top: BorderSide(color: Colors.white.withValues(alpha: 0.07)),
+          ),
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 48,
+              child: Text(
+                live ? 'CANLI' : (done ? 'Bitti' : (time.isEmpty ? '–' : time)),
+                style: TextStyle(
+                  color: live ? const Color(0xFFF87171) : Colors.white,
+                  fontSize: live || done ? 11.5 : 15,
+                  fontWeight: FontWeight.w900,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${home.name} – ${away.name}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: done ? _muted : Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (pitch.isNotEmpty)
+                    Text(
+                      pitch,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: _muted, fontSize: 11.5),
+                    ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: Colors.white24),
           ],
         ),
       ),

@@ -98,6 +98,10 @@ class ErrorReporter {
   static String get _platform =>
       kIsWeb ? 'web' : defaultTargetPlatform.name.toLowerCase();
 
+  /// Geri bildirim gibi başka kayıtlar için platform ve sürüm.
+  static String get platform => _platform;
+  static String? get version => _version;
+
   /// Hatayı bir kez (oturum başına parmak izi) sunucuya yazar.
   static void report(
     Object error,

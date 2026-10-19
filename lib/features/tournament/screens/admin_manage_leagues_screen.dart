@@ -107,6 +107,7 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
     var transferEnabled = league?.transferEnabled ?? false;
     // Maç sonucu haberi: varsayılan açık; yalnızca admin değiştirir.
     var autoResultNews = league?.autoResultNews ?? true;
+    var autoPreviewNews = league?.autoPreviewNews ?? true;
     // YouTube canlı yayın: kanaldaki yayınlar maçlara otomatik eklenir.
     var youtubeLive = league?.youtubeLive ?? false;
     final isAdmin = AppSession.of(context).value.isAdmin;
@@ -165,6 +166,7 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
           if (isAdmin) 'status': isActive ? 'active' : 'passive',
           if (isAdmin) 'transfer_enabled': transferEnabled,
           if (isAdmin) 'auto_result_news': autoResultNews,
+          if (isAdmin) 'auto_preview_news': autoPreviewNews,
         };
         if (isEdit) {
           await _sb.from('leagues').update(payload).eq('id', league.id);
@@ -803,6 +805,35 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                                     child: Text(
                                       autoResultNews
                                           ? 'Açık · maç ve hafta bitince haber'
+                                          : 'Kapalı',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                  AdminFieldRow(
+                                    icon: Icons.event_available_outlined,
+                                    label: 'Maç Günü Haberi',
+                                    onTap: saving
+                                        ? null
+                                        : () => setPopupState(
+                                            () => autoPreviewNews =
+                                                !autoPreviewNews,
+                                          ),
+                                    trailing: Switch.adaptive(
+                                      value: autoPreviewNews,
+                                      activeTrackColor: kAdminAccent,
+                                      onChanged: saving
+                                          ? null
+                                          : (v) => setPopupState(
+                                              () => autoPreviewNews = v,
+                                            ),
+                                    ),
+                                    child: Text(
+                                      autoPreviewNews
+                                          ? 'Açık · maç günü sabah kart'
                                           : 'Kapalı',
                                       style: const TextStyle(
                                         color: Colors.white,

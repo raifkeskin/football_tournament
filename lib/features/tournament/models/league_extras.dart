@@ -43,7 +43,8 @@ class NewsItem {
   final String? liveDrawId;
 
   /// Sistemin oluşturduğu haber: 'match_result' (tek maç skor kartı),
-  /// 'week_results' (haftanın sonuçları) veya 'instagram' (turnuvanın
+  /// 'week_results' (haftanın sonuçları), 'match_preview' / 'day_preview'
+  /// (maç günü kartı ve günün programı) veya 'instagram' (turnuvanın
   /// Instagram gönderisi). null: elle yazılmış haber.
   final String? autoKind;
   final String? matchId;
@@ -54,6 +55,10 @@ class NewsItem {
 
   bool get isMatchResult => autoKind == 'match_result' && autoData != null;
   bool get isWeekResults => autoKind == 'week_results' && autoData != null;
+
+  /// Maç günü haberleri: tek maç kartı ve günün programı.
+  bool get isMatchPreview => autoKind == 'match_preview' && autoData != null;
+  bool get isDayPreview => autoKind == 'day_preview' && autoData != null;
 
   /// Turnuvanın Instagram hesabından aktarılan gönderi (instagram-sync).
   bool get isInstagram => autoKind == 'instagram';

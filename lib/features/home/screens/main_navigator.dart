@@ -20,6 +20,8 @@ import '../../../core/widgets/app_name_band.dart';
 import '../../../core/widgets/app_logo.dart';
 import '../../../core/design_flags.dart';
 import '../../../core/widgets/admin_page.dart';
+import '../../../core/services/error_reporter.dart';
+import '../widgets/feedback_dialog.dart';
 
 /// Sol yan menü (Drawer) ile ana ekranlar arasında geçiş.
 class MainNavigator extends StatefulWidget {
@@ -687,11 +689,44 @@ class _MenuDrawer extends StatelessWidget {
                         ),
                         onPressed: onEnterCode,
                       ),
+                    TextButton.icon(
+                      style: TextButton.styleFrom(foregroundColor: accent),
+                      icon: const Icon(
+                        Icons.chat_bubble_outline_rounded,
+                        size: 20,
+                      ),
+                      label: const Text(
+                        'Sorun Bildir / Öneri Gönder',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      onPressed: () {
+                        final nav = Navigator.of(context);
+                        final ctx = nav.context;
+                        nav.pop(); // çekmeceyi kapat
+                        showFeedbackDialog(
+                          ctx,
+                          role: loggedIn ? session.role : null,
+                        );
+                      },
+                    ),
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(14, 8, 14, 16),
+                      padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
                       child: loggedIn
                           ? _userBlock(accent)
                           : _loginButton(accent),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+                      child: Text(
+                        'LigMasası '
+                        '${(ErrorReporter.version ?? '').split('+').first}',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white38,
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
                   ],
                 ),
