@@ -31,14 +31,16 @@ flutter build web --release --source-maps --dart-define=BUILD_ID="$BUILD_ID"
 mkdir -p "build_maps/$BUILD_ID"
 find build/web -name '*.js.map' -exec mv {} "build_maps/$BUILD_ID/" \;
 
-# Statik sayfalar (katilim.html) uygulamanın herkese açık anon anahtarını
+# Statik sayfalar (katilim.html, panel.html) uygulamanın herkese açık anon anahtarını
 # kullanır; anahtar tek yerde (app_config.dart) durur, burada yerleştirilir.
 ANON_KEY="$(grep -A2 "'SUPABASE_ANON_KEY'" lib/core/config/app_config.dart | grep -oE "eyJ[A-Za-z0-9._-]+")"
 if [[ -z "$ANON_KEY" ]]; then
   echo "Anon anahtar bulunamadı (app_config.dart)." >&2
   exit 1
 fi
-sed -i '' "s|__SUPABASE_ANON_KEY__|$ANON_KEY|g" build/web/katilim.html
+for f in build/web/katilim.html build/web/panel.html; do
+  sed -i '' "s|__SUPABASE_ANON_KEY__|$ANON_KEY|g" "$f"
+done
 
 echo "==> firebase deploy --only hosting"
 firebase deploy --only hosting

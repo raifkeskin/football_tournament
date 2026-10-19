@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Yönetim Masası · Lig Masası</title>
+<link rel="icon" href="/favicon.png">
+<style>
+:root{--bg:#0f172a;--side:#0b1222;--card:#1e293b;--card2:#162032;--text:#e2e8f0;--muted:#94a3b8;--accent:#10b981;--accent2:#064e3b;--danger:#f87171;--warn:#f59e0b;--live:#ef4444;--line:#334155}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+button{font:inherit;color:inherit;cursor:pointer}
+input{font:inherit}
+kbd{display:inline-block;min-width:18px;padding:0 5px;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;font:600 11px/16px ui-monospace,Menlo,monospace;color:var(--muted);text-align:center}
+
+/* Giriş */
+.login{min-height:100%;display:flex;align-items:center;justify-content:center;padding:24px 16px}
+.login form{width:100%;max-width:360px;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:26px 22px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:1.5px;font-style:italic;font-size:17px;color:#fff}
+.brand img{width:34px;height:34px}
+.login h1{font-size:18px;margin:18px 0 4px}
+.login p{color:var(--muted);margin:0 0 18px;font-size:13px}
+.login label{display:block;font-size:12px;color:var(--muted);margin:12px 0 5px;font-weight:600}
+.login input{width:100%;padding:11px 12px;border-radius:10px;border:1.5px solid var(--line);background:var(--bg);color:var(--text);outline:none}
+.login input:focus{border-color:var(--accent)}
+.btn{padding:10px 16px;border-radius:10px;border:1.5px solid var(--line);background:transparent;font-weight:700}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn:disabled{opacity:.55;cursor:default}
+.login .btn{width:100%;margin-top:20px;padding:12px}
+.err{color:var(--danger);font-size:13px;margin-top:12px;min-height:18px}
+
+/* Yerleşim */
+.app{display:grid;grid-template-columns:220px 1fr;min-height:100%}
+aside{background:var(--side);border-right:1px solid var(--line);padding:16px 12px;display:flex;flex-direction:column;gap:4px}
+aside .brand{padding:4px 8px 18px}
+.nav{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;color:var(--muted);font-weight:600;border:0;background:none;text-align:left;width:100%}
+.nav.on{background:var(--card);color:#fff}
+.nav[disabled]{opacity:.45;cursor:default}
+.nav small{margin-left:auto;font-size:10px;font-weight:700;color:var(--muted)}
+aside .me{margin-top:auto;padding:10px 8px 0;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+aside .me button{background:none;border:0;color:var(--danger);padding:6px 0 0;font-weight:700}
+main{padding:20px 28px 40px;min-width:0}
+.top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:18px}
+.top h1{font-size:20px;margin:0 12px 0 0}
+.day{display:flex;align-items:center;gap:6px}
+.day .btn{padding:7px 11px}
+.day input{padding:6px 8px;border-radius:9px;border:1.5px solid var(--line);background:var(--card);color:var(--text);color-scheme:dark}
+.keys{margin-left:auto;color:var(--muted);font-size:12px;display:flex;gap:12px;flex-wrap:wrap}
+
+.section{margin-bottom:22px}
+.section h2{font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin:0 0 8px;display:flex;align-items:center;gap:8px}
+.section.warn h2{color:var(--warn)}
+.list{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.row{display:grid;grid-template-columns:74px 1fr 92px 1fr 96px 110px;align-items:center;gap:10px;padding:10px 14px;border-top:1px solid var(--line);cursor:pointer}
+.row:first-child{border-top:0}
+.row:hover{background:var(--card2)}
+.row.sel{background:#1b3a35;box-shadow:inset 3px 0 0 var(--accent)}
+.when{color:var(--muted);font-variant-numeric:tabular-nums;font-size:13px}
+.when b{display:block;color:var(--text);font-size:14px}
+.tm{display:flex;align-items:center;gap:8px;min-width:0;font-weight:600}
+.tm span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tm.r{justify-content:flex-end;text-align:right}
+.tm img{width:24px;height:24px;object-fit:contain;flex:none}
+.sc{text-align:center;font-weight:800;font-size:17px;font-variant-numeric:tabular-nums}
+.sc small{display:block;font-size:11px;color:var(--muted);font-weight:600}
+.sc.none{color:var(--muted);font-weight:600;font-size:13px}
+.st{font-size:11px;font-weight:800;letter-spacing:.5px;padding:3px 8px;border-radius:20px;justify-self:center;white-space:nowrap}
+.st.notStarted{color:var(--muted);border:1px solid var(--line)}
+.st.live,.st.halftime{background:var(--live);color:#fff}
+.st.finished{background:var(--accent2);color:#6ee7b7}
+.st.postponed,.st.cancelled{color:var(--warn);border:1px solid var(--warn)}
+.row .btn{padding:7px 10px;font-size:13px;justify-self:end}
+.meta{grid-column:2/5;color:var(--muted);font-size:12px;margin-top:-6px}
+.empty{padding:34px 16px;text-align:center;color:var(--muted)}
+.lg{display:flex;align-items:center;gap:8px;padding:9px 14px;background:var(--card2);font-weight:700;font-size:13px;border-top:1px solid var(--line)}
+.lg:first-child{border-top:0}
+
+/* Skor penceresi */
+.ov{position:fixed;inset:0;background:rgba(2,6,23,.7);display:flex;align-items:center;justify-content:center;padding:16px;z-index:10}
+.dlg{width:100%;max-width:440px;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px}
+.dlg h3{margin:0 0 4px;font-size:16px}
+.dlg .sub{color:var(--muted);font-size:12px;margin-bottom:18px}
+.pair{display:grid;grid-template-columns:1fr 24px 1fr;gap:10px;align-items:end}
+.pair .t{text-align:center;font-weight:700;font-size:13px;margin-bottom:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pair input{width:100%;text-align:center;font-size:30px;font-weight:800;padding:10px 0;border-radius:12px;border:1.5px solid var(--line);background:var(--bg);color:var(--text);outline:none}
+.pair input:focus{border-color:var(--accent)}
+.pair .dash{text-align:center;font-size:26px;color:var(--muted);padding-bottom:14px}
+.pens{margin-top:16px;padding-top:14px;border-top:1px dashed var(--line)}
+.pens .lbl{font-size:12px;color:var(--warn);font-weight:700;margin-bottom:8px}
+.pens input{font-size:20px;padding:7px 0}
+.acts{display:flex;gap:10px;justify-content:flex-end;margin-top:20px;align-items:center}
+.acts .hint{margin-right:auto;color:var(--muted);font-size:12px}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;padding:10px 18px;border-radius:10px;font-weight:700;z-index:20}
+.toast.bad{background:var(--danger)}
+
+@media (max-width:820px){
+  .app{grid-template-columns:1fr}
+  aside{flex-direction:row;flex-wrap:wrap;padding:10px 16px;border-right:0;border-bottom:1px solid var(--line)}
+  aside .brand{padding:4px 8px;width:100%}
+  .nav{width:auto}
+  aside .me{margin:0 0 0 auto;border:0;padding:0}
+  main{padding:16px}
+  .keys{display:none}
+  .row{grid-template-columns:52px 1fr 60px 1fr;row-gap:6px}
+  .row .st{grid-column:1/2}
+  .row .btn{grid-column:4/5}
+  .meta{grid-column:2/4;margin:0}
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+(function () {
+  // Yönetim Masası: turnuva/bölge sorumlularının masaüstü paneli.
+  // Uygulamayla aynı Supabase hesabı ve yetkileri kullanılır; iş kuralları
+  // veritabanındadır (tetikleyiciler, RLS, desk_matches).
+  var BASE = 'https://qxdjebzszikeslobrozf.supabase.co';
+  var KEY = '__SUPABASE_ANON_KEY__';
+  var SKEY = 'lm_panel';
+  var root = document.getElementById('root');
+  var session = null;   // {access_token, refresh_token, expires_at, user}
+  var state = {date: today(), data: null, sel: -1, busy: false, dlg: null};
+
+  // ---------- yardımcılar ----------
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c];
+    });
+  }
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function iso(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  function today() { return iso(new Date()); }
+  function addDays(s, n) {
+    var p = s.split('-'), d = new Date(+p[0], +p[1] - 1, +p[2]);
+    d.setDate(d.getDate() + n);
+    return iso(d);
+  }
+  var DAYS = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
+  var MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+  function dayTitle(s) {
+    var p = s.split('-'), d = new Date(+p[0], +p[1] - 1, +p[2]);
+    var t = s === today() ? 'Bugün' : s === addDays(today(), -1) ? 'Dün' : s === addDays(today(), 1) ? 'Yarın' : DAYS[d.getDay()];
+    return t + ', ' + d.getDate() + ' ' + MONTHS[d.getMonth()];
+  }
+  function shortDate(s) {
+    var p = s.split('-');
+    return +p[2] + ' ' + MONTHS[+p[1] - 1].slice(0, 3);
+  }
+  var STATUS = {notStarted: 'BAŞLAMADI', live: 'CANLI', halftime: 'DEVRE ARASI', finished: 'BİTTİ', postponed: 'ERTELENDİ', cancelled: 'İPTAL'};
+  function toast(msg, bad) {
+    var t = document.createElement('div');
+    t.className = 'toast' + (bad ? ' bad' : '');
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(function () { t.remove(); }, 2600);
+  }
+
+  // ---------- oturum ----------
+  function saveSession(s) {
+    session = s;
+    try {
+      if (s) localStorage.setItem(SKEY, JSON.stringify(s));
+      else localStorage.removeItem(SKEY);
+    } catch (e) {}
+  }
+  function loadSession() {
+    try { session = JSON.parse(localStorage.getItem(SKEY) || 'null'); } catch (e) { session = null; }
+  }
+  function authCall(grant, body) {
+    return fetch(BASE + '/auth/v1/token?grant_type=' + grant, {
+      method: 'POST',
+      headers: {apikey: KEY, 'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    }).then(function (r) {
+      return r.json().then(function (j) {
+        if (!r.ok) throw new Error(j.error_description || j.msg || j.message || 'Giriş başarısız');
+        return j;
+      });
+    });
+  }
+  // Uygulamadaki gibi: 10 haneli telefon (başında 0 olabilir) hesabın
+  // e-posta adına çevrilir; e-posta yazıldıysa doğrudan kullanılır.
+  function loginId(raw) {
+    raw = raw.trim();
+    if (raw.indexOf('@') > 0) return {email: raw};
+    var d = raw.replace(/\D/g, '');
+    if (d.length === 11 && d[0] === '0') d = d.slice(1);
+    if (d.length === 12 && d.slice(0, 2) === '90') d = d.slice(2);
+    if (d.length === 10) return {email: d + '@masterclass.com'};
+    return {phone: raw};
+  }
+  function token() {
+    if (!session) return Promise.reject(new Error('Oturum yok'));
+    if (session.expires_at && session.expires_at * 1000 > Date.now() + 60000) {
+      return Promise.resolve(session.access_token);
+    }
+    return authCall('refresh_token', {refresh_token: session.refresh_token}).then(function (s) {
+      saveSession(s);
+      return s.access_token;
+    }, function (e) {
+      saveSession(null);
+      render();
+      throw e;
+    });
+  }
+  function api(path, opts) {
+    opts = opts || {};
+    return token().then(function (t) {
+      var h = {apikey: KEY, Authorization: 'Bearer ' + t, 'Content-Type': 'application/json'};
+      if (opts.prefer) h.Prefer = opts.prefer;
+      return fetch(BASE + '/rest/v1/' + path, {
+        method: opts.method || 'GET',
+        headers: h,
+        body: opts.body ? JSON.stringify(opts.body) : undefined
+      });
+    }).then(function (r) {
+      if (r.status === 204) return null;
+      return r.text().then(function (txt) {
+        var j = txt ? JSON.parse(txt) : null;
+        if (!r.ok) throw new Error((j && (j.message || j.hint)) || ('Hata ' + r.status));
+        return j;
+      });
+    });
+  }
+
+  // ---------- giriş ekranı ----------
+  function renderLogin(msg) {
+    root.innerHTML =
+      '<div class="login"><form id="lf">' +
+      '<div class="brand"><img src="/logo-lm.png" alt="">LİG MASASI</div>' +
+      '<h1>Yönetim Masası</h1>' +
+      '<p>Turnuva ve bölge sorumluları için. Uygulamadaki hesabınızla girin.</p>' +
+      '<label for="lp">Telefon</label><input id="lp" autocomplete="username" inputmode="tel" placeholder="5xx xxx xx xx" required>' +
+      '<label for="lw">Şifre</label><input id="lw" type="password" autocomplete="current-password" required>' +
+      '<button class="btn primary" id="lb">Giriş yap</button>' +
+      '<div class="err" id="le">' + esc(msg || '') + '</div>' +
+      '</form></div>';
+    var f = document.getElementById('lf');
+    document.getElementById('lp').focus();
+    f.onsubmit = function (e) {
+      e.preventDefault();
+      var b = document.getElementById('lb');
+      b.disabled = true;
+      var body = loginId(document.getElementById('lp').value);
+      body.password = document.getElementById('lw').value;
+      authCall('password', body).then(function (s) {
+        saveSession(s);
+        state.data = null;
+        render();
+      }, function (err) {
+        b.disabled = false;
+        document.getElementById('le').textContent =
+          /invalid/i.test(err.message) ? 'Telefon ya da şifre hatalı.' : err.message;
+      });
+    };
+  }
+
+  // ---------- panel ----------
+  function load() {
+    state.busy = true;
+    var d = state.date;
+    return api('rpc/desk_matches', {method: 'POST', body: {p_date: d}}).then(function (j) {
+      if (d !== state.date) return;
+      state.data = j;
+      state.busy = false;
+      var n = rows().length;
+      if (state.sel >= n) state.sel = n - 1;
+      renderMain();
+    }, function (e) {
+      state.busy = false;
+      if (session) toast(e.message, true);
+    });
+  }
+  function rows() {
+    var m = (state.data && state.data.matches) || [];
+    // Sırası: önce sonucu bekleyen eski maçlar, sonra günün maçları.
+    return m.filter(function (x) { return x.overdue; }).concat(m.filter(function (x) { return !x.overdue; }));
+  }
+  function setDate(d) {
+    state.date = d;
+    state.sel = -1;
+    renderMain();
+    load();
+  }
+
+  function render() {
+    if (!session) return renderLogin();
+    var u = session.user || {};
+    var who = (u.email || '').replace('@masterclass.com', '') || u.phone || '';
+    root.innerHTML =
+      '<div class="app"><aside>' +
+      '<div class="brand"><img src="/logo-lm.png" alt="">LİG MASASI</div>' +
+      '<button class="nav on">📅 Bugün</button>' +
+      '<button class="nav" disabled>⚽ Canlı giriş <small>YAKINDA</small></button>' +
+      '<button class="nav" disabled>✅ Onaylar <small>YAKINDA</small></button>' +
+      '<button class="nav" disabled>🗓️ Fikstür <small>YAKINDA</small></button>' +
+      '<div class="me">' + esc(who) + '<br><button id="lo">Çıkış yap</button></div>' +
+      '</aside><main id="main"></main></div>';
+    document.getElementById('lo').onclick = function () {
+      token().then(function (t) {
+        fetch(BASE + '/auth/v1/logout', {method: 'POST', headers: {apikey: KEY, Authorization: 'Bearer ' + t}});
+      }).catch(function () {});
+      saveSession(null);
+      state.data = null;
+      render();
+    };
+    renderMain();
+    if (!state.data) load();
+  }
+
+  function rowHtml(m, i) {
+    var played = m.status === 'finished' || m.status === 'live' || m.status === 'halftime';
+    var score = played
+      ? '<div class="sc">' + m.hs + ' – ' + m.as + (m.hp != null && m.ap != null ? '<small>pen. ' + m.hp + '–' + m.ap + '</small>' : '') + '</div>'
+      : '<div class="sc none">–</div>';
+    var meta = [m.season, m.group, m.cup_round || (m.week ? m.week + '. hafta' : '')].filter(Boolean).join(' · ');
+    return '<div class="row' + (i === state.sel ? ' sel' : '') + '" data-i="' + i + '">' +
+      '<div class="when"><b>' + esc((m.time || '').slice(0, 5) || '--:--') + '</b>' + (m.overdue ? esc(shortDate(m.date)) : '') + '</div>' +
+      '<div class="tm r"><span>' + esc(m.home) + '</span>' + (m.home_logo ? '<img src="' + esc(m.home_logo) + '" alt="">' : '') + '</div>' +
+      score +
+      '<div class="tm">' + (m.away_logo ? '<img src="' + esc(m.away_logo) + '" alt="">' : '') + '<span>' + esc(m.away) + '</span></div>' +
+      '<span class="st ' + esc(m.status) + '">' + (STATUS[m.status] || esc(m.status)) + '</span>' +
+      '<button class="btn' + (m.status === 'finished' ? '' : ' primary') + '" data-score="' + i + '">' + (m.status === 'finished' ? 'Düzelt' : 'Skor gir') + '</button>' +
+      '<div class="meta">' + esc(meta) + '</div>' +
+      '</div>';
+  }
+
+  function listHtml(list, offset) {
+    var html = '', last = null;
+    list.forEach(function (m, k) {
+      if (m.league !== last) {
+        html += '<div class="lg">' + esc(m.league || 'Turnuva') + '</div>';
+        last = m.league;
+      }
+      html += rowHtml(m, offset + k);
+    });
+    return '<div class="list">' + html + '</div>';
+  }
+
+  function renderMain() {
+    var main = document.getElementById('main');
+    if (!main) return;
+    var all = rows();
+    var over = all.filter(function (m) { return m.overdue; });
+    var day = all.filter(function (m) { return !m.overdue; });
+    var body;
+    if (!state.data) {
+      body = '<div class="list"><div class="empty">Yükleniyor…</div></div>';
+    } else if (!state.data.can) {
+      body = '<div class="list"><div class="empty">Bu panel turnuva ve bölge sorumluları içindir.<br>Hesabınızda yönetim yetkisi görünmüyor.</div></div>';
+    } else {
+      body = '';
+      if (over.length) {
+        body += '<div class="section warn"><h2>⚠️ Sonucu girilmemiş maçlar (' + over.length + ')</h2>' + listHtml(over, 0) + '</div>';
+      }
+      body += '<div class="section"><h2>' + esc(dayTitle(state.date)) + ' · ' + day.length + ' maç</h2>' +
+        (day.length ? listHtml(day, over.length) : '<div class="list"><div class="empty">Bu gün yönettiğiniz maç yok.</div></div>') +
+        '</div>';
+    }
+    main.innerHTML =
+      '<div class="top"><h1>Bugün</h1>' +
+      '<div class="day"><button class="btn" id="dp" title="Önceki gün (←)">‹</button>' +
+      '<input type="date" id="dd" value="' + state.date + '">' +
+      '<button class="btn" id="dn" title="Sonraki gün (→)">›</button>' +
+      (state.date !== today() ? '<button class="btn" id="dt">Bugün</button>' : '') + '</div>' +
+      '<div class="keys"><span><kbd>←</kbd><kbd>→</kbd> gün</span><span><kbd>↑</kbd><kbd>↓</kbd> maç seç</span><span><kbd>Enter</kbd> skor</span><span><kbd>B</kbd> bugün</span><span><kbd>R</kbd> yenile</span></div>' +
+      '</div>' + body;
+    document.getElementById('dp').onclick = function () { setDate(addDays(state.date, -1)); };
+    document.getElementById('dn').onclick = function () { setDate(addDays(state.date, 1)); };
+    var dt = document.getElementById('dt');
+    if (dt) dt.onclick = function () { setDate(today()); };
+    document.getElementById('dd').onchange = function (e) { if (e.target.value) setDate(e.target.value); };
+    Array.prototype.forEach.call(main.querySelectorAll('.row'), function (el) {
+      el.onclick = function (e) {
+        var i = +el.getAttribute('data-i');
+        state.sel = i;
+        if (e.target.hasAttribute('data-score')) return openScore(all[i]);
+        highlight();
+      };
+      el.ondblclick = function () { openScore(all[+el.getAttribute('data-i')]); };
+    });
+  }
+
+  function highlight() {
+    Array.prototype.forEach.call(document.querySelectorAll('.row'), function (el) {
+      var on = +el.getAttribute('data-i') === state.sel;
+      el.classList.toggle('sel', on);
+      if (on) el.scrollIntoView({block: 'nearest'});
+    });
+  }
+
+  // ---------- skor girişi ----------
+  // Uygulamadaki hızlı skor girişiyle aynı: skor yazılır, maç "Bitti" olur;
+  // eleme maçı berabereyse penaltı skoru istenir. Haber, bildirim, puan
+  // tablosu veritabanı tetikleyicileriyle güncellenir.
+  function openScore(m) {
+    if (!m) return;
+    var has = m.status === 'finished' || m.hs || m.as;
+    var ov = document.createElement('div');
+    ov.className = 'ov';
+    ov.innerHTML =
+      '<div class="dlg" role="dialog">' +
+      '<h3>' + esc(m.home) + ' – ' + esc(m.away) + '</h3>' +
+      '<div class="sub">' + esc([m.league, shortDate(m.date) + ' ' + (m.time || '').slice(0, 5)].join(' · ')) +
+      (m.status !== 'finished' ? ' · kaydedince maç bitmiş sayılır' : '') + '</div>' +
+      '<div class="pair"><div><div class="t">' + esc(m.home) + '</div><input id="sh" inputmode="numeric" maxlength="2" value="' + (has ? m.hs : '') + '"></div>' +
+      '<div class="dash">–</div>' +
+      '<div><div class="t">' + esc(m.away) + '</div><input id="sa" inputmode="numeric" maxlength="2" value="' + (has ? m.as : '') + '"></div></div>' +
+      '<div class="pens" id="pens" hidden><div class="lbl">Eleme maçı berabere bitemez: penaltı skoru</div>' +
+      '<div class="pair"><input id="ph" inputmode="numeric" maxlength="2" value="' + (m.hp != null ? m.hp : '') + '"><div class="dash">–</div>' +
+      '<input id="pa" inputmode="numeric" maxlength="2" value="' + (m.ap != null ? m.ap : '') + '"></div></div>' +
+      '<div class="acts"><span class="hint"><kbd>Enter</kbd> kaydet · <kbd>Esc</kbd> vazgeç</span>' +
+      '<button class="btn" id="sc">Vazgeç</button><button class="btn primary" id="ss">Kaydet</button></div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    state.dlg = ov;
+    var sh = ov.querySelector('#sh'), sa = ov.querySelector('#sa');
+    var ph = ov.querySelector('#ph'), pa = ov.querySelector('#pa');
+    function num(el) { var v = parseInt(el.value, 10); return isNaN(v) ? null : v; }
+    function needsPens() { return m.knockout && (num(sh) || 0) === (num(sa) || 0); }
+    function sync() { ov.querySelector('#pens').hidden = !needsPens(); }
+    [sh, sa, ph, pa].forEach(function (el) {
+      el.addEventListener('focus', function () { el.select(); });
+      el.addEventListener('input', function () {
+        el.value = el.value.replace(/\D/g, '');
+        sync();
+        // Tek hane yazılınca sıradaki kutuya geçilir (10+ gol nadir; ikinci
+        // hane yine yazılabilir, odak geçtikten sonra Shift+Tab ile dönülür).
+        if (el.value.length === 1 && el === sh) sa.focus();
+      });
+    });
+    sync();
+    function close() {
+      ov.remove();
+      state.dlg = null;
+    }
+    function save() {
+      var btn = ov.querySelector('#ss');
+      if (btn.disabled) return;
+      var hs = num(sh) || 0, as = num(sa) || 0;
+      var hp = num(ph), ap = num(pa);
+      if (needsPens() && (hp == null || ap == null || hp === ap)) {
+        toast('Eleme maçı berabere bitemez: penaltı skorunu girin.', true);
+        (hp == null ? ph : pa).focus();
+        return;
+      }
+      btn.disabled = true;
+      saveScore(m, hs, as, m.knockout && needsPens() ? hp : null, m.knockout && needsPens() ? ap : null).then(function () {
+        close();
+        toast('Kaydedildi: ' + m.home + ' ' + hs + '–' + as + ' ' + m.away);
+        load();
+      }, function (e) {
+        btn.disabled = false;
+        toast(e.message, true);
+      });
+    }
+    ov.querySelector('#sc').onclick = close;
+    ov.querySelector('#ss').onclick = save;
+    ov.onclick = function (e) { if (e.target === ov) close(); };
+    ov.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { e.preventDefault(); close(); }
+      else if (e.key === 'Enter') { e.preventDefault(); save(); }
+    });
+    sh.focus();
+  }
+
+  function saveScore(m, hs, as, hp, ap) {
+    var body = {home_score: hs, away_score: as, is_completed: true, status: 'finished'};
+    if (m.knockout) {
+      body.home_pens = hp;
+      body.away_pens = ap;
+      body.shootout = null;
+    }
+    return api('matches?id=eq.' + m.id + '&select=id', {method: 'PATCH', body: body, prefer: 'return=representation'})
+      .then(function (r) {
+        if (!r || !r.length) throw new Error('Bu maçı düzenleme yetkiniz yok.');
+        // Canlı girilmemiş maçta başlangıç/devre/bitiş satırları eklenir
+        // (uygulamadaki hızlı skor girişi gibi); varsa tekrar eklenmez.
+        return api('match_events?match_id=eq.' + m.id + '&event_type=eq.status&select=id&limit=1');
+      })
+      .then(function (ev) {
+        if (ev && ev.length) return null;
+        return api('leagues?id=eq.' + m.league_id + '&select=match_period_duration').then(function (l) {
+          var p = (l && l[0] && l[0].match_period_duration) || 25;
+          var now = new Date().toISOString();
+          return api('match_events', {method: 'POST', prefer: 'return=minimal', body: [
+            {match_id: m.id, event_type: 'status', minute: 0, player_name: 'Maç Başladı', created_at: now},
+            {match_id: m.id, event_type: 'status', minute: p, player_name: 'İlk Yarı', created_at: now},
+            {match_id: m.id, event_type: 'status', minute: p * 2, player_name: 'Maç Sonucu', created_at: now}
+          ]});
+        });
+      });
+  }
+
+  // ---------- klavye ----------
+  document.addEventListener('keydown', function (e) {
+    if (!session || state.dlg || e.metaKey || e.ctrlKey || e.altKey) return;
+    var tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea') return;
+    var all = rows();
+    if (e.key === 'ArrowLeft') { e.preventDefault(); setDate(addDays(state.date, -1)); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); setDate(addDays(state.date, 1)); }
+    else if (e.key === 'ArrowDown' && all.length) { e.preventDefault(); state.sel = Math.min(all.length - 1, state.sel + 1); highlight(); }
+    else if (e.key === 'ArrowUp' && all.length) { e.preventDefault(); state.sel = Math.max(0, state.sel - 1); highlight(); }
+    else if (e.key === 'Enter' && state.sel >= 0) { e.preventDefault(); openScore(all[state.sel]); }
+    else if (e.key === 'b' || e.key === 'B') { setDate(today()); }
+    else if (e.key === 'r' || e.key === 'R') { load(); }
+  });
+
+  loadSession();
+  render();
+})();
+</script>
+</body>
+</html>
