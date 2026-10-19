@@ -224,7 +224,14 @@ Kalıcı maliyet: sonrasında her yeni özellik iki dilde yazılır.
   - Olay sonrası: VAR iptali ve sil.
   - Dakika maç saatinden kendiliğinden gelir.
   - RPC'ler: `desk_match`, `desk_add_event`, `desk_delete_event`. Skor atomik güncellenir.
-- **2. aşama:** onaylar, esame, fikstür tablosu, Ctrl+K.
+- **Liste + detay düzeni (2026-10-19):** maç satırları yatay; tıklanan maç sağ bölmede açılır, başka maça tıklanınca sağ taraf o maça geçer.
+- **Oyuncu değişikliği kuralı (2026-10-19, DB tetikleyici, uygulamada da geçerli):** çıkan oyuncu sahada, giren oyuncu kenarda olmalı.
+- **Onaylar YAPILDI (2026-10-19):**
+  - Kapsam: kadro talepleri, kart cezaları (maç sayısı düzenlenir), profil değişiklikleri, yayın linki uyuşmazlıkları, Instagram gönderileri.
+  - Menüde talep sayısı rozeti görünür.
+  - Kısayollar: O onayla, X reddet.
+  - Kayıtlar `desk_approvals` RPC'sinden gelir (security invoker).
+- **Sıradakiler:** Fikstür tablosu, Puan Durumu, Cezalar, Sponsorlar, Takımlar, Lisanslar, Haberler, Ctrl+K arama.
 
 ### Web'e taşınacaklar
 Uygulamada yapılan ve panele de dokunan değişiklikler buraya yazılır. Kullanıcı "web'e uygula" deyince toplu olarak işlenir, sonra liste temizlenir. Veritabanı kuralları (RPC, tetikleyici, RLS) iki tarafa kendiliğinden yansır, buraya yazılmaz.
