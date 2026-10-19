@@ -189,3 +189,24 @@ Fotoğraf yükleyerek esame okuma 2026-10-17'de yapıldı (galeriden seçme, Gem
 - Android/web'de image_picker kamera kaynağı ek izin istemeden çalışır.
 - Turnuva ayarı: "Esame girişi: Elle / Kağıttan oku (kamera + galeri)".
 - Sonraki aşama: maç sonu kağıttaki gol / SK / KK sütunlarını okuma.
+
+## 22. Dil seçeneği (çok dilli uygulama) — BÜYÜMEDE YAPILACAK
+
+Kullanıcı sayısı büyür ve Türkçe bilmeyen kitleden talep gelirse yapılacak (karar 2026-10-19). Maliyet: yüksek.
+
+Ölçek (2026-10-19 ölçümü):
+- Uygulamada 184 dosyada ~2.400 sabit Türkçe metin.
+- Veritabanında ~600 satır Türkçe metin: bildirim başlıkları, otomatik haber, hata mesajları.
+- Afişlere gömülü yazılar ("MAÇ SONUCU", "HAFTA" …).
+
+Aşamalar:
+1. Uygulama ekranları:
+   - Metinler ARB dosyalarına taşınır (`flutter_localizations` + `intl` zaten kurulu).
+   - Ayarlara dil seçimi eklenir.
+   - İlk dil İngilizce.
+2. Sunucu metinleri:
+   - Kullanıcının dil tercihi `notification_prefs` içinde tutulur.
+   - `push_send`, otomatik haber ve afiş metinleri dile göre üretilir.
+3. Mağaza: App Store / Play açıklamaları, görseller, gizlilik ve koşullar sayfaları her dil için.
+
+Kalıcı maliyet: sonrasında her yeni özellik iki dilde yazılır.
