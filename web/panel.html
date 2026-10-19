@@ -148,22 +148,46 @@ button.tile:hover { border-color: #33476e; }
 .lg-head { padding: 8px 16px; background: var(--panel); border-top: 1px solid var(--line); font-weight: 700; font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
 .lg-head img { width: 18px; height: 18px; object-fit: contain; }
 
-/* Maç satırları */
-.match {
-  display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 12px; align-items: center;
-  padding: 12px 16px; border-top: 1px solid var(--line); cursor: pointer;
+/* Liste + sağda maç: maça tıklayınca sağ bölme açılır, liste daralır. */
+.split { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; align-items: start; }
+.split.open { grid-template-columns: minmax(440px, .8fr) minmax(0, 1.3fr); }
+.listcol { display: grid; gap: 22px; align-content: start; min-width: 0; container-type: inline-size; }
+.detail { display: none; min-width: 0; container-type: inline-size; }
+.split.open .detail {
+  display: grid; gap: 14px; align-content: start;
+  position: sticky; top: 76px; max-height: calc(100vh - 92px); overflow: auto; padding-right: 2px;
 }
-.match:hover { background: rgba(255,255,255,.02); }
-.match.sel { background: rgba(16,185,129,.08); box-shadow: inset 3px 0 0 var(--accent); }
-.match .time { font: 800 18px/1.05 var(--display); color: var(--muted); }
-.match .time small { display: block; font-size: 13px; }
-.match.is-live .time { color: var(--live); }
-.teams { display: grid; gap: 4px; min-width: 0; }
-.team { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.team img, .team .dot { width: 20px; height: 20px; flex: none; object-fit: contain; }
-.team .dot { border-radius: 50%; display: grid; place-items: center; font-size: 9px; font-weight: 800; color: #fff; background: var(--card-2); }
-.team span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
-.team em { margin-left: auto; font-style: normal; font: 800 18px/1 var(--display); padding-left: 10px; }
+.dhead { display: flex; align-items: center; gap: 8px; }
+.dhead .sub { margin: 0 auto 0 0; font-size: 13px; }
+.dhead .btn { padding: 5px 10px; font-size: 13px; }
+@container (max-width: 760px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .listcol .keys { display: none; } }
+
+/* Maç satırı (yatay): saat · ev sahibi · skor · deplasman · düğme */
+.mrow {
+  display: grid; grid-template-columns: 62px minmax(0, 1fr) 96px minmax(0, 1fr) auto;
+  gap: 4px 12px; align-items: center; padding: 12px 16px; border-top: 1px solid var(--line); cursor: pointer;
+}
+.mrow:hover { background: rgba(255,255,255,.025); }
+.mrow.sel { background: rgba(16,185,129,.09); box-shadow: inset 3px 0 0 var(--accent); }
+.mrow .time { font: 800 18px/1.05 var(--display); color: var(--muted); }
+.mrow .time small { display: block; font-size: 13px; }
+.mrow.is-live .time { color: var(--live); }
+.mrow .tm { display: flex; align-items: center; gap: 8px; min-width: 0; font-weight: 700; }
+.mrow .tm.r { justify-content: flex-end; text-align: right; }
+.mrow .tm span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mrow .tm img, .mrow .tm .dot { width: 24px; height: 24px; flex: none; object-fit: contain; }
+.mrow .tm .dot { border-radius: 50%; display: grid; place-items: center; font-size: 10px; font-weight: 800; background: var(--card-2); }
+.mrow .sc { text-align: center; font: 800 22px/1 var(--display); }
+.mrow .sc.none { color: var(--muted); font-size: 18px; }
+.mrow .score-in { justify-content: center; }
+.mrow .acts { min-width: 0; }
+.mrow .meta { grid-column: 2 / 5; justify-content: center; margin: 0; }
+@container (max-width: 560px) {
+  .mrow { grid-template-columns: 48px minmax(0, 1fr) 70px minmax(0, 1fr); }
+  .mrow .acts { grid-column: 1 / -1; justify-content: center; }
+  .mrow .acts:empty { display: none; }
+  .mrow .tm img, .mrow .tm .dot { display: none; }
+}
 .acts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: end; align-items: center; }
 .btn { border: 1px solid var(--line); background: var(--card-2); border-radius: 9px; padding: 7px 11px; font-weight: 700; font-size: 13.5px; white-space: nowrap; }
 .btn:hover { border-color: #3a5180; }
@@ -241,8 +265,23 @@ button.tile:hover { border-color: #33476e; }
 .shoot .grp { display: flex; gap: 6px; align-items: center; padding: 6px 8px; border: 1px solid var(--line); border-radius: 10px; }
 .shoot .grp b { font-size: 13px; margin-right: 4px; }
 .pick-list { display: grid; }
-@media (max-width: 1100px) { .lgrid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .lgrid .evbox { grid-column: 1 / -1; order: 3; } }
-@media (max-width: 640px) { .lgrid { grid-template-columns: 1fr; } .sb .score { font-size: 36px; } .sb .side-t { font-size: 17px; } }
+/* Sağ bölme dar: olaylar esamelerin üstünde (kaydırmadan görünsün),
+   esameler yan yana; geniş: esame · olaylar · esame. */
+.lgrid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.lgrid .evbox { grid-column: 1 / -1; order: -1; }
+.lgrid .evbox .evs { max-height: 240px; overflow: auto; }
+@container (min-width: 1080px) {
+  .lgrid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr) minmax(0, 1fr); }
+  .lgrid .evbox { grid-column: auto; order: 0; }
+  .lgrid .evbox .evs { max-height: none; }
+}
+@container (max-width: 560px) { .lgrid { grid-template-columns: 1fr; } .sb .score { font-size: 36px; } .sb .side-t { font-size: 17px; } }
+/* Dar ekranda sağ bölme listenin yerine geçer; Kapat ile listeye dönülür. */
+@media (max-width: 1000px) {
+  .split.open { grid-template-columns: minmax(0, 1fr); }
+  .split.open .listcol { display: none; }
+  .split.open .detail { position: static; max-height: none; overflow: visible; }
+}
 
 /* Henüz yapılmayan bölüm */
 .soon { padding: 40px 20px; text-align: center; color: var(--muted); }
@@ -491,10 +530,11 @@ button.tile:hover { border-color: #33476e; }
       // Seçili turnuva artık listede yoksa: tek turnuvaysa o, değilse tümü.
       if (state.league && !ls.some(function (l) { return l.id === state.league; })) state.league = null;
       if (!state.league && ls.length === 1) state.league = ls[0].id;
-      var n = rows().length;
-      if (state.sel >= n) state.sel = n - 1;
+      syncSel();
       renderTop();
-      renderContent();
+      if (document.getElementById('listcol')) renderList();
+      else renderContent();
+      if (state.view === 'live' && !state.liveId) pickFirstLive();
     }, function (e) {
       if (session) toast(e.message, true);
     });
@@ -513,10 +553,16 @@ button.tile:hover { border-color: #33476e; }
     var m = matches();
     return m.filter(function (x) { return !x.overdue; }).concat(m.filter(function (x) { return x.overdue; }));
   }
+  // Seçili satır, sağda açık maçın satırıdır.
+  function syncSel() {
+    if (!state.liveId) return;
+    var all = rows();
+    for (var i = 0; i < all.length; i++) if (all[i].id === state.liveId) { state.sel = i; return; }
+  }
   function setDate(d) {
     state.date = d;
     state.sel = -1;
-    renderContent();
+    renderList();
     load();
   }
 
@@ -544,26 +590,33 @@ button.tile:hover { border-color: #33476e; }
       }).catch(function () {});
       saveSession(null);
       state.data = null;
+      closeLive();
       render();
     };
     renderTop();
     renderContent();
     if (!state.data) load();
+    if (state.liveId) startPoll();
   }
 
+  // Bugün ve Canlı maç aynı ekrandır (liste + sağda maç); Canlı maç menüsü
+  // açık maç yoksa ilk canlı maçı açar.
   function go(view) {
     state.view = view;
-    if (view !== 'live') {
-      state.mode = null;
-      state.pick = null;
-      stopPoll();
-    }
+    if (view !== 'today' && view !== 'live') closeLive();
     syncHash();
     Array.prototype.forEach.call(root.querySelectorAll('.nav-btn'), function (b) {
       if (b.getAttribute('data-view') === view) b.setAttribute('aria-current', 'page');
       else b.removeAttribute('aria-current');
     });
     renderContent();
+    if (view === 'live' && !state.liveId) pickFirstLive();
+  }
+  function pickFirstLive() {
+    var all = rows().filter(function (m) { return !m.overdue; });
+    var m = all.filter(function (x) { return x.status === 'live' || x.status === 'halftime'; })[0] ||
+      all.filter(function (x) { return x.status === 'notStarted'; })[0];
+    if (m) openLive(m.id);
   }
 
   function renderTop() {
@@ -599,29 +652,35 @@ button.tile:hover { border-color: #33476e; }
         else localStorage.removeItem(LKEY);
       } catch (e) {}
       state.sel = -1;
+      syncSel();
       renderTop();
-      renderContent();
+      renderList();
     };
   }
 
   function renderContent() {
     var el = document.getElementById('content');
     if (!el) return;
-    if (state.view === 'live') return renderLive(el);
-    if (state.view !== 'today') {
-      var n = NAV.filter(function (x) { return x.id === state.view; })[0];
-      el.innerHTML = '<div class="h-row"><div><h1>' + esc(n.name) + '</h1></div></div>' +
-        '<div class="box"><div class="soon"><b>Sıradaki aşamada</b>' + esc(SOON[state.view] || '') + '</div></div>';
+    if (state.view === 'today' || state.view === 'live') {
+      el.innerHTML = '<div class="split' + (state.liveId ? ' open' : '') + '" id="split">' +
+        '<div class="listcol" id="listcol"></div><section class="detail" id="detail" aria-label="Maç"></section></div>';
+      renderList();
+      renderDetail();
       return;
     }
-    renderToday(el);
+    var n = NAV.filter(function (x) { return x.id === state.view; })[0];
+    el.innerHTML = '<div class="h-row"><div><h1>' + esc(n.name) + '</h1></div></div>' +
+      '<div class="box"><div class="soon"><b>Sıradaki aşamada</b>' + esc(SOON[state.view] || '') + '</div></div>';
   }
 
-  // ---------- Bugün ----------
+  // ---------- Maç listesi ----------
   function teamHtml(name, logo, score) {
     return '<div class="team">' +
       (logo ? '<img src="' + esc(logo) + '" alt="">' : '<span class="dot">' + esc(initials(name)) + '</span>') +
       '<span>' + esc(name) + '</span>' + (score == null ? '' : '<em class="num">' + score + '</em>') + '</div>';
+  }
+  function crest(name, logo) {
+    return logo ? '<img src="' + esc(logo) + '" alt="">' : '<span class="dot">' + esc(initials(name)) + '</span>';
   }
   function metaOf(m) {
     var bits = [];
@@ -634,26 +693,31 @@ button.tile:hover { border-color: #33476e; }
     if (m.hp != null && m.ap != null) bits.push('<span class="pill mute">Penaltı ' + m.hp + '–' + m.ap + '</span>');
     return '<div class="meta">' + bits.join('') + '</div>';
   }
+  // Yatay satır: saat · ev sahibi · skor · deplasman · düğme. Satıra
+  // tıklayınca maç sağda açılır.
   function matchRow(m, i) {
-    var played = m.status === 'finished' || m.status === 'live' || m.status === 'halftime';
     var live = m.status === 'live' || m.status === 'halftime';
+    var played = live || m.status === 'finished';
+    var score = played
+      ? '<div class="sc num">' + m.hs + ' – ' + m.as + '</div>'
+      : '<div class="sc num none">–</div>';
     var btn = m.status === 'finished'
-      ? '<button class="btn ghost" data-live="' + i + '">Olaylar</button><button class="btn ghost" data-score="' + i + '">Düzelt</button>'
-      : live
-        ? '<button class="btn live" data-live="' + i + '">Canlı yönet</button>'
-        : '<button class="btn" data-live="' + i + '">Canlı yönet</button><button class="btn primary" data-score="' + i + '">Skor gir</button>';
-    return '<div class="match' + (live ? ' is-live' : '') + (i === state.sel ? ' sel' : '') + '" data-i="' + i + '">' +
+      ? '<button class="btn ghost" data-score="' + i + '">Düzelt</button>'
+      : live ? '' : '<button class="btn primary" data-score="' + i + '">Skor gir</button>';
+    return '<div class="mrow' + (live ? ' is-live' : '') + (i === state.sel ? ' sel' : '') + '" data-i="' + i + '">' +
       '<div class="time num">' + esc((m.time || '').slice(0, 5) || '--:--') + '</div>' +
-      '<div class="teams">' + teamHtml(m.home, m.home_logo, played ? m.hs : null) + teamHtml(m.away, m.away_logo, played ? m.as : null) + metaOf(m) + '</div>' +
-      '<div class="acts">' + btn + '</div></div>';
+      '<div class="tm r"><span>' + esc(m.home) + '</span>' + crest(m.home, m.home_logo) + '</div>' + score +
+      '<div class="tm">' + crest(m.away, m.away_logo) + '<span>' + esc(m.away) + '</span></div>' +
+      '<div class="acts">' + btn + '</div>' + metaOf(m) + '</div>';
   }
   function overdueRow(m, i) {
-    return '<div class="match' + (i === state.sel ? ' sel' : '') + '" data-i="' + i + '">' +
+    return '<div class="mrow' + (i === state.sel ? ' sel' : '') + '" data-i="' + i + '">' +
       '<div class="time num"><small>' + esc(shortDate(m.date)) + '</small>' + esc((m.time || '').slice(0, 5)) + '</div>' +
-      '<div class="teams">' + teamHtml(m.home, m.home_logo) + teamHtml(m.away, m.away_logo) + metaOf(m) + '</div>' +
-      '<div class="acts"><div class="score-in"><input class="num" inputmode="numeric" maxlength="2" placeholder="–" aria-label="' + esc(m.home) + ' skoru" data-h="' + i + '">' +
+      '<div class="tm r"><span>' + esc(m.home) + '</span>' + crest(m.home, m.home_logo) + '</div>' +
+      '<div class="score-in"><input class="num" inputmode="numeric" maxlength="2" placeholder="–" aria-label="' + esc(m.home) + ' skoru" data-h="' + i + '">' +
       '<span>–</span><input class="num" inputmode="numeric" maxlength="2" placeholder="–" aria-label="' + esc(m.away) + ' skoru" data-a="' + i + '"></div>' +
-      '<button class="btn primary" data-quick="' + i + '">Kaydet</button></div></div>';
+      '<div class="tm">' + crest(m.away, m.away_logo) + '<span>' + esc(m.away) + '</span></div>' +
+      '<div class="acts"><button class="btn primary" data-quick="' + i + '">Kaydet</button></div>' + metaOf(m) + '</div>';
   }
   // Turnuva seçili değilse maçlar turnuva başlıklarıyla ayrılır.
   function grouped(list, offset, fn) {
@@ -668,7 +732,9 @@ button.tile:hover { border-color: #33476e; }
     return html;
   }
 
-  function renderToday(el) {
+  function renderList() {
+    var el = document.getElementById('listcol');
+    if (!el) return;
     var all = rows();
     var day = all.filter(function (m) { return !m.overdue; });
     var over = all.filter(function (m) { return m.overdue; });
@@ -677,6 +743,8 @@ button.tile:hover { border-color: #33476e; }
     var doneN = day.filter(function (m) { return m.status === 'finished'; }).length;
     var cur = currentLeague();
     var sub = cur ? cur.name : 'Yönettiğiniz turnuvalar';
+    var w = dayWord(state.date);
+    var dayLabel = (w === 'Bugün' ? 'Bugünün' : w === 'Dün' ? 'Dünün' : w === 'Yarın' ? 'Yarının' : w) + ' maçları';
     var body;
     if (!state.data) {
       body = '<div class="box"><div class="empty" style="border:0">Yükleniyor…</div></div>';
@@ -690,8 +758,8 @@ button.tile:hover { border-color: #33476e; }
         '<div class="tile ok"><span class="big num">' + doneN + '</span><span class="cap">maç bitti</span></div>' +
         '<div class="tile' + (over.length ? ' warn' : ' off') + '"><span class="big num">' + over.length + '</span><span class="cap">maçın sonucu girilmedi</span></div>' +
         '</div>' +
-        '<section class="box"><div class="box-head"><h2 class="label"></h2>' +
-        '<span class="hint">' + day.length + ' maç</span></div>' +
+        '<section class="box"><div class="box-head"><h2 class="label">' + esc(dayLabel) + '</h2>' +
+        '<span class="hint">' + day.length + ' maç · tıklayınca sağda açılır</span></div>' +
         (day.length ? grouped(day, 0, matchRow) : '<div class="empty">Bu gün yönettiğiniz maç yok.</div>') +
         '</section>';
       if (over.length) {
@@ -701,38 +769,30 @@ button.tile:hover { border-color: #33476e; }
       }
     }
     el.innerHTML =
-      '<div class="h-row"><div><h1>' + esc(dayWord(state.date)) + ' · ' + esc(longDate(state.date)) + '</h1>' +
+      '<div class="h-row"><div><h1>' + esc(w) + ' · ' + esc(longDate(state.date)) + '</h1>' +
       '<p class="sub">' + esc(sub) + '</p></div>' +
       '<div class="day"><button class="btn" id="dp" title="Önceki gün (←)">‹</button>' +
       '<input type="date" id="dd" value="' + state.date + '">' +
       '<button class="btn" id="dn" title="Sonraki gün (→)">›</button>' +
       (state.date !== today() ? '<button class="btn" id="dt">Bugün</button>' : '') + '</div></div>' +
       body +
-      '<div class="keys"><span><span class="kbd">←</span> <span class="kbd">→</span> gün</span><span><span class="kbd">↑</span> <span class="kbd">↓</span> maç seç</span><span><span class="kbd">Enter</span> skor</span><span><span class="kbd">L</span> canlı yönet</span><span><span class="kbd">B</span> bugün</span><span><span class="kbd">R</span> yenile</span></div>';
-    // Başlık "Bugünün maçları", "Dünün maçları", "Pazartesi maçları" gibi.
-    var h = el.querySelector('.box-head .label');
-    if (h && !h.classList.contains('warn')) {
-      var w = dayWord(state.date);
-      h.textContent = (w === 'Bugün' ? 'Bugünün' : w === 'Dün' ? 'Dünün' : w === 'Yarın' ? 'Yarının' : w) + ' maçları';
-    }
+      '<div class="keys"><span><span class="kbd">←</span> <span class="kbd">→</span> gün</span><span><span class="kbd">↑</span> <span class="kbd">↓</span> maç</span><span><span class="kbd">Enter</span> skor</span><span><span class="kbd">B</span> bugün</span><span><span class="kbd">Esc</span> maçı kapat</span></div>';
     document.getElementById('dp').onclick = function () { setDate(addDays(state.date, -1)); };
     document.getElementById('dn').onclick = function () { setDate(addDays(state.date, 1)); };
     var dt = document.getElementById('dt');
     if (dt) dt.onclick = function () { setDate(today()); };
     document.getElementById('dd').onchange = function (e) { if (e.target.value) setDate(e.target.value); };
 
-    Array.prototype.forEach.call(el.querySelectorAll('.match'), function (row) {
+    Array.prototype.forEach.call(el.querySelectorAll('.mrow'), function (row) {
       var i = +row.getAttribute('data-i');
       row.onclick = function (e) {
         var t = e.target;
         if (t.tagName === 'INPUT') return;
         state.sel = i;
         if (t.hasAttribute('data-score')) return openScore(all[i]);
-        if (t.hasAttribute('data-live')) return openLive(all[i].id);
         if (t.hasAttribute('data-quick')) return quickSave(all[i], row, t);
-        highlight();
+        openLive(all[i].id);
       };
-      if (!all[i].overdue) row.ondblclick = function () { openScore(all[i]); };
     });
     Array.prototype.forEach.call(el.querySelectorAll('.score-in input'), function (inp) {
       inp.addEventListener('input', function () {
@@ -743,14 +803,14 @@ button.tile:hover { border-color: #33476e; }
       inp.addEventListener('keydown', function (e) {
         if (e.key !== 'Enter') return;
         e.preventDefault();
-        var row = inp.closest('.match');
+        var row = inp.closest('.mrow');
         quickSave(all[+row.getAttribute('data-i')], row, row.querySelector('[data-quick]'));
       });
     });
   }
 
   function highlight() {
-    Array.prototype.forEach.call(document.querySelectorAll('.match'), function (el) {
+    Array.prototype.forEach.call(document.querySelectorAll('.mrow'), function (el) {
       var on = +el.getAttribute('data-i') === state.sel;
       el.classList.toggle('sel', on);
       if (on) el.scrollIntoView({block: 'nearest'});
@@ -772,6 +832,7 @@ button.tile:hover { border-color: #33476e; }
     saveScore(m, hs, as, null, null).then(function () {
       toast('Kaydedildi: ' + m.home + ' ' + hs + '–' + as + ' ' + m.away);
       load();
+      if (state.liveId === m.id) loadLive();
     }, function (e) {
       btn.disabled = false;
       toast(e.message, true);
@@ -843,6 +904,7 @@ button.tile:hover { border-color: #33476e; }
         close();
         toast('Kaydedildi: ' + m.home + ' ' + hs + '–' + as + ' ' + m.away);
         load();
+        if (state.liveId === m.id) loadLive();
       }, function (e) {
         btn.disabled = false;
         toast(e.message, true);
@@ -902,40 +964,68 @@ button.tile:hover { border-color: #33476e; }
   var liveTimer = null, tickTimer = null;
 
   function syncHash() {
-    var h = state.view === 'live' && state.liveId ? '#canli/' + state.liveId : state.view === 'live' ? '#canli' : '';
+    var h = state.liveId ? '#mac/' + state.liveId : state.view === 'live' ? '#canli' : '';
     if (location.hash !== h) history.replaceState(null, '', h || location.pathname);
   }
   function readHash() {
-    var m = /^#canli(?:\/([0-9a-f-]{36}))?$/.exec(location.hash);
-    if (m) {
-      state.view = 'live';
-      state.liveId = m[1] || null;
-    }
+    var m = /^#(mac|canli)(?:\/([0-9a-f-]{36}))?$/.exec(location.hash);
+    if (!m) return;
+    state.view = m[1] === 'canli' ? 'live' : 'today';
+    state.liveId = m[2] || null;
   }
+  // Maçı sağda aç (liste yerinde kalır); başka maça tıklanınca sağ taraf
+  // o maça geçer.
   function openLive(id) {
-    state.liveId = id;
+    if (state.liveId !== id) {
+      state.liveId = id;
+      state.live = null;
+      state.liveSig = '';
+      state.mode = null;
+      state.pick = null;
+      state.minuteManual = false;
+    }
+    syncSel();
+    highlight();
+    var sp = document.getElementById('split');
+    if (sp) sp.classList.add('open');
+    syncHash();
+    renderDetail();
+    startPoll();
+  }
+  function closeLive() {
+    state.liveId = null;
     state.live = null;
     state.liveSig = '';
     state.mode = null;
     state.pick = null;
-    state.minuteManual = false;
-    go('live');
+    stopPoll();
+    var sp = document.getElementById('split');
+    if (sp) sp.classList.remove('open');
+    syncHash();
+    renderDetail();
   }
   function loadLive() {
     var id = state.liveId;
     if (!id) return Promise.resolve();
     return api('rpc/desk_match', {method: 'POST', body: {p_match_id: id}}).then(function (d) {
-      if (id !== state.liveId || state.view !== 'live') return;
+      if (id !== state.liveId) return;
       state.offset = Date.parse(d.now) - Date.now();
       var sig = JSON.stringify(d, function (k, v) { return k === 'now' ? undefined : v; });
       state.live = d;
       if (sig !== state.liveSig) {
         state.liveSig = sig;
-        renderContent();
+        renderDetail();
+      }
+      // Listedeki satır da güncel kalsın (skor, durum).
+      var m = ((state.data && state.data.matches) || []).filter(function (x) { return x.id === d.id; })[0];
+      if (m && m.status !== d.status) load();
+      else if (m && (m.hs !== d.hs || m.as !== d.as || m.hp !== d.hp || m.ap !== d.ap)) {
+        m.hs = d.hs; m.as = d.as; m.hp = d.hp; m.ap = d.ap;
+        renderList();
       }
     }, function (e) { toast(e.message, true); });
   }
-  // Başka cihazdan girilen olaylar da görünsün: ekran açıkken 10 sn'de bir.
+  // Başka cihazdan girilen olaylar da görünsün: maç açıkken 10 sn'de bir.
   function startPoll() {
     stopPoll();
     liveTimer = setInterval(function () {
@@ -1093,15 +1183,17 @@ button.tile:hover { border-color: #33476e; }
       (kicks ? '<button class="btn ghost" data-kick="undo">Son atışı geri al</button>' : '') + '</div>';
   }
 
-  function renderLive(el) {
-    if (!liveTimer) startPoll();
-    if (!state.liveId) return renderLivePicker(el);
+  function renderDetail() {
+    var el = document.getElementById('detail');
+    if (!el) return;
+    if (!state.liveId) { el.innerHTML = ''; return; }
     var d = state.live;
-    if (!d) {
+    if (!d || d.id !== state.liveId) {
       el.innerHTML = '<div class="box"><div class="empty" style="border:0">Yükleniyor…</div></div>';
       loadLive();
       return;
     }
+    var keepScroll = el.scrollTop;
     var finished = d.status === 'finished';
     var started = d.status !== 'notStarted' && d.status !== 'postponed';
     var mk = marks(d);
@@ -1131,11 +1223,11 @@ button.tile:hover { border-color: #33476e; }
         (logo ? '<img src="' + esc(logo) + '" alt="">' : '<span class="dot">' + esc(initials(name)) + '</span>') +
         (r ? '' : '<span>' + esc(name) + '</span>') + '</div>';
     }
-    var meta = [d.league, d.cup_round || (d.week ? d.week + '. hafta' : ''), shortDate(d.date) + ' ' + (d.time || '').slice(0, 5)].filter(Boolean).join(' · ');
+    var meta = [state.league ? '' : d.league, d.cup_round || (d.week ? d.week + '. hafta' : ''), shortDate(d.date) + ' ' + (d.time || '').slice(0, 5)].filter(Boolean).join(' · ');
     el.innerHTML =
-      '<div class="h-row"><div><h1>Canlı maç</h1><p class="sub">' + esc(meta) + '</p></div>' +
-      '<div class="day"><button class="btn" id="lback">‹ Maç listesi</button><button class="btn" id="lref">Yenile</button></div></div>' +
       '<section class="board">' +
+      '<div class="dhead"><span class="sub">' + esc(meta) + '</span>' +
+      '<button class="btn ghost" id="lref">Yenile</button><button class="btn ghost" id="lclose" title="Kapat (Esc)">✕ Kapat</button></div>' +
       '<div class="sb">' + side(d.home, d.home_logo, true) +
       '<div class="mid"><div class="score num">' + (d.hs || 0) + ' – ' + (d.as || 0) + '</div>' +
       '<div class="clock">' + clockText(d) + (d.hp != null && d.ap != null ? '<span class="pens-s">Pen. ' + d.hp + '–' + d.ap + '</span>' : '') + '</div></div>' +
@@ -1148,9 +1240,10 @@ button.tile:hover { border-color: #33476e; }
       '<section class="box evbox"><div class="box-head"><h2 class="label">Olaylar</h2><span class="hint">' + d.events.length + '</span></div><div class="evs">' + eventsHtml(d) + '</div></section>' +
       '<section class="box"><div class="box-head"><h2 class="label">' + esc(d.away) + '</h2></div>' + rosterHtml(d, d.away_id, mk) + '</section>' +
       '</div>' +
-      '<div class="keys"><span><span class="kbd">G</span> gol</span><span><span class="kbd">P</span> penaltı</span><span><span class="kbd">O</span> kendi kalesine</span><span><span class="kbd">S</span> sarı</span><span><span class="kbd">R</span> kırmızı</span><span><span class="kbd">D</span> değişiklik</span><span><span class="kbd">M</span> dakika</span><span><span class="kbd">Esc</span> vazgeç</span></div>';
+      '<div class="keys"><span><span class="kbd">G</span> gol</span><span><span class="kbd">P</span> penaltı</span><span><span class="kbd">O</span> kendi kalesine</span><span><span class="kbd">S</span> sarı</span><span><span class="kbd">R</span> kırmızı</span><span><span class="kbd">D</span> değişiklik</span><span><span class="kbd">M</span> dakika</span><span><span class="kbd">Esc</span> vazgeç / kapat</span></div>';
+    el.scrollTop = keepScroll;
 
-    document.getElementById('lback').onclick = function () { state.liveId = null; state.live = null; state.mode = null; state.pick = null; syncHash(); renderContent(); };
+    document.getElementById('lclose').onclick = closeLive;
     document.getElementById('lref').onclick = function () { loadLive(); };
     var mi = document.getElementById('lmin');
     if (mi) {
@@ -1162,58 +1255,26 @@ button.tile:hover { border-color: #33476e; }
     if (np) np.onclick = function () { finishGoal(null); };
     var cp = document.getElementById('cancelpick');
     if (cp) cp.onclick = cancelPick;
-    Array.prototype.forEach.call(el.querySelectorAll('[data-mode]'), function (b) {
-      b.onclick = function () { setMode(b.getAttribute('data-mode')); };
-    });
-    Array.prototype.forEach.call(el.querySelectorAll('[data-pl]'), function (b) {
-      b.onclick = function () { pickPlayer(b.getAttribute('data-pl'), b.getAttribute('data-team')); };
-    });
-    Array.prototype.forEach.call(el.querySelectorAll('[data-phase]'), function (b) {
-      b.onclick = function () { phase(b.getAttribute('data-phase'), b); };
-    });
-    Array.prototype.forEach.call(el.querySelectorAll('[data-kick]'), function (b) {
-      b.onclick = function () { kick(b.getAttribute('data-kick'), b); };
-    });
-    Array.prototype.forEach.call(el.querySelectorAll('[data-del]'), function (b) {
-      b.onclick = function () { delEvent(b.getAttribute('data-del')); };
-    });
-    Array.prototype.forEach.call(el.querySelectorAll('[data-var]'), function (b) {
-      b.onclick = function () { varGoal(b.getAttribute('data-var')); };
-    });
-    Array.prototype.forEach.call(el.querySelectorAll('[data-varr]'), function (b) {
-      b.onclick = function () { varRed(b.getAttribute('data-varr')); };
-    });
-  }
-
-  // Maç seçilmemişse: seçili günün maçları (Bugün ekranındaki veri).
-  function renderLivePicker(el) {
-    var day = rows().filter(function (m) { return !m.overdue; });
-    var html = day.length ? grouped(day, 0, function (m, i) {
-      var live = m.status === 'live' || m.status === 'halftime';
-      var played = live || m.status === 'finished';
-      return '<div class="match' + (live ? ' is-live' : '') + '" data-pick="' + esc(m.id) + '">' +
-        '<div class="time num">' + esc((m.time || '').slice(0, 5)) + '</div>' +
-        '<div class="teams">' + teamHtml(m.home, m.home_logo, played ? m.hs : null) + teamHtml(m.away, m.away_logo, played ? m.as : null) + metaOf(m) + '</div>' +
-        '<div class="acts"><button class="btn' + (live ? ' live' : ' primary') + '">' + (m.status === 'finished' ? 'Olaylar' : 'Yönet') + '</button></div></div>';
-    }) : '<div class="empty">' + (state.data ? 'Bu gün yönettiğiniz maç yok.' : 'Yükleniyor…') + '</div>';
-    el.innerHTML = '<div class="h-row"><div><h1>Canlı maç</h1><p class="sub">' + esc(dayWord(state.date) + ' · ' + longDate(state.date)) + ' · yönetmek istediğiniz maçı seçin</p></div></div>' +
-      '<section class="box"><div class="box-head"><h2 class="label">Maçlar</h2></div>' + html + '</section>';
-    Array.prototype.forEach.call(el.querySelectorAll('[data-pick]'), function (r) {
-      r.onclick = function () { openLive(r.getAttribute('data-pick')); };
-    });
-    if (!state.data) load();
+    function each(sel, fn) { Array.prototype.forEach.call(el.querySelectorAll(sel), fn); }
+    each('[data-mode]', function (b) { b.onclick = function () { setMode(b.getAttribute('data-mode')); }; });
+    each('[data-pl]', function (b) { b.onclick = function () { pickPlayer(b.getAttribute('data-pl'), b.getAttribute('data-team')); }; });
+    each('[data-phase]', function (b) { b.onclick = function () { phase(b.getAttribute('data-phase'), b); }; });
+    each('[data-kick]', function (b) { b.onclick = function () { kick(b.getAttribute('data-kick'), b); }; });
+    each('[data-del]', function (b) { b.onclick = function () { delEvent(b.getAttribute('data-del')); }; });
+    each('[data-var]', function (b) { b.onclick = function () { varGoal(b.getAttribute('data-var')); }; });
+    each('[data-varr]', function (b) { b.onclick = function () { varRed(b.getAttribute('data-varr')); }; });
   }
 
   function setMode(id) {
     if (id === 'motm' && !(state.live && state.live.status === 'finished')) return;
     state.pick = null;
     state.mode = state.mode === id ? null : id;
-    renderContent();
+    renderDetail();
   }
   function cancelPick() {
     state.pick = null;
     state.mode = null;
-    renderContent();
+    renderDetail();
   }
   function minuteVal() {
     var d = state.live;
@@ -1245,11 +1306,11 @@ button.tile:hover { border-color: #33476e; }
     }
     if (mode === 'goal') {
       state.pick = {step: 'assist', player: pid, team: teamId, name: nameOf(pid), minute: minuteVal()};
-      return renderContent();
+      return renderDetail();
     }
     if (mode === 'sub') {
       state.pick = {step: 'in', player: pid, team: teamId, name: nameOf(pid)};
-      return renderContent();
+      return renderDetail();
     }
     var map = {
       pen_goal: {type: 'goal', pen: true},
@@ -1278,7 +1339,7 @@ button.tile:hover { border-color: #33476e; }
     state.pick = null;
     state.mode = null;
     state.minuteManual = false;
-    renderContent();
+    renderDetail();
     return api('rpc/desk_add_event', {method: 'POST', body: body}).then(function () {
       var label = {goal: o.own ? 'Kendi kalesine gol' : 'Gol', penalty_missed: 'Kaçan penaltı', yellow_card: 'Sarı kart', red_card: 'Kırmızı kart', substitution: 'Değişiklik', man_of_the_match: 'Maçın adamı'}[o.type];
       toast(label + ' kaydedildi: ' + nameOf(o.player));
@@ -1374,44 +1435,59 @@ button.tile:hover { border-color: #33476e; }
     });
   }
 
+  // Sağda maç açıkken harf tuşları olay türünü seçer; Esc önce yarım kalan
+  // seçimi, sonra maçı kapatır.
   function liveKey(e) {
-    if (!state.liveId || !state.live) return;
+    if (!state.liveId || !state.live) return false;
     var k = e.key.length === 1 ? e.key.toLocaleUpperCase('tr') : e.key;
-    if (k === 'Escape') { e.preventDefault(); cancelPick(); return; }
-    if (k === 'Enter' && state.pick && state.pick.step === 'assist') { e.preventDefault(); finishGoal(null); return; }
+    if (k === 'Escape') {
+      e.preventDefault();
+      if (state.mode || state.pick) cancelPick();
+      else closeLive();
+      return true;
+    }
+    if (k === 'Enter' && state.pick && state.pick.step === 'assist') { e.preventDefault(); finishGoal(null); return true; }
     if (k === 'M') {
       var mi = document.getElementById('lmin');
       if (mi) { e.preventDefault(); mi.focus(); }
-      return;
+      return true;
     }
     for (var i = 0; i < MODES.length; i++) {
-      if (MODES[i].key === k) { e.preventDefault(); setMode(MODES[i].id); return; }
+      if (MODES[i].key === k) { e.preventDefault(); setMode(MODES[i].id); return true; }
     }
+    return false;
   }
 
   // ---------- klavye ----------
+  var arrowTimer = null;
   document.addEventListener('keydown', function (e) {
     if (!session || state.dlg || e.metaKey || e.ctrlKey || e.altKey) return;
     var tag = (e.target.tagName || '').toLowerCase();
     if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
-    if (state.view === 'live') return liveKey(e);
-    if (state.view !== 'today') return;
+    if (state.view !== 'today' && state.view !== 'live') return;
+    if (liveKey(e)) return;
     var all = rows();
+    // Oklarla gezerken sağdaki maç da kısa bir beklemeden sonra değişir.
+    function moveSel(n) {
+      state.sel = Math.max(0, Math.min(all.length - 1, state.sel + n));
+      highlight();
+      clearTimeout(arrowTimer);
+      arrowTimer = setTimeout(function () { if (all[state.sel]) openLive(all[state.sel].id); }, 250);
+    }
     if (e.key === 'ArrowLeft') { e.preventDefault(); setDate(addDays(state.date, -1)); }
     else if (e.key === 'ArrowRight') { e.preventDefault(); setDate(addDays(state.date, 1)); }
-    else if (e.key === 'ArrowDown' && all.length) { e.preventDefault(); state.sel = Math.min(all.length - 1, state.sel + 1); highlight(); }
-    else if (e.key === 'ArrowUp' && all.length) { e.preventDefault(); state.sel = Math.max(0, state.sel - 1); highlight(); }
-    else if (e.key === 'Enter' && state.sel >= 0) {
+    else if (e.key === 'ArrowDown' && all.length) { e.preventDefault(); moveSel(1); }
+    else if (e.key === 'ArrowUp' && all.length) { e.preventDefault(); moveSel(-1); }
+    else if (e.key === 'Enter' && state.sel >= 0 && all[state.sel]) {
       e.preventDefault();
       var m = all[state.sel];
       if (m.overdue) {
-        var row = document.querySelector('.match[data-i="' + state.sel + '"] [data-h]');
-        if (row) row.focus();
+        var inp = document.querySelector('.mrow[data-i="' + state.sel + '"] [data-h]');
+        if (inp) inp.focus();
       } else openScore(m);
     }
-    else if ((e.key === 'l' || e.key === 'L') && state.sel >= 0) { openLive(all[state.sel].id); }
     else if (e.key === 'b' || e.key === 'B') { setDate(today()); }
-    else if (e.key === 'r' || e.key === 'R') { load(); }
+    else if ((e.key === 'r' || e.key === 'R') && !state.liveId) { load(); }
   });
 
   loadSession();
