@@ -249,3 +249,8 @@ Kalıcı maliyet: sonrasında her yeni özellik iki dilde yazılır.
 ### Web'e taşınacaklar
 Uygulamada yapılan ve panele de dokunan değişiklikler buraya yazılır. Kullanıcı "web'e uygula" deyince toplu olarak işlenir, sonra liste temizlenir. Veritabanı kuralları (RPC, tetikleyici, RLS) iki tarafa kendiliğinden yansır, buraya yazılmaz.
 - (boş)
+
+## 24. Takım sorumlusu davetle + ikinci yetkili (kaptan) — DEĞERLENDİRMEDE (2026-10-19)
+- Takım sorumlusu oyuncu listesinden değil telefonla atanır: eşleşen hesap ya da kayıt varsa ad soyad otomatik gelir, yoksa elle yazılır. Kadroda olmayan kişi de atanabilir (ör. teknik sorumlu). Kurucu başkan davet yapısıyla aynı.
+- **Fikir (sonra karar verilecek):** takım sorumlusuyla aynı yetkide ikinci bir kişi, örneğin kaptan. Uygulamadan esame girişi vb. yapabilir. Davet yapısı birden çok sorumluya zaten izin verir.
+- Kurucu başkan ve bölge sorumlusu ekleme pencerelerine de telefonla otomatik ad soyad gelecek.
