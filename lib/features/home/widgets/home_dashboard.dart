@@ -2223,9 +2223,7 @@ class _HomePollButtonState extends State<_HomePollButton> {
         params: {'p_match_id': widget.matchId, 'p_team_id': widget.teamId},
       );
       if (!mounted || raw is! Map) return;
-      setState(
-        () => _active = raw['poll_id'] != null && raw['closed'] != true,
-      );
+      setState(() => _active = raw['poll_id'] != null && raw['closed'] != true);
     } catch (_) {
       if (mounted) setState(() => _active = false);
     }
@@ -2254,7 +2252,9 @@ class _HomePollButtonState extends State<_HomePollButton> {
       setState(() => _active = true);
       AttendanceHomeCard.refresh.value++;
       messenger.showSnackBar(
-        const SnackBar(content: Text('Anket başlatıldı; kadrona bildirim gitti.')),
+        const SnackBar(
+          content: Text('Anket başlatıldı; kadrona bildirim gitti.'),
+        ),
       );
     } on PostgrestException catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));

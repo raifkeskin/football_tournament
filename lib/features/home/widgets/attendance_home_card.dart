@@ -298,11 +298,19 @@ class _AttendanceHomeCardState extends State<AttendanceHomeCard> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(yes ? Icons.check_rounded : Icons.close_rounded, size: 15, color: c),
+          Icon(
+            yes ? Icons.check_rounded : Icons.close_rounded,
+            size: 15,
+            color: c,
+          ),
           const SizedBox(width: 4),
           Text(
             yes ? 'Geliyorsun' : 'Gelemiyorsun',
-            style: TextStyle(color: c, fontWeight: FontWeight.w800, fontSize: 12.5),
+            style: TextStyle(
+              color: c,
+              fontWeight: FontWeight.w800,
+              fontSize: 12.5,
+            ),
           ),
         ],
       ),
@@ -313,7 +321,10 @@ class _AttendanceHomeCardState extends State<AttendanceHomeCard> {
     height: 28,
     padding: const EdgeInsets.symmetric(horizontal: 12),
     alignment: Alignment.center,
-    decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(14)),
+    decoration: BoxDecoration(
+      color: bg,
+      borderRadius: BorderRadius.circular(14),
+    ),
     child: Text(
       text,
       style: TextStyle(color: fg, fontWeight: FontWeight.w800, fontSize: 12.5),
@@ -370,7 +381,10 @@ class _AttendanceHomeCardState extends State<AttendanceHomeCard> {
                           if (!single) ...[
                             const Text(
                               '  ·  ',
-                              style: TextStyle(color: kAdminMuted, fontSize: 12),
+                              style: TextStyle(
+                                color: kAdminMuted,
+                                fontSize: 12,
+                              ),
                             ),
                             _dots(p, size: 12),
                           ],
@@ -437,9 +451,8 @@ class _AttendanceHomeCardState extends State<AttendanceHomeCard> {
                       if (status != null)
                         _link(
                           editing ? 'Vazgeç' : 'Yanıtı değiştir',
-                          () => setState(
-                            () => _editingId = editing ? null : id,
-                          ),
+                          () =>
+                              setState(() => _editingId = editing ? null : id),
                         ),
                       const Spacer(),
                       if (!single)
@@ -567,9 +580,7 @@ class _AttendanceHomeCardState extends State<AttendanceHomeCard> {
                                   Text(
                                     labels[k]!,
                                     style: TextStyle(
-                                      color: tab == k
-                                          ? colors[k]
-                                          : kAdminMuted,
+                                      color: tab == k ? colors[k] : kAdminMuted,
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600,
                                     ),
