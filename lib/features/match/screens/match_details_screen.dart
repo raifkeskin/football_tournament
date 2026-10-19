@@ -555,6 +555,47 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
   /// penaltı atışları ve skor yalnız yönetende açık.
   bool _hasControl = false;
 
+  /// "Maçı yönet" şeridi maç saatinden 1 saat önce açılır; o ana kadar
+  /// ekran bir kez yenilenir.
+  Timer? _controlOpenTimer;
+
+  static DateTime? _scheduledStart(MatchModel m) {
+    final d = DateTime.tryParse((m.matchDate ?? '').trim());
+    if (d == null) return null;
+    final t = RegExp(
+      r'^(\d{1,2}):(\d{2})',
+    ).firstMatch((m.matchTime ?? '').trim());
+    if (t == null) return null;
+    return DateTime(
+      d.year,
+      d.month,
+      d.day,
+      int.parse(t.group(1)!),
+      int.parse(t.group(2)!),
+    );
+  }
+
+  /// Başlamamış maçta yönetim saatinden önce mi (maçtan 1 saat öncesine
+  /// kadar). Saat bilinmiyorsa kısıt yok.
+  bool _beforeControlWindow(MatchModel m) {
+    if (m.status != MatchStatus.notStarted &&
+        m.status != MatchStatus.postponed) {
+      return false;
+    }
+    final start = _scheduledStart(m);
+    if (start == null) return false;
+    final opens = start.subtract(const Duration(hours: 1));
+    final wait = opens.difference(DateTime.now());
+    if (wait <= Duration.zero) return false;
+    if (_controlOpenTimer == null && wait < const Duration(days: 1)) {
+      _controlOpenTimer = Timer(wait + const Duration(seconds: 1), () {
+        _controlOpenTimer = null;
+        if (mounted) setState(() {});
+      });
+    }
+    return true;
+  }
+
   /// Golleri afiş için takım tarafına göre toplar: "Kaya 12' 58'",
   /// dakikasız sezonda "Kaya ×2". Kendi kalesine gol rakip tarafa yazılır.
   Future<(List<PosterScorer>, List<PosterScorer>)> _posterScorers(
@@ -800,6 +841,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
   @override
   void dispose() {
     LeagueSwitchScope.setBandHidden(_bandRoute, false);
+    _controlOpenTimer?.cancel();
     _tabController.dispose();
     super.dispose();
   }
@@ -1148,8 +1190,12 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
             canManageLeague ||
             (m.observerId != null && m.observerId == session.user?.id);
         // Bitmiş / iptal maçta yönetim kilidi yok (düzeltmeler serbest).
+        // Maçtan 1 saat öncesine kadar yönetim şeridi ve maç akışı görünmez;
+        // gözlemci atama, erteleme gibi işlemler açık kalır.
+        final bool beforeWindow = _beforeControlWindow(m);
         final bool needsControl =
             isSuperAdmin &&
+            !beforeWindow &&
             m.status != MatchStatus.finished &&
             m.status != MatchStatus.cancelled;
         final bool canControl = isSuperAdmin && (!needsControl || _hasControl);
@@ -1405,7 +1451,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                   }
                                 },
                               ),
-                            if (canControl)
+                            if (canControl && !beforeWindow)
                               _MatchFlowBar(
                                 match: m,
                                 onAction: (action) =>
@@ -1418,8 +1464,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                 homeName: homeName,
                                 awayName: awayName,
                                 canEdit:
-                                    canControl &&
-                                    m.status == MatchStatus.live,
+                                    canControl && m.status == MatchStatus.live,
                                 onKick: (home, scored) =>
                                     _shootoutKick(m, home, scored),
                               ),
