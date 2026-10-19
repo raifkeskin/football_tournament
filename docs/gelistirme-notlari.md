@@ -210,3 +210,17 @@ Aşamalar:
 3. Mağaza: App Store / Play açıklamaları, görseller, gizlilik ve koşullar sayfaları her dil için.
 
 Kalıcı maliyet: sonrasında her yeni özellik iki dilde yazılır.
+
+## 23. Yönetim Masası (web paneli, ligmasasi.com/panel) — 1a YAPILDI (2026-10-19)
+- Sorumluların masaüstü paneli: `web/panel.html`, sade HTML/JS, uygulamayla aynı hesap ve yetkiler. Veriler tek RPC'den gelir (`desk_matches`).
+- **1a:**
+  - giriş
+  - Bugün (gün seçimi, sonucu girilmemiş maçlar)
+  - skor girişi (eleme maçında penaltı)
+  - kısayollar: ← → gün, ↑ ↓ maç, Enter skor, B bugün, R yenile
+- **1b:** canlı maç olay girişi (gol, kart, değişiklik, devre), tek tuşla.
+- **2. aşama:** onaylar, esame, fikstür tablosu, Ctrl+K.
+
+### Web'e taşınacaklar
+Uygulamada yapılan ve panele de dokunan değişiklikler buraya yazılır. Kullanıcı "web'e uygula" deyince toplu olarak işlenir, sonra liste temizlenir. Veritabanı kuralları (RPC, tetikleyici, RLS) iki tarafa kendiliğinden yansır, buraya yazılmaz.
+- (boş)
