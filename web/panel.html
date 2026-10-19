@@ -250,7 +250,7 @@ button.tile:hover { border-color: #33476e; }
 .pl .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .pl .mk { font-size: 12px; white-space: nowrap; }
 .pl.off { opacity: .45; }
-.pl:disabled { cursor: default; }
+.pl:disabled { cursor: default; opacity: .35; }
 .evs { display: grid; }
 .ev { display: grid; grid-template-columns: 40px 22px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 8px 14px; border-top: 1px solid var(--line); }
 .ev .m { font: 800 16px/1 var(--display); color: var(--muted); }
@@ -958,7 +958,7 @@ button.tile:hover { border-color: #33476e; }
     pen_miss: 'Penaltıyı kaçıran oyuncuyu seçin',
     yellow: 'Sarı kart gören oyuncuyu seçin',
     red: 'Kırmızı kart gören oyuncuyu seçin',
-    sub: 'Çıkan oyuncuyu seçin',
+    sub: 'Çıkan oyuncuyu seçin (sahadakiler)',
     motm: 'Maçın adamını seçin'
   };
   var liveTimer = null, tickTimer = null;
@@ -1086,10 +1086,25 @@ button.tile:hover { border-color: #33476e; }
       if (e.type === 'goal') add(e.player_id, e.own ? '🔄' : '⚽');
       else if (e.type === 'yellow_card') add(e.player_id, '🟨');
       else if (e.type === 'red_card') add(e.player_id, '🟥');
-      else if (e.type === 'substitution') add(e.player_id, '🔻');
+      else if (e.type === 'substitution') { add(e.player_id, '🔻'); add(e.sub_in_id, '🔺'); }
       else if (e.type === 'man_of_the_match') add(e.player_id, '⭐');
     });
     return mk;
+  }
+
+  // O an sahadakiler (veritabanındaki match_on_pitch ile aynı kural): ilk 11,
+  // sonra değişiklikler sırayla; kırmızı kart gören sahadan iner.
+  function onPitch(d, teamId) {
+    var on = {};
+    d.roster.forEach(function (r) { if (r.team_id === teamId && r.starting) on[r.player_id] = true; });
+    d.events.forEach(function (e) {
+      if (e.team_id !== teamId) return;
+      if (e.type === 'substitution') {
+        delete on[e.player_id];
+        if (e.sub_in_id) on[e.sub_in_id] = true;
+      } else if (e.type === 'red_card') delete on[e.player_id];
+    });
+    return on;
   }
 
   function rosterHtml(d, teamId, mk) {
@@ -1099,19 +1114,26 @@ button.tile:hover { border-color: #33476e; }
     }
     var sentOff = {};
     d.events.forEach(function (e) { if (e.type === 'red_card') sentOff[e.player_id] = true; });
+    var on = onPitch(d, teamId);
     var pk = state.pick;
+    var sub = state.mode === 'sub';
     function btn(r) {
-      var chosen = pk && (pk.player === r.player_id);
-      // Değişiklikte giren oyuncu ve asist yalnız aynı takımdan seçilir.
+      var id = r.player_id;
+      var chosen = pk && (pk.player === id);
+      // Asist ve giren oyuncu yalnız aynı takımdan seçilir. Değişiklikte
+      // çıkan sahadan, giren kenardan seçilir.
       var lock = pk && pk.team !== teamId;
-      return '<button class="pl' + (sentOff[r.player_id] ? ' off' : '') + (chosen ? ' chosen' : '') + '" data-pl="' + esc(r.player_id) + '" data-team="' + esc(teamId) + '"' + (lock ? ' disabled' : '') + '>' +
+      if (sub && !pk) lock = !on[id];
+      else if (sub && pk && pk.step === 'in') lock = lock || !!on[id] || !!sentOff[id];
+      return '<button class="pl' + (sentOff[id] ? ' off' : '') + (chosen ? ' chosen' : '') + '" data-pl="' + esc(id) + '" data-team="' + esc(teamId) + '"' + (lock ? ' disabled' : '') + '>' +
         '<span class="no">' + (r.no == null ? '–' : r.no) + '</span><span class="nm">' + esc(r.name) + (r.captain ? ' (K)' : '') + '</span>' +
-        '<span class="mk">' + (mk[r.player_id] || '') + '</span></button>';
+        '<span class="mk">' + (mk[id] || '') + '</span></button>';
     }
-    var st = list.filter(function (r) { return r.starting; });
-    var sb = list.filter(function (r) { return !r.starting; });
-    return '<div class="roster">' + (st.length ? '<h4>İlk 11</h4>' + st.map(btn).join('') : '') +
-      (sb.length ? '<h4>Yedekler</h4>' + sb.map(btn).join('') : '') + '</div>';
+    var hasStart = list.some(function (r) { return r.starting; });
+    var st = list.filter(function (r) { return hasStart ? on[r.player_id] : true; });
+    var sb = list.filter(function (r) { return hasStart && !on[r.player_id]; });
+    return '<div class="roster">' + (st.length ? '<h4>' + (hasStart ? 'Sahada' : 'Esame') + '</h4>' + st.map(btn).join('') : '') +
+      (sb.length ? '<h4>Kenarda</h4>' + sb.map(btn).join('') : '') + '</div>';
   }
 
   function evIcon(e) {
@@ -1202,7 +1224,7 @@ button.tile:hover { border-color: #33476e; }
     if (state.pick && state.pick.step === 'assist') {
       hint = '<div class="hintbar">⚽ ' + esc(state.pick.name) + ' · asist yapan oyuncuyu seçin<button class="btn primary" id="noassist">Asistsiz kaydet <span class="kbd">Enter</span></button><button class="btn ghost" id="cancelpick">Vazgeç <span class="kbd">Esc</span></button></div>';
     } else if (state.pick && state.pick.step === 'in') {
-      hint = '<div class="hintbar">↔️ Çıkan: ' + esc(state.pick.name) + ' · giren oyuncuyu seçin<button class="btn ghost" id="cancelpick">Vazgeç <span class="kbd">Esc</span></button></div>';
+      hint = '<div class="hintbar">↔️ Çıkan: ' + esc(state.pick.name) + ' · giren oyuncuyu seçin (kenardakiler)<button class="btn ghost" id="cancelpick">Vazgeç <span class="kbd">Esc</span></button></div>';
     } else if (mode) {
       hint = '<div class="hintbar">' + esc(MODE_HINT[mode]) + '<button class="btn ghost" id="cancelpick">Vazgeç <span class="kbd">Esc</span></button></div>';
     } else {
