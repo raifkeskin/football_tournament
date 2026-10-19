@@ -96,9 +96,9 @@ class _AttendanceHomeCardState extends State<AttendanceHomeCard> {
       p['status'] = status;
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Kaydedilemedi: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Kaydedilemedi: $e')));
       }
     } finally {
       if (mounted) setState(() => _busy = null);
@@ -118,9 +118,7 @@ class _AttendanceHomeCardState extends State<AttendanceHomeCard> {
   @override
   Widget build(BuildContext context) {
     if (_uid == null || _polls.isEmpty) return const SizedBox.shrink();
-    return Column(
-      children: [for (final p in _polls) _card(p)],
-    );
+    return Column(children: [for (final p in _polls) _card(p)]);
   }
 
   Widget _card(Map<String, dynamic> p) {
@@ -143,7 +141,11 @@ class _AttendanceHomeCardState extends State<AttendanceHomeCard> {
         children: [
           Row(
             children: [
-              const Icon(Icons.how_to_reg_rounded, color: kAdminAccent, size: 18),
+              const Icon(
+                Icons.how_to_reg_rounded,
+                color: kAdminAccent,
+                size: 18,
+              ),
               const SizedBox(width: 6),
               const Expanded(
                 child: Text(
