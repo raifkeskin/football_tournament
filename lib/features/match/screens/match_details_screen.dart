@@ -13,6 +13,7 @@ import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 import '../../tournament/models/league_extras.dart';
 import '../models/match.dart';
 import '../widgets/attendance_card.dart';
+import '../widgets/match_control_bar.dart';
 import '../widgets/penalty_badge.dart';
 import '../widgets/shootout_board.dart';
 import 'esame_edit_screen.dart';
@@ -550,6 +551,10 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
 
   int _refreshKey = 0;
 
+  /// Maçın yönetimi bende mi (MatchControlBar). Olay girişi, devreler,
+  /// penaltı atışları ve skor yalnız yönetende açık.
+  bool _hasControl = false;
+
   /// Golleri afiş için takım tarafına göre toplar: "Kaya 12' 58'",
   /// dakikasız sezonda "Kaya ×2". Kendi kalesine gol rakip tarafa yazılır.
   Future<(List<PosterScorer>, List<PosterScorer>)> _posterScorers(
@@ -1010,6 +1015,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     bool canAssignObserver = false,
     bool canUndo = false,
     bool canQuickScore = false,
+    bool canControl = true,
     String homeName = '',
     String awayName = '',
   }) {
@@ -1018,6 +1024,8 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     if (match.status == MatchStatus.cancelled) return null;
 
     if (tabIndex == 0) {
+      // Maçı başka sorumlu yönetirken giriş menüsü yok (şeritten devral).
+      if (!canControl) return null;
       return _SpeedDialFab(
         key: const ValueKey('fab_detail'),
         actions: [
@@ -1139,6 +1147,12 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
         final bool isSuperAdmin =
             canManageLeague ||
             (m.observerId != null && m.observerId == session.user?.id);
+        // Bitmiş / iptal maçta yönetim kilidi yok (düzeltmeler serbest).
+        final bool needsControl =
+            isSuperAdmin &&
+            m.status != MatchStatus.finished &&
+            m.status != MatchStatus.cancelled;
+        final bool canControl = isSuperAdmin && (!needsControl || _hasControl);
         final bool managesHome =
             session.managesTeam(m.seasonId, m.homeTeamId) ||
             session.teamId == m.homeTeamId;
@@ -1250,6 +1264,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                       canAssignObserver: canManageLeague,
                       canUndo: canManageLeague,
                       canQuickScore: canManageLeague,
+                      canControl: canControl,
                       homeName: homeName,
                       awayName: awayName,
                     ),
@@ -1380,7 +1395,17 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                       children: [
                         Column(
                           children: [
-                            if (isSuperAdmin)
+                            if (needsControl)
+                              MatchControlBar(
+                                key: ValueKey('ctl_${m.id}'),
+                                match: m,
+                                onChanged: (v) {
+                                  if (mounted && v != _hasControl) {
+                                    setState(() => _hasControl = v);
+                                  }
+                                },
+                              ),
+                            if (canControl)
                               _MatchFlowBar(
                                 match: m,
                                 onAction: (action) =>
@@ -1393,7 +1418,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                                 homeName: homeName,
                                 awayName: awayName,
                                 canEdit:
-                                    isSuperAdmin &&
+                                    canControl &&
                                     m.status == MatchStatus.live,
                                 onKick: (home, scored) =>
                                     _shootoutKick(m, home, scored),

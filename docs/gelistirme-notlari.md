@@ -189,3 +189,71 @@ Fotoğraf yükleyerek esame okuma 2026-10-17'de yapıldı (galeriden seçme, Gem
 - Android/web'de image_picker kamera kaynağı ek izin istemeden çalışır.
 - Turnuva ayarı: "Esame girişi: Elle / Kağıttan oku (kamera + galeri)".
 - Sonraki aşama: maç sonu kağıttaki gol / SK / KK sütunlarını okuma.
+
+## 22. Dil seçeneği (çok dilli uygulama) — BÜYÜMEDE YAPILACAK
+
+Kullanıcı sayısı büyür ve Türkçe bilmeyen kitleden talep gelirse yapılacak (karar 2026-10-19). Maliyet: yüksek.
+
+Ölçek (2026-10-19 ölçümü):
+- Uygulamada 184 dosyada ~2.400 sabit Türkçe metin.
+- Veritabanında ~600 satır Türkçe metin: bildirim başlıkları, otomatik haber, hata mesajları.
+- Afişlere gömülü yazılar ("MAÇ SONUCU", "HAFTA" …).
+
+Aşamalar:
+1. Uygulama ekranları:
+   - Metinler ARB dosyalarına taşınır (`flutter_localizations` + `intl` zaten kurulu).
+   - Ayarlara dil seçimi eklenir.
+   - İlk dil İngilizce.
+2. Sunucu metinleri:
+   - Kullanıcının dil tercihi `notification_prefs` içinde tutulur.
+   - `push_send`, otomatik haber ve afiş metinleri dile göre üretilir.
+3. Mağaza: App Store / Play açıklamaları, görseller, gizlilik ve koşullar sayfaları her dil için.
+
+Kalıcı maliyet: sonrasında her yeni özellik iki dilde yazılır.
+
+## 23. Yönetim Masası (web paneli, ligmasasi.com/panel) — 1a YAPILDI (2026-10-19)
+- Sorumluların masaüstü paneli: `web/panel.html`, sade HTML/JS, uygulamayla aynı hesap ve yetkiler. Veriler tek RPC'den gelir (`desk_matches`).
+- **1a:**
+  - giriş
+  - Bugün (gün seçimi, sonucu girilmemiş maçlar)
+  - skor girişi (eleme maçında penaltı)
+  - kısayollar: ← → gün, ↑ ↓ maç, Enter skor, B bugün, R yenile
+- **1b YAPILDI (2026-10-19):** canlı maç ekranı.
+  - Kontroller: devre düğmeleri, uzatma/penaltı, son adımı geri al.
+  - Olay girişi: olay türü tuşla seçilir (G gol, P penaltı, O kendi kalesine, X kaçan penaltı, S sarı, R kırmızı, D değişiklik, Y maçın adamı), ardından oyuncuya tıklanır; golde ardından asist seçilir.
+  - Olay sonrası: VAR iptali ve sil.
+  - Dakika maç saatinden kendiliğinden gelir.
+  - RPC'ler: `desk_match`, `desk_add_event`, `desk_delete_event`. Skor atomik güncellenir.
+- **Liste + detay düzeni (2026-10-19):** maç satırları yatay; tıklanan maç sağ bölmede açılır, başka maça tıklanınca sağ taraf o maça geçer.
+- **Oyuncu değişikliği kuralı (2026-10-19, DB tetikleyici, uygulamada da geçerli):** çıkan oyuncu sahada, giren oyuncu kenarda olmalı.
+- **Onaylar YAPILDI (2026-10-19):**
+  - Kapsam: kadro talepleri, kart cezaları (maç sayısı düzenlenir), profil değişiklikleri, yayın linki uyuşmazlıkları, Instagram gönderileri.
+  - Menüde talep sayısı rozeti görünür.
+  - Kısayollar: O onayla, X reddet.
+  - Kayıtlar `desk_approvals` RPC'sinden gelir (security invoker).
+- **Kalan bölümler YAPILDI (2026-10-19):** tek RPC `desk_season`'dan beslenirler.
+  - **Fikstür:** haftalık tablo; tarih, saat, saha ve durum yerinde değişir.
+  - **Puan Durumu:** uygulamadaki sıralama kuralıyla.
+  - **Takımlar:** kadro ve sorumlu.
+  - **Lisanslar:** oyuncu arama.
+  - **Cezalar:** liste.
+  - **Sponsorlar:** ekle, düzenle, gizle, sil; logo yüklenir.
+  - **Haberler:** yeni haber (en çok 5 fotoğraf), yayınla/kaldır, sil.
+  - **Ctrl+K arama.**
+- **Panelde olmayanlar** (uygulamadan yapılır):
+  - oyuncu lisansı ekleme
+  - kadro düzenleme
+  - esame
+  - sponsor logosunun arka plan temizliği
+
+### Web'e taşınacaklar
+Uygulamada yapılan ve panele de dokunan değişiklikler buraya yazılır. Kullanıcı "web'e uygula" deyince toplu olarak işlenir, sonra liste temizlenir. Veritabanı kuralları (RPC, tetikleyici, RLS) iki tarafa kendiliğinden yansır, buraya yazılmaz.
+- (boş)
+
+## 24. Takım sorumlusu telefonla — YAPILDI (2026-10-19)
+- Takım Yönetimi › Takım Sorumlusu: önce telefon yazılır. Telefon bir futbolcuya, hesaba ya da sahip/sorumlu davetine kayıtlıysa ad soyad kendiliğinden gelir ve değiştirilemez; kayıtlı değilse elle yazılır. Kadroda olmayan kişi de (ör. teknik sorumlu) atanabilir.
+- Veritabanı: `set_team_manager` RPC, `lookup_person_by_phone`. Telefon herkese açık `teams` tablosunda değil, `team_manager_contacts` tablosunda durur (yalnız takımı yönetebilenler okur). Ad `teams.manager_name`'de.
+- Futbolcu olmayan sorumlu bu telefonla kayıt olabilir. Hesap açılınca yetkisi kendiliğinden bağlanır.
+- Eski derlemeler futbolcu seçerek `manager_id` yazmaya devam edebilir; ad ve telefon futbolcudan doldurulur.
+- **Vazgeçildi:** ikinci yetkili (kaptan).
+- **Sonra:** kurucu başkan ve bölge sorumlusu ekleme pencerelerinde de telefonla otomatik ad.
