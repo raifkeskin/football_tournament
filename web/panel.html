@@ -190,6 +190,60 @@ button.tile:hover { border-color: #33476e; }
 .score-in input:focus { border-color: var(--accent); outline: none; }
 .empty { padding: 22px 16px; color: var(--muted); border-top: 1px solid var(--line); text-align: center; }
 
+/* ---- Canlı maç ---- */
+.board { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; display: grid; gap: 14px; }
+.sb { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 16px; }
+.sb .side-t { display: flex; align-items: center; gap: 10px; min-width: 0; font: 800 22px/1.1 var(--display); }
+.sb .side-t.r { justify-content: flex-end; text-align: right; }
+.sb .side-t img, .sb .side-t .dot { width: 36px; height: 36px; object-fit: contain; flex: none; }
+.sb .side-t .dot { border-radius: 50%; background: var(--card-2); display: grid; place-items: center; font-size: 13px; }
+.sb .side-t span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sb .mid { text-align: center; }
+.sb .score { font: 800 46px/1 var(--display); letter-spacing: 2px; }
+.sb .clock { margin-top: 4px; display: flex; gap: 6px; justify-content: center; align-items: center; flex-wrap: wrap; }
+.sb .pens-s { color: var(--warn); font-weight: 700; font-size: 13px; }
+.phase { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.phase .grow { flex: 1; }
+.tools { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.tool { border: 1px solid var(--line); background: var(--card-2); border-radius: 10px; padding: 8px 11px; font-weight: 700; font-size: 13.5px; display: inline-flex; gap: 7px; align-items: center; }
+.tool .kbd { padding: 0 5px; }
+.tool[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.tool[aria-pressed="true"] .kbd { background: rgba(0,0,0,.15); color: var(--accent-ink); border-color: rgba(0,0,0,.2); }
+.tool:disabled { opacity: .4; cursor: default; }
+.minute { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; color: var(--muted); font-size: 13px; }
+.minute input { width: 58px; padding: 7px 6px; text-align: center; border-radius: 9px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font: 800 17px/1 var(--display); }
+.hintbar { padding: 10px 14px; border-radius: 12px; background: rgba(16,185,129,.1); border: 1px solid rgba(16,185,129,.35); color: #a7f3d0; font-weight: 600; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.hintbar.idle { background: var(--card); border-color: var(--line); color: var(--muted); font-weight: 500; }
+.hintbar .btn { margin-left: auto; }
+.lgrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.roster { display: grid; gap: 4px; padding: 8px; }
+.roster h4 { margin: 8px 6px 2px; font-size: 11.5px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+.pl { display: flex; align-items: center; gap: 9px; width: 100%; padding: 7px 9px; border-radius: 9px; border: 1px solid transparent; background: transparent; text-align: left; }
+.pl:hover { background: var(--card-2); }
+.armed .pl:hover { border-color: var(--accent); background: rgba(16,185,129,.12); }
+.pl.chosen { border-color: var(--accent); background: rgba(16,185,129,.18); }
+.pl .no { width: 26px; height: 26px; border-radius: 7px; background: var(--card-2); display: grid; place-items: center; font: 800 14px/1 var(--display); flex: none; }
+.pl .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.pl .mk { font-size: 12px; white-space: nowrap; }
+.pl.off { opacity: .45; }
+.pl:disabled { cursor: default; }
+.evs { display: grid; }
+.ev { display: grid; grid-template-columns: 40px 22px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 8px 14px; border-top: 1px solid var(--line); }
+.ev .m { font: 800 16px/1 var(--display); color: var(--muted); }
+.ev .tx { min-width: 0; }
+.ev .tx b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ev .tx small { color: var(--muted); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ev.away { background: rgba(255,255,255,.015); }
+.ev.cancelled b { text-decoration: line-through; opacity: .6; }
+.ev .acts .btn { padding: 4px 8px; font-size: 12px; }
+.card-ic { width: 12px; height: 16px; border-radius: 2px; display: inline-block; }
+.shoot { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.shoot .grp { display: flex; gap: 6px; align-items: center; padding: 6px 8px; border: 1px solid var(--line); border-radius: 10px; }
+.shoot .grp b { font-size: 13px; margin-right: 4px; }
+.pick-list { display: grid; }
+@media (max-width: 1100px) { .lgrid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .lgrid .evbox { grid-column: 1 / -1; order: 3; } }
+@media (max-width: 640px) { .lgrid { grid-template-columns: 1fr; } .sb .score { font-size: 36px; } .sb .side-t { font-size: 17px; } }
+
 /* Henüz yapılmayan bölüm */
 .soon { padding: 40px 20px; text-align: center; color: var(--muted); }
 .soon b { display: block; color: var(--fg); font: 800 22px/1.2 var(--display); margin-bottom: 6px; }
@@ -242,7 +296,9 @@ button.tile:hover { border-color: #33476e; }
   var SKEY = 'lm_panel', LKEY = 'lm_panel_league';
   var root = document.getElementById('root');
   var session = null;   // {access_token, refresh_token, expires_at, user}
-  var state = {view: 'today', date: today(), data: null, sel: -1, dlg: null, league: null};
+  var state = {view: 'today', date: today(), data: null, sel: -1, dlg: null, league: null,
+    // Canlı maç: seçili maç, verisi, seçili olay türü ve yarım kalan seçim.
+    liveId: null, live: null, liveSig: '', mode: null, pick: null, minuteManual: false, offset: 0};
   try { state.league = localStorage.getItem(LKEY); } catch (e) {}
 
   var ICON = {
@@ -497,6 +553,12 @@ button.tile:hover { border-color: #33476e; }
 
   function go(view) {
     state.view = view;
+    if (view !== 'live') {
+      state.mode = null;
+      state.pick = null;
+      stopPoll();
+    }
+    syncHash();
     Array.prototype.forEach.call(root.querySelectorAll('.nav-btn'), function (b) {
       if (b.getAttribute('data-view') === view) b.setAttribute('aria-current', 'page');
       else b.removeAttribute('aria-current');
@@ -545,6 +607,7 @@ button.tile:hover { border-color: #33476e; }
   function renderContent() {
     var el = document.getElementById('content');
     if (!el) return;
+    if (state.view === 'live') return renderLive(el);
     if (state.view !== 'today') {
       var n = NAV.filter(function (x) { return x.id === state.view; })[0];
       el.innerHTML = '<div class="h-row"><div><h1>' + esc(n.name) + '</h1></div></div>' +
@@ -575,8 +638,10 @@ button.tile:hover { border-color: #33476e; }
     var played = m.status === 'finished' || m.status === 'live' || m.status === 'halftime';
     var live = m.status === 'live' || m.status === 'halftime';
     var btn = m.status === 'finished'
-      ? '<button class="btn ghost" data-score="' + i + '">Düzelt</button>'
-      : '<button class="btn' + (live ? ' live' : ' primary') + '" data-score="' + i + '">Skor gir</button>';
+      ? '<button class="btn ghost" data-live="' + i + '">Olaylar</button><button class="btn ghost" data-score="' + i + '">Düzelt</button>'
+      : live
+        ? '<button class="btn live" data-live="' + i + '">Canlı yönet</button>'
+        : '<button class="btn" data-live="' + i + '">Canlı yönet</button><button class="btn primary" data-score="' + i + '">Skor gir</button>';
     return '<div class="match' + (live ? ' is-live' : '') + (i === state.sel ? ' sel' : '') + '" data-i="' + i + '">' +
       '<div class="time num">' + esc((m.time || '').slice(0, 5) || '--:--') + '</div>' +
       '<div class="teams">' + teamHtml(m.home, m.home_logo, played ? m.hs : null) + teamHtml(m.away, m.away_logo, played ? m.as : null) + metaOf(m) + '</div>' +
@@ -643,7 +708,7 @@ button.tile:hover { border-color: #33476e; }
       '<button class="btn" id="dn" title="Sonraki gün (→)">›</button>' +
       (state.date !== today() ? '<button class="btn" id="dt">Bugün</button>' : '') + '</div></div>' +
       body +
-      '<div class="keys"><span><span class="kbd">←</span> <span class="kbd">→</span> gün</span><span><span class="kbd">↑</span> <span class="kbd">↓</span> maç seç</span><span><span class="kbd">Enter</span> skor</span><span><span class="kbd">B</span> bugün</span><span><span class="kbd">R</span> yenile</span></div>';
+      '<div class="keys"><span><span class="kbd">←</span> <span class="kbd">→</span> gün</span><span><span class="kbd">↑</span> <span class="kbd">↓</span> maç seç</span><span><span class="kbd">Enter</span> skor</span><span><span class="kbd">L</span> canlı yönet</span><span><span class="kbd">B</span> bugün</span><span><span class="kbd">R</span> yenile</span></div>';
     // Başlık "Bugünün maçları", "Dünün maçları", "Pazartesi maçları" gibi.
     var h = el.querySelector('.box-head .label');
     if (h && !h.classList.contains('warn')) {
@@ -663,6 +728,7 @@ button.tile:hover { border-color: #33476e; }
         if (t.tagName === 'INPUT') return;
         state.sel = i;
         if (t.hasAttribute('data-score')) return openScore(all[i]);
+        if (t.hasAttribute('data-live')) return openLive(all[i].id);
         if (t.hasAttribute('data-quick')) return quickSave(all[i], row, t);
         highlight();
       };
@@ -801,23 +867,526 @@ button.tile:hover { border-color: #33476e; }
     }
     return api('matches?id=eq.' + m.id + '&select=id', {method: 'PATCH', body: body, prefer: 'return=representation'})
       .then(function (r) {
+        // Başladı/devre/bitti satırları yazılmaz; maç detayı bunları maç
+        // durumundan üretir (uygulamadaki hızlı skor girişi gibi).
         if (!r || !r.length) throw new Error('Bu maçı düzenleme yetkiniz yok.');
-        // Canlı girilmemiş maçta başlangıç/devre/bitiş satırları eklenir
-        // (uygulamadaki hızlı skor girişi gibi); varsa tekrar eklenmez.
-        return api('match_events?match_id=eq.' + m.id + '&event_type=eq.status&select=id&limit=1');
-      })
-      .then(function (ev) {
-        if (ev && ev.length) return null;
-        return api('leagues?id=eq.' + m.league_id + '&select=match_period_duration').then(function (l) {
-          var p = (l && l[0] && l[0].match_period_duration) || 25;
-          var now = new Date().toISOString();
-          return api('match_events', {method: 'POST', prefer: 'return=minimal', body: [
-            {match_id: m.id, event_type: 'status', minute: 0, player_name: 'Maç Başladı', created_at: now},
-            {match_id: m.id, event_type: 'status', minute: p, player_name: 'İlk Yarı', created_at: now},
-            {match_id: m.id, event_type: 'status', minute: p * 2, player_name: 'Maç Sonucu', created_at: now}
-          ]});
-        });
       });
+  }
+
+  // ---------- Canlı maç ----------
+  // Akış: olay türü seçilir (tuş ya da düğme), sonra oyuncuya tıklanır.
+  // Golde ardından asist (ya da Enter: asistsiz), değişiklikte giren oyuncu
+  // seçilir. Dakika maç saatinden kendiliğinden gelir, elle değiştirilebilir.
+  // Skor, ceza, bildirim ve haber veritabanında güncellenir
+  // (desk_add_event + tetikleyiciler).
+  var MODES = [
+    {id: 'goal', key: 'G', name: 'Gol', icon: '⚽'},
+    {id: 'pen_goal', key: 'P', name: 'Penaltı golü', icon: '🎯'},
+    {id: 'own_goal', key: 'O', name: 'Kendi kalesine', icon: '🔄'},
+    {id: 'pen_miss', key: 'X', name: 'Kaçan penaltı', icon: '✖️'},
+    {id: 'yellow', key: 'S', name: 'Sarı kart', icon: '<i class="card-ic" style="background:#facc15"></i>'},
+    {id: 'red', key: 'R', name: 'Kırmızı kart', icon: '<i class="card-ic" style="background:#ef4444"></i>'},
+    {id: 'sub', key: 'D', name: 'Değişiklik', icon: '↔️'},
+    {id: 'motm', key: 'Y', name: 'Maçın adamı', icon: '⭐'}
+  ];
+  var MODE_HINT = {
+    goal: 'Golü atan oyuncuyu seçin',
+    pen_goal: 'Penaltıyı gole çeviren oyuncuyu seçin',
+    own_goal: 'Kendi kalesine atan oyuncuyu seçin (skor rakibe yazılır)',
+    pen_miss: 'Penaltıyı kaçıran oyuncuyu seçin',
+    yellow: 'Sarı kart gören oyuncuyu seçin',
+    red: 'Kırmızı kart gören oyuncuyu seçin',
+    sub: 'Çıkan oyuncuyu seçin',
+    motm: 'Maçın adamını seçin'
+  };
+  var liveTimer = null, tickTimer = null;
+
+  function syncHash() {
+    var h = state.view === 'live' && state.liveId ? '#canli/' + state.liveId : state.view === 'live' ? '#canli' : '';
+    if (location.hash !== h) history.replaceState(null, '', h || location.pathname);
+  }
+  function readHash() {
+    var m = /^#canli(?:\/([0-9a-f-]{36}))?$/.exec(location.hash);
+    if (m) {
+      state.view = 'live';
+      state.liveId = m[1] || null;
+    }
+  }
+  function openLive(id) {
+    state.liveId = id;
+    state.live = null;
+    state.liveSig = '';
+    state.mode = null;
+    state.pick = null;
+    state.minuteManual = false;
+    go('live');
+  }
+  function loadLive() {
+    var id = state.liveId;
+    if (!id) return Promise.resolve();
+    return api('rpc/desk_match', {method: 'POST', body: {p_match_id: id}}).then(function (d) {
+      if (id !== state.liveId || state.view !== 'live') return;
+      state.offset = Date.parse(d.now) - Date.now();
+      var sig = JSON.stringify(d, function (k, v) { return k === 'now' ? undefined : v; });
+      state.live = d;
+      if (sig !== state.liveSig) {
+        state.liveSig = sig;
+        renderContent();
+      }
+    }, function (e) { toast(e.message, true); });
+  }
+  // Başka cihazdan girilen olaylar da görünsün: ekran açıkken 10 sn'de bir.
+  function startPoll() {
+    stopPoll();
+    liveTimer = setInterval(function () {
+      if (document.hidden || state.dlg || state.pick) return;
+      loadLive();
+    }, 10000);
+    tickTimer = setInterval(tick, 5000);
+  }
+  function stopPoll() {
+    clearInterval(liveTimer);
+    clearInterval(tickTimer);
+    liveTimer = tickTimer = null;
+  }
+
+  // Maçın dakikası (uygulamadaki canlı dakika gibi): ilk yarı başlangıçtan,
+  // ikinci yarı devre süresinden, uzatma iki devreden sonra sayılır.
+  function curMinute(d) {
+    if (!d || !d.kickoff_at) return null;
+    var now = Date.now() + state.offset;
+    function since(t) { return Math.max(0, Math.floor((now - Date.parse(t)) / 60000)) + 1; }
+    if (d.status === 'halftime') return d.period;
+    if (d.status === 'finished') return null;
+    if (d.extra_time_at) return 2 * d.period + since(d.extra_time_at);
+    if (d.second_half_at) return d.period + since(d.second_half_at);
+    return since(d.kickoff_at);
+  }
+  function clockText(d) {
+    if (d.status === 'notStarted') return '<span class="pill mute">BAŞLAMADI</span>';
+    if (d.status === 'postponed') return '<span class="pill warn">ERTELENDİ</span>';
+    if (d.status === 'cancelled') return '<span class="pill warn">İPTAL</span>';
+    if (d.status === 'finished') return '<span class="pill ok">MAÇ BİTTİ</span>';
+    if (d.status === 'halftime') return '<span class="pill live">DEVRE ARASI</span>';
+    if (d.shootout) return '<span class="pill live">PENALTILAR</span>';
+    var mn = curMinute(d);
+    var part = d.extra_time_at ? 'UZATMA' : d.second_half_at ? '2. YARI' : '1. YARI';
+    return '<span class="pill live" id="lclock">' + part + ' · ' + mn + '\'</span>';
+  }
+  function tick() {
+    var d = state.live;
+    if (!d || state.view !== 'live') return;
+    var c = document.getElementById('lclock');
+    if (c && d.status === 'live' && !d.shootout) {
+      var part = d.extra_time_at ? 'UZATMA' : d.second_half_at ? '2. YARI' : '1. YARI';
+      c.textContent = part + ' · ' + curMinute(d) + '\'';
+    }
+    var mi = document.getElementById('lmin');
+    if (mi && !state.minuteManual && document.activeElement !== mi) {
+      var v = curMinute(d);
+      mi.value = v == null ? '' : v;
+    }
+  }
+
+  // Oyuncu yanındaki işaretler: gol, kart, değişiklik.
+  function marks(d) {
+    var mk = {};
+    function add(id, s) { if (id) mk[id] = (mk[id] || '') + s; }
+    d.events.forEach(function (e) {
+      if (e.type === 'goal') add(e.player_id, e.own ? '🔄' : '⚽');
+      else if (e.type === 'yellow_card') add(e.player_id, '🟨');
+      else if (e.type === 'red_card') add(e.player_id, '🟥');
+      else if (e.type === 'substitution') add(e.player_id, '🔻');
+      else if (e.type === 'man_of_the_match') add(e.player_id, '⭐');
+    });
+    return mk;
+  }
+
+  function rosterHtml(d, teamId, mk) {
+    var list = d.roster.filter(function (r) { return r.team_id === teamId; });
+    if (!list.length) {
+      return '<div class="empty" style="border:0">Esame girilmemiş.<br>Olay girmek için önce uygulamadan esameyi girin.</div>';
+    }
+    var sentOff = {};
+    d.events.forEach(function (e) { if (e.type === 'red_card') sentOff[e.player_id] = true; });
+    var pk = state.pick;
+    function btn(r) {
+      var chosen = pk && (pk.player === r.player_id);
+      // Değişiklikte giren oyuncu ve asist yalnız aynı takımdan seçilir.
+      var lock = pk && pk.team !== teamId;
+      return '<button class="pl' + (sentOff[r.player_id] ? ' off' : '') + (chosen ? ' chosen' : '') + '" data-pl="' + esc(r.player_id) + '" data-team="' + esc(teamId) + '"' + (lock ? ' disabled' : '') + '>' +
+        '<span class="no">' + (r.no == null ? '–' : r.no) + '</span><span class="nm">' + esc(r.name) + (r.captain ? ' (K)' : '') + '</span>' +
+        '<span class="mk">' + (mk[r.player_id] || '') + '</span></button>';
+    }
+    var st = list.filter(function (r) { return r.starting; });
+    var sb = list.filter(function (r) { return !r.starting; });
+    return '<div class="roster">' + (st.length ? '<h4>İlk 11</h4>' + st.map(btn).join('') : '') +
+      (sb.length ? '<h4>Yedekler</h4>' + sb.map(btn).join('') : '') + '</div>';
+  }
+
+  function evIcon(e) {
+    if (e.type === 'goal') return e.own ? '🔄' : e.pen ? '🎯' : '⚽';
+    if (e.type === 'goal_cancelled') return '📺';
+    if (e.type === 'penalty_missed') return '✖️';
+    if (e.type === 'yellow_card') return '<i class="card-ic" style="background:#facc15"></i>';
+    if (e.type === 'red_card') return '<i class="card-ic" style="background:#ef4444"></i>';
+    if (e.type === 'red_card_cancelled') return '<i class="card-ic" style="background:#ef4444;opacity:.4"></i>';
+    if (e.type === 'substitution') return '↔️';
+    if (e.type === 'man_of_the_match') return '⭐';
+    return '•';
+  }
+  function evText(e, d) {
+    var team = e.team_id === d.home_id ? d.home : d.away;
+    var t = {
+      goal: e.own ? 'Kendi kalesine' : e.pen ? 'Penaltı golü' : 'Gol',
+      goal_cancelled: 'Gol (VAR ile iptal)',
+      penalty_missed: 'Kaçan penaltı',
+      yellow_card: 'Sarı kart',
+      red_card: 'Kırmızı kart',
+      red_card_cancelled: 'Kırmızı kart (VAR ile iptal)',
+      substitution: 'Değişiklik',
+      man_of_the_match: 'Maçın adamı'
+    }[e.type] || e.type;
+    var who = e.type === 'substitution' ? (e.sub_in || '?') + ' ↔ ' + (e.player || '?') : (e.player || '');
+    var extra = e.type === 'goal' && e.assist ? ' · Asist: ' + e.assist : '';
+    return '<b>' + esc(who || t) + '</b><small>' + esc(t + extra + ' · ' + team) + '</small>';
+  }
+  function eventsHtml(d) {
+    var ev = d.events.slice().reverse();
+    if (!ev.length) return '<div class="empty">Henüz olay yok.</div>';
+    return ev.map(function (e) {
+      var acts = '';
+      if (e.type === 'goal' && d.status !== 'notStarted') acts += '<button class="btn ghost" data-var="' + e.id + '" title="VAR: gol iptali">VAR</button>';
+      if (e.type === 'red_card') acts += '<button class="btn ghost" data-varr="' + e.id + '" title="VAR: kart iptali">VAR</button>';
+      acts += '<button class="btn ghost" data-del="' + e.id + '" title="Yanlış girildiyse sil">Sil</button>';
+      var cancelled = /_cancelled$/.test(e.type);
+      return '<div class="ev' + (e.team_id === d.away_id ? ' away' : '') + (cancelled ? ' cancelled' : '') + '">' +
+        '<span class="m num">' + (e.minute == null || e.minute === 999 ? '' : e.minute + '\'') + '</span>' +
+        '<span>' + evIcon(e) + '</span><div class="tx">' + evText(e, d) + '</div><div class="acts">' + acts + '</div></div>';
+    }).join('');
+  }
+
+  function phaseHtml(d) {
+    var b = [];
+    var eq = d.hs === d.as;
+    if (d.status === 'notStarted' || d.status === 'postponed') b.push(['start', 'Maçı başlat', 'live']);
+    if (d.status === 'live' && !d.second_half_at) b.push(['end_first_half', 'İlk yarıyı bitir', 'primary']);
+    if (d.status === 'halftime') b.push(['start_second_half', 'İkinci yarıyı başlat', 'live']);
+    if (d.status === 'live' && d.second_half_at && !d.shootout) {
+      if (d.tiebreak === 'et_pens' && eq && !d.extra_time_at) b.push(['start_extra_time', 'Uzatmaya geç', '']);
+      if (d.tiebreak && eq) b.push(['start_shootout', 'Penaltılara geç', '']);
+    }
+    if (d.status === 'live' && d.second_half_at) b.push(['finish', 'Maçı bitir', 'primary']);
+    var html = b.map(function (x) { return '<button class="btn ' + x[2] + '" data-phase="' + x[0] + '">' + x[1] + '</button>'; }).join('');
+    if (d.owner && d.status !== 'notStarted' && d.status !== 'postponed' && d.status !== 'cancelled') {
+      html += '<span class="grow"></span><button class="btn ghost" data-phase="undo" title="Son adımı geri al">Son adımı geri al</button>';
+    }
+    return html;
+  }
+
+  function shootHtml(d) {
+    if (!(d.status === 'live' && d.shootout)) return '';
+    var kicks = Array.isArray(d.shootout) ? d.shootout.length : 0;
+    return '<div class="shoot"><span class="label warn">Penaltı atışları · ' + (d.hp || 0) + '–' + (d.ap || 0) + '</span>' +
+      '<div class="grp"><b>' + esc(d.home) + '</b><button class="btn primary" data-kick="h1">Gol</button><button class="btn" data-kick="h0">Kaçtı</button></div>' +
+      '<div class="grp"><b>' + esc(d.away) + '</b><button class="btn primary" data-kick="a1">Gol</button><button class="btn" data-kick="a0">Kaçtı</button></div>' +
+      (kicks ? '<button class="btn ghost" data-kick="undo">Son atışı geri al</button>' : '') + '</div>';
+  }
+
+  function renderLive(el) {
+    if (!liveTimer) startPoll();
+    if (!state.liveId) return renderLivePicker(el);
+    var d = state.live;
+    if (!d) {
+      el.innerHTML = '<div class="box"><div class="empty" style="border:0">Yükleniyor…</div></div>';
+      loadLive();
+      return;
+    }
+    var finished = d.status === 'finished';
+    var started = d.status !== 'notStarted' && d.status !== 'postponed';
+    var mk = marks(d);
+    var mode = state.mode;
+    var hint;
+    if (state.pick && state.pick.step === 'assist') {
+      hint = '<div class="hintbar">⚽ ' + esc(state.pick.name) + ' · asist yapan oyuncuyu seçin<button class="btn primary" id="noassist">Asistsiz kaydet <span class="kbd">Enter</span></button><button class="btn ghost" id="cancelpick">Vazgeç <span class="kbd">Esc</span></button></div>';
+    } else if (state.pick && state.pick.step === 'in') {
+      hint = '<div class="hintbar">↔️ Çıkan: ' + esc(state.pick.name) + ' · giren oyuncuyu seçin<button class="btn ghost" id="cancelpick">Vazgeç <span class="kbd">Esc</span></button></div>';
+    } else if (mode) {
+      hint = '<div class="hintbar">' + esc(MODE_HINT[mode]) + '<button class="btn ghost" id="cancelpick">Vazgeç <span class="kbd">Esc</span></button></div>';
+    } else {
+      hint = '<div class="hintbar idle">Olay türünü seçin (harf tuşu ya da düğme), sonra oyuncuya tıklayın.' +
+        (started ? '' : ' Maç başlamadan da olay girilebilir; dakikayı elle yazın.') + '</div>';
+    }
+    var tools = MODES.map(function (x) {
+      var dis = x.id === 'motm' && !finished;
+      return '<button class="tool" data-mode="' + x.id + '" aria-pressed="' + (mode === x.id) + '"' + (dis ? ' disabled title="Maç bittikten sonra"' : '') + '>' +
+        x.icon + ' ' + esc(x.name) + ' <span class="kbd">' + x.key + '</span></button>';
+    }).join('');
+    var mn = curMinute(d);
+    var minute = d.track_minutes
+      ? '<label class="minute">Dakika <input id="lmin" class="num" inputmode="numeric" maxlength="3" value="' + (mn == null ? '' : mn) + '"> <span class="kbd">M</span></label>'
+      : '<span class="minute">Bu sezonda dakika tutulmuyor</span>';
+    function side(name, logo, r) {
+      return '<div class="side-t' + (r ? ' r' : '') + '">' + (r ? '<span>' + esc(name) + '</span>' : '') +
+        (logo ? '<img src="' + esc(logo) + '" alt="">' : '<span class="dot">' + esc(initials(name)) + '</span>') +
+        (r ? '' : '<span>' + esc(name) + '</span>') + '</div>';
+    }
+    var meta = [d.league, d.cup_round || (d.week ? d.week + '. hafta' : ''), shortDate(d.date) + ' ' + (d.time || '').slice(0, 5)].filter(Boolean).join(' · ');
+    el.innerHTML =
+      '<div class="h-row"><div><h1>Canlı maç</h1><p class="sub">' + esc(meta) + '</p></div>' +
+      '<div class="day"><button class="btn" id="lback">‹ Maç listesi</button><button class="btn" id="lref">Yenile</button></div></div>' +
+      '<section class="board">' +
+      '<div class="sb">' + side(d.home, d.home_logo, true) +
+      '<div class="mid"><div class="score num">' + (d.hs || 0) + ' – ' + (d.as || 0) + '</div>' +
+      '<div class="clock">' + clockText(d) + (d.hp != null && d.ap != null ? '<span class="pens-s">Pen. ' + d.hp + '–' + d.ap + '</span>' : '') + '</div></div>' +
+      side(d.away, d.away_logo, false) + '</div>' +
+      '<div class="phase">' + phaseHtml(d) + '</div>' + shootHtml(d) +
+      '</section>' +
+      '<div class="tools">' + tools + minute + '</div>' + hint +
+      '<div class="lgrid' + (mode ? ' armed' : '') + '">' +
+      '<section class="box"><div class="box-head"><h2 class="label">' + esc(d.home) + '</h2></div>' + rosterHtml(d, d.home_id, mk) + '</section>' +
+      '<section class="box evbox"><div class="box-head"><h2 class="label">Olaylar</h2><span class="hint">' + d.events.length + '</span></div><div class="evs">' + eventsHtml(d) + '</div></section>' +
+      '<section class="box"><div class="box-head"><h2 class="label">' + esc(d.away) + '</h2></div>' + rosterHtml(d, d.away_id, mk) + '</section>' +
+      '</div>' +
+      '<div class="keys"><span><span class="kbd">G</span> gol</span><span><span class="kbd">P</span> penaltı</span><span><span class="kbd">O</span> kendi kalesine</span><span><span class="kbd">S</span> sarı</span><span><span class="kbd">R</span> kırmızı</span><span><span class="kbd">D</span> değişiklik</span><span><span class="kbd">M</span> dakika</span><span><span class="kbd">Esc</span> vazgeç</span></div>';
+
+    document.getElementById('lback').onclick = function () { state.liveId = null; state.live = null; state.mode = null; state.pick = null; syncHash(); renderContent(); };
+    document.getElementById('lref').onclick = function () { loadLive(); };
+    var mi = document.getElementById('lmin');
+    if (mi) {
+      mi.addEventListener('input', function () { mi.value = mi.value.replace(/\D/g, ''); state.minuteManual = true; });
+      mi.addEventListener('focus', function () { mi.select(); });
+      mi.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); mi.blur(); } });
+    }
+    var np = document.getElementById('noassist');
+    if (np) np.onclick = function () { finishGoal(null); };
+    var cp = document.getElementById('cancelpick');
+    if (cp) cp.onclick = cancelPick;
+    Array.prototype.forEach.call(el.querySelectorAll('[data-mode]'), function (b) {
+      b.onclick = function () { setMode(b.getAttribute('data-mode')); };
+    });
+    Array.prototype.forEach.call(el.querySelectorAll('[data-pl]'), function (b) {
+      b.onclick = function () { pickPlayer(b.getAttribute('data-pl'), b.getAttribute('data-team')); };
+    });
+    Array.prototype.forEach.call(el.querySelectorAll('[data-phase]'), function (b) {
+      b.onclick = function () { phase(b.getAttribute('data-phase'), b); };
+    });
+    Array.prototype.forEach.call(el.querySelectorAll('[data-kick]'), function (b) {
+      b.onclick = function () { kick(b.getAttribute('data-kick'), b); };
+    });
+    Array.prototype.forEach.call(el.querySelectorAll('[data-del]'), function (b) {
+      b.onclick = function () { delEvent(b.getAttribute('data-del')); };
+    });
+    Array.prototype.forEach.call(el.querySelectorAll('[data-var]'), function (b) {
+      b.onclick = function () { varGoal(b.getAttribute('data-var')); };
+    });
+    Array.prototype.forEach.call(el.querySelectorAll('[data-varr]'), function (b) {
+      b.onclick = function () { varRed(b.getAttribute('data-varr')); };
+    });
+  }
+
+  // Maç seçilmemişse: seçili günün maçları (Bugün ekranındaki veri).
+  function renderLivePicker(el) {
+    var day = rows().filter(function (m) { return !m.overdue; });
+    var html = day.length ? grouped(day, 0, function (m, i) {
+      var live = m.status === 'live' || m.status === 'halftime';
+      var played = live || m.status === 'finished';
+      return '<div class="match' + (live ? ' is-live' : '') + '" data-pick="' + esc(m.id) + '">' +
+        '<div class="time num">' + esc((m.time || '').slice(0, 5)) + '</div>' +
+        '<div class="teams">' + teamHtml(m.home, m.home_logo, played ? m.hs : null) + teamHtml(m.away, m.away_logo, played ? m.as : null) + metaOf(m) + '</div>' +
+        '<div class="acts"><button class="btn' + (live ? ' live' : ' primary') + '">' + (m.status === 'finished' ? 'Olaylar' : 'Yönet') + '</button></div></div>';
+    }) : '<div class="empty">' + (state.data ? 'Bu gün yönettiğiniz maç yok.' : 'Yükleniyor…') + '</div>';
+    el.innerHTML = '<div class="h-row"><div><h1>Canlı maç</h1><p class="sub">' + esc(dayWord(state.date) + ' · ' + longDate(state.date)) + ' · yönetmek istediğiniz maçı seçin</p></div></div>' +
+      '<section class="box"><div class="box-head"><h2 class="label">Maçlar</h2></div>' + html + '</section>';
+    Array.prototype.forEach.call(el.querySelectorAll('[data-pick]'), function (r) {
+      r.onclick = function () { openLive(r.getAttribute('data-pick')); };
+    });
+    if (!state.data) load();
+  }
+
+  function setMode(id) {
+    if (id === 'motm' && !(state.live && state.live.status === 'finished')) return;
+    state.pick = null;
+    state.mode = state.mode === id ? null : id;
+    renderContent();
+  }
+  function cancelPick() {
+    state.pick = null;
+    state.mode = null;
+    renderContent();
+  }
+  function minuteVal() {
+    var d = state.live;
+    if (!d.track_minutes) return null;
+    var mi = document.getElementById('lmin');
+    var v = mi ? parseInt(mi.value, 10) : NaN;
+    return isNaN(v) ? null : v;
+  }
+  function nameOf(pid) {
+    var r = state.live.roster.filter(function (x) { return x.player_id === pid; })[0];
+    return r ? r.name : '';
+  }
+
+  function pickPlayer(pid, teamId) {
+    var d = state.live, mode = state.mode, pk = state.pick;
+    if (!mode) { toast('Önce olay türünü seçin (G, S, R, D…).', true); return; }
+    if (d.track_minutes && mode !== 'motm' && minuteVal() == null) {
+      toast('Dakikayı yazın.', true);
+      document.getElementById('lmin').focus();
+      return;
+    }
+    if (pk && pk.step === 'assist') {
+      if (pid === pk.player) return;
+      return finishGoal(pid);
+    }
+    if (pk && pk.step === 'in') {
+      if (pid === pk.player) return;
+      return addEvent({type: 'substitution', team: pk.team, player: pk.player, sub_in: pid});
+    }
+    if (mode === 'goal') {
+      state.pick = {step: 'assist', player: pid, team: teamId, name: nameOf(pid), minute: minuteVal()};
+      return renderContent();
+    }
+    if (mode === 'sub') {
+      state.pick = {step: 'in', player: pid, team: teamId, name: nameOf(pid)};
+      return renderContent();
+    }
+    var map = {
+      pen_goal: {type: 'goal', pen: true},
+      own_goal: {type: 'goal', own: true},
+      pen_miss: {type: 'penalty_missed'},
+      yellow: {type: 'yellow_card'},
+      red: {type: 'red_card'},
+      motm: {type: 'man_of_the_match'}
+    }[mode];
+    addEvent({type: map.type, team: teamId, player: pid, pen: !!map.pen, own: !!map.own});
+  }
+  function finishGoal(assistId) {
+    var pk = state.pick;
+    if (!pk || pk.step !== 'assist') return;
+    addEvent({type: 'goal', team: pk.team, player: pk.player, assist: assistId, minute: pk.minute});
+  }
+
+  function addEvent(o) {
+    var d = state.live;
+    var body = {
+      p_match_id: d.id, p_type: o.type, p_team_id: o.team, p_player_id: o.player,
+      p_minute: o.minute !== undefined ? o.minute : minuteVal(),
+      p_assist_id: o.assist || null, p_sub_in_id: o.sub_in || null,
+      p_own_goal: !!o.own, p_penalty: !!o.pen
+    };
+    state.pick = null;
+    state.mode = null;
+    state.minuteManual = false;
+    renderContent();
+    return api('rpc/desk_add_event', {method: 'POST', body: body}).then(function () {
+      var label = {goal: o.own ? 'Kendi kalesine gol' : 'Gol', penalty_missed: 'Kaçan penaltı', yellow_card: 'Sarı kart', red_card: 'Kırmızı kart', substitution: 'Değişiklik', man_of_the_match: 'Maçın adamı'}[o.type];
+      toast(label + ' kaydedildi: ' + nameOf(o.player));
+      return loadLive();
+    }, function (e) { toast(e.message, true); });
+  }
+
+  function confirmBox(title, text, okLabel, danger) {
+    return new Promise(function (resolve) {
+      var ov = document.createElement('div');
+      ov.className = 'ov';
+      ov.innerHTML = '<div class="dlg" role="dialog" aria-modal="true"><h3>' + esc(title) + '</h3><div class="sub">' + esc(text) + '</div>' +
+        '<div class="acts"><span class="hint"><span class="kbd">Enter</span> onayla · <span class="kbd">Esc</span> vazgeç</span>' +
+        '<button class="btn" data-n>Vazgeç</button><button class="btn ' + (danger ? 'live' : 'primary') + '" data-y>' + esc(okLabel) + '</button></div></div>';
+      document.body.appendChild(ov);
+      state.dlg = ov;
+      function done(v) { ov.remove(); state.dlg = null; resolve(v); }
+      ov.querySelector('[data-n]').onclick = function () { done(false); };
+      ov.querySelector('[data-y]').onclick = function () { done(true); };
+      ov.onclick = function (e) { if (e.target === ov) done(false); };
+      ov.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') { e.preventDefault(); done(false); }
+        else if (e.key === 'Enter') { e.preventDefault(); done(true); }
+      });
+      ov.querySelector('[data-y]').focus();
+    });
+  }
+
+  function phase(action, btn) {
+    var ask = {
+      finish: ['Maçı bitir', 'Maç bitmiş sayılır; sonuç puan tablosuna işlenir ve takipçilere bildirim gider.', 'Maçı bitir', false],
+      undo: ['Son adımı geri al', 'Maçın son durumu bir adım geri alınır (ör. bitmiş maç yeniden canlıya döner).', 'Geri al', true],
+      start_shootout: ['Penaltılara geç', 'Penaltı atışları başlar.', 'Penaltılara geç', false],
+      start_extra_time: ['Uzatmaya geç', 'Uzatma devresi başlar.', 'Uzatmaya geç', false]
+    }[action];
+    var go2 = ask ? confirmBox(ask[0], ask[1], ask[2], ask[3]) : Promise.resolve(true);
+    go2.then(function (ok) {
+      if (!ok) return;
+      btn.disabled = true;
+      api('rpc/advance_match_phase', {method: 'POST', body: {p_match_id: state.live.id, p_action: action}}).then(function () {
+        state.minuteManual = false;
+        return loadLive();
+      }, function (e) {
+        btn.disabled = false;
+        toast(e.message, true);
+      });
+    });
+  }
+
+  function kick(k, btn) {
+    btn.disabled = true;
+    var body = {p_match_id: state.live.id, p_side: k === 'undo' ? null : k[0], p_scored: k[1] === '1'};
+    api('rpc/shootout_kick', {method: 'POST', body: body}).then(loadLive, function (e) {
+      btn.disabled = false;
+      toast(e.message, true);
+    });
+  }
+
+  function evById(id) { return state.live.events.filter(function (e) { return e.id === id; })[0]; }
+  function delEvent(id) {
+    var e = evById(id);
+    confirmBox('Olayı sil', (e ? (e.minute != null && e.minute !== 999 ? e.minute + '\' ' : '') + (e.player || '') : '') + ' kaydı silinecek. Yanlış girilen olaylar için kullanın; VAR kararı için VAR düğmesini kullanın.', 'Sil', true).then(function (ok) {
+      if (!ok) return;
+      api('rpc/desk_delete_event', {method: 'POST', body: {p_event_id: id}}).then(function () {
+        toast('Olay silindi.');
+        return loadLive();
+      }, function (err) { toast(err.message, true); });
+    });
+  }
+  // VAR: uygulamadaki gibi olay türü değişir; skor ve bildirim tetikleyicide.
+  function varGoal(id) {
+    var e = evById(id);
+    confirmBox('VAR: Gol İptali', (e && e.player ? e.player + ' golü' : 'Bu gol') + ' iptal edilecek. Skor güncellenir ve maçı takip edenlere bildirim gider.', 'Golü iptal et', true).then(function (ok) {
+      if (!ok) return;
+      api('match_events?id=eq.' + id + '&event_type=eq.goal&select=id', {method: 'PATCH', body: {event_type: 'goal_cancelled'}, prefer: 'return=representation'}).then(function (r) {
+        if (!r || !r.length) throw new Error('Gol güncellenemedi (yetki yok ya da zaten değişmiş).');
+        toast('Gol VAR kararıyla iptal edildi.');
+        return loadLive();
+      }).catch(function (err) { toast(err.message, true); });
+    });
+  }
+  function varRed(id) {
+    var e = evById(id);
+    confirmBox('VAR: Kart İptali', (e && e.player ? e.player + ' için ' : '') + 'kırmızı kart iptal edilecek; karttan doğan ceza da düşer.', 'Kartı iptal et', true).then(function (ok) {
+      if (!ok) return;
+      api('match_events?id=eq.' + id + '&event_type=eq.red_card&select=id', {method: 'PATCH', body: {event_type: 'red_card_cancelled'}, prefer: 'return=representation'}).then(function (r) {
+        if (!r || !r.length) throw new Error('Kart güncellenemedi (yetki yok ya da zaten değişmiş).');
+        return api('player_penalties?source_event_id=eq.' + id, {method: 'DELETE'}).catch(function () {});
+      }).then(function () {
+        toast('Kırmızı kart VAR kararıyla iptal edildi.');
+        return loadLive();
+      }).catch(function (err) { toast(err.message, true); });
+    });
+  }
+
+  function liveKey(e) {
+    if (!state.liveId || !state.live) return;
+    var k = e.key.length === 1 ? e.key.toLocaleUpperCase('tr') : e.key;
+    if (k === 'Escape') { e.preventDefault(); cancelPick(); return; }
+    if (k === 'Enter' && state.pick && state.pick.step === 'assist') { e.preventDefault(); finishGoal(null); return; }
+    if (k === 'M') {
+      var mi = document.getElementById('lmin');
+      if (mi) { e.preventDefault(); mi.focus(); }
+      return;
+    }
+    for (var i = 0; i < MODES.length; i++) {
+      if (MODES[i].key === k) { e.preventDefault(); setMode(MODES[i].id); return; }
+    }
   }
 
   // ---------- klavye ----------
@@ -825,6 +1394,7 @@ button.tile:hover { border-color: #33476e; }
     if (!session || state.dlg || e.metaKey || e.ctrlKey || e.altKey) return;
     var tag = (e.target.tagName || '').toLowerCase();
     if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+    if (state.view === 'live') return liveKey(e);
     if (state.view !== 'today') return;
     var all = rows();
     if (e.key === 'ArrowLeft') { e.preventDefault(); setDate(addDays(state.date, -1)); }
@@ -839,11 +1409,13 @@ button.tile:hover { border-color: #33476e; }
         if (row) row.focus();
       } else openScore(m);
     }
+    else if ((e.key === 'l' || e.key === 'L') && state.sel >= 0) { openLive(all[state.sel].id); }
     else if (e.key === 'b' || e.key === 'B') { setDate(today()); }
     else if (e.key === 'r' || e.key === 'R') { load(); }
   });
 
   loadSession();
+  readHash();
   render();
 })();
 </script>

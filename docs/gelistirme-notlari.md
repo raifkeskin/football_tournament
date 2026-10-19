@@ -218,7 +218,12 @@ Kalıcı maliyet: sonrasında her yeni özellik iki dilde yazılır.
   - Bugün (gün seçimi, sonucu girilmemiş maçlar)
   - skor girişi (eleme maçında penaltı)
   - kısayollar: ← → gün, ↑ ↓ maç, Enter skor, B bugün, R yenile
-- **1b:** canlı maç olay girişi (gol, kart, değişiklik, devre), tek tuşla.
+- **1b YAPILDI (2026-10-19):** canlı maç ekranı.
+  - Kontroller: devre düğmeleri, uzatma/penaltı, son adımı geri al.
+  - Olay girişi: olay türü tuşla seçilir (G gol, P penaltı, O kendi kalesine, X kaçan penaltı, S sarı, R kırmızı, D değişiklik, Y maçın adamı), ardından oyuncuya tıklanır; golde ardından asist seçilir.
+  - Olay sonrası: VAR iptali ve sil.
+  - Dakika maç saatinden kendiliğinden gelir.
+  - RPC'ler: `desk_match`, `desk_add_event`, `desk_delete_event`. Skor atomik güncellenir.
 - **2. aşama:** onaylar, esame, fikstür tablosu, Ctrl+K.
 
 ### Web'e taşınacaklar
