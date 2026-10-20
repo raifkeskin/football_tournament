@@ -14,6 +14,7 @@ import '../features/sponsors/admin_sponsors_screen.dart';
 import '../features/tournament/screens/admin_penalty_management_screen.dart';
 import 'admin_pending_actions_screen.dart';
 import '../features/auth/screens/admin_otp_monitor_screen.dart';
+import '../features/ai/admin_ai_screen.dart';
 
 /// Yönetim paneli. Admin tüm kartları görür; kurucu başkan ve bölge
 /// sorumlusu yalnızca yetkili oldukları kartları (veriler ekranlarda kendi
@@ -189,6 +190,23 @@ class AdminPanelWidget extends StatelessWidget {
                   name: 'AdminPitchManagementScreen',
                 ),
                 builder: (_) => const AdminPitchManagementScreen(),
+              ),
+            );
+          },
+        ),
+      // Yapay zekâ: sezon bazında aç/kapa, model, işlem başına maliyet.
+      if (isAdmin)
+        _AdminMenuData(
+          baslik: 'Yapay Zekâ Yönetimi',
+          renkler: const [Color(0xFFA78BFA), Color(0xFF6D28D9)],
+          ikon: Icons.auto_awesome_rounded,
+          resimYolu: 'assets/images/admin_fixture.jpg',
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                settings: const RouteSettings(name: 'AdminAiScreen'),
+                builder: (_) => const AdminAiScreen(),
               ),
             );
           },

@@ -25,13 +25,21 @@
 // GEMINI_PRICE_OUTPUT (3.0).
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { aiModel, refreshUsdTry, seasonAiEnabled } from "../_shared/ai_settings.ts";
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
-const GEMINI_MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-flash-latest";
+const DEFAULT_MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-flash-latest";
+// Her istekte Yapay Zekâ Yönetimi'ndeki seçimle (flash / pro) güncellenir.
+let GEMINI_MODEL = DEFAULT_MODEL;
 const GEMINI_THINKING = Deno.env.get("GEMINI_THINKING") ?? "medium";
-const PRICE_INPUT = Number(Deno.env.get("GEMINI_PRICE_INPUT") ?? "0.5");
-const PRICE_AUDIO = Number(Deno.env.get("GEMINI_PRICE_AUDIO") ?? "1.0");
-const PRICE_OUTPUT = Number(Deno.env.get("GEMINI_PRICE_OUTPUT") ?? "3.0");
+const FLASH_INPUT = Number(Deno.env.get("GEMINI_PRICE_INPUT") ?? "0.5");
+const FLASH_AUDIO = Number(Deno.env.get("GEMINI_PRICE_AUDIO") ?? "1.0");
+const FLASH_OUTPUT = Number(Deno.env.get("GEMINI_PRICE_OUTPUT") ?? "3.0");
+// Pro (1M token başına $): giriş 2, çıkış 12; ses girişi de 2.
+const isPro = () => GEMINI_MODEL.includes("pro");
+const priceInput = () => (isPro() ? 2.0 : FLASH_INPUT);
+const priceAudio = () => (isPro() ? 2.0 : FLASH_AUDIO);
+const priceOutput = () => (isPro() ? 12.0 : FLASH_OUTPUT);
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
@@ -142,7 +150,7 @@ type FoundGoal = {
 function estimateCost(seconds: number, fps = 1): number {
   const video = seconds * fps * VIDEO_TOKENS_PER_FRAME;
   const audio = seconds * AUDIO_TOKENS_PER_SEC;
-  return (video * PRICE_INPUT + audio * PRICE_AUDIO + OUTPUT_TOKENS_GUESS * PRICE_OUTPUT) / 1e6;
+  return (video * priceInput() + audio * priceAudio() + OUTPUT_TOKENS_GUESS * priceOutput()) / 1e6;
 }
 
 type Usage = {
@@ -161,7 +169,7 @@ function usageOf(meta: Record<string, unknown> | undefined): Usage {
   const video = by("VIDEO");
   const audio = by("AUDIO");
   const output = Number(meta?.candidatesTokenCount ?? 0) + Number(meta?.thoughtsTokenCount ?? 0);
-  const cost = ((text + video) * PRICE_INPUT + audio * PRICE_AUDIO + output * PRICE_OUTPUT) / 1e6;
+  const cost = ((text + video) * priceInput() + audio * priceAudio() + output * priceOutput()) / 1e6;
   return { text, video, audio, output, cost };
 }
 
@@ -714,6 +722,11 @@ Deno.serve(async (req) => {
   const { data: m } = await admin.from("matches")
     .select("id, season_id, home_team_id, away_team_id").eq("id", matchId).maybeSingle();
   if (!m) return json({ error: "Maç bulunamadı." }, 404);
+  if (!(await seasonAiEnabled(admin, m.season_id, "clips"))) {
+    return json({ error: "Bu sezonda gol videosu yakalama kapalı." }, 403);
+  }
+  GEMINI_MODEL = await aiModel(admin, "clips", DEFAULT_MODEL);
+  await refreshUsdTry(admin);
 
   const { data: links } = await admin.from("match_media")
     .select("url, created_at").eq("match_id", matchId).eq("media_type", "Maç Yayın Linki")

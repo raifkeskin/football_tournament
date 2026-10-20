@@ -155,8 +155,11 @@ class _MatchHighlightsStripState extends State<MatchHighlightsStrip> {
     final canRun = _tracksMinutes == false
         ? AppSession.of(context).value.isAdmin
         : widget.canReview;
+    final aiClips =
+        SeasonMatchSettings.cached(widget.match.seasonId)?.aiClips ?? true;
     final showReview =
         canRun &&
+        aiClips &&
         widget.hasStream &&
         widget.match.status == MatchStatus.finished;
     if (approved.isEmpty && !showReview && widget.trailing.isEmpty) {

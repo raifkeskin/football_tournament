@@ -12,6 +12,7 @@ import '../../player/services/penalty_service.dart';
 import '../../tournament/models/age_rules.dart';
 import '../../tournament/screens/formation_tab.dart';
 import '../models/match.dart';
+import '../utils/season_match_settings.dart';
 import '../widgets/esame_scan.dart';
 
 /// Esame girişi (tam ekran): üstte İlk 11 ve Yedekler kutuları (tüm yuvalar
@@ -77,10 +78,19 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
   static const _mid = Color(0xFF94A3B8);
   static const _slotH = 24.0;
 
+  /// Sezonda kağıttan okuma açık mı (Yapay Zekâ Yönetimi).
+  late bool _aiEsame =
+      SeasonMatchSettings.cached(widget.match.seasonId)?.aiEsame ?? true;
+
   @override
   void initState() {
     super.initState();
     _loadData();
+    SeasonMatchSettings.of(widget.match.seasonId).then((s) {
+      if (mounted && s.aiEsame != _aiEsame) {
+        setState(() => _aiEsame = s.aiEsame);
+      }
+    });
   }
 
   /// Esame ekranında üstteki ortak bant gizlenir.
@@ -591,7 +601,7 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
             ],
           ),
           actions: [
-            if (!_isLoading && _players.isNotEmpty)
+            if (_aiEsame && !_isLoading && _players.isNotEmpty)
               TextButton.icon(
                 style: TextButton.styleFrom(foregroundColor: _green),
                 onPressed: _isSaving ? null : _readFromPaper,
