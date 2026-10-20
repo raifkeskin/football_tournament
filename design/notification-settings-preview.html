@@ -1,0 +1,233 @@
+<title>Bildirim Ayarları Önizleme</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=Barlow+Condensed:ital,wght@1,700;1,800&display=swap">
+<style>
+/* Düzen: solda uygulama ekranları (telefon kareleri), sağda kararlar ve bildirim örnekleri; dar ekranda alt alta. */
+:root {
+  --ground: #0B1220;      /* sayfa zemini */
+  --app: #0F172A;         /* uygulama zemini */
+  --surface: #1E293B;     /* kart */
+  --line: rgba(255,255,255,.08);
+  --text: #F1F5F9;
+  --muted: #94A3B8;
+  --dim: #64748B;
+  --accent: #10B981;      /* uygulamanın yeşili */
+  --accent-soft: rgba(16,185,129,.16);
+  --gold: #FBBF24;
+  --live: #F87171;
+  --display: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  --body: 'Barlow', 'Segoe UI', system-ui, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--ground); color: var(--text); font-family: var(--body); font-size: 15px; line-height: 1.45; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-inline: 16px; padding-block: 28px 56px; display: grid; gap: 28px; }
+header h1 { font-family: var(--display); font-style: italic; font-weight: 800; font-size: clamp(28px, 5vw, 40px); letter-spacing: .5px; margin: 0; text-wrap: balance; }
+header p { margin: 6px 0 0; color: var(--muted); max-width: 70ch; }
+.layout { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 24px; align-items: start; }
+.phones { display: flex; flex-wrap: wrap; gap: 24px; justify-content: center; }
+.phone { width: 360px; max-width: 100%; background: var(--app); border-radius: 30px; border: 1px solid var(--line); overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,.45); }
+.cap { font-size: 12px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--dim); text-align: center; margin-top: 8px; font-weight: 700; }
+.band { height: 56px; display: grid; grid-template-columns: 48px 1fr 48px; align-items: center; background: linear-gradient(90deg, #052e22, #064E3B, #052e22); border-bottom: 2px solid var(--accent); padding: 0 6px; }
+.band .t { text-align: center; font-family: var(--display); font-style: italic; font-weight: 800; letter-spacing: 1.2px; font-size: 16px; }
+.band .b { color: #fff; font-size: 20px; text-align: center; }
+.screen { padding: 14px 14px 20px; display: grid; gap: 14px; }
+.sec-t { font-size: 11px; font-weight: 800; letter-spacing: 1.3px; color: var(--muted); text-transform: uppercase; margin: 2px 4px 6px; }
+.group { background: var(--surface); border-radius: 14px; overflow: hidden; }
+.row { display: grid; grid-template-columns: 30px 1fr auto; gap: 10px; align-items: center; padding: 11px 12px; border-top: 1px solid var(--line); min-height: 52px; }
+.row:first-child { border-top: 0; }
+.row .ic { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: var(--accent-soft); font-size: 15px; }
+.row .l { min-width: 0; }
+.row .l b { display: block; font-weight: 700; font-size: 14.5px; }
+.row .l small { display: block; color: var(--muted); font-size: 12px; line-height: 1.3; margin-top: 1px; }
+.sw { width: 44px; height: 26px; border-radius: 13px; background: #334155; position: relative; border: 0; cursor: pointer; padding: 0; flex: none; }
+.sw::after { content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: transform .18s; }
+.sw[aria-checked="true"] { background: var(--accent); }
+.sw[aria-checked="true"]::after { transform: translateX(18px); }
+.sw:focus-visible, .seg button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.seg { display: inline-flex; background: #0B1220; border-radius: 10px; padding: 3px; gap: 2px; }
+.seg button { border: 0; background: none; color: var(--muted); font: 700 12px var(--body); padding: 6px 9px; border-radius: 8px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: #fff; box-shadow: inset 0 0 0 1px rgba(16,185,129,.55); }
+.perm { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; padding: 12px; border-radius: 14px; background: linear-gradient(135deg, rgba(16,185,129,.18), rgba(16,185,129,.04)); border: 1px solid rgba(16,185,129,.35); }
+.perm b { font-size: 14.5px; }
+.perm small { display: block; color: var(--muted); font-size: 12px; }
+.btn { border: 0; background: var(--accent); color: #04281d; font: 800 13px var(--body); padding: 8px 12px; border-radius: 10px; cursor: pointer; }
+.note { font-size: 12px; color: var(--dim); padding: 0 4px; }
+.fixed { font-size: 12px; font-weight: 700; color: var(--muted); background: #0B1220; padding: 5px 8px; border-radius: 8px; }
+.role { font-size: 10px; font-weight: 800; letter-spacing: 1px; color: var(--gold); border: 1px solid rgba(251,191,36,.4); border-radius: 6px; padding: 1px 6px; margin-left: 6px; vertical-align: 2px; }
+.follow { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center; padding: 10px 12px; border-top: 1px solid var(--line); }
+.follow:first-child { border-top: 0; }
+.logo { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font: 800 12px var(--display); font-style: italic; background: #0B1220; border: 1px solid var(--line); }
+/* Sağ sütun */
+.side { display: grid; gap: 18px; min-width: 0; }
+.card { background: var(--surface); border-radius: 16px; padding: 16px; border: 1px solid var(--line); min-width: 0; }
+.card h2 { font-family: var(--display); font-style: italic; font-weight: 800; font-size: 22px; margin: 0 0 10px; letter-spacing: .4px; }
+.push { display: grid; grid-template-columns: 38px 1fr; gap: 10px; padding: 10px 12px; border-radius: 14px; background: #0B1220; border: 1px solid var(--line); margin-top: 10px; }
+.push .ap { width: 38px; height: 38px; border-radius: 10px; background: #064E3B; display: grid; place-items: center; font-size: 18px; }
+.push b { font-size: 13.5px; display: flex; justify-content: space-between; gap: 8px; }
+.push b span { color: var(--dim); font-weight: 600; font-size: 11.5px; }
+.push p { margin: 2px 0 0; font-size: 13px; color: #CBD5E1; }
+.tag { display: inline-block; font-size: 10.5px; font-weight: 800; letter-spacing: .8px; padding: 2px 7px; border-radius: 6px; margin-top: 6px; }
+.tag.new { color: #04281d; background: var(--accent); }
+.tag.chg { color: #1f1300; background: var(--gold); }
+.tbl { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; min-width: 520px; }
+th, td { text-align: left; padding: 8px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-size: 11px; letter-spacing: 1px; text-transform: uppercase; }
+td .y { color: var(--accent); font-weight: 800; }
+td .n { color: var(--dim); }
+ul.dec { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: #CBD5E1; font-size: 14px; }
+ul.dec b { color: var(--text); }
+@media (prefers-reduced-motion: reduce) { .sw::after { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Bildirim Ayarları · Önizleme</h1>
+    <p>Profil → Bildirimler ekranı ve bildirim örnekleri. Anahtarlar bu sayfada çalışır (yalnız önizleme). Kapatılan bildirim telefona gitmez, uygulama içi bildirimlerde görünmeye devam eder.</p>
+  </header>
+
+  <div class="layout">
+    <div class="phones">
+      <!-- Telefon 1: giriş yapmış kullanıcı -->
+      <div>
+        <div class="phone">
+          <div class="band"><span class="b">‹</span><span class="t">BİLDİRİMLER</span><span></span></div>
+          <div class="screen">
+            <div class="perm">
+              <div><b>Telefon bildirimleri açık</b><small>Bu cihaz bildirim alıyor.</small></div>
+              <button class="sw" role="switch" aria-checked="true" aria-label="Telefon bildirimleri"></button>
+            </div>
+
+            <div>
+              <div class="sec-t">Hangi maçlar</div>
+              <div class="group">
+                <div class="row"><span class="ic">⚽</span><span class="l"><b>Takımımın maçları</b><small>Beyaz FK</small></span><button class="sw" role="switch" aria-checked="true" aria-label="Takımımın maçları"></button></div>
+                <div class="row"><span class="ic">★</span><span class="l"><b>Takip ettiğim takımlar</b><small>Yeşil FK · Takımları düzenle</small></span><button class="sw" role="switch" aria-checked="true" aria-label="Takip ettiğim takımlar"></button></div>
+                <div class="row"><span class="ic">◎</span><span class="l"><b>Grubumdaki tüm maçlar</b><small>Avrupa Grubu</small></span><button class="sw" role="switch" aria-checked="false" aria-label="Grubumdaki tüm maçlar"></button></div>
+                <div class="row"><span class="ic">🏆</span><span class="l"><b>Turnuvanın tüm maçları</b><small>Champions Master Lig</small></span><button class="sw" role="switch" aria-checked="false" aria-label="Turnuvanın tüm maçları"></button></div>
+              </div>
+            </div>
+
+            <div>
+              <div class="sec-t">Maç bildirimleri</div>
+              <div class="group">
+                <div class="row"><span class="ic">📅</span><span class="l"><b>Maç planlandı / saat değişti</b><small>11 Ekim 2026 Pazar / 18:30</small></span><button class="sw" role="switch" aria-checked="true" aria-label="Maç planlandı"></button></div>
+                <div class="row"><span class="ic">⏰</span><span class="l"><b>Maç hatırlatma</b><small>Maçtan önce</small></span><span class="fixed">2 saat</span></div>
+                <div class="row"><span class="ic">⚡</span><span class="l"><b>Canlı gol</b><small>Skor, dakika, golcü ve asist</small></span><button class="sw" role="switch" aria-checked="true" aria-label="Canlı gol"></button></div>
+                <div class="row"><span class="ic">🏁</span><span class="l"><b>Maç sonucu</b><small>Maç bitince skor</small></span><button class="sw" role="switch" aria-checked="true" aria-label="Maç sonucu"></button></div>
+              </div>
+            </div>
+
+            <div>
+              <div class="sec-t">Turnuva</div>
+              <div class="group">
+                <div class="row" style="grid-template-columns:30px 1fr"><span class="ic">📰</span><span class="l"><b>Haberler</b><small style="margin-top:8px"><span class="seg" role="group" aria-label="Haberler"><button aria-pressed="false">Kapalı</button><button aria-pressed="true">Bölgem</button><button aria-pressed="false">Tüm turnuva</button></span></small></span></div>
+                <div class="row"><span class="ic">🟥</span><span class="l"><b>Cezalarım</b><small>Onaylanan ceza ve maç sayısı</small></span><button class="sw" role="switch" aria-checked="true" aria-label="Cezalarım"></button></div>
+              </div>
+            </div>
+
+            <div>
+              <div class="sec-t">Yönetim <span class="role">YÖNETİCİ</span></div>
+              <div class="group">
+                <div class="row"><span class="ic">⚖️</span><span class="l"><b>Onay bekleyen cezalar</b><small>Kart cezası girildiğinde</small></span><button class="sw" role="switch" aria-checked="true" aria-label="Onay bekleyen cezalar"></button></div>
+                <div class="row"><span class="ic">📝</span><span class="l"><b>Kadro ve profil talepleri</b><small>Onayınızı bekleyen değişiklikler</small></span><button class="sw" role="switch" aria-checked="true" aria-label="Kadro ve profil talepleri"></button></div>
+              </div>
+            </div>
+            <div class="note">Kapattığınız bildirimler telefona gelmez; uygulamadaki zil listesinde 14 gün durur.</div>
+          </div>
+        </div>
+        <div class="cap">Giriş yapmış oyuncu / sorumlu</div>
+      </div>
+
+      <!-- Telefon 2: misafir -->
+      <div>
+        <div class="phone">
+          <div class="band"><span class="b">‹</span><span class="t">BİLDİRİMLER</span><span></span></div>
+          <div class="screen">
+            <div class="perm">
+              <div><b>Telefon bildirimleri kapalı</b><small>Takip ettiğiniz turnuvaların sonuçlarını almak için açın.</small></div>
+              <button class="btn" type="button">İzin ver</button>
+            </div>
+            <div>
+              <div class="sec-t">Takip ettiğim turnuvalar</div>
+              <div class="group">
+                <div class="follow"><span class="logo">CML</span><span class="l"><b style="font-size:14.5px">Champions Master Lig</b><br><small style="color:var(--muted);font-size:12px">Sonuçlar · Planlanan maçlar</small></span><button class="sw" role="switch" aria-checked="true" aria-label="Champions Master Lig"></button></div>
+                <div class="follow"><span class="logo">MBL</span><span class="l"><b style="font-size:14.5px">Master Bosphorus Legends</b><br><small style="color:var(--muted);font-size:12px">Sonuçlar</small></span><button class="sw" role="switch" aria-checked="true" aria-label="Master Bosphorus Legends"></button></div>
+                <div class="follow"><span class="logo">HGL</span><span class="l"><b style="font-size:14.5px">Hürriyet Gençlik Ligi</b><br><small style="color:var(--muted);font-size:12px">Takip etmiyorsunuz</small></span><button class="sw" role="switch" aria-checked="false" aria-label="Hürriyet Gençlik Ligi"></button></div>
+              </div>
+            </div>
+            <div>
+              <div class="sec-t">Takip ettiğim turnuvalarda</div>
+              <div class="group">
+                <div class="row"><span class="ic">🏁</span><span class="l"><b>Maç sonuçları</b></span><button class="sw" role="switch" aria-checked="true" aria-label="Maç sonuçları"></button></div>
+                <div class="row"><span class="ic">⚡</span><span class="l"><b>Canlı gol</b></span><button class="sw" role="switch" aria-checked="false" aria-label="Canlı gol (misafir)"></button></div>
+                <div class="row"><span class="ic">📅</span><span class="l"><b>Maç planlandı</b></span><button class="sw" role="switch" aria-checked="false" aria-label="Maç planlandı (misafir)"></button></div>
+                <div class="row"><span class="ic">📰</span><span class="l"><b>Haberler</b></span><button class="sw" role="switch" aria-checked="false" aria-label="Haberler (misafir)"></button></div>
+              </div>
+            </div>
+            <div class="note">Misafir için hesap açılmaz; cihaza bağlı anonim bir kimlik oluşturulur. Giriş yapınca ayarlar hesaba taşınır.</div>
+          </div>
+        </div>
+        <div class="cap">Misafir (uygulama yüklü, hesap yok)</div>
+      </div>
+    </div>
+
+    <div class="side">
+      <div class="card">
+        <h2>Bildirim örnekleri</h2>
+        <div class="push"><span class="ap">⚡</span><div><b>GOL! <span>şimdi</span></b><p>Beyaz FK <strong>2 - 1</strong> Yeşil FK · 34' Ahmet Yılmaz (Asist: Mehmet Kaya)</p><span class="tag new">YENİ</span></div></div>
+        <div class="push"><span class="ap">🟥</span><div><b>Ceza onaylandı <span>5 dk</span></b><p>Ahmet Yılmaz · Kırmızı kart · 2 maç ceza</p><span class="tag new">YENİ · oyuncu + takım sorumlusu</span></div></div>
+        <div class="push"><span class="ap">📅</span><div><b>Maç planlandı <span>1 sa</span></b><p>Beyaz FK - Yeşil FK · 11 Ekim 2026 Pazar / 18:30</p><span class="tag chg">TARİH BİÇİMİ DÜZELDİ</span></div></div>
+        <div class="push"><span class="ap">🏁</span><div><b>Maç sonucu <span>dün</span></b><p>Beyaz FK 3 - 1 Yeşil FK</p></div></div>
+      </div>
+
+      <div class="card">
+        <h2>Kime, nasıl gider</h2>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Bildirim</th><th>Kime</th><th>Telefon</th><th>Uygulama</th></tr></thead>
+            <tbody>
+              <tr><td>Maç planlandı / saat değişti</td><td>Seçtiği maç kapsamı + yöneticiler</td><td><span class="y">Ayara göre</span></td><td><span class="y">Her zaman</span></td></tr>
+              <tr><td>Maç hatırlatma (2 sa)</td><td>Maçın oyuncuları, sorumluları</td><td><span class="y">Ayara göre</span></td><td><span class="y">Her zaman</span></td></tr>
+              <tr><td>Canlı gol</td><td>Seçtiği maç kapsamı, takip eden misafirler</td><td><span class="y">Ayara göre</span></td><td><span class="y">Her zaman</span></td></tr>
+              <tr><td>Maç sonucu</td><td>Seçtiği maç kapsamı, takip eden misafirler</td><td><span class="y">Ayara göre</span></td><td><span class="y">Her zaman</span></td></tr>
+              <tr><td>Haber</td><td>Bölgesi ya da tüm turnuva (ayar)</td><td><span class="y">Ayara göre</span></td><td><span class="y">Her zaman</span></td></tr>
+              <tr><td>Ceza onaylandı</td><td>Cezalı oyuncu + takım sorumlusu</td><td><span class="y">Ayara göre</span></td><td><span class="y">Her zaman</span></td></tr>
+              <tr><td>Onay bekleyen ceza</td><td>Kurucu, admin</td><td><span class="y">Ayara göre</span></td><td><span class="y">Her zaman</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Kararlar</h2>
+        <ul class="dec">
+          <li><b>Kapatılan bildirim</b> telefona gitmez, uygulama içi listede görünür.</li>
+          <li><b>Saklama süresi</b> 60 günden <b>14 güne</b> iner.</li>
+          <li><b>Hatırlatma</b> sabit 2 saat.</li>
+          <li><b>Takip ettiğim takım</b> cihazdan veritabanına taşınır; bildirimi gider.</li>
+          <li><b>Haberler</b> bölgeye göre gider (varsayılan: Bölgem).</li>
+          <li><b>Misafir</b> turnuva takip edip sonuç/gol bildirimi alabilir.</li>
+          <li><b>Bildirime basınca</b> ilgili maç ya da haber açılır (telefon bildiriminde de).</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.querySelectorAll('.sw').forEach(function (b) {
+  b.addEventListener('click', function () {
+    b.setAttribute('aria-checked', b.getAttribute('aria-checked') === 'true' ? 'false' : 'true');
+  });
+});
+document.querySelectorAll('.seg').forEach(function (g) {
+  g.querySelectorAll('button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      g.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', 'false'); });
+      b.setAttribute('aria-pressed', 'true');
+    });
+  });
+});
+</script>

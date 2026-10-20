@@ -1,0 +1,644 @@
+<title>Turnuva Talebi Önizleme</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=Barlow+Condensed:ital,wght@1,700;1,800&display=swap">
+<style>
+/* Düzen: akış şeridi; giriş noktaları (3 telefon); talep akışı (4 telefon); teklif şablonu; kararlar. Uygulamanın koyu temasına bağlı tek tema. */
+:root {
+  --ground: #0B1220;
+  --app: #0F172A;
+  --surface: #1E293B;
+  --surface2: #263449;
+  --line: rgba(255,255,255,.08);
+  --text: #F1F5F9;
+  --muted: #94A3B8;
+  --dim: #64748B;
+  --accent: #10B981;
+  --accent-soft: rgba(16,185,129,.16);
+  --gold: #FBBF24;
+  --gold-soft: rgba(251,191,36,.14);
+  --blue: #60A5FA;
+  --blue-soft: rgba(96,165,250,.14);
+  --display: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  --body: 'Barlow', 'Segoe UI', system-ui, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--ground); color: var(--text); font-family: var(--body); font-size: 15px; line-height: 1.45; }
+.wrap { max-width: 1560px; margin: 0 auto; padding-inline: 16px; padding-block: 28px 56px; display: grid; gap: 28px; }
+header h1 { font-family: var(--display); font-style: italic; font-weight: 800; font-size: clamp(28px, 5vw, 40px); letter-spacing: .5px; margin: 0; text-wrap: balance; }
+header p { margin: 6px 0 0; color: var(--muted); max-width: 80ch; }
+h2.sh { font-family: var(--display); font-style: italic; font-weight: 800; font-size: 26px; margin: 10px 0 -10px; }
+.sub { color: var(--muted); margin: -4px 0 0; max-width: 80ch; font-size: 14px; }
+
+.flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.flow .st { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; font-size: 13px; }
+.flow .st b { display: block; font-size: 11px; letter-spacing: 1.1px; text-transform: uppercase; color: var(--accent); }
+.flow .st.me b { color: var(--gold); }
+.flow .ar { color: var(--dim); font-weight: 800; }
+
+.phones { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(360px, 100%), 1fr)); gap: 28px 24px; justify-items: center; align-items: start; }
+.pcol { width: 360px; max-width: 100%; display: grid; gap: 10px; }
+.phone { background: var(--app); border-radius: 30px; border: 1px solid var(--line); overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,.45); height: 740px; display: flex; flex-direction: column; }
+.phone.short { height: 620px; }
+.cap { font-size: 12px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--dim); text-align: center; font-weight: 700; }
+.note { font-size: 13px; color: var(--muted); line-height: 1.4; }
+.note b { color: var(--text); }
+
+.band { flex: none; height: 56px; display: grid; grid-template-columns: 48px 1fr 48px; align-items: center; background: linear-gradient(90deg, #052e22, #064E3B, #052e22); border-bottom: 2px solid var(--accent); padding: 0 6px; }
+.band .t { text-align: center; font-family: var(--display); font-style: italic; font-weight: 800; letter-spacing: 1.2px; font-size: 16px; text-transform: uppercase; }
+.band .b { color: #fff; font-size: 20px; text-align: center; }
+.screen { flex: 1; overflow-y: auto; padding: 14px 14px 20px; display: flex; flex-direction: column; gap: 14px; scrollbar-width: thin; }
+.foot { flex: none; padding: 12px 14px 16px; border-top: 1px solid var(--line); background: var(--app); display: flex; gap: 10px; }
+
+.sec-t { font-size: 11px; font-weight: 800; letter-spacing: 1.3px; color: var(--muted); text-transform: uppercase; margin: 2px 4px -6px; }
+.group { background: var(--surface); border-radius: 14px; overflow: hidden; }
+.row { display: grid; grid-template-columns: 30px 1fr auto; gap: 10px; align-items: center; padding: 11px 12px; border-top: 1px solid var(--line); min-height: 52px; }
+.row:first-child { border-top: 0; }
+.row.wide { grid-template-columns: 30px 1fr; }
+.ic { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); font-size: 14px; font-weight: 800; }
+.row .l { min-width: 0; }
+.row .l b { display: block; font-weight: 700; font-size: 14.5px; }
+.row .l small { display: block; color: var(--muted); font-size: 12px; line-height: 1.3; margin-top: 1px; }
+.row .l small i { font-style: normal; color: var(--dim); }
+.row .v { color: var(--muted); font-size: 13.5px; text-align: right; }
+.row input, .row select, .row textarea { width: 100%; background: transparent; border: 0; color: var(--text); font: 600 14.5px var(--body); padding: 2px 0; outline: none; }
+.row textarea { font-weight: 500; font-size: 14px; resize: vertical; min-height: 84px; line-height: 1.4; }
+.row input::placeholder, .row textarea::placeholder { color: var(--dim); font-weight: 500; }
+.row select option { background: var(--surface); }
+.optional .row:not(.keep) { opacity: .55; }
+
+.btn { flex: 1; border: 0; border-radius: 12px; padding: 13px 14px; font: 800 14px var(--body); letter-spacing: .6px; text-transform: uppercase; cursor: pointer; background: var(--accent); color: #052e22; }
+.btn.ghost { background: var(--surface); color: var(--text); }
+.btn:focus-visible, .chip:focus-visible, .sw:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.btn[disabled] { opacity: .45; cursor: default; }
+
+/* Tanıtım ve paket */
+.hero { border-radius: 16px; padding: 18px 16px; background: radial-gradient(120% 90% at 100% 0%, rgba(16,185,129,.35), transparent 60%), var(--surface); display: grid; gap: 8px; }
+.hero h2 { margin: 0; font-family: var(--display); font-style: italic; font-weight: 800; font-size: 27px; line-height: 1.05; text-wrap: balance; }
+.hero p { margin: 0; color: var(--muted); font-size: 13.5px; }
+.ticks { display: grid; gap: 4px; margin: 4px 0 0; padding: 0; list-style: none; font-size: 13px; }
+.ticks li::before { content: '✓  '; color: var(--accent); font-weight: 800; }
+.types { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.types span { flex: none; font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: 99px; background: var(--surface); color: var(--muted); }
+.pack { border-radius: 16px; background: var(--surface); border: 1.5px solid var(--accent); overflow: hidden; }
+.pack .h { padding: 12px 14px; background: var(--accent-soft); display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.pack .nm { font-family: var(--display); font-style: italic; font-weight: 800; font-size: 22px; letter-spacing: .4px; text-transform: uppercase; }
+.pack .h small { color: var(--accent); font-weight: 700; font-size: 12px; }
+.pack ul { list-style: none; margin: 0; padding: 6px 0; }
+.pack li { display: grid; grid-template-columns: 22px 1fr; gap: 8px; padding: 7px 14px; font-size: 13.5px; line-height: 1.35; }
+.pack li::before { content: '✓'; color: var(--accent); font-weight: 800; }
+.pack li b { font-weight: 700; }
+.pack li span { color: var(--muted); }
+.faq { font-size: 13px; color: var(--muted); background: var(--surface); border-radius: 14px; padding: 12px 14px; display: grid; gap: 8px; }
+.faq b { color: var(--text); display: block; font-size: 13.5px; }
+
+/* Sihirbaz */
+.steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.steps div { display: grid; gap: 5px; font-size: 10.5px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; color: var(--dim); }
+.steps div::before { content: ''; height: 4px; border-radius: 2px; background: var(--surface2); }
+.steps div.on { color: var(--accent); }
+.steps div.on::before { background: var(--accent); }
+.steps div.done::before { background: rgba(16,185,129,.5); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px 12px; border-top: 1px solid var(--line); }
+.chips:first-child { border-top: 0; }
+.chips .lbl { width: 100%; font-size: 12px; color: var(--muted); font-weight: 600; }
+.chip { border: 1px solid var(--line); background: var(--surface2); color: var(--text); font: 700 13px var(--body); padding: 7px 11px; border-radius: 99px; cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--accent); color: #052e22; border-color: var(--accent); }
+.sw { width: 44px; height: 26px; border-radius: 13px; background: #334155; position: relative; border: 0; cursor: pointer; padding: 0; flex: none; }
+.sw::after { content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: transform .18s; }
+.sw[aria-checked="true"] { background: var(--accent); }
+.sw[aria-checked="true"]::after { transform: translateX(18px); }
+.price-only { border-radius: 14px; background: var(--gold-soft); border: 1px solid rgba(251,191,36,.35); }
+.price-only .row .l b { color: var(--gold); }
+.calc { border-radius: 14px; padding: 12px 14px; background: var(--surface); display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+.calc b { font-family: var(--display); font-style: italic; font-weight: 800; font-size: 28px; color: var(--text); line-height: 1; font-variant-numeric: tabular-nums; }
+.calc span.k { font-size: 11px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; color: var(--accent); }
+.done-card { text-align: center; padding: 30px 16px; display: grid; gap: 10px; justify-items: center; }
+.done-card .big { width: 64px; height: 64px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-size: 30px; font-weight: 800; }
+.done-card h3 { margin: 0; font-family: var(--display); font-style: italic; font-size: 24px; }
+.done-card p { margin: 0; color: var(--muted); font-size: 13.5px; }
+
+/* Teklif / durum */
+.status { display: grid; background: var(--surface); border-radius: 14px; padding: 6px 14px; }
+.tl { display: grid; grid-template-columns: 18px 1fr; gap: 10px; padding: 8px 0; }
+.tl .dot { width: 12px; height: 12px; border-radius: 50%; margin-top: 4px; background: var(--surface2); border: 2px solid var(--dim); }
+.tl.ok .dot { background: var(--accent); border-color: var(--accent); }
+.tl.now .dot { background: var(--gold); border-color: var(--gold); box-shadow: 0 0 0 4px var(--gold-soft); }
+.tl b { font-size: 14px; display: block; }
+.tl small { color: var(--muted); font-size: 12px; }
+.tl.wait b { color: var(--dim); }
+.offer { border-radius: 16px; overflow: hidden; background: var(--surface); border: 1.5px solid var(--gold); }
+.offer .h { background: var(--gold-soft); padding: 10px 14px; font-size: 11px; font-weight: 800; letter-spacing: 1.3px; text-transform: uppercase; color: var(--gold); display: flex; justify-content: space-between; }
+.offer .b { padding: 12px 14px 14px; display: grid; gap: 10px; }
+.figs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.fig { background: var(--app); border-radius: 10px; padding: 9px 10px; display: grid; gap: 1px; }
+.fig b { font-family: var(--display); font-style: italic; font-weight: 800; font-size: 22px; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.fig span { font-size: 11.5px; color: var(--muted); line-height: 1.25; }
+.fig s { color: var(--dim); font-size: 11.5px; }
+.fig.total { grid-column: 1 / -1; background: linear-gradient(90deg, rgba(251,191,36,.18), rgba(251,191,36,.05)); }
+.fig.total b { font-size: 30px; color: var(--gold); }
+.offer .msg { font-size: 13px; color: var(--muted); background: var(--app); border-radius: 10px; padding: 10px 12px; }
+.offer .doc { font-size: 13px; font-weight: 800; color: var(--gold); }
+.offer .acts { display: flex; gap: 8px; }
+.pay { background: var(--surface); border-radius: 14px; padding: 12px 14px; display: grid; gap: 6px; font-size: 13px; color: var(--muted); }
+.pay b { color: var(--text); }
+.pay code { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; color: var(--text); background: var(--app); padding: 6px 8px; border-radius: 8px; display: block; overflow-x: auto; }
+
+/* Admin */
+.tabs { display: flex; gap: 6px; overflow-x: auto; }
+.tabs span { flex: none; font-size: 12.5px; font-weight: 800; padding: 6px 11px; border-radius: 99px; background: var(--surface); color: var(--muted); }
+.tabs span.on { background: var(--text); color: var(--app); }
+.tabs span i { font-style: normal; opacity: .65; margin-left: 4px; }
+.req { background: var(--surface); border-radius: 14px; padding: 12px 14px; display: grid; gap: 6px; }
+.req .top { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.req .top b { font-size: 15px; }
+.pill { font-size: 10.5px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; padding: 3px 8px; border-radius: 6px; white-space: nowrap; }
+.pill.new { background: var(--blue-soft); color: var(--blue); }
+.pill.price { background: var(--gold-soft); color: var(--gold); }
+.pill.paid { background: var(--accent-soft); color: var(--accent); }
+.req .meta { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12.5px; color: var(--muted); }
+.req .meta span { font-variant-numeric: tabular-nums; }
+.req .desc { font-size: 12.5px; color: var(--text); background: var(--app); border-radius: 8px; padding: 8px 10px; }
+.req.open { outline: 1.5px solid var(--blue); }
+.sumrow { display: flex; justify-content: space-between; align-items: baseline; padding: 11px 12px; border-top: 1px solid var(--line); }
+.sumrow span { color: var(--muted); font-size: 13px; }
+.sumrow b { font-family: var(--display); font-style: italic; font-size: 24px; color: var(--gold); font-variant-numeric: tabular-nums; }
+
+/* Giriş noktaları */
+.trophy { width: 18px; height: 18px; flex: none; }
+.login-logo { text-align: center; font-family: var(--display); font-style: italic; font-weight: 800; font-size: 30px; letter-spacing: 1px; margin-top: 8px; }
+.roles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.roles div { background: var(--surface); border-radius: 12px; padding: 9px 6px; text-align: center; font-size: 10.5px; color: var(--muted); line-height: 1.25; }
+.roles div b { display: block; font-family: var(--display); font-style: italic; font-size: 15px; color: var(--text); letter-spacing: .6px; }
+.roles div.on { outline: 1.5px solid var(--accent); background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--surface); }
+.fld { background: var(--surface); border-radius: 12px; padding: 12px 14px; color: var(--dim); font-size: 14px; }
+.forgot { text-align: center; color: var(--muted); font-size: 13px; text-decoration: underline; }
+.ep-card { border: 1.5px solid rgba(251,191,36,.45); border-radius: 14px; padding: 12px 14px; display: flex; gap: 12px; align-items: center; color: var(--gold); background: var(--gold-soft); }
+.ep-card .tx { flex: 1; min-width: 0; color: var(--text); font-size: 13px; line-height: 1.3; }
+.ep-card .tx b { display: block; font-size: 14.5px; }
+.ep-card .tx span { color: var(--muted); }
+.ep-card .go, .strip .go { font-weight: 800; color: var(--gold); font-size: 13px; white-space: nowrap; }
+.drawer { flex: 1; display: grid; grid-template-columns: 74% 1fr; }
+.drawer .pane { background: var(--app); border-right: 1px solid var(--line); padding: 14px 12px; display: flex; flex-direction: column; gap: 8px; }
+.drawer .shade { background: rgba(0,0,0,.55); }
+.drawer .head { display: flex; gap: 10px; align-items: center; font-weight: 800; font-size: 17px; padding-bottom: 10px; border-bottom: 2px solid var(--gold); margin-bottom: 4px; }
+.drawer .head i { width: 38px; height: 38px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-style: normal; font-weight: 800; }
+.mi { display: flex; gap: 10px; align-items: center; background: var(--surface); border-radius: 12px; padding: 9px 10px; font-weight: 700; font-size: 14px; }
+.mi i { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; font-style: normal; font-size: 13px; color: #fff; }
+.mi.on { outline: 1.5px solid var(--gold); }
+.mi.kur { background: var(--gold-soft); color: var(--gold); }
+.mi.kur i { background: var(--gold); color: #3b2a00; }
+.mi .new { margin-left: auto; font-size: 10px; letter-spacing: .8px; background: var(--gold); color: #3b2a00; padding: 2px 6px; border-radius: 5px; font-weight: 800; }
+.sep { height: 1px; background: var(--line); margin: 4px 2px; }
+.hello { display: flex; justify-content: space-between; align-items: center; }
+.hello b { font-size: 17px; display: block; }
+.hello small { color: var(--muted); font-size: 12px; }
+.hello .grp { font-size: 12.5px; font-weight: 700; background: var(--surface); border-radius: 99px; padding: 6px 11px; }
+.strip { display: flex; align-items: center; gap: 10px; border-radius: 12px; padding: 10px 12px; background: linear-gradient(90deg, rgba(251,191,36,.22), rgba(251,191,36,.06)); border: 1px solid rgba(251,191,36,.35); color: var(--gold); }
+.strip .tx { flex: 1; min-width: 0; font-size: 13px; color: var(--text); font-weight: 800; }
+.mini { background: var(--surface); border-radius: 14px; padding: 12px 14px; display: grid; gap: 8px; }
+.mini .t { font-size: 11px; font-weight: 800; letter-spacing: 1.2px; color: var(--muted); text-transform: uppercase; }
+.mini .m { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; font-size: 13px; font-weight: 700; align-items: center; }
+.mini .m span:first-child { text-align: right; }
+.mini .m em { font-style: normal; color: var(--gold); font-variant-numeric: tabular-nums; }
+.stat3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; text-align: center; }
+.stat3 div { background: var(--app); border-radius: 10px; padding: 8px 4px; font-size: 11px; color: var(--muted); }
+.stat3 b { display: block; font-size: 18px; color: var(--text); font-variant-numeric: tabular-nums; }
+
+/* Teklif şablonu */
+.tpl { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.paper { background: #F6F5F1; color: #141A33; border-radius: 14px; padding: 22px 22px 18px; display: grid; gap: 16px; box-shadow: 0 20px 50px rgba(0,0,0,.45); }
+.paper .eb { font-family: var(--display); font-style: italic; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; color: #A9822E; font-size: 13px; }
+.paper h3 { margin: 0; font-family: var(--display); font-style: italic; font-weight: 800; font-size: 30px; line-height: 1.05; color: #1B2A6B; }
+.paper .lead { color: #5A6077; font-size: 14px; margin: 0; }
+.pfigs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.pfig { background: #fff; border: 1px solid #E2DFD6; border-radius: 10px; padding: 10px 12px; display: grid; gap: 1px; min-width: 0; }
+.pfig b { font-family: var(--display); font-style: italic; font-weight: 800; font-size: 24px; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.pfig span { font-size: 11.5px; color: #5A6077; line-height: 1.25; }
+.pfig.main { background: #1B2A6B; border-color: #1B2A6B; }
+.pfig.main b, .pfig.main span { color: #F6F5F1; }
+.ptbl { overflow-x: auto; border: 1px solid #E2DFD6; border-radius: 10px; background: #fff; }
+.ptbl table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.ptbl th, .ptbl td { padding: 8px 10px; text-align: right; border-bottom: 1px solid #E2DFD6; white-space: nowrap; }
+.ptbl th:first-child, .ptbl td:first-child { text-align: left; }
+.ptbl thead th { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: #5A6077; }
+.ptbl tr:last-child td { border-bottom: 0; }
+.ptbl tr.tot td { font-weight: 800; background: #F3EBD8; }
+.ptbl td.strike { color: #5A6077; text-decoration: line-through; }
+.paper .h4 { font-family: var(--display); font-style: italic; font-weight: 800; font-size: 18px; color: #1B2A6B; margin: 0 0 -8px; }
+.paper .sm { font-size: 12px; color: #5A6077; margin: 0; }
+.outline { display: grid; gap: 10px; counter-reset: s; }
+.outline div { background: var(--surface); border-radius: 12px; padding: 12px 14px; display: grid; gap: 2px; font-size: 13.5px; color: var(--muted); }
+.outline div b { color: var(--text); font-size: 14.5px; }
+.outline div b::before { counter-increment: s; content: counter(s) ". "; color: var(--gold); }
+
+/* Kararlar */
+.decide { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 14px; }
+.decide article { background: var(--surface); border-radius: 14px; padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.decide h3 { margin: 0; font-size: 15px; }
+.decide p { margin: 0; color: var(--muted); font-size: 13.5px; }
+.decide .k { font-size: 10.5px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; color: var(--accent); }
+.decide .k.open { color: var(--gold); }
+@media (max-width: 760px) { .tpl { grid-template-columns: 1fr; } .pfigs { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { .sw::after { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Turnuva Talebi Akışı</h1>
+    <p>Kullanıcı giriş ekranından, yan menüden ya da ana sayfadaki şeritten "Turnuvanı Kur"a gelir. Uygulamanın özetini görür, talep formunu doldurur. Turnuvası henüz hazır değilse "Bilgi almak istiyorum" der ve örnek fiyatı hemen görür. Sen maç başı ücret üzerinden teklif gönderirsin, ödeme uygulama dışında alınır, kabul edilen talep tek tuşla turnuvaya dönüşür. Talep formu tıklanabilir.</p>
+  </header>
+
+  <div class="flow" aria-label="Akış">
+    <div class="st"><b>Kullanıcı</b>Turnuvanı Kur</div><span class="ar">→</span>
+    <div class="st"><b>Kullanıcı</b>Talep oluşturur (~2 dk)</div><span class="ar">→</span>
+    <div class="st me"><b>Sen</b>Telegram bildirimi + inceleme</div><span class="ar">→</span>
+    <div class="st me"><b>Sen</b>Teklif: maç sayısı × maç başı ücret</div><span class="ar">→</span>
+    <div class="st"><b>Kullanıcı</b>Kabul eder, öder (IBAN)</div><span class="ar">→</span>
+    <div class="st me"><b>Sen</b>Ödendi → Turnuvaya dönüştür</div>
+  </div>
+
+  <h2 class="sh">Giriş noktaları</h2>
+  <div class="phones">
+    <div class="pcol">
+      <div class="phone short">
+        <div class="screen">
+          <div class="login-logo">LİG MASASI</div>
+          <div class="roles"><div class="on"><b>SAHA</b>Futbolcuyum</div><div><b>KULÜBE</b>Takım / turnuva sorumlusuyum</div><div><b>TRİBÜN</b>Girişe gerek olmadan takip et</div></div>
+          <div class="fld">0 (5XX) XXX XX XX</div>
+          <div class="fld">Şifre</div>
+          <button class="btn" type="button" style="flex:none">Sahaya Çık</button>
+          <div class="forgot">Şifremi Unuttum</div>
+          <div class="ep-card"><svg class="trophy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4Z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg><div class="tx"><b>Turnuva mı düzenliyorsun?</b><span>Lig Masası'nda kur.</span></div><span class="go">Talep oluştur ›</span></div>
+        </div>
+      </div>
+      <div class="cap">A · Giriş ekranı</div>
+      <div class="note">Formun altında çerçeveli bir kart. Giriş düğmesiyle yarışmaz, giriş yapmadan gelen organizatör yine de görür.</div>
+    </div>
+
+    <div class="pcol">
+      <div class="phone short">
+        <div class="band"><span class="b">✕</span><span class="t">Masterlar</span><span class="b"></span></div>
+        <div class="drawer">
+          <div class="pane">
+            <div class="head"><i>LM</i>Masterlar</div>
+            <div class="mi on"><i style="background:#16A34A">⌂</i>Ana Sayfa</div>
+            <div class="mi"><i style="background:#2563EB">▦</i>Maç Takvimi</div>
+            <div class="mi"><i style="background:#D97706">★</i>Puan Durumu</div>
+            <div class="mi"><i style="background:#E11D48">▶</i>Yayın Rehberi</div>
+            <div class="sep"></div>
+            <div class="mi kur"><i><svg class="trophy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4Z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg></i>Turnuvanı Kur<span class="new">Yeni</span></div>
+          </div>
+          <div class="shade"></div>
+        </div>
+      </div>
+      <div class="cap">B · Yan menü</div>
+      <div class="note">Ana bölümlerden çizgiyle ayrılmış, altın renkli satır. <b>Misafir ve futbolcu görür</b>, yönetici ve kurucu başkan görmez.</div>
+    </div>
+
+    <div class="pcol">
+      <div class="phone short">
+        <div class="band"><span class="b">≡</span><span class="t">Masterlar ˅</span><span class="b">◔</span></div>
+        <div class="screen">
+          <div class="hello"><div><b>Merhaba</b><small>2026 Sezonu</small></div><span class="grp">Anadolu Grubu ˅</span></div>
+          <div class="strip"><svg class="trophy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4Z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg><div class="tx">Turnuvanı Lig Masası'nda kur</div><span class="go">Talep oluştur ›</span></div>
+          <div class="mini"><span class="t">Masterlar Ligi</span><div class="stat3"><div><b>16</b>Takım</div><div><b>32</b>Maç</div><div><b>124</b>Gol</div></div></div>
+          <div class="mini"><span class="t">Bu hafta · 5. hafta</span>
+            <div class="m"><span>Moda</span><em>19:00</em><span>Maltepe Sahil</span></div>
+            <div class="m"><span>Ataşehir Yıldızları</span><em>20:00</em><span>Kartal Veteranlar</span></div>
+            <div class="m"><span>Pendik Denizciler</span><em>21:00</em><span>Üsküdar Dostlar</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="cap">C · Ana sayfa, üstte şerit</div>
+      <div class="note">Selamlamanın hemen altında tek satır. İlk bakışta görünür, turnuva içeriğini aşağı itmez.</div>
+    </div>
+  </div>
+
+  <h2 class="sh">Talep akışı</h2>
+  <div class="phones">
+
+    <!-- 1. Tanıtım + standart paket -->
+    <div class="pcol">
+      <div class="phone">
+        <div class="band"><span class="b">‹</span><span class="t">Turnuvanı Kur</span><span class="b"></span></div>
+        <div class="screen">
+          <div class="hero">
+            <h2>Turnuvan Lig Masası'nda canlı yayında olsun</h2>
+            <p>Oyuncular, takım sorumluları ve izleyiciler her şeyi telefondan takip eder.</p>
+            <ul class="ticks">
+              <li>Kurulumu birlikte yapıyoruz</li>
+              <li>Talebine 24 saat içinde dönüyoruz</li>
+              <li>Ödeme teklifi kabul ettikten sonra</li>
+            </ul>
+          </div>
+          <div class="types"><span>Halı saha</span><span>Okul</span><span>Şirket</span><span>Dernek</span><span>Master</span><span>Köy / mahalle</span></div>
+
+          <div class="pack">
+            <ul>
+              <li><div><b>Fikstür ve kura</b> <span>· lig, grup, eleme; tek ya da çift devre</span></div></li>
+              <li><div><b>Canlı skor</b> <span>· gol, asist, kart anında herkese</span></div></li>
+              <li><div><b>Puan durumu ve istatistik</b> <span>· gol krallığı, asist, kart listesi</span></div></li>
+              <li><div><b>Takım ve oyuncu profilleri</b> <span>· kadro, forma numarası, oyuncu geçmişi</span></div></li>
+              <li><div><b>Esame ve kart cezaları</b> <span>· cezalı oyuncu esamede işaretli</span></div></li>
+              <li><div><b>Haberler ve bildirimler</b> <span>· maç günü, gol, sonuç bildirimleri</span></div></li>
+              <li><div><b>Sponsor alanı ve paylaşım görselleri</b> <span>· maç afişleri, skor kartları</span></div></li>
+              <li><div><b>Roller</b> <span>· turnuva, bölge ve takım sorumluları kendi işini yapar</span></div></li>
+            </ul>
+          </div>
+
+          <div class="faq">
+            <div><b>Ücret nasıl belirleniyor?</b>Maç başı ücretle. Turnuvan henüz hazır değilse "Bilgi almak istiyorum" de; takım ve format bilgisine göre örnek fiyatı hemen gösteririz. İlk turnuvana %20 indirim.</div>
+            <div><b>Önce görebilir miyim?</b>"Demoyu Gez" ile örnek turnuvalarımızı giriş yapmadan gezebilirsin.</div>
+          </div>
+        </div>
+        <div class="foot"><button class="btn ghost" type="button">Demoyu Gez</button><button class="btn" type="button">Talep Oluştur</button></div>
+      </div>
+      <div class="cap">1 · Tanıtım ve standart paket</div>
+      <div class="note">Paket adı yok, yalnızca özet içerik. Tanıtımda fiyat yok. <b>Demoyu Gez</b>: kişi misafir olarak bizim hazırladığımız demo liglere girer (Masterlar Ligi, okul, şirket). Giriş yapmış futbolcuda turnuva seçici demo lige geçer, çıkınca kendi turnuvasına döner.</div>
+    </div>
+
+    <!-- 2. Sihirbaz -->
+    <div class="pcol">
+      <div class="phone">
+        <div class="band"><span class="b">‹</span><span class="t">Turnuva Talebi</span><span class="b">✕</span></div>
+        <div class="screen" id="wiz">
+          <div class="steps" id="steps"><div>Turnuva</div><div>Format</div><div>Ek istek</div><div>İletişim</div></div>
+
+          <section data-step="0" style="display:grid;gap:14px">
+            <div class="price-only">
+              <div class="row"><span class="ic" style="background:var(--gold-soft);color:var(--gold)">₺</span><div class="l"><b>Bilgi almak istiyorum</b><small>Turnuvam henüz hazır değil.</small></div><button class="sw" role="switch" aria-checked="false" aria-label="Bilgi almak istiyorum" id="priceOnly"></button></div>
+            </div>
+            <div class="sec-t" id="tinfo-t">Turnuva</div>
+            <div class="group" id="tinfo">
+              <div class="row"><span class="ic">T</span><div class="l"><small>Turnuva adı <i class="opt" hidden>· isteğe bağlı</i></small><input id="w-name" value="Kadıköy Masterlar Kupası" placeholder="Ör. Bahar Kupası 2027"></div><span></span></div>
+              <div class="row"><span class="ic">◎</span><div class="l"><small>Şehir / ilçe <i class="opt" hidden>· isteğe bağlı</i></small><input id="w-city" value="İstanbul, Kadıköy"></div><span></span></div>
+              <div class="row"><span class="ic">▦</span><div class="l"><small>Tahmini başlangıç <i class="opt" hidden>· isteğe bağlı</i></small><input id="w-date" value="Kasım 2026"></div><span></span></div>
+            </div>
+            <div class="group">
+              <div class="chips" data-single><span class="lbl">Turnuva türü</span>
+                <button class="chip" type="button" aria-pressed="false">Halı saha</button><button class="chip" type="button" aria-pressed="false">Okul</button><button class="chip" type="button" aria-pressed="false">Şirket</button><button class="chip" type="button" aria-pressed="false">Dernek</button><button class="chip" type="button" aria-pressed="true">Master</button><button class="chip" type="button" aria-pressed="false">Diğer</button>
+              </div>
+            </div>
+          </section>
+
+          <section data-step="1" hidden style="display:grid;gap:14px">
+            <div class="sec-t">Format</div>
+            <div class="group">
+              <div class="chips" data-single data-k="teams"><span class="lbl">Takım sayısı</span>
+                <button class="chip" type="button" aria-pressed="false" data-v="8">8</button><button class="chip" type="button" aria-pressed="false" data-v="12">12</button><button class="chip" type="button" aria-pressed="true" data-v="16">16</button><button class="chip" type="button" aria-pressed="false" data-v="24">24</button><button class="chip" type="button" aria-pressed="false" data-v="32">32</button>
+              </div>
+              <div class="chips" data-single data-k="groups"><span class="lbl">Grup sayısı</span>
+                <button class="chip" type="button" aria-pressed="false" data-v="1">Tek lig</button><button class="chip" type="button" aria-pressed="true" data-v="2">2 grup</button><button class="chip" type="button" aria-pressed="false" data-v="4">4 grup</button>
+              </div>
+              <div class="chips" data-single data-k="legs"><span class="lbl">Devre</span>
+                <button class="chip" type="button" aria-pressed="true" data-v="1">Tek devre</button><button class="chip" type="button" aria-pressed="false" data-v="2">Çift devre</button>
+              </div>
+              <div class="chips" data-single data-k="ko"><span class="lbl">Lig sonrası eleme / kupa</span>
+                <button class="chip" type="button" aria-pressed="false" data-v="0">Yok</button><button class="chip" type="button" aria-pressed="true" data-v="1">Var</button>
+              </div>
+            </div>
+            <div class="calc"><span class="k">Tahmini maç sayısı</span><b id="mcount">63</b><span id="mtext">2 grupta 8'er takım, tek devre: 56 lig maçı + 7 eleme maçı</span></div>
+            <div class="group">
+              <div class="chips" data-single><span class="lbl">Kaç kişilik</span>
+                <button class="chip" type="button" aria-pressed="false">5+1</button><button class="chip" type="button" aria-pressed="false">6+1</button><button class="chip" type="button" aria-pressed="true">7+1</button><button class="chip" type="button" aria-pressed="false">11</button>
+              </div>
+            </div>
+          </section>
+
+          <section data-step="2" hidden style="display:grid;gap:14px">
+            <div class="sec-t">Ek istekler · isteğe bağlı</div>
+            <div class="group">
+              <div class="row"><span class="ic">⇪</span><div class="l"><b>Kurulumu siz yapın</b><small>Takım ve oyuncu listelerini biz gireriz</small></div><button class="sw" role="switch" aria-checked="true" aria-label="Kurulum"></button></div>
+              <div class="row"><span class="ic">◇</span><div class="l"><b>Canlı kura</b><small>Grupları uygulamada canlı çekeriz</small></div><button class="sw" role="switch" aria-checked="false" aria-label="Canlı kura"></button></div>
+              <div class="row"><span class="ic">▣</span><div class="l"><b>Instagram paylaşımları</b><small>Maç günü ve skor görselleri</small></div><button class="sw" role="switch" aria-checked="false" aria-label="Instagram"></button></div>
+            </div>
+            <div class="note" style="padding:0 4px">Uygulamadaki her şey zaten dahil. Buradaki istekler teklife ayrıca yazılır.</div>
+          </section>
+
+          <section data-step="3" hidden style="display:grid;gap:14px">
+            <div class="sec-t">İletişim</div>
+            <div class="group">
+              <div class="row"><span class="ic">◉</span><div class="l"><small>Ad soyad</small><input id="w-person" value="Murat Yılmaz"></div><span></span></div>
+              <div class="row"><span class="ic">☏</span><div class="l"><small>Telefon (zorunlu)</small><input id="w-phone" value="0532 412 18 07" inputmode="tel"></div><span></span></div>
+              <div class="row"><span class="ic">⌂</span><div class="l"><small>Kurum / dernek <i>· isteğe bağlı</i></small><input id="w-org" placeholder="Ör. Kadıköy Spor Derneği"></div><span></span></div>
+            </div>
+            <div class="sec-t">Açıklama</div>
+            <div class="group">
+              <div class="row wide"><span class="ic">✎</span><div class="l"><textarea id="w-desc" placeholder="Turnuvanı anlat: kaçıncı yılı, sahalar, maç günleri, özel istekler, sorular...">Geçen yıl 14 takımdık, bu yıl 16 bekliyoruz. Maçlar cumartesi akşamları Moda'da. Kart cezalarını uygulamadan takip etmek istiyoruz.</textarea></div></div>
+            </div>
+            <div class="note" style="padding:0 4px">Giriş yapmadan da gönderebilirsin; sana telefon ya da WhatsApp ile dönüş yaparız. Bu numarayla kayıt olursan talebin "Taleplerim"de görünür.</div>
+          </section>
+
+          <section data-step="4" hidden style="display:grid;gap:14px">
+            <div class="done-card" style="padding-bottom:4px">
+              <div class="big">✓</div>
+              <h3>Talebin alındı</h3>
+              <p id="done-text">24 saat içinde teklifimizi "Taleplerim" ekranına ve telefonuna göndereceğiz.</p>
+            </div>
+            <div class="offer" id="sample" hidden>
+              <div class="h"><span>Örnek fiyat</span><span>İlk turnuva %20 indirim</span></div>
+              <div class="b">
+                <div class="figs">
+                  <div class="fig"><b id="s-pp">₺800</b><span>maç başı ücret</span><s>₺1.000</s></div>
+                  <div class="fig"><b id="s-team">₺400</b><span>takım başına, maç başı</span></div>
+                  <div class="fig total"><b id="s-tot">₺50.400</b><span id="s-line">63 maç × ₺800 · sezon toplamı</span><s id="s-list">₺63.000</s></div>
+                </div>
+                <div class="msg">Seçtiğin formata göre hesaplandı. Turnuvan netleşince talebini güncelle, sana özel teklif gönderelim.</div>
+              </div>
+            </div>
+          </section>
+        </div>
+        <div class="foot"><button class="btn ghost" type="button" id="back">Geri</button><button class="btn" type="button" id="next">İleri</button></div>
+      </div>
+      <div class="cap">2 · Talep formu (tıklanabilir)</div>
+      <div class="note">İlk adımdaki <b>"Bilgi almak istiyorum"</b> açılınca ad, şehir ve tarih alanları kalkar. Form sonunda seçilen formata göre <b>örnek fiyat</b> hemen görünür: liste fiyatının üstü çizili, ilk turnuva %20 indirimli. Formatı seçtikçe maç sayısı anında hesaplanır. Son adımda serbest açıklama alanı var.</div>
+    </div>
+
+    <!-- 3. Kullanıcı: teklif -->
+    <div class="pcol">
+      <div class="phone">
+        <div class="band"><span class="b">‹</span><span class="t">Taleplerim</span><span class="b"></span></div>
+        <div class="screen">
+          <div class="group"><div class="row"><span class="ic">K</span><div class="l"><b>Kadıköy Masterlar Kupası</b><small>16 takım · 2 grup · tek devre + eleme</small></div><span class="pill price">Teklif geldi</span></div></div>
+
+          <div class="offer">
+            <div class="h"><span>Teklif</span><span>13 Eki</span></div>
+            <div class="b">
+              <div class="figs">
+                <div class="fig"><b>₺800</b><span>maç başı ücret</span><s>₺1.000</s></div>
+                <div class="fig"><b>₺400</b><span>takım başına, maç başı</span></div>
+                <div class="fig total"><b>₺50.400</b><span>63 maç × ₺800 · ilk turnuva %20 indirim</span><s>₺63.000</s></div>
+              </div>
+              <div class="msg">"Merhaba Murat Bey, ilk turnuvanıza özel %20 indirim uyguladım. Kurulumu biz yapıyoruz, Kasım başı için fikstürü birlikte çıkaralım." · Raif</div>
+              <span class="doc">Detaylı teklifi aç ›</span>
+              <div class="acts"><button class="btn ghost" type="button">Soru Sor</button><button class="btn" type="button">Kabul Et</button></div>
+            </div>
+          </div>
+
+          <div class="status">
+            <div class="tl ok"><span class="dot"></span><div><b>Talep oluşturuldu</b><small>12 Eki, 21:40</small></div></div>
+            <div class="tl now"><span class="dot"></span><div><b>Teklif geldi</b><small>Kabul edersen ödeme bilgisi açılır</small></div></div>
+            <div class="tl wait"><span class="dot"></span><div><b>Ödeme</b><small>Havale / EFT</small></div></div>
+            <div class="tl wait"><span class="dot"></span><div><b>Turnuvan hazır</b><small>Kurucu başkan olarak eklenirsin</small></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="cap">3 · Kullanıcının teklif ekranı</div>
+      <div class="note">Teklif maç başı ücretle yazılır: maç başı ücret, takım başına düşen pay ve sezon toplamı. <b>"Detaylı teklifi aç"</b> aşağıdaki şablondan üretilen sayfayı açar. Rakamlar örnek.</div>
+    </div>
+
+    <!-- 4. Admin -->
+    <div class="pcol">
+      <div class="phone">
+        <div class="band"><span class="b">≡</span><span class="t">Turnuva Talepleri</span><span class="b"></span></div>
+        <div class="screen">
+          <div class="tabs"><span class="on">Yeni <i>2</i></span><span>Teklif verildi <i>1</i></span><span>Ödendi <i>1</i></span><span>Kuruldu <i>3</i></span><span>Reddedildi</span></div>
+
+          <div class="req open">
+            <div class="top"><b>Kadıköy Masterlar Kupası</b><span class="pill new">Yeni</span></div>
+            <div class="meta"><span>Master</span><span>16 takım</span><span>2 grup</span><span>Tek devre + eleme</span><span>63 maç</span></div>
+            <div class="meta"><span>Murat Yılmaz · 0532 412 18 07</span></div>
+            <div class="desc">Geçen yıl 14 takımdık, bu yıl 16 bekliyoruz. Maçlar cumartesi akşamları Moda'da…</div>
+          </div>
+          <div class="req">
+            <div class="top"><b>Adsız talep</b><span class="pill price">Bilgi talebi</span></div>
+            <div class="meta"><span>Halı saha</span><span>8 takım</span><span>Tek lig</span><span>28 maç</span></div>
+          </div>
+
+          <div class="sec-t">Teklif yaz · Kadıköy Masterlar Kupası</div>
+          <div class="group">
+            <div class="row"><span class="ic">#</span><div class="l"><small>Maç sayısı (talepten)</small><input id="a-m" value="63" inputmode="numeric"></div><span></span></div>
+            <div class="row"><span class="ic">₺</span><div class="l"><small>Maç başı ücret</small><input id="a-p" value="800" inputmode="numeric"></div><span class="v">liste ₺1.000 · %20</span></div>
+            <div class="sumrow"><span>Sezon toplamı</span><b id="a-t">₺31.500</b></div>
+            <div class="row wide"><span class="ic">✉</span><div class="l"><small>Mesaj</small><textarea id="a-msg" style="min-height:60px">Merhaba Murat Bey, ilk turnuvanıza özel %20 indirim uyguladım.</textarea></div></div>
+          </div>
+          <div style="display:flex;gap:8px"><button class="btn ghost" type="button">Ara</button><button class="btn ghost" type="button">Reddet</button><button class="btn" type="button">Teklifi Gönder</button></div>
+        </div>
+      </div>
+      <div class="cap">4 · Admin: talepler</div>
+      <div class="note">Maç sayısı talepten hesaplanmış gelir, sen yalnızca maç başı ücreti yazarsın, toplam kendiliğinden çıkar. Bilgi talepleri ayrı etiketle görünür. Yeni talep Telegram botuna da düşer.</div>
+    </div>
+  </div>
+
+  <h2 class="sh">Teklif şablonu</h2>
+  <p class="sub">Bosphorus Legends için hazırladığımız maç başı teklif sayfasını şablon yapıyoruz. Talepteki bilgiler (takım, grup, devre, eleme) ve senin yazdığın maç başı ücretle sayfa kendiliğinden dolar. Kullanıcı "Detaylı teklifi aç" deyince bunu görür, istersen bağlantısını WhatsApp'tan da paylaşırsın.</p>
+  <div class="tpl">
+    <div class="paper" aria-label="Teklif sayfası örneği">
+      <div class="eb">2026–2027 Sezonu · Teklif</div>
+      <h3>Kadıköy Masterlar Kupası için Lig Masası</h3>
+      <p class="lead">16 takım, 2 grup, tek devre lig ve sonrasında eleme. Uygulamadaki her şey dahil, kurulum bizden.</p>
+      <div class="pfigs">
+        <div class="pfig main"><b>₺800</b><span>maç başı uygulama ücreti</span></div>
+        <div class="pfig"><b>₺400</b><span>takım başına, maç başı</span></div>
+        <div class="pfig"><b>₺50.400</b><span>sezon toplamı, 63 maç</span></div>
+      </div>
+      <p class="h4">Ücret</p>
+      <div class="ptbl"><table>
+        <thead><tr><th>Aşama</th><th>Maç</th><th>Liste</th><th>İlk turnuva %20</th></tr></thead>
+        <tbody>
+          <tr><td>Grup maçları (2 × 8 takım)</td><td>56</td><td class="strike">₺56.000</td><td>₺44.800</td></tr>
+          <tr><td>Eleme (çeyrek, yarı, final)</td><td>7</td><td class="strike">₺7.000</td><td>₺5.600</td></tr>
+          <tr class="tot"><td>Toplam</td><td>63</td><td class="strike">₺63.000</td><td>₺50.400</td></tr>
+        </tbody>
+      </table></div>
+      <p class="sm">Ödeme: %30 peşin, kalanı eleme turundan önce. Rakamlar örnektir.</p>
+    </div>
+    <div class="outline">
+      <div><b>Özet</b>Maç başı ücret, takım başına maç başı pay, sezon toplamı. İlk bakışta üç rakam.</div>
+      <div><b>Sezon formatı</b>Grup ve eleme aşamaları, aşama başına maç sayısı. Talepteki formattan otomatik.</div>
+      <div><b>Ücret tablosu</b>Aşama aşama maç sayısı, liste fiyatı (üstü çizili) ve lansman fiyatı.</div>
+      <div><b>Takımlara etkisi</b>İsteğe bağlı. Organizatör bugünkü maç başı giderini yazdıysa, uygulama ücretinin takım bütçesindeki payı.</div>
+      <div><b>Uygulamada neler var</b>Uygulama özellikleri, ekran görüntüleriyle.</div>
+      <div><b>Koşullar</b>Ödeme planı, sezon süresi, iptal. Turnuva Sahibi Sözleşmesi'ne bağlantı.</div>
+    </div>
+  </div>
+
+  <h2 class="sh">Kararlar</h2>
+  <div class="decide">
+    <article><span class="k">Karar · 13 Eki</span><h3>"Talep Oluştur"</h3><p>Düğmelerde "Teklif İste" yerine "Talep Oluştur".</p></article>
+    <article><span class="k">Karar · 13 Eki</span><h3>Paket adı yok</h3><p>Tek paket, başlıksız; yalnızca özet içerik. Üçlü pakete sonra geçilir.</p></article>
+    <article><span class="k">Karar · 13 Eki</span><h3>Bilgi talebi + örnek fiyat</h3><p>"Bilgi almak istiyorum" seçilirse turnuva adı ve tarihi sorulmaz; form sonunda örnek fiyat görünür: liste fiyatı üstü çizili, ilk turnuva %20 indirimli.</p></article>
+    <article><span class="k">Karar · 13 Eki</span><h3>Teklif maç başı</h3><p>Liste ₺1.000/maç (örnek), ilk turnuvaya %20 indirim. Detaylı teklif Bosphorus şablonuyla.</p></article>
+    <article><span class="k open">Öneri</span><h3>Misafir talep gönderebilir</h3><p>Ad soyad ve telefon yeterli. Dönüş telefon / WhatsApp ile; aynı numarayla kayıt olunca talep "Taleplerim"e bağlanır.</p></article>
+    <article><span class="k open">Açık</span><h3>Gerçek liste fiyatı</h3><p>₺1.000 örnek. Admin ayarından değiştirilebilir olacak.</p></article>
+  </div>
+</div>
+
+<script>
+// Tekli seçim çipleri
+document.querySelectorAll('[data-single]').forEach(g => {
+  g.addEventListener('click', e => {
+    const c = e.target.closest('.chip'); if (!c) return;
+    g.querySelectorAll('.chip').forEach(x => x.setAttribute('aria-pressed', x === c ? 'true' : 'false'));
+    calc();
+  });
+});
+// Anahtarlar
+document.querySelectorAll('.sw').forEach(s => s.addEventListener('click', () => {
+  s.setAttribute('aria-checked', s.getAttribute('aria-checked') === 'true' ? 'false' : 'true');
+  if (s.id === 'priceOnly') priceOnly();
+}));
+function infoOnly() { return document.getElementById('priceOnly').getAttribute('aria-checked') === 'true'; }
+function priceOnly() {
+  const on = infoOnly();
+  document.getElementById('tinfo').hidden = on;
+  document.getElementById('tinfo-t').hidden = on;
+}
+// Maç sayısı
+function val(k) {
+  const c = document.querySelector('[data-k="' + k + '"] .chip[aria-pressed="true"]');
+  return c ? +c.dataset.v : 0;
+}
+function calc() {
+  const teams = val('teams'), groups = Math.max(1, val('groups')), legs = val('legs') || 1, ko = val('ko');
+  const per = Math.floor(teams / groups), extra = teams % groups;
+  let league = 0;
+  for (let i = 0; i < groups; i++) { const n = per + (i < extra ? 1 : 0); league += n * (n - 1) / 2 * legs; }
+  // Eleme: tek ligde ilk 4 (yarı final + final), gruplu formatta 8 takım (çeyrek finalden)
+  const koTeams = groups === 1 ? 4 : 8;
+  const koMatches = ko ? koTeams - 1 : 0;
+  document.getElementById('mcount').textContent = league + koMatches;
+  const gtxt = groups === 1 ? teams + ' takımlı tek lig' : groups + ' grupta ' + per + "'er takım";
+  document.getElementById('mtext').textContent = gtxt + ', ' + (legs === 2 ? 'çift' : 'tek') + ' devre: ' + league + ' lig maçı' + (ko ? ' + ' + koMatches + ' eleme maçı' : '');
+}
+// Admin toplam
+function adminTotal() {
+  const m = parseInt(document.getElementById('a-m').value, 10) || 0;
+  const p = parseInt(String(document.getElementById('a-p').value).replace(/\D/g, ''), 10) || 0;
+  document.getElementById('a-t').textContent = '₺' + (m * p).toLocaleString('tr-TR');
+}
+document.getElementById('a-m').addEventListener('input', adminTotal);
+document.getElementById('a-p').addEventListener('input', adminTotal);
+// Sihirbaz
+let step = 0;
+const secs = document.querySelectorAll('#wiz section');
+const bar = document.querySelectorAll('#steps div');
+const next = document.getElementById('next'), back = document.getElementById('back');
+function render() {
+  secs.forEach(s => s.hidden = +s.dataset.step !== step);
+  bar.forEach((b, i) => { b.className = i === step ? 'on' : i < step ? 'done' : ''; });
+  document.getElementById('steps').hidden = step === 4;
+  back.disabled = step === 0;
+  next.textContent = step === 3 ? 'Talebi Gönder' : step === 4 ? 'Taleplerime Git' : 'İleri';
+  back.hidden = step === 4;
+}
+function sample() {
+  const on = infoOnly();
+  document.getElementById('sample').hidden = !on;
+  document.getElementById('done-text').textContent = on
+    ? 'Örnek fiyat aşağıda. Soruların için seni telefonla da arayabiliriz.'
+    : '24 saat içinde teklifimizi "Taleplerim" ekranına ve telefonuna göndereceğiz.';
+  if (!on) return;
+  const m = +document.getElementById('mcount').textContent, list = 1000, pp = list * 0.8;
+  const tl = n => '₺' + Math.round(n).toLocaleString('tr-TR');
+  document.getElementById('s-pp').textContent = tl(pp);
+  document.getElementById('s-team').textContent = tl(pp / 2);
+  document.getElementById('s-tot').textContent = tl(m * pp);
+  document.getElementById('s-list').textContent = tl(m * list);
+  document.getElementById('s-line').textContent = m + ' maç × ' + tl(pp) + ' · sezon toplamı';
+}
+next.addEventListener('click', () => { step = step >= 4 ? 0 : step + 1; if (step === 4) sample(); render(); document.getElementById('wiz').scrollTop = 0; });
+back.addEventListener('click', () => { if (step > 0) { step--; render(); } });
+render(); calc(); adminTotal();
+</script>

@@ -1,0 +1,472 @@
+<title>Lig Formatı ve Play-Off</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;1,800&family=Roboto:wght@400;500;700;900&display=swap">
+<style>
+/* Layout: uygulamanın koyu dünyası; solda ayar ekranı (telefon), sağda sonuç ekranı (puan tablosu + play-off ağacı). Dar ekranda alt alta. */
+:root {
+  --bg: #0b1120;
+  --screen: #111827;
+  --card: #1a2438;
+  --card-hi: #22304a;
+  --line: rgba(255,255,255,.08);
+  --fg: #f1f5f9;
+  --muted: #94a3b8;
+  --accent: #10b981;
+  --danger: #f87171;
+  --amber: #fbbf24;
+  --display: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --body: "Roboto", system-ui, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); margin: 0;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 24px 60px; }
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; gap: 22px; }
+h1 { font-family: var(--display); font-style: italic; font-weight: 800; font-size: 2.1rem; margin: 0; text-wrap: balance; }
+.lead { color: var(--muted); margin: 6px 0 0; line-height: 1.5; max-width: 66ch; font-size: 14px; }
+.topbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
+.seg { display: inline-flex; background: #0d1424; border: 1px solid var(--line); border-radius: 14px; padding: 4px; gap: 2px; }
+.seg button { font: inherit; font-weight: 800; font-size: 14px; color: #cbd5e1; background: transparent; border: 0; border-radius: 10px; padding: 9px 16px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.seg button:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.note { font-size: 12px; color: var(--muted); }
+
+.cols { display: grid; grid-template-columns: minmax(0, 420px) minmax(0, 1fr); gap: 24px; align-items: start; }
+@media (max-width: 860px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--screen); border: 1px solid rgba(255,255,255,.12); border-radius: 26px; overflow: hidden; min-width: 0; }
+.panel-h { padding: 14px 16px 12px; border-bottom: 2px solid var(--accent); background: linear-gradient(180deg, #1c2a3f, #141d2e); display: flex; align-items: center; gap: 10px; }
+.panel-h .ic { width: 30px; height: 30px; border-radius: 9px; background: rgba(16,185,129,.16); display: grid; place-items: center; color: var(--accent); font-weight: 900; flex: none; }
+.panel-h b { font-family: var(--display); font-weight: 800; font-size: 18px; letter-spacing: .5px; }
+.panel-h small { display: block; color: var(--muted); font-size: 11.5px; }
+.panel-b { padding: 14px; display: grid; gap: 14px; }
+.sec-t { font-family: var(--display); font-weight: 800; letter-spacing: 1.4px; text-transform: uppercase; color: var(--accent); font-size: 14px; margin: 0; }
+
+.tpls { display: flex; flex-wrap: wrap; gap: 6px; }
+.tpl { font: inherit; font-size: 12.5px; font-weight: 700; padding: 7px 11px; border-radius: 999px; background: #1b2232; color: #cbd5e1; border: 1px solid var(--line); cursor: pointer; }
+.tpl[aria-pressed="true"] { background: rgba(16,185,129,.16); border-color: var(--accent); color: #fff; }
+
+.cup { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 12px; display: grid; gap: 10px; position: relative; }
+.cup.err { border-color: var(--danger); }
+.cup-top { display: flex; gap: 8px; align-items: center; }
+.swatch { width: 12px; height: 12px; border-radius: 4px; flex: none; }
+.cup-name { flex: 1; min-width: 0; font: inherit; font-weight: 800; font-size: 15px; color: var(--fg); background: transparent; border: 0; border-bottom: 1px dashed rgba(255,255,255,.2); padding: 4px 0; }
+.del { font: inherit; background: transparent; border: 0; color: var(--muted); cursor: pointer; font-size: 18px; line-height: 1; padding: 4px 6px; border-radius: 8px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; color: #cbd5e1; }
+.row label { color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; }
+select { font: inherit; font-weight: 800; font-size: 14px; color: var(--fg); background: #0d1424; border: 1px solid rgba(255,255,255,.18); border-radius: 10px; padding: 6px 8px; }
+.pill { display: inline-flex; background: #0d1424; border: 1px solid var(--line); border-radius: 10px; padding: 3px; gap: 2px; }
+.pill button { font: inherit; font-size: 12px; font-weight: 700; color: #cbd5e1; background: transparent; border: 0; border-radius: 7px; padding: 5px 9px; cursor: pointer; }
+.pill button[aria-pressed="true"] { background: var(--card-hi); color: #fff; }
+.chk { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12.5px; }
+.chk input { accent-color: var(--accent); width: 16px; height: 16px; }
+.cup-info { font-size: 12px; color: var(--muted); line-height: 1.45; }
+.cup-info b { color: #e2e8f0; font-weight: 700; }
+.cup-err { font-size: 12px; color: var(--danger); font-weight: 700; }
+.add { font: inherit; font-weight: 800; font-size: 13px; color: var(--accent); background: transparent; border: 1px dashed rgba(16,185,129,.5); border-radius: 14px; padding: 10px; cursor: pointer; }
+.rest { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 12px; display: grid; gap: 8px; }
+.rest .row { gap: 14px; }
+.radio { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.radio input { accent-color: var(--danger); width: 16px; height: 16px; }
+
+/* Puan tablosu */
+.tbl { background: #0e1626; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+.tr { display: grid; grid-template-columns: 34px 1fr 30px 30px 38px 34px; align-items: center; gap: 4px; padding: 0 10px 0 0; min-height: 40px; border-top: 1px solid var(--line); position: relative; font-size: 13.5px; }
+.tr.h { min-height: 32px; border-top: 0; background: rgba(0,0,0,.25); font-size: 11.5px; color: var(--muted); font-weight: 800; letter-spacing: .6px; }
+.tr .bar { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
+.rk { justify-self: center; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 12px; font-variant-numeric: tabular-nums; }
+.tm { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.tm span.n { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.crest { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 9px; font-weight: 900; color: #0b1120; flex: none; }
+.num { text-align: center; font-variant-numeric: tabular-nums; color: #cbd5e1; }
+.pts { text-align: center; font-weight: 900; color: var(--accent); font-variant-numeric: tabular-nums; }
+.zdiv { display: flex; align-items: center; gap: 8px; padding: 6px 12px; font-family: var(--display); font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; font-size: 12px; border-top: 1px solid var(--line); background: rgba(255,255,255,.02); }
+.zdiv::after { content: ""; flex: 1; height: 1px; background: currentColor; opacity: .35; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 10px 12px; font-size: 12px; color: #cbd5e1; border-top: 1px solid var(--line); }
+.legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+
+.ifnow { background: linear-gradient(90deg, rgba(16,185,129,.12), rgba(16,185,129,.03)); border: 1px solid rgba(16,185,129,.3); border-radius: 16px; padding: 12px; display: grid; gap: 8px; }
+.ifnow h3 { margin: 0; font-family: var(--display); font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; font-size: 14px; }
+.ifnow .cupline { font-size: 13px; color: #e2e8f0; line-height: 1.6; }
+.ifnow .cupline b { font-weight: 800; }
+
+/* Ağaç */
+.bracket-wrap { display: grid; gap: 12px; }
+.bk { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 12px; min-width: 0; }
+.bk-h { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.bk-h b { font-family: var(--display); font-weight: 800; font-size: 17px; letter-spacing: .5px; }
+.bk-h small { color: var(--muted); font-size: 11.5px; margin-left: auto; }
+.bk-scroll { overflow-x: auto; padding-bottom: 4px; }
+.rounds { display: flex; gap: 22px; min-width: max-content; align-items: stretch; }
+.round { display: flex; flex-direction: column; justify-content: space-around; gap: 10px; min-width: 150px; }
+.round-t { font-size: 10.5px; font-weight: 800; letter-spacing: 1px; color: var(--muted); text-transform: uppercase; text-align: center; margin-bottom: 2px; }
+.m { background: #0e1626; border: 1px solid rgba(255,255,255,.1); border-radius: 10px; overflow: hidden; position: relative; }
+.m .s { display: flex; align-items: center; gap: 6px; padding: 6px 8px; font-size: 12.5px; min-width: 0; }
+.m .s + .s { border-top: 1px solid var(--line); }
+.m .seed { width: 18px; text-align: right; color: var(--muted); font-weight: 800; font-size: 11px; font-variant-numeric: tabular-nums; flex: none; }
+.m .tn { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.m .tn.ph { color: var(--muted); font-weight: 500; font-style: italic; }
+.m .leg { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); font-size: 9.5px; font-weight: 800; color: var(--amber); background: rgba(251,191,36,.12); border-radius: 6px; padding: 1px 5px; }
+.m.final { border-color: var(--zc, var(--accent)); box-shadow: 0 0 0 1px var(--zc, var(--accent)) inset; }
+.m.bye { border-style: dashed; opacity: .8; }
+.trophy { text-align: center; font-size: 11px; color: var(--amber); font-weight: 800; letter-spacing: 1px; margin-top: 4px; }
+.third { margin-top: 10px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.third .m { min-width: 180px; }
+.empty { color: var(--muted); font-size: 13px; padding: 14px; text-align: center; background: var(--card); border: 1px dashed rgba(255,255,255,.15); border-radius: 16px; }
+@media (prefers-reduced-motion: no-preference) { .m, .tr { transition: background .2s, border-color .2s; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Lig Formatı ve Play-Off</h1>
+    <p class="lead">Solda sezon ayarlarına gelecek "Lig Formatı" ekranı, sağda bu ayardan kendiliğinden oluşan puan tablosu, "Bugün bitse" kartı ve play-off ağacı. Şablon seçin ya da kupaların sıra aralıklarını değiştirin; sağ taraf anında güncellenir. Takımlar Champions Master'dan, <b>puanlar örnektir</b>.</p>
+  </header>
+
+  <div class="topbar">
+    <div class="seg" role="group" aria-label="Takım sayısı">
+      <button type="button" id="n8" aria-pressed="false">8 takım</button>
+      <button type="button" id="n9" aria-pressed="true">9 takım</button>
+    </div>
+    <span class="note">8 takımda Triokablo çıkarıldı; şablon kendini yeni takım sayısına uyarlar.</span>
+  </div>
+
+  <div class="cols">
+    <section class="panel" aria-label="Lig formatı ayarı">
+      <div class="panel-h"><span class="ic">⚙</span><div><b>Lig Formatı</b><small>Sezon düzenle › Lig Formatı</small></div></div>
+      <div class="panel-b">
+        <div>
+          <p class="sec-t">Şablon</p>
+          <div class="tpls" id="tpls"></div>
+        </div>
+        <div style="display:grid; gap:10px">
+          <p class="sec-t">Kupalar</p>
+          <div id="cups" style="display:grid; gap:10px"></div>
+          <button type="button" class="add" id="addCup">+ Kupa ekle</button>
+        </div>
+        <div class="rest" id="rest"></div>
+      </div>
+    </section>
+
+    <section style="display:grid; gap:16px; min-width:0" aria-label="Sonuç">
+      <div class="panel">
+        <div class="panel-h"><span class="ic">#</span><div><b>Puan Durumu</b><small>Bölge renkleri ve açıklama formattan gelir</small></div></div>
+        <div class="panel-b">
+          <div class="tbl" id="table"></div>
+          <div class="ifnow" id="ifnow"></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-h"><span class="ic">🏆</span><div><b>Play-Off</b><small>Turnuva sayfasında yeni sekme · normal sezon bitince açılır</small></div></div>
+        <div class="panel-b bracket-wrap" id="brackets"></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+(function () {
+  var ALL = [
+    { n: "Aras Geoteknik", c: "#d9f99d", p: 19 },
+    { n: "Bmr Oto İstanbul", c: "#e5e7eb", p: 17 },
+    { n: "Fenerbahçe", c: "#fde68a", p: 16 },
+    { n: "Feriköy", c: "#fca5a5", p: 14 },
+    { n: "Galata City", c: "#fcd34d", p: 12 },
+    { n: "Gaziosmanpaşa Autur", c: "#fecaca", p: 10 },
+    { n: "Petrol 72", c: "#f87171", p: 8 },
+    { n: "Triokablo", c: "#fdba74", p: 6 },
+    { n: "Yıldız", c: "#93c5fd", p: 4 }
+  ];
+  var COLORS = ["#10b981", "#60a5fa", "#a78bfa", "#fbbf24"];
+  var RED = "#f87171";
+
+  var TEMPLATES = [
+    { id: "none", label: "Play-off yok" },
+    { id: "top4", label: "İlk 4 Play-Off" },
+    { id: "top4p", label: "İlk 4 + Prestij Kupası" },
+    { id: "top8", label: "İlk 8 Play-Off" }
+  ];
+
+  var state = { teams: 9, tpl: "top4p", cups: [], rest: "out" };
+
+  function teams() {
+    return ALL.filter(function (t) { return state.teams === 9 || t.n !== "Triokablo"; });
+  }
+
+  function applyTemplate(id) {
+    var n = state.teams;
+    state.tpl = id;
+    if (id === "none") state.cups = [];
+    if (id === "top4") state.cups = [cup("Şampiyonluk Play-Off", 1, 4)];
+    if (id === "top4p") state.cups = [cup("Şampiyonluk Play-Off", 1, 4), cup("Prestij Kupası", 5, Math.min(8, n))];
+    if (id === "top8") state.cups = [cup("Play-Off", 1, Math.min(8, n))];
+    state.rest = id === "none" ? "none" : "out";
+  }
+  function cup(name, from, to) { return { name: name, from: from, to: to, legs: 1, third: false }; }
+
+  // ---- Ağaç mantığı -------------------------------------------------------
+  function pow2(n) { var s = 1; while (s < n) s *= 2; return s; }
+  // Standart tohumlama sırası: 4 → [1,4,2,3]; 8 → [1,8,4,5,2,7,3,6]
+  function seedOrder(size) {
+    var list = [1, 2];
+    while (list.length < size) {
+      var m = list.length * 2 + 1, next = [];
+      list.forEach(function (s) { next.push(s, m - s); });
+      list = next;
+    }
+    return list;
+  }
+  function roundName(k) {
+    return k === 2 ? "Final" : k === 4 ? "Yarı Final" : k === 8 ? "Çeyrek Final" : "Son " + k;
+  }
+
+  function errorsOf(i) {
+    var c = state.cups[i], n = state.teams, errs = [];
+    if (c.to < c.from) errs.push("Bitiş sırası başlangıçtan küçük olamaz.");
+    else if (c.to - c.from + 1 < 2) errs.push("Kupaya en az 2 takım katılmalı.");
+    state.cups.forEach(function (o, j) {
+      if (j === i) return;
+      var lo = Math.max(c.from, o.from), hi = Math.min(c.to, o.to);
+      if (lo <= hi) errs.push((lo === hi ? lo + ". sıra" : lo + "–" + hi + ". sıralar") + " \"" + (o.name || "Kupa") + "\" ile çakışıyor.");
+    });
+    if (c.to > n) errs.push("Ligde " + n + " takım var.");
+    return errs;
+  }
+  function validCups() {
+    return state.cups.map(function (c, i) { return { c: c, i: i, ok: errorsOf(i).length === 0 }; }).filter(function (x) { return x.ok; });
+  }
+  function zoneOf(rank) {
+    var v = validCups();
+    for (var k = 0; k < v.length; k++) {
+      if (rank >= v[k].c.from && rank <= v[k].c.to) return { name: v[k].c.name || "Kupa", color: COLORS[v[k].i % COLORS.length] };
+    }
+    if (state.rest === "out") return { name: "Lige veda", color: RED };
+    return null;
+  }
+
+  // ---- Çizim ---------------------------------------------------------------
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (ch) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]; }); }
+
+  function renderTop() {
+    document.getElementById("n8").setAttribute("aria-pressed", state.teams === 8);
+    document.getElementById("n9").setAttribute("aria-pressed", state.teams === 9);
+    document.getElementById("tpls").innerHTML = TEMPLATES.map(function (t) {
+      return '<button type="button" class="tpl" data-tpl="' + t.id + '" aria-pressed="' + (state.tpl === t.id) + '">' + t.label + "</button>";
+    }).join("");
+  }
+
+  function rankOptions(sel) {
+    var out = "";
+    for (var r = 1; r <= state.teams; r++) out += '<option value="' + r + '"' + (r === sel ? " selected" : "") + ">" + r + ".</option>";
+    return out;
+  }
+
+  function cupInfo(c) {
+    var k = c.to - c.from + 1;
+    if (k < 2) return "";
+    var size = pow2(k), byes = size - k, rounds = [];
+    for (var s = size; s >= 2; s /= 2) rounds.push(roundName(s));
+    var first = seedOrder(size), pairs = [];
+    for (var i = 0; i < first.length; i += 2) {
+      var a = first[i], b = first[i + 1];
+      if (a <= k && b <= k) pairs.push((c.from + a - 1) + "–" + (c.from + b - 1));
+    }
+    var txt = "<b>" + k + " takım</b> · " + rounds.join(" → ");
+    txt += "<br>İlk tur: " + pairs.join(", ");
+    if (byes) {
+      var bye = [];
+      for (var j = 1; j <= byes; j++) bye.push(c.from + j - 1 + ".");
+      txt += "<br><b>" + bye.join(" ve ") + " bay geçer</b> (" + roundName(size / 2) + "'den başlar)";
+    }
+    return txt;
+  }
+
+  function renderCups() {
+    var box = document.getElementById("cups");
+    if (!state.cups.length) {
+      box.innerHTML = '<div class="empty">Play-off yok. Lig, normal sezon sonunda biter.</div>';
+      return;
+    }
+    box.innerHTML = state.cups.map(function (c, i) {
+      var errs = errorsOf(i), color = COLORS[i % COLORS.length];
+      return '<div class="cup' + (errs.length ? " err" : "") + '">' +
+        '<div class="cup-top"><span class="swatch" style="background:' + color + '"></span>' +
+        '<input class="cup-name" id="cup-name-' + i + '" data-i="' + i + '" value="' + esc(c.name) + '" aria-label="Kupa adı">' +
+        '<button type="button" class="del" data-del="' + i + '" aria-label="Kupayı sil">×</button></div>' +
+        '<div class="row"><label for="cup-from-' + i + '">Sıralar</label>' +
+        '<select id="cup-from-' + i + '" data-from="' + i + '">' + rankOptions(c.from) + "</select> → " +
+        '<select id="cup-to-' + i + '" data-to="' + i + '" aria-label="Bitiş sırası">' + rankOptions(c.to) + "</select></div>" +
+        '<div class="row"><span class="pill" role="group" aria-label="Maç sayısı">' +
+        '<button type="button" data-legs="' + i + '" data-v="1" aria-pressed="' + (c.legs === 1) + '">Tek maç</button>' +
+        '<button type="button" data-legs="' + i + '" data-v="2" aria-pressed="' + (c.legs === 2) + '">Rövanşlı</button></span>' +
+        (c.to - c.from + 1 >= 4 ? '<label class="chk"><input type="checkbox" id="cup-third-' + i + '" data-third="' + i + '"' + (c.third ? " checked" : "") + "> 3.lük maçı</label>" : "") +
+        "</div>" +
+        (errs.length ? '<div class="cup-err">' + errs.map(esc).join("<br>") + "</div>" : '<div class="cup-info">' + cupInfo(c) + "</div>") +
+        "</div>";
+    }).join("");
+  }
+
+  function covered() {
+    var set = {};
+    validCups().forEach(function (x) { for (var r = x.c.from; r <= x.c.to; r++) set[r] = 1; });
+    return set;
+  }
+  function restRanks() {
+    var cov = covered(), list = [];
+    for (var r = 1; r <= state.teams; r++) if (!cov[r]) list.push(r);
+    return list;
+  }
+
+  function renderRest() {
+    var el = document.getElementById("rest"), list = restRanks();
+    if (!list.length) {
+      el.innerHTML = '<p class="sec-t">Kalan sıralar</p><div class="cup-info">Her sıra bir kupada; kalan takım yok.</div>';
+      return;
+    }
+    var lbl = list.length === 1 ? list[0] + ". sıra" : list[0] + "–" + list[list.length - 1] + ". sıralar";
+    el.innerHTML = '<p class="sec-t">Kalan sıralar · ' + lbl + "</p>" +
+      '<div class="row">' +
+      '<label class="radio"><input type="radio" name="rest" id="rest-out" value="out"' + (state.rest === "out" ? " checked" : "") + "> Lige veda (kırmızı)</label>" +
+      '<label class="radio"><input type="radio" name="rest" id="rest-none" value="none"' + (state.rest === "none" ? " checked" : "") + "> İşaretsiz</label></div>";
+  }
+
+  function renderTable() {
+    var t = teams(), html = '<div class="tr h"><span style="text-align:center">#</span><span>Takım</span><span class="num">O</span><span class="num">G</span><span class="num">AV</span><span style="text-align:center;color:var(--accent)">P</span></div>';
+    var prevZone = null;
+    t.forEach(function (tm, i) {
+      var rank = i + 1, z = zoneOf(rank);
+      var zKey = z ? z.name : "";
+      if (z && zKey !== prevZone) html += '<div class="zdiv" style="color:' + z.color + '">' + esc(z.name) + "</div>";
+      prevZone = zKey;
+      var played = 7, won = Math.round(tm.p / 3), av = tm.p - 10;
+      html += '<div class="tr">' + (z ? '<span class="bar" style="background:' + z.color + '"></span>' : "") +
+        '<span class="rk" style="' + (z ? "background:" + z.color + "33;color:" + z.color + ";border:1.5px solid " + z.color : "background:#334155;color:#e2e8f0") + '">' + rank + "</span>" +
+        '<span class="tm"><span class="crest" style="background:' + tm.c + '">' + esc(tm.n[0]) + '</span><span class="n">' + esc(tm.n) + "</span></span>" +
+        '<span class="num">' + played + '</span><span class="num">' + won + '</span><span class="num">' + (av > 0 ? "+" + av : av) + '</span><span class="pts">' + tm.p + "</span></div>";
+    });
+    var legend = [];
+    validCups().forEach(function (x) { legend.push('<span><i style="background:' + COLORS[x.i % COLORS.length] + '"></i>' + esc(x.c.name || "Kupa") + "</span>"); });
+    if (state.rest === "out" && restRanks().length) legend.push('<span><i style="background:' + RED + '"></i>Lige veda</span>');
+    if (legend.length) html += '<div class="legend">' + legend.join("") + "</div>";
+    document.getElementById("table").innerHTML = html;
+  }
+
+  function nameAt(rank) { var t = teams()[rank - 1]; return t ? t.n : rank + ". sıra"; }
+
+  function renderIfNow() {
+    var el = document.getElementById("ifnow"), v = validCups();
+    if (!v.length) { el.hidden = true; return; }
+    el.hidden = false;
+    el.innerHTML = "<h3>Bugün bitse</h3>" + v.map(function (x) {
+      var c = x.c, k = c.to - c.from + 1, size = pow2(k), order = seedOrder(size), parts = [];
+      for (var i = 0; i < order.length; i += 2) {
+        var a = order[i], b = order[i + 1];
+        if (a <= k && b <= k) parts.push(esc(nameAt(c.from + a - 1)) + " – " + esc(nameAt(c.from + b - 1)));
+      }
+      var byes = [];
+      for (var j = 1; j <= size - k; j++) byes.push(esc(nameAt(c.from + j - 1)));
+      return '<div class="cupline"><b style="color:' + COLORS[x.i % COLORS.length] + '">' + esc(c.name || "Kupa") + ":</b> " + parts.join(" · ") +
+        (byes.length ? ' <span style="color:var(--muted)">(bay: ' + byes.join(", ") + ")</span>" : "") + "</div>";
+    }).join("") + '<div class="note">Sezon sürerken sıralama değiştikçe güncellenir.</div>';
+  }
+
+  function slot(seed, name, ph) {
+    return '<div class="s"><span class="seed">' + (seed || "") + '</span><span class="tn' + (ph ? " ph" : "") + '">' + esc(name) + "</span></div>";
+  }
+
+  function renderBrackets() {
+    var el = document.getElementById("brackets"), v = validCups();
+    if (!v.length) { el.innerHTML = '<div class="empty">Play-off tanımlı değil; bu sekme görünmez.</div>'; return; }
+    el.innerHTML = v.map(function (x) {
+      var c = x.c, color = COLORS[x.i % COLORS.length], k = c.to - c.from + 1, size = pow2(k), order = seedOrder(size);
+      // Her tur: maç listesi; her maç iki taraf (etiket, tohum).
+      var rounds = [], cur = [];
+      for (var i = 0; i < order.length; i += 2) {
+        var a = order[i], b = order[i + 1];
+        cur.push({ a: a <= k ? { seed: c.from + a - 1, name: nameAt(c.from + a - 1) } : null,
+                   b: b <= k ? { seed: c.from + b - 1, name: nameAt(c.from + b - 1) } : null });
+      }
+      rounds.push(cur);
+      while (cur.length > 1) {
+        var next = [];
+        for (var j = 0; j < cur.length; j += 2) next.push({ a: winner(cur[j]), b: winner(cur[j + 1]) });
+        rounds.push(next); cur = next;
+      }
+      function winner(m) {
+        if (m.a && !m.b) return m.a;          // bay
+        if (!m.a && m.b) return m.b;
+        if (!m.a && !m.b) return null;
+        return { ph: true, name: m.a.seed + "–" + m.b.seed + " galibi", seed: "" };
+      }
+      var html = '<div class="bk"><div class="bk-h"><span class="swatch" style="background:' + color + '"></span><b>' + esc(c.name || "Kupa") +
+        "</b><small>" + k + " takım · " + (c.legs === 2 ? "rövanşlı" : "tek maç") + "</small></div>";
+      html += '<div class="bk-scroll"><div class="rounds">';
+      rounds.forEach(function (r, ri) {
+        var teamsInRound = size / Math.pow(2, ri), isFinal = teamsInRound === 2;
+        html += '<div class="round"><div class="round-t">' + roundName(teamsInRound) + "</div>";
+        r.forEach(function (m) {
+          var bye = (m.a && !m.b) || (!m.a && m.b);
+          if (ri === 0 && bye) {
+            var t = m.a || m.b;
+            html += '<div class="m bye">' + slot(t.seed + ".", t.name) + slot("", "bay geçer", true) + "</div>";
+            return;
+          }
+          html += '<div class="m' + (isFinal ? " final" : "") + '" style="--zc:' + color + '">' +
+            (m.a ? slot(m.a.ph ? "" : m.a.seed + ".", m.a.name, m.a.ph) : slot("", "—", true)) +
+            (m.b ? slot(m.b.ph ? "" : m.b.seed + ".", m.b.name, m.b.ph) : slot("", "—", true)) +
+            (c.legs === 2 && !isFinal ? '<span class="leg">2 maç</span>' : "") + "</div>";
+        });
+        if (isFinal) html += '<div class="trophy">🏆 ŞAMPİYON</div>';
+        html += "</div>";
+      });
+      html += "</div></div>";
+      if (c.third && k >= 4) html += '<div class="third"><span>3.lük maçı:</span><div class="m">' + slot("", "Yarı final mağlubu", true) + slot("", "Yarı final mağlubu", true) + "</div></div>";
+      return html + "</div>";
+    }).join("");
+  }
+
+  function render() {
+    renderTop(); renderCups(); renderRest(); renderTable(); renderIfNow(); renderBrackets();
+  }
+
+  // ---- Olaylar ---------------------------------------------------------------
+  document.getElementById("n8").addEventListener("click", function () { state.teams = 8; applyTemplate(state.tpl === "custom" ? "top4p" : state.tpl); render(); });
+  document.getElementById("n9").addEventListener("click", function () { state.teams = 9; applyTemplate(state.tpl === "custom" ? "top4p" : state.tpl); render(); });
+  document.getElementById("tpls").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-tpl]"); if (!b) return;
+    applyTemplate(b.dataset.tpl); render();
+  });
+  document.getElementById("addCup").addEventListener("click", function () {
+    var free = restRanks(), from = free.length ? free[0] : state.teams - 1;
+    var to = free.length >= 2 ? free[Math.min(free.length - 1, 3)] : state.teams;
+    state.cups.push(cup("Yeni Kupa", from, Math.max(to, from + 1 <= state.teams ? from + 1 : from)));
+    state.tpl = "custom"; render();
+  });
+  var cupsEl = document.getElementById("cups");
+  cupsEl.addEventListener("click", function (e) {
+    var d = e.target.closest("[data-del]");
+    if (d) { state.cups.splice(+d.dataset.del, 1); state.tpl = "custom"; render(); return; }
+    var l = e.target.closest("[data-legs]");
+    if (l) { state.cups[+l.dataset.legs].legs = +l.dataset.v; state.tpl = "custom"; render(); }
+  });
+  cupsEl.addEventListener("change", function (e) {
+    var t = e.target;
+    if (t.dataset.from != null) state.cups[+t.dataset.from].from = +t.value;
+    else if (t.dataset.to != null) state.cups[+t.dataset.to].to = +t.value;
+    else if (t.dataset.third != null) state.cups[+t.dataset.third].third = t.checked;
+    else return;
+    state.tpl = "custom"; render();
+  });
+  cupsEl.addEventListener("input", function (e) {
+    var t = e.target; if (t.dataset.i == null) return;
+    state.cups[+t.dataset.i].name = t.value;
+    state.tpl = "custom";
+    renderTable(); renderIfNow(); renderBrackets(); renderTop();
+  });
+  document.getElementById("rest").addEventListener("change", function (e) {
+    if (e.target.name === "rest") { state.rest = e.target.value; render(); }
+  });
+
+  applyTemplate("top4p");
+  render();
+})();
+</script>
