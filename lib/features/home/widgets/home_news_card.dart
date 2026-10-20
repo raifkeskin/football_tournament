@@ -8,6 +8,7 @@ import '../../../core/services/service_locator.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../match/screens/live_draw_screen.dart';
 import '../../news/screens/news_feed_screen.dart';
+import '../../news/widgets/result_news_cards.dart';
 import '../../tournament/models/league_extras.dart';
 import '../../tournament/screens/tournament_hub_screen.dart';
 import '../home_warmup.dart';
@@ -264,6 +265,9 @@ class _NewsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Otomatik haber (maç sonucu, maç günü, hafta): skor satırı.
+    final strip = autoNewsStrip(item);
+    if (strip != null) return strip;
     // Haber fotoğrafı yoksa turnuvanın logosu.
     final photo = (item.imageUrl ?? '').isNotEmpty
         ? item.imageUrl!

@@ -1128,3 +1128,201 @@ class _DayRow extends StatelessWidget {
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// Ana sayfa haber kartı: otomatik haberin tek satırlık skor görünümü
+// (iki takım + skor/saat, altında kısa bilgi). Yükseklik sabit (68).
+// ---------------------------------------------------------------------------
+
+/// Otomatik haber için ana sayfa satırı; kart türü değilse null.
+Widget? autoNewsStrip(NewsItem item) {
+  final d = item.autoData;
+  if (d == null) return null;
+  final week = (d['week'] as num?)?.toInt() ?? item.week;
+  String dayWord(String label) => switch (label) {
+    'BUGÜN' => 'Bugün',
+    'YARIN' => 'Yarın',
+    'CANLI' => 'Canlı',
+    _ => label,
+  };
+
+  if (item.isMatchResult) {
+    final r = _Result(d);
+    final scorers = [...r.homeScorers, ...r.awayScorers]
+      ..sort((a, b) => b.n.compareTo(a.n));
+    final shown = scorers.take(2).map((s) => s.short).join(', ');
+    return _StripLayout(
+      home: r.home,
+      away: r.away,
+      center: '${r.hs} – ${r.as}',
+      homeDim: r.hs < r.as,
+      awayDim: r.as < r.hs,
+      caption: [
+        'Maç sonucu',
+        if (week != null) '$week. hafta',
+        if (shown.isNotEmpty)
+          '⚽ $shown${scorers.length > 2 ? ' +${scorers.length - 2}' : ''}',
+      ].join(' · '),
+    );
+  }
+  if (item.isWeekResults) {
+    final results = [
+      for (final m in (d['matches'] as List? ?? const []))
+        if (m is Map) _Result(Map<String, dynamic>.from(m)),
+    ];
+    if (results.isEmpty) return null;
+    final r = results.first;
+    final goals = results.fold<int>(0, (a, x) => a + x.hs + x.as);
+    return _StripLayout(
+      home: r.home,
+      away: r.away,
+      center: '${r.hs} – ${r.as}',
+      homeDim: r.hs < r.as,
+      awayDim: r.as < r.hs,
+      caption: [
+        week == null ? 'Hafta sonuçları' : '$week. hafta sonuçları',
+        if (results.length > 1) '${results.length - 1} maç daha',
+        '$goals gol',
+      ].join(' · '),
+    );
+  }
+  if (item.isMatchPreview) {
+    final status = d['status']?.toString();
+    final live = status == 'live' || status == 'halftime';
+    final time = (d['time'] ?? '').toString().trim();
+    final pitch = (d['pitch'] ?? '').toString().trim();
+    final w = d['weather'] is Map ? d['weather'] as Map : null;
+    final day = _dayLabel(d['date']?.toString(), status);
+    return _StripLayout(
+      home: _Team(d['home'] as Map?),
+      away: _Team(d['away'] as Map?),
+      center: live ? 'CANLI' : (time.isEmpty ? '-' : time),
+      highlight: true,
+      caption: [
+        if (day.isNotEmpty) dayWord(day),
+        if (pitch.isNotEmpty) pitch,
+        if (w != null && w['temp'] != null) '${w['temp']}°',
+      ].join(' · '),
+    );
+  }
+  if (item.isDayPreview) {
+    final matches = [
+      for (final m in (d['matches'] as List? ?? const []))
+        if (m is Map) m,
+    ];
+    if (matches.isEmpty) return null;
+    final m = matches.first;
+    final day = _dayLabel(d['date']?.toString(), null);
+    final time = (m['time'] ?? '').toString().trim();
+    return _StripLayout(
+      home: _Team(m['home'] as Map?),
+      away: _Team(m['away'] as Map?),
+      center: time.isEmpty ? '-' : time,
+      highlight: true,
+      caption: [
+        switch (day) {
+          'BUGÜN' => 'Bugünün maçları',
+          'YARIN' => 'Yarının maçları',
+          _ => 'Günün maçları',
+        },
+        if (matches.length > 1) '${matches.length - 1} maç daha',
+      ].join(' · '),
+    );
+  }
+  return null;
+}
+
+extension on _Scorer {
+  /// "K. Kahya 2" (ana sayfa satırı için kısa).
+  String get short {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    final n0 = parts.length > 1
+        ? '${parts.first.characters.first}. ${parts.sublist(1).join(' ')}'
+        : name.trim();
+    return n > 1 ? '$n0 $n' : n0;
+  }
+}
+
+class _StripLayout extends StatelessWidget {
+  const _StripLayout({
+    required this.home,
+    required this.away,
+    required this.center,
+    required this.caption,
+    this.homeDim = false,
+    this.awayDim = false,
+    this.highlight = false,
+  });
+
+  final _Team home;
+  final _Team away;
+  final String center;
+  final String caption;
+  final bool homeDim;
+  final bool awayDim;
+
+  /// Maç öncesi: ortadaki saat sarı.
+  final bool highlight;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget name(_Team t, bool dim, bool end) => Expanded(
+      child: Text(
+        t.name,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        textAlign: end ? TextAlign.right : TextAlign.left,
+        style: TextStyle(
+          color: dim ? const Color(0xFFCBD5E1) : Colors.white,
+          fontSize: 14.5,
+          fontWeight: dim ? FontWeight.w700 : FontWeight.w800,
+        ),
+      ),
+    );
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Row(
+          children: [
+            _Crest(home, size: 28),
+            const SizedBox(width: 7),
+            name(home, homeDim, true),
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 7),
+              constraints: const BoxConstraints(minWidth: 62),
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.35),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                center,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: highlight ? const Color(0xFFFBBF24) : Colors.white,
+                  fontSize: highlight ? 18 : 20,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.5,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ),
+            name(away, awayDim, false),
+            const SizedBox(width: 7),
+            _Crest(away, size: 28),
+          ],
+        ),
+        if (caption.isNotEmpty) ...[
+          const SizedBox(height: 7),
+          Text(
+            caption,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: _muted, fontSize: 12),
+          ),
+        ],
+      ],
+    );
+  }
+}
