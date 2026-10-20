@@ -2,9 +2,11 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/widgets/admin_form.dart';
+import '../../../core/widgets/admin_page.dart';
 import '../models/match.dart';
 
 /// Kağıttan okunup onaylanan esame satırı.
@@ -20,7 +22,37 @@ class EsamePick {
   final String? jersey;
 }
 
-/// Esame kağıdının fotoğrafını galeriden seçtirir, sunucuda (esame-read,
+const _consentKey = 'esame_ai_consent_v1';
+
+/// Fotoğraf yapay zekâya (Google Gemini) gitmeden önce bir kez açık onay
+/// alınır (App Store 5.1.2); onay cihazda hatırlanır.
+Future<bool> _aiConsent(BuildContext context) async {
+  SharedPreferences? prefs;
+  try {
+    prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_consentKey) == true) return true;
+  } catch (_) {}
+  if (!context.mounted) return false;
+  final ok = await showAdminConfirmDialog(
+    context: context,
+    title: 'Kağıttan okuma',
+    message:
+        'Esame kâğıdının fotoğrafı, oyuncu adlarının ve forma numaralarının '
+        'okunması için Google Gemini yapay zekâ hizmetine gönderilir. '
+        'Fotoğraf saklanmaz ve model eğitiminde kullanılmaz.',
+    confirmLabel: 'DEVAM',
+    destructive: false,
+    icon: Icons.auto_awesome_rounded,
+  );
+  if (ok) {
+    try {
+      await prefs?.setBool(_consentKey, true);
+    } catch (_) {}
+  }
+  return ok;
+}
+
+/// Esame kağıdının fotoğrafını kamerayla çektirir ya da galeriden seçtirir, sunucuda (esame-read,
 /// Gemini) okutur ve sonucu kontrol penceresinde gösterir. Onaylanan
 /// satırlar döner; vazgeçilirse ya da okuma başarısızsa null.
 ///
@@ -33,8 +65,17 @@ Future<List<EsamePick>?> scanEsameFromPhoto(
   required String teamName,
   required List<PlayerModel> players,
 }) async {
+  if (!await _aiConsent(context) || !context.mounted) return null;
+  final source = await showAdminOptionPicker<ImageSource>(
+    context: context,
+    title: 'Esame kâğıdı',
+    items: const [ImageSource.camera, ImageSource.gallery],
+    labelBuilder: (s) =>
+        s == ImageSource.camera ? 'Kamerayla çek' : 'Galeriden seç',
+  );
+  if (source == null || !context.mounted) return null;
   final picked = await ImagePicker().pickImage(
-    source: ImageSource.gallery,
+    source: source,
     maxWidth: 2000,
     maxHeight: 2000,
     imageQuality: 85,
