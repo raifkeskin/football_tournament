@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/services/active_tournament.dart';
 import '../../../core/services/app_session.dart';
 import '../../../core/utils/team_colors.dart';
+import '../../../core/utils/team_name.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../match/models/match.dart';
 import '../../match/widgets/match_weather.dart';
@@ -23,7 +24,9 @@ Color _accent() =>
 class _Team {
   _Team(Map? m)
     : id = (m?['id'] ?? '').toString(),
-      name = (m?['name'] ?? '').toString(),
+      // Uygulamanın her yerindeki kural: "Masterler / Masterlar" eki
+      // gösterilmez, "Spor Kulübü" → SK.
+      name = shortTeamName((m?['name'] ?? '').toString()),
       logo = (m?['logo'] ?? '').toString().trim(),
       color = m?['color']?.toString();
 
@@ -1267,14 +1270,16 @@ class _StripLayout extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Widget name(_Team t, bool dim, bool end) => Expanded(
+      // Uzun ad alt satıra geçer (en çok iki satır).
       child: Text(
         t.name,
-        maxLines: 1,
+        maxLines: 2,
         overflow: TextOverflow.ellipsis,
         textAlign: end ? TextAlign.right : TextAlign.left,
         style: TextStyle(
           color: dim ? const Color(0xFFCBD5E1) : Colors.white,
-          fontSize: 14.5,
+          fontSize: 14,
+          height: 1.15,
           fontWeight: dim ? FontWeight.w700 : FontWeight.w800,
         ),
       ),
