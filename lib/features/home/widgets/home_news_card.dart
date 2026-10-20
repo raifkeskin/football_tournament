@@ -40,7 +40,7 @@ class HomeNewsCard extends StatefulWidget {
 
 class _HomeNewsCardState extends State<HomeNewsCard> {
   /// Kartta gösterilecek en fazla haber.
-  static const _maxItems = 3;
+  static const _maxItems = 5;
 
   static const _red = Color(0xFFE5383B);
 
