@@ -181,7 +181,7 @@ Bugün aktarım açıksa turnuvanın Instagram hesabındaki her yeni gönderi so
 - Eski sürümler etkilenmez (yayınlanmamış haber kullanıcılara görünmez).
 - Maliyet: düşük-orta.
 
-## 21. Esame kağıdını kamerayla okutma — YAPILACAK
+## 21. Esame kağıdını kamerayla okutma — YAPILDI (2026-10-20, 1.0.4+17)
 
 Fotoğraf yükleyerek esame okuma 2026-10-17'de yapıldı (galeriden seçme, Gemini ile okuma, kadroyla eşleştirme, onay ekranı). Sıradaki adım: aynı akışa "Kameraya okut" seçeneği.
 
