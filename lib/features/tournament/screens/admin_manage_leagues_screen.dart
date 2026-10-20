@@ -745,7 +745,7 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                                             ),
                                     ),
                                     child: Text(
-                                      isActive ? 'Aktif' : 'Pasif ',
+                                      isActive ? 'Aktif' : 'Pasif',
                                       style: const TextStyle(
                                         color: Colors.white,
                                         fontSize: 15,
