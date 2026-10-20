@@ -745,9 +745,7 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                                             ),
                                     ),
                                     child: Text(
-                                      isActive
-                                          ? 'Aktif · uygulamada listelenir'
-                                          : 'Pasif · listelerde görünmez',
+                                      isActive ? 'Aktif' : 'Pasif ',
                                       style: const TextStyle(
                                         color: Colors.white,
                                         fontSize: 15,
@@ -786,7 +784,7 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                                   ),
                                   AdminFieldRow(
                                     icon: Icons.scoreboard_outlined,
-                                    label: 'Maç Sonucu Haberi',
+                                    label: 'Maç/Hafta Sonuçları Haber Yayını',
                                     onTap: saving
                                         ? null
                                         : () => setPopupState(
@@ -803,9 +801,7 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                                             ),
                                     ),
                                     child: Text(
-                                      autoResultNews
-                                          ? 'Açık · maç ve hafta bitince haber'
-                                          : 'Kapalı',
+                                      autoResultNews ? 'Açık' : 'Kapalı',
                                       style: const TextStyle(
                                         color: Colors.white,
                                         fontSize: 15,
@@ -815,7 +811,7 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                                   ),
                                   AdminFieldRow(
                                     icon: Icons.event_available_outlined,
-                                    label: 'Maç Günü Haberi',
+                                    label: 'Maç Günü Haber Yayını',
                                     onTap: saving
                                         ? null
                                         : () => setPopupState(
@@ -832,9 +828,7 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                                             ),
                                     ),
                                     child: Text(
-                                      autoPreviewNews
-                                          ? 'Açık · maç günü sabah kart'
-                                          : 'Kapalı',
+                                      autoPreviewNews ? 'Açık' : 'Kapalı',
                                       style: const TextStyle(
                                         color: Colors.white,
                                         fontSize: 15,
@@ -853,7 +847,7 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                                     icon: isPrivate
                                         ? Icons.lock_outline_rounded
                                         : Icons.public_rounded,
-                                    label: 'Gizli turnuva',
+                                    label: 'Gizli Turnuva',
                                     onTap: saving
                                         ? null
                                         : () => setPopupState(() {
@@ -889,9 +883,7 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                                             }),
                                     ),
                                     child: Text(
-                                      isPrivate
-                                          ? 'Açık · yalnızca üyeler ve kodu girenler görür'
-                                          : 'Kapalı · herkes görür',
+                                      isPrivate ? 'Açık' : 'Kapalı',
                                       style: const TextStyle(
                                         color: Colors.white,
                                         fontSize: 15,
