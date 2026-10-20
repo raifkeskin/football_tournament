@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/services/active_tournament.dart';
 import '../../../core/services/app_session.dart';
 import '../../../core/utils/team_colors.dart';
+import '../../../core/utils/team_name.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../match/models/match.dart';
 import '../../match/widgets/match_weather.dart';
@@ -23,7 +24,9 @@ Color _accent() =>
 class _Team {
   _Team(Map? m)
     : id = (m?['id'] ?? '').toString(),
-      name = (m?['name'] ?? '').toString(),
+      // Uygulamanın her yerindeki kural: "Masterler / Masterlar" eki
+      // gösterilmez, "Spor Kulübü" → SK.
+      name = shortTeamName((m?['name'] ?? '').toString()),
       logo = (m?['logo'] ?? '').toString().trim(),
       color = m?['color']?.toString();
 
@@ -1125,6 +1128,358 @@ class _DayRow extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Ana sayfa haber kartı: otomatik haberin tek satırlık skor görünümü
+// (iki takım + skor/saat, altında kısa bilgi). Yükseklik sabit (68).
+// ---------------------------------------------------------------------------
+
+/// Ana sayfa haber kartındaki bandın yüksekliği (alt yazı hariç).
+const double newsStripBandHeight = 138;
+
+/// Bant + alt yazının toplam yüksekliği; ana sayfa kartı bu kadar yer ayırır.
+const double newsStripHeight = newsStripBandHeight + 30;
+
+/// Otomatik haber için ana sayfa bandı; kart türü değilse null.
+Widget? autoNewsStrip(NewsItem item) {
+  final d = item.autoData;
+  if (d == null) return null;
+  final week = (d['week'] as num?)?.toInt() ?? item.week;
+
+  if (item.isMatchResult) {
+    final r = _Result(d);
+    final scorers = [...r.homeScorers, ...r.awayScorers]
+      ..sort((a, b) => b.n.compareTo(a.n));
+    final shown = scorers.take(2).map((s) => s.short).join(', ');
+    return _DuelStrip(
+      home: r.home,
+      away: r.away,
+      center: '${r.hs} – ${r.as}',
+      sub: 'MAÇ BİTTİ',
+      caption: [
+        if (week != null) '$week. hafta',
+        if (shown.isNotEmpty)
+          '⚽ $shown${scorers.length > 2 ? ' +${scorers.length - 2}' : ''}',
+      ].join(' · '),
+    );
+  }
+  if (item.isWeekResults) {
+    final results = [
+      for (final m in (d['matches'] as List? ?? const []))
+        if (m is Map) _Result(Map<String, dynamic>.from(m)),
+    ];
+    if (results.isEmpty) return null;
+    final goals = results.fold<int>(0, (a, x) => a + x.hs + x.as);
+    return _ListStrip(
+      rows: [for (final r in results) (r.home, '${r.hs} – ${r.as}', r.away)],
+      caption: [
+        week == null ? 'Hafta sonuçları' : '$week. hafta sonuçları',
+        '$goals gol',
+      ].join(' · '),
+    );
+  }
+  if (item.isMatchPreview) {
+    final status = d['status']?.toString();
+    final live = status == 'live' || status == 'halftime';
+    final time = (d['time'] ?? '').toString().trim();
+    final pitch = (d['pitch'] ?? '').toString().trim();
+    final w = d['weather'] is Map ? d['weather'] as Map : null;
+    return _DuelStrip(
+      home: _Team(d['home'] as Map?),
+      away: _Team(d['away'] as Map?),
+      center: live ? 'CANLI' : (time.isEmpty ? '-' : time),
+      sub: live ? '' : _dayLabel(d['date']?.toString(), status),
+      highlight: true,
+      caption: [
+        if (week != null) '$week. hafta',
+        if (pitch.isNotEmpty) pitch,
+        if (w != null && w['temp'] != null) '${w['temp']}°',
+      ].join(' · '),
+    );
+  }
+  if (item.isDayPreview) {
+    final matches = [
+      for (final m in (d['matches'] as List? ?? const []))
+        if (m is Map) m,
+    ];
+    if (matches.isEmpty) return null;
+    final day = _dayLabel(d['date']?.toString(), null);
+    return _ListStrip(
+      highlight: true,
+      rows: [
+        for (final m in matches)
+          (
+            _Team(m['home'] as Map?),
+            () {
+              final t = (m['time'] ?? '').toString().trim();
+              return t.isEmpty ? '-' : t;
+            }(),
+            _Team(m['away'] as Map?),
+          ),
+      ],
+      caption: switch (day) {
+        'BUGÜN' => 'Bugünün maçları',
+        'YARIN' => 'Yarının maçları',
+        _ => 'Günün maçları',
+      },
+    );
+  }
+  return null;
+}
+
+/// Bandın altındaki tek satırlık açıklama.
+class _StripCaption extends StatelessWidget {
+  const _StripCaption(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    height: newsStripHeight - newsStripBandHeight,
+    child: Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        child: Text(
+          text,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: _muted, fontSize: 12),
+        ),
+      ),
+    ),
+  );
+}
+
+/// Takım renginden ortadaki koyu alana geçen bant (Haberler sekmesiyle aynı).
+BoxDecoration _stripBand(Color home, Color away, {double tint = 1}) =>
+    BoxDecoration(
+      gradient: LinearGradient(
+        colors: [
+          Color.lerp(_center, home, tint)!,
+          _center,
+          _center,
+          Color.lerp(_center, away, tint)!,
+        ],
+        stops: const [0, 0.42, 0.58, 1],
+      ),
+    );
+
+extension on _Scorer {
+  /// "K. Kahya 2" (ana sayfa satırı için kısa).
+  String get short {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    final n0 = parts.length > 1
+        ? '${parts.first.characters.first}. ${parts.sublist(1).join(' ')}'
+        : name.trim();
+    return n > 1 ? '$n0 $n' : n0;
+  }
+}
+
+/// Tek maç: armalar, büyük harfli tam ad, ortada skor ya da saat.
+class _DuelStrip extends StatelessWidget {
+  const _DuelStrip({
+    required this.home,
+    required this.away,
+    required this.center,
+    required this.sub,
+    required this.caption,
+    this.highlight = false,
+  });
+
+  final _Team home;
+  final _Team away;
+  final String center;
+  final String sub;
+  final String caption;
+
+  /// Maç öncesi: ortadaki saat sarı.
+  final bool highlight;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget team(_Team t) {
+      final name = t.name.toUpperCase();
+      // Ad kelime bütün kalarak alt satıra iner; sütuna sığmayacak kadar
+      // uzun tek kelime varsa yazı küçülür.
+      final long = name.split(' ').any((w) => w.characters.length > 11);
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _Crest(t, size: 54),
+          const SizedBox(height: 7),
+          Text(
+            name,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: long ? 11 : 12,
+              height: 1.2,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      children: [
+        Container(
+          height: newsStripBandHeight,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: _stripBand(home.band, away.band),
+          child: Row(
+            children: [
+              Expanded(child: team(home)),
+              SizedBox(
+                width: 100,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        center,
+                        maxLines: 1,
+                        style: TextStyle(
+                          color: highlight
+                              ? const Color(0xFFFBBF24)
+                              : Colors.white,
+                          fontSize: highlight ? 30 : 36,
+                          height: 1,
+                          fontWeight: FontWeight.w900,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ),
+                    if (sub.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        sub,
+                        style: const TextStyle(
+                          color: _soft,
+                          fontSize: 10,
+                          letterSpacing: 1.2,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              Expanded(child: team(away)),
+            ],
+          ),
+        ),
+        _StripCaption(caption),
+      ],
+    );
+  }
+}
+
+/// Birden çok maç (hafta sonuçları, günün maçları): en çok 3 satır.
+class _ListStrip extends StatelessWidget {
+  const _ListStrip({
+    required this.rows,
+    required this.caption,
+    this.highlight = false,
+  });
+
+  final List<(_Team, String, _Team)> rows;
+  final String caption;
+
+  /// Maç öncesi: saatler sarı.
+  final bool highlight;
+
+  static const _max = 3;
+
+  @override
+  Widget build(BuildContext context) {
+    final shown = rows.take(_max).toList();
+    final more = rows.length - shown.length;
+    Widget name(_Team t, bool end) => Expanded(
+      child: Text(
+        t.name,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        textAlign: end ? TextAlign.right : TextAlign.left,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 12.5,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+    return Column(
+      children: [
+        Container(
+          height: newsStripBandHeight,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: _stripBand(
+            shown.first.$1.band,
+            shown.first.$3.band,
+            tint: 0.55,
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              for (final (h, c, a) in shown)
+                SizedBox(
+                  height: 32,
+                  child: Row(
+                    children: [
+                      name(h, true),
+                      const SizedBox(width: 7),
+                      _Crest(h, size: 24),
+                      Container(
+                        width: 56,
+                        margin: const EdgeInsets.symmetric(horizontal: 7),
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.35),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          c,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: highlight
+                                ? const Color(0xFFFBBF24)
+                                : Colors.white,
+                            fontSize: highlight ? 13.5 : 15,
+                            fontWeight: FontWeight.w900,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ),
+                      _Crest(a, size: 24),
+                      const SizedBox(width: 7),
+                      name(a, false),
+                    ],
+                  ),
+                ),
+              if (more > 0)
+                Padding(
+                  padding: const EdgeInsets.only(top: 3),
+                  child: Text(
+                    '+$more maç daha',
+                    style: const TextStyle(
+                      color: _muted,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        _StripCaption(caption),
+      ],
     );
   }
 }

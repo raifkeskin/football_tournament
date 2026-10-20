@@ -1054,7 +1054,6 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
   Widget? _buildTabFab({
     required MatchModel match,
     required int tabIndex,
-    bool canAssignObserver = false,
     bool canUndo = false,
     bool canQuickScore = false,
     bool canControl = true,
@@ -1098,12 +1097,6 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
             icon: Icons.location_on,
             onTap: () => _openPitchEditor(match),
           ),
-          // if (canAssignObserver)
-          //   _SpeedDialAction(
-          //     label: 'Gözlemci Ata',
-          //     icon: Icons.visibility_outlined,
-          //     onTap: () => _openObserverPicker(match),
-          //   ),
           if (canUndo &&
               match.status != MatchStatus.notStarted &&
               match.status != MatchStatus.postponed &&
@@ -1308,7 +1301,6 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                   : _buildTabFab(
                       match: m,
                       tabIndex: _tabController.index,
-                      canAssignObserver: canManageLeague,
                       canUndo: canManageLeague,
                       canQuickScore: canManageLeague,
                       canControl: canControl,
@@ -1669,44 +1661,6 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
       if (!mounted) return;
       final msg = e is PostgrestException ? e.message : '$e';
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-    }
-  }
-
-  Future<void> _openObserverPicker(MatchModel m) async {
-    final List<({String userId, String label})> users;
-    try {
-      users = await _matchService.listObserverCandidates();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Kullanıcılar okunamadı: $e')));
-      return;
-    }
-    if (!mounted) return;
-    const none = (userId: '', label: 'Gözlemci yok');
-    final picked = await showAdminOptionPicker<({String userId, String label})>(
-      context: context,
-      title: 'Gözlemci Ata',
-      items: [none, ...users],
-      labelBuilder: (u) => u.label,
-      selected: [
-        none,
-        ...users,
-      ].where((u) => u.userId == (m.observerId ?? '')).firstOrNull,
-      emptyText: 'Kayıtlı kullanıcı yok.',
-    );
-    if (picked == null || !mounted) return;
-    try {
-      await _matchService.setMatchObserver(
-        matchId: m.id,
-        userId: picked.userId.isEmpty ? null : picked.userId,
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Gözlemci atanamadı: $e')));
     }
   }
 

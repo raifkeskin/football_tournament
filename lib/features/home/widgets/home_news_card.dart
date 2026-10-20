@@ -8,6 +8,7 @@ import '../../../core/services/service_locator.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../match/screens/live_draw_screen.dart';
 import '../../news/screens/news_feed_screen.dart';
+import '../../news/widgets/result_news_cards.dart';
 import '../../tournament/models/league_extras.dart';
 import '../../tournament/screens/tournament_hub_screen.dart';
 import '../home_warmup.dart';
@@ -17,12 +18,21 @@ import '../home_warmup.dart';
 /// görünmez. Son 24 saatin haberi "SON DAKİKA", daha eskisi "HABERLER".
 
 class HomeNewsCard extends StatefulWidget {
-  const HomeNewsCard({super.key, this.leagueId, this.regionId});
+  const HomeNewsCard({
+    super.key,
+    this.leagueId,
+    this.regionId,
+    this.inset = 16,
+  });
 
   /// Verilirse yalnız bu turnuvanın haberleri; [regionId] verilirse o
   /// bölgenin ve tüm turnuvanın haberleri (kişinin bölgesi).
   final String? leagueId;
   final String? regionId;
+
+  /// Yan boşluk; kenar boşluğu zaten olan panelde 0 (diğer kartlarla aynı
+  /// genişlik).
+  final double inset;
 
   @override
   State<HomeNewsCard> createState() => _HomeNewsCardState();
@@ -30,7 +40,7 @@ class HomeNewsCard extends StatefulWidget {
 
 class _HomeNewsCardState extends State<HomeNewsCard> {
   /// Kartta gösterilecek en fazla haber.
-  static const _maxItems = 3;
+  static const _maxItems = 5;
 
   static const _red = Color(0xFFE5383B);
 
@@ -106,7 +116,7 @@ class _HomeNewsCardState extends State<HomeNewsCard> {
         final drawCard = draw == null
             ? null
             : Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                padding: EdgeInsets.fromLTRB(widget.inset, 12, widget.inset, 0),
                 child: LiveDrawNewsCard(
                   key: ValueKey(draw.liveDrawId),
                   drawId: draw.liveDrawId!,
@@ -122,9 +132,14 @@ class _HomeNewsCardState extends State<HomeNewsCard> {
         final accent = theme?.secondary ?? const Color(0xFFD4A017);
 
         final normal = Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          padding: EdgeInsets.fromLTRB(widget.inset, 12, widget.inset, 0),
           child: Material(
             color: Colors.transparent,
+            // Bant kartın kenarına kadar uzanır; köşeler kırpılır.
+            clipBehavior: Clip.antiAlias,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+            ),
             child: InkWell(
               // Turnuva Sayfası'nın Haberler sekmesi; bu haber açık gelir.
               onTap: () {
@@ -142,7 +157,6 @@ class _HomeNewsCardState extends State<HomeNewsCard> {
               },
               borderRadius: BorderRadius.circular(18),
               child: Ink(
-                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(18),
                   gradient: LinearGradient(
@@ -158,65 +172,68 @@ class _HomeNewsCardState extends State<HomeNewsCard> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Row(
-                      children: [
-                        Container(
-                          height: 22,
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          decoration: BoxDecoration(
-                            color: _red,
-                            borderRadius: BorderRadius.circular(11),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.bolt_rounded,
-                                size: 14,
-                                color: Colors.white,
-                              ),
-                              const SizedBox(width: 2),
-                              Text(
-                                _isFresh(items[_index].createdAt)
-                                    ? 'SON DAKİKA'
-                                    : 'HABERLER',
-                                style: const TextStyle(
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+                      child: Row(
+                        children: [
+                          Container(
+                            height: 22,
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            decoration: BoxDecoration(
+                              color: _red,
+                              borderRadius: BorderRadius.circular(11),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.bolt_rounded,
+                                  size: 14,
                                   color: Colors.white,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 0.5,
                                 ),
-                              ),
-                            ],
+                                const SizedBox(width: 2),
+                                Text(
+                                  _isFresh(items[_index].createdAt)
+                                      ? 'SON DAKİKA'
+                                      : 'HABERLER',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          _ago(items[_index].createdAt),
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 12,
+                          const SizedBox(width: 8),
+                          Text(
+                            _ago(items[_index].createdAt),
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                            ),
                           ),
-                        ),
-                        const Spacer(),
-                        Text(
-                          'Tümü',
-                          style: TextStyle(
+                          const Spacer(),
+                          Text(
+                            'Tümü',
+                            style: TextStyle(
+                              color: accent,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            size: 18,
                             color: accent,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
                           ),
-                        ),
-                        Icon(
-                          Icons.chevron_right_rounded,
-                          size: 18,
-                          color: accent,
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 10),
+                    // Tüm türler aynı yükseklikte: kayarken sayfa zıplamaz.
                     SizedBox(
-                      height: 68,
+                      height: newsStripHeight,
                       child: PageView.builder(
                         controller: _page,
                         itemCount: items.length,
@@ -225,7 +242,7 @@ class _HomeNewsCardState extends State<HomeNewsCard> {
                       ),
                     ),
                     if (items.length > 1) ...[
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 2),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -245,6 +262,7 @@ class _HomeNewsCardState extends State<HomeNewsCard> {
                         ],
                       ),
                     ],
+                    const SizedBox(height: 10),
                   ],
                 ),
               ),
@@ -264,6 +282,9 @@ class _NewsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Otomatik haber (maç sonucu, maç günü, hafta): skor satırı.
+    final strip = autoNewsStrip(item);
+    if (strip != null) return strip;
     // Haber fotoğrafı yoksa turnuvanın logosu.
     final photo = (item.imageUrl ?? '').isNotEmpty
         ? item.imageUrl!
@@ -273,53 +294,77 @@ class _NewsRow extends StatelessWidget {
       if (item.regionName.isNotEmpty) item.regionName,
     ].join(' · ');
 
-    return Row(
+    final hasPhoto = (item.imageUrl ?? '').isNotEmpty;
+    return Column(
       children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            width: 68,
-            height: 68,
-            color: Colors.white.withValues(alpha: 0.08),
-            child: photo.isEmpty
-                ? const Icon(Icons.newspaper_rounded, color: Colors.white38)
-                : WebSafeImage(
-                    url: photo,
-                    width: 68,
-                    height: 68,
-                    fit: (item.imageUrl ?? '').isNotEmpty
-                        ? BoxFit.cover
-                        : BoxFit.contain,
-                  ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
+        SizedBox(
+          height: newsStripBandHeight,
+          width: double.infinity,
+          child: Stack(
+            fit: StackFit.expand,
             children: [
-              Text(
-                item.content.trim().replaceAll(RegExp(r'\s+'), ' '),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  height: 1.25,
+              ColoredBox(color: Colors.white.withValues(alpha: 0.06)),
+              if (photo.isEmpty)
+                const Icon(
+                  Icons.newspaper_rounded,
+                  size: 40,
+                  color: Colors.white38,
+                )
+              else if (hasPhoto)
+                WebSafeImage(url: photo, fit: BoxFit.cover)
+              else
+                // Fotoğraf yok: turnuva logosu üst yarıda.
+                Align(
+                  alignment: const Alignment(0, -0.55),
+                  child: WebSafeImage(
+                    url: photo,
+                    width: 64,
+                    height: 64,
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              // Başlık okunur kalsın diye alta doğru koyulaşır.
+              const DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    stops: [0.35, 1],
+                    colors: [Color(0x00060E23), Color(0xEB060E23)],
+                  ),
                 ),
               ),
-              if (source.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Text(
-                  source,
-                  maxLines: 1,
+              Positioned(
+                left: 14,
+                right: 14,
+                bottom: 10,
+                child: Text(
+                  item.content.trim().replaceAll(RegExp(r'\s+'), ' '),
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white60, fontSize: 12),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    height: 1.25,
+                  ),
                 ),
-              ],
+              ),
             ],
+          ),
+        ),
+        SizedBox(
+          height: newsStripHeight - newsStripBandHeight,
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: Text(
+                source,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white60, fontSize: 12),
+              ),
+            ),
           ),
         ),
       ],

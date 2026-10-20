@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/service_locator.dart';
@@ -12,6 +13,7 @@ import '../../player/services/penalty_service.dart';
 import '../../tournament/models/age_rules.dart';
 import '../../tournament/screens/formation_tab.dart';
 import '../models/match.dart';
+import '../utils/season_match_settings.dart';
 import '../widgets/esame_scan.dart';
 
 /// Esame girişi (tam ekran): üstte İlk 11 ve Yedekler kutuları (tüm yuvalar
@@ -38,6 +40,15 @@ class EsameEditScreen extends StatefulWidget {
 
 /// Bırakma hedefi: ilk 11, yedek ya da kadro listesi.
 enum _Box { starters, subs, list }
+
+/// Aşılan bir kontenjan kuralı: başlık, ilgili oyuncular ve çözüm.
+class _QuotaIssue {
+  const _QuotaIssue(this.title, this.ids, this.fix);
+
+  final String title;
+  final List<String> ids;
+  final String fix;
+}
 
 class _EsameEditScreenState extends State<EsameEditScreen> {
   final _teamService = ServiceLocator.teamService;
@@ -77,10 +88,20 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
   static const _mid = Color(0xFF94A3B8);
   static const _slotH = 24.0;
 
+  /// Sezonda kağıttan okuma açık mı (Yapay Zekâ Yönetimi).
+  late bool _aiEsame =
+      SeasonMatchSettings.cached(widget.match.seasonId)?.aiEsame ?? true;
+
   @override
   void initState() {
     super.initState();
     _loadData();
+    _loadCaptainHint();
+    SeasonMatchSettings.of(widget.match.seasonId).then((s) {
+      if (mounted && s.aiEsame != _aiEsame) {
+        setState(() => _aiEsame = s.aiEsame);
+      }
+    });
   }
 
   /// Esame ekranında üstteki ortak bant gizlenir.
@@ -186,6 +207,160 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
     birthYear: AgeRules.birthYearOf(p.birthDate),
     isGk: (p.mainPosition ?? '').trim() == 'Kaleci',
   );
+
+  /// Esamede [i]. kontenjandan (kaleci dışı) olan oyuncular.
+  List<String> _quotaIds(int i) => [..._starters, ..._subs].where((id) {
+    final p = _byId[id]!;
+    final c = _ageRules.check(
+      birthYear: AgeRules.birthYearOf(p.birthDate),
+      isGk: (p.mainPosition ?? '').trim() == 'Kaleci',
+    );
+    return c.status == AgeStatus.quota && c.quotaIndex == i;
+  }).toList();
+
+  /// Sezonun maç günü kontenjan sınırlarından aşılanlar (kural yoksa boş).
+  List<_QuotaIssue> get _quotaIssues {
+    if (!_ageRules.hasMatchLimits) return const [];
+    final issues = <_QuotaIssue>[];
+    for (var i = 0; i < _ageRules.quotas.length; i++) {
+      final q = _ageRules.quotas[i];
+      final max = q.matchMax;
+      if (q.gk || max == null) continue;
+      final ids = _quotaIds(i);
+      if (ids.length > max) {
+        issues.add(
+          _QuotaIssue(
+            '${q.yearsLabel} doğumlu: esamede en fazla $max, şu an '
+                '${ids.length}',
+            ids,
+            '${ids.length - max} oyuncuyu esameden çıkarın.',
+          ),
+        );
+      }
+    }
+    final field = _starters.where((id) => _isQuota(_byId[id]!)).toList();
+    final fieldMax = _ageRules.matchFieldMax;
+    if (fieldMax != null && field.length > fieldMax) {
+      issues.add(
+        _QuotaIssue(
+          "İlk 11'de en fazla $fieldMax kontenjan oyuncusu, şu an "
+              '${field.length}',
+          field,
+          '${field.length - fieldMax} oyuncuyu yedeğe alın ya da esameden '
+              'çıkarın.',
+        ),
+      );
+    }
+    final squad = [
+      ..._starters,
+      ..._subs,
+    ].where((id) => _isQuota(_byId[id]!)).toList();
+    final squadMax = _ageRules.matchMax;
+    if (squadMax != null && squad.length > squadMax) {
+      issues.add(
+        _QuotaIssue(
+          'Esamede en fazla $squadMax kontenjan oyuncusu, şu an '
+              '${squad.length}',
+          squad,
+          '${squad.length - squadMax} oyuncuyu esameden çıkarın.',
+        ),
+      );
+    }
+    return issues;
+  }
+
+  /// Kaydetmeyi engelleyen kontenjan aşımı açıklaması.
+  Future<void> _showQuotaDialog(List<_QuotaIssue> issues) {
+    return showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Container(
+          padding: const EdgeInsets.all(22),
+          decoration: adminDialogDecoration(),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.error_outline_rounded, color: _red, size: 22),
+                    SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        'Esame kaydedilemedi',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                const Divider(color: Colors.white24, height: 1),
+                const SizedBox(height: 14),
+                const Text(
+                  'Sezonun kontenjan kuralına uymuyor. Kırmızı işaretli '
+                  'oyuncuları düzenleyip tekrar kaydedin.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white70, fontSize: 13.5),
+                ),
+                const SizedBox(height: 14),
+                for (final issue in issues)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.fromLTRB(12, 9, 12, 9),
+                    decoration: BoxDecoration(
+                      color: _red.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          issue.title,
+                          style: const TextStyle(
+                            color: _red,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          issue.ids.map((id) => _byId[id]!.name).join(', '),
+                          style: const TextStyle(
+                            color: Color(0xFFFECACA),
+                            fontSize: 12.5,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          issue.fix,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 10),
+                AdminPrimaryButton(
+                  label: 'DÜZENLE',
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   void _toast(String msg) {
     ScaffoldMessenger.of(context)
@@ -317,11 +492,13 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
       _dirty = true;
     });
     final notes = [
-      'Esame kağıttan dolduruldu: ilk 11 ${_starters.length}, '
-          'yedek ${_subs.length}.',
+      if (_quotaIssues.isNotEmpty)
+        'Kontenjan sınırı aşıldı. Kırmızı işaretli oyuncuları düzenleyin.'
+      else
+        'Esame kağıttan dolduruldu. Kontrol edip Kaydet\'e basın.',
       if (skipped.isNotEmpty) 'Cezalı, eklenmedi: ${skipped.join(', ')}.',
-      if (overflow > 0) '$overflow oyuncu kontenjanı aştığı için eklenmedi.',
-      'Kontrol edip Kaydet\'e basın.',
+      if (overflow > 0)
+        '$overflow oyuncu için İlk 11 ve yedeklerde yer kalmadı.',
     ];
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
@@ -336,6 +513,11 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
   /// Esameyi kaydeder; [close] ise ekranı kapatır. Başarılıysa true.
   Future<bool> _save({bool close = true}) async {
     FocusScope.of(context).unfocus();
+    final issues = _quotaIssues;
+    if (issues.isNotEmpty) {
+      await _showQuotaDialog(issues);
+      return false;
+    }
     final ids = [..._starters, ..._subs];
     final used = <String>{};
     for (final id in ids) {
@@ -591,7 +773,7 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
             ],
           ),
           actions: [
-            if (!_isLoading && _players.isNotEmpty)
+            if (_aiEsame && !_isLoading && _players.isNotEmpty)
               TextButton.icon(
                 style: TextButton.styleFrom(foregroundColor: _green),
                 onPressed: _isSaving ? null : _readFromPaper,
@@ -674,7 +856,72 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
     return m < 1 || m > 12 ? ymd : '$d ${_months[m - 1]}';
   }
 
-  /// Kontenjan sayacı ve "1'den otomatik ver".
+  static const _captainHintKey = 'esame_captain_hint_hidden';
+
+  /// Kaptan ipucu bir kez kapatılınca bu cihazda bir daha gösterilmez.
+  bool _showCaptainHint = false;
+
+  Future<void> _loadCaptainHint() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final hidden = prefs.getBool(_captainHintKey) ?? false;
+      if (mounted && !hidden) setState(() => _showCaptainHint = true);
+    } catch (_) {}
+  }
+
+  Future<void> _hideCaptainHint() async {
+    setState(() => _showCaptainHint = false);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_captainHintKey, true);
+    } catch (_) {}
+  }
+
+  Widget _captainHint() => Container(
+    margin: const EdgeInsets.only(bottom: 6),
+    padding: const EdgeInsets.fromLTRB(9, 6, 2, 6),
+    decoration: BoxDecoration(
+      color: _green.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(9),
+      border: Border.all(color: _green.withValues(alpha: 0.5)),
+    ),
+    child: Row(
+      children: [
+        _tag('C', _green),
+        const SizedBox(width: 7),
+        const Expanded(
+          child: Text.rich(
+            TextSpan(
+              text: "Kaptanı seçmek için İlk 11'deki oyuncunun ",
+              children: [
+                TextSpan(
+                  text: 'adına dokunun',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+                TextSpan(text: ' ve "Kaptan yap"ı seçin.'),
+              ],
+            ),
+            style: TextStyle(
+              color: Color(0xFFA7F3D0),
+              fontSize: 11.5,
+              height: 1.3,
+            ),
+          ),
+        ),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _hideCaptainHint,
+          child: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            child: Icon(Icons.close_rounded, size: 16, color: _mid),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  /// Kontenjan paneli (yalnız sezonda maç günü sınırı varsa), kaptan ipucu
+  /// ve diziliş / otomatik numara düğmeleri.
   Widget _topLine() {
     Widget? quota;
     if (_ageRules.hasMatchLimits) {
@@ -683,42 +930,92 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
           onField + _subs.where((id) => _isQuota(_byId[id]!)).length;
       final maxSquad = _ageRules.matchMax;
       final maxField = _ageRules.matchFieldMax;
-      // Kontenjan bazında esame sınırı (ör. 1988 en fazla 2, 1989 en fazla 1).
-      final perQuota = <String>[];
-      var quotaOver = false;
-      for (var i = 0; i < _ageRules.quotas.length; i++) {
-        final q = _ageRules.quotas[i];
-        final qMax = q.matchMax;
-        if (q.gk || qMax == null) continue;
-        final n = [..._starters, ..._subs].where((id) {
-          final p = _byId[id]!;
-          final c = _ageRules.check(
-            birthYear: AgeRules.birthYearOf(p.birthDate),
-            isGk: (p.mainPosition ?? '').trim() == 'Kaleci',
-          );
-          return c.status == AgeStatus.quota && c.quotaIndex == i;
-        }).length;
-        if (n > qMax) quotaOver = true;
-        perQuota.add('${q.yearsLabel} $n/$qMax');
+      Widget chip(String label, int n, int max) {
+        final bad = n > max;
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+          decoration: BoxDecoration(
+            color: bad
+                ? _red.withValues(alpha: 0.22)
+                : Colors.white.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Text.rich(
+            TextSpan(
+              text: '$label ',
+              style: TextStyle(
+                color: bad ? _red : _mid,
+                fontWeight: FontWeight.w600,
+              ),
+              children: [
+                TextSpan(
+                  text: '$n/$max',
+                  style: TextStyle(
+                    color: bad ? _red : _gold,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+            style: const TextStyle(
+              fontSize: 11.5,
+              fontFeatures: [FontFeature.tabularFigures()],
+            ),
+          ),
+        );
       }
-      final over =
-          quotaOver ||
-          (maxSquad != null && inSquad > maxSquad) ||
-          (maxField != null && onField > maxField);
-      quota = Text(
-        [
-          'Kontenjan',
-          if (maxSquad != null) 'esame $inSquad/$maxSquad',
-          ...perQuota,
-          if (maxField != null) 'ilk 11 $onField/$maxField',
-          if (over) 'sınır aşıldı',
-        ].join(' · '),
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          color: over ? _red : _gold,
-          fontSize: 11.5,
-          fontWeight: FontWeight.w700,
+
+      // Kontenjan bazında esame sınırı (ör. 1988 en fazla 2, 1989 en fazla 1).
+      final chips = <Widget>[
+        for (var i = 0; i < _ageRules.quotas.length; i++)
+          if (!_ageRules.quotas[i].gk && _ageRules.quotas[i].matchMax != null)
+            chip(
+              _ageRules.quotas[i].yearsLabel,
+              _quotaIds(i).length,
+              _ageRules.quotas[i].matchMax!,
+            ),
+        if (maxField != null) chip("İlk 11", onField, maxField),
+        if (maxSquad != null) chip('Esame toplam', inSquad, maxSquad),
+      ];
+      final over = _quotaIssues.isNotEmpty;
+      final c = over ? _red : _gold;
+      quota = Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(10, 7, 10, 8),
+        decoration: BoxDecoration(
+          color: c.withValues(alpha: over ? 0.12 : 0.07),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: c.withValues(alpha: over ? 0.6 : 0.35)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  'KONTENJAN',
+                  style: TextStyle(
+                    color: c,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.6,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  over ? 'SINIR AŞILDI' : 'KURALA UYGUN',
+                  style: TextStyle(
+                    color: c,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.6,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Wrap(spacing: 5, runSpacing: 5, children: chips),
+          ],
         ),
       );
     }
@@ -753,6 +1050,7 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
         children: [
           if (quota != null)
             Padding(padding: const EdgeInsets.only(bottom: 6), child: quota),
+          if (_showCaptainHint) _captainHint(),
           Row(
             children: [
               button(
@@ -796,6 +1094,7 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
     final color = starters ? _green : _blue;
     final full = list.length >= limit;
     final bad = _badJersey;
+    final over = {for (final q in _quotaIssues) ...q.ids};
     // İki kutu aynı yükseklikte: kısa olan boş satırla tamamlanır.
     final rows = math.max(_startingLimit, _subLimit);
     return Container(
@@ -835,14 +1134,21 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
           ),
           for (var i = 0; i < rows; i++)
             i < limit
-                ? _slot(box, i, list, bad)
+                ? _slot(box, i, list, bad, over)
                 : const SizedBox(height: _slotH),
         ],
       ),
     );
   }
 
-  Widget _slot(_Box box, int i, List<String> list, Set<String> bad) {
+  /// [over]: kontenjan sınırını aşan oyuncular (satır kırmızı çerçeveli).
+  Widget _slot(
+    _Box box,
+    int i,
+    List<String> list,
+    Set<String> bad,
+    Set<String> over,
+  ) {
     final id = i < list.length ? list[i] : null;
     final starters = box == _Box.starters;
     return DragTarget<String>(
@@ -882,6 +1188,7 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
           );
         }
         final editing = id != null && id == _editingId;
+        final quotaOver = id != null && over.contains(id);
         final row = Container(
           height: _slotH,
           margin: const EdgeInsets.only(bottom: 1),
@@ -892,12 +1199,18 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
                 ? Colors.white.withValues(alpha: 0.14)
                 : editing
                 ? _gold.withValues(alpha: 0.16)
+                : quotaOver
+                ? _red.withValues(alpha: 0.14)
                 : id == null
                 ? Colors.white.withValues(alpha: 0.02)
                 : Colors.white.withValues(alpha: 0.05),
             borderRadius: BorderRadius.circular(5),
             border: Border.all(
-              color: editing ? _gold : Colors.transparent,
+              color: editing
+                  ? _gold
+                  : quotaOver
+                  ? _red.withValues(alpha: 0.7)
+                  : Colors.transparent,
               width: 1.5,
             ),
           ),
@@ -967,6 +1280,7 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
           ),
           if (isGk) _tag('KL', _gold),
           if (isCap) _tag('C', _green),
+          if (_ageRules.hasMatchLimits && _isQuota(p)) _tag('KONT.', _gold),
         ],
       ),
     );
@@ -1253,7 +1567,8 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
               ),
             ),
           ),
-          if (_ageRules.hasMatchLimits && _isQuota(p)) _tag('K', _gold),
+          if (_ageRules.hasMatchLimits && _isQuota(p))
+            _tag('KONTENJAN ${AgeRules.birthYearOf(p.birthDate)}', _gold),
           const SizedBox(width: 6),
           if (pen != null)
             Container(
