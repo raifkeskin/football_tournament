@@ -1,0 +1,287 @@
+<title>Futbolcu Kaydı Önizleme</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Barlow:wght@400;500;600;700;800&display=swap">
+<style>
+/* Layout: uygulamanın koyu zemini; her bölüm başlık + yan yana telefon kesitleri */
+:root{
+  --bg:#0B1220; --card:#162235; --card2:#1E2D44; --line:rgba(255,255,255,.08);
+  --fg:#F1F5F9; --mid:#94A3B8; --gold:#FBBF24; --green:#22C55E; --blue:#60A5FA; --red:#F87171;
+  --display:"Barlow Condensed","Arial Narrow",sans-serif; --body:"Barlow",system-ui,sans-serif;
+  color-scheme:dark;
+}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.45}
+.wrap{max-width:1180px;margin:0 auto;padding-block:28px 60px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1{font-family:var(--display);font-size:34px;letter-spacing:.5px;margin:0 0 6px;text-wrap:balance}
+.lead{color:var(--mid);max-width:70ch;margin:0 0 20px}
+section{border-top:1px solid var(--line);padding-top:26px;margin-top:30px}
+h2{font-family:var(--display);font-size:24px;margin:0 0 4px;text-wrap:balance}
+.desc{color:var(--mid);max-width:72ch;margin:0 0 18px}
+.row{display:flex;flex-wrap:wrap;gap:22px;align-items:flex-start}
+.opt{flex:1 1 300px;min-width:0;max-width:360px}
+.opt h3{font-size:12.5px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:var(--mid);margin:0 0 10px}
+.opt h3 b{color:var(--gold)}
+.opt p{color:var(--mid);font-size:13.5px;margin:10px 0 0}
+.phone{background:#0F1A2B;border:1px solid var(--line);border-radius:22px;padding:14px;overflow:hidden}
+
+/* Form başlığı */
+.hdr{display:flex;gap:10px;align-items:center;margin-bottom:14px}
+.hdr .ic{width:38px;height:38px;border-radius:11px;background:rgba(34,197,94,.14);color:var(--green);display:grid;place-items:center;font-size:18px;flex:none}
+.hdr b{display:block;font-size:16px}
+.hdr small{color:var(--mid);font-size:12.5px}
+
+/* Bölümlü kart satırları (admin form deseni) */
+.grp{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:10px}
+.grp .gt{font-size:10.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--mid);padding:9px 12px 0}
+.fr{display:flex;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--line);min-height:44px}
+.fr:last-child{border-bottom:0}
+.fr .i{width:18px;text-align:center;color:var(--mid);font-size:14px;flex:none}
+.fr .l{font-size:12.5px;color:var(--mid);width:86px;flex:none}
+.fr .v{flex:1;min-width:0;font-weight:700;font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fr .v.ph{color:#55647A;font-weight:600}
+.fr .v .typed{color:var(--mid);font-weight:500;text-decoration:line-through;margin-right:6px;font-size:12.5px}
+.fr.lock .v{color:#D6E4F0}
+.fr .lk{color:var(--green);font-size:12px;flex:none}
+.fr.bad{background:rgba(248,113,113,.07)}
+.fr.bad .l{color:var(--red)}
+
+/* NVİ doğrulama alanı */
+.nvi{border-radius:12px;padding:11px 12px;margin:2px 0 10px;display:flex;gap:10px;align-items:center}
+.nvi.idle{background:rgba(96,165,250,.08);border:1px dashed rgba(96,165,250,.45)}
+.nvi.ok{background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.55)}
+.nvi.err{background:rgba(248,113,113,.09);border:1px solid rgba(248,113,113,.5);align-items:flex-start}
+.nvi .tx{flex:1;min-width:0;font-size:12.5px;color:#CBD5E1}
+.nvi .tx b{display:block;font-size:14px;color:var(--fg)}
+.nvi.ok .tx b{color:var(--green)}
+.nvi.err .tx b{color:var(--red)}
+.nbtn{flex:none;height:34px;padding:0 12px;border-radius:9px;border:1.5px solid var(--blue);background:transparent;color:var(--blue);font:800 12.5px var(--body);letter-spacing:.4px}
+.tick{width:30px;height:30px;border-radius:50%;background:var(--green);color:#062A1C;display:grid;place-items:center;font-weight:900;font-size:17px;flex:none}
+.warn{width:26px;height:26px;border-radius:50%;background:rgba(248,113,113,.2);color:var(--red);display:grid;place-items:center;font-weight:900;flex:none}
+.spin{width:22px;height:22px;border-radius:50%;border:3px solid rgba(96,165,250,.25);border-top-color:var(--blue);flex:none;animation:sp 1s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}}
+
+.chips{display:flex;flex-wrap:wrap;gap:5px;padding:4px 12px 10px}
+.chip{font-size:12px;font-weight:700;border-radius:8px;padding:5px 9px;background:rgba(255,255,255,.06);color:#CBD5E1}
+.chip.on{background:var(--gold);color:#1F1300}
+.chip.on2{background:rgba(251,191,36,.18);color:var(--gold)}
+.past{padding:8px 12px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:8px;font-size:13.5px}
+.past span:last-child{color:var(--mid);font-size:12.5px;flex:none}
+.add{padding:9px 12px;color:var(--blue);font-weight:800;font-size:13px}
+.bio{padding:6px 12px 10px;font-size:13.5px;color:#D6E4F0}
+.bio small{display:block;text-align:right;color:var(--mid);font-size:11px;margin-top:4px}
+.consent{display:flex;gap:8px;font-size:12px;color:var(--mid);margin:8px 2px 12px}
+.consent .cb{width:17px;height:17px;border-radius:4px;background:var(--green);color:#062A1C;display:grid;place-items:center;font-size:11px;font-weight:900;flex:none;margin-top:1px}
+.btn{display:block;width:100%;height:46px;border-radius:12px;border:0;font:800 14px var(--body);letter-spacing:.4px}
+.btn.g{background:var(--green);color:#062A1C}
+.btn.dis{background:#26354D;color:#64748B}
+
+/* Onay kartı */
+.ap{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px}
+.ap .top{display:flex;gap:10px;align-items:center}
+.av{width:44px;height:44px;border-radius:12px;background:#26354D;display:grid;place-items:center;font:800 18px var(--display);color:var(--gold);flex:none}
+.ap .nm{font-weight:800;font-size:16px;display:flex;align-items:center;gap:6px}
+.vb{width:18px;height:18px;border-radius:50%;background:var(--green);color:#062A1C;display:inline-grid;place-items:center;font-size:11px;font-weight:900}
+.ap .sub{color:var(--mid);font-size:12.5px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:13px;margin:12px 0}
+.kv dt{color:var(--mid)}
+.kv dd{margin:0;font-weight:700;min-width:0}
+.ok-line{color:var(--green);font-weight:700}
+.badge{display:inline-flex;gap:6px;align-items:center;font-size:12px;font-weight:800;border-radius:7px;padding:4px 8px}
+.badge.g{background:rgba(34,197,94,.14);color:var(--green)}
+.badge.y{background:rgba(251,191,36,.14);color:var(--gold)}
+.acts{display:flex;gap:8px;margin-top:4px}
+.acts .btn{height:40px;font-size:13px}
+.btn.o{background:transparent;color:var(--red);border:1.5px solid rgba(248,113,113,.6)}
+
+/* Ad düzeltme tablosu */
+.fix{width:100%;border-collapse:collapse;font-size:14px}
+.fix td{padding:7px 10px;border-bottom:1px solid var(--line)}
+.fix td:first-child{color:var(--mid);font-family:ui-monospace,Menlo,monospace;font-size:13px}
+.fix td:nth-child(2){color:var(--mid);width:24px;text-align:center}
+.fix td:last-child{font-weight:800}
+.tbl{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:14px;max-width:520px}
+</style>
+
+<div class="wrap">
+  <h1>Futbolcu Olarak Kayıt Ol</h1>
+  <p class="lead">Kayıt ekranındaki yeni "Futbolcuyum" akışının önizlemesi. Kişi ad, soyad, doğum tarihi ve TC'yi girip <b>NVİ ile Doğrula</b>'ya basar. Doğrulama başarılıysa yeşil tik çıkar ve bu dört alan kilitlenir. Talep admin onayına gider ve onay kartında da aynı tik görünür.</p>
+
+  <section>
+    <h2>1. Kimlik bilgileri ve NVİ doğrulama</h2>
+    <p class="desc">Sorgu sunucudan yapılır. NVİ servisi yalnızca "eşleşti" ya da "eşleşmedi" cevabı verir, kişinin bilgilerini göndermez. Doğrulamadan sonra TC'nin kendisi saklanmaz, yalnızca tekrar kaydı engellemek için okunamaz bir parmak izi tutulur.</p>
+    <div class="row">
+
+      <div class="opt">
+        <h3>Doğrulama öncesi</h3>
+        <div class="phone">
+          <div class="hdr"><div class="ic">⚽</div><div><b>Futbolcu Kaydı</b><small>Bilgilerinizi kimliğinizdeki gibi girin</small></div></div>
+          <div class="grp">
+            <div class="gt">Kimlik</div>
+            <div class="fr"><span class="i">👤</span><span class="l">Ad</span><span class="v">Raif</span></div>
+            <div class="fr"><span class="i">👤</span><span class="l">Soyad</span><span class="v">Keskin</span></div>
+            <div class="fr"><span class="i">📅</span><span class="l">Doğum tarihi</span><span class="v">14.03.1985</span></div>
+            <div class="fr"><span class="i">#</span><span class="l">TC Kimlik No</span><span class="v">1234567••••</span></div>
+          </div>
+          <div class="nvi idle">
+            <div class="tx"><b>Kimliğinizi doğrulayın</b>Nüfus kaydıyla eşleşip eşleşmediği kontrol edilir.</div>
+            <button class="nbtn" type="button">NVİ İLE DOĞRULA</button>
+          </div>
+          <button class="btn dis" type="button">Önce kimliğinizi doğrulayın</button>
+        </div>
+        <p>Dört alan dolmadan ve TC'nin son hanesi kuralına uymadan buton pasif kalır. Böylece yanlış yazılmış TC için NVİ'ye hiç sorgu gitmez.</p>
+      </div>
+
+      <div class="opt">
+        <h3>Sorgulanıyor</h3>
+        <div class="phone">
+          <div class="hdr"><div class="ic">⚽</div><div><b>Futbolcu Kaydı</b><small>Bilgilerinizi kimliğinizdeki gibi girin</small></div></div>
+          <div class="grp">
+            <div class="gt">Kimlik</div>
+            <div class="fr"><span class="i">👤</span><span class="l">Ad</span><span class="v">Raif</span></div>
+            <div class="fr"><span class="i">👤</span><span class="l">Soyad</span><span class="v">Keskin</span></div>
+            <div class="fr"><span class="i">📅</span><span class="l">Doğum tarihi</span><span class="v">14.03.1985</span></div>
+            <div class="fr"><span class="i">#</span><span class="l">TC Kimlik No</span><span class="v">1234567••••</span></div>
+          </div>
+          <div class="nvi idle">
+            <div class="spin"></div>
+            <div class="tx"><b>Nüfus kaydı kontrol ediliyor…</b>Birkaç saniye sürebilir.</div>
+          </div>
+          <button class="btn dis" type="button">Önce kimliğinizi doğrulayın</button>
+        </div>
+      </div>
+
+      <div class="opt">
+        <h3><b>Doğrulandı</b></h3>
+        <div class="phone">
+          <div class="hdr"><div class="ic">⚽</div><div><b>Futbolcu Kaydı</b><small>Bilgilerinizi kimliğinizdeki gibi girin</small></div></div>
+          <div class="grp">
+            <div class="gt">Kimlik</div>
+            <div class="fr lock"><span class="i">👤</span><span class="l">Ad</span><span class="v">Raif</span><span class="lk">🔒</span></div>
+            <div class="fr lock"><span class="i">👤</span><span class="l">Soyad</span><span class="v">Keskin</span><span class="lk">🔒</span></div>
+            <div class="fr lock"><span class="i">📅</span><span class="l">Doğum tarihi</span><span class="v">14.03.1985</span><span class="lk">🔒</span></div>
+            <div class="fr lock"><span class="i">#</span><span class="l">TC Kimlik No</span><span class="v">•••••••••••</span><span class="lk">🔒</span></div>
+          </div>
+          <div class="nvi ok">
+            <div class="tick">✓</div>
+            <div class="tx"><b>Kimlik doğrulandı</b>Bilgiler nüfus kaydıyla eşleşti.</div>
+          </div>
+          <button class="btn g" type="button">DEVAM ET</button>
+        </div>
+        <p>Kilitli bir alana dokunulursa "Değiştirirseniz doğrulama yeniden yapılır" sorusu çıkar. Bu sayede doğrulanan ad ile kaydedilen ad hep aynı kalır.</p>
+      </div>
+
+      <div class="opt">
+        <h3>Eşleşmedi</h3>
+        <div class="phone">
+          <div class="hdr"><div class="ic">⚽</div><div><b>Futbolcu Kaydı</b><small>Bilgilerinizi kimliğinizdeki gibi girin</small></div></div>
+          <div class="grp">
+            <div class="gt">Kimlik</div>
+            <div class="fr bad"><span class="i">👤</span><span class="l">Ad</span><span class="v">Mehmet</span></div>
+            <div class="fr bad"><span class="i">👤</span><span class="l">Soyad</span><span class="v">Yılmaz</span></div>
+            <div class="fr"><span class="i">📅</span><span class="l">Doğum tarihi</span><span class="v">02.09.1990</span></div>
+            <div class="fr"><span class="i">#</span><span class="l">TC Kimlik No</span><span class="v">1098765••••</span></div>
+          </div>
+          <div class="nvi err">
+            <div class="warn">!</div>
+            <div class="tx"><b>Nüfus kaydıyla eşleşmedi</b>Ad ve soyadınızı kimlik kartınızdaki gibi yazın. İkinci adınız varsa onu da ekleyin (örn. "Mehmet Ali"). Kalan deneme: 2</div>
+          </div>
+          <button class="btn dis" type="button">Önce kimliğinizi doğrulayın</button>
+        </div>
+        <p>Kişi başı saatte 3 deneme hakkı var. NVİ servisine ulaşılamazsa "Şu an doğrulama yapılamıyor, birazdan tekrar deneyin" yazar ve kayıt doğrulanmadan gönderilmez.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <h2>2. Futbol bilgileri, eski takımlar, biyografi</h2>
+    <p class="desc">Doğrulamadan sonra açılan ikinci adım. Bu bilgiler Serbest Oyuncular ekranında takım sorumlularına görünür. Telefon numarası yalnızca onay için kullanılır, listede görünmez.</p>
+    <div class="row">
+      <div class="opt">
+        <h3>İkinci adım</h3>
+        <div class="phone">
+          <div class="hdr"><div class="ic">⚽</div><div><b>Raif Keskin <span class="vb">✓</span></b><small>Futbol bilgileriniz</small></div></div>
+          <div class="grp">
+            <div class="gt">İletişim</div>
+            <div class="fr"><span class="i">📱</span><span class="l">WhatsApp</span><span class="v">0532 ••• •• 47</span></div>
+          </div>
+          <div class="grp">
+            <div class="gt">Mevki</div>
+            <div class="chips"><span class="chip">Kaleci</span><span class="chip">Defans</span><span class="chip on">Orta Saha</span><span class="chip on2">Forvet</span></div>
+            <div class="fr"><span class="i">🦶</span><span class="l">Ayak</span><span class="v">Sağ</span></div>
+            <div class="fr"><span class="i">📏</span><span class="l">Boy / Kilo</span><span class="v ph">İsteğe bağlı</span></div>
+          </div>
+          <div class="grp">
+            <div class="gt">Oynadığım takımlar</div>
+            <div class="past"><span>Kartal Gençlik</span><span>2019–2023</span></div>
+            <div class="past"><span>Maltepe Masterlar</span><span>2023–2025</span></div>
+            <div class="add">+ Takım ekle</div>
+          </div>
+          <div class="grp">
+            <div class="gt">Hakkımda</div>
+            <div class="bio">Hafta sonları oynayan, pas oyununu seven bir orta saha oyuncusuyum. Cumartesi maçlarına her hafta gelebilirim.<small>118 / 500</small></div>
+          </div>
+          <div class="consent"><span class="cb">✓</span><span>Aydınlatma metnini okudum. Kimliğimin NVİ üzerinden doğrulanmasını kabul ediyorum.</span></div>
+          <button class="btn g" type="button">KAYIT TALEBİ GÖNDER</button>
+        </div>
+        <p>Turuncu dolu çip ana mevki, açık turuncu çip yan mevki. İkinci dokunuş yan mevki yapar, üçüncü dokunuş seçimi kaldırır.</p>
+      </div>
+
+      <div class="opt">
+        <h3>Admin onay kartı</h3>
+        <div class="phone">
+          <div class="ap">
+            <div class="top">
+              <div class="av">RK</div>
+              <div><div class="nm">Raif Keskin <span class="vb">✓</span></div><div class="sub">Futbolcu kaydı · 2 dk önce</div></div>
+            </div>
+            <dl class="kv">
+              <dt>Kimlik</dt><dd class="ok-line">✓ NVİ ile doğrulandı</dd>
+              <dt>Yaş</dt><dd>41 (14.03.1985)</dd>
+              <dt>Mevki</dt><dd>Orta Saha · Forvet</dd>
+              <dt>Ayak</dt><dd>Sağ</dd>
+              <dt>Telefon</dt><dd>0532 ••• •• 47</dd>
+              <dt>Eski takım</dt><dd>Kartal Gençlik, Maltepe Masterlar</dd>
+            </dl>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
+              <span class="badge g">Sistemde kaydı yok</span>
+            </div>
+            <div class="acts">
+              <button class="btn o" type="button">REDDET</button>
+              <button class="btn g" type="button">ONAYLA</button>
+            </div>
+          </div>
+          <div class="ap" style="margin-top:10px">
+            <div class="top">
+              <div class="av">AÇ</div>
+              <div><div class="nm">Ahmet Çelik <span class="vb">✓</span></div><div class="sub">Futbolcu kaydı · 1 sa önce</div></div>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin:12px 0">
+              <span class="badge y">⚠ Benzer kayıt: Ahmet Çelik, 1988, Ataşehir FK</span>
+            </div>
+            <div class="acts">
+              <button class="btn o" type="button">REDDET</button>
+              <button class="btn g" type="button">MEVCUTLA BİRLEŞTİR</button>
+            </div>
+          </div>
+        </div>
+        <p>Aynı bildirim Telegram'a da gelir. Sistemde aynı ad ve doğum yılıyla, TC'si girilmemiş bir oyuncu varsa kart sarı uyarı gösterir. Bu durumda yeni oyuncu açmak yerine mevcut kayıtla birleştirme önerilir.</p>
+      </div>
+
+      <div class="opt">
+        <h3>Ad soyad otomatik düzeltme</h3>
+        <div class="tbl">
+          <table class="fix">
+            <tr><td>raif keskin</td><td>→</td><td>Raif Keskin</td></tr>
+            <tr><td>RAİF KESKİN</td><td>→</td><td>Raif Keskin</td></tr>
+            <tr><td>Raif keskin</td><td>→</td><td>Raif Keskin</td></tr>
+            <tr><td>ışık irem</td><td>→</td><td>Işık İrem</td></tr>
+            <tr><td>MEHMET ALİ öz</td><td>→</td><td>Mehmet Ali Öz</td></tr>
+            <tr><td>&nbsp;ayşe&nbsp;&nbsp;nur&nbsp;</td><td>→</td><td>Ayşe Nur</td></tr>
+          </table>
+        </div>
+        <p>Düzeltme Türkçe harf kurallarıyla yapılır (i/İ, ı/I) ve fazla boşluklar silinir. Veritabanında çalıştığı için kayıt ekranı, admin ya da kurucu başkan, adı kim girerse girsin sonuç aynı olur. NVİ'ye ise büyük harfle gönderilir, bu yüzden yazım farkı doğrulamayı bozmaz.</p>
+      </div>
+    </div>
+  </section>
+</div>

@@ -3426,10 +3426,10 @@ class _RosterInfoNote extends StatelessWidget {
             child: Text(
               hours == 0
                   ? 'Takım sorumluları, kendi takımlarının esamesini maç '
-                        'saatinde bu sekmedeki "Esame" butonundan girebilir. '
+                        'saatinde bu sekmedeki "Esame Girişi" butonundan girebilir. '
                         'Bu saatten önce buton kilitli görünür.'
                   : 'Takım sorumluları, kendi takımlarının esamesini maç '
-                        'saatinden $hours saat önce bu sekmedeki "Esame" '
+                        'saatinden $hours saat önce bu sekmedeki "Esame Girişi" '
                         'butonundan girebilir. Bu saatten önce buton kilitli '
                         'görünür.',
               style: const TextStyle(
@@ -3487,6 +3487,46 @@ class _LineupTabState extends State<_LineupTab>
   /// Turnuvanın esame açılış süresi (saat); yüklenene kadar varsayılan 1.
   int _openHours = 1;
 
+  /// Sezonun ilk oyuncu sayısı (11, halı sahada 7-8); paylaşım için gerekli.
+  int _startingCount = 11;
+
+  /// Maçın bölgesinin sorumlusu mu (bölge sorumlusu esameyi maç başladıktan
+  /// sonra da düzenler; admin, kurucu başkan ve gözlemci gibi).
+  bool _regionOwner = false;
+  bool _regionChecked = false;
+
+  bool get _isStaff => widget.isSuperAdmin || _regionOwner;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_regionChecked) return;
+    _regionChecked = true;
+    final session = AppSession.of(context).value;
+    final m = widget.match;
+    final groupId = (m.groupId ?? '').trim();
+    if (widget.isSuperAdmin ||
+        groupId.isEmpty ||
+        session.regionsInSeason(m.seasonId).isEmpty) {
+      return;
+    }
+    Supabase.instance.client
+        .from('groups')
+        .select('region_id')
+        .eq('id', groupId)
+        .maybeSingle()
+        .then((row) {
+          final regionId = row?['region_id']?.toString();
+          if (mounted && session.canManageRegion(m.leagueId, regionId)) {
+            setState(() => _regionOwner = true);
+          }
+        })
+        .catchError((_) {});
+  }
+
+  /// Takım başına esame akışı (aynı maç akışından süzülür).
+  final Map<String, Stream<List<MatchRosterModel>>> _rosterStreams = {};
+
   @override
   void initState() {
     super.initState();
@@ -3494,6 +3534,18 @@ class _LineupTabState extends State<_LineupTab>
   }
 
   Future<void> _loadOpenHours() async {
+    Supabase.instance.client
+        .from('seasons')
+        .select('starting_player_count')
+        .eq('id', widget.match.seasonId)
+        .maybeSingle()
+        .then((row) {
+          final n = (row?['starting_player_count'] as num?)?.toInt();
+          if (n != null && n > 0 && n != _startingCount && mounted) {
+            setState(() => _startingCount = n);
+          }
+        })
+        .catchError((_) {});
     try {
       final row = await Supabase.instance.client
           .from('leagues')
@@ -3667,7 +3719,8 @@ class _LineupTabState extends State<_LineupTab>
     // yalnızca kendi takımını, turnuvanın belirlediği süre kadar önce ve
     // maç bitene kadar.
     final m = widget.match;
-    final managesThis = !widget.isSuperAdmin && _managesTeam(teamId);
+    final session = AppSession.of(context).value;
+    final managesThis = !_isStaff && _managesTeam(teamId);
     final openAt = _rosterOpenAt(m, _openHours);
     if (managesThis) _scheduleOpen(openAt);
     final managerOpen =
@@ -3677,13 +3730,81 @@ class _LineupTabState extends State<_LineupTab>
         !DateTime.now().toUtc().isBefore(openAt);
     // Maç başladıysa takım sorumlusuna ne kilit ne düzenleme düğmesi.
     final locked = managesThis && _beforeKickoff(m) && !managerOpen;
-    final edit = locked
-        ? Tooltip(
+    final canEdit = _isStaff || managerOpen;
+    // Paylaşım: yalnızca o takımın sorumlusu ve lig yöneticileri.
+    final canShare =
+        session.canManageLeague(widget.match.leagueId) || _managesTeam(teamId);
+    final cross = alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start;
+    final box = BoxDecoration(
+      color: color.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: color.withValues(alpha: 0.4)),
+    );
+    if (!canShare && !canEdit && !locked) {
+      return Container(
+        padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+        decoration: box,
+        child: label,
+      );
+    }
+
+    return StreamBuilder<List<MatchRosterModel>>(
+      stream: _rosterStreams.putIfAbsent(
+        teamId,
+        () => ServiceLocator.matchService.watchMatchRosters(m.id, teamId),
+      ),
+      builder: (context, snap) {
+        final rosters = snap.data ?? const <MatchRosterModel>[];
+        final starters = rosters.where((r) => r.isStarting).length;
+        final subs = rosters.length - starters;
+        final need = _startingCount;
+        final complete = starters >= need;
+
+        final share = canShare
+            ? _shareButton(color, teamId, complete, starters, need)
+            : null;
+
+        Widget? status;
+        if (snap.hasData) {
+          status = rosters.isEmpty
+              ? _statusLine(
+                  Icons.warning_amber_rounded,
+                  'Esame girilmedi',
+                  kAdminAmber,
+                  alignEnd,
+                )
+              : complete
+              ? _statusLine(
+                  Icons.check_circle_rounded,
+                  subs > 0
+                      ? 'İlk $need tamam · $subs yedek'
+                      : 'İlk $need tamam',
+                  kAdminAccent,
+                  alignEnd,
+                )
+              : _statusLine(
+                  Icons.groups_rounded,
+                  'İlk $need: $starters / $need',
+                  kAdminAmber,
+                  alignEnd,
+                );
+        }
+
+        Widget? action;
+        if (locked) {
+          action = Tooltip(
             message: _openHours == 0
                 ? 'Esame maç saatinde açılır.'
                 : 'Esame maçtan $_openHours saat önce açılır.',
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Container(
+              height: 36,
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.04),
+                borderRadius: BorderRadius.circular(9),
+                border: Border.all(color: Colors.white24),
+              ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -3692,79 +3813,200 @@ class _LineupTabState extends State<_LineupTab>
                     size: 15,
                     color: Colors.white38,
                   ),
-                  const SizedBox(width: 3),
+                  const SizedBox(width: 4),
                   Flexible(
                     child: Text(
                       openAt == null
                           ? 'Esame kapalı'
-                          : 'Esame açılışı ${DateFormat('HH:mm').format(openAt.add(const Duration(hours: 3)))}',
+                          : 'Esame ${DateFormat('HH:mm').format(openAt.add(const Duration(hours: 3)))}\'de açılır',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: Colors.white38,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                   ),
                 ],
               ),
             ),
-          )
-        : widget.isSuperAdmin || managerOpen
-        ? InkWell(
-            onTap: () => _showRosterEditSheet(context, teamId),
-            borderRadius: BorderRadius.circular(8),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.edit_note_rounded, size: 16, color: color),
-                  const SizedBox(width: 3),
-                  Text(
-                    'Esame',
-                    style: TextStyle(
-                      color: color,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
+          );
+        } else if (canEdit) {
+          final filled = !complete;
+          action = SizedBox(
+            height: 36,
+            child: Material(
+              color: filled ? color : Colors.transparent,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(9),
+                side: filled
+                    ? BorderSide.none
+                    : BorderSide(color: color, width: 1.5),
+              ),
+              child: InkWell(
+                onTap: () => _showRosterEditSheet(context, teamId),
+                borderRadius: BorderRadius.circular(9),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.edit_note_rounded,
+                          size: 18,
+                          color: filled ? Colors.white : color,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          rosters.isEmpty
+                              ? 'ESAME GİRİŞİ'
+                              : complete
+                              ? 'ESAMEYİ DÜZENLE'
+                              : 'ESAME GİRİŞİNE DEVAM',
+                          style: TextStyle(
+                            color: filled ? Colors.white : color,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.4,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
+                ),
               ),
             ),
-          )
-        : null;
-    // Paylaşım: yalnızca o takımın sorumlusu ve lig yöneticileri.
-    final session = AppSession.of(context).value;
-    final canShare =
-        session.canManageLeague(widget.match.leagueId) || _managesTeam(teamId);
-    final share = canShare
-        ? IconButton(
-            tooltip: 'Kadroyu paylaş',
-            visualDensity: VisualDensity.compact,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
-            onPressed: () => _shareLineup(teamId),
-            icon: Icon(Icons.ios_share_rounded, size: 20, color: color),
-          )
-        : null;
-    final info = Expanded(
+          );
+        }
+
+        return Container(
+          padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+          decoration: box,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: alignEnd
+                    ? [?share, Expanded(child: label)]
+                    : [Expanded(child: label), ?share],
+              ),
+              if (status != null) ...[
+                const SizedBox(height: 6),
+                Align(
+                  alignment: alignEnd
+                      ? Alignment.centerRight
+                      : Alignment.centerLeft,
+                  child: status,
+                ),
+              ],
+              if (action != null) ...[
+                const SizedBox(height: 6),
+                Column(crossAxisAlignment: cross, children: [action]),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _statusLine(IconData icon, String text, Color color, bool alignEnd) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 13, color: color),
+        const SizedBox(width: 3),
+        Flexible(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: color,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Paylaş: simge + yazı. İlk 11 (sezonun ilk oyuncu sayısı) tamamlanmadan
+  /// soluk görünür; basılınca "Esame girişini tamamlayın" balonu çıkar.
+  Widget _shareButton(
+    Color color,
+    String teamId,
+    bool complete,
+    int starters,
+    int need,
+  ) {
+    final c = complete ? color : Colors.white38;
+    final body = Container(
+      margin: const EdgeInsets.only(left: 4, right: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(
+          color: complete ? color.withValues(alpha: 0.45) : Colors.white12,
+        ),
+      ),
       child: Column(
-        crossAxisAlignment: alignEnd
-            ? CrossAxisAlignment.end
-            : CrossAxisAlignment.start,
-        children: [label, ?edit],
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.ios_share_rounded, size: 15, color: c),
+          Text(
+            'Paylaş',
+            style: TextStyle(
+              color: c,
+              fontSize: 9.5,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ],
       ),
     );
-    return Container(
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
+    if (complete) {
+      return InkWell(
+        onTap: () => _shareLineup(teamId),
+        borderRadius: BorderRadius.circular(7),
+        child: body,
+      );
+    }
+    return Tooltip(
+      triggerMode: TooltipTriggerMode.tap,
+      showDuration: const Duration(seconds: 3),
+      preferBelow: true,
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(10),
       ),
-      child: Row(children: alignEnd ? [?share, info] : [info, ?share]),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      richMessage: TextSpan(
+        style: const TextStyle(
+          color: Color(0xFF0F172A),
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          height: 1.3,
+        ),
+        children: [
+          const TextSpan(
+            text: 'Esame girişini tamamlayın\n',
+            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+          ),
+          TextSpan(
+            text:
+                'Paylaşmak için ilk $need oyuncunun tamamını seçin. '
+                'Şu an $starters / $need.',
+          ),
+        ],
+      ),
+      child: body,
     );
   }
 
@@ -5456,6 +5698,7 @@ Future<void> shareLineupPoster(
           .select('id, name, logo_url, first_color, second_color')
           .inFilter('id', [teamId, opponentId]),
       db.from('leagues').select('name, logo_url').eq('id', m.leagueId),
+      db.from('seasons').select('starting_player_count').eq('id', m.seasonId),
     ]);
     final players = {for (final p in results[0] as List<PlayerModel>) p.id: p};
     final rosters = results[1] as List<MatchRosterModel>;
@@ -5465,10 +5708,23 @@ Future<void> shareLineupPoster(
     final leagueRows = results[3] as List;
     final league = leagueRows.isEmpty ? null : leagueRows.first as Map;
 
+    final seasonRows = results[4] as List;
+    final need = seasonRows.isEmpty
+        ? 11
+        : ((seasonRows.first as Map)['starting_player_count'] as num?)
+                  ?.toInt() ??
+              11;
+
+    // Eksik kadronun afişi çıkmaz (Kadro ve Diziliş sekmesi aynı kural).
     final starters = rosters.where((r) => r.isStarting).toList();
-    if (starters.isEmpty) {
+    if (starters.length < need) {
       messenger.showSnackBar(
-        const SnackBar(content: Text('Önce ilk 11 girilmelidir.')),
+        SnackBar(
+          content: Text(
+            'Esame girişini tamamlayın: ilk $need oyuncunun tamamını seçin '
+            '(şu an ${starters.length} / $need).',
+          ),
+        ),
       );
       return;
     }

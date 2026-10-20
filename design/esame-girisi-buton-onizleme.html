@@ -1,0 +1,158 @@
+<title>Esame Girişi Butonu</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=Barlow:wght@500;600;700;800&display=swap">
+<style>
+/* Layout: uygulamanın koyu zemini; her durum bir telefon kesiti, yan yana */
+:root{
+  --bg:#0B1220; --phone:#0F172A; --line:rgba(255,255,255,.08);
+  --fg:#F1F5F9; --mid:#94A3B8; --dim:#64748B;
+  --home:#E11D48; --away:#38BDF8; --amber:#FBBF24; --green:#22C55E;
+  --display:"Barlow Condensed","Arial Narrow",sans-serif; --body:"Barlow",system-ui,sans-serif;
+  color-scheme:dark;
+}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.45}
+.wrap{max-width:1240px;margin:0 auto;padding-block:28px 60px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1{font-family:var(--display);font-size:32px;margin:0 0 6px;text-wrap:balance}
+.lead{color:var(--mid);max-width:70ch;margin:0 0 26px}
+.row{display:flex;flex-wrap:wrap;gap:22px;align-items:flex-start}
+.opt{flex:1 1 280px;min-width:0;max-width:340px}
+.opt h3{font-size:12.5px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:var(--mid);margin:0 0 10px}
+.opt h3 b{color:var(--green)}
+.opt p{color:var(--mid);font-size:13.5px;margin:10px 0 0}
+.phone{background:var(--phone);border:1px solid var(--line);border-radius:22px;padding:12px;overflow:hidden}
+
+.tabs{display:flex;gap:16px;font-size:12.5px;font-weight:700;color:var(--dim);border-bottom:1px solid var(--line);padding:0 4px 8px;margin-bottom:10px}
+.tabs .on{color:var(--fg);box-shadow:0 10px 0 -8px var(--fg)}
+
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.card{--c:var(--home);border-radius:12px;padding:8px 9px 8px;background:color-mix(in srgb,var(--c) 12%,transparent);border:1px solid color-mix(in srgb,var(--c) 40%,transparent);min-width:0;display:flex;flex-direction:column;gap:6px}
+.card.a{--c:var(--away)}
+.top{display:flex;align-items:flex-start;gap:4px}
+.card.a .top{flex-direction:row-reverse;text-align:right}
+.tn{flex:1;min-width:0;font-weight:800;font-size:13.5px;line-height:1.2}
+
+/* Şu anki küçük öğeler */
+.old-edit{display:flex;gap:3px;align-items:center;color:var(--c);font-size:12px;font-weight:800}
+.card.a .old-edit{justify-content:flex-end}
+.old-share{color:var(--c);font-size:17px;line-height:1;flex:none}
+
+/* Önerilen paylaş: simge + yazı, köşede küçük */
+.share{flex:none;display:flex;flex-direction:column;align-items:center;gap:1px;color:var(--c);font-size:9.5px;font-weight:800;letter-spacing:.3px;padding:2px 4px;border-radius:7px;border:1px solid color-mix(in srgb,var(--c) 35%,transparent)}
+.share i{font-style:normal;font-size:14px;line-height:1}
+.share.off{color:var(--dim);border-color:rgba(255,255,255,.12);opacity:.6}
+.top{position:relative}
+.bubble{position:absolute;right:-2px;top:36px;z-index:2;width:172px;background:#F8FAFC;color:#0F172A;border-radius:10px;padding:8px 10px;font-size:11.5px;font-weight:700;line-height:1.3;box-shadow:0 6px 18px rgba(0,0,0,.45);text-align:left}
+.bubble:before{content:"";position:absolute;right:14px;top:-6px;border:6px solid transparent;border-top:0;border-bottom-color:#F8FAFC}
+.bubble b{display:block;font-size:12.5px;margin-bottom:2px}
+.count{font-size:10.5px;font-weight:800;color:var(--amber)}
+
+/* Önerilen ana buton */
+.warn{display:flex;gap:4px;align-items:center;font-size:10.5px;font-weight:800;color:var(--amber)}
+.card.a .warn{justify-content:flex-end}
+.done{display:flex;gap:4px;align-items:center;font-size:10.5px;font-weight:800;color:var(--green)}
+.card.a .done{justify-content:flex-end}
+.btn{display:flex;align-items:center;justify-content:center;gap:5px;height:36px;border-radius:9px;background:var(--c);color:#fff;font:800 12.5px var(--body);letter-spacing:.4px;border:0;width:100%;box-shadow:0 2px 0 rgba(0,0,0,.35)}
+.btn.out{background:transparent;color:var(--c);border:1.5px solid var(--c);box-shadow:none}
+.lock{display:flex;gap:4px;align-items:center;justify-content:center;height:36px;border-radius:9px;background:rgba(255,255,255,.04);border:1px dashed rgba(255,255,255,.15);color:var(--dim);font-size:11.5px;font-weight:800}
+
+.list{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.list div{display:flex;flex-direction:column;gap:4px}
+.pl{display:flex;gap:6px;align-items:center;font-size:12px;color:#CBD5E1;background:rgba(255,255,255,.03);border-radius:6px;padding:4px 6px}
+.pl b{width:18px;text-align:center;color:var(--amber);font-variant-numeric:tabular-nums;font-size:11.5px}
+.empty{font-size:12px;color:var(--dim);text-align:center;padding:16px 4px;border:1px dashed rgba(255,255,255,.08);border-radius:8px}
+</style>
+
+<div class="wrap">
+  <h1>Esame Girişi Butonu</h1>
+  <p class="lead">Maç detayı, Kadro sekmesi. Örnekte giriş yapan kişi <b>Kartal FK</b>'nın takım sorumlusu. Kendi takımında büyük "Esame Girişi" butonunu ve küçük, yazılı "Paylaş"ı görür. Paylaş, sezonun ilk 11 sayısı (halı sahada 7 ya da 8) kadar oyuncu seçilmeden soluk kalır. Rakip takımın kartında buton çıkmaz.</p>
+
+  <div class="row">
+    <div class="opt">
+      <h3>Şu an</h3>
+      <div class="phone">
+        <div class="tabs"><span>Özet</span><span class="on">Kadro</span><span>Diziliş</span><span>Medya</span></div>
+        <div class="cards">
+          <div class="card"><div class="top"><span class="tn">Kartal FK</span><span class="old-share">⇪</span></div><div class="old-edit">✎ Esame</div></div>
+          <div class="card a"><div class="top"><span class="tn">Maltepe Masterlar</span></div></div>
+        </div>
+        <div class="list"><div><div class="empty">Esame girilmedi</div></div><div><div class="empty">Esame girilmedi</div></div></div>
+      </div>
+      <p>"Esame" yazısı ve paylaş simgesi aynı renkte, aynı boyutta ve yan yana. Kullanıcı ikisini karıştırıyor.</p>
+    </div>
+
+    <div class="opt">
+      <h3><b>Öneri</b> · esame girilmemiş</h3>
+      <div class="phone">
+        <div class="tabs"><span>Özet</span><span class="on">Kadro</span><span>Diziliş</span><span>Medya</span></div>
+        <div class="cards">
+          <div class="card">
+            <div class="top"><span class="tn">Kartal FK</span><span class="share off"><i>⇪</i>Paylaş</span></div>
+            <div class="warn">⚠ Esame girilmedi</div>
+            <button class="btn" type="button">✎ ESAME GİRİŞİ</button>
+          </div>
+          <div class="card a"><div class="top"><span class="tn">Maltepe Masterlar</span></div></div>
+        </div>
+        <div class="list"><div><div class="empty">Esame girilmedi</div></div><div><div class="empty">Esame girilmedi</div></div></div>
+      </div>
+      <p>Ekranda yapılacak asıl iş tek ve büyük bir buton olarak görünür. Paylaş köşede, küçük ve yazılı durur. Esame girilmediği için soluk görünür.</p>
+    </div>
+
+    <div class="opt">
+      <h3><b>Öneri</b> · esame girilmiş</h3>
+      <div class="phone">
+        <div class="tabs"><span>Özet</span><span class="on">Kadro</span><span>Diziliş</span><span>Medya</span></div>
+        <div class="cards">
+          <div class="card">
+            <div class="top"><span class="tn">Kartal FK</span><span class="share"><i>⇪</i>Paylaş</span></div>
+            <div class="done">✓ İlk 11 tamam · 3 yedek</div>
+            <button class="btn out" type="button">✎ ESAMEYİ DÜZENLE</button>
+          </div>
+          <div class="card a"><div class="top"><span class="tn">Maltepe Masterlar</span></div></div>
+        </div>
+        <div class="list">
+          <div><div class="pl"><b>1</b>Mert Aydın</div><div class="pl"><b>4</b>Can Öztürk</div><div class="pl"><b>7</b>Raif Keskin</div><div class="pl"><b>10</b>Emre Şahin</div></div>
+          <div><div class="empty">Esame girilmedi</div></div>
+        </div>
+      </div>
+      <p>Esame kaydedildikten sonra buton içi boş hale gelir ve "Esameyi Düzenle" olur. Yeşil satır işin tamamlandığını gösterir. İlk 11 tamamlandığı için Paylaş artık takım renginde ve açık.</p>
+    </div>
+
+    <div class="opt">
+      <h3><b>Öneri</b> · ilk 11 eksik, Paylaş'a basıldı</h3>
+      <div class="phone">
+        <div class="tabs"><span>Özet</span><span class="on">Kadro</span><span>Diziliş</span><span>Medya</span></div>
+        <div class="cards">
+          <div class="card">
+            <div class="top"><span class="tn">Kartal FK</span><span class="share off"><i>⇪</i>Paylaş</span>
+              <div class="bubble"><b>Esame girişini tamamlayın</b>Paylaşmak için ilk 11'in tamamını seçin. Şu an 7 / 11.</div>
+            </div>
+            <div class="count">İlk 11: 7 / 11</div>
+            <button class="btn" type="button">✎ ESAME GİRİŞİNE DEVAM</button>
+          </div>
+          <div class="card a"><div class="top"><span class="tn">Maltepe Masterlar</span></div></div>
+        </div>
+        <div class="list">
+          <div><div class="pl"><b>1</b>Mert Aydın</div><div class="pl"><b>4</b>Can Öztürk</div><div class="pl"><b>7</b>Raif Keskin</div></div>
+          <div><div class="empty">Esame girilmedi</div></div>
+        </div>
+      </div>
+      <p>İlk 11 sayısı sezonda belirlenen sayıdan gelir; 7'li bir halı saha sezonunda "7 / 7" olur. Soluk Paylaş'a basılınca balon çıkar ve 3 saniye sonra kaybolur. Yedekler bu sayıya dahil değildir.</p>
+    </div>
+
+    <div class="opt">
+      <h3><b>Öneri</b> · esame henüz açılmadı</h3>
+      <div class="phone">
+        <div class="tabs"><span>Özet</span><span class="on">Kadro</span><span>Diziliş</span><span>Medya</span></div>
+        <div class="cards">
+          <div class="card">
+            <div class="top"><span class="tn">Kartal FK</span><span class="share off"><i>⇪</i>Paylaş</span></div>
+            <div class="lock">🔒 Esame 18:00'de açılır</div>
+          </div>
+          <div class="card a"><div class="top"><span class="tn">Maltepe Masterlar</span></div></div>
+        </div>
+        <div class="list"><div><div class="empty">Esame girilmedi</div></div><div><div class="empty">Esame girilmedi</div></div></div>
+      </div>
+      <p>Butonun yerinde kesik çizgili, gri bir kilit kutusu durur. Esame açılınca bu kutunun yerine yeşil buton gelir.</p>
+    </div>
+  </div>
+</div>
