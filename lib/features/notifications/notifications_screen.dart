@@ -142,6 +142,7 @@ class _Tile extends StatelessWidget {
     'approval' => (Icons.rule_folder_outlined, const Color(0xFFF59E0B)),
     'roster' => (Icons.groups_rounded, const Color(0xFF3B82F6)),
     'attend' => (Icons.how_to_reg_rounded, const Color(0xFF14B8A6)),
+    'esame' => (Icons.edit_note_rounded, const Color(0xFFF59E0B)),
     _ => (Icons.notifications_rounded, const Color(0xFF64748B)),
   };
 

@@ -61,8 +61,9 @@ class NotificationRouter {
       case 'live':
       case 'goal':
         if (ref != null) await _openMatch(context, ref);
-      // Katılım Durum Sorgulama: maçın Kadro sekmesi (kart orada).
+      // Katılım Durum Sorgulama ve esame hatırlatması: maçın Kadro sekmesi.
       case 'attend':
+      case 'esame':
         if (ref != null) await _openMatch(context, ref, tab: 1);
       case 'news':
         if (ref != null) await _openNews(context, ref);
