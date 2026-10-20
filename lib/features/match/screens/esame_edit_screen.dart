@@ -1095,8 +1095,14 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
     final full = list.length >= limit;
     final bad = _badJersey;
     final over = {for (final q in _quotaIssues) ...q.ids};
-    // İki kutu aynı yükseklikte: kısa olan boş satırla tamamlanır.
-    final rows = math.max(_startingLimit, _subLimit);
+    // Kutu oyuncu geldikçe uzar: dolu satırlar + bir boş bırakma satırı
+    // (doluysa yok). İki kutu aynı yükseklikte: kısa olan boşlukla tamamlanır.
+    int shown(List<String> l, int lim) => math.min(lim, l.length + 1);
+    final rows = math.max(
+      shown(_starters, _startingLimit),
+      shown(_subs, _subLimit),
+    );
+    final own = shown(list, limit);
     return Container(
       padding: const EdgeInsets.fromLTRB(5, 5, 5, 5),
       decoration: BoxDecoration(
@@ -1133,9 +1139,9 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
             ),
           ),
           for (var i = 0; i < rows; i++)
-            i < limit
+            i < own
                 ? _slot(box, i, list, bad, over)
-                : const SizedBox(height: _slotH),
+                : const SizedBox(height: _slotH + 1),
         ],
       ),
     );
