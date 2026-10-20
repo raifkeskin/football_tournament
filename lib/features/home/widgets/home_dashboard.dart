@@ -1258,6 +1258,8 @@ class _HomeDashboardState extends State<HomeDashboard> {
         // Son dakika haber kartı (mevcut bileşen).
         // Yalnız bu turnuvanın ve kişinin bölgesinin haberleri.
         HomeNewsCard(
+          // Panelin kendi kenar boşluğu var; kart diğerleriyle aynı genişlikte.
+          inset: 0,
           leagueId: widget.league.id,
           regionId: groupFilter == null ? null : d.groupRegionId[groupFilter],
         ),
