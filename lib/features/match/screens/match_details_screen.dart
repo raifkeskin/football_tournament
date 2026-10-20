@@ -3490,6 +3490,40 @@ class _LineupTabState extends State<_LineupTab>
   /// Sezonun ilk oyuncu sayısı (11, halı sahada 7-8); paylaşım için gerekli.
   int _startingCount = 11;
 
+  /// Maçın bölgesinin sorumlusu mu (bölge sorumlusu esameyi maç başladıktan
+  /// sonra da düzenler; admin, kurucu başkan ve gözlemci gibi).
+  bool _regionOwner = false;
+  bool _regionChecked = false;
+
+  bool get _isStaff => widget.isSuperAdmin || _regionOwner;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_regionChecked) return;
+    _regionChecked = true;
+    final session = AppSession.of(context).value;
+    final m = widget.match;
+    final groupId = (m.groupId ?? '').trim();
+    if (widget.isSuperAdmin ||
+        groupId.isEmpty ||
+        session.regionsInSeason(m.seasonId).isEmpty) {
+      return;
+    }
+    Supabase.instance.client
+        .from('groups')
+        .select('region_id')
+        .eq('id', groupId)
+        .maybeSingle()
+        .then((row) {
+          final regionId = row?['region_id']?.toString();
+          if (mounted && session.canManageRegion(m.leagueId, regionId)) {
+            setState(() => _regionOwner = true);
+          }
+        })
+        .catchError((_) {});
+  }
+
   /// Takım başına esame akışı (aynı maç akışından süzülür).
   final Map<String, Stream<List<MatchRosterModel>>> _rosterStreams = {};
 
@@ -3686,7 +3720,7 @@ class _LineupTabState extends State<_LineupTab>
     // maç bitene kadar.
     final m = widget.match;
     final session = AppSession.of(context).value;
-    final managesThis = !widget.isSuperAdmin && _managesTeam(teamId);
+    final managesThis = !_isStaff && _managesTeam(teamId);
     final openAt = _rosterOpenAt(m, _openHours);
     if (managesThis) _scheduleOpen(openAt);
     final managerOpen =
@@ -3696,7 +3730,7 @@ class _LineupTabState extends State<_LineupTab>
         !DateTime.now().toUtc().isBefore(openAt);
     // Maç başladıysa takım sorumlusuna ne kilit ne düzenleme düğmesi.
     final locked = managesThis && _beforeKickoff(m) && !managerOpen;
-    final canEdit = widget.isSuperAdmin || managerOpen;
+    final canEdit = _isStaff || managerOpen;
     // Paylaşım: yalnızca o takımın sorumlusu ve lig yöneticileri.
     final canShare =
         session.canManageLeague(widget.match.leagueId) || _managesTeam(teamId);
