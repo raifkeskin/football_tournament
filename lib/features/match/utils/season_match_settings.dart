@@ -6,6 +6,8 @@ class SeasonMatchSettings {
   const SeasonMatchSettings({
     this.periodMinutes = 45,
     this.tracksGoalMinutes = true,
+    this.aiEsame = true,
+    this.aiClips = true,
   });
 
   /// `seasons.match_period_duration` = TEK DEVRE süresi.
@@ -14,6 +16,10 @@ class SeasonMatchSettings {
   /// `seasons.track_goal_minutes`: false ise (halısaha) olaylar dakikasız
   /// girilir, maç detayında golcü listesi gösterilir, YZ kesitleri kapanır.
   final bool tracksGoalMinutes;
+
+  /// Yapay Zekâ Yönetimi: sezonda esame okuma / gol videosu yakalama açık mı.
+  final bool aiEsame;
+  final bool aiClips;
 
   static final Map<String, Future<SeasonMatchSettings>> _futures = {};
   static final Map<String, SeasonMatchSettings> _cache = {};
@@ -29,7 +35,10 @@ class SeasonMatchSettings {
       try {
         final res = await Supabase.instance.client
             .from('seasons')
-            .select('match_period_duration, track_goal_minutes')
+            .select(
+              'match_period_duration, track_goal_minutes, '
+              'ai_esame_enabled, ai_clips_enabled',
+            )
             .eq('id', sid)
             .limit(1);
         if (res.isEmpty) return const SeasonMatchSettings();
@@ -38,6 +47,8 @@ class SeasonMatchSettings {
         return _cache[sid] = SeasonMatchSettings(
           periodMinutes: m > 0 ? m : 45,
           tracksGoalMinutes: res.first['track_goal_minutes'] != false,
+          aiEsame: res.first['ai_esame_enabled'] != false,
+          aiClips: res.first['ai_clips_enabled'] != false,
         );
       } catch (_) {
         _futures.remove(sid); // hata kalıcı önbelleğe alınmasın

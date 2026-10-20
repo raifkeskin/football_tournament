@@ -13,6 +13,7 @@
 // doğru okudu, Flash ~6 kat ucuz). Zor el yazısında gemini-pro-latest.
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { aiModel, refreshUsdTry, seasonAiEnabled } from "../_shared/ai_settings.ts";
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 const ESAME_MODEL = Deno.env.get("ESAME_MODEL") ?? "gemini-flash-latest";
@@ -112,7 +113,8 @@ Deno.serve(async (req) => {
   if (allowed !== true) return json({ error: "Bu takımın esamesini girme yetkiniz yok." }, 403);
 
   // Model yalnız admin tarafından değiştirilebilir (karşılaştırma testi).
-  let model = ESAME_MODEL;
+  // Model Yapay Zekâ Yönetimi'nden (flash / pro); yoksa ESAME_MODEL.
+  let model = await aiModel(admin, "esame", ESAME_MODEL);
   const wanted = String(body?.model ?? "").trim();
   if (wanted && wanted !== model) {
     const { data: isAdmin } = await userClient.rpc("is_admin");
@@ -126,6 +128,10 @@ Deno.serve(async (req) => {
   const { data: m } = await admin.from("matches")
     .select("season_id, home_team_id, away_team_id").eq("id", matchId).maybeSingle();
   if (!m) return json({ error: "Maç bulunamadı." }, 404);
+  if (!(await seasonAiEnabled(admin, m.season_id, "esame"))) {
+    return json({ error: "Bu sezonda kağıttan okuma kapalı; esameyi elle girin." }, 403);
+  }
+  await refreshUsdTry(admin);
   if (teamId !== m.home_team_id && teamId !== m.away_team_id) {
     return json({ error: "Takım bu maçta oynamıyor." }, 400);
   }
