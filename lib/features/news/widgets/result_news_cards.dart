@@ -27,11 +27,15 @@ class _Team {
       // Uygulamanın her yerindeki kural: "Masterler / Masterlar" eki
       // gösterilmez, "Spor Kulübü" → SK.
       name = shortTeamName((m?['name'] ?? '').toString()),
+      short = (m?['short'] ?? '').toString().trim(),
       logo = (m?['logo'] ?? '').toString().trim(),
       color = m?['color']?.toString();
 
   final String id;
   final String name;
+
+  /// Yönetimde girilen kısa ad (teams.short_name); yoksa boş.
+  final String short;
   final String logo;
   final String? color;
 
@@ -1269,28 +1273,34 @@ class _StripLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget name(_Team t, bool dim, bool end) => Expanded(
-      // Uzun ad alt satıra geçer (en çok iki satır).
-      child: Text(
-        t.name,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        textAlign: end ? TextAlign.right : TextAlign.left,
-        style: TextStyle(
-          color: dim ? const Color(0xFFCBD5E1) : Colors.white,
-          fontSize: 14,
-          height: 1.15,
-          fontWeight: dim ? FontWeight.w700 : FontWeight.w800,
+    // Logo yok; ad iki satıra kadar kelime bütün kalarak iner. 11 harften
+    // uzun kelime sütuna sığmaz: kısa ad varsa o, yoksa yazı 12'ye iner.
+    Widget name(_Team t, bool dim, bool end) {
+      bool tooLong(String s) =>
+          s.split(' ').any((w) => w.characters.length > 11);
+      final long = tooLong(t.name);
+      final text = long && t.short.isNotEmpty ? t.short : t.name;
+      return Expanded(
+        child: Text(
+          text,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          textAlign: end ? TextAlign.right : TextAlign.left,
+          style: TextStyle(
+            color: dim ? const Color(0xFFCBD5E1) : Colors.white,
+            fontSize: long && text == t.name ? 12 : 13,
+            height: 1.15,
+            fontWeight: dim ? FontWeight.w700 : FontWeight.w800,
+          ),
         ),
-      ),
-    );
+      );
+    }
+
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Row(
           children: [
-            _Crest(home, size: 28),
-            const SizedBox(width: 7),
             name(home, homeDim, true),
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 7),
@@ -1313,8 +1323,6 @@ class _StripLayout extends StatelessWidget {
               ),
             ),
             name(away, awayDim, false),
-            const SizedBox(width: 7),
-            _Crest(away, size: 28),
           ],
         ),
         if (caption.isNotEmpty) ...[
