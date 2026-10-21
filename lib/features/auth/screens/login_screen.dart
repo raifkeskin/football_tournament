@@ -16,6 +16,8 @@ import '../widgets/phone_input.dart';
 import '../password_input.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../tournament_request/tournament_request.dart';
+import '../../../core/services/app_settings.dart';
+import '../registration/register_choice_screen.dart';
 
 /// Açılışta "Misafir olarak devam et" seçildi mi (cihazda saklanır).
 class GuestMode {
@@ -290,10 +292,16 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _openRegistration() {
+    // Yeni akış açıksa kayıt türü seçimi, değilse eski kayıt talebi.
+    final next = AppSettings.selfRegistrationEnabled.value;
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        settings: const RouteSettings(name: 'OnlineRegistrationScreen'),
-        builder: (_) => const OnlineRegistrationScreen(),
+        settings: RouteSettings(
+          name: next ? 'RegisterChoiceScreen' : 'OnlineRegistrationScreen',
+        ),
+        builder: (_) => next
+            ? const RegisterChoiceScreen()
+            : const OnlineRegistrationScreen(),
       ),
     );
   }
@@ -395,7 +403,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 10),
                   _WideTile(
                     title: 'Kayıt Ol',
-                    subtitle: 'Hesabın yok mu? Telefonunla hesap aç',
+                    subtitle:
+                        'Futbolcu profili ya da turnuva sorumlusu hesabı aç',
                     icon: Icons.person_add_alt_1_rounded,
                     colors: const [Color(0xFF475569), Color(0xFF1E293B)],
                     onTap: _loading ? null : _openRegistration,

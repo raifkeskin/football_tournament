@@ -20,10 +20,24 @@ class IdentityVerifyScreen extends StatefulWidget {
     super.key,
     this.expectedPlayerId,
     this.expectedName,
+    this.registration = false,
   });
 
   final String? expectedPlayerId;
   final String? expectedName;
+
+  /// Kayıt Ol (giriş yapılmamış): çip okununca profil aranmaz, okunan
+  /// bilgilerle ekran kapanır ([readForRegistration]).
+  final bool registration;
+
+  /// Kayıt Ol akışı: kimlik okunur, çipteki bilgiler döner. Vazgeçilirse null.
+  static Future<IdCardData?> readForRegistration(BuildContext context) =>
+      Navigator.of(context).push<IdCardData>(
+        MaterialPageRoute(
+          settings: const RouteSettings(name: 'IdentityRegisterScreen'),
+          builder: (_) => const IdentityVerifyScreen(registration: true),
+        ),
+      );
 
   static Future<bool?> open(
     BuildContext context, {
@@ -162,6 +176,10 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
         },
       );
       if (!mounted) return;
+      if (widget.registration) {
+        Navigator.of(context).pop(card);
+        return;
+      }
       setState(() {
         _card = card;
         _status = 'Profil aranıyor…';
@@ -238,7 +256,8 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
   @override
   Widget build(BuildContext context) {
     return AdminPageScaffold(
-      title: 'Kimlik Doğrulama',
+      title: widget.registration ? 'Kimliğini Doğrula' : 'Kimlik Doğrulama',
+      bandBack: !widget.registration,
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
