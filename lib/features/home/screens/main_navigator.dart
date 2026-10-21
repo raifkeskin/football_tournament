@@ -24,6 +24,7 @@ import '../../../core/widgets/admin_page.dart';
 import '../../../core/services/error_reporter.dart';
 import '../widgets/feedback_dialog.dart';
 import '../../tournament_request/tournament_request.dart';
+import '../../identity/identity_access.dart';
 import '../../identity/identity_verify_screen.dart';
 import '../../identity/verified_badge.dart';
 
@@ -602,6 +603,7 @@ class _MenuDrawer extends StatelessWidget {
         ActiveTournament.theme,
         LeagueSwitchScope.genericTab,
         AppSettings.tournamentRequestsEnabled,
+        IdentityAccess.changes,
       ]),
       builder: (context, _) {
         final theme = ActiveTournament.theme.value;
@@ -726,7 +728,7 @@ class _MenuDrawer extends StatelessWidget {
                       ),
                     // Kimlik doğrulama: giriş yapan herkes (çip yalnız
                     // uygulamada okunur).
-                    if (loggedIn && !kIsWeb)
+                    if (loggedIn && !kIsWeb && IdentityAccess.visible(session))
                       TextButton.icon(
                         style: TextButton.styleFrom(
                           foregroundColor: kVerifiedBlue,

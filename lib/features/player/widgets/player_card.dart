@@ -15,6 +15,7 @@ import '../../../core/widgets/web_safe_image.dart';
 import '../../../core/utils/string_utils.dart';
 import '../../../core/utils/team_name.dart';
 import '../../../core/widgets/admin_page.dart' show showAdminConfirmDialog;
+import '../../identity/identity_access.dart';
 import '../../identity/identity_service.dart';
 import '../../identity/identity_verify_screen.dart';
 import '../../identity/verified_badge.dart';
@@ -1602,7 +1603,9 @@ class _IdentityMenuState extends State<_IdentityMenu> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_ready) return const SizedBox.shrink();
+    if (!_ready || !IdentityAccess.visibleIn(context)) {
+      return const SizedBox.shrink();
+    }
     final canRead = !_verified && !kIsWeb;
     if (!canRead && !_canUnverify) return const SizedBox.shrink();
     return PopupMenuButton<String>(
@@ -1627,10 +1630,7 @@ class _IdentityMenuState extends State<_IdentityMenu> {
         if (canRead)
           const PopupMenuItem(
             value: 'read',
-            child: Text(
-              'Kimliği okut',
-              style: TextStyle(color: Colors.white),
-            ),
+            child: Text('Kimliği okut', style: TextStyle(color: Colors.white)),
           ),
         if (_canUnverify)
           const PopupMenuItem(
