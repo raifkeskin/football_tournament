@@ -102,13 +102,14 @@ class TournamentRequestIntroScreen extends StatelessWidget {
     (
       Icons.document_scanner_outlined,
       'Kâğıttan Esame',
-      'Kâğıt esamenin fotoğrafını çek, kadro kendiliğinden dolsun',
+      'Kadroyu tek tek eklemeye uğraşma, esamenin fotoğrafını çek; kadro '
+          'otomatik maç detayına eklensin',
     ),
     (
       Icons.live_tv_rounded,
       'Canlı Yayın',
       'Maçın canlı yayını uygulamadan izlenir; maç bitiminde gol '
-          'kesitleri maç detayına eklenir',
+          'kesitleri kısa sürede maç detayına eklenir',
     ),
     (
       Icons.notifications_active_outlined,
@@ -148,7 +149,7 @@ class TournamentRequestIntroScreen extends StatelessWidget {
           const Icon(Icons.emoji_events_rounded, size: 44, color: kRequestGold),
           const SizedBox(height: 10),
           const Text(
-            'Amatör turnuvan artık profesyonel',
+            'Turnuvan artık çok profesyonel',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: Colors.white,

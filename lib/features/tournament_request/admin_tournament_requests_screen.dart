@@ -480,7 +480,7 @@ class _AdminTournamentRequestsScreenState
                               row(
                                 Icons.emoji_events_outlined,
                                 'Oluşturuldu · '
-                                    '${_date(r['converted_at']?.toString())}',
+                                '${_date(r['converted_at']?.toString())}',
                                 leagueName.isEmpty ? '—' : leagueName,
                               ),
                             ],
