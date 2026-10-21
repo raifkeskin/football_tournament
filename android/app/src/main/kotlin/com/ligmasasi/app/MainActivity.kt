@@ -1,9 +1,15 @@
 package com.ligmasasi.app
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -25,6 +31,31 @@ class MainActivity : FlutterActivity() {
             return
         }
         super.onCreate(savedInstanceState)
+        createSoundChannels()
+    }
+
+    // Bildirim sesleri: Android 8+ sesi kanal belirler. send-push bildirim
+    // türüne göre kanalı seçer (gol / maç başladı / devre ve maç sonucu);
+    // diğerleri varsayılan kanalda telefonun sesiyle gelir. Kullanıcı her
+    // kanalın sesini telefon ayarlarından değiştirebilir ya da kapatabilir.
+    private fun createSoundChannels() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val nm = getSystemService(NotificationManager::class.java) ?: return
+        // Ses denemesi sürümünden kalan kanallar.
+        for (i in 1..9) nm.deleteNotificationChannel("ses_deneme_$i")
+        val attrs = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
+        listOf(
+            Triple("lm_gol", "Goller", R.raw.lm_gol),
+            Triple("lm_mac_basladi", "Maç başlangıcı", R.raw.lm_mac_basladi),
+            Triple("lm_mac_sonu", "Devre ve maç sonucu", R.raw.lm_mac_sonu),
+        ).forEach { (id, name, res) ->
+            val ch = NotificationChannel(id, name, NotificationManager.IMPORTANCE_HIGH)
+            ch.setSound(Uri.parse("android.resource://$packageName/$res"), attrs)
+            nm.createNotificationChannel(ch)
+        }
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -46,6 +77,25 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+        // Kimlik doğrulama: NFC kapalıysa telefonun NFC ayarını açar.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "ligmasasi/nfc")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "openSettings" -> result.success(openNfcSettings())
+                    else -> result.notImplemented()
+                }
+            }
+    }
+
+    private fun openNfcSettings(): Boolean {
+        for (action in listOf(Settings.ACTION_NFC_SETTINGS, Settings.ACTION_WIRELESS_SETTINGS)) {
+            try {
+                startActivity(Intent(action))
+                return true
+            } catch (_: ActivityNotFoundException) {
+            }
+        }
+        return false
     }
 
     private fun igInstalled(): Boolean = try {

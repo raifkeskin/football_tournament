@@ -13,6 +13,9 @@ class AppSettings {
   static const _kSmsOtpProvider = 'sms_otp_provider';
   static const _kMatchPhotoLimit = 'match_photo_limit';
   static const _kTournamentRequests = 'tournament_requests_enabled';
+  static const _kSelfRegistration = 'self_registration_enabled';
+  static const _kIdentity = 'identity_verification_enabled';
+  static const _kIdentityUsers = 'identity_verification_users';
 
   /// Gizli turnuva özelliği. Kapalıyken "Turnuva Kodu Gir" ve "Gizli turnuva"
   /// alanları gizlenir; veritabanı da tüm turnuvaları herkese açar.
@@ -37,6 +40,15 @@ class AppSettings {
   /// "Turnuvanı Kur" girişleri herkese açık mı (admin her zaman görür).
   static final tournamentRequestsEnabled = ValueNotifier<bool>(false);
 
+  /// Yeni Kayıt Ol akışı (Futbolcu Profili kimlikle / Turnuva Sorumlusu).
+  /// Kapalıyken eski kayıt talebi akışı kullanılır.
+  static final selfRegistrationEnabled = ValueNotifier<bool>(false);
+
+  /// Kimlik doğrulama herkese açık mı; kapalıyken yalnız admin ve
+  /// [identityVerificationUsers] (deneme hesapları) görür.
+  static final identityVerificationEnabled = ValueNotifier<bool>(false);
+  static final identityVerificationUsers = ValueNotifier<Set<String>>({});
+
   static SupabaseClient get _sb => Supabase.instance.client;
 
   static Future<void> load() async {
@@ -53,6 +65,16 @@ class AppSettings {
           smsOtpTestMode.value = r['value'] != 'iletimerkezi';
         } else if (r['key'] == _kTournamentRequests) {
           tournamentRequestsEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kSelfRegistration) {
+          selfRegistrationEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kIdentity) {
+          identityVerificationEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kIdentityUsers) {
+          final v = r['value'];
+          identityVerificationUsers.value = {
+            if (v is List)
+              for (final x in v) x.toString(),
+          };
         } else if (r['key'] == _kMatchPhotoLimit) {
           final v = r['value'];
           if (v is num && v > 0) matchPhotoLimit.value = v.toInt();
@@ -122,5 +144,15 @@ class AppSettings {
       'updated_at': DateTime.now().toUtc().toIso8601String(),
     });
     tournamentRequestsEnabled.value = enabled;
+  }
+
+  /// Yalnızca admin.
+  static Future<void> setSelfRegistrationEnabled(bool enabled) async {
+    await _sb.from('app_settings').upsert({
+      'key': _kSelfRegistration,
+      'value': enabled,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    });
+    selfRegistrationEnabled.value = enabled;
   }
 }

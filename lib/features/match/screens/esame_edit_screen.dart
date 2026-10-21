@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,6 +10,10 @@ import '../../../core/services/service_locator.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/app_name_band.dart';
+import '../../identity/identity_access.dart';
+import '../../identity/identity_service.dart';
+import '../../identity/identity_verify_screen.dart';
+import '../../identity/verified_badge.dart';
 import '../../player/services/penalty_service.dart';
 import '../../tournament/models/age_rules.dart';
 import '../../tournament/screens/formation_tab.dart';
@@ -76,6 +81,11 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
   Map<String, PlayerPenalty> _penalized = const {};
   AgeRules _ageRules = const AgeRules();
 
+  /// Sezonda onaylı kimlik zorunlu mu; zorunluysa onaysız oyuncu esameye
+  /// eklenemez.
+  bool _requireId = false;
+  Set<String> _verified = const {};
+
   /// -1: Tümü, 0..3: Kaleci / Defans / Orta Saha / Forvet.
   int _tab = -1;
 
@@ -133,7 +143,10 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
         try {
           return await Supabase.instance.client
               .from('seasons')
-              .select('starting_player_count, sub_player_count, age_rules')
+              .select(
+                'starting_player_count, sub_player_count, age_rules, '
+                'require_verified_id',
+              )
               .eq('id', widget.match.seasonId)
               .maybeSingle();
         } catch (_) {
@@ -163,6 +176,7 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
         _startingLimit = sRes?['starting_player_count'] ?? 11;
         _subLimit = sRes?['sub_player_count'] ?? 7;
         _ageRules = AgeRules.fromJson(sRes?['age_rules']);
+        _requireId = sRes?['require_verified_id'] == true;
         _players = [...players]..sort(_compare);
         _byId = {for (final p in _players) p.id: p};
         _penalized = penalties;
@@ -185,8 +199,36 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
         }
         _isLoading = false;
       });
+      _loadVerified();
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _loadVerified() async {
+    // Özellik gizliyken (ve sezon istemiyorsa) tik gösterilmez.
+    if (!_requireId && !IdentityAccess.visibleIn(context)) return;
+    try {
+      final v = await IdentityService.verifiedAmong(_players.map((p) => p.id));
+      if (mounted) setState(() => _verified = v);
+    } catch (_) {}
+  }
+
+  /// Sezon onaylı kimlik istiyor ve oyuncunun kimliği onaylı değil.
+  bool _unverified(String id) => _requireId && !_verified.contains(id);
+
+  /// Esameden "Kimliği okut": doğrulama ekranı açılır, dönünce liste
+  /// yenilenir.
+  Future<void> _verifyPlayer(PlayerModel p) async {
+    await IdentityVerifyScreen.open(
+      context,
+      expectedPlayerId: p.id,
+      expectedName: p.name,
+    );
+    if (!mounted) return;
+    await _loadVerified();
+    if (mounted && _verified.contains(p.id)) {
+      _toast('${p.name} onaylandı; esameye ekleyebilirsiniz.');
     }
   }
 
@@ -394,6 +436,13 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
       );
       return;
     }
+    if (_unverified(id)) {
+      _toast(
+        'Kimliği onaylı değil; bu sezonda esameye eklenemez. Önce '
+        'kimliğini okutun.',
+      );
+      return;
+    }
     final list = box == _Box.starters ? _starters : _subs;
     final limit = box == _Box.starters ? _startingLimit : _subLimit;
     final old = list.indexOf(id);
@@ -464,6 +513,7 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
     );
     if (picks == null || !mounted) return;
     final skipped = <String>[];
+    final unverified = <String>[];
     var overflow = 0;
     setState(() {
       _starters.clear();
@@ -473,6 +523,10 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
         if (!_byId.containsKey(pid) || _selected(pid)) continue;
         if (_penalized[pid] != null) {
           skipped.add(_byId[pid]!.name);
+          continue;
+        }
+        if (_unverified(pid)) {
+          unverified.add(_byId[pid]!.name);
           continue;
         }
         if (pick.starting && _starters.length < _startingLimit) {
@@ -497,6 +551,8 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
       else
         'Esame kağıttan dolduruldu. Kontrol edip Kaydet\'e basın.',
       if (skipped.isNotEmpty) 'Cezalı, eklenmedi: ${skipped.join(', ')}.',
+      if (unverified.isNotEmpty)
+        'Kimliği onaylı değil, eklenmedi: ${unverified.join(', ')}.',
       if (overflow > 0)
         '$overflow oyuncu için İlk 11 ve yedeklerde yer kalmadı.',
     ];
@@ -519,6 +575,18 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
       return false;
     }
     final ids = [..._starters, ..._subs];
+    final notVerified = ids.where(_unverified).toList();
+    if (notVerified.isNotEmpty) {
+      await showAdminInfoDialog(
+        context: context,
+        title: 'Kimliği onaylı olmayan oyuncu',
+        message:
+            'Bu sezonda esameye yalnız kimliği onaylı oyuncular eklenebilir: '
+            '${notVerified.map((id) => _byId[id]?.name ?? '').join(', ')}. '
+            'Kimliklerini okutun ya da esameden çıkarın.',
+      );
+      return false;
+    }
     final used = <String>{};
     for (final id in ids) {
       final n = _jersey[id]?.text.trim() ?? '';
@@ -572,7 +640,11 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
       if (mounted && close) Navigator.pop(context, true);
       return true;
     } catch (e) {
-      if (mounted) _toast('Hata: $e');
+      final msg =
+          e is PostgrestException && e.message.contains('KIMLIK_ONAYSIZ')
+          ? e.message.replaceFirst('KIMLIK_ONAYSIZ: ', '')
+          : 'Hata: $e';
+      if (mounted) _toast(msg);
       return false;
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -1502,6 +1574,7 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
 
   Widget _squadRow(PlayerModel p) {
     final pen = _penalized[p.id];
+    final noId = pen == null && _unverified(p.id);
     final sub = (p.position ?? '').trim();
     final editing = p.id == _editingId;
     final row = Container(
@@ -1520,7 +1593,7 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
       ),
       child: Row(
         children: [
-          pen != null
+          pen != null || noId
               ? const SizedBox(width: 26)
               : Draggable<String>(
                   data: p.id,
@@ -1565,7 +1638,7 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
               style: TextStyle(
                 color: editing
                     ? _gold
-                    : pen != null
+                    : pen != null || noId
                     ? Colors.white38
                     : Colors.white,
                 fontSize: 13,
@@ -1573,10 +1646,23 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
               ),
             ),
           ),
+          if (_verified.contains(p.id))
+            const Padding(
+              padding: EdgeInsets.only(right: 4),
+              child: VerifiedBadge(size: 15),
+            ),
           if (_ageRules.hasMatchLimits && _isQuota(p))
             _tag('KONTENJAN ${AgeRules.birthYearOf(p.birthDate)}', _gold),
           const SizedBox(width: 6),
-          if (pen != null)
+          if (noId)
+            kIsWeb
+                ? _tag('KİMLİK ONAYSIZ', _mid)
+                : _addButton(
+                    'Kimliği okut',
+                    kVerifiedBlue,
+                    () => _verifyPlayer(p),
+                  )
+          else if (pen != null)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
               decoration: BoxDecoration(
@@ -1603,7 +1689,7 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
         ],
       ),
     );
-    if (pen != null) return row;
+    if (pen != null || noId) return row;
     return LongPressDraggable<String>(
       data: p.id,
       feedback: _dragChip(p.name),

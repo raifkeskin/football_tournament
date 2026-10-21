@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -13,6 +14,11 @@ import '../../tournament/screens/formation_tab.dart'
 import '../../../core/widgets/web_safe_image.dart';
 import '../../../core/utils/string_utils.dart';
 import '../../../core/utils/team_name.dart';
+import '../../../core/widgets/admin_page.dart' show showAdminConfirmDialog;
+import '../../identity/identity_access.dart';
+import '../../identity/identity_service.dart';
+import '../../identity/identity_verify_screen.dart';
+import '../../identity/verified_badge.dart';
 
 // Uygulamanın ortak renkleri
 const _bgDark = Color(0xFF0F172A);
@@ -110,6 +116,7 @@ Future<void> showPlayerCard(
             String str(String k) => (r[k] ?? '').toString().trim();
             return PlayerCard(
               playerPhone: key,
+              playerId: str('id'),
               name: [
                 str('name'),
                 str('surname'),
@@ -152,9 +159,13 @@ class PlayerCard extends StatefulWidget {
     required this.weight,
     required this.seasons,
     required this.initialSeasonId,
+    this.playerId = '',
   });
 
   final String playerPhone;
+
+  /// Onay ikonu ve onay menüsü için oyuncu id'si.
+  final String playerId;
   final String name;
   final String number;
   final String photoUrl;
@@ -1051,8 +1062,21 @@ class _PlayerCardState extends State<PlayerCard> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(
-                                name,
+                              Text.rich(
+                                TextSpan(
+                                  text: name,
+                                  children: [
+                                    if (widget.playerId.isNotEmpty)
+                                      WidgetSpan(
+                                        alignment: PlaceholderAlignment.middle,
+                                        child: VerifiedBadgeFor(
+                                          playerId: widget.playerId,
+                                          size: 19,
+                                          leading: 6,
+                                        ),
+                                      ),
+                                  ],
+                                ),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
@@ -1146,10 +1170,20 @@ class _PlayerCardState extends State<PlayerCard> {
         Positioned(
           top: topInset,
           right: 0,
-          child: IconButton(
-            onPressed: () => Navigator.of(context).maybePop(),
-            icon: const Icon(Icons.close_rounded, color: Colors.white70),
-            tooltip: 'Kapat',
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (widget.playerId.isNotEmpty)
+                _IdentityMenu(
+                  playerId: widget.playerId,
+                  playerName: widget.name,
+                ),
+              IconButton(
+                onPressed: () => Navigator.of(context).maybePop(),
+                icon: const Icon(Icons.close_rounded, color: Colors.white70),
+                tooltip: 'Kapat',
+              ),
+            ],
           ),
         ),
       ],
@@ -1489,6 +1523,124 @@ class _StatTotals {
       yellow: yellow + other.yellow,
       red: red + other.red,
       motm: motm + other.motm,
+    );
+  }
+}
+
+/// Oyuncu kartındaki kimlik menüsü: onaylı değilse "Kimliği okut" (giriş
+/// yapan herkes, uygulamada); onaylıysa admin ve kurucu başkana "Onayı
+/// kaldır". Menüde seçenek yoksa görünmez.
+class _IdentityMenu extends StatefulWidget {
+  const _IdentityMenu({required this.playerId, required this.playerName});
+
+  final String playerId;
+  final String playerName;
+
+  @override
+  State<_IdentityMenu> createState() => _IdentityMenuState();
+}
+
+class _IdentityMenuState extends State<_IdentityMenu> {
+  bool _verified = false;
+  bool _canUnverify = false;
+  bool _ready = false;
+
+  bool get _loggedIn {
+    final u = Supabase.instance.client.auth.currentUser;
+    return u != null && !u.isAnonymous;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    IdentityService.changes.addListener(_load);
+    _load();
+  }
+
+  @override
+  void dispose() {
+    IdentityService.changes.removeListener(_load);
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    if (!_loggedIn) return;
+    try {
+      final v = await IdentityService.isVerified(widget.playerId);
+      final can = v && await IdentityService.canUnverify(widget.playerId);
+      if (!mounted) return;
+      setState(() {
+        _verified = v;
+        _canUnverify = can;
+        _ready = true;
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _unverify() async {
+    final ok = await showAdminConfirmDialog(
+      context: context,
+      title: 'Onayı kaldır',
+      message:
+          '${widget.playerName} profilinin kimlik onayı kaldırılsın mı? '
+          'Kimlik yeniden okutulana kadar profil onaysız görünür.',
+      confirmLabel: 'KALDIR',
+      icon: Icons.gpp_bad_outlined,
+    );
+    if (!ok || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await IdentityService.unverify(widget.playerId);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Kimlik onayı kaldırıldı.')),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(IdentityService.errorText(e))),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_ready || !IdentityAccess.visibleIn(context)) {
+      return const SizedBox.shrink();
+    }
+    final canRead = !_verified && !kIsWeb;
+    if (!canRead && !_canUnverify) return const SizedBox.shrink();
+    return PopupMenuButton<String>(
+      tooltip: 'Kimlik',
+      icon: Icon(
+        _verified ? Icons.verified_rounded : Icons.verified_outlined,
+        color: _verified ? kVerifiedBlue : Colors.white70,
+      ),
+      color: const Color(0xFF1E293B),
+      onSelected: (v) {
+        if (v == 'read') {
+          IdentityVerifyScreen.open(
+            context,
+            expectedPlayerId: widget.playerId,
+            expectedName: widget.playerName,
+          );
+        } else if (v == 'unverify') {
+          _unverify();
+        }
+      },
+      itemBuilder: (_) => [
+        if (canRead)
+          const PopupMenuItem(
+            value: 'read',
+            child: Text('Kimliği okut', style: TextStyle(color: Colors.white)),
+          ),
+        if (_canUnverify)
+          const PopupMenuItem(
+            value: 'unverify',
+            child: Text(
+              'Onayı kaldır',
+              style: TextStyle(color: Color(0xFFF87171)),
+            ),
+          ),
+      ],
     );
   }
 }

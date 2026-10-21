@@ -2,11 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../core/services/app_session.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
-import '../../../core/widgets/app_date_picker.dart';
 import '../../../core/widgets/picked_image.dart';
 import '../../../core/widgets/web_safe_image.dart';
+import '../../auth/widgets/phone_input.dart';
+import '../../identity/change_phone_screen.dart';
+import '../../identity/identity_access.dart';
+import '../../identity/identity_service.dart';
 import '../services/player_profile_service.dart';
 
 /// Futbolcunun kendi bilgileri. Değişiklikler turnuva sorumlusu onayına
@@ -38,7 +42,7 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
   );
   late String? _mainPosition = widget.player.mainPosition;
   late String? _subPosition = widget.player.subPosition;
-  late String? _birthDate = widget.player.birthDate;
+  late final String? _birthDate = widget.player.birthDate;
   XFile? _photo;
   bool _busy = false;
   String? _error;
@@ -77,7 +81,6 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
       ProfileField.weight: int.tryParse(_weightController.text.trim()),
       ProfileField.mainPosition: _mainPosition,
       ProfileField.subPosition: _subPosition,
-      ProfileField.birthDate: _birthDate,
     };
     return {
       for (final e in next.entries)
@@ -139,23 +142,6 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
     });
   }
 
-  Future<void> _pickBirthDate() async {
-    final now = DateTime.now();
-    final d = await showAppDatePicker(
-      context: context,
-      title: 'Doğum Tarihi',
-      initialDate: DateTime.tryParse(_birthDate ?? '') ?? DateTime(1990),
-      firstYear: 1940,
-      lastYear: now.year - 10,
-    );
-    if (d == null || !mounted) return;
-    String two(int v) => v.toString().padLeft(2, '0');
-    setState(() {
-      _birthDate = '${d.year}-${two(d.month)}-${two(d.day)}';
-      _error = null;
-    });
-  }
-
   Future<void> _submit() async {
     final changes = _changedFields();
     if (changes.isEmpty && _photo == null) {
@@ -205,6 +191,54 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
     final m = RegExp(r'message: ([^,]+)').firstMatch(s);
     return (m?.group(1) ?? s).replaceFirst('Exception: ', '');
   }
+
+  /// Telefon: onaylı profil numarasını kimliğini yeniden okutarak
+  /// değiştirebilir (kimlik doğrulama açık olanlara).
+  Widget _phoneSection() {
+    final session = AppSession.of(context).value;
+    final phone = normalizePhoneToRaw10(session.phone);
+    if (!IdentityAccess.visible(session)) return const SizedBox.shrink();
+    return FutureBuilder<bool>(
+      future: _verifiedFuture ??= IdentityService.isVerified(widget.player.id),
+      initialData: IdentityService.cached(widget.player.id),
+      builder: (context, snap) {
+        if (snap.data != true) return const SizedBox.shrink();
+        return AdminFormSection(
+          title: 'Telefon',
+          child: AdminFieldGroup(
+            children: [
+              AdminFieldRow(
+                icon: Icons.phone_iphone_rounded,
+                label: 'Giriş numaram',
+                trailing: TextButton(
+                  onPressed: _busy
+                      ? null
+                      : () async {
+                          final changed = await ChangePhoneScreen.open(context);
+                          if (changed == true && mounted) setState(() {});
+                        },
+                  child: const Text(
+                    'Değiştir',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
+                child: Text(
+                  phone.length == 10 ? '0 ${formatPhoneRaw10(phone)}' : '-',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<bool>? _verifiedFuture;
 
   Widget _lockedTrailing(String key, {String? label}) {
     final v = label ?? ProfileField.display(key, _pendingValues[key]);
@@ -354,6 +388,7 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
         children: [
           _photoSection(),
           const SizedBox(height: 22),
+          _phoneSection(),
           AdminFormSection(
             title: 'Fiziksel',
             child: AdminFieldGroup(
@@ -409,35 +444,24 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
                     placeholder: 'Seçin',
                     onTap: _busy ? null : _pickSubPosition,
                   ),
-                _locked(ProfileField.birthDate)
-                    ? AdminFieldRow(
-                        icon: Icons.cake_outlined,
-                        label: 'Doğum Tarihi',
-                        trailing: _lockedTrailing(ProfileField.birthDate),
-                        child: Text(
-                          ProfileField.display(
-                            ProfileField.birthDate,
-                            _birthDate,
-                          ),
-                          style: const TextStyle(
-                            color: Colors.white54,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      )
-                    : AdminSelectRow(
-                        icon: Icons.cake_outlined,
-                        label: 'Doğum Tarihi',
-                        value: _birthDate == null
-                            ? null
-                            : ProfileField.display(
-                                ProfileField.birthDate,
-                                _birthDate,
-                              ),
-                        placeholder: 'Seçin',
-                        onTap: _busy ? null : _pickBirthDate,
-                      ),
+                // Doğum tarihi uygulamadan değiştirilemez (kimlikten gelir).
+                AdminFieldRow(
+                  icon: Icons.cake_outlined,
+                  label: 'Doğum Tarihi',
+                  trailing: const Icon(
+                    Icons.lock_outline_rounded,
+                    color: Colors.white38,
+                    size: 15,
+                  ),
+                  child: Text(
+                    ProfileField.display(ProfileField.birthDate, _birthDate),
+                    style: const TextStyle(
+                      color: Colors.white54,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
               ],
             ),
           ),

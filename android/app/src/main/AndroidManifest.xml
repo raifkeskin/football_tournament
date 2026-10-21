@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!-- Mağaza sürümünde de gerekli (Flutter yalnız debug/profile'a ekler). -->
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Android 13+: telefon bildirimi izni (FCM) -->
@@ -8,7 +9,17 @@
     <!-- Afişi galeriye kaydetme (gal): Android 10 ve üstünde izin gerekmez;
          yalnız eski sürümler için yazma izni. -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        android:maxSdkVersion="29" />
+        android:maxSdkVersion="29" tools:replace="android:maxSdkVersion" />
+    <!-- Kimlik doğrulama: kimlik kartı çipini okuma (normal izin, soru
+         çıkmaz). NFC'siz telefonlarda da uygulama kurulabilir. -->
+    <uses-permission android:name="android.permission.NFC" />
+    <uses-feature android:name="android.hardware.nfc" android:required="false" />
+    <!-- Kimliğin arka yüzü canlı kamerayla okunur (camera eklentisi). Ses
+         kaydı yapılmaz: eklentinin mikrofon izni çıkarılır. Kamerasız
+         cihazlarda da kurulabilir. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" tools:node="remove" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
     <queries>
         <!-- Afişi Instagram'da paylaş (hikâye / gönderi). -->
         <package android:name="com.instagram.android" />

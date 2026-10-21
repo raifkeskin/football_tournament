@@ -299,42 +299,50 @@ class _LoginBand extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.fromLTRB(18, top + 16, 18, 16),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xFF0B3D24), Color(0xFF0F172A)],
+    // Klavye açıkken bant küçülür (arma ve ad yarı boya iner); telefon,
+    // şifre ve giriş düğmesine yer kalır.
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom > 0;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(end: keyboard ? 0 : 1),
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+      builder: (context, t, _) => Container(
+        padding: EdgeInsets.fromLTRB(18, top + 6 + 10 * t, 18, 8 + 8 * t),
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF0B3D24), Color(0xFF0F172A)],
+          ),
         ),
-      ),
-      child: Row(
-        children: [
-          // Zeminsiz arma: çerçeve yok, bandın rengi arkadan görünür.
-          const AppLogo(size: 62),
-          const SizedBox(width: 14),
-          Expanded(
-            // Gizli admin girişi: ada üç kez dokunmak.
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => AppNameBand.onLoginTitleTap?.call(),
-              child: Text(
-                _trUpper(kAppName),
-                maxLines: 1,
-                style: const TextStyle(
-                  fontFamily: 'BarlowCondensed',
-                  fontStyle: FontStyle.italic,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white,
-                  fontSize: 30,
-                  height: 1,
-                  letterSpacing: 0.8,
-                  decoration: TextDecoration.none,
+        child: Row(
+          children: [
+            // Zeminsiz arma: çerçeve yok, bandın rengi arkadan görünür.
+            AppLogo(size: 40 + 22 * t),
+            SizedBox(width: 10 + 4 * t),
+            Expanded(
+              // Gizli admin girişi: ada üç kez dokunmak.
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => AppNameBand.onLoginTitleTap?.call(),
+                child: Text(
+                  _trUpper(kAppName),
+                  maxLines: 1,
+                  style: TextStyle(
+                    fontFamily: 'BarlowCondensed',
+                    fontStyle: FontStyle.italic,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                    fontSize: 22 + 8 * t,
+                    height: 1,
+                    letterSpacing: 0.8,
+                    decoration: TextDecoration.none,
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

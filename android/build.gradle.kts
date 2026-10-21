@@ -29,14 +29,18 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
+// Kotlin hedefi eklentinin Java hedefiyle aynı olmalı (eski eklentiler
+// 1.8 / 11 ile gelir); Java hedefi okunamazsa 17.
 subprojects {
     tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+        val java = project.extensions
+            .findByType<com.android.build.gradle.BaseExtension>()
+            ?.compileOptions?.targetCompatibility?.toString()
         compilerOptions.jvmTarget.set(
-            when (project.name) {
-                "image_gallery_saver2", "image_gallery_saver2_fixed" ->
-                    org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_1_8
-                else ->
-                    org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+            when (java) {
+                "1.8" -> org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_1_8
+                "11" -> org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11
+                else -> org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
             },
         )
     }

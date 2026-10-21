@@ -45,7 +45,15 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Esame kâğıdını okutmak için fotoğrafını çekebilmeniz gerekir.</string>
+	<string>Esame kâğıdını ve kimlik kartının arka yüzünü okutmak için fotoğrafını çekebilmeniz gerekir.</string>
+	<key>NFCReaderUsageDescription</key>
+	<string>Futbolcu profilini onaylamak için kimlik kartının çipi okunur.</string>
+	<key>com.apple.developer.nfc.readersession.iso7816.select-identifiers</key>
+	<array>
+		<string>A0000002471001</string>
+		<string>A0000002472001</string>
+		<string>00000000000000</string>
+	</array>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Paylaşım afişlerini fotoğraflarınıza kaydedebilmek için gerekir.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

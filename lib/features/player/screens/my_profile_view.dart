@@ -1,3 +1,4 @@
+import '../../identity/verified_badge.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/push/push_card.dart';
@@ -429,8 +430,22 @@ class _MyProfileViewState extends State<MyProfileView> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        p.name.isEmpty ? (widget.displayName ?? '-') : p.name,
+                      Text.rich(
+                        TextSpan(
+                          text: p.name.isEmpty
+                              ? (widget.displayName ?? '-')
+                              : p.name,
+                          children: [
+                            WidgetSpan(
+                              alignment: PlaceholderAlignment.middle,
+                              child: VerifiedBadgeFor(
+                                playerId: widget.playerId ?? '',
+                                size: 20,
+                                leading: 6,
+                              ),
+                            ),
+                          ],
+                        ),
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 21,

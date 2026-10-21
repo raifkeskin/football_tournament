@@ -23,7 +23,9 @@ import '../../../core/design_flags.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../../core/services/error_reporter.dart';
 import '../widgets/feedback_dialog.dart';
-import '../../tournament_request/tournament_request.dart';
+import '../../identity/identity_access.dart';
+import '../../identity/identity_verify_screen.dart';
+import '../../identity/verified_badge.dart';
 
 /// Sol yan menü (Drawer) ile ana ekranlar arasında geçiş.
 class MainNavigator extends StatefulWidget {
@@ -600,6 +602,7 @@ class _MenuDrawer extends StatelessWidget {
         ActiveTournament.theme,
         LeagueSwitchScope.genericTab,
         AppSettings.tournamentRequestsEnabled,
+        IdentityAccess.changes,
       ]),
       builder: (context, _) {
         final theme = ActiveTournament.theme.value;
@@ -698,28 +701,23 @@ class _MenuDrawer extends StatelessWidget {
                         ),
                         onPressed: onEnterCode,
                       ),
-                    if (TournamentRequestAccess.visible(session))
+                    // Kimlik doğrulama: giriş yapan herkes (çip yalnız
+                    // uygulamada okunur).
+                    if (loggedIn && !kIsWeb && IdentityAccess.visible(session))
                       TextButton.icon(
                         style: TextButton.styleFrom(
-                          foregroundColor: kRequestGold,
+                          foregroundColor: kVerifiedBlue,
                         ),
-                        icon: const Icon(Icons.emoji_events_rounded, size: 20),
-                        label: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'Turnuvanı Kur',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            SizedBox(width: 6),
-                            _NewBadge(),
-                          ],
+                        icon: const Icon(Icons.verified_rounded, size: 20),
+                        label: const Text(
+                          'Kimlik Doğrulama',
+                          style: TextStyle(fontWeight: FontWeight.bold),
                         ),
                         onPressed: () {
                           final nav = Navigator.of(context);
                           final ctx = nav.context;
                           nav.pop(); // çekmeceyi kapat
-                          TournamentRequestAccess.open(ctx);
+                          IdentityVerifyScreen.open(ctx);
                         },
                       ),
                     TextButton.icon(
@@ -1071,26 +1069,4 @@ class _MenuDrawer extends StatelessWidget {
       onPressed: () => onSelect(MainNavigator.profileTab),
     );
   }
-}
-
-/// Menüdeki yeni özellik etiketi.
-class _NewBadge extends StatelessWidget {
-  const _NewBadge();
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-    decoration: BoxDecoration(
-      color: kRequestGold,
-      borderRadius: BorderRadius.circular(6),
-    ),
-    child: const Text(
-      'Yeni',
-      style: TextStyle(
-        color: Color(0xFF0F172A),
-        fontSize: 10.5,
-        fontWeight: FontWeight.w900,
-      ),
-    ),
-  );
 }

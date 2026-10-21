@@ -67,12 +67,26 @@ async function fcmAccessToken(sa: ServiceAccount): Promise<string> {
 
 /// true: gönderildi; false: belirteç geçersiz (silinmeli). Diğer hatalar
 /// fırlatılır.
+/** Bildirim türüne göre ses: uygulamadaki ses dosyası ve Android kanalı
+ *  (aynı ad). Diğer bildirimler telefonun varsayılan sesiyle gelir. Kanalı
+ *  olmayan eski sürümlerde Android varsayılan kanala, iOS varsayılan sese
+ *  düşer. */
+function soundFor(p: { title: string; tag?: string }): string | null {
+  const tag = p.tag ?? "";
+  if (tag.startsWith("goal-") && p.title === "GOL!") return "lm_gol";
+  if (tag.startsWith("live-") && p.title === "Maç başladı") return "lm_mac_basladi";
+  if (tag.startsWith("result-")) return "lm_mac_sonu";
+  if (tag.startsWith("live-") && p.title === "İlk yarı sonucu") return "lm_mac_sonu";
+  return null;
+}
+
 async function sendFcm(
   sa: ServiceAccount,
   token: string,
   p: { title: string; body: string; url: string; tag?: string },
 ): Promise<boolean> {
   const access = await fcmAccessToken(sa);
+  const sound = soundFor(p);
   const res = await fetch(
     `https://fcm.googleapis.com/v1/projects/${sa.project_id}/messages:send`,
     {
@@ -89,12 +103,16 @@ async function sendFcm(
           android: {
             priority: "high",
             ttl: "86400s",
-            notification: { tag: p.tag ?? undefined, sound: "default" },
+            notification: {
+              tag: p.tag ?? undefined,
+              sound: sound ?? "default",
+              channel_id: sound ?? undefined,
+            },
           },
           // iOS (APNs): ses + aynı etiketli bildirim öncekinin yerine geçer.
           apns: {
             headers: p.tag ? { "apns-collapse-id": p.tag.slice(0, 64) } : {},
-            payload: { aps: { sound: "default" } },
+            payload: { aps: { sound: sound ? `${sound}.wav` : "default" } },
           },
         },
       }),

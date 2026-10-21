@@ -16,6 +16,8 @@ import '../widgets/phone_input.dart';
 import '../password_input.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../tournament_request/tournament_request.dart';
+import '../../../core/services/app_settings.dart';
+import '../registration/register_choice_screen.dart';
 
 /// Açılışta "Misafir olarak devam et" seçildi mi (cihazda saklanır).
 class GuestMode {
@@ -290,10 +292,16 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _openRegistration() {
+    // Yeni akış açıksa kayıt türü seçimi, değilse eski kayıt talebi.
+    final next = AppSettings.selfRegistrationEnabled.value;
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        settings: const RouteSettings(name: 'OnlineRegistrationScreen'),
-        builder: (_) => const OnlineRegistrationScreen(),
+        settings: RouteSettings(
+          name: next ? 'RegisterChoiceScreen' : 'OnlineRegistrationScreen',
+        ),
+        builder: (_) => next
+            ? const RegisterChoiceScreen()
+            : const OnlineRegistrationScreen(),
       ),
     );
   }
@@ -333,222 +341,304 @@ class _LoginScreenState extends State<LoginScreen> {
       fontWeight: FontWeight.w800,
     );
 
+    // Klavyenin açılması bu ekranı yeniden çizsin (gömülü formda iç
+    // Scaffold'a gelen boşluklar kaldırılmış olabilir; asıl değer View'dan).
+    MediaQuery.viewInsetsOf(context);
     return Scaffold(
       backgroundColor: bgDark,
       // Başlık ve menü yok (üstte uygulama bandı var): giriş ekranında
       // hiçbir durumda menü düğmesi gösterilmez.
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 440),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  IntrinsicHeight(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(
-                          child: _RoleTile(
-                            title: 'Saha',
-                            subtitle: 'Futbolcuyum',
-                            icon: Icons.sports_soccer_rounded,
-                            colors: const [
-                              Color(0xFF22C55E),
-                              Color(0xFF0F6B35),
-                            ],
-                            selected: !_staff,
-                            onTap: _loading
-                                ? null
-                                : () => setState(() => _staff = false),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: _RoleTile(
-                            title: 'Kulübe',
-                            subtitle: 'Takım / turnuva sorumlusuyum',
-                            icon: Icons.assignment_ind_rounded,
-                            colors: const [
-                              Color(0xFFF59E0B),
-                              Color(0xFF9A5B06),
-                            ],
-                            selected: _staff,
-                            onTap: _loading
-                                ? null
-                                : () => setState(() => _staff = true),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  _WideTile(
-                    title: 'Tribün',
-                    subtitle: 'Girişe gerek olmadan, tüm turnuvaları takip et',
-                    icon: Icons.stadium_rounded,
-                    colors: const [Color(0xFF1E3A8A), Color(0xFF172554)],
-                    onTap: _loading ? null : _continueAsGuest,
-                  ),
-                  const SizedBox(height: 10),
-                  _WideTile(
-                    title: 'Kayıt Ol',
-                    subtitle: 'Hesabın yok mu? Telefonunla hesap aç',
-                    icon: Icons.person_add_alt_1_rounded,
-                    colors: const [Color(0xFF475569), Color(0xFF1E293B)],
-                    onTap: _loading ? null : _openRegistration,
-                  ),
-                  const SizedBox(height: 22),
-                  Text(
-                    _staff
-                        ? 'Takım, bölge veya turnuva yönettiğin hesabınla gir; '
-                              'yönetim sayfan açılır.'
-                        : 'Takımına kayıtlı telefon numaranla gir; maçların ve '
-                              'istatistiklerin seni bekliyor.',
-                    style: const TextStyle(
-                      color: Color(0xFF94A3B8),
-                      fontSize: 13.5,
-                      height: 1.35,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _phoneController,
-                    textInputAction: TextInputAction.next,
-                    keyboardType: TextInputType.phone,
-                    onEditingComplete: _passwordFocus.requestFocus,
-                    inputFormatters: [PhoneMaskFormatter()],
-                    decoration: _fieldDecoration(
-                      label: 'Telefon Numarası',
-                      icon: Icons.phone_outlined,
-                      prefixText: '0 ',
-                      hintText: '(5XX) XXX XX XX',
-                    ),
-                    style: fieldText,
-                    enabled: !_loading,
-                  ),
-                  const SizedBox(height: 12),
-                  ValueListenableBuilder<bool>(
-                    valueListenable: PasswordKeyboard.numeric,
-                    builder: (context, _, _) => TextField(
-                      controller: _passwordController,
-                      focusNode: _passwordFocus,
-                      obscureText: true,
-                      keyboardType: PasswordKeyboard.type,
-                      onSubmitted: _loading ? null : (_) => _login(session),
-                      decoration:
-                          _fieldDecoration(
-                            label: 'Şifre',
-                            icon: Icons.lock_outline,
-                          ).copyWith(
-                            suffixIcon: PasswordKeyboardToggle(
-                              focus: _passwordFocus,
-                            ),
-                          ),
-                      style: fieldText,
-                      enabled: !_loading,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final keyboard = View.of(context).viewInsets.bottom > 0;
+            final h = constraints.maxHeight;
+            // Kaydırma çıkmasın: kartlar ve aralar ekran yüksekliğine göre
+            // küçülür (~700 tam boy, ~560 en küçük); daha kısa ekranda kart
+            // alt yazıları da gizlenir, yine sığmazsa kaydırılır. Telefon,
+            // şifre ve giriş düğmesi küçülmez.
+            final s = ((h - 560) / 140).clamp(0.0, 1.0);
+            final subtitles = h >= 520;
+            final gap = 6 + 4 * s;
+            // Klavye açıkken: kartlar ince seçiciye döner, Tribün / Kayıt Ol
+            // ve turnuva kartı gizlenir; açıklama yalnız yer varsa kalır.
+            final showInfo = !keyboard || h >= 400;
+            return Center(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  keyboard ? 8 : 10 + 8 * s,
+                  16,
+                  keyboard ? 12 : 16 + 8 * s,
+                ),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 440),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      SizedBox(
-                        width: 36,
-                        height: 36,
-                        child: Checkbox(
-                          value: _rememberMe,
-                          activeColor: _green,
-                          side: BorderSide(
-                            color: Colors.white.withValues(alpha: 0.5),
-                          ),
-                          onChanged: _loading
-                              ? null
-                              : (v) => setState(() => _rememberMe = v ?? false),
+                      IntrinsicHeight(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Expanded(
+                              child: _RoleTile(
+                                title: 'Saha',
+                                subtitle: 'Futbolcuyum',
+                                icon: Icons.sports_soccer_rounded,
+                                colors: const [
+                                  Color(0xFF22C55E),
+                                  Color(0xFF0F6B35),
+                                ],
+                                selected: !_staff,
+                                compact: keyboard,
+                                scale: s,
+                                showSubtitle: subtitles,
+                                onTap: _loading
+                                    ? null
+                                    : () => setState(() => _staff = false),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: _RoleTile(
+                                title: 'Kulübe',
+                                subtitle: 'Turnuva / Takım Sorumlusuyum',
+                                icon: Icons.assignment_ind_rounded,
+                                colors: const [
+                                  Color(0xFFF59E0B),
+                                  Color(0xFF9A5B06),
+                                ],
+                                selected: _staff,
+                                compact: keyboard,
+                                scale: s,
+                                showSubtitle: subtitles,
+                                onTap: _loading
+                                    ? null
+                                    : () => setState(() => _staff = true),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      Text(
-                        'Beni Hatırla',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.8),
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
+                      _Collapse(
+                        visible: !keyboard,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            SizedBox(height: gap),
+                            _WideTile(
+                              title: 'Tribün',
+                              subtitle:
+                                  'Girişe gerek olmadan, tüm turnuvaları takip et',
+                              icon: Icons.stadium_rounded,
+                              colors: const [
+                                Color(0xFF1E3A8A),
+                                Color(0xFF172554),
+                              ],
+                              scale: s,
+                              showSubtitle: subtitles,
+                              onTap: _loading ? null : _continueAsGuest,
+                            ),
+                            SizedBox(height: gap),
+                            _WideTile(
+                              title: 'Kayıt Ol',
+                              subtitle: 'Hesabın yok mu? Telefonunla hesap aç',
+                              icon: Icons.person_add_alt_1_rounded,
+                              colors: const [
+                                Color(0xFF475569),
+                                Color(0xFF1E293B),
+                              ],
+                              scale: s,
+                              showSubtitle: subtitles,
+                              onTap: _loading ? null : _openRegistration,
+                            ),
+                          ],
                         ),
+                      ),
+                      _Collapse(
+                        visible: showInfo,
+                        child: Padding(
+                          padding: EdgeInsets.only(
+                            top: keyboard ? 12 : 12 + 10 * s,
+                          ),
+                          child: Text(
+                            _staff
+                                ? 'Takım, bölge veya turnuva yönettiğin hesabınla gir; '
+                                      'yönetim sayfan açılır.'
+                                : 'Takımına kayıtlı telefon numaranla gir; maçların ve '
+                                      'istatistiklerin seni bekliyor.',
+                            style: const TextStyle(
+                              color: Color(0xFF94A3B8),
+                              fontSize: 13.5,
+                              height: 1.35,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _phoneController,
+                        textInputAction: TextInputAction.next,
+                        keyboardType: TextInputType.phone,
+                        onEditingComplete: _passwordFocus.requestFocus,
+                        inputFormatters: [PhoneMaskFormatter()],
+                        decoration: _fieldDecoration(
+                          label: 'Telefon Numarası',
+                          icon: Icons.phone_outlined,
+                          prefixText: '0 ',
+                          hintText: '(5XX) XXX XX XX',
+                        ),
+                        style: fieldText,
+                        enabled: !_loading,
+                      ),
+                      const SizedBox(height: 12),
+                      ValueListenableBuilder<bool>(
+                        valueListenable: PasswordKeyboard.numeric,
+                        builder: (context, _, _) => TextField(
+                          controller: _passwordController,
+                          focusNode: _passwordFocus,
+                          obscureText: true,
+                          keyboardType: PasswordKeyboard.type,
+                          onSubmitted: _loading ? null : (_) => _login(session),
+                          decoration:
+                              _fieldDecoration(
+                                label: 'Şifre',
+                                icon: Icons.lock_outline,
+                              ).copyWith(
+                                suffixIcon: PasswordKeyboardToggle(
+                                  focus: _passwordFocus,
+                                ),
+                              ),
+                          style: fieldText,
+                          enabled: !_loading,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          SizedBox(
+                            width: 36,
+                            height: 36,
+                            child: Checkbox(
+                              value: _rememberMe,
+                              activeColor: _green,
+                              side: BorderSide(
+                                color: Colors.white.withValues(alpha: 0.5),
+                              ),
+                              onChanged: _loading
+                                  ? null
+                                  : (v) => setState(
+                                      () => _rememberMe = v ?? false,
+                                    ),
+                            ),
+                          ),
+                          Text(
+                            'Beni Hatırla',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.8),
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const Spacer(),
+                          TextButton(
+                            onPressed: _loading
+                                ? null
+                                : () => Navigator.of(context).push(
+                                    MaterialPageRoute<void>(
+                                      settings: const RouteSettings(
+                                        name: 'ForgotPasswordScreen',
+                                      ),
+                                      builder: (_) =>
+                                          const ForgotPasswordScreen(),
+                                    ),
+                                  ),
+                            child: const Text(
+                              'Şifremi Unuttum',
+                              style: TextStyle(
+                                color: Color(0xFF94A3B8),
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                                decoration: TextDecoration.underline,
+                                decorationColor: Color(0xFF94A3B8),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        height: 54,
+                        child: _loading
+                            ? const Center(
+                                child: SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 3,
+                                    color: _green,
+                                  ),
+                                ),
+                              )
+                            : ElevatedButton(
+                                onPressed: () => _login(session),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF16A34A),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  elevation: 0,
+                                ),
+                                child: Text(
+                                  _staff ? 'KULÜBEYE GEÇ' : 'SAHAYA ÇIK',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 16,
+                                    letterSpacing: 1.2,
+                                  ),
+                                ),
+                              ),
+                      ),
+                      _Collapse(
+                        visible: !keyboard,
+                        child: const TournamentRequestLoginCard(),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    height: 54,
-                    child: _loading
-                        ? const Center(
-                            child: SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 3,
-                                color: _green,
-                              ),
-                            ),
-                          )
-                        : ElevatedButton(
-                            onPressed: () => _login(session),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF16A34A),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              elevation: 0,
-                            ),
-                            child: Text(
-                              _staff ? 'KULÜBEYE GEÇ' : 'SAHAYA ÇIK',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w800,
-                                fontSize: 16,
-                                letterSpacing: 1.2,
-                              ),
-                            ),
-                          ),
-                  ),
-                  const SizedBox(height: 14),
-                  Center(
-                    child: TextButton(
-                      onPressed: _loading
-                          ? null
-                          : () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                settings: const RouteSettings(
-                                  name: 'ForgotPasswordScreen',
-                                ),
-                                builder: (_) => const ForgotPasswordScreen(),
-                              ),
-                            ),
-                      child: const Text(
-                        'Şifremi Unuttum',
-                        style: TextStyle(
-                          color: Color(0xFF94A3B8),
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13,
-                          decoration: TextDecoration.underline,
-                          decorationColor: Color(0xFF94A3B8),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const TournamentRequestLoginCard(),
-                ],
+                ),
               ),
-            ),
-          ),
+            );
+          },
         ),
       ),
     );
   }
 }
 
-/// Saha / Kulübe kutusu: seçilince beyaz çerçeve.
+/// Bölümü yumuşakça daraltıp gizler / geri açar (klavye açılınca).
+class _Collapse extends StatelessWidget {
+  const _Collapse({required this.visible, required this.child});
+
+  final bool visible;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedCrossFade(
+      firstChild: child,
+      secondChild: const SizedBox(width: double.infinity),
+      crossFadeState: visible
+          ? CrossFadeState.showFirst
+          : CrossFadeState.showSecond,
+      duration: const Duration(milliseconds: 250),
+      sizeCurve: Curves.easeOut,
+    );
+  }
+}
+
+/// Saha / Kulübe kutusu: seçilince beyaz çerçeve. [compact]: klavye açıkken
+/// ince seçici (simge + ad). [scale] 0..1: ekran yüksekliğine göre boy.
 class _RoleTile extends StatelessWidget {
   const _RoleTile({
     required this.title,
@@ -557,6 +647,9 @@ class _RoleTile extends StatelessWidget {
     required this.colors,
     required this.selected,
     required this.onTap,
+    this.compact = false,
+    this.scale = 1,
+    this.showSubtitle = true,
   });
 
   final String title;
@@ -565,40 +658,65 @@ class _RoleTile extends StatelessWidget {
   final List<Color> colors;
   final bool selected;
   final VoidCallback? onTap;
+  final bool compact;
+  final double scale;
+  final bool showSubtitle;
 
   @override
   Widget build(BuildContext context) {
+    final full = ConstrainedBox(
+      constraints: BoxConstraints(minHeight: 76 + 36 * scale),
+      child: Stack(
+        children: [
+          Positioned(
+            right: -10,
+            top: -10,
+            child: Icon(
+              icon,
+              size: 48 + 16 * scale,
+              color: Colors.white.withValues(alpha: 0.25),
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.fromLTRB(14, 28 + 12 * scale, 14, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                _TileTitle(title, size: 22 + 4 * scale),
+                if (showSubtitle) ...[
+                  const SizedBox(height: 2),
+                  _TileSubtitle(subtitle),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+    final slim = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 20, color: Colors.white.withValues(alpha: 0.9)),
+          const SizedBox(width: 8),
+          _TileTitle(title, size: 20),
+        ],
+      ),
+    );
     return _TileFrame(
       colors: colors,
       selected: selected,
       onTap: onTap,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 112),
-        child: Stack(
-          children: [
-            Positioned(
-              right: -10,
-              top: -10,
-              child: Icon(
-                icon,
-                size: 64,
-                color: Colors.white.withValues(alpha: 0.25),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 40, 14, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  _TileTitle(title, size: 26),
-                  const SizedBox(height: 2),
-                  _TileSubtitle(subtitle),
-                ],
-              ),
-            ),
-          ],
-        ),
+      child: AnimatedCrossFade(
+        firstChild: full,
+        secondChild: slim,
+        crossFadeState: compact
+            ? CrossFadeState.showSecond
+            : CrossFadeState.showFirst,
+        duration: const Duration(milliseconds: 250),
+        sizeCurve: Curves.easeOut,
       ),
     );
   }
@@ -612,6 +730,8 @@ class _WideTile extends StatelessWidget {
     required this.icon,
     required this.colors,
     required this.onTap,
+    this.scale = 1,
+    this.showSubtitle = true,
   });
 
   final String title;
@@ -619,26 +739,35 @@ class _WideTile extends StatelessWidget {
   final IconData icon;
   final List<Color> colors;
   final VoidCallback? onTap;
+  final double scale;
+  final bool showSubtitle;
 
   @override
   Widget build(BuildContext context) {
+    final v = 6 + 4 * scale;
     return _TileFrame(
       colors: colors,
       selected: false,
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+        padding: EdgeInsets.fromLTRB(14, v, 10, v),
         child: Row(
           children: [
-            Icon(icon, color: Colors.white.withValues(alpha: 0.85), size: 28),
+            Icon(
+              icon,
+              color: Colors.white.withValues(alpha: 0.85),
+              size: 24 + 4 * scale,
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _TileTitle(title, size: 22),
-                  const SizedBox(height: 2),
-                  _TileSubtitle(subtitle),
+                  _TileTitle(title, size: 18 + 4 * scale),
+                  if (showSubtitle) ...[
+                    const SizedBox(height: 2),
+                    _TileSubtitle(subtitle),
+                  ],
                 ],
               ),
             ),

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../../../core/constants/app_constants.dart';
 import '../models/season.dart';
 import '../services/interfaces/i_league_service.dart';
@@ -22,6 +23,7 @@ import '../../team/screens/team_squad_screen.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../widgets/league_owners_section.dart';
+import '../../identity/identity_access.dart';
 import 'age_rules_dialog.dart';
 import 'league_format_screen.dart';
 import '../../match/utils/season_match_settings.dart';
@@ -100,6 +102,11 @@ class SeasonManagementScreen extends StatelessWidget {
     final isEdit = season != null;
     final messenger = ScaffoldMessenger.of(context);
     final isAdmin = AppSession.of(context).value.isAdmin;
+    // Kimlik doğrulama gizliyken anahtar yalnız erişimi olana (ya da açık
+    // kalmışsa) görünür.
+    final showIdentity =
+        IdentityAccess.visible(AppSession.of(context).value) ||
+        (season?.requireVerifiedId ?? false);
     // Yaş ve kontenjan kuralları: admin ve kurucu başkan (kayıtlı sezonda).
     final canEditAgeRules =
         isEdit && AppSession.of(context).value.canManageLeague(season.leagueId);
@@ -177,6 +184,7 @@ class SeasonManagementScreen extends StatelessWidget {
     var isDefault = season?.isDefault ?? false;
     var isDoubleRound = season?.isDoubleRound ?? false;
     var trackGoalMinutes = season?.trackGoalMinutes ?? true;
+    var requireVerifiedId = season?.requireVerifiedId ?? false;
     // Lig Formatı kaydedilince satırda onay (popup açıkken alt mesaj
     // görünmüyor).
     var formatSaved = false;
@@ -272,6 +280,7 @@ class SeasonManagementScreen extends StatelessWidget {
         isDefault: isDefault,
         isDoubleRound: isDoubleRound,
         trackGoalMinutes: trackGoalMinutes,
+        requireVerifiedId: requireVerifiedId,
         transferStartDate: transferStartDate,
         transferEndDate: transferEndDate,
         teamsPerGroup: int.tryParse(teamsPerGroupController.text.trim()) ?? 4,
@@ -534,6 +543,18 @@ class SeasonManagementScreen extends StatelessWidget {
                               trackGoalMinutes,
                               (v) => setSheetState(() => trackGoalMinutes = v),
                             ),
+                            if (showIdentity)
+                              switchRow(
+                                Icons.verified_outlined,
+                                'Onaylı Kimlik Zorunlu',
+                                requireVerifiedId
+                                    ? 'Kimliği onaylı olmayan oyuncu esameye '
+                                          'eklenemez'
+                                    : 'Kapalı: kimlik onayı istenmez',
+                                requireVerifiedId,
+                                (v) =>
+                                    setSheetState(() => requireVerifiedId = v),
+                              ),
                           ],
                         ),
                       ),
@@ -1767,12 +1788,7 @@ class _TeamListScreenState extends State<TeamListScreen> {
         : name.isNotEmpty
         ? (Icons.hourglass_top_rounded, _amber)
         : (Icons.person_off_outlined, _muted);
-    // Uzun isimlerde "Takım Sorumlusu" başlığı atlanır.
-    final label = name.isEmpty
-        ? 'Takım sorumlusu yok'
-        : name.length <= 16
-        ? 'Takım Sorumlusu · $name'
-        : name;
+    final label = name.isEmpty ? 'Takım sorumlusu yok' : name;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
