@@ -74,39 +74,54 @@ class TournamentRequestIntroScreen extends StatelessWidget {
   static const _features = <(IconData, String, String)>[
     (
       Icons.account_tree_outlined,
-      'Fikstür ve kura',
-      'lig, grup, eleme; tek ya da çift devre',
+      'Fikstür ve Kura',
+      'Lig, sezon, grup, playoff ve takımlar; tek ya da çift devre',
     ),
-    (Icons.bolt_rounded, 'Canlı skor', 'gol, asist, kart anında herkese'),
+    (
+      Icons.bolt_rounded,
+      'Canlı Skor',
+      'Anlık maç detayı: gol, asist, kart ve canlı yayın takibi',
+    ),
     (
       Icons.leaderboard_outlined,
-      'Puan durumu ve istatistik',
-      'gol krallığı, asist, kart listesi',
+      'Puan Durumu ve İstatistik',
+      'Gol krallığı, asist ve kart listeleri maç bitince güncellenir',
     ),
     (
       Icons.badge_outlined,
-      'Takım ve oyuncu profilleri',
-      'kadro, forma numarası, oyuncu geçmişi',
+      'Takım ve Oyuncu Profilleri',
+      'Kadro, forma numarası, fotoğraf ve oyuncu geçmişi',
     ),
     (
       Icons.fact_check_outlined,
-      'Esame ve kart cezaları',
-      'cezalı oyuncu esamede işaretli',
+      'Esame ve Kart Cezaları',
+      'Maç kadrosu telefondan girilir; cezalı oyuncu esamede işaretli',
+    ),
+    (
+      Icons.document_scanner_outlined,
+      'Kâğıttan Esame',
+      'Kâğıt esamenin fotoğrafını çek; kadro ve ilk 11 kendiliğinden dolsun',
+    ),
+    (
+      Icons.movie_filter_outlined,
+      'Yayından Gol Anları',
+      'Canlı yayın varsa goller, dakikaları ve gol kesitleri yayından '
+          'çıkarılır',
     ),
     (
       Icons.notifications_active_outlined,
-      'Haberler ve bildirimler',
-      'maç günü, gol, sonuç bildirimleri',
+      'Bildirimler ve Haberler',
+      'Maç saati, gol ve sonuç bildirimleri; maç günü ve sonuç haberleri',
     ),
     (
       Icons.campaign_outlined,
-      'Sponsor alanı ve paylaşım görselleri',
-      'maç afişleri, skor kartları',
+      'Sponsor Alanı ve Paylaşım Görselleri',
+      'Sponsor şeridi, maç afişleri ve skor kartları',
     ),
     (
       Icons.groups_outlined,
-      'Roller',
-      'turnuva, bölge ve takım sorumluları kendi işini yapar',
+      'Roller ve Yetkiler',
+      'Turnuva, bölge ve takım sorumluları kendi işini kendisi yapar',
     ),
   ];
 
@@ -131,7 +146,7 @@ class TournamentRequestIntroScreen extends StatelessWidget {
           const Icon(Icons.emoji_events_rounded, size: 44, color: kRequestGold),
           const SizedBox(height: 10),
           const Text(
-            'Turnuvan Lig Masası\'nda canlı yayında olsun',
+            'Turnuvanı tek yerden yönet, herkes canlı takip etsin',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: Colors.white,
@@ -141,8 +156,9 @@ class TournamentRequestIntroScreen extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           const Text(
-            'Oyuncular, takım sorumluları ve izleyiciler her şeyi '
-            'telefondan takip eder.',
+            'Fikstürden canlı skora, esameden cezalara kadar her şey tek '
+            'uygulamada. Oyuncular, takım sorumluları ve izleyiciler her '
+            'şeyi telefondan anında görür.',
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.white70, fontSize: 14),
           ),
@@ -158,7 +174,7 @@ class TournamentRequestIntroScreen extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           AdminFormSection(
-            title: 'Neler var?',
+            title: 'Turnuvanda neler var?',
             child: AdminFieldGroup(
               children: [
                 for (final f in _features)
@@ -174,30 +190,6 @@ class TournamentRequestIntroScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-              ],
-            ),
-          ),
-          const AdminFormSection(
-            title: 'Yapay zekâ',
-            child: AdminFieldGroup(
-              children: [
-                AdminFieldRow(
-                  icon: Icons.document_scanner_outlined,
-                  label: 'Kâğıttan esame',
-                  child: _RowText(
-                    'Kâğıt esamenin fotoğrafını çek; kadro, forma numaraları '
-                    've ilk 11 otomatik dolsun.',
-                  ),
-                ),
-                AdminFieldRow(
-                  icon: Icons.movie_filter_outlined,
-                  label: 'Yayından gol anları',
-                  child: _RowText(
-                    'Maçın canlı yayını varsa maç bitince goller ve '
-                    'dakikaları yayından bulunur, gol kesitleri hazırlanır '
-                    '(yayınlamadan önce sen onaylarsın).',
-                  ),
-                ),
               ],
             ),
           ),
@@ -228,10 +220,59 @@ class TournamentRequestIntroScreen extends StatelessWidget {
               ],
             ),
           ),
+          const _Footnote([
+            'Destek taleplerine çok hızlı dönüş sağlanır.',
+            'Kurulumdan ilk maç gününe kadar adım adım yanındayız.',
+            'Takım ve oyuncu listelerini istersen biz gireriz.',
+          ]),
         ],
       ),
     );
   }
+}
+
+/// Sayfa sonundaki küçük notlar.
+class _Footnote extends StatelessWidget {
+  const _Footnote(this.lines);
+
+  final List<String> lines;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(6, 2, 6, 0),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final l in lines)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(top: 2),
+                  child: Icon(
+                    Icons.check_circle_outline_rounded,
+                    size: 14,
+                    color: kAdminAccent,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    l,
+                    style: const TextStyle(
+                      color: Colors.white60,
+                      fontSize: 12.5,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    ),
+  );
 }
 
 class _Pill extends StatelessWidget {
