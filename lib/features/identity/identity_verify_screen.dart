@@ -92,7 +92,23 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
     _status = null;
   });
 
+  /// Canlı kamera: kart algılanınca kapanır ve çip okumaya geçilir.
   Future<void> _scanBack() async {
+    setState(() => _error = null);
+    final r = await IdCardReader.scanLive(context);
+    if (!mounted || r == null) return;
+    if (r.key != null) {
+      setState(() => _key = r.key);
+      await _readChip();
+    } else if (r.fallback == 'photo') {
+      await _scanPhoto();
+    } else if (r.fallback == 'manual') {
+      await _manualKey();
+    }
+  }
+
+  /// Yedek yol: arka yüzün fotoğrafı çekilir.
+  Future<void> _scanPhoto() async {
     setState(() {
       _error = null;
       _busy = true;
@@ -749,8 +765,8 @@ class _Steps extends StatelessWidget {
         children: [
           step(
             '1',
-            'Kimlik kartının arka yüzünün fotoğrafını çekin '
-                '(alttaki 3 satır net görünsün).',
+            'Kimlik kartının arka yüzünü kameraya gösterin; kart '
+                'kendiliğinden okunur.',
           ),
           step('2', 'Kartı telefonun arkasına yaslayın; çip okunur.'),
           step(

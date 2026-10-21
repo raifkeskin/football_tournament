@@ -1,12 +1,15 @@
 import 'dart:io' show File, Platform;
 
 import 'package:dmrtd/dmrtd.dart';
+import 'package:flutter/material.dart'
+    show BuildContext, MaterialPageRoute, Navigator;
 import 'package:flutter/services.dart';
 import 'package:flutter_nfc_kit/flutter_nfc_kit.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'id_card.dart';
+import 'mrz_scanner_io.dart';
 
 /// Kimlik kartı okuyucu (Android / iOS): arka yüz kamerayla, çip NFC ile.
 /// Kimliğin fotoğrafı yalnız telefonda işlenir ve hemen silinir.
@@ -39,6 +42,22 @@ class IdCardReader {
     } catch (_) {
       return false;
     }
+  }
+
+  /// Canlı kamerayla arka yüz: kart algılanınca kamera kendiliğinden
+  /// kapanır. Dönüş: okunan anahtar, ya da kullanıcının seçtiği yol
+  /// ('photo' / 'manual'); kapatılırsa null.
+  static Future<({IdCardKey? key, String? fallback})?> scanLive(
+    BuildContext context,
+  ) async {
+    final r = await Navigator.of(context).push<MrzScanResult>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => const MrzScannerScreen(),
+      ),
+    );
+    if (r == null) return null;
+    return (key: r.key, fallback: r.fallback);
   }
 
   /// Arka yüzün fotoğrafı çekilir, alttaki 3 satır telefonda okunur.
