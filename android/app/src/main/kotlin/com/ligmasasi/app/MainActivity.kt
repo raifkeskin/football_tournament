@@ -33,32 +33,25 @@ class MainActivity : FlutterActivity() {
         createSoundChannels()
     }
 
-    // Bildirim sesi denemesi: her ses ayrı kanal (Android 8+ sesi kanal
-    // belirler). Seçim yapılınca bu kanallar kalıcı kanallarla değişecek.
+    // Bildirim sesleri: Android 8+ sesi kanal belirler. send-push bildirim
+    // türüne göre kanalı seçer (gol / maç başladı / devre ve maç sonucu);
+    // diğerleri varsayılan kanalda telefonun sesiyle gelir. Kullanıcı her
+    // kanalın sesini telefon ayarlarından değiştirebilir ya da kapatabilir.
     private fun createSoundChannels() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val nm = getSystemService(NotificationManager::class.java) ?: return
+        // Ses denemesi sürümünden kalan kanallar.
+        for (i in 1..9) nm.deleteNotificationChannel("ses_deneme_$i")
         val attrs = AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_NOTIFICATION)
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
             .build()
-        val sounds = listOf(
-            R.raw.ses_deneme_1 to "Ses denemesi 1 · Tek uzun düdük",
-            R.raw.ses_deneme_2 to "Ses denemesi 2 · Kısa düdük",
-            R.raw.ses_deneme_3 to "Ses denemesi 3 · Üç düdük",
-            R.raw.ses_deneme_4 to "Ses denemesi 4 · Stat patlaması",
-            R.raw.ses_deneme_5 to "Ses denemesi 5 · Stat coşkusu",
-            R.raw.ses_deneme_6 to "Ses denemesi 6 · Tribün uğultusu",
-            R.raw.ses_deneme_7 to "Ses denemesi 7 · Kalabalık alkış",
-            R.raw.ses_deneme_8 to "Ses denemesi 8 · Tezahürat",
-            R.raw.ses_deneme_9 to "Ses denemesi 9 · Düdük + stat",
-        )
-        sounds.forEachIndexed { i, (res, name) ->
-            val ch = NotificationChannel(
-                "ses_deneme_${i + 1}",
-                name,
-                NotificationManager.IMPORTANCE_HIGH,
-            )
+        listOf(
+            Triple("lm_gol", "Goller", R.raw.lm_gol),
+            Triple("lm_mac_basladi", "Maç başlangıcı", R.raw.lm_mac_basladi),
+            Triple("lm_mac_sonu", "Devre ve maç sonucu", R.raw.lm_mac_sonu),
+        ).forEach { (id, name, res) ->
+            val ch = NotificationChannel(id, name, NotificationManager.IMPORTANCE_HIGH)
             ch.setSound(Uri.parse("android.resource://$packageName/$res"), attrs)
             nm.createNotificationChannel(ch)
         }
