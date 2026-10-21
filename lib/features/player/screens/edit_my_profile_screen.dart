@@ -4,7 +4,6 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
-import '../../../core/widgets/app_date_picker.dart';
 import '../../../core/widgets/picked_image.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../services/player_profile_service.dart';
@@ -38,7 +37,7 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
   );
   late String? _mainPosition = widget.player.mainPosition;
   late String? _subPosition = widget.player.subPosition;
-  late String? _birthDate = widget.player.birthDate;
+  late final String? _birthDate = widget.player.birthDate;
   XFile? _photo;
   bool _busy = false;
   String? _error;
@@ -77,7 +76,6 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
       ProfileField.weight: int.tryParse(_weightController.text.trim()),
       ProfileField.mainPosition: _mainPosition,
       ProfileField.subPosition: _subPosition,
-      ProfileField.birthDate: _birthDate,
     };
     return {
       for (final e in next.entries)
@@ -135,23 +133,6 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
     if (v == null || !mounted) return;
     setState(() {
       _subPosition = v;
-      _error = null;
-    });
-  }
-
-  Future<void> _pickBirthDate() async {
-    final now = DateTime.now();
-    final d = await showAppDatePicker(
-      context: context,
-      title: 'Doğum Tarihi',
-      initialDate: DateTime.tryParse(_birthDate ?? '') ?? DateTime(1990),
-      firstYear: 1940,
-      lastYear: now.year - 10,
-    );
-    if (d == null || !mounted) return;
-    String two(int v) => v.toString().padLeft(2, '0');
-    setState(() {
-      _birthDate = '${d.year}-${two(d.month)}-${two(d.day)}';
       _error = null;
     });
   }
@@ -409,35 +390,24 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
                     placeholder: 'Seçin',
                     onTap: _busy ? null : _pickSubPosition,
                   ),
-                _locked(ProfileField.birthDate)
-                    ? AdminFieldRow(
-                        icon: Icons.cake_outlined,
-                        label: 'Doğum Tarihi',
-                        trailing: _lockedTrailing(ProfileField.birthDate),
-                        child: Text(
-                          ProfileField.display(
-                            ProfileField.birthDate,
-                            _birthDate,
-                          ),
-                          style: const TextStyle(
-                            color: Colors.white54,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      )
-                    : AdminSelectRow(
-                        icon: Icons.cake_outlined,
-                        label: 'Doğum Tarihi',
-                        value: _birthDate == null
-                            ? null
-                            : ProfileField.display(
-                                ProfileField.birthDate,
-                                _birthDate,
-                              ),
-                        placeholder: 'Seçin',
-                        onTap: _busy ? null : _pickBirthDate,
-                      ),
+                // Doğum tarihi uygulamadan değiştirilemez (kimlikten gelir).
+                AdminFieldRow(
+                  icon: Icons.cake_outlined,
+                  label: 'Doğum Tarihi',
+                  trailing: const Icon(
+                    Icons.lock_outline_rounded,
+                    color: Colors.white38,
+                    size: 15,
+                  ),
+                  child: Text(
+                    ProfileField.display(ProfileField.birthDate, _birthDate),
+                    style: const TextStyle(
+                      color: Colors.white54,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
