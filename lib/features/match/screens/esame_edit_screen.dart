@@ -10,6 +10,7 @@ import '../../../core/services/service_locator.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/app_name_band.dart';
+import '../../identity/identity_access.dart';
 import '../../identity/identity_service.dart';
 import '../../identity/identity_verify_screen.dart';
 import '../../identity/verified_badge.dart';
@@ -205,6 +206,8 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
   }
 
   Future<void> _loadVerified() async {
+    // Özellik gizliyken (ve sezon istemiyorsa) tik gösterilmez.
+    if (!_requireId && !IdentityAccess.visibleIn(context)) return;
     try {
       final v = await IdentityService.verifiedAmong(_players.map((p) => p.id));
       if (mounted) setState(() => _verified = v);
@@ -637,7 +640,8 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
       if (mounted && close) Navigator.pop(context, true);
       return true;
     } catch (e) {
-      final msg = e is PostgrestException && e.message.contains('KIMLIK_ONAYSIZ')
+      final msg =
+          e is PostgrestException && e.message.contains('KIMLIK_ONAYSIZ')
           ? e.message.replaceFirst('KIMLIK_ONAYSIZ: ', '')
           : 'Hata: $e';
       if (mounted) _toast(msg);

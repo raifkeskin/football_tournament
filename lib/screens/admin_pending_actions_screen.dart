@@ -115,7 +115,10 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
     setState(() => _busy = true);
     try {
       if (publish) {
-        await _client.from('news').update({'is_published': true}).eq('id', n.id);
+        await _client
+            .from('news')
+            .update({'is_published': true})
+            .eq('id', n.id);
       } else {
         // Gönderi instagram_seen_media'da kaldığı için tekrar aktarılmaz.
         await _client.from('news').delete().eq('id', n.id);
@@ -1021,12 +1024,7 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              side(
-                c.manual,
-                'Elle girilen',
-                Colors.white24,
-                url: c.manualUrl,
-              ),
+              side(c.manual, 'Elle girilen', Colors.white24, url: c.manualUrl),
               const SizedBox(width: 10),
               side(c.auto, 'Kanalda bulunan', kAdminAccent),
             ],
@@ -1123,8 +1121,11 @@ class _IgNews {
   factory _IgNews.fromMap(Map<String, dynamic> r) {
     final data = r['auto_data'] is Map ? r['auto_data'] as Map : const {};
     final season = r['seasons'] is Map ? r['seasons'] as Map : const {};
-    final league = season['leagues'] is Map ? season['leagues'] as Map : const {};
-    String? text(dynamic v) => (v ?? '').toString().trim().isEmpty ? null : '$v';
+    final league = season['leagues'] is Map
+        ? season['leagues'] as Map
+        : const {};
+    String? text(dynamic v) =>
+        (v ?? '').toString().trim().isEmpty ? null : '$v';
     return _IgNews(
       id: r['id'].toString(),
       content: (r['content'] ?? '').toString(),
