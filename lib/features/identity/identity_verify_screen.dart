@@ -92,14 +92,14 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
     _status = null;
   });
 
-  /// Canlı kamera: kart algılanınca kapanır ve çip okumaya geçilir.
+  /// Canlı kamera: kart algılanınca kapanır; çip okuması butonla başlar.
   Future<void> _scanBack() async {
     setState(() => _error = null);
     final r = await IdCardReader.scanLive(context);
     if (!mounted || r == null) return;
     if (r.key != null) {
+      // Çip okuması kullanıcı ÇİPİ OKU'ya basınca başlar.
       setState(() => _key = r.key);
-      await _readChip();
     } else if (r.fallback == 'photo') {
       await _scanPhoto();
     } else if (r.fallback == 'manual') {
@@ -117,8 +117,6 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
       final key = await IdCardReader.scanBackSide();
       if (!mounted || key == null) return;
       setState(() => _key = key);
-      // Bilgiler tamam: çip okumaya geçilir.
-      await _readChip();
     } on IdCardError catch (e) {
       if (mounted) setState(() => _error = e.message);
     } catch (_) {
@@ -140,7 +138,6 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
       _key = key;
       _error = null;
     });
-    await _readChip();
   }
 
   Future<void> _readChip() async {
@@ -416,6 +413,13 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
                 ),
                 if (_card == null && !_busy) ...[
                   const SizedBox(height: 12),
+                  const Text(
+                    '2. adım: ÇİPİ OKU\'ya basın, ardından kartı telefonun '
+                    'arkasına düz yaslayın.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: kAdminMuted, fontSize: 13),
+                  ),
+                  const SizedBox(height: 10),
                   AdminPrimaryButton(
                     label: 'ÇİPİ OKU',
                     icon: Icons.nfc_rounded,

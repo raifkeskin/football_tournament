@@ -55,7 +55,7 @@ class _MrzScannerScreenState extends State<MrzScannerScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _stop();
+    _stop(rebuild: false);
     _recognizer.close();
     super.dispose();
   }
@@ -118,14 +118,23 @@ class _MrzScannerScreenState extends State<MrzScannerScreen>
     }
   }
 
-  Future<void> _stop() async {
+  /// Önizleme önce ekrandan kaldırılır, sonra kamera kapatılır: kapanmış
+  /// kameraya önizleme çizdirilirse "Disposed CameraController" hatası olur.
+  Future<void> _stop({bool rebuild = true}) async {
     final c = _controller;
-    _controller = null;
     if (c == null) return;
+    if (rebuild && mounted) {
+      setState(() => _controller = null);
+      await WidgetsBinding.instance.endOfFrame;
+    } else {
+      _controller = null;
+    }
     try {
       if (c.value.isStreamingImages) await c.stopImageStream();
     } catch (_) {}
-    await c.dispose();
+    try {
+      await c.dispose();
+    } catch (_) {}
   }
 
   Future<void> _onFrame(CameraImage image) async {
