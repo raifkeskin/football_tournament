@@ -1,8 +1,13 @@
 package com.ligmasasi.app
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
@@ -25,6 +30,38 @@ class MainActivity : FlutterActivity() {
             return
         }
         super.onCreate(savedInstanceState)
+        createSoundChannels()
+    }
+
+    // Bildirim sesi denemesi: her ses ayrı kanal (Android 8+ sesi kanal
+    // belirler). Seçim yapılınca bu kanallar kalıcı kanallarla değişecek.
+    private fun createSoundChannels() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val nm = getSystemService(NotificationManager::class.java) ?: return
+        val attrs = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
+        val sounds = listOf(
+            R.raw.ses_deneme_1 to "Ses denemesi 1 · Tek uzun düdük",
+            R.raw.ses_deneme_2 to "Ses denemesi 2 · Kısa düdük",
+            R.raw.ses_deneme_3 to "Ses denemesi 3 · Üç düdük",
+            R.raw.ses_deneme_4 to "Ses denemesi 4 · Stat patlaması",
+            R.raw.ses_deneme_5 to "Ses denemesi 5 · Stat coşkusu",
+            R.raw.ses_deneme_6 to "Ses denemesi 6 · Tribün uğultusu",
+            R.raw.ses_deneme_7 to "Ses denemesi 7 · Kalabalık alkış",
+            R.raw.ses_deneme_8 to "Ses denemesi 8 · Tezahürat",
+            R.raw.ses_deneme_9 to "Ses denemesi 9 · Düdük + stat",
+        )
+        sounds.forEachIndexed { i, (res, name) ->
+            val ch = NotificationChannel(
+                "ses_deneme_${i + 1}",
+                name,
+                NotificationManager.IMPORTANCE_HIGH,
+            )
+            ch.setSound(Uri.parse("android.resource://$packageName/$res"), attrs)
+            nm.createNotificationChannel(ch)
+        }
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
