@@ -15,6 +15,9 @@ import '../models/match.dart';
 import '../services/match_highlight_service.dart';
 import '../utils/season_match_settings.dart';
 import '../../../core/services/app_session.dart';
+import '../../../core/utils/realtime_signal.dart';
+import '../../../core/utils/resilient_stream.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 String _clock(int sec) {
   final h = sec ~/ 3600;
@@ -90,11 +93,49 @@ class _MatchHighlightsStripState extends State<MatchHighlightsStrip> {
     widget.match.seasonId,
   )?.tracksGoalMinutes;
 
+  /// Yeni biten maçta kesitler (otomatik analiz) maç detayı açıkken gelir:
+  /// `match:<id>` Broadcast konusundan dinlenir. Eski maçlarda kanal açılmaz.
+  StreamSubscription<RowChange>? _live;
+  Timer? _liveDebounce;
+
+  bool get _awaitsClips {
+    final m = widget.match;
+    if (m.status != MatchStatus.finished &&
+        m.status != MatchStatus.live &&
+        m.status != MatchStatus.halftime) {
+      return false;
+    }
+    final at = m.updatedAt ?? DateTime.tryParse((m.matchDate ?? '').trim());
+    return at == null ||
+        DateTime.now().difference(at.toLocal()) < const Duration(hours: 14);
+  }
+
+  void _listenLive() {
+    if (!_awaitsClips) return;
+    _live =
+        resilientStream(
+          () => realtimeRowChanges(
+            Supabase.instance.client,
+            table: 'match_highlights',
+            column: 'match_id',
+            value: widget.match.id,
+          ),
+        ).listen((_) {
+          // Kesitler toplu eklenir: tek okuma, izleyicilere yayılarak.
+          _liveDebounce?.cancel();
+          _liveDebounce = Timer(
+            Duration(milliseconds: 800 + DateTime.now().microsecond % 2500),
+            _load,
+          );
+        }, onError: (_) {});
+  }
+
   @override
   void initState() {
     super.initState();
     MatchHighlightService.changes.addListener(_onChanged);
     _load();
+    _listenLive();
     if (_tracksMinutes == null) {
       SeasonMatchSettings.of(widget.match.seasonId).then((s) {
         if (mounted) setState(() => _tracksMinutes = s.tracksGoalMinutes);
@@ -105,6 +146,8 @@ class _MatchHighlightsStripState extends State<MatchHighlightsStrip> {
   @override
   void dispose() {
     MatchHighlightService.changes.removeListener(_onChanged);
+    _liveDebounce?.cancel();
+    _live?.cancel();
     super.dispose();
   }
 
@@ -423,6 +466,10 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
   String? _playingId;
   final Set<String> _busy = {};
 
+  /// Kaydedilmemiş ±5 sn düzeltmeleri (kesit id → başlangıç, bitiş).
+  /// "Kaydet" ile yayındaki kesite yazılır; önizleme taslak aralıkla oynar.
+  final Map<String, (int, int)> _draft = {};
+
   /// Açılışta veri alınamadıysa yeniden deneme (bağlantı kopukluğu).
   Timer? _retry;
 
@@ -559,13 +606,14 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
   }
 
   void _play(MatchHighlight h) {
+    final (startSec, endSec) = _draft[h.id] ?? (h.startSec, h.endSec);
     final player = _player;
     if (player == null) {
       final created = YoutubePlayerController.fromVideoId(
         videoId: h.videoId,
         autoPlay: true,
-        startSeconds: h.startSec.toDouble(),
-        endSeconds: h.endSec.toDouble(),
+        startSeconds: startSec.toDouble(),
+        endSeconds: endSec.toDouble(),
         params: const YoutubePlayerParams(
           // Android'de YouTube'un kendi tam ekranı WebView'da boş ekran
           // bırakıyor; telefonda tam ekran YoutubePlayerFrame düğmesiyle.
@@ -584,9 +632,30 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
     setState(() => _playingId = h.id);
     player.loadVideoById(
       videoId: h.videoId,
-      startSeconds: h.startSec.toDouble(),
-      endSeconds: h.endSec.toDouble(),
+      startSeconds: startSec.toDouble(),
+      endSeconds: endSec.toDouble(),
     );
+  }
+
+  /// Taslak aralığı değiştirir ve yeni aralığı hemen oynatır.
+  void _nudge(MatchHighlight h, {int startBy = 0, int endBy = 0}) {
+    final (a, b) = _draft[h.id] ?? (h.startSec, h.endSec);
+    final next = (a + startBy, b + endBy);
+    setState(() {
+      if (next == (h.startSec, h.endSec)) {
+        _draft.remove(h.id);
+      } else {
+        _draft[h.id] = next;
+      }
+    });
+    _play(h);
+  }
+
+  Future<void> _saveDraft(MatchHighlight h) async {
+    final d = _draft[h.id];
+    if (d == null) return;
+    await _update(h, startSec: d.$1, endSec: d.$2);
+    if (mounted) setState(() => _draft.remove(h.id));
   }
 
   Future<void> _update(
@@ -896,6 +965,8 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
 
   Widget _card(MatchHighlight h) {
     final busy = _busy.contains(h.id);
+    final (start, end) = _draft[h.id] ?? (h.startSec, h.endSec);
+    final dirty = _draft.containsKey(h.id);
     final team = _teamLabel(h, widget.match, widget.homeName, widget.awayName);
     final conf = switch (h.confidence) {
       'high' => ('Yüksek', kAdminAccent),
@@ -1018,9 +1089,13 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  '${_clock(h.startSec)} – ${_clock(h.endSec)}  '
-                  '(${h.endSec - h.startSec} sn)',
-                  style: const TextStyle(color: kAdminMuted, fontSize: 12),
+                  '${_clock(start)} – ${_clock(end)}  '
+                  '(${end - start} sn)${dirty ? ' · kaydedilmedi' : ''}',
+                  style: TextStyle(
+                    color: dirty ? kAdminAmber : kAdminMuted,
+                    fontSize: 12,
+                    fontWeight: dirty ? FontWeight.w700 : FontWeight.w400,
+                  ),
                 ),
               ),
             ],
@@ -1035,17 +1110,10 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
                 'Başlangıç',
                 style: TextStyle(color: kAdminMuted, fontSize: 12),
               ),
-              nudge(
-                '−5 sn',
-                h.startSec >= 5
-                    ? () => _update(h, startSec: h.startSec - 5)
-                    : null,
-              ),
+              nudge('−5 sn', start >= 5 ? () => _nudge(h, startBy: -5) : null),
               nudge(
                 '+5 sn',
-                h.endSec - h.startSec > 6
-                    ? () => _update(h, startSec: h.startSec + 5)
-                    : null,
+                end - start > 6 ? () => _nudge(h, startBy: 5) : null,
               ),
               const SizedBox(width: 6),
               const Text(
@@ -1054,13 +1122,42 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
               ),
               nudge(
                 '−5 sn',
-                h.endSec - h.startSec > 6
-                    ? () => _update(h, endSec: h.endSec - 5)
-                    : null,
+                end - start > 6 ? () => _nudge(h, endBy: -5) : null,
               ),
-              nudge('+5 sn', () => _update(h, endSec: h.endSec + 5)),
+              nudge('+5 sn', () => _nudge(h, endBy: 5)),
             ],
           ),
+          if (dirty) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: busy
+                        ? null
+                        : () {
+                            setState(() => _draft.remove(h.id));
+                            _play(h);
+                          },
+                    child: const Text('Vazgeç'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: busy ? null : () => _saveDraft(h),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: kAdminAccent,
+                    ),
+                    child: Text(
+                      h.isApproved ? 'Kaydet ve güncelle' : 'Kaydet',
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 10),
           Row(
             children: [

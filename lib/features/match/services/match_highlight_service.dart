@@ -237,8 +237,10 @@ class MatchHighlightService {
       if (description != null)
         'description': description.trim().isEmpty ? null : description.trim(),
       'player_id': ?playerId,
-      if (status != null) ...{
-        'status': status,
+      'status': ?status,
+      // Sorumlunun dokunduğu kesit (onay, düzeltme, kaldırma) YZ yeniden
+      // çalışınca silinmez.
+      if (status != null || startSec != null || endSec != null) ...{
         'reviewed_by': _db.auth.currentUser?.id,
         'reviewed_at': DateTime.now().toUtc().toIso8601String(),
       },

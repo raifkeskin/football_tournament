@@ -42,6 +42,31 @@ const priceAudio = () => (isPro() ? 2.0 : FLASH_AUDIO);
 const priceOutput = () => (isPro() ? 12.0 : FLASH_OUTPUT);
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+const YOUTUBE_API_KEY = Deno.env.get("YOUTUBE_API_KEY") ?? "";
+
+/** YouTube canlı yayını bitti mi? (videos.list, 1 kota birimi)
+ *  "live" / "upcoming": sürüyor ya da başlamadı; "ended": bitti ya da canlı
+ *  yayın değil; "unknown": API yanıt vermedi (analiz denenir). */
+async function youtubeLiveState(videoId: string): Promise<string> {
+  if (!YOUTUBE_API_KEY) return "unknown";
+  try {
+    const res = await fetch(
+      "https://www.googleapis.com/youtube/v3/videos?part=snippet,liveStreamingDetails" +
+        `&id=${encodeURIComponent(videoId)}&key=${YOUTUBE_API_KEY}`,
+    );
+    if (!res.ok) return "unknown";
+    const j = await res.json();
+    const item = j?.items?.[0];
+    if (!item) return "unknown";
+    const lbc = String(item.snippet?.liveBroadcastContent ?? "none");
+    if (lbc === "live" || lbc === "upcoming") return lbc;
+    const details = item.liveStreamingDetails;
+    if (details && details.actualStartTime && !details.actualEndTime) return "live";
+    return "ended";
+  } catch (_) {
+    return "unknown";
+  }
+}
 
 const admin = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
@@ -525,6 +550,8 @@ type RunOpts = {
   secondHalf: number | null;
   limit: number;
   roster: RosterPlayer[];
+  /** Sezon tercihi: kesitler doğrudan yayına girer. */
+  autoPublish: boolean;
 };
 
 /** Tüm gollerin dakikası girilmiş mi? (pencereli tarama yapılabilir) */
@@ -655,15 +682,16 @@ async function run(opts: RunOpts) {
           end_sec: end,
           description: (f.aciklama ?? "").trim() || null,
           confidence: CONFIDENCE[f.guven ?? ""] ?? null,
-          status: "pending",
+          status: opts.autoPublish ? "approved" : "pending",
           source: "ai",
         });
       }
     }
 
-    // Yeniden çalıştırmada eski bekleyen YZ kesitleri silinir (onaylılar kalır).
+    // Yeniden çalıştırmada sorumlunun dokunmadığı eski YZ kesitleri silinir;
+    // onaylanan, düzeltilen ya da kaldırılanlar (reviewed_by dolu) kalır.
     await admin.from("match_highlights").delete()
-      .eq("match_id", matchId).eq("status", "pending").eq("source", "ai");
+      .eq("match_id", matchId).eq("source", "ai").is("reviewed_by", null);
     if (rows.length) {
       const { error } = await admin.from("match_highlights").insert(rows);
       if (error) throw new Error(error.message);
@@ -697,17 +725,31 @@ Deno.serve(async (req) => {
   const userClient = createClient(SUPABASE_URL, ANON_KEY, {
     global: { headers: { Authorization: auth } },
   });
-  const { data: userData } = await userClient.auth.getUser();
-  if (!userData?.user) return json({ error: "Giriş gerekli." }, 401);
-
   const body = await req.json().catch(() => ({}));
   const matchId = String(body?.match_id ?? "").trim();
   if (!matchId) return json({ error: "match_id eksik." }, 400);
   const kickoff = toSec(body?.kickoff_sec);
   const secondHalf = toSec(body?.second_half_sec);
 
-  const { data: allowed } = await userClient.rpc("owns_match", { p_match_id: matchId });
-  if (allowed !== true) return json({ error: "Bu maç için yetkiniz yok." }, 403);
+  // Maç bitince veritabanı (highlights_auto_tick) gizli anahtarla çağırır.
+  const syncGiven = req.headers.get("x-sync-secret") ?? "";
+  let auto = false;
+  if (syncGiven) {
+    const { data: row } = await admin.from("app_private_settings")
+      .select("value").eq("key", "highlights_sync_secret").maybeSingle();
+    if (!row?.value || row.value !== syncGiven) {
+      return json({ error: "Geçersiz anahtar." }, 401);
+    }
+    auto = true;
+  }
+  let userId: string | null = null;
+  if (!auto) {
+    const { data: userData } = await userClient.auth.getUser();
+    if (!userData?.user) return json({ error: "Giriş gerekli." }, 401);
+    userId = userData.user.id;
+    const { data: allowed } = await userClient.rpc("owns_match", { p_match_id: matchId });
+    if (allowed !== true) return json({ error: "Bu maç için yetkiniz yok." }, 403);
+  }
 
   // Aynı maçta süren bir iş varsa (10 dk'dan yeni) yenisi başlatılmaz.
   const { data: job } = await admin.from("match_highlight_jobs")
@@ -725,6 +767,9 @@ Deno.serve(async (req) => {
   if (!(await seasonAiEnabled(admin, m.season_id, "clips"))) {
     return json({ error: "Bu sezonda gol videosu yakalama kapalı." }, 403);
   }
+  const { data: pub } = await admin.from("seasons")
+    .select("ai_clips_auto_publish").eq("id", m.season_id).maybeSingle();
+  const autoPublish = pub?.ai_clips_auto_publish !== false;
   GEMINI_MODEL = await aiModel(admin, "clips", DEFAULT_MODEL);
   await refreshUsdTry(admin);
 
@@ -733,6 +778,30 @@ Deno.serve(async (req) => {
     .order("created_at", { ascending: false });
   const videoId = (links ?? []).map((l) => youtubeId(l.url ?? "")).find((x) => x) ?? null;
   if (!videoId) return json({ error: "Maçın YouTube yayın linki yok." }, 400);
+
+  // Elle başlatmada da yayın sürüyorsa analiz başlamaz (video henüz tamam
+  // değil, deneme boşa gider).
+  if (!auto && (await youtubeLiveState(videoId)) === "live") {
+    return json({
+      error: "YouTube yayını hâlâ sürüyor. Yayın kapandıktan sonra tekrar deneyin.",
+    }, 409);
+  }
+
+  // Otomatik: YouTube yayını hâlâ sürüyorsa beklenir; veritabanı dakikada bir
+  // yeniden sorar. Bittiyse deneme sayılır ve analiz başlar.
+  if (auto) {
+    const state = await youtubeLiveState(videoId);
+    if (state === "live" || state === "upcoming") {
+      return json({ waiting: state }, 202);
+    }
+    const { data: att } = await admin.from("highlights_auto_attempts")
+      .select("tries").eq("match_id", matchId).maybeSingle();
+    await admin.from("highlights_auto_attempts").upsert({
+      match_id: matchId,
+      tries: (att?.tries ?? 0) + 1,
+      called_at: new Date().toISOString(),
+    });
+  }
 
   const [{ data: teams }, { data: season }, { data: events }] = await Promise.all([
     admin.from("teams").select("id, name").in("id", [m.home_team_id, m.away_team_id]),
@@ -782,6 +851,7 @@ Deno.serve(async (req) => {
   const timed = isTimed(goals);
   // Dakikasız maçta tüm video taranır (pahalı): yalnız admin başlatabilir.
   if (!timed) {
+    if (auto) return json({ error: "Dakikasız maç otomatik taranmaz." }, 400);
     const { data: isAdmin } = await userClient.rpc("is_admin");
     if (isAdmin !== true) {
       return json({ error: "Dakikası girilmemiş maçta YZ analizini yalnız admin başlatabilir." }, 403);
@@ -826,7 +896,7 @@ Deno.serve(async (req) => {
     cost_usd: 0,
     kickoff_sec: kickoff,
     second_half_sec: secondHalf,
-    requested_by: userData.user.id,
+    requested_by: userId,
     started_at: new Date().toISOString(),
     finished_at: null,
   });
@@ -843,6 +913,7 @@ Deno.serve(async (req) => {
     secondHalf,
     limit: limits.perMatch,
     roster,
+    autoPublish,
   });
   // deno-lint-ignore no-explicit-any
   const rt = (globalThis as any).EdgeRuntime;
