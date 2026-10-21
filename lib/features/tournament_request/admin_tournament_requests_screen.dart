@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/services/app_session.dart';
 import '../../core/widgets/admin_form.dart';
 import '../../core/widgets/admin_page.dart';
+import 'offer_editor.dart';
 import 'tournament_request.dart';
 
 /// Admin: gelen turnuva talepleri. Durum ve not admin tarafından tutulur;
@@ -142,6 +143,11 @@ class _AdminTournamentRequestsScreenState
     return AdminPageScaffold(
       title: 'Turnuva Talepleri',
       actions: [
+        AdminBarAction(
+          icon: Icons.tune_rounded,
+          tooltip: 'Teklif Ayarları',
+          onPressed: () => showOfferSettings(context),
+        ),
         AdminBarAction(
           icon: Icons.refresh_rounded,
           tooltip: 'Yenile',
@@ -286,6 +292,18 @@ class _AdminTournamentRequestsScreenState
   Future<void> _detail(Map<String, dynamic> r) async {
     final id = r['id'].toString();
     final raw = (r['phone_raw10'] ?? '').toString();
+    var offers = const <Map<String, dynamic>>[];
+    try {
+      final rows = await Supabase.instance.client
+          .from('tournament_offers')
+          .select()
+          .eq('request_id', id)
+          .order('version', ascending: false);
+      offers = List<Map<String, dynamic>>.from(rows);
+    } catch (_) {}
+    if (!mounted) return;
+    final last = offers.isEmpty ? null : offers.first;
+    final token = (r['offer_token'] ?? '').toString();
     final extras = ((r['extras'] as List?) ?? const [])
         .map((e) => _extraNames[e] ?? e.toString())
         .join(', ');
@@ -355,6 +373,67 @@ class _AdminTournamentRequestsScreenState
                 ],
               ),
               const SizedBox(height: 14),
+              AdminFormSection(
+                title: 'Teklif',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (offers.isNotEmpty)
+                      AdminFieldGroup(
+                        children: [
+                          for (final o in offers)
+                            AdminFieldRow(
+                              icon: o['viewed_at'] != null
+                                  ? Icons.mark_email_read_outlined
+                                  : Icons.request_quote_outlined,
+                              label:
+                                  '${o['version'] == 1 ? 'İlk teklif' : 'Revize ${(o['version'] as num) - 1}'}'
+                                  ' · ${_date(o['created_at']?.toString())}'
+                                  '${o['viewed_at'] != null ? ' · görüldü' : ''}',
+                              child: Text(
+                                '${formatTl(num.parse('${o['per_match_price']}'))} / maç'
+                                ' · ${o['match_count']} maç'
+                                ' · ${formatTl(num.parse('${o['total']}'))}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14.5,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    const SizedBox(height: 10),
+                    AdminPrimaryButton(
+                      label: last == null ? 'TEKLİF HAZIRLA' : 'REVİZE ET',
+                      icon: Icons.request_quote_outlined,
+                      onPressed: () async {
+                        final saved = await showOfferEditor(
+                          c,
+                          request: r,
+                          last: last,
+                        );
+                        if (!saved || !c.mounted) return;
+                        Navigator.pop(c);
+                        await _reload();
+                      },
+                    ),
+                    if (token.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      AdminSecondaryButton(
+                        label: 'LİNKİ TEKRAR GÖNDER',
+                        onPressed: () => openOfferWhatsApp(
+                          phoneRaw10: raw,
+                          contactName: (r['contact_name'] ?? '').toString(),
+                          code: (r['code'] ?? '').toString(),
+                          token: token,
+                          revised: offers.length > 1,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
               AdminFieldGroup(
                 children: [
                   row(
