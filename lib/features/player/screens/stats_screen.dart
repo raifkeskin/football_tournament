@@ -16,9 +16,12 @@ import '../../../core/services/app_session.dart';
 /// Bir sezonun oyuncu istatistikleri (gol, asist, maçın oyuncusu, kartlar).
 /// Başlık çubuğu yok; Turnuva Sayfası'nın İstatistik sekmesinde gösterilir.
 class StatsView extends StatefulWidget {
-  const StatsView({super.key, required this.seasonId});
+  const StatsView({super.key, required this.seasonId, this.groupId});
 
   final String seasonId;
+
+  /// Verilirse yalnız bu gruptaki takımların oyuncuları sayılır.
+  final String? groupId;
 
   @override
   State<StatsView> createState() => _StatsViewState();
@@ -28,6 +31,32 @@ class _StatsViewState extends State<StatsView> {
   final IMatchService _matchService = ServiceLocator.matchService;
   final ITeamService _teamService = ServiceLocator.teamService;
   late final Stream<List<Team>> _teamsStream = _teamService.watchAllTeams();
+
+  /// Seçili gruptaki takımlar (grup verilmediyse ya da okunamadıysa null:
+  /// süzme yok).
+  static final Map<String, Set<String>> _groupTeamsCache = {};
+  Set<String>? _groupTeams;
+
+  @override
+  void initState() {
+    super.initState();
+    final g = widget.groupId;
+    if (g == null) return;
+    _groupTeams = _groupTeamsCache[g];
+    Supabase.instance.client
+        .from('season_teams')
+        .select('team_id')
+        .eq('season_id', widget.seasonId)
+        .eq('group_id', g)
+        .then((rows) {
+          final ids = {for (final r in rows) (r['team_id'] ?? '').toString()}
+            ..remove('');
+          if (ids.isEmpty) return;
+          _groupTeamsCache[g] = ids;
+          if (mounted) setState(() => _groupTeams = ids);
+        })
+        .catchError((_) {});
+  }
 
   // İstatistikteki oyuncuların ad + fotoğrafı tek sorguda okunur (önceden
   // her satır ayrı sorgu atıyordu). Aynı oyuncu kümesi için tekrar okunmaz.
@@ -110,8 +139,11 @@ class _StatsViewState extends State<StatsView> {
                 return const Center(child: CircularProgressIndicator());
               }
 
-              // Sadece golü, asisti, ödülü ya da kartı olan oyuncular.
+              // Sadece golü, asisti, ödülü ya da kartı olan oyuncular
+              // (gruplu sezonda seçili grubun takımlarından).
+              final inGroup = _groupTeams;
               final stats = (statsSnap.data ?? const <PlayerStats>[])
+                  .where((s) => inGroup == null || inGroup.contains(s.teamId))
                   .where(
                     (s) =>
                         s.goals > 0 ||

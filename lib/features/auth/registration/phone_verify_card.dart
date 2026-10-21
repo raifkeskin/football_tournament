@@ -28,7 +28,10 @@ class PhoneVerifyController extends ChangeNotifier {
       !PasswordRules.isWeak(password, phone: raw10) &&
       password == password2;
 
-  bool get ready => verified && passwordOk;
+  /// false: şifre adımı yok (ör. telefon değişikliği).
+  bool requirePassword = true;
+
+  bool get ready => verified && (!requirePassword || passwordOk);
 
   /// Sunucu kodu kabul etmediyse (süresi doldu vb.) telefon adımına dönülür.
   void restart() {
@@ -50,6 +53,8 @@ class PhoneVerifyCard extends StatefulWidget {
     required this.kind,
     this.name,
     this.enabled = true,
+    this.send,
+    this.check,
   });
 
   final PhoneVerifyController controller;
@@ -60,6 +65,10 @@ class PhoneVerifyCard extends StatefulWidget {
   /// Adminin bildiriminde görünen ad (test modunda).
   final String Function()? name;
   final bool enabled;
+
+  /// Kod gönderme / denetleme sunucu çağrısı (verilmezse kayıt çağrıları).
+  final Future<String> Function(String raw10)? send;
+  final Future<String> Function(String raw10, String code)? check;
 
   @override
   State<PhoneVerifyCard> createState() => _PhoneVerifyCardState();
@@ -131,11 +140,14 @@ class _PhoneVerifyCardState extends State<PhoneVerifyCard> {
       _error = null;
     });
     try {
-      final r = await RegistrationService.sendCode(
-        raw10: raw10,
-        kind: widget.kind,
-        name: widget.name?.call(),
-      );
+      final send = widget.send;
+      final r = send != null
+          ? await send(raw10)
+          : await RegistrationService.sendCode(
+              raw10: raw10,
+              kind: widget.kind,
+              name: widget.name?.call(),
+            );
       if (!mounted) return;
       if (r == 'sent') {
         _c
@@ -168,18 +180,19 @@ class _PhoneVerifyCardState extends State<PhoneVerifyCard> {
       _error = null;
     });
     try {
-      final r = await RegistrationService.checkCode(
-        raw10: _c.raw10!,
-        code: code,
-      );
+      final check = widget.check;
+      final r = check != null
+          ? await check(_c.raw10!, code)
+          : await RegistrationService.checkCode(raw10: _c.raw10!, code: code);
       if (!mounted) return;
       if (r == 'ok') {
         _c
           ..code = code
           ..verified = true;
+        // Şifre adımı yoksa doğrulama işin kendisidir (ör. numara değişti).
         _timer?.cancel();
         _c._changed();
-        _pass1Focus.requestFocus();
+        if (_c.requirePassword) _pass1Focus.requestFocus();
       } else {
         setState(() => _error = RegistrationService.message(r));
       }
@@ -215,7 +228,8 @@ class _PhoneVerifyCardState extends State<PhoneVerifyCard> {
         children: [
           if (step == 1) ..._phoneStep(),
           if (step == 2) ..._codeStep(raw10!),
-          if (step == 3) ..._passwordStep(raw10!),
+          if (step == 3 && _c.requirePassword) ..._passwordStep(raw10!),
+          if (step == 3 && !_c.requirePassword) _verifiedRow(raw10!),
         ],
       ),
     );
@@ -387,6 +401,24 @@ class _PhoneVerifyCardState extends State<PhoneVerifyCard> {
       ],
     ),
   ];
+
+  Widget _verifiedRow(String raw10) => Padding(
+    padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
+    child: Row(
+      children: [
+        const Icon(Icons.check_circle, color: kAdminAccent, size: 18),
+        const SizedBox(width: 8),
+        Text(
+          '0 ${formatPhoneRaw10(raw10)} doğrulandı',
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+            fontSize: 13.5,
+          ),
+        ),
+      ],
+    ),
+  );
 
   List<Widget> _passwordStep(String raw10) {
     final p1 = _pass1.text.trim();
