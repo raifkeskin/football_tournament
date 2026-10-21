@@ -1,3 +1,4 @@
+import '../../identity/verified_badge.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -2015,6 +2016,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                           ),
                         ),
                       ),
+                      VerifiedBadgeFor(playerId: p.id, size: 15, leading: 4),
                       ?_ageTag(p),
                     ],
                   ),
@@ -3828,6 +3830,7 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
                             ),
                           ),
                         ),
+                        VerifiedBadgeFor(playerId: p.id, size: 16, leading: 4),
                         if (consent != null && !consent.complete) ...[
                           const SizedBox(width: 6),
                           ConsentChip(status: consent),

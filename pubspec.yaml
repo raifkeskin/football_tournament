@@ -61,6 +61,13 @@ dependencies:
   firebase_messaging: ^16.7.0
   web: ^1.1.1
   gal: ^2.3.3
+  # Kimlik doğrulama: kimlik kartı çipi (ICAO 9303, BAC) ve arka yüz okuma.
+  flutter_nfc_kit: ^3.7.0
+  dmrtd:
+    git:
+      url: https://github.com/ZeroPass/dmrtd.git
+      ref: 3b6c091843573b275ae68a87335e1872f8b60ea0
+  google_mlkit_text_recognition: ^0.17.1
 dev_dependencies:
   flutter_test:
     sdk: flutter
