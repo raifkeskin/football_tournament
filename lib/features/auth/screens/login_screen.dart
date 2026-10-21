@@ -369,7 +369,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         Expanded(
                           child: _RoleTile(
                             title: 'Kulübe',
-                            subtitle: 'Takım / turnuva sorumlusuyum',
+                            subtitle: 'Turnuva / Takım Sorumlusuyum',
                             icon: Icons.assignment_ind_rounded,
                             colors: const [
                               Color(0xFFF59E0B),
@@ -476,6 +476,29 @@ class _LoginScreenState extends State<LoginScreen> {
                           fontSize: 13,
                         ),
                       ),
+                      const Spacer(),
+                      TextButton(
+                        onPressed: _loading
+                            ? null
+                            : () => Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  settings: const RouteSettings(
+                                    name: 'ForgotPasswordScreen',
+                                  ),
+                                  builder: (_) => const ForgotPasswordScreen(),
+                                ),
+                              ),
+                        child: const Text(
+                          'Şifremi Unuttum',
+                          style: TextStyle(
+                            color: Color(0xFF94A3B8),
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                            decoration: TextDecoration.underline,
+                            decorationColor: Color(0xFF94A3B8),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -511,31 +534,6 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ),
                           ),
-                  ),
-                  const SizedBox(height: 14),
-                  Center(
-                    child: TextButton(
-                      onPressed: _loading
-                          ? null
-                          : () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                settings: const RouteSettings(
-                                  name: 'ForgotPasswordScreen',
-                                ),
-                                builder: (_) => const ForgotPasswordScreen(),
-                              ),
-                            ),
-                      child: const Text(
-                        'Şifremi Unuttum',
-                        style: TextStyle(
-                          color: Color(0xFF94A3B8),
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13,
-                          decoration: TextDecoration.underline,
-                          decorationColor: Color(0xFF94A3B8),
-                        ),
-                      ),
-                    ),
                   ),
                   const TournamentRequestLoginCard(),
                 ],
