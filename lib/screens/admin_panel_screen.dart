@@ -323,6 +323,18 @@ class AdminPanelWidget extends StatelessWidget {
                     offText: 'Kapalı · yalnız admin görür',
                   ),
                   const SizedBox(height: 8),
+                  _SettingSwitch(
+                    setting: AppSettings.selfRegistrationEnabled,
+                    save: AppSettings.setSelfRegistrationEnabled,
+                    title: 'Yeni Kayıt Akışı',
+                    onIcon: Icons.how_to_reg_rounded,
+                    offIcon: Icons.person_add_alt_1_outlined,
+                    onText:
+                        'Açık · Kayıt Ol: Futbolcu Profili (kimlikle) ya da '
+                        'Turnuva Sorumlusu; kod SMS Test Modu\'na göre gider',
+                    offText: 'Kapalı · eski kayıt talebi akışı',
+                  ),
+                  const SizedBox(height: 8),
                   const _PhotoLimitSetting(),
                   const SizedBox(height: 8),
                   _SettingSwitch(
