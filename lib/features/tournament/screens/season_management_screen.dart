@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../../../core/constants/app_constants.dart';
 import '../models/season.dart';
 import '../services/interfaces/i_league_service.dart';
@@ -1767,12 +1768,7 @@ class _TeamListScreenState extends State<TeamListScreen> {
         : name.isNotEmpty
         ? (Icons.hourglass_top_rounded, _amber)
         : (Icons.person_off_outlined, _muted);
-    // Uzun isimlerde "Takım Sorumlusu" başlığı atlanır.
-    final label = name.isEmpty
-        ? 'Takım sorumlusu yok'
-        : name.length <= 16
-        ? 'Takım Sorumlusu · $name'
-        : name;
+    final label = name.isEmpty ? 'Takım sorumlusu yok' : name;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

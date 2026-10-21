@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+
 import 'package:excel/excel.dart' hide Border;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -10,11 +11,13 @@ import '../../tournament/models/age_rules.dart';
 import '../../auth/widgets/phone_input.dart';
 import '../../player/consent/consent_service.dart';
 import '../../player/consent/consent_widgets.dart';
+
 import 'package:flutter/services.dart';
 import 'package:football_tournament/core/widgets/custom_bottom_sheet_dropdown.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+
 import '../../tournament/models/league.dart';
 import '../../tournament/services/interfaces/i_league_service.dart';
 import '../../match/models/match.dart';
@@ -32,15 +35,19 @@ import '../../../core/widgets/app_date_picker.dart';
 import '../../../core/widgets/tc_masked_field.dart';
 import '../../../core/widgets/app_name_band.dart';
 import '../../../core/widgets/web_safe_image.dart';
+
 import 'package:football_tournament/core/widgets/picked_image.dart';
 import 'package:football_tournament/core/widgets/admin_form.dart';
+
 import '../../../core/utils/string_utils.dart';
 import '../../share/poster_share.dart';
 import '../../share/squad_poster.dart';
 import '../../../core/utils/team_colors.dart';
 import '../widgets/team_page_tabs.dart';
 import '../../admin/services/approval_service.dart';
+
 import 'package:supabase_flutter/supabase_flutter.dart' show Supabase;
+
 import '../../../core/utils/reveal_search.dart';
 
 class TeamSquadScreen extends StatefulWidget {
@@ -723,17 +730,22 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
   int _tab = 0;
   String? _selectedPosition;
 
-  /// Takım renkleri (üst bandın zemini); bir kez okunur.
-  late final Future<(String?, String?)> _teamColors = () async {
+  /// Takım renkleri (üst bandın zemini) ve takım sorumlusunun adı; bir kez
+  /// okunur.
+  late final Future<(String?, String?, String?)> _teamColors = () async {
     try {
       final r = await Supabase.instance.client
           .from('teams')
-          .select('first_color, second_color')
+          .select('first_color, second_color, manager_name')
           .eq('id', widget.teamId)
           .maybeSingle();
-      return (r?['first_color'] as String?, r?['second_color'] as String?);
+      return (
+        r?['first_color'] as String?,
+        r?['second_color'] as String?,
+        r?['manager_name'] as String?,
+      );
     } catch (_) {
-      return (null, null);
+      return (null, null, null);
     }
   }();
   List<League> _teamTournaments = [];
@@ -1710,7 +1722,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                                   canAdd ? 150 : 72,
                                 ),
                                 children: [
-                                  FutureBuilder<(String?, String?)>(
+                                  FutureBuilder<(String?, String?, String?)>(
                                     future: _teamColors,
                                     builder: (context, colorSnap) =>
                                         _SquadSummaryCard(
@@ -1721,6 +1733,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                                               widget.initialSecondColor ??
                                               colorSnap.data?.$2,
                                           teamName: titleTeam,
+                                          managerName: colorSnap.data?.$3 ?? '',
                                           logoUrl: widget.teamLogoUrl,
                                           subtitle: _tournamentNameById(
                                             effectiveTournamentId,
@@ -3974,6 +3987,7 @@ class _SquadSection extends StatelessWidget {
 class _SquadSummaryCard extends StatelessWidget {
   const _SquadSummaryCard({
     required this.teamName,
+    required this.managerName,
     required this.logoUrl,
     required this.subtitle,
     required this.players,
@@ -3999,6 +4013,9 @@ class _SquadSummaryCard extends StatelessWidget {
   }
 
   final String teamName;
+
+  /// teams.manager_name; boşsa satır gösterilmez.
+  final String managerName;
   final String logoUrl;
   final String subtitle;
   final List<PlayerModel> players;
@@ -4157,6 +4174,20 @@ class _SquadSummaryCard extends StatelessWidget {
                           _stat(avgAge, 'Ort. yaş'),
                         ],
                       ),
+                      if (managerName.trim().isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Takım Sorumlusu • ${managerName.trim()}',
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.85),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
