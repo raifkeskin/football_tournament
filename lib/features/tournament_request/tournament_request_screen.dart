@@ -178,6 +178,30 @@ class TournamentRequestIntroScreen extends StatelessWidget {
             ),
           ),
           const AdminFormSection(
+            title: 'Yapay zekâ',
+            child: AdminFieldGroup(
+              children: [
+                AdminFieldRow(
+                  icon: Icons.document_scanner_outlined,
+                  label: 'Kâğıttan esame',
+                  child: _RowText(
+                    'Kâğıt esamenin fotoğrafını çek; kadro, forma numaraları '
+                    've ilk 11 otomatik dolsun.',
+                  ),
+                ),
+                AdminFieldRow(
+                  icon: Icons.movie_filter_outlined,
+                  label: 'Yayından gol anları',
+                  child: _RowText(
+                    'Maçın canlı yayını varsa maç bitince goller ve '
+                    'dakikaları yayından bulunur, gol kesitleri hazırlanır '
+                    '(yayınlamadan önce sen onaylarsın).',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const AdminFormSection(
             title: 'Nasıl işliyor?',
             child: AdminFieldGroup(
               children: [
