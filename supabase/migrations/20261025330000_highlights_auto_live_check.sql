@@ -2,7 +2,8 @@
 -- çağrılır. Fonksiyon YouTube'a yayının bitip bitmediğini sorar (videos.list,
 -- 1 kota birimi): sürüyorsa bekler, bittiyse analizi hemen başlatır ve
 -- denemeyi sayar (tries). Hata verirse 15 dk arayla en fazla 3 deneme.
--- Yayın 3 saat içinde kapanmazsa beklemekten vazgeçilir.
+-- Yayın 30 dk içinde kapanmazsa beklemekten vazgeçilir; analizi sorumlu
+-- maç detayından elle başlatır.
 
 alter table public.highlights_auto_attempts alter column tries set default 0;
 
@@ -45,7 +46,7 @@ begin
        and (
          -- Henüz analiz yok: yayın bitene kadar dakikada bir sorulur.
          (j.match_id is null
-          and m.updated_at > now() - interval '3 hours'
+          and m.updated_at > now() - interval '30 minutes'
           -- Fonksiyon analizden önce reddediyorsa (ör. bütçe) 3 kez denenir.
           and coalesce(a.tries, 0) < 3
           and (a.match_id is null or a.called_at < now() - interval '50 seconds'))

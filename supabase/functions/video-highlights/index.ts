@@ -779,6 +779,14 @@ Deno.serve(async (req) => {
   const videoId = (links ?? []).map((l) => youtubeId(l.url ?? "")).find((x) => x) ?? null;
   if (!videoId) return json({ error: "Maçın YouTube yayın linki yok." }, 400);
 
+  // Elle başlatmada da yayın sürüyorsa analiz başlamaz (video henüz tamam
+  // değil, deneme boşa gider).
+  if (!auto && (await youtubeLiveState(videoId)) === "live") {
+    return json({
+      error: "YouTube yayını hâlâ sürüyor. Yayın kapandıktan sonra tekrar deneyin.",
+    }, 409);
+  }
+
   // Otomatik: YouTube yayını hâlâ sürüyorsa beklenir; veritabanı dakikada bir
   // yeniden sorar. Bittiyse deneme sayılır ve analiz başlar.
   if (auto) {
