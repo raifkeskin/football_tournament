@@ -26,7 +26,7 @@ class NotificationRouter {
   /// Açılış adresindeki ve açıkken gelen bildirim tıklamalarını dinler.
   static void init() {
     if (NativePush.supported) {
-      // Uygulama (APK): FCM bildirimine basılınca.
+      // Uygulama (Android/iOS): FCM bildirimine basılınca.
       NativePush.setOpenHandler((url) {
         final t = Uri.tryParse(url)?.queryParameters['n'];
         if (t != null && t.isNotEmpty) _queue(t);

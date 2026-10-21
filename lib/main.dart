@@ -54,7 +54,7 @@ void main() async {
   // Son turnuva teması hemen; kişiye göre güncel tema arkadan.
   await ActiveTournament.init(guestChosen: GuestMode.chosen);
 
-  // Uygulama (APK): Firebase Cloud Messaging ile telefon bildirimi.
+  // Uygulama (Android/iOS): Firebase Cloud Messaging ile telefon bildirimi.
   if (NativePush.supported) {
     PushService.initNative();
     await NativePush.init();

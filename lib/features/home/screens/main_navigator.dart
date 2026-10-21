@@ -11,6 +11,7 @@ import '../../../core/widgets/web_safe_image.dart';
 import '../../../core/services/app_settings.dart';
 import '../../../core/services/league_access.dart';
 import '../../match/screens/broadcast_guide_screen.dart';
+import '../../../core/push/push_prompt.dart';
 import '../../notifications/notification_router.dart';
 import '../../notifications/notification_settings_screen.dart';
 import '../../team/screens/standings_list_screen.dart';
@@ -73,6 +74,12 @@ class _MainNavigatorState extends State<MainNavigator> {
     NotificationRouter.pending.addListener(_onPushOpen);
     // Uygulama bir bildirimden açıldıysa ekran kurulunca hedefe git.
     WidgetsBinding.instance.addPostFrameCallback((_) => _onPushOpen());
+    // Girişten sonra bir kez "Bildirimlere izin ver" (ana ekran oturunca).
+    Future<void>.delayed(const Duration(seconds: 2), () {
+      if (mounted && NotificationRouter.pending.value == null) {
+        PushPrompt.maybeShow(context, PushPromptReason.login);
+      }
+    });
     AppSettings.bottomNavEnabled.addListener(_onSettings);
   }
 
