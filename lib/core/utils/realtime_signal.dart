@@ -154,7 +154,8 @@ String? broadcastTopicFor(String table, String? column, String? value) {
   return switch ((table, column)) {
     ('matches', 'id') ||
     ('match_events', 'match_id') ||
-    ('match_rosters', 'match_id') => 'match:$value',
+    ('match_rosters', 'match_id') ||
+    ('match_highlights', 'match_id') => 'match:$value',
     ('matches', 'season_id') ||
     ('match_events', 'season_id') => 'season:$value',
     ('matches', 'league_id') => 'league:$value',

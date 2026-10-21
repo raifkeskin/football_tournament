@@ -15,6 +15,9 @@ import '../models/match.dart';
 import '../services/match_highlight_service.dart';
 import '../utils/season_match_settings.dart';
 import '../../../core/services/app_session.dart';
+import '../../../core/utils/realtime_signal.dart';
+import '../../../core/utils/resilient_stream.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 String _clock(int sec) {
   final h = sec ~/ 3600;
@@ -90,11 +93,49 @@ class _MatchHighlightsStripState extends State<MatchHighlightsStrip> {
     widget.match.seasonId,
   )?.tracksGoalMinutes;
 
+  /// Yeni biten maçta kesitler (otomatik analiz) maç detayı açıkken gelir:
+  /// `match:<id>` Broadcast konusundan dinlenir. Eski maçlarda kanal açılmaz.
+  StreamSubscription<RowChange>? _live;
+  Timer? _liveDebounce;
+
+  bool get _awaitsClips {
+    final m = widget.match;
+    if (m.status != MatchStatus.finished &&
+        m.status != MatchStatus.live &&
+        m.status != MatchStatus.halftime) {
+      return false;
+    }
+    final at = m.updatedAt ?? DateTime.tryParse((m.matchDate ?? '').trim());
+    return at == null ||
+        DateTime.now().difference(at.toLocal()) < const Duration(hours: 14);
+  }
+
+  void _listenLive() {
+    if (!_awaitsClips) return;
+    _live =
+        resilientStream(
+          () => realtimeRowChanges(
+            Supabase.instance.client,
+            table: 'match_highlights',
+            column: 'match_id',
+            value: widget.match.id,
+          ),
+        ).listen((_) {
+          // Kesitler toplu eklenir: tek okuma, izleyicilere yayılarak.
+          _liveDebounce?.cancel();
+          _liveDebounce = Timer(
+            Duration(milliseconds: 800 + DateTime.now().microsecond % 2500),
+            _load,
+          );
+        }, onError: (_) {});
+  }
+
   @override
   void initState() {
     super.initState();
     MatchHighlightService.changes.addListener(_onChanged);
     _load();
+    _listenLive();
     if (_tracksMinutes == null) {
       SeasonMatchSettings.of(widget.match.seasonId).then((s) {
         if (mounted) setState(() => _tracksMinutes = s.tracksGoalMinutes);
@@ -105,6 +146,8 @@ class _MatchHighlightsStripState extends State<MatchHighlightsStrip> {
   @override
   void dispose() {
     MatchHighlightService.changes.removeListener(_onChanged);
+    _liveDebounce?.cancel();
+    _live?.cancel();
     super.dispose();
   }
 
