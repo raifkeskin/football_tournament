@@ -1758,15 +1758,63 @@ class _TeamListScreenState extends State<TeamListScreen> {
     if (mounted) _reload();
   }
 
+  /// Takım sorumlusu: bağlandıysa adı (yeşil onay), atanmış ama henüz kayıt
+  /// olmamışsa "Kayıt bekleniyor", hiç yoksa "Takım sorumlusu yok".
+  Widget _managerLine(_TeamStanding t) {
+    final name = t.managerName;
+    final (IconData icon, Color color) = t.managerLinked
+        ? (Icons.verified_rounded, _accent)
+        : name.isNotEmpty
+        ? (Icons.hourglass_top_rounded, _amber)
+        : (Icons.person_off_outlined, _muted);
+    // Uzun isimlerde "Takım Sorumlusu" başlığı atlanır.
+    final label = name.isEmpty
+        ? 'Takım sorumlusu yok'
+        : name.length <= 16
+        ? 'Takım Sorumlusu · $name'
+        : name;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 13, color: color),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: name.isEmpty ? _muted : Colors.white70,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (!t.managerLinked && name.isNotEmpty)
+          const Padding(
+            padding: EdgeInsets.only(left: 17, top: 1),
+            child: Text(
+              'Kayıt bekleniyor',
+              style: TextStyle(
+                color: _amber,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _teamRow(
     _TeamStanding t, {
     required bool first,
     required bool ranked,
   }) {
-    final av = t.goalDiff > 0 ? '+${t.goalDiff}' : '${t.goalDiff}';
-    final sub = ranked
-        ? '${t.points} P · ${t.played} maç · AV $av'
-        : '${t.played} maç';
     return InkWell(
       onTap: () => _openSquad(t),
       child: Container(
@@ -1812,11 +1860,8 @@ class _TeamListScreenState extends State<TeamListScreen> {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    sub,
-                    style: const TextStyle(color: _muted, fontSize: 12),
-                  ),
+                  const SizedBox(height: 3),
+                  _managerLine(t),
                 ],
               ),
             ),
@@ -2377,6 +2422,11 @@ class _TeamStanding {
   int rank = 0;
   int rosterCount = 0;
 
+  /// Takım sorumlusunun adı (takım kartındaki) ve hesabının sezona bağlı
+  /// olup olmadığı (bağlıysa maç günü esame girebilir).
+  String managerName = '';
+  bool managerLinked = false;
+
   int get goalDiff => goalsFor - goalsAgainst;
 }
 
@@ -2437,7 +2487,7 @@ Future<_SeasonOverview> _loadSeasonOverview(String seasonId) async {
     sb.from('groups').select('id, name, region_id').eq('season_id', sid),
     sb
         .from('season_teams')
-        .select('team_id, group_id, teams(name, logo_url)')
+        .select('team_id, group_id, teams(name, logo_url, manager_name)')
         .eq('season_id', sid),
     sb
         .from('matches')
@@ -2458,6 +2508,7 @@ Future<_SeasonOverview> _loadSeasonOverview(String seasonId) async {
         .eq('season_id', sid)
         .order('sort_order', ascending: true)
         .order('name', ascending: true),
+    sb.from('team_managers').select('team_id').eq('season_id', sid),
   ]);
   String s(dynamic v) => (v ?? '').toString().trim();
 
@@ -2486,7 +2537,10 @@ Future<_SeasonOverview> _loadSeasonOverview(String seasonId) async {
       name: s(t['name']).isEmpty ? id : s(t['name']),
       logoUrl: s(t['logo_url']),
       groupId: gid.isEmpty || !groupsById.containsKey(gid) ? null : gid,
-    );
+    )..managerName = s(t['manager_name']);
+  }
+  for (final any in results[5]) {
+    teamsById[s((any as Map)['team_id'])]?.managerLinked = true;
   }
 
   var total = 0;

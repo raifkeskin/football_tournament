@@ -102,7 +102,7 @@ class PushService {
       'p_endpoint': 'fcm:$token',
       'p_p256dh': '',
       'p_auth': '',
-      'p_platform': 'android',
+      'p_platform': NativePush.platform,
     },
   );
 

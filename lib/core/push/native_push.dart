@@ -3,7 +3,8 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Uygulama (APK) sürümünde telefon bildirimi: Firebase Cloud Messaging.
+/// Uygulama (Android/iOS) sürümünde telefon bildirimi: Firebase Cloud
+/// Messaging (iOS'ta FCM, APNs üzerinden iletir).
 /// Cihazın FCM belirteci push_subscriptions'a `fcm:<belirteç>` adresiyle
 /// kaydedilir; send-push fonksiyonu bu adresleri FCM'e gönderir. Web'de
 /// kullanılmaz (orada Web Push).
@@ -11,7 +12,24 @@ class NativePush {
   NativePush._();
 
   static bool get supported =>
-      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
+
+  static bool get _isIos => defaultTargetPlatform == TargetPlatform.iOS;
+
+  /// Kayıt yeri: push_subscriptions.platform.
+  static String get platform => _isIos ? 'ios' : 'android';
+
+  /// iOS'ta GoogleService-Info.plist Xcode kaynaklarında olmadığı için
+  /// ayarlar burada verilir (com.ligmasasi.app kaydı).
+  static const _iosOptions = FirebaseOptions(
+    apiKey: 'AIzaSyB3IWOeQsTH-j43DfGyBBcIjgxNDk3ZRfY',
+    appId: '1:974894815246:ios:5177c472a52777a11bc45f',
+    messagingSenderId: '974894815246',
+    projectId: 'football-tournament-c0c05',
+    iosBundleId: 'com.ligmasasi.app',
+  );
 
   static const _prefKey = 'native_push_on';
   static bool _ready = false;
@@ -29,7 +47,7 @@ class NativePush {
   static Future<void> init() async {
     if (!supported || _ready) return;
     try {
-      await Firebase.initializeApp();
+      await Firebase.initializeApp(options: _isIos ? _iosOptions : null);
       _ready = true;
       await refreshStatus();
       final m = FirebaseMessaging.instance;

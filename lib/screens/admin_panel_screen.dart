@@ -15,6 +15,7 @@ import '../features/tournament/screens/admin_penalty_management_screen.dart';
 import 'admin_pending_actions_screen.dart';
 import '../features/auth/screens/admin_otp_monitor_screen.dart';
 import '../features/ai/admin_ai_screen.dart';
+import '../features/tournament_request/admin_tournament_requests_screen.dart';
 
 /// Yönetim paneli. Admin tüm kartları görür; kurucu başkan ve bölge
 /// sorumlusu yalnızca yetkili oldukları kartları (veriler ekranlarda kendi
@@ -260,6 +261,20 @@ class AdminPanelWidget extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 8),
+                  _buildSmallActionTile(
+                    context,
+                    'Turnuva Talepleri',
+                    Icons.emoji_events_outlined,
+                    () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        settings: const RouteSettings(
+                          name: 'AdminTournamentRequestsScreen',
+                        ),
+                        builder: (_) => const AdminTournamentRequestsScreen(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                 ],
                 _buildSmallActionTile(
                   context,
@@ -296,6 +311,16 @@ class AdminPanelWidget extends StatelessWidget {
                     offIcon: Icons.menu_rounded,
                     onText: 'Açık · ana ekranlarda alt gezinme çubuğu görünür',
                     offText: 'Kapalı · gezinme yan menü ve kaydırma ile',
+                  ),
+                  const SizedBox(height: 8),
+                  _SettingSwitch(
+                    setting: AppSettings.tournamentRequestsEnabled,
+                    save: AppSettings.setTournamentRequestsEnabled,
+                    title: 'Turnuva Oluştur',
+                    onIcon: Icons.emoji_events_rounded,
+                    offIcon: Icons.emoji_events_outlined,
+                    onText: 'Açık · "Turnuvanı Kur" girişi herkese görünür',
+                    offText: 'Kapalı · yalnız admin görür',
                   ),
                   const SizedBox(height: 8),
                   const _PhotoLimitSetting(),

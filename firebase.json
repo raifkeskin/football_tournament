@@ -25,7 +25,7 @@
         ]
       },
       {
-        "source": "/@(panel|katilim)?(.html)",
+        "source": "/@(panel|katilim|teklif)?(.html)",
         "headers": [
           {
             "key": "Cache-Control",

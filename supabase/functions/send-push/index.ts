@@ -91,6 +91,11 @@ async function sendFcm(
             ttl: "86400s",
             notification: { tag: p.tag ?? undefined, sound: "default" },
           },
+          // iOS (APNs): ses + aynı etiketli bildirim öncekinin yerine geçer.
+          apns: {
+            headers: p.tag ? { "apns-collapse-id": p.tag.slice(0, 64) } : {},
+            payload: { aps: { sound: "default" } },
+          },
         },
       }),
     },
