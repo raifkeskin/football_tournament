@@ -50,25 +50,7 @@ class AdminPageScaffold extends StatelessWidget {
         child: Scaffold(
           backgroundColor: kAdminBg,
           body: SafeArea(top: false, child: body),
-          bottomNavigationBar: bottomBar == null
-              ? null
-              : DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: kAdminBg,
-                    border: Border(
-                      top: BorderSide(
-                        color: Colors.white.withValues(alpha: 0.08),
-                      ),
-                    ),
-                  ),
-                  child: SafeArea(
-                    top: false,
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-                      child: bottomBar,
-                    ),
-                  ),
-                ),
+          bottomNavigationBar: _bottom(),
           floatingActionButton: acts.isEmpty
               ? null
               : Column(
@@ -89,8 +71,27 @@ class AdminPageScaffold extends StatelessWidget {
       extendBodyBehindAppBar: true,
       appBar: MasterClassAppBar(title: title, actions: actions),
       body: Stack(children: [SafeArea(child: body)]),
+      bottomNavigationBar: _bottom(),
     );
   }
+
+  Widget? _bottom() => bottomBar == null
+      ? null
+      : DecoratedBox(
+          decoration: BoxDecoration(
+            color: kAdminBg,
+            border: Border(
+              top: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+            ),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+              child: bottomBar,
+            ),
+          ),
+        );
 }
 
 /// Başlık çubuğu için beyaz ikon butonu (ör. sağ üstteki "Ekle").

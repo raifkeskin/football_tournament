@@ -114,7 +114,7 @@ class TournamentRequestLoginCard extends StatelessWidget {
           padding: const EdgeInsets.only(top: 18),
           child: InkWell(
             borderRadius: BorderRadius.circular(14),
-            onTap: () => TournamentRequestAccess.open(context, bandBack: false),
+            onTap: () => TournamentRequestAccess.open(context),
             child: Container(
               padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
               decoration: BoxDecoration(
