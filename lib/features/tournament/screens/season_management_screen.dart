@@ -178,6 +178,7 @@ class SeasonManagementScreen extends StatelessWidget {
     var isDefault = season?.isDefault ?? false;
     var isDoubleRound = season?.isDoubleRound ?? false;
     var trackGoalMinutes = season?.trackGoalMinutes ?? true;
+    var requireVerifiedId = season?.requireVerifiedId ?? false;
     // Lig Formatı kaydedilince satırda onay (popup açıkken alt mesaj
     // görünmüyor).
     var formatSaved = false;
@@ -273,6 +274,7 @@ class SeasonManagementScreen extends StatelessWidget {
         isDefault: isDefault,
         isDoubleRound: isDoubleRound,
         trackGoalMinutes: trackGoalMinutes,
+        requireVerifiedId: requireVerifiedId,
         transferStartDate: transferStartDate,
         transferEndDate: transferEndDate,
         teamsPerGroup: int.tryParse(teamsPerGroupController.text.trim()) ?? 4,
@@ -534,6 +536,16 @@ class SeasonManagementScreen extends StatelessWidget {
                                   : 'Dakika bilgisi tutulmaz...',
                               trackGoalMinutes,
                               (v) => setSheetState(() => trackGoalMinutes = v),
+                            ),
+                            switchRow(
+                              Icons.verified_outlined,
+                              'Onaylı Kimlik Zorunlu',
+                              requireVerifiedId
+                                  ? 'Kimliği onaylı olmayan oyuncu esameye '
+                                        'eklenemez'
+                                  : 'Kapalı: kimlik onayı istenmez',
+                              requireVerifiedId,
+                              (v) => setSheetState(() => requireVerifiedId = v),
                             ),
                           ],
                         ),

@@ -24,6 +24,8 @@ import '../../../core/widgets/admin_page.dart';
 import '../../../core/services/error_reporter.dart';
 import '../widgets/feedback_dialog.dart';
 import '../../tournament_request/tournament_request.dart';
+import '../../identity/identity_verify_screen.dart';
+import '../../identity/verified_badge.dart';
 
 /// Sol yan menü (Drawer) ile ana ekranlar arasında geçiş.
 class MainNavigator extends StatefulWidget {
@@ -720,6 +722,25 @@ class _MenuDrawer extends StatelessWidget {
                           final ctx = nav.context;
                           nav.pop(); // çekmeceyi kapat
                           TournamentRequestAccess.open(ctx);
+                        },
+                      ),
+                    // Kimlik doğrulama: giriş yapan herkes (çip yalnız
+                    // uygulamada okunur).
+                    if (loggedIn && !kIsWeb)
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          foregroundColor: kVerifiedBlue,
+                        ),
+                        icon: const Icon(Icons.verified_rounded, size: 20),
+                        label: const Text(
+                          'Kimlik Doğrulama',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () {
+                          final nav = Navigator.of(context);
+                          final ctx = nav.context;
+                          nav.pop(); // çekmeceyi kapat
+                          IdentityVerifyScreen.open(ctx);
                         },
                       ),
                     TextButton.icon(

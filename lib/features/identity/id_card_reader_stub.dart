@@ -1,0 +1,19 @@
+import 'id_card.dart';
+
+/// Web: kimlik kartı çipi tarayıcıdan okunamaz; doğrulama uygulamadan yapılır.
+class IdCardReader {
+  IdCardReader._();
+
+  static const supported = false;
+
+  static Future<NfcState> nfcState() async => NfcState.unsupported;
+
+  static Future<bool> openNfcSettings() async => false;
+
+  static Future<IdCardKey?> scanBackSide() async => null;
+
+  static Future<IdCardData> readChip(
+    IdCardKey key, {
+    void Function(String status)? onStatus,
+  }) async => throw const IdCardError('Kimlik okuma yalnız uygulamada.');
+}
