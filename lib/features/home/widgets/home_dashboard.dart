@@ -26,6 +26,7 @@ import 'overdue_results_banner.dart';
 import '../../sponsors/sponsor_strip.dart';
 import '../../../core/utils/team_name.dart';
 import '../../../core/push/notification_prefs.dart';
+import '../../tournament_request/tournament_request.dart';
 
 /// Yeni tasarımın renk sistemi: temel renkler sabit, turnuva yalnızca ana ve
 /// vurgu rengini getirir, durum renkleri her turnuvada aynı.
@@ -902,6 +903,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
               padding: const EdgeInsets.only(bottom: 24),
               children: [
                 _greeting(session, data),
+                const TournamentRequestStrip(),
                 OverdueResultsBanner(leagueId: widget.league.id),
                 AttendanceHomeCard(leagueId: widget.league.id),
                 content,

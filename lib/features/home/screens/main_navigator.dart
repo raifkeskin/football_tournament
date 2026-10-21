@@ -22,6 +22,7 @@ import '../../../core/design_flags.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../../core/services/error_reporter.dart';
 import '../widgets/feedback_dialog.dart';
+import '../../tournament_request/tournament_request.dart';
 
 /// Sol yan menü (Drawer) ile ana ekranlar arasında geçiş.
 class MainNavigator extends StatefulWidget {
@@ -591,6 +592,7 @@ class _MenuDrawer extends StatelessWidget {
       listenable: Listenable.merge([
         ActiveTournament.theme,
         LeagueSwitchScope.genericTab,
+        AppSettings.tournamentRequestsEnabled,
       ]),
       builder: (context, _) {
         final theme = ActiveTournament.theme.value;
@@ -688,6 +690,30 @@ class _MenuDrawer extends StatelessWidget {
                           style: TextStyle(fontWeight: FontWeight.bold),
                         ),
                         onPressed: onEnterCode,
+                      ),
+                    if (TournamentRequestAccess.visible(session))
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          foregroundColor: kRequestGold,
+                        ),
+                        icon: const Icon(Icons.emoji_events_rounded, size: 20),
+                        label: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'Turnuvanı Kur',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            SizedBox(width: 6),
+                            _NewBadge(),
+                          ],
+                        ),
+                        onPressed: () {
+                          final nav = Navigator.of(context);
+                          final ctx = nav.context;
+                          nav.pop(); // çekmeceyi kapat
+                          TournamentRequestAccess.open(ctx);
+                        },
                       ),
                     TextButton.icon(
                       style: TextButton.styleFrom(foregroundColor: accent),
@@ -1038,4 +1064,26 @@ class _MenuDrawer extends StatelessWidget {
       onPressed: () => onSelect(MainNavigator.profileTab),
     );
   }
+}
+
+/// Menüdeki yeni özellik etiketi.
+class _NewBadge extends StatelessWidget {
+  const _NewBadge();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+    decoration: BoxDecoration(
+      color: kRequestGold,
+      borderRadius: BorderRadius.circular(6),
+    ),
+    child: const Text(
+      'Yeni',
+      style: TextStyle(
+        color: Color(0xFF0F172A),
+        fontSize: 10.5,
+        fontWeight: FontWeight.w900,
+      ),
+    ),
+  );
 }
