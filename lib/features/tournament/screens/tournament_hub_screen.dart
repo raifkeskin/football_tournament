@@ -446,8 +446,9 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
       case TournamentHubTab.stats:
         return _KeepAlive(
           child: StatsView(
-            key: ValueKey('ss|${season.id}'),
+            key: ValueKey('ss|${season.id}|${group.id}'),
             seasonId: season.id,
+            groupId: group.id,
           ),
         );
       case TournamentHubTab.news:

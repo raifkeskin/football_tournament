@@ -95,9 +95,16 @@ class _RegisterPlayerScreenState extends State<RegisterPlayerScreen> {
         ),
         actionsAlignment: MainAxisAlignment.center,
         actions: [
-          TextButton(
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              foregroundColor: Colors.white,
+            ),
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Kapat'),
+            child: const Text(
+              'Kapat',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: kAdminAccent),

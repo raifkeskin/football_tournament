@@ -2,10 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../core/services/app_session.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/picked_image.dart';
 import '../../../core/widgets/web_safe_image.dart';
+import '../../auth/widgets/phone_input.dart';
+import '../../identity/change_phone_screen.dart';
+import '../../identity/identity_access.dart';
+import '../../identity/identity_service.dart';
 import '../services/player_profile_service.dart';
 
 /// Futbolcunun kendi bilgileri. Değişiklikler turnuva sorumlusu onayına
@@ -187,6 +192,54 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
     return (m?.group(1) ?? s).replaceFirst('Exception: ', '');
   }
 
+  /// Telefon: onaylı profil numarasını kimliğini yeniden okutarak
+  /// değiştirebilir (kimlik doğrulama açık olanlara).
+  Widget _phoneSection() {
+    final session = AppSession.of(context).value;
+    final phone = normalizePhoneToRaw10(session.phone);
+    if (!IdentityAccess.visible(session)) return const SizedBox.shrink();
+    return FutureBuilder<bool>(
+      future: _verifiedFuture ??= IdentityService.isVerified(widget.player.id),
+      initialData: IdentityService.cached(widget.player.id),
+      builder: (context, snap) {
+        if (snap.data != true) return const SizedBox.shrink();
+        return AdminFormSection(
+          title: 'Telefon',
+          child: AdminFieldGroup(
+            children: [
+              AdminFieldRow(
+                icon: Icons.phone_iphone_rounded,
+                label: 'Giriş numaram',
+                trailing: TextButton(
+                  onPressed: _busy
+                      ? null
+                      : () async {
+                          final changed = await ChangePhoneScreen.open(context);
+                          if (changed == true && mounted) setState(() {});
+                        },
+                  child: const Text(
+                    'Değiştir',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
+                child: Text(
+                  phone.length == 10 ? '0 ${formatPhoneRaw10(phone)}' : '-',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<bool>? _verifiedFuture;
+
   Widget _lockedTrailing(String key, {String? label}) {
     final v = label ?? ProfileField.display(key, _pendingValues[key]);
     return Row(
@@ -335,6 +388,7 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
         children: [
           _photoSection(),
           const SizedBox(height: 22),
+          _phoneSection(),
           AdminFormSection(
             title: 'Fiziksel',
             child: AdminFieldGroup(

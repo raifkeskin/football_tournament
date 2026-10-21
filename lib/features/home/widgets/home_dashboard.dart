@@ -1213,6 +1213,16 @@ class _HomeDashboardState extends State<HomeDashboard> {
     final postponedWeeks = postponedByWeek.keys.toList()..sort();
 
     final hasOwnTeam = d.myTeamIds.isNotEmpty;
+    // Birden fazla grup varsa krallıklar yalnız seçili grubun takımlarından.
+    List<_Scorer> leadersInGroup(List<_Scorer> list) =>
+        d.groups.length > 1 && groupFilter != null
+        ? [
+            for (final p in list)
+              if (d.teams[p.teamId]?.groupId == groupFilter) p,
+          ]
+        : list;
+    final scorers = leadersInGroup(d.scorers);
+    final assisters = leadersInGroup(d.assisters);
     // Birden fazla grup varsa yalnız seçili grubun maçlarından doğan
     // cezalar (maçsız elle girilen ceza her grupta sayılır).
     final matchGroup = {for (final m in d.matches) m.id: m.groupId};
@@ -1297,21 +1307,21 @@ class _HomeDashboardState extends State<HomeDashboard> {
           ),
           _miniStandings(d, groupFilter ?? d.groups.keys.first, focusTeams),
         ],
-        if (d.scorers.isNotEmpty) ...[
+        if (scorers.isNotEmpty) ...[
           _sectionHeader(
             'GOL KRALLIĞI',
             'İstatistik',
             () => openHub(TournamentHubTab.stats),
           ),
-          _leaders(d, d.scorers, 'gol'),
+          _leaders(d, scorers, 'gol'),
         ],
-        if (d.assisters.isNotEmpty) ...[
+        if (assisters.isNotEmpty) ...[
           _sectionHeader(
             'ASİST KRALLIĞI',
             'İstatistik',
             () => openHub(TournamentHubTab.stats),
           ),
-          _leaders(d, d.assisters, 'asist'),
+          _leaders(d, assisters, 'asist'),
         ],
         if (lastWeekMatches.isNotEmpty) ...[
           _sectionHeader(

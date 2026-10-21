@@ -143,6 +143,10 @@ class RegistrationService {
     'ambiguous' =>
       'Bu bilgilerle birden fazla profil bulundu. Takım ya da turnuva '
           'sorumlunuza başvurun.',
+    'not_verified' => 'Profilin kimlikle onaylı değil.',
+    'identity_mismatch' => 'Okutulan kimlik bu profile ait değil.',
+    'phone_taken' => 'Bu numara başka bir hesapta kayıtlı.',
+    'same_phone' => 'Bu numara zaten hesabında kayıtlı.',
     _ => 'İşlem tamamlanamadı. Lütfen tekrar deneyin.',
   };
 
