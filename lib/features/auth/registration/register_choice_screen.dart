@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../identity/verified_badge.dart';
-import 'register_organizer_screen.dart';
+import '../../tournament_request/tournament_request.dart';
 import 'register_player_screen.dart';
 
 /// Kayıt Ol: Futbolcu Profili (kimlikle) ya da Turnuva Kurucu / Sorumlusu.
@@ -60,15 +60,12 @@ class RegisterChoiceScreen extends StatelessWidget {
           _ChoiceCard(
             title: 'Turnuva Kurucu / Sorumlusu',
             text:
-                'Ad, soyad ve telefon numaran yeterli. Hesabın açılınca '
-                'turnuvanı kurmak için talep oluşturabilirsin.',
+                'Turnuvanı Lig Masası\'nda kurmak için talep oluştur; '
+                'teklif ve hesap bilgilerin bu adımda alınır.',
             icon: Icons.emoji_events_rounded,
             colors: const [Color(0xFFF59E0B), Color(0xFF9A5B06)],
-            onTap: () => _open(
-              context,
-              'RegisterOrganizerScreen',
-              const RegisterOrganizerScreen(),
-            ),
+            // Turnuva sorumlusu turnuva talebi akışından gelir.
+            onTap: () => TournamentRequestAccess.open(context),
           ),
         ],
       ),
