@@ -22,7 +22,6 @@ class RegisterChoiceScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return AdminPageScaffold(
       title: 'Kayıt Ol',
-      bandBack: false,
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 18, 16, 32),
         children: [

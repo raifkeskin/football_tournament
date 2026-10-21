@@ -257,7 +257,6 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
   Widget build(BuildContext context) {
     return AdminPageScaffold(
       title: widget.registration ? 'Kimliğini Doğrula' : 'Kimlik Doğrulama',
-      bandBack: !widget.registration,
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [

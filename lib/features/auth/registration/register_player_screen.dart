@@ -7,12 +7,13 @@ import '../../identity/id_card_reader.dart';
 import '../../identity/identity_verify_screen.dart';
 import '../../identity/verified_badge.dart';
 import '../../player/services/player_profile_service.dart';
-import 'phone_verify_card.dart';
+import '../screens/forgot_password_screen.dart';
+import 'register_phone_screen.dart';
 import 'registration_service.dart';
 
 /// Futbolcu Profili kaydı: 1) kimlik çipi okunur (ad, soyad, doğum tarihi,
-/// TC); 2) kişi mevki, boy, kilo, ayak bilgilerini girer, telefonunu
-/// doğrular ve şifresini belirler. Profil onaylı (mavi tikli) açılır.
+/// TC); 2) kişi mevki, boy, kilo, ayak bilgilerini girer; 3) telefon
+/// doğrulama ekranında şifresini belirler. Profil onaylı (mavi tikli) açılır.
 class RegisterPlayerScreen extends StatefulWidget {
   const RegisterPlayerScreen({super.key});
 
@@ -29,35 +30,93 @@ class _RegisterPlayerScreenState extends State<RegisterPlayerScreen> {
   String? _foot;
   final _height = TextEditingController();
   final _weight = TextEditingController();
-  final _phone = PhoneVerifyController();
   bool _busy = false;
   String? _error;
 
   @override
-  void initState() {
-    super.initState();
-    _phone.addListener(_refresh);
-  }
-
-  @override
   void dispose() {
-    _phone.dispose();
     _height.dispose();
     _weight.dispose();
     super.dispose();
   }
 
-  void _refresh() {
-    if (mounted) setState(() => _error = null);
-  }
-
   String get _first => trTitleCase(_card!.firstName);
   String get _last => trTitleCase(_card!.lastName);
 
+  /// Kimlik okunur; bu kişinin hesabı olan bir profili zaten varsa uyarılır.
   Future<void> _readCard() async {
     final card = await IdentityVerifyScreen.readForRegistration(context);
     if (card == null || !mounted) return;
-    setState(() => _card = card);
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final r = await RegistrationService.precheckPlayer(
+        firstName: trTitleCase(card.firstName),
+        lastName: trTitleCase(card.lastName),
+        birthDate: card.birthDate,
+        tc: card.tc,
+      );
+      if (!mounted) return;
+      if (r == 'ok') {
+        setState(() => _card = card);
+      } else if (r == 'profile_has_account') {
+        await _alreadyRegistered();
+      } else {
+        setState(() => _error = RegistrationService.message(r));
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = 'Bağlantı hatası. Lütfen tekrar deneyin.');
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _alreadyRegistered() async {
+    final forgot = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        icon: const VerifiedBadge(size: 40),
+        title: const Text(
+          'Zaten kayıtlı profiliniz var',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
+        ),
+        content: const Text(
+          'Bu kimlikle açılmış bir hesabınız bulunuyor. Şifrenizi '
+          'unuttuysanız "Şifremi Unuttum" menüsünden şifre talebinde '
+          'bulunabilirsiniz.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.white70, height: 1.4),
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Kapat'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: kAdminAccent),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text(
+              'Şifremi Unuttum',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (forgot != true || !mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute<void>(
+        settings: const RouteSettings(name: 'ForgotPasswordScreen'),
+        builder: (_) => const ForgotPasswordScreen(),
+      ),
+    );
   }
 
   bool get _formOk {
@@ -78,7 +137,9 @@ class _RegisterPlayerScreenState extends State<RegisterPlayerScreen> {
     return null;
   }
 
-  Future<void> _submit() async {
+  /// Bilgiler tamam: telefon doğrulama ekranına geçilir; profil orada
+  /// oluşturulur.
+  void _next() {
     final card = _card;
     if (card == null) return;
     if (!_formOk) {
@@ -90,49 +151,39 @@ class _RegisterPlayerScreenState extends State<RegisterPlayerScreen> {
       setState(() => _error = numErr);
       return;
     }
-    if (!_phone.ready) return;
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    final raw10 = _phone.raw10!;
-    final password = _phone.password;
-    try {
-      final r = await RegistrationService.registerPlayer(
-        raw10: raw10,
-        code: _phone.code,
-        password: password,
-        firstName: _first,
-        lastName: _last,
-        birthDate: card.birthDate,
-        tc: card.tc,
-        mainPosition: _main!,
-        subPosition: _sub,
-        foot: _foot,
-        height: int.tryParse(_height.text.trim()),
-        weight: int.tryParse(_weight.text.trim()),
-      );
-      if (!mounted) return;
-      if (r != 'ok') {
-        if (r == 'expired' || r == 'too_many_attempts' || r == 'wrong_code') {
-          _phone.restart();
-        }
-        setState(() => _error = RegistrationService.message(r));
-        return;
-      }
-      await RegistrationService.signInAndOpenHome(
-        context,
-        raw10: raw10,
-        password: password,
-        message: 'Futbolcu profilin oluşturuldu.',
-      );
-    } catch (_) {
-      if (mounted) {
-        setState(() => _error = 'İşlem tamamlanamadı. Lütfen tekrar deneyin.');
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+    FocusScope.of(context).unfocus();
+    final first = _first;
+    final last = _last;
+    final main = _main!;
+    final sub = _sub;
+    final foot = _foot;
+    final height = int.tryParse(_height.text.trim());
+    final weight = int.tryParse(_weight.text.trim());
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        settings: const RouteSettings(name: 'RegisterPhoneScreen'),
+        builder: (_) => RegisterPhoneScreen(
+          kind: 'player',
+          name: '$first $last',
+          buttonLabel: 'PROFİLİMİ OLUŞTUR',
+          successMessage: 'Futbolcu profilin oluşturuldu.',
+          submit: (raw10, code, password) => RegistrationService.registerPlayer(
+            raw10: raw10,
+            code: code,
+            password: password,
+            firstName: first,
+            lastName: last,
+            birthDate: card.birthDate,
+            tc: card.tc,
+            mainPosition: main,
+            subPosition: sub,
+            foot: foot,
+            height: height,
+            weight: weight,
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -140,23 +191,20 @@ class _RegisterPlayerScreenState extends State<RegisterPlayerScreen> {
     final card = _card;
     return AdminPageScaffold(
       title: 'Futbolcu Profili',
-      bandBack: false,
-      body: AutofillGroup(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-          children: [
-            _progress(card == null ? 1 : 2),
-            const SizedBox(height: 18),
-            if (card == null) ..._identityStep() else ..._formStep(card),
-          ],
-        ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+        children: [
+          _progress(card == null ? 1 : 2),
+          const SizedBox(height: 18),
+          if (card == null) ..._identityStep() else ..._formStep(card),
+        ],
       ),
     );
   }
 
   Widget _progress(int step) => Row(
     children: [
-      for (var i = 1; i <= 2; i++) ...[
+      for (var i = 1; i <= 3; i++) ...[
         if (i > 1) const SizedBox(width: 6),
         Expanded(
           child: Container(
@@ -170,7 +218,7 @@ class _RegisterPlayerScreenState extends State<RegisterPlayerScreen> {
       ],
       const SizedBox(width: 10),
       Text(
-        '$step / 2',
+        '$step / 3',
         style: const TextStyle(
           color: kAdminMuted,
           fontSize: 12.5,
@@ -209,9 +257,11 @@ class _RegisterPlayerScreenState extends State<RegisterPlayerScreen> {
         'No geri dönülemez şekilde şifrelenir, bunlar dışındaki hiçbir '
         'bilgi sisteme kaydedilmez.',
       ),
+      if (_error != null) _errorText(),
       AdminPrimaryButton(
         label: 'KİMLİĞİMİ OKUT',
         icon: Icons.contactless_rounded,
+        busy: _busy,
         onPressed: _readCard,
       ),
       const SizedBox(height: 12),
@@ -281,6 +331,7 @@ class _RegisterPlayerScreenState extends State<RegisterPlayerScreen> {
               _sub = v;
               _error = null;
             }),
+            columns: subs.length,
           ),
         ),
       AdminFormSection(
@@ -302,34 +353,30 @@ class _RegisterPlayerScreenState extends State<RegisterPlayerScreen> {
       ),
       AdminFormSection(
         title: 'Kullandığı Ayak',
-        child: _chips(_feet, _foot, (v) => setState(() => _foot = v)),
-      ),
-      PhoneVerifyCard(
-        controller: _phone,
-        kind: 'player',
-        name: () => '$_first $_last',
-        enabled: !_busy,
-      ),
-      if (_error != null)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: Text(
-            _error!,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: kAdminDanger,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
+        child: _chips(
+          _feet,
+          _foot,
+          (v) => setState(() => _foot = v),
+          columns: _feet.length,
         ),
+      ),
+      if (_error != null) _errorText(),
       AdminPrimaryButton(
-        label: 'PROFİLİMİ OLUŞTUR',
-        icon: Icons.check_rounded,
-        busy: _busy,
-        onPressed: _phone.ready && _formOk ? _submit : null,
+        label: 'İLERİ',
+        icon: Icons.arrow_forward_rounded,
+        onPressed: _formOk ? _next : null,
       ),
     ];
   }
+
+  Widget _errorText() => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: Text(
+      _error!,
+      textAlign: TextAlign.center,
+      style: const TextStyle(color: kAdminDanger, fontWeight: FontWeight.w700),
+    ),
+  );
 
   Widget _identityCard(IdCardData card) => Container(
     padding: const EdgeInsets.all(14),

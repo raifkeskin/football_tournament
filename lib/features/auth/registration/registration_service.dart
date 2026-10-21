@@ -37,6 +37,27 @@ class RegistrationService {
     return (r ?? '').toString();
   }
 
+  /// Kimlik okununca: bu kişinin hesabı olan bir profili var mı.
+  static Future<String> precheckPlayer({
+    required String firstName,
+    required String lastName,
+    required DateTime birthDate,
+    required String tc,
+  }) async {
+    String two(int v) => v.toString().padLeft(2, '0');
+    final r = await _sb.rpc(
+      'register_player_precheck',
+      params: {
+        'p_first': firstName,
+        'p_last': lastName,
+        'p_birth':
+            '${birthDate.year}-${two(birthDate.month)}-${two(birthDate.day)}',
+        'p_tc': tc,
+      },
+    );
+    return (r ?? '').toString();
+  }
+
   static Future<String> registerOrganizer({
     required String raw10,
     required String code,
