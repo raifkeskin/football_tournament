@@ -21,7 +21,13 @@ class AdminAiScreen extends StatefulWidget {
   State<AdminAiScreen> createState() => _AdminAiScreenState();
 }
 
-typedef _Season = ({String id, String name, bool esame, bool clips});
+typedef _Season = ({
+  String id,
+  String name,
+  bool esame,
+  bool clips,
+  bool autoPublish,
+});
 
 class _Op {
   _Op(Map r)
@@ -132,7 +138,10 @@ class _AdminAiScreenState extends State<AdminAiScreen> {
     try {
       final rows = await _sb
           .from('seasons')
-          .select('id, name, is_default, ai_esame_enabled, ai_clips_enabled')
+          .select(
+            'id, name, is_default, ai_esame_enabled, ai_clips_enabled, '
+            'ai_clips_auto_publish',
+          )
           .eq('league_id', id)
           .isFilter('deleted_at', null)
           .order('start_date', ascending: false);
@@ -143,6 +152,7 @@ class _AdminAiScreenState extends State<AdminAiScreen> {
             name: (r['name'] ?? '').toString(),
             esame: r['ai_esame_enabled'] != false,
             clips: r['ai_clips_enabled'] != false,
+            autoPublish: r['ai_clips_auto_publish'] != false,
           ),
       ];
       final def = rows
@@ -220,12 +230,21 @@ class _AdminAiScreenState extends State<AdminAiScreen> {
     if (picked != null) setState(() => _seasonId = picked.id);
   }
 
-  Future<void> _setFlag(_Season s, {bool? esame, bool? clips}) async {
+  Future<void> _setFlag(
+    _Season s, {
+    bool? esame,
+    bool? clips,
+    bool? autoPublish,
+  }) async {
     setState(() => _busy = true);
     try {
       await _sb
           .from('seasons')
-          .update({'ai_esame_enabled': ?esame, 'ai_clips_enabled': ?clips})
+          .update({
+            'ai_esame_enabled': ?esame,
+            'ai_clips_enabled': ?clips,
+            'ai_clips_auto_publish': ?autoPublish,
+          })
           .eq('id', s.id);
       SeasonMatchSettings.invalidate(s.id);
       if (!mounted) return;
@@ -238,6 +257,7 @@ class _AdminAiScreenState extends State<AdminAiScreen> {
                     name: x.name,
                     esame: esame ?? x.esame,
                     clips: clips ?? x.clips,
+                    autoPublish: autoPublish ?? x.autoPublish,
                   )
                 : x,
         ];
@@ -522,6 +542,18 @@ class _AdminAiScreenState extends State<AdminAiScreen> {
                     season.clips,
                     (v) => _setFlag(season, clips: v),
                   ),
+                  if (season.clips)
+                    _switchRow(
+                      Icons.publish_rounded,
+                      'Gol kesitleri otomatik yayınlansın',
+                      season.autoPublish
+                          ? 'Açık · maç bitince bulunan kesitler hemen '
+                                'yayında; sorumlu ±5 sn düzeltebilir'
+                          : 'Kapalı · sorumlu kontrol edip onaylayınca '
+                                'yayınlanır',
+                      season.autoPublish,
+                      (v) => _setFlag(season, autoPublish: v),
+                    ),
                 ],
               ],
             ),

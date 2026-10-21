@@ -525,6 +525,8 @@ type RunOpts = {
   secondHalf: number | null;
   limit: number;
   roster: RosterPlayer[];
+  /** Sezon tercihi: kesitler doğrudan yayına girer. */
+  autoPublish: boolean;
 };
 
 /** Tüm gollerin dakikası girilmiş mi? (pencereli tarama yapılabilir) */
@@ -655,15 +657,16 @@ async function run(opts: RunOpts) {
           end_sec: end,
           description: (f.aciklama ?? "").trim() || null,
           confidence: CONFIDENCE[f.guven ?? ""] ?? null,
-          status: "pending",
+          status: opts.autoPublish ? "approved" : "pending",
           source: "ai",
         });
       }
     }
 
-    // Yeniden çalıştırmada eski bekleyen YZ kesitleri silinir (onaylılar kalır).
+    // Yeniden çalıştırmada sorumlunun dokunmadığı eski YZ kesitleri silinir;
+    // onaylanan, düzeltilen ya da kaldırılanlar (reviewed_by dolu) kalır.
     await admin.from("match_highlights").delete()
-      .eq("match_id", matchId).eq("status", "pending").eq("source", "ai");
+      .eq("match_id", matchId).eq("source", "ai").is("reviewed_by", null);
     if (rows.length) {
       const { error } = await admin.from("match_highlights").insert(rows);
       if (error) throw new Error(error.message);
@@ -697,17 +700,31 @@ Deno.serve(async (req) => {
   const userClient = createClient(SUPABASE_URL, ANON_KEY, {
     global: { headers: { Authorization: auth } },
   });
-  const { data: userData } = await userClient.auth.getUser();
-  if (!userData?.user) return json({ error: "Giriş gerekli." }, 401);
-
   const body = await req.json().catch(() => ({}));
   const matchId = String(body?.match_id ?? "").trim();
   if (!matchId) return json({ error: "match_id eksik." }, 400);
   const kickoff = toSec(body?.kickoff_sec);
   const secondHalf = toSec(body?.second_half_sec);
 
-  const { data: allowed } = await userClient.rpc("owns_match", { p_match_id: matchId });
-  if (allowed !== true) return json({ error: "Bu maç için yetkiniz yok." }, 403);
+  // Maç bitince veritabanı (highlights_auto_tick) gizli anahtarla çağırır.
+  const syncGiven = req.headers.get("x-sync-secret") ?? "";
+  let auto = false;
+  if (syncGiven) {
+    const { data: row } = await admin.from("app_private_settings")
+      .select("value").eq("key", "highlights_sync_secret").maybeSingle();
+    if (!row?.value || row.value !== syncGiven) {
+      return json({ error: "Geçersiz anahtar." }, 401);
+    }
+    auto = true;
+  }
+  let userId: string | null = null;
+  if (!auto) {
+    const { data: userData } = await userClient.auth.getUser();
+    if (!userData?.user) return json({ error: "Giriş gerekli." }, 401);
+    userId = userData.user.id;
+    const { data: allowed } = await userClient.rpc("owns_match", { p_match_id: matchId });
+    if (allowed !== true) return json({ error: "Bu maç için yetkiniz yok." }, 403);
+  }
 
   // Aynı maçta süren bir iş varsa (10 dk'dan yeni) yenisi başlatılmaz.
   const { data: job } = await admin.from("match_highlight_jobs")
@@ -725,6 +742,9 @@ Deno.serve(async (req) => {
   if (!(await seasonAiEnabled(admin, m.season_id, "clips"))) {
     return json({ error: "Bu sezonda gol videosu yakalama kapalı." }, 403);
   }
+  const { data: pub } = await admin.from("seasons")
+    .select("ai_clips_auto_publish").eq("id", m.season_id).maybeSingle();
+  const autoPublish = pub?.ai_clips_auto_publish !== false;
   GEMINI_MODEL = await aiModel(admin, "clips", DEFAULT_MODEL);
   await refreshUsdTry(admin);
 
@@ -782,6 +802,7 @@ Deno.serve(async (req) => {
   const timed = isTimed(goals);
   // Dakikasız maçta tüm video taranır (pahalı): yalnız admin başlatabilir.
   if (!timed) {
+    if (auto) return json({ error: "Dakikasız maç otomatik taranmaz." }, 400);
     const { data: isAdmin } = await userClient.rpc("is_admin");
     if (isAdmin !== true) {
       return json({ error: "Dakikası girilmemiş maçta YZ analizini yalnız admin başlatabilir." }, 403);
@@ -826,7 +847,7 @@ Deno.serve(async (req) => {
     cost_usd: 0,
     kickoff_sec: kickoff,
     second_half_sec: secondHalf,
-    requested_by: userData.user.id,
+    requested_by: userId,
     started_at: new Date().toISOString(),
     finished_at: null,
   });
@@ -843,6 +864,7 @@ Deno.serve(async (req) => {
     secondHalf,
     limit: limits.perMatch,
     roster,
+    autoPublish,
   });
   // deno-lint-ignore no-explicit-any
   const rt = (globalThis as any).EdgeRuntime;
