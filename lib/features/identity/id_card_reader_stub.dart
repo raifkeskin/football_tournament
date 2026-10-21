@@ -1,3 +1,5 @@
+import 'package:flutter/widgets.dart' show BuildContext;
+
 import 'id_card.dart';
 
 /// Web: kimlik kartı çipi tarayıcıdan okunamaz; doğrulama uygulamadan yapılır.
@@ -9,6 +11,10 @@ class IdCardReader {
   static Future<NfcState> nfcState() async => NfcState.unsupported;
 
   static Future<bool> openNfcSettings() async => false;
+
+  static Future<({IdCardKey? key, String? fallback})?> scanLive(
+    BuildContext context,
+  ) async => null;
 
   static Future<IdCardKey?> scanBackSide() async => null;
 
