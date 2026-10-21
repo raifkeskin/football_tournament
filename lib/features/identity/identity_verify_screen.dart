@@ -355,10 +355,6 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
     );
   }
 
-  String _date(DateTime d) =>
-      '${d.day.toString().padLeft(2, '0')}.'
-      '${d.month.toString().padLeft(2, '0')}.${d.year}';
-
   Widget _keySection() {
     final k = _key;
     TextStyle v() => const TextStyle(
@@ -404,17 +400,17 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
                     AdminFieldRow(
                       icon: Icons.badge_outlined,
                       label: 'Seri No',
-                      child: Text(k.documentNumber, style: v()),
+                      child: Text(_maskDoc(k.documentNumber), style: v()),
                     ),
                     AdminFieldRow(
                       icon: Icons.cake_outlined,
                       label: 'Doğum Tarihi',
-                      child: Text(_date(k.birthDate), style: v()),
+                      child: Text(_maskDate(k.birthDate), style: v()),
                     ),
                     AdminFieldRow(
                       icon: Icons.event_available_outlined,
                       label: 'Son Geçerlilik',
-                      child: Text(_date(k.expiryDate), style: v()),
+                      child: Text(_maskDate(k.expiryDate), style: v()),
                     ),
                   ],
                 ),
@@ -508,8 +504,12 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
     ),
   );
 
-  String _maskTc(String tc) =>
-      '${tc.substring(0, 1)}${'•' * 8}${tc.substring(9)}';
+  /// Ekranda kimlik bilgileri maskeli: seri noyu ve tarihlerin gün/ayını
+  /// yanınızdaki göremez.
+  String _maskDoc(String d) =>
+      d.length <= 3 ? d : '${d.substring(0, 3)}${'•' * (d.length - 3)}';
+
+  String _maskDate(DateTime d) => '••.••.${d.year}';
 
   Widget _resultSection() {
     final card = _card!;
@@ -537,17 +537,14 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
                 icon: Icons.cake_outlined,
                 label: 'Doğum Tarihi',
                 child: Text(
-                  _date(card.birthDate),
+                  _maskDate(card.birthDate),
                   style: const TextStyle(color: Colors.white, fontSize: 15),
                 ),
               ),
               AdminFieldRow(
                 icon: Icons.pin_outlined,
                 label: 'Kimlik No',
-                child: Text(
-                  _maskTc(card.tc),
-                  style: const TextStyle(color: Colors.white, fontSize: 15),
-                ),
+                child: _EncryptingTc(key: ValueKey(card.tc), tc: card.tc),
               ),
             ],
           ),
@@ -706,16 +703,199 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
     );
   }
 
-  Widget _privacyNote() => const Padding(
-    padding: EdgeInsets.symmetric(horizontal: 4),
-    child: Text(
-      'Kimliği yalnızca sahibinin izniyle okutun. Kimliğin fotoğrafı '
-      'telefonda işlenip hemen silinir; kimlik numarası saklanmaz, '
-      'yalnızca aynı kimliğin iki profile bağlanmasını önlemek için '
-      'geri çevrilemez biçimde tutulur.',
-      style: TextStyle(color: kAdminMuted, fontSize: 12, height: 1.4),
-    ),
+  Widget _privacyNote() => const _StorageCard();
+}
+
+/// "Neler kaydedilir?" kartı: kullanıcıya kimliğinin sisteme eklenmediğini
+/// açıkça gösterir.
+class _StorageCard extends StatelessWidget {
+  const _StorageCard();
+
+  @override
+  Widget build(BuildContext context) {
+    Widget line(bool saved, String text) => Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            saved ? Icons.check_circle_rounded : Icons.block_rounded,
+            size: 17,
+            color: saved ? kAdminAccent : kAdminDanger,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12.5,
+                height: 1.3,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    Widget head(String t) => Padding(
+      padding: const EdgeInsets.only(bottom: 6, top: 2),
+      child: Text(
+        t,
+        style: const TextStyle(
+          color: kAdminMuted,
+          fontSize: 11.5,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.6,
+        ),
+      ),
+    );
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.lock_rounded, color: kVerifiedBlue, size: 18),
+              SizedBox(width: 8),
+              Text(
+                'Kimlik bilgileriniz sisteme eklenmez',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          head('KAYDEDİLEN'),
+          line(true, 'Profilinizdeki "onaylı" işareti ve onay tarihi'),
+          line(
+            true,
+            'Kimlik numaranızın geri çevrilemez şifreli özeti (aynı kimlik '
+            'iki profile bağlanamasın diye; kimse, yönetici de dahil, '
+            'numaranızı buradan göremez)',
+          ),
+          const SizedBox(height: 4),
+          head('KAYDEDİLMEYEN'),
+          line(false, 'Kimlik kartının görüntüsü (telefonda okunur, silinir)'),
+          line(false, 'Kimlik numaranızın kendisi'),
+          line(false, 'Seri no, son geçerlilik tarihi, çipteki fotoğraf'),
+          line(
+            false,
+            'Çipteki ad, soyad ve doğum tarihi (yalnızca profilinizle '
+            'karşılaştırılır)',
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Kimliği yalnızca sahibinin izniyle okutun.',
+            style: TextStyle(color: kAdminMuted, fontSize: 11.5),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Kimlik numarası önce okunduğu gibi görünür, sonra rakamlar tek tek
+/// gizlenir ve kilit simgesiyle "şifrelendi" yazar.
+class _EncryptingTc extends StatefulWidget {
+  const _EncryptingTc({super.key, required this.tc});
+
+  final String tc;
+
+  @override
+  State<_EncryptingTc> createState() => _EncryptingTcState();
+}
+
+class _EncryptingTcState extends State<_EncryptingTc>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1400),
   );
+
+  @override
+  void initState() {
+    super.initState();
+    // Yarım saniye okunur halde kalır, sonra gizlenir.
+    Future.delayed(const Duration(milliseconds: 700), () {
+      if (mounted) _c.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = widget.tc;
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (context, _) {
+        // Baştaki 1 ve sondaki 2 hane kalır; aradaki 8 hane soldan gizlenir.
+        final hidden = (_c.value * 8).ceil();
+        final b = StringBuffer(tc.substring(0, 1));
+        for (var i = 1; i < 9; i++) {
+          b.write(i <= hidden ? '•' : tc[i]);
+        }
+        b.write(tc.substring(9));
+        final done = _c.isCompleted;
+        return Row(
+          children: [
+            Text(
+              b.toString(),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
+            ),
+            const SizedBox(width: 10),
+            AnimatedOpacity(
+              opacity: done ? 1 : 0.6,
+              duration: const Duration(milliseconds: 250),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: kVerifiedBlue.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      done ? Icons.lock_rounded : Icons.lock_open_rounded,
+                      size: 13,
+                      color: kVerifiedBlue,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      done ? 'Şifrelendi' : 'Şifreleniyor…',
+                      style: const TextStyle(
+                        color: kVerifiedBlue,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
 }
 
 class _Steps extends StatelessWidget {
