@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/push/push_prompt.dart';
 import '../../../core/services/data_versions.dart';
 
 import '../../../core/services/active_tournament.dart';
@@ -862,6 +863,10 @@ class _HomeDashboardState extends State<HomeDashboard> {
         ensureSession: true,
       ).catchError((Object _) {}),
     );
+    // İlk takipte bir kez "Bildirimlere izin ver".
+    if (mounted) {
+      unawaited(PushPrompt.maybeShow(context, PushPromptReason.follow));
+    }
   }
 
   // ---- Görünüm --------------------------------------------------------
