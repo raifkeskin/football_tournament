@@ -15,6 +15,7 @@ import 'reset_password_screen.dart';
 import '../widgets/phone_input.dart';
 import '../password_input.dart';
 import '../../../core/widgets/admin_form.dart';
+import '../../tournament_request/tournament_request.dart';
 
 /// Açılışta "Misafir olarak devam et" seçildi mi (cihazda saklanır).
 class GuestMode {
@@ -536,6 +537,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ),
+                  const TournamentRequestLoginCard(),
                 ],
               ),
             ),
