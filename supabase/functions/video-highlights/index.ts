@@ -42,6 +42,31 @@ const priceAudio = () => (isPro() ? 2.0 : FLASH_AUDIO);
 const priceOutput = () => (isPro() ? 12.0 : FLASH_OUTPUT);
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+const YOUTUBE_API_KEY = Deno.env.get("YOUTUBE_API_KEY") ?? "";
+
+/** YouTube canlı yayını bitti mi? (videos.list, 1 kota birimi)
+ *  "live" / "upcoming": sürüyor ya da başlamadı; "ended": bitti ya da canlı
+ *  yayın değil; "unknown": API yanıt vermedi (analiz denenir). */
+async function youtubeLiveState(videoId: string): Promise<string> {
+  if (!YOUTUBE_API_KEY) return "unknown";
+  try {
+    const res = await fetch(
+      "https://www.googleapis.com/youtube/v3/videos?part=snippet,liveStreamingDetails" +
+        `&id=${encodeURIComponent(videoId)}&key=${YOUTUBE_API_KEY}`,
+    );
+    if (!res.ok) return "unknown";
+    const j = await res.json();
+    const item = j?.items?.[0];
+    if (!item) return "unknown";
+    const lbc = String(item.snippet?.liveBroadcastContent ?? "none");
+    if (lbc === "live" || lbc === "upcoming") return lbc;
+    const details = item.liveStreamingDetails;
+    if (details && details.actualStartTime && !details.actualEndTime) return "live";
+    return "ended";
+  } catch (_) {
+    return "unknown";
+  }
+}
 
 const admin = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
@@ -753,6 +778,22 @@ Deno.serve(async (req) => {
     .order("created_at", { ascending: false });
   const videoId = (links ?? []).map((l) => youtubeId(l.url ?? "")).find((x) => x) ?? null;
   if (!videoId) return json({ error: "Maçın YouTube yayın linki yok." }, 400);
+
+  // Otomatik: YouTube yayını hâlâ sürüyorsa beklenir; veritabanı dakikada bir
+  // yeniden sorar. Bittiyse deneme sayılır ve analiz başlar.
+  if (auto) {
+    const state = await youtubeLiveState(videoId);
+    if (state === "live" || state === "upcoming") {
+      return json({ waiting: state }, 202);
+    }
+    const { data: att } = await admin.from("highlights_auto_attempts")
+      .select("tries").eq("match_id", matchId).maybeSingle();
+    await admin.from("highlights_auto_attempts").upsert({
+      match_id: matchId,
+      tries: (att?.tries ?? 0) + 1,
+      called_at: new Date().toISOString(),
+    });
+  }
 
   const [{ data: teams }, { data: season }, { data: events }] = await Promise.all([
     admin.from("teams").select("id, name").in("id", [m.home_team_id, m.away_team_id]),
