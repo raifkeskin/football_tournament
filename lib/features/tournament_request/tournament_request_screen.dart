@@ -85,12 +85,14 @@ class TournamentRequestIntroScreen extends StatelessWidget {
     (
       Icons.leaderboard_outlined,
       'Puan Durumu ve İstatistik',
-      'Gol krallığı, asist ve kart listeleri maç bitince güncellenir',
+      'Maç sırasında canlı puan durumu; gol krallığı, asist ve kart '
+          'listeleri anında güncellenir',
     ),
     (
       Icons.badge_outlined,
       'Takım ve Oyuncu Profilleri',
-      'Kadro, forma numarası, fotoğraf ve oyuncu geçmişi',
+      'Kadro ve forma numaraları; oyuncu bilgileri, geçmişi ve '
+          'istatistikleri',
     ),
     (
       Icons.fact_check_outlined,
@@ -100,13 +102,13 @@ class TournamentRequestIntroScreen extends StatelessWidget {
     (
       Icons.document_scanner_outlined,
       'Kâğıttan Esame',
-      'Kâğıt esamenin fotoğrafını çek; kadro ve ilk 11 kendiliğinden dolsun',
+      'Kâğıt esamenin fotoğrafını çek, kadro kendiliğinden dolsun',
     ),
     (
-      Icons.movie_filter_outlined,
-      'Yayından Gol Anları',
-      'Canlı yayın varsa goller, dakikaları ve gol kesitleri yayından '
-          'çıkarılır',
+      Icons.live_tv_rounded,
+      'Canlı Yayın',
+      'Maçın canlı yayını uygulamadan izlenir; maç bitiminde gol '
+          'kesitleri maç detayına eklenir',
     ),
     (
       Icons.notifications_active_outlined,
@@ -146,7 +148,7 @@ class TournamentRequestIntroScreen extends StatelessWidget {
           const Icon(Icons.emoji_events_rounded, size: 44, color: kRequestGold),
           const SizedBox(height: 10),
           const Text(
-            'Turnuvanı tek yerden yönet, herkes canlı takip etsin',
+            'Amatör turnuvan artık profesyonel',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: Colors.white,
@@ -156,9 +158,9 @@ class TournamentRequestIntroScreen extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           const Text(
-            'Fikstürden canlı skora, esameden cezalara kadar her şey tek '
-            'uygulamada. Oyuncular, takım sorumluları ve izleyiciler her '
-            'şeyi telefondan anında görür.',
+            'Canlı skor, puan durumu, oyuncu profilleri ve maç '
+            'bildirimleriyle turnuvan bir lig gibi yönetilsin, herkes anında '
+            'takip etsin.',
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.white70, fontSize: 14),
           ),
