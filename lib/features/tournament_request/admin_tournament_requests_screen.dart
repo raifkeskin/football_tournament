@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/services/app_session.dart';
 import '../../core/widgets/admin_form.dart';
 import '../../core/widgets/admin_page.dart';
+import 'convert_dialog.dart';
 import 'offer_editor.dart';
 import 'tournament_request.dart';
 
@@ -301,6 +302,18 @@ class _AdminTournamentRequestsScreenState
           .order('version', ascending: false);
       offers = List<Map<String, dynamic>>.from(rows);
     } catch (_) {}
+    final leagueId = (r['league_id'] ?? '').toString();
+    var leagueName = '';
+    if (leagueId.isNotEmpty) {
+      try {
+        final l = await Supabase.instance.client
+            .from('leagues')
+            .select('name')
+            .eq('id', leagueId)
+            .maybeSingle();
+        leagueName = (l?['name'] ?? '').toString();
+      } catch (_) {}
+    }
     if (!mounted) return;
     final last = offers.isEmpty ? null : offers.first;
     final token = (r['offer_token'] ?? '').toString();
@@ -433,6 +446,59 @@ class _AdminTournamentRequestsScreenState
                     ],
                   ],
                 ),
+              ),
+              AdminFormSection(
+                title: 'Turnuva',
+                child: leagueId.isEmpty
+                    ? AdminPrimaryButton(
+                        label: 'TURNUVAYA DÖNÜŞTÜR',
+                        icon: Icons.emoji_events_outlined,
+                        onPressed: () async {
+                          final name = await showConvertRequestDialog(
+                            c,
+                            request: r,
+                          );
+                          if (name == null || !c.mounted) return;
+                          Navigator.pop(c);
+                          await _reload();
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                '$name oluşturuldu. Kurucu başkana '
+                                'detaydan WhatsApp ile haber verebilirsin.',
+                              ),
+                            ),
+                          );
+                        },
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          AdminFieldGroup(
+                            children: [
+                              row(
+                                Icons.emoji_events_outlined,
+                                'Oluşturuldu · '
+                                    '${_date(r['converted_at']?.toString())}',
+                                leagueName.isEmpty ? '—' : leagueName,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          AdminSecondaryButton(
+                            label: 'KURUCU BAŞKANA WHATSAPP\'TAN BİLDİR',
+                            onPressed: raw.isEmpty
+                                ? null
+                                : () => openOwnerWelcomeWhatsApp(
+                                    phoneRaw10: raw,
+                                    contactName: (r['contact_name'] ?? '')
+                                        .toString(),
+                                    leagueName: leagueName,
+                                  ),
+                          ),
+                        ],
+                      ),
               ),
               AdminFieldGroup(
                 children: [
