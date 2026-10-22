@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../core/widgets/admin_form.dart';
 import '../../core/widgets/admin_page.dart';
 import '../../core/widgets/web_safe_image.dart';
+import '../auth/widgets/phone_input.dart';
 import 'id_card_reader.dart';
 import 'identity_service.dart';
 import 'verified_badge.dart';
@@ -242,6 +243,8 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
         _verifiedId = c.playerId;
         _count++;
       });
+      await _askPhone(c);
+      if (!mounted) return;
       if (widget.expectedPlayerId != null &&
           widget.expectedPlayerId == c.playerId) {
         Navigator.of(context).pop(true);
@@ -250,6 +253,63 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
       if (mounted) setState(() => _error = IdentityService.errorText(e));
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Doğrulanan profilde numara yoksa yetkili numarayı hemen girer;
+  /// futbolcu ilk girişinde bu numaraya gelen kodla şifresini belirler.
+  Future<void> _askPhone(IdentityCandidate c) async {
+    final String state;
+    try {
+      state = await IdentityService.phoneState(c.playerId);
+    } catch (_) {
+      return;
+    }
+    if (state != 'none' || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final value = await showAdminTextInputDialog(
+      context: context,
+      title: 'Telefon Numarası',
+      subtitle:
+          '${c.fullName} profilinde numara yok. Numarayı yazarsanız '
+          'futbolcu ilk girişinde bu numaraya gelen kodla şifresini '
+          'belirler. Kapatırsanız profil numarasız kalır.',
+      icon: Icons.phone_iphone_rounded,
+      label: 'Cep telefonu',
+      fieldIcon: Icons.phone_rounded,
+      hint: '(5XX) XXX XX XX',
+      keyboardType: TextInputType.phone,
+      inputFormatters: [PhoneMaskFormatter()],
+      validator: (v) {
+        final raw = normalizePhoneToRaw10(v);
+        if (!RegExp(r'^5\d{9}$').hasMatch(raw)) {
+          return 'Geçerli bir cep telefonu numarası girin.';
+        }
+        return null;
+      },
+    );
+    if (value == null || !mounted) return;
+    final raw = normalizePhoneToRaw10(value);
+    try {
+      final r = await IdentityService.setPhone(c.playerId, raw);
+      if (!mounted) return;
+      final text = switch (r) {
+        'ok' =>
+          'Numara kaydedildi. Futbolcu ${formatPhoneRaw10(raw)} ile '
+              '"Şifremi Unuttum"dan kod alıp şifresini belirleyebilir.',
+        'phone_taken' => 'Bu numara başka bir profilde ya da hesapta kayıtlı.',
+        'confirmed' => 'Profilin numarası zaten onaylı.',
+        'forbidden' => 'Bu profile numara ekleme yetkiniz yok.',
+        _ => 'Numara kaydedilemedi. Lütfen tekrar deneyin.',
+      };
+      messenger.showSnackBar(SnackBar(content: Text(text)));
+      if (r == 'phone_taken' && mounted) {
+        await _askPhone(c);
+      }
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(IdentityService.errorText(e))),
+      );
     }
   }
 
