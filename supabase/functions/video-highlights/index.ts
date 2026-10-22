@@ -803,14 +803,22 @@ Deno.serve(async (req) => {
     });
   }
 
-  const [{ data: teams }, { data: season }, { data: events }] = await Promise.all([
+  const [{ data: teams }, { data: season }, { data: events, error: eventsError }] = await Promise.all([
     admin.from("teams").select("id, name").in("id", [m.home_team_id, m.away_team_id]),
     admin.from("seasons").select("match_period_duration").eq("id", m.season_id).maybeSingle(),
     admin.from("match_events")
-      .select("id, minute, team_id, player_id, player_name, is_own_goal, is_penalty")
+      // match_events'te oyuncu adı sütunu yok; ad players'tan gelir. (Eski
+      // sorgu olmayan sütunu istediği için hata dönüyor, maç dakikasız
+      // sayılıp otomatik taranmıyordu.)
+      .select("id, minute, team_id, player_id, is_own_goal, is_penalty, " +
+        "player:players!match_events_player_id_fkey(name, surname)")
       .eq("match_id", matchId).eq("event_type", "goal")
       .order("minute").order("created_at"),
   ]);
+  // Goller okunamazsa maç dakikasız sanılıp tüm video taranmasın.
+  if (eventsError) {
+    return json({ error: `Goller okunamadı: ${eventsError.message}` }, 500);
+  }
   const nameOf = (id: string) => (teams ?? []).find((t) => t.id === id)?.name ?? "";
   const home = { id: m.home_team_id, name: nameOf(m.home_team_id) || "Ev sahibi" };
   const away = { id: m.away_team_id, name: nameOf(m.away_team_id) || "Deplasman" };
@@ -825,7 +833,7 @@ Deno.serve(async (req) => {
     minute: e.minute == null ? null : Number(e.minute) || 0,
     teamId: e.team_id,
     teamName: e.team_id === home.id ? home.name : e.team_id === away.id ? away.name : "",
-    player: (e.player_name ?? "").trim(),
+    player: `${(e as any).player?.name ?? ""} ${(e as any).player?.surname ?? ""}`.trim(),
     ownGoal: !!e.is_own_goal,
     penalty: !!e.is_penalty,
   }));
