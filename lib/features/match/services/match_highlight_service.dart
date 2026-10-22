@@ -97,6 +97,12 @@ class MatchHighlightJob {
   final String status;
   final String? mode;
   final int? found;
+
+  /// Maç raporunda olup yayında görüntüsü bulunamayan gol sayısı.
+  final int? missing;
+
+  /// Sistem emin olamadı (başlangıç tutmadı / gollerin azı bulundu).
+  final bool needsReview;
   final String? error;
   final DateTime? startedAt;
 
@@ -111,6 +117,8 @@ class MatchHighlightJob {
     required this.status,
     this.mode,
     this.found,
+    this.missing,
+    this.needsReview = false,
     this.error,
     this.startedAt,
     this.costUsd,
@@ -168,7 +176,8 @@ class MatchHighlightService {
     final r = await _db
         .from('match_highlight_jobs')
         .select(
-          'status, mode, found, error, started_at, cost_usd, kickoff_sec, '
+          'status, mode, found, missing, needs_review, error, started_at, '
+          'cost_usd, kickoff_sec, '
           'second_half_sec',
         )
         .eq('match_id', matchId)
@@ -178,6 +187,8 @@ class MatchHighlightService {
       status: (r['status'] ?? '').toString(),
       mode: r['mode']?.toString(),
       found: r['found'] is num ? (r['found'] as num).toInt() : null,
+      missing: r['missing'] is num ? (r['missing'] as num).toInt() : null,
+      needsReview: r['needs_review'] == true,
       error: r['error']?.toString(),
       startedAt: DateTime.tryParse('${r['started_at'] ?? ''}'),
       costUsd: r['cost_usd'] is num
