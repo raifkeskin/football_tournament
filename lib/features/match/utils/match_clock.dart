@@ -61,22 +61,30 @@ class MatchClock {
     return minute > limit ? "$limit+${minute - limit}'" : "$minute'";
   }
 
-  /// Olay girişinde önerilecek dakika (canlı maçta). Uzatma dakikaları
-  /// devrenin son dakikasına yazılır (30+2' → 30); uzatma/penaltıda ve maç
-  /// canlı değilse null.
-  static int? liveMinuteValue(MatchModel m, {DateTime? now}) {
+  /// Olay girişinde önerilecek dakika (canlı maçta). Devre süresi aşıldıysa
+  /// devre sonu + uzatma (30+2' → minute 30, added 2). Uzatma devresinde,
+  /// penaltılarda ve maç canlı değilse null.
+  static ({int minute, int? added})? liveMinuteParts(
+    MatchModel m, {
+    DateTime? now,
+  }) {
     if (m.status != MatchStatus.live) return null;
     if (m.shootout != null || m.extraTimeAt != null) return null;
     final kickoff = m.kickoffAt;
-    if (kickoff == null) return m.minute;
+    if (kickoff == null) {
+      return m.minute == null ? null : (minute: m.minute!, added: null);
+    }
     final t = (now ?? DateTime.now()).toUtc();
     final period = periodOf(m.seasonId);
     final secondHalf = m.secondHalfAt;
     final start = secondHalf ?? kickoff;
     final played = t.difference(start).inMinutes.clamp(0, 999) + 1;
     final base = secondHalf == null ? 0 : period;
+    final limit = base + period;
     final minute = base + played;
-    return minute > base + period ? base + period : minute;
+    return minute > limit
+        ? (minute: limit, added: (minute - limit).clamp(1, 30))
+        : (minute: minute, added: null);
   }
 }
 

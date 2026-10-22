@@ -49,6 +49,11 @@ class _Scorer {
       minutes = [
         for (final v in (m['minutes'] as List? ?? const []))
           if (v is num) v.toInt(),
+      ],
+      // Uzatmalı etiketler (30+2'); eski haberlerde yok.
+      labels = [
+        for (final v in (m['labels'] as List? ?? const []))
+          if (v != null) v.toString(),
       ];
 
   final String name;
@@ -56,6 +61,7 @@ class _Scorer {
   final int pen;
   final bool og;
   final List<int> minutes;
+  final List<String> labels;
 
   /// "Ali Can (2)", "Veli Er (P)", "Mehmet Ak (K.K.)"
   String get label {
@@ -66,8 +72,11 @@ class _Scorer {
     return b.toString();
   }
 
-  String get minuteText =>
-      minutes.isEmpty ? '' : minutes.map((m) => "$m'").join(', ');
+  String get minuteText => labels.isNotEmpty
+      ? labels.join(', ')
+      : minutes.isEmpty
+      ? ''
+      : minutes.map((m) => "$m'").join(', ');
 }
 
 /// Bir maçın sonucu (auto_data veya week_results.matches öğesi).

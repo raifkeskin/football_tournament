@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../utils/minute_label.dart';
 
 import '../../../core/widgets/match_event_icons.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
@@ -49,7 +50,9 @@ String _clipTitle(
   String awayName,
 ) {
   final team = _teamLabel(h, match, homeName, awayName);
-  final min = h.minute != null ? "${h.minute}' " : '';
+  final min = h.minute != null
+      ? '${minuteLabel(h.minute, h.addedMinute)} '
+      : '';
   return '${min}Gol${team.isEmpty ? '' : ' · $team'}';
 }
 
@@ -1014,7 +1017,7 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
               Expanded(
                 child: Text(
                   [
-                    if (h.minute != null) "${h.minute}'",
+                    if (h.minute != null) minuteLabel(h.minute, h.addedMinute),
                     'Gol',
                     if (team.isNotEmpty) team,
                   ].join(' · '),

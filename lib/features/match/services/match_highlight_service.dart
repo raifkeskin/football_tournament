@@ -19,6 +19,9 @@ class MatchHighlight {
   /// oyuncusu kullanılır.
   final String? playerId;
   final int? minute;
+
+  /// Uzatma dakikası (30+2'); yoksa null.
+  final int? addedMinute;
   final String videoId;
   final int startSec;
   final int endSec;
@@ -38,6 +41,7 @@ class MatchHighlight {
     this.teamId,
     this.playerId,
     this.minute,
+    this.addedMinute,
     required this.videoId,
     required this.startSec,
     required this.endSec,
@@ -65,6 +69,7 @@ class MatchHighlight {
       teamId: readStr(m['team_id']),
       playerId: readStr(m['player_id']),
       minute: readInt(m['minute']),
+      addedMinute: readInt(m['added_minute']),
       videoId: m['video_id'].toString(),
       startSec: readInt(m['start_sec']) ?? 0,
       endSec: readInt(m['end_sec']) ?? 0,

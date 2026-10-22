@@ -1,3 +1,4 @@
+import '../utils/minute_label.dart';
 import 'dart:convert';
 
 enum MatchStatus { notStarted, live, finished, postponed, cancelled, halftime }
@@ -477,6 +478,9 @@ class MatchEvent {
 
   /// Dakika tutulmayan sezonda (halısaha) null.
   final int? minute;
+
+  /// Uzatma dakikası (30+2' → minute 30, addedMinute 2); yoksa null.
+  final int? addedMinute;
   final String eventName;
   final String? playerId;
   final String? assistPlayerId;
@@ -492,6 +496,7 @@ class MatchEvent {
     required this.teamId,
     required this.eventType,
     this.minute,
+    this.addedMinute,
     required this.eventName,
     this.playerId,
     this.assistPlayerId,
@@ -525,6 +530,7 @@ class MatchEvent {
       subInPlayerId: (v('subInPlayerId', 'sub_in_player_id')).toString(),
       eventType: (v('eventType', 'event_type') ?? '').toString(),
       minute: minute,
+      addedMinute: readAddedMinute(map),
       teamId: (v('teamId', 'team_id') ?? '').toString(),
       isOwnGoal: (v('isOwnGoal', 'is_own_goal') as bool?) ?? false,
       isPenalty: (v('isPenalty', 'is_penalty') as bool?) ?? false,
@@ -556,6 +562,8 @@ class MatchEvent {
       // match_events tablosunda player_name kolonu yok; oyuncu adı okurken
       // player_id üzerinden players tablosundan bulunur.
       'minute': minute,
+      // Yalnız uzatmada gönderilir (eski kayıtlar etkilenmez).
+      if (addedMinute != null) 'added_minute': addedMinute,
       'is_own_goal': isOwnGoal,
       // Yalnız penaltıda gönderilir; kolon yokken diğer olaylar etkilenmez.
       if (isPenalty) 'is_penalty': true,

@@ -41,6 +41,7 @@ import '../../../core/utils/team_colors.dart';
 import '../../../core/widgets/pitch_token_style.dart';
 import 'package:football_tournament/core/widgets/picked_image.dart';
 import '../utils/match_clock.dart';
+import '../utils/minute_label.dart';
 import '../services/match_highlight_service.dart';
 import '../widgets/match_highlights_section.dart';
 import '../widgets/youtube_find_sheet.dart';
@@ -4495,6 +4496,10 @@ class _DetailTabView extends StatelessWidget {
           final am = _readMinute(a['minute']);
           final bm = _readMinute(b['minute']);
           if (am != bm) return am.compareTo(bm);
+          // Aynı dakikada uzatma (30+2') sonra gelir.
+          final aa = readAddedMinute(a) ?? 0;
+          final ba = readAddedMinute(b) ?? 0;
+          if (aa != ba) return aa.compareTo(ba);
           final at = pickType(a);
           final bt = pickType(b);
           return at.compareTo(bt);
@@ -4576,6 +4581,7 @@ class _DetailTabView extends StatelessWidget {
               isOwnGoal: type == 'goal' && isOwnGoal,
               match: match,
               minute: minute,
+              addedMinute: system ? null : readAddedMinute(e),
               fullTime: period * 2,
               type: type,
               title: displayTitle(),
@@ -4930,6 +4936,9 @@ class _DetailEventTile extends StatelessWidget {
   final bool isOwnGoal;
   final int minute;
 
+  /// Uzatma dakikası (30+2'); yoksa null.
+  final int? addedMinute;
+
   /// Normal maç süresi (2 devre); aşan dakika "60+4'" gösterilir.
   final int fullTime;
   final String type;
@@ -4954,6 +4963,7 @@ class _DetailEventTile extends StatelessWidget {
     this.isPenalty = false,
     this.isOwnGoal = false,
     required this.minute,
+    this.addedMinute,
     required this.fullTime,
     required this.type,
     required this.title,
@@ -5111,9 +5121,7 @@ class _DetailEventTile extends StatelessWidget {
     // Maçın adamının dakikası yoktur.
     final String min = type == 'man_of_the_match'
         ? ''
-        : minute > fullTime
-        ? "$fullTime+${minute - fullTime}'"
-        : "$minute'";
+        : minuteLabel(minute, addedMinute, fullTime: fullTime);
 
     Widget icon;
     if (system) {
@@ -5276,26 +5284,21 @@ class _DetailEventTile extends StatelessWidget {
     );
   }
 
-  /// Ortadaki dakika rozeti; maçın adamında dakika yerine yıldız. Gol
-  /// dakikası dolu yeşil zeminde beyaz yazılır.
+  /// Ortadaki dakika rozeti; maçın adamında dakika yerine yıldız. Tüm
+  /// olaylarda tek renk (sade, okunaklı); olay türünü ikon gösterir.
   Widget _minuteBadge(String min) {
-    final goal = type == 'goal';
     // Sabit boy: 2 haneli dakika sığar, satır genişliğine yayılmaz;
     // 60+4' gibi uzatma dakikası için biraz genişleyebilir.
     return Container(
       constraints: const BoxConstraints(minWidth: 34, minHeight: 22),
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
-        color: goal ? const Color(0xFF10B981) : const Color(0xFF0F172A),
+        color: const Color(0xFF1A2335),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(
-          color: goal
-              ? const Color(0xFF10B981)
-              : Colors.amber.withValues(alpha: 0.45),
-        ),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
       ),
       child: min.isEmpty
-          ? const Icon(Icons.star_rounded, size: 12, color: Colors.amber)
+          ? const Icon(Icons.star_rounded, size: 12, color: Colors.white70)
           // widthFactor 1: rozet yazı kadar (en az minWidth), yazı ortada.
           : Center(
               widthFactor: 1,
@@ -5305,8 +5308,8 @@ class _DetailEventTile extends StatelessWidget {
                 maxLines: 1,
                 style: TextStyle(
                   fontSize: 10.5,
-                  fontWeight: FontWeight.w800,
-                  color: goal ? Colors.white : Colors.amber,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white70,
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
