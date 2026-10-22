@@ -68,21 +68,31 @@ async function youtubeLiveState(videoId: string): Promise<string> {
   }
 }
 
-/** Canlı yayının gerçek başlama saati (YouTube); canlı yayın değilse null. */
-async function youtubeStartedAt(videoId: string): Promise<number | null> {
-  if (!YOUTUBE_API_KEY) return null;
+/** Canlı yayının gerçek başlama saati (ms) ve video süresi (sn); YouTube
+ *  vermezse null. */
+async function youtubeTiming(
+  videoId: string,
+): Promise<{ startMs: number | null; durationSec: number | null }> {
+  const none = { startMs: null, durationSec: null };
+  if (!YOUTUBE_API_KEY) return none;
   try {
     const res = await fetch(
-      "https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails" +
+      "https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails,contentDetails" +
         `&id=${encodeURIComponent(videoId)}&key=${YOUTUBE_API_KEY}`,
     );
-    if (!res.ok) return null;
-    const j = await res.json();
-    const t = j?.items?.[0]?.liveStreamingDetails?.actualStartTime;
+    if (!res.ok) return none;
+    const item = (await res.json())?.items?.[0];
+    const t = item?.liveStreamingDetails?.actualStartTime;
     const ms = t ? Date.parse(t) : NaN;
-    return Number.isFinite(ms) ? ms : null;
+    // ISO 8601 süre: PT1H32M10S
+    const d = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/.exec(item?.contentDetails?.duration ?? "");
+    const dur = d ? (+(d[1] ?? 0)) * 3600 + (+(d[2] ?? 0)) * 60 + (+(d[3] ?? 0)) : 0;
+    return {
+      startMs: Number.isFinite(ms) ? ms : null,
+      durationSec: dur > 0 ? dur : null,
+    };
   } catch (_) {
-    return null;
+    return none;
   }
 }
 
@@ -431,16 +441,23 @@ async function resolveStarts(
     secondHalfAt: string | null;
   },
 ): Promise<{ kickoff: number | null; secondHalf: number | null; disagree: boolean; source: string }> {
-  const ytStart = await youtubeStartedAt(o.videoId);
+  const yt = await youtubeTiming(o.videoId);
+  const periodSec = o.period * 60;
+  // Düdüklere maç sırasında basıldıysa saat kullanılır. Sonradan girilen
+  // maçta (iki düdük art arda) saat yayının sonunu gösterir: kullanılmaz.
+  const k = o.kickoffAt ? Date.parse(o.kickoffAt) : NaN;
+  const h = o.secondHalfAt ? Date.parse(o.secondHalfAt) : NaN;
+  const liveEntered = Number.isFinite(k) &&
+    (!Number.isFinite(h) || h - k >= (periodSec - 300) * 1000);
   const offset = (iso: string | null) => {
-    if (ytStart == null || !iso) return null;
+    if (!liveEntered || yt.startMs == null || !iso) return null;
     const ms = Date.parse(iso);
     if (!Number.isFinite(ms)) return null;
-    const sec = Math.round((ms - ytStart) / 1000);
-    // Yayından 1 saatten fazla önce / 4 saatten sonra: saat güvenilmez.
-    return sec > -3600 && sec < 4 * 3600 ? sec : null;
+    const sec = Math.round((ms - yt.startMs) / 1000);
+    // Yayından 1 saatten fazla önce ya da videonun bitimine yakın: güvenilmez.
+    const maxSec = yt.durationSec != null ? yt.durationSec - 600 : 4 * 3600;
+    return sec > -3600 && sec < maxSec ? sec : null;
   };
-  const periodSec = o.period * 60;
   let disagree = false;
   const sources: string[] = [];
 
