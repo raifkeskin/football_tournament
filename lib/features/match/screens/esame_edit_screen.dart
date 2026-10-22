@@ -670,6 +670,8 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
+      // Pencere sürüklenince sahadaki oyuncu sürüklemesiyle çakışıyor.
+      enableDrag: false,
       backgroundColor: _bg,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
