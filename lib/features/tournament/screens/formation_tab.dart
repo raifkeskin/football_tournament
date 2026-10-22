@@ -442,6 +442,20 @@ class _FormationTabState extends State<FormationTab>
 
   /// Kaydedilmemiş değişikliği olan takımlar (teamIndex).
   final Set<int> _dirty = {};
+
+  /// Dokunarak yer değiştirmede ilk seçilen oyuncu.
+  String? _picked;
+
+  void _pick(List<String> current, String id) {
+    final first = _picked;
+    if (first == null) {
+      setState(() => _picked = id);
+      return;
+    }
+    setState(() => _picked = null);
+    if (first != id) _swap(current, first, id);
+  }
+
   bool _saving = false;
 
   void _swap(List<String> current, String fromId, String toId) {
@@ -531,6 +545,7 @@ class _FormationTabState extends State<FormationTab>
     setState(() {
       _chosen[_selected] = value;
       _order.remove(_selected); // yeni dizilişte otomatik yerleşim
+      _picked = null;
       _dirty.add(_selected);
     });
   }
@@ -550,7 +565,10 @@ class _FormationTabState extends State<FormationTab>
             homeColor: widget.homeColor ?? _accent,
             awayColor: widget.awayColor ?? _accent,
             selected: _selected,
-            onChanged: (v) => setState(() => _selected = v),
+            onChanged: (v) => setState(() {
+              _selected = v;
+              _picked = null;
+            }),
           ),
           const SizedBox(height: 10),
         ],
@@ -689,6 +707,10 @@ class _FormationTabState extends State<FormationTab>
                           onSwap: _canEdit
                               ? (from, to) => _swap(currentIds, from, to)
                               : null,
+                          picked: _picked,
+                          onPick: _canEdit
+                              ? (id) => _pick(currentIds, id)
+                              : null,
                         ),
                       ),
                     ),
@@ -696,8 +718,8 @@ class _FormationTabState extends State<FormationTab>
                       const Padding(
                         padding: EdgeInsets.only(top: 8),
                         child: Text(
-                          'Yer değiştirmek için oyuncuya basılı tutup başka '
-                          'bir oyuncunun üzerine bırakın.',
+                          'Yer değiştirmek için iki oyuncuya sırayla dokunun '
+                          '(ya da basılı tutup diğerinin üzerine bırakın).',
                           textAlign: TextAlign.center,
                           style: TextStyle(color: _midText, fontSize: 11),
                         ),
@@ -922,6 +944,8 @@ class _Pitch extends StatelessWidget {
     required this.teamColor,
     this.style = PitchTokenStyle.circle,
     this.onSwap,
+    this.picked,
+    this.onPick,
   });
 
   /// lines[0]: kaleci, sonrakiler defanstan hücuma dizilişin hatları.
@@ -931,6 +955,11 @@ class _Pitch extends StatelessWidget {
 
   /// null değilse oyuncular sürükle-bırakla yer değiştirebilir.
   final void Function(String fromId, String toId)? onSwap;
+
+  /// Dokunarak yer değiştirme: seçili oyuncu ve dokunma. Sürükleme bazı
+  /// cihazlarda (iOS tarayıcı, alt pencere) kaydırmayla çakışıyor.
+  final String? picked;
+  final void Function(String id)? onPick;
 
   @override
   Widget build(BuildContext context) {
@@ -976,10 +1005,16 @@ class _Pitch extends StatelessWidget {
   }
 
   Widget _slot(_PitchPlayer p, Color color) {
-    final token = _PlayerToken(player: p, color: color, style: style);
     final swap = onSwap;
+    final selected = picked == p.id;
+    final token = _PlayerToken(
+      player: p,
+      color: selected ? const Color(0xFFFACC15) : color,
+      style: style,
+    );
     if (swap == null) return token;
-    return DragTarget<String>(
+    final pick = onPick;
+    final body = DragTarget<String>(
       onWillAcceptWithDetails: (d) => d.data != p.id,
       onAcceptWithDetails: (d) => swap(d.data, p.id),
       builder: (context, candidates, _) {
@@ -995,12 +1030,18 @@ class _Pitch extends StatelessWidget {
           ),
           childWhenDragging: Opacity(opacity: 0.3, child: token),
           child: AnimatedScale(
-            scale: candidates.isNotEmpty ? 1.15 : 1,
+            scale: candidates.isNotEmpty || selected ? 1.15 : 1,
             duration: const Duration(milliseconds: 120),
             child: token,
           ),
         );
       },
+    );
+    if (pick == null) return body;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => pick(p.id),
+      child: body,
     );
   }
 }
