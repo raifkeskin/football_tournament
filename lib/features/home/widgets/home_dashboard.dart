@@ -1091,11 +1091,14 @@ class _HomeDashboardState extends State<HomeDashboard> {
     );
   }
 
-  /// Özetin grubu: seçilen grup, yoksa kişinin grubu, o da yoksa ilk grup
-  /// (gruplar karışmasın; her grubun haftası farklı olabilir).
+  /// Özetin grubu: seçilen grup, yoksa sorumlu olduğu bölgenin grubu, yoksa
+  /// kişinin grubu, o da yoksa ilk grup (gruplar karışmasın; her grubun
+  /// haftası farklı olabilir).
   String? _groupId(_DashData d) {
     final picked = _pickedGroupId;
     if (picked != null && d.groups.containsKey(picked)) return picked;
+    final region = _regionGroupId(d);
+    if (region != null) return region;
     final mine = _myGroupId(d);
     if (mine != null) return mine;
     if (d.groups.isEmpty) return null;
@@ -1105,6 +1108,25 @@ class _HomeDashboardState extends State<HomeDashboard> {
             d.groups[a]!.toLowerCase().compareTo(d.groups[b]!.toLowerCase()),
       );
     return ids.first;
+  }
+
+  /// Bölge sorumlusunun bu sezondaki ilk bölgesinin grubu.
+  String? _regionGroupId(_DashData d) {
+    final regions = AppSession.of(context).value.regionsInSeason(d.seasonId)
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    for (final r in regions) {
+      final ids =
+          [
+            for (final e in d.groupRegionId.entries)
+              if (e.value == r.id && d.groups.containsKey(e.key)) e.key,
+          ]..sort(
+            (a, b) => d.groups[a]!.toLowerCase().compareTo(
+              d.groups[b]!.toLowerCase(),
+            ),
+          );
+      if (ids.isNotEmpty) return ids.first;
+    }
+    return null;
   }
 
   /// Kişinin (ya da takip ettiği takımın) grubu.
