@@ -47,7 +47,8 @@ $function$;
 revoke all on function public.my_player_id() from public, anon;
 grant execute on function public.my_player_id() to authenticated;
 
--- Yetkili yeni oyuncu açar ve id'sini alır. Telefon verilmişse ve o
+-- Yetkili (admin, kurucu başkan, bölge sorumlusu) yeni oyuncu açar ve
+-- id'sini alır. Telefon verilmişse ve o
 -- numarada oyuncu varsa mevcut oyuncu döner (eski davranış). Ad + soyad +
 -- doğum tarihi aynı başka kayıt varsa players_identity_uq hatası verir.
 create or replace function public.staff_create_player(
@@ -70,11 +71,12 @@ declare
   v_raw text := public.phone_raw10(p_phone);
   v_id uuid;
 begin
+  -- Oyuncu ekleme kuralı players_insert ile aynı (takım sorumlusu kadro
+  -- talebiyle ekler).
   if v_uid is null or not (
        public.is_admin()
-    or exists (select 1 from public.league_owners where user_id = v_uid)
-    or exists (select 1 from public.region_owners where user_id = v_uid)
-    or exists (select 1 from public.team_managers where user_id = v_uid)) then
+    or public.is_any_league_owner()
+    or public.is_any_region_owner()) then
     raise exception 'Oyuncu ekleme yetkiniz yok.';
   end if;
   if nullif(trim(coalesce(p_name, '')), '') is null then
