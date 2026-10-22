@@ -6,9 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/utils/resilient_stream.dart';
 import '../../tournament/models/league.dart';
 import '../models/match.dart';
-import '../widgets/knockout_fields.dart';
 import '../widgets/penalty_badge.dart';
-import '../../tournament/models/league_format.dart';
 import '../../team/models/team.dart';
 import '../../../core/services/app_session.dart';
 import '../../tournament/services/interfaces/i_league_service.dart';
@@ -1283,23 +1281,6 @@ class _MatchCard extends StatelessWidget {
     final pitches = [...await _leagueService.watchPitches().first]
       ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
-    // Eleme maçı ayarı; kupalar sezonun lig formatından gelir.
-    final initialKo = KnockoutValue(
-      tiebreak: match.tiebreak,
-      cupName: match.cupName,
-      cupRound: match.cupRound,
-    );
-    var ko = initialKo;
-    var cups = const <FormatCup>[];
-    try {
-      final row = await Supabase.instance.client
-          .from('seasons')
-          .select('league_format')
-          .eq('id', match.seasonId)
-          .maybeSingle();
-      cups = LeagueFormat.fromJson(row?['league_format'])?.cups ?? const [];
-    } catch (_) {}
-
     if (pitches.length == 1) {
       selectedPitchId = pitches.first.id;
       selectedPitchName = pitches.first.name.trim().isEmpty
@@ -1583,12 +1564,6 @@ class _MatchCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    KnockoutFields(
-                      value: ko,
-                      cups: cups,
-                      onChanged: (v) => setDialogState(() => ko = v),
-                    ),
                     const SizedBox(height: 24),
                     SizedBox(
                       height: 50,
@@ -1643,14 +1618,6 @@ class _MatchCard extends StatelessWidget {
                               pitchId: selectedPitchId,
                               pitchName: selectedPitchName,
                             );
-                            if (!ko.sameAs(initialKo)) {
-                              await _matchService.setMatchKnockout(
-                                matchId: match.id,
-                                tiebreak: ko.tiebreak,
-                                cupName: ko.cupName,
-                                cupRound: ko.cupRound,
-                              );
-                            }
                             if (c.mounted) Navigator.pop(c);
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(

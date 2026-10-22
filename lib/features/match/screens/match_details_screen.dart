@@ -497,6 +497,10 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    if (!_regionOwnerChecked) {
+      _regionOwnerChecked = true;
+      _checkRegionOwner();
+    }
     final route = ModalRoute.of(context);
     if (route == _bandRoute) return;
     if (_bandRoute != null) {
@@ -527,6 +531,32 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     _teamsStream = _teamService.watchAllTeams();
     _pitchesStream = _leagueService.watchPitches();
     _prefetchLineups(widget.match);
+  }
+
+  bool _regionOwnerChecked = false;
+
+  /// Maçın bölgesinin sorumlusu mu (Medya sekmesindeki menü için).
+  bool _matchRegionOwner = false;
+
+  void _checkRegionOwner() {
+    final session = AppSession.of(context).value;
+    final m = widget.match;
+    final groupId = (m.groupId ?? '').trim();
+    if (groupId.isEmpty || session.regionsInSeason(m.seasonId).isEmpty) {
+      return;
+    }
+    Supabase.instance.client
+        .from('groups')
+        .select('region_id')
+        .eq('id', groupId)
+        .maybeSingle()
+        .then((row) {
+          final regionId = row?['region_id']?.toString();
+          if (mounted && session.ownedRegions.any((r) => r.id == regionId)) {
+            setState(() => _matchRegionOwner = true);
+          }
+        })
+        .catchError((_) {});
   }
 
   // Akışlar bir kez kurulur; sekme değişimi gibi yeniden çizimlerde
@@ -1292,11 +1322,10 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                     ),
                 ],
               ),
-              // Bölge sorumlusu yalnızca Medya sekmesinde menüyü görür.
+              // Maçın bölge sorumlusu yalnızca Medya sekmesinde menüyü görür.
               floatingActionButton:
                   !(isSuperAdmin ||
-                      (_tabController.index == 2 &&
-                          session.regionsInSeason(m.seasonId).isNotEmpty))
+                      (_tabController.index == 2 && _matchRegionOwner))
                   ? null
                   : _buildTabFab(
                       match: m,
