@@ -22,6 +22,7 @@ import '../../team/models/team.dart';
 import '../../../core/utils/team_name.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../../core/services/app_session.dart';
+import '../widgets/match_schedule_dialog.dart';
 import '../../../core/services/app_settings.dart';
 import '../../../core/services/image_upload_service.dart';
 import '../../tournament/services/interfaces/i_league_service.dart';
@@ -1087,6 +1088,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     bool canUndo = false,
     bool canQuickScore = false,
     bool canControl = true,
+    bool scheduleOnly = false,
     String homeName = '',
     String awayName = '',
   }) {
@@ -1095,6 +1097,19 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     if (match.status == MatchStatus.cancelled) return null;
 
     if (tabIndex == 0) {
+      // Maçın bölge sorumlusu yalnızca tarih, saat ve stadı girer.
+      if (scheduleOnly) {
+        return _SpeedDialFab(
+          key: const ValueKey('fab_schedule'),
+          actions: [
+            _SpeedDialAction(
+              label: 'Tarih Girişi',
+              icon: Icons.edit_calendar_rounded,
+              onTap: () => _openScheduleDialog(match),
+            ),
+          ],
+        );
+      }
       // Maçı başka sorumlu yönetirken giriş menüsü yok (şeritten devral).
       if (!canControl) return null;
       return _SpeedDialFab(
@@ -1123,9 +1138,9 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
             ),
           ),
           _SpeedDialAction(
-            label: 'Stad Seç',
-            icon: Icons.location_on,
-            onTap: () => _openPitchEditor(match),
+            label: 'Tarih Girişi',
+            icon: Icons.edit_calendar_rounded,
+            onTap: () => _openScheduleDialog(match),
           ),
           if (canUndo &&
               match.status != MatchStatus.notStarted &&
@@ -1322,14 +1337,18 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                     ),
                 ],
               ),
-              // Maçın bölge sorumlusu yalnızca Medya sekmesinde menüyü görür.
+              // Maçın bölge sorumlusu Maç sekmesinde tarih girişini, Medya
+              // sekmesinde medya menüsünü görür.
               floatingActionButton:
                   !(isSuperAdmin ||
-                      (_tabController.index == 2 && _matchRegionOwner))
+                      (_matchRegionOwner &&
+                          (_tabController.index == 0 ||
+                              _tabController.index == 2)))
                   ? null
                   : _buildTabFab(
                       match: m,
                       tabIndex: _tabController.index,
+                      scheduleOnly: !isSuperAdmin,
                       canUndo: canManageLeague,
                       canQuickScore: canManageLeague,
                       canControl: canControl,
@@ -1693,88 +1712,12 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     }
   }
 
-  void _openPitchEditor(MatchModel m) async {
-    final list = await _leagueService.listPitchesOnce();
-    String? sel = m.pitchName;
-    if (!mounted) return;
-    var saving = false;
-    showDialog(
-      context: context,
-      builder: (c) => StatefulBuilder(
-        builder: (context, setS) {
-          Future<void> pick() async {
-            final v = await showAdminOptionPicker<String>(
-              context: context,
-              title: 'Saha',
-              items: list,
-              labelBuilder: (p) => p,
-              selected: sel,
-              emptyText: 'Kayıtlı saha yok.',
-            );
-            if (v != null) setS(() => sel = v);
-          }
-
-          Future<void> save() async {
-            setS(() => saving = true);
-            try {
-              await _matchService.updateMatchPitchName(
-                matchId: m.id,
-                pitchName: sel,
-              );
-              if (c.mounted) Navigator.pop(c);
-            } catch (e) {
-              setS(() => saving = false);
-              if (c.mounted) {
-                ScaffoldMessenger.of(c).showSnackBar(
-                  SnackBar(content: Text('Saha kaydedilemedi: $e')),
-                );
-              }
-            }
-          }
-
-          return Dialog(
-            backgroundColor: Colors.transparent,
-            insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-            child: AdminDialogCloseOverlay(
-              onClose: saving ? null : () => Navigator.pop(c),
-              child: Container(
-                padding: const EdgeInsets.all(22),
-                decoration: adminDialogDecoration(),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const AdminDialogHeader(
-                      icon: Icons.stadium_outlined,
-                      title: 'Saha Seçimi',
-                    ),
-                    const SizedBox(height: 18),
-                    AdminFieldGroup(
-                      children: [
-                        AdminSelectRow(
-                          icon: Icons.location_on_outlined,
-                          label: 'Saha',
-                          value: sel,
-                          placeholder: 'Saha seçin',
-                          onTap: saving ? null : pick,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 22),
-                    AdminPrimaryButton(
-                      label: 'KAYDET',
-                      busy: saving,
-                      onPressed: save,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
+  /// Tarih, saat ve stad (Fikstür'deki Maçı Düzenle penceresi).
+  void _openScheduleDialog(MatchModel m) => showMatchScheduleDialog(
+    context,
+    match: m,
+    onDataChanged: _triggerRefresh,
+  );
 
   Future<void> _openHighlightMediaAdder(
     MatchModel matchModel,
