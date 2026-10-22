@@ -100,7 +100,7 @@ class _ChangePhoneScreenState extends State<ChangePhoneScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Telefon numaran değişti. Bundan sonra 0 '
+              'Telefon numaran değişti. Bundan sonra '
               '${formatPhoneRaw10(raw10)} ile giriş yap.',
             ),
           ),
