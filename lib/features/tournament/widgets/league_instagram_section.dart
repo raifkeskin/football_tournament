@@ -33,8 +33,17 @@ class _IgStatus {
 /// durum yenilenir (bkz. migration 20261020140000_instagram_accounts).
 const _importHint =
     '15 dakikada bir yeni gönderiler kontrol edilir. Açıklamasında #ligmasasi '
-    'olan gönderi hemen haber olur; olmayan, Bekleyen Onaylar\'da onayınızı '
-    'bekler.';
+    'ya da bir bölgenin etiketi olan gönderi hemen haber olur; olmayan, '
+    'Bekleyen Onaylar\'da onayınızı bekler.';
+
+/// Aktif sezonun bölgesi ve Instagram etiketi (# olmadan).
+class _RegionTag {
+  const _RegionTag({required this.id, required this.name, this.tag});
+
+  final String id;
+  final String name;
+  final String? tag;
+}
 
 /// "Haberlere aktar" açıkken gönderiler 15 dakikada bir aktif sezonun
 /// haberlerine düşer (instagram-sync, migration 20261020150000).
@@ -50,6 +59,7 @@ class LeagueInstagramSection extends StatefulWidget {
 class _LeagueInstagramSectionState extends State<LeagueInstagramSection> {
   final _sb = Supabase.instance.client;
   late Future<_IgStatus?> _status = _load();
+  late Future<List<_RegionTag>> _regions = _loadRegions();
   late final AppLifecycleListener _lifecycle;
   bool _busy = false;
 
@@ -86,12 +96,134 @@ class _LeagueInstagramSectionState extends State<LeagueInstagramSection> {
     );
   }
 
+  /// Aktif sezonun bölgeleri (bölge yoksa boş; etiket satırları çıkmaz).
+  Future<List<_RegionTag>> _loadRegions() async {
+    final seasons = await _sb
+        .from('seasons')
+        .select('id, is_active')
+        .eq('league_id', widget.leagueId)
+        .isFilter('deleted_at', null)
+        .order('start_date', ascending: false);
+    if (seasons.isEmpty) return const [];
+    final season = seasons.firstWhere(
+      (x) => x['is_active'] == true,
+      orElse: () => seasons.first,
+    );
+    final rows = await _sb
+        .from('season_regions')
+        .select('id, name, instagram_tag')
+        .eq('season_id', season['id'])
+        .order('sort_order');
+    return [
+      for (final r in rows)
+        _RegionTag(
+          id: r['id'].toString(),
+          name: (r['name'] ?? '').toString(),
+          tag: (r['instagram_tag'] ?? '').toString().trim().isEmpty
+              ? null
+              : r['instagram_tag'].toString(),
+        ),
+    ];
+  }
+
   void _reload() {
     if (!mounted) return;
     setState(() {
       _status = _load();
+      _regions = _loadRegions();
     });
   }
+
+  /// Bölgenin Instagram etiketini düzenler (boş bırakılırsa kaldırılır).
+  Future<void> _editRegionTag(_RegionTag r) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final value = await showAdminTextInputDialog(
+      context: context,
+      title: 'Bölge Etiketi',
+      subtitle: r.name,
+      icon: Icons.tag_rounded,
+      label: 'Etiket',
+      fieldIcon: Icons.tag_rounded,
+      hint: 'ör. anadolu',
+      initialValue: r.tag ?? '',
+      validator: (v) {
+        final t = v.trim().replaceFirst(RegExp(r'^#'), '');
+        if (t.isEmpty) return null;
+        if (!RegExp(r'^[\p{L}\p{N}_]{2,40}$', unicode: true).hasMatch(t)) {
+          return 'Boşluksuz yazın: harf, rakam ve alt çizgi (2-40).';
+        }
+        return null;
+      },
+    );
+    if (value == null || !mounted) return;
+    final t = value.trim().replaceFirst(RegExp(r'^#'), '');
+    setState(() => _busy = true);
+    try {
+      await _sb
+          .from('season_regions')
+          .update({'instagram_tag': t.isEmpty ? null : t})
+          .eq('id', r.id);
+      _reload();
+    } on PostgrestException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Bölge etiketleri: açıklamada bölgenin etiketi geçen gönderi hemen o
+  /// bölgenin haberi olur.
+  Widget _regionTags() => FutureBuilder<List<_RegionTag>>(
+    future: _regions,
+    builder: (context, snap) {
+      final regions = snap.data ?? const <_RegionTag>[];
+      if (regions.isEmpty) return const SizedBox.shrink();
+      return Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            AdminFieldGroup(
+              children: [
+                for (final r in regions)
+                  AdminFieldRow(
+                    icon: Icons.tag_rounded,
+                    label: 'Bölge etiketi · ${r.name}',
+                    onTap: _busy ? null : () => _editRegionTag(r),
+                    trailing: const Icon(
+                      Icons.edit_outlined,
+                      color: kAdminMuted,
+                      size: 18,
+                    ),
+                    child: Text(
+                      r.tag == null ? 'Yok' : '#${r.tag}',
+                      style: TextStyle(
+                        color: r.tag == null ? kAdminMuted : Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(4, 8, 4, 0),
+              child: Text(
+                'Açıklamasında bölgenin etiketi geçen gönderi hemen o bölgenin '
+                'haberi olur. Birden fazla bölgenin etiketi geçerse tüm '
+                'turnuvada görünür.',
+                style: TextStyle(
+                  color: kAdminMuted,
+                  fontSize: 12,
+                  height: 1.35,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
 
   Future<void> _connect() async {
     final messenger = ScaffoldMessenger.of(context);
@@ -326,6 +458,7 @@ class _LeagueInstagramSectionState extends State<LeagueInstagramSection> {
                     ),
                   ),
                 ),
+              if (s != null && s.importNews) _regionTags(),
               if (note != null)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),

@@ -252,6 +252,9 @@ class SupabaseMatchService implements IMatchService {
   static void notifyLocalChange(String matchId) =>
       _localChanges.add(matchId.trim());
 
+  /// Bu cihazda değişen maçların id'leri (ana sayfa yenilensin diye).
+  static Stream<String> get localChanges => _localChanges.stream;
+
   @override
   Stream<MatchModel> watchMatch(String matchId) {
     final id = matchId.trim();
@@ -793,6 +796,7 @@ class SupabaseMatchService implements IMatchService {
         .update({'pitch_id': pitchId})
         .eq('id', matchId);
     AppConfig.sqlLogResult(table: 'matches', operation: 'UPDATE', count: 1);
+    notifyLocalChange(matchId);
   }
 
   @override
@@ -952,6 +956,7 @@ class SupabaseMatchService implements IMatchService {
           rethrow;
         }
       }
+      notifyLocalChange(id);
     });
   }
 
