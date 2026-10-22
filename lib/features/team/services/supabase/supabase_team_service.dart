@@ -1033,9 +1033,11 @@ class SupabaseTeamService implements ITeamService {
     required String name,
     String? birthDate,
     String? mainPosition,
+    String? subPosition,
     String? preferredFoot,
     int? height,
     int? weight,
+    String? photoUrl,
     String? caller,
   }) async {
     final p = _normalizePhoneToRaw10((phone ?? '').trim());
@@ -1065,6 +1067,8 @@ class SupabaseTeamService implements ITeamService {
           'p_foot': preferredFoot,
           'p_height': height,
           'p_weight': weight,
+          'p_sub': subPosition,
+          'p_photo': photoUrl,
         },
       );
       AppConfig.sqlLogResult(

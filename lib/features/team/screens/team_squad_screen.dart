@@ -2502,6 +2502,8 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
               name: fullName,
               birthDate: resolvedBirthDate,
               mainPosition: resolvedMainPosition,
+              subPosition: resolvedSubPosition,
+              photoUrl: finalPhotoUrl,
               preferredFoot: _preferredFoot.trim().isEmpty
                   ? null
                   : _preferredFoot.trim(),
@@ -2517,7 +2519,8 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
           throw Exception('Oyuncu oluşturulamadı, lütfen tekrar deneyin.');
         }
       }
-      if (identityChanged) {
+      // Yeni oyuncu tüm bilgileriyle açıldı; yalnız düzenlemede güncellenir.
+      if (isEditing && identityChanged) {
         await _teamService.updatePlayer(
           playerId: playerId,
           data: {

@@ -51,6 +51,7 @@ grant execute on function public.my_player_id() to authenticated;
 -- id'sini alır. Telefon verilmişse ve o
 -- numarada oyuncu varsa mevcut oyuncu döner (eski davranış). Ad + soyad +
 -- doğum tarihi aynı başka kayıt varsa players_identity_uq hatası verir.
+drop function if exists public.staff_create_player(text, text, date, text, text, text, int, int);
 create or replace function public.staff_create_player(
   p_name text,
   p_surname text,
@@ -59,7 +60,9 @@ create or replace function public.staff_create_player(
   p_main text default null,
   p_foot text default null,
   p_height int default null,
-  p_weight int default null
+  p_weight int default null,
+  p_sub text default null,
+  p_photo text default null
 )
 returns uuid
 language plpgsql
@@ -93,16 +96,19 @@ begin
     end if;
   end if;
 
+  -- Tüm bilgiler tek seferde: kadroya eklenmemiş oyuncuyu kurucu başkan
+  -- sonradan güncelleyemez (owns_player).
   insert into public.players (
-    name, surname, birth_date, phone, main_position, preferred_foot,
-    height, weight
+    name, surname, birth_date, phone, main_position, sub_position,
+    preferred_foot, height, weight, photo_url
   ) values (
     trim(p_name), nullif(trim(coalesce(p_surname, '')), ''), p_birth, v_raw,
-    nullif(trim(coalesce(p_main, '')), ''), nullif(trim(coalesce(p_foot, '')), ''),
-    p_height, p_weight
+    nullif(trim(coalesce(p_main, '')), ''), nullif(trim(coalesce(p_sub, '')), ''),
+    nullif(trim(coalesce(p_foot, '')), ''), p_height, p_weight,
+    nullif(trim(coalesce(p_photo, '')), '')
   ) returning id into v_id;
   return v_id;
 end;
 $function$;
-revoke all on function public.staff_create_player(text, text, date, text, text, text, int, int) from public, anon;
-grant execute on function public.staff_create_player(text, text, date, text, text, text, int, int) to authenticated;
+revoke all on function public.staff_create_player(text, text, date, text, text, text, int, int, text, text) from public, anon;
+grant execute on function public.staff_create_player(text, text, date, text, text, text, int, int, text, text) to authenticated;

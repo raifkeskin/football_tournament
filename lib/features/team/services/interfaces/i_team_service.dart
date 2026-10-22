@@ -41,9 +41,11 @@ abstract class ITeamService {
     required String name,
     String? birthDate,
     String? mainPosition,
+    String? subPosition,
     String? preferredFoot,
     int? height,
     int? weight,
+    String? photoUrl,
     String? caller,
   });
 
