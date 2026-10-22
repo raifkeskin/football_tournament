@@ -1103,6 +1103,7 @@ class _MenuDrawer extends StatelessWidget {
             style: TextButton.styleFrom(
               foregroundColor: const Color(0xFFF87171),
               minimumSize: const Size(44, 44),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
             ),
             icon: const Icon(Icons.logout_rounded, size: 20),
             label: const Text(
@@ -1150,78 +1151,93 @@ class _DrawerIconStrip extends StatefulWidget {
 class _DrawerIconStripState extends State<_DrawerIconStrip> {
   int? _open;
 
+  static const _size = 44.0;
+  static const _gap = 8.0;
+
   @override
   Widget build(BuildContext context) {
     final accent = widget.accent;
-    // Tek satır: açılan ikon uzar, diğerleri yuvarlak kalır.
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      spacing: 8,
-      children: [
-        for (var i = 0; i < widget.items.length; i++)
-          () {
-            final (icon, label, run) = widget.items[i];
-            final open = _open == i;
-            return Flexible(
-              child: Tooltip(
-                message: label,
-                child: Material(
-                  color: open
-                      ? Color.lerp(const Color(0xFF1E293B), accent, 0.2)
-                      : const Color(0xFF1E293B),
-                  shape: StadiumBorder(
-                    side: BorderSide(
-                      color: open
-                          ? accent
-                          : Colors.white.withValues(alpha: 0.08),
-                    ),
-                  ),
-                  child: InkWell(
-                    customBorder: const StadiumBorder(),
-                    onTap: () {
-                      if (open) {
-                        run();
-                      } else {
-                        setState(() => _open = i);
-                      }
-                    },
-                    child: AnimatedSize(
-                      duration: const Duration(milliseconds: 180),
-                      curve: Curves.easeOut,
-                      child: Container(
-                        height: 44,
-                        padding: EdgeInsets.symmetric(
-                          horizontal: open ? 14 : 12,
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(icon, size: 20, color: accent),
-                            if (open) ...[
-                              const SizedBox(width: 8),
-                              Flexible(
-                                child: Text(
-                                  label,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: accent,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
+    final n = widget.items.length;
+    // Tek satır: kapalı ikonlar yuvarlak, açılan ikon Çıkış'a kadar kalan
+    // genişliği alır ve başlığı tam okunur.
+    return LayoutBuilder(
+      builder: (context, c) {
+        final openWidth = (c.maxWidth - (n - 1) * (_size + _gap)).clamp(
+          _size,
+          double.infinity,
+        );
+        return Row(
+          children: [
+            for (var i = 0; i < n; i++) ...[
+              if (i > 0) const SizedBox(width: _gap),
+              _pill(i, accent, open: _open == i, width: openWidth),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _pill(
+    int i,
+    Color accent, {
+    required bool open,
+    required double width,
+  }) {
+    final (icon, label, run) = widget.items[i];
+    return Tooltip(
+      message: label,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+        width: open ? width : _size,
+        height: _size,
+        child: Material(
+          color: open
+              ? Color.lerp(const Color(0xFF1E293B), accent, 0.2)
+              : const Color(0xFF1E293B),
+          shape: StadiumBorder(
+            side: BorderSide(
+              color: open ? accent : Colors.white.withValues(alpha: 0.08),
+            ),
+          ),
+          child: InkWell(
+            customBorder: const StadiumBorder(),
+            onTap: () {
+              if (open) {
+                run();
+              } else {
+                setState(() => _open = i);
+              }
+            },
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: open ? 12 : 0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, size: 20, color: accent),
+                  if (open) ...[
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.fade,
+                        style: TextStyle(
+                          color: accent,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
-                  ),
-                ),
+                  ],
+                ],
               ),
-            );
-          }(),
-      ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
