@@ -322,8 +322,9 @@ class _FixtureViewState extends State<FixtureView> {
       poster: FixturePoster(
         leagueName: league.name,
         leagueLogo: league.logoUrl,
+        // Sonuç afişinde "Maç Sonuçları" hafta satırında; üstte yalnız grup.
         subtitle: results
-            ? (groupName.isEmpty ? 'Maç Sonuçları' : '$groupName Maç Sonuçları')
+            ? groupName
             : (groupName.isEmpty ? 'Fikstür' : '$groupName Fikstür'),
         weekText: results ? '$week. Hafta Maç Sonuçları' : '$week. Hafta',
         days: posterDays,
