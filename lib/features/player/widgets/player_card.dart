@@ -6,6 +6,7 @@ import '../../team/widgets/team_page_tabs.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/active_tournament.dart';
+import '../../../core/services/app_session.dart';
 import '../../../core/widgets/youtube_player_page.dart';
 import '../../match/widgets/youtube_find_sheet.dart' show BroadcastThumb;
 import '../../tournament/models/league.dart';
@@ -1606,7 +1607,13 @@ class _IdentityMenuState extends State<_IdentityMenu> {
     if (!_ready || !IdentityAccess.visibleIn(context)) {
       return const SizedBox.shrink();
     }
-    final canRead = !_verified && !kIsWeb;
+    // Başkasının kimliğini admin, kurucu başkan ve bölge sorumlusu okutur;
+    // diğerleri yalnız kendi profilinde.
+    final session = AppSession.of(context).value;
+    final canRead =
+        !_verified &&
+        !kIsWeb &&
+        (session.hasManagementPanel || session.playerId == widget.playerId);
     if (!canRead && !_canUnverify) return const SizedBox.shrink();
     return PopupMenuButton<String>(
       tooltip: 'Kimlik',

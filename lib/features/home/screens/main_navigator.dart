@@ -24,6 +24,7 @@ import '../../../core/widgets/admin_page.dart';
 import '../../../core/services/error_reporter.dart';
 import '../widgets/feedback_dialog.dart';
 import '../../identity/identity_access.dart';
+import '../../identity/identity_service.dart';
 import '../../identity/identity_verify_screen.dart';
 import '../../identity/verified_badge.dart';
 
@@ -661,6 +662,10 @@ class _MenuDrawer extends StatelessWidget {
                               padding: const EdgeInsets.only(bottom: 8),
                               child: _item(i, accent),
                             ),
+                          if (loggedIn &&
+                              !kIsWeb &&
+                              IdentityAccess.visible(session))
+                            _identityTile(context, accent),
                         ],
                       ),
                     ),
@@ -700,25 +705,6 @@ class _MenuDrawer extends StatelessWidget {
                           style: TextStyle(fontWeight: FontWeight.bold),
                         ),
                         onPressed: onEnterCode,
-                      ),
-                    // Kimlik doğrulama: giriş yapan herkes (çip yalnız
-                    // uygulamada okunur).
-                    if (loggedIn && !kIsWeb && IdentityAccess.visible(session))
-                      TextButton.icon(
-                        style: TextButton.styleFrom(
-                          foregroundColor: kVerifiedBlue,
-                        ),
-                        icon: const Icon(Icons.verified_rounded, size: 20),
-                        label: const Text(
-                          'Kimlik Doğrulama',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        onPressed: () {
-                          final nav = Navigator.of(context);
-                          final ctx = nav.context;
-                          nav.pop(); // çekmeceyi kapat
-                          IdentityVerifyScreen.open(ctx);
-                        },
                       ),
                     TextButton.icon(
                       style: TextButton.styleFrom(foregroundColor: accent),
@@ -898,12 +884,29 @@ class _MenuDrawer extends StatelessWidget {
 
   Widget _item(int i, Color accent) {
     final (icon, label, colors) = _items[i];
-    final selected = activeIndex == i;
+    return _tile(
+      icon: icon,
+      label: label,
+      colors: colors,
+      accent: accent,
+      selected: activeIndex == i,
+      onTap: () => onSelect(i),
+    );
+  }
+
+  Widget _tile({
+    required IconData icon,
+    required String label,
+    required List<Color> colors,
+    required Color accent,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
     return Material(
       color: selected ? Color.lerp(_surface, accent, 0.16) : _surface,
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
-        onTap: () => onSelect(i),
+        onTap: onTap,
         borderRadius: BorderRadius.circular(14),
         child: Container(
           height: 54,
@@ -943,6 +946,40 @@ class _MenuDrawer extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  /// Kimlik Doğrulama: admin, kurucu başkan ve bölge sorumlusu her zaman
+  /// görür (başkalarının kimliğini okutur); diğerleri yalnız kendi profili
+  /// onaylı değilken (kendisi ya da yönetici onaylayınca kaybolur).
+  Widget _identityTile(BuildContext context, Color accent) {
+    Widget tile() => Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: _tile(
+        icon: Icons.verified_rounded,
+        label: 'Kimlik Doğrulama',
+        colors: const [Color(0xFF38BDF8), kVerifiedBlue],
+        accent: accent,
+        selected: false,
+        onTap: () {
+          final nav = Navigator.of(context);
+          final ctx = nav.context;
+          nav.pop(); // çekmeceyi kapat
+          IdentityVerifyScreen.open(ctx);
+        },
+      ),
+    );
+    if (session.hasManagementPanel) return tile();
+    final playerId = (session.playerId ?? '').trim();
+    if (playerId.isEmpty) return const SizedBox.shrink();
+    return ValueListenableBuilder<int>(
+      valueListenable: IdentityService.changes,
+      builder: (context, _, _) => FutureBuilder<bool>(
+        future: IdentityService.isVerified(playerId),
+        initialData: IdentityService.cached(playerId),
+        builder: (context, snap) =>
+            snap.data == false ? tile() : const SizedBox.shrink(),
       ),
     );
   }
