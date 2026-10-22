@@ -669,63 +669,6 @@ class _MenuDrawer extends StatelessWidget {
                         ],
                       ),
                     ),
-                    // Bildirim ayarları: yalnız misafire (giriş yapan profil
-                    // ekranından açar).
-                    if (!loggedIn)
-                      TextButton.icon(
-                        style: TextButton.styleFrom(foregroundColor: accent),
-                        icon: const Icon(
-                          Icons.notifications_active_outlined,
-                          size: 20,
-                        ),
-                        label: const Text(
-                          'Bildirim Ayarları',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        onPressed: () {
-                          final nav = Navigator.of(context);
-                          nav.pop(); // çekmeceyi kapat
-                          nav.push(
-                            MaterialPageRoute<void>(
-                              settings: const RouteSettings(
-                                name: 'NotificationSettingsScreen',
-                              ),
-                              builder: (_) =>
-                                  const NotificationSettingsScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                    if (AppSettings.privateLeaguesEnabled.value)
-                      TextButton.icon(
-                        style: TextButton.styleFrom(foregroundColor: accent),
-                        icon: const Icon(Icons.key_rounded, size: 20),
-                        label: const Text(
-                          'Turnuva Kodu Gir',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        onPressed: onEnterCode,
-                      ),
-                    TextButton.icon(
-                      style: TextButton.styleFrom(foregroundColor: accent),
-                      icon: const Icon(
-                        Icons.chat_bubble_outline_rounded,
-                        size: 20,
-                      ),
-                      label: const Text(
-                        'Sorun Bildir / Öneri Gönder',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      onPressed: () {
-                        final nav = Navigator.of(context);
-                        final ctx = nav.context;
-                        nav.pop(); // çekmeceyi kapat
-                        showFeedbackDialog(
-                          ctx,
-                          role: loggedIn ? session.role : null,
-                        );
-                      },
-                    ),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
                       child: loggedIn
@@ -733,7 +676,11 @@ class _MenuDrawer extends StatelessWidget {
                           : _loginButton(accent),
                     ),
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+                      padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+                      child: _iconStrip(context, accent),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
                       child: Text(
                         'LigMasası '
                         '${(ErrorReporter.version ?? '').split('+').first}',
@@ -1065,25 +1012,70 @@ class _MenuDrawer extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 10),
-        OutlinedButton.icon(
-          style: OutlinedButton.styleFrom(
-            foregroundColor: const Color(0xFFFCA5A5),
-            side: BorderSide(
-              color: const Color(0xFFF87171).withValues(alpha: 0.4),
-            ),
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
+      ],
+    );
+  }
+
+  /// Alt ikon şeridi: Bildirim Ayarları (misafir), Turnuva Kodu Gir, Sorun
+  /// Bildir; sağda Çıkış. İkona basınca başlığı açılır, açıkken basınca
+  /// işlem yapılır.
+  Widget _iconStrip(BuildContext context, Color accent) {
+    void closeThen(void Function(BuildContext ctx) run) {
+      final nav = Navigator.of(context);
+      final ctx = nav.context;
+      nav.pop(); // çekmeceyi kapat
+      run(ctx);
+    }
+
+    return Row(
+      children: [
+        Expanded(
+          child: _DrawerIconStrip(
+            accent: accent,
+            items: [
+              if (!loggedIn)
+                (
+                  Icons.notifications_active_outlined,
+                  'Bildirim Ayarları',
+                  () => closeThen(
+                    (ctx) => Navigator.of(ctx).push(
+                      MaterialPageRoute<void>(
+                        settings: const RouteSettings(
+                          name: 'NotificationSettingsScreen',
+                        ),
+                        builder: (_) => const NotificationSettingsScreen(),
+                      ),
+                    ),
+                  ),
+                ),
+              if (AppSettings.privateLeaguesEnabled.value)
+                (Icons.key_rounded, 'Turnuva Kodu Gir', onEnterCode),
+              (
+                Icons.chat_bubble_outline_rounded,
+                'Sorun Bildir',
+                () => closeThen(
+                  (ctx) => showFeedbackDialog(
+                    ctx,
+                    role: loggedIn ? session.role : null,
+                  ),
+                ),
+              ),
+            ],
           ),
-          icon: const Icon(Icons.logout_rounded, size: 20),
-          label: const Text(
-            'Çıkış Yap',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-          onPressed: onLogout,
         ),
+        if (loggedIn)
+          TextButton.icon(
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFFF87171),
+              minimumSize: const Size(44, 44),
+            ),
+            icon: const Icon(Icons.logout_rounded, size: 20),
+            label: const Text(
+              'Çıkış',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            onPressed: onLogout,
+          ),
       ],
     );
   }
@@ -1104,6 +1096,88 @@ class _MenuDrawer extends StatelessWidget {
         style: TextStyle(fontWeight: FontWeight.bold),
       ),
       onPressed: () => onSelect(MainNavigator.profileTab),
+    );
+  }
+}
+
+/// Menünün alttaki küçük ikonları; basılan ikon genişleyip başlığını
+/// gösterir, açıkken basınca işlemi yapar.
+class _DrawerIconStrip extends StatefulWidget {
+  const _DrawerIconStrip({required this.accent, required this.items});
+
+  final Color accent;
+  final List<(IconData, String, VoidCallback)> items;
+
+  @override
+  State<_DrawerIconStrip> createState() => _DrawerIconStripState();
+}
+
+class _DrawerIconStripState extends State<_DrawerIconStrip> {
+  int? _open;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = widget.accent;
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (var i = 0; i < widget.items.length; i++)
+          () {
+            final (icon, label, run) = widget.items[i];
+            final open = _open == i;
+            return Tooltip(
+              message: label,
+              child: Material(
+                color: open
+                    ? Color.lerp(const Color(0xFF1E293B), accent, 0.2)
+                    : const Color(0xFF1E293B),
+                shape: StadiumBorder(
+                  side: BorderSide(
+                    color: open ? accent : Colors.white.withValues(alpha: 0.08),
+                  ),
+                ),
+                child: InkWell(
+                  customBorder: const StadiumBorder(),
+                  onTap: () {
+                    if (open) {
+                      run();
+                    } else {
+                      setState(() => _open = i);
+                    }
+                  },
+                  child: AnimatedSize(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOut,
+                    child: Container(
+                      height: 44,
+                      constraints: const BoxConstraints(minWidth: 44),
+                      padding: EdgeInsets.symmetric(horizontal: open ? 14 : 0),
+                      alignment: Alignment.center,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(icon, size: 20, color: accent),
+                          if (open) ...[
+                            const SizedBox(width: 8),
+                            Text(
+                              label,
+                              style: TextStyle(
+                                color: accent,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }(),
+      ],
     );
   }
 }
