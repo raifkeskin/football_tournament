@@ -16,6 +16,7 @@ class AppSettings {
   static const _kSelfRegistration = 'self_registration_enabled';
   static const _kIdentity = 'identity_verification_enabled';
   static const _kIdentityUsers = 'identity_verification_users';
+  static const _kIdentityRoles = 'identity_verification_roles';
 
   /// Gizli turnuva özelliği. Kapalıyken "Turnuva Kodu Gir" ve "Gizli turnuva"
   /// alanları gizlenir; veritabanı da tüm turnuvaları herkese açar.
@@ -49,6 +50,10 @@ class AppSettings {
   static final identityVerificationEnabled = ValueNotifier<bool>(false);
   static final identityVerificationUsers = ValueNotifier<Set<String>>({});
 
+  /// Kimlik Yönetimi: kimlik doğrulamanın açık olduğu roller
+  /// (league_owner, region_owner, team_manager, player).
+  static final identityVerificationRoles = ValueNotifier<Set<String>>({});
+
   static SupabaseClient get _sb => Supabase.instance.client;
 
   static Future<void> load() async {
@@ -72,6 +77,12 @@ class AppSettings {
         } else if (r['key'] == _kIdentityUsers) {
           final v = r['value'];
           identityVerificationUsers.value = {
+            if (v is List)
+              for (final x in v) x.toString(),
+          };
+        } else if (r['key'] == _kIdentityRoles) {
+          final v = r['value'];
+          identityVerificationRoles.value = {
             if (v is List)
               for (final x in v) x.toString(),
           };
@@ -147,6 +158,18 @@ class AppSettings {
   }
 
   /// Yalnızca admin.
+  /// Yalnızca admin. Rolün kimlik doğrulamasını açar ya da kapatır.
+  static Future<void> setIdentityRole(String role, bool on) async {
+    final next = {...identityVerificationRoles.value};
+    on ? next.add(role) : next.remove(role);
+    await _sb.from('app_settings').upsert({
+      'key': _kIdentityRoles,
+      'value': next.toList()..sort(),
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    });
+    identityVerificationRoles.value = next;
+  }
+
   static Future<void> setSelfRegistrationEnabled(bool enabled) async {
     await _sb.from('app_settings').upsert({
       'key': _kSelfRegistration,
