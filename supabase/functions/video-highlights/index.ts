@@ -477,8 +477,10 @@ function goalsPrompt(
       );
     }
     lines.push(
-      "Bu golleri videoda bul ve her biri için olay_no'yu yaz. Raporda olmayan",
-      "bir gol görürsen olay_no'yu boş bırakarak ekle.",
+      "Bu golleri videoda bul ve her biri için olay_no'yu yaz. Eşleştirmeyi",
+      "zamana ve takıma göre yap: spikerin söylediği oyuncu rapordakinden",
+      "farklı olsa da o gol aynı goldür, olay_no'yu yine yaz (raporu esas al).",
+      "Raporda olmayan bir gol görürsen olay_no'yu boş bırakarak ekle.",
       "",
     );
   }
@@ -489,7 +491,8 @@ function goalsPrompt(
     "- bitis: sevinç başladıktan ~5 sn sonra",
     "- atan_takim: golü atan takımın adı (yukarıdaki adlardan biri)",
     "- mac_dakikasi: tabelada okunuyorsa maç süresi, yoksa boş",
-    "- aciklama: kısa Türkçe açıklama (oyuncu adı anlatımda geçiyorsa kullan)",
+    "- aciklama: kısa Türkçe açıklama; olay_no verdiysen oyuncu adı yazma",
+    "  (golü atan maç raporundan gösterilir)",
     "- atan_oyuncu: golü atanın adı, yalnızca spiker söylüyorsa ya da",
     "  formasından kesin okunuyorsa (kadrodaki yazılışla); yoksa boş",
     "- forma_no: golü atanın forma numarası, kesin okunuyorsa; yoksa boş",
@@ -646,19 +649,28 @@ async function run(opts: RunOpts) {
         if (end == null || end < goalSec + 3 || end > goalSec + 20) end = goalSec + 8;
         start = Math.max(0, start);
 
-        const ev = f.olay_no != null
-          ? goals.find((g) => g.no === f.olay_no && !usedEvents.has(g.id))
-          : undefined;
-        if (ev) usedEvents.add(ev.id);
-
         const teamName = (f.atan_takim ?? "").toLocaleLowerCase("tr");
-        const teamId = ev
-          ? (ev.ownGoal ? (ev.teamId === home.id ? away.id : home.id) : ev.teamId)
-          : teamName && home.name.toLocaleLowerCase("tr").includes(teamName)
+        const sideOf = (g: GoalEvent) =>
+          g.ownGoal ? (g.teamId === home.id ? away.id : home.id) : g.teamId;
+        const foundTeam = teamName && home.name.toLocaleLowerCase("tr").includes(teamName)
           ? home.id
           : teamName && away.name.toLocaleLowerCase("tr").includes(teamName)
           ? away.id
           : null;
+        let ev = f.olay_no != null
+          ? goals.find((g) => g.no === f.olay_no && !usedEvents.has(g.id))
+          : undefined;
+        // YZ olay_no vermediyse (ör. spiker başka oyuncu adı söyledi) bu
+        // aralıktaki kullanılmamış gol olayı eşleşir: önce aynı takım, tek
+        // adaysa takım bilinmese de. Dakika ve oyuncu maç raporundan gelir.
+        if (!ev && w) {
+          const free = w.goals.filter((g) => !usedEvents.has(g.id));
+          const same = foundTeam ? free.filter((g) => sideOf(g) === foundTeam) : [];
+          ev = same[0] ?? (free.length === 1 && !foundTeam ? free[0] : undefined);
+        }
+        if (ev) usedEvents.add(ev.id);
+
+        const teamId = ev ? sideOf(ev) : foundTeam;
 
         // Dakika: maç detayından; yoksa tabeladan; o da yoksa videodaki
         // başlangıç anlarından hesaplanır.
