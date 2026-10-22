@@ -60,6 +60,24 @@ class MatchClock {
     final minute = base + played;
     return minute > limit ? "$limit+${minute - limit}'" : "$minute'";
   }
+
+  /// Olay girişinde önerilecek dakika (canlı maçta). Uzatma dakikaları
+  /// devrenin son dakikasına yazılır (30+2' → 30); uzatma/penaltıda ve maç
+  /// canlı değilse null.
+  static int? liveMinuteValue(MatchModel m, {DateTime? now}) {
+    if (m.status != MatchStatus.live) return null;
+    if (m.shootout != null || m.extraTimeAt != null) return null;
+    final kickoff = m.kickoffAt;
+    if (kickoff == null) return m.minute;
+    final t = (now ?? DateTime.now()).toUtc();
+    final period = periodOf(m.seasonId);
+    final secondHalf = m.secondHalfAt;
+    final start = secondHalf ?? kickoff;
+    final played = t.difference(start).inMinutes.clamp(0, 999) + 1;
+    final base = secondHalf == null ? 0 : period;
+    final minute = base + played;
+    return minute > base + period ? base + period : minute;
+  }
 }
 
 /// Maç canlıyken dakikayı periyodik olarak yeniden çizer.

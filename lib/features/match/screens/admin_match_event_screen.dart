@@ -9,6 +9,7 @@ import '../../../core/services/service_locator.dart';
 import '../../../core/utils/team_name.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
+import '../utils/match_clock.dart';
 import '../utils/season_match_settings.dart';
 
 class AdminMatchEventScreen extends StatefulWidget {
@@ -21,6 +22,9 @@ class AdminMatchEventScreen extends StatefulWidget {
 
 class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
   final _minuteController = TextEditingController();
+
+  /// Canlı maçta otomatik yazılan dakika (değiştirilmediyse form boş sayılır).
+  String _autoMinute = '';
   final IMatchService _matchService = ServiceLocator.matchService;
   final ITeamService _teamService = ServiceLocator.teamService;
   String _eventType = 'goal';
@@ -58,6 +62,9 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
   void initState() {
     super.initState();
     _teamId = widget.match.homeTeamId;
+    // Canlı maçta dakika saatten gelir; sorumlu isterse değiştirir.
+    final live = MatchClock.liveMinuteValue(widget.match);
+    if (live != null) _minuteController.text = _autoMinute = '$live';
     SeasonMatchSettings.of(widget.match.seasonId).then((s) {
       if (mounted && s.tracksGoalMinutes != _tracksMinutes) {
         setState(() => _tracksMinutes = s.tracksGoalMinutes);
@@ -702,7 +709,8 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
 
   /// Formda girilmiş ama kaydedilmemiş bir şey var mı?
   bool get _isDirty =>
-      _minuteController.text.trim().isNotEmpty ||
+      (_minuteController.text.trim().isNotEmpty &&
+          _minuteController.text.trim() != _autoMinute) ||
       _selectedPlayer != null ||
       _selectedAssist != null ||
       _selectedSubIn != null ||
