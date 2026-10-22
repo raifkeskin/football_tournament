@@ -493,12 +493,18 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
           .select('id, name, surname, photo_url')
           .eq('auth_uid', user.id)
           .limit(1);
+      // Eşleşmemişse hesabın numarasıyla sunucu bulur (telefon tablodan
+      // okunmaz).
       if (res.isEmpty && phone.isNotEmpty) {
-        res = await _supabase
-            .from('players')
-            .select('id, name, surname, photo_url')
-            .eq('phone', phone)
-            .limit(1);
+        final mine = await _supabase.rpc('my_player_id');
+        final id = (mine ?? '').toString();
+        if (id.isNotEmpty) {
+          res = await _supabase
+              .from('players')
+              .select('id, name, surname, photo_url')
+              .eq('id', id)
+              .limit(1);
+        }
       }
       if (res.isNotEmpty) {
         final r = res.first;

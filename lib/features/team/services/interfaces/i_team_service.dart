@@ -34,10 +34,11 @@ abstract class ITeamService {
 
   Stream<List<PlayerModel>> watchAllPlayers({String? caller});
 
-  Future<void> upsertPlayerIdentity({
-    required String phone,
+  /// Yeni oyuncu açar (telefon verilmişse ve o numarada oyuncu varsa onu
+  /// kullanır); oyuncunun id'sini döner.
+  Future<String?> upsertPlayerIdentity({
+    String? phone,
     required String name,
-    String? nationalId,
     String? birthDate,
     String? mainPosition,
     String? preferredFoot,

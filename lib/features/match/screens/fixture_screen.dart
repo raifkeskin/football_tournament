@@ -771,7 +771,6 @@ class _MatchCard extends StatelessWidget {
     return false;
   }
 
-
   final MatchModel match;
   final Map<String, String> teamLogoById;
   final Map<String, String> teamNameById;
