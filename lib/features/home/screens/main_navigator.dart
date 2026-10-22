@@ -932,7 +932,23 @@ class _MenuDrawer extends StatelessWidget {
   }
 
   /// Giriş yapan kişi: kartına dokununca profil; altında çıkış.
+  /// Profil kartı; profili kimlikle doğrulanmışsa tik ve "Doğrulanmış
+  /// profil" yazısı.
   Widget _userBlock(Color accent) {
+    final playerId = (session.playerId ?? '').trim();
+    if (playerId.isEmpty) return _userCard(accent, verified: false);
+    return ValueListenableBuilder<int>(
+      valueListenable: IdentityService.changes,
+      builder: (context, _, _) => FutureBuilder<bool>(
+        future: IdentityService.isVerified(playerId),
+        initialData: IdentityService.cached(playerId),
+        builder: (context, snap) =>
+            _userCard(accent, verified: snap.data == true),
+      ),
+    );
+  }
+
+  Widget _userCard(Color accent, {required bool verified}) {
     final name = (session.displayName ?? '').trim();
     final photo = (session.photoUrl ?? '').trim();
     final selected = activeIndex == MainNavigator.profileTab;
@@ -990,16 +1006,35 @@ class _MenuDrawer extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          name.isEmpty ? 'Profilim' : name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 15,
-                          ),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                name.isEmpty ? 'Profilim' : name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 15,
+                                ),
+                              ),
+                            ),
+                            if (verified) ...[
+                              const SizedBox(width: 5),
+                              const VerifiedBadge(size: 16),
+                            ],
+                          ],
                         ),
+                        if (verified)
+                          const Text(
+                            'Doğrulanmış profil',
+                            style: TextStyle(
+                              color: kVerifiedBlue,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -1036,7 +1071,7 @@ class _MenuDrawer extends StatelessWidget {
               if (!loggedIn)
                 (
                   Icons.notifications_active_outlined,
-                  'Bildirim Ayarları',
+                  'Bildirimler',
                   () => closeThen(
                     (ctx) => Navigator.of(ctx).push(
                       MaterialPageRoute<void>(
@@ -1049,7 +1084,7 @@ class _MenuDrawer extends StatelessWidget {
                   ),
                 ),
               if (AppSettings.privateLeaguesEnabled.value)
-                (Icons.key_rounded, 'Turnuva Kodu Gir', onEnterCode),
+                (Icons.key_rounded, 'Kod Gir', onEnterCode),
               (
                 Icons.chat_bubble_outline_rounded,
                 'Sorun Bildir',
@@ -1118,58 +1153,67 @@ class _DrawerIconStripState extends State<_DrawerIconStrip> {
   @override
   Widget build(BuildContext context) {
     final accent = widget.accent;
-    return Wrap(
+    // Tek satır: açılan ikon uzar, diğerleri yuvarlak kalır.
+    return Row(
+      mainAxisSize: MainAxisSize.min,
       spacing: 8,
-      runSpacing: 8,
       children: [
         for (var i = 0; i < widget.items.length; i++)
           () {
             final (icon, label, run) = widget.items[i];
             final open = _open == i;
-            return Tooltip(
-              message: label,
-              child: Material(
-                color: open
-                    ? Color.lerp(const Color(0xFF1E293B), accent, 0.2)
-                    : const Color(0xFF1E293B),
-                shape: StadiumBorder(
-                  side: BorderSide(
-                    color: open ? accent : Colors.white.withValues(alpha: 0.08),
+            return Flexible(
+              child: Tooltip(
+                message: label,
+                child: Material(
+                  color: open
+                      ? Color.lerp(const Color(0xFF1E293B), accent, 0.2)
+                      : const Color(0xFF1E293B),
+                  shape: StadiumBorder(
+                    side: BorderSide(
+                      color: open
+                          ? accent
+                          : Colors.white.withValues(alpha: 0.08),
+                    ),
                   ),
-                ),
-                child: InkWell(
-                  customBorder: const StadiumBorder(),
-                  onTap: () {
-                    if (open) {
-                      run();
-                    } else {
-                      setState(() => _open = i);
-                    }
-                  },
-                  child: AnimatedSize(
-                    duration: const Duration(milliseconds: 180),
-                    curve: Curves.easeOut,
-                    child: Container(
-                      height: 44,
-                      constraints: const BoxConstraints(minWidth: 44),
-                      padding: EdgeInsets.symmetric(horizontal: open ? 14 : 0),
-                      alignment: Alignment.center,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(icon, size: 20, color: accent),
-                          if (open) ...[
-                            const SizedBox(width: 8),
-                            Text(
-                              label,
-                              style: TextStyle(
-                                color: accent,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
+                  child: InkWell(
+                    customBorder: const StadiumBorder(),
+                    onTap: () {
+                      if (open) {
+                        run();
+                      } else {
+                        setState(() => _open = i);
+                      }
+                    },
+                    child: AnimatedSize(
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeOut,
+                      child: Container(
+                        height: 44,
+                        padding: EdgeInsets.symmetric(
+                          horizontal: open ? 14 : 12,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(icon, size: 20, color: accent),
+                            if (open) ...[
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: Text(
+                                  label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: accent,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
                               ),
-                            ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
                     ),
                   ),
