@@ -3,7 +3,7 @@ import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import '../utils/minute_label.dart';
 
 import '../../../core/widgets/match_event_icons.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
@@ -21,8 +21,6 @@ import '../../../core/utils/resilient_stream.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 String _clock(int sec) {
-  // Negatif: yayın maç başladıktan sonra açılmış (maçın o dakikasında).
-  if (sec < 0) return "yayın ${(-sec) ~/ 60}'de başladı";
   final h = sec ~/ 3600;
   final m = (sec % 3600) ~/ 60;
   final s = sec % 60;
@@ -49,7 +47,9 @@ String _clipTitle(
   String awayName,
 ) {
   final team = _teamLabel(h, match, homeName, awayName);
-  final min = h.minute != null ? "${h.minute}' " : '';
+  final min = h.minute != null
+      ? '${minuteLabel(h.minute, h.addedMinute)} '
+      : '';
   return '${min}Gol${team.isEmpty ? '' : ' · $team'}';
 }
 
@@ -918,6 +918,8 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
 
   /// Maliyet ve videoda bulunan/girilen başlangıç anları.
   String _jobDetails(MatchHighlightJob job) => [
+    if (job.needsReview) 'Kontrol önerilir',
+    if ((job.missing ?? 0) > 0) '${job.missing} gol yayında bulunamadı',
     if (job.kickoffSec != null) 'Başlangıç ${_clock(job.kickoffSec!)}',
     if (job.secondHalfSec != null) '2. yarı ${_clock(job.secondHalfSec!)}',
     if (job.costUsd != null) 'Maliyet ${job.costUsd!.toStringAsFixed(3)} \$',
@@ -1014,7 +1016,7 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
               Expanded(
                 child: Text(
                   [
-                    if (h.minute != null) "${h.minute}'",
+                    if (h.minute != null) minuteLabel(h.minute, h.addedMinute),
                     'Gol',
                     if (team.isNotEmpty) team,
                   ].join(' · '),
@@ -1212,50 +1214,6 @@ class _AnalyzeDialogState extends State<_AnalyzeDialog> {
   int? _kickoff;
   int? _second;
 
-  /// Yayın maç başladıktan sonra açıldıysa maçın o dakikası.
-  int? _lateMinute;
-
-  Future<void> _pickLate() async {
-    final c = TextEditingController(text: _lateMinute?.toString() ?? '');
-    final v = await showDialog<int>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
-        title: const Text(
-          'Yayın kaçıncı dakikada başladı?',
-          style: TextStyle(color: Colors.white, fontSize: 16),
-        ),
-        content: TextField(
-          controller: c,
-          autofocus: true,
-          keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
-            hintText: 'Örn. 5',
-            suffixText: '. dakika',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Vazgeç'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, int.tryParse(c.text.trim())),
-            child: const Text('Tamam'),
-          ),
-        ],
-      ),
-    );
-    if (v != null && v > 0 && v < 120 && mounted) {
-      setState(() {
-        _lateMinute = v;
-        _kickoff = null;
-      });
-    }
-  }
-
   /// Videodaki an: saat / dk / sn çarkı (YouTube süresiyle aynı birimler).
   Future<int?> _pick(String title, int? current) {
     var picked = Duration(seconds: current ?? 0);
@@ -1313,10 +1271,7 @@ class _AnalyzeDialogState extends State<_AnalyzeDialog> {
   }
 
   void _submit() {
-    // Geç başlayan yayında maçın başlangıcı videonun öncesinde kalır
-    // (negatif an); başlangıç aranmaz, goller dakikadan yerleştirilir.
-    final kickoff = _lateMinute != null ? -_lateMinute! * 60 : _kickoff;
-    Navigator.pop(context, (kickoff: kickoff, second: _second));
+    Navigator.pop(context, (kickoff: _kickoff, second: _second));
   }
 
   Widget _timeRow(
@@ -1372,43 +1327,11 @@ class _AnalyzeDialogState extends State<_AnalyzeDialog> {
               title: 'Videoda başlangıç (isteğe bağlı)',
               child: AdminFieldGroup(
                 children: [
-                  if (_lateMinute == null)
-                    _timeRow(
-                      Icons.play_arrow_rounded,
-                      'MAÇIN BAŞLADIĞI AN',
-                      _kickoff,
-                      (v) => setState(() => _kickoff = v),
-                    ),
-                  AdminFieldRow(
-                    icon: Icons.history_toggle_off_rounded,
-                    label: 'YAYIN MAÇ BAŞLADIKTAN SONRA MI AÇILDI?',
-                    onTap: _pickLate,
-                    trailing: _lateMinute == null
-                        ? const Icon(
-                            Icons.chevron_right_rounded,
-                            color: Colors.white54,
-                          )
-                        : IconButton(
-                            tooltip: 'Temizle',
-                            visualDensity: VisualDensity.compact,
-                            onPressed: () => setState(() => _lateMinute = null),
-                            icon: const Icon(
-                              Icons.close_rounded,
-                              color: Colors.white54,
-                            ),
-                          ),
-                    child: Text(
-                      _lateMinute == null
-                          ? 'Hayır (baştan yayında)'
-                          : "Evet, maçın $_lateMinute. dakikasında",
-                      style: TextStyle(
-                        color: _lateMinute == null
-                            ? Colors.white38
-                            : Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+                  _timeRow(
+                    Icons.play_arrow_rounded,
+                    'MAÇIN BAŞLADIĞI AN',
+                    _kickoff,
+                    (v) => setState(() => _kickoff = v),
                   ),
                   _timeRow(
                     Icons.timelapse_rounded,
