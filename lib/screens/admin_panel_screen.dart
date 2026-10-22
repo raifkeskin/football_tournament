@@ -15,6 +15,7 @@ import '../features/tournament/screens/admin_penalty_management_screen.dart';
 import 'admin_pending_actions_screen.dart';
 import '../features/auth/screens/admin_otp_monitor_screen.dart';
 import '../features/ai/admin_ai_screen.dart';
+import '../features/identity/admin_identity_screen.dart';
 import '../features/tournament_request/admin_tournament_requests_screen.dart';
 
 /// Yönetim paneli. Admin tüm kartları görür; kurucu başkan ve bölge
@@ -191,6 +192,23 @@ class AdminPanelWidget extends StatelessWidget {
                   name: 'AdminPitchManagementScreen',
                 ),
                 builder: (_) => const AdminPitchManagementScreen(),
+              ),
+            );
+          },
+        ),
+      // Kimlik doğrulamanın hangi rollere açık olduğu.
+      if (isAdmin)
+        _AdminMenuData(
+          baslik: 'Kimlik Yönetimi',
+          renkler: const [Color(0xFF38BDF8), Color(0xFF1D9BF0)],
+          ikon: Icons.verified_user_rounded,
+          resimYolu: 'assets/images/admin_team.jpg',
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                settings: const RouteSettings(name: 'AdminIdentityScreen'),
+                builder: (_) => const AdminIdentityScreen(),
               ),
             );
           },
