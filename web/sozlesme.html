@@ -87,6 +87,9 @@ a{color:var(--accent)}
       '<li><b>Format:</b> ' + esc(format) + '</li>' +
       '<li><b>Hizmet Kapsamı:</b> Toplam ' + o.match_count + ' maçlık periyot için; fikstür ve kura oluşturma, canlı skor ve detay (gol, asist, kart) takibi, puan durumu ve istatistik listeleri, takım ve oyuncu profilleri dijital altyapı erişimi.</li></ul>';
 
+    // Ön Bilgilendirme ve Mesafeli Satış'ta aynı cayma maddesi.
+    var cayma = '<p>İşbu sözleşme konusu hizmet, Alıcı\'ya sunulan bir dijital arayüz ve yazılım kullanım hakkıdır. Hizmet, ödemenin onayı ile birlikte dijital ortamda anında erişime açıldığından Mesafeli Sözleşmeler Yönetmeliği madde 15/1-ğ uyarınca "elektronik ortamda anında ifa edilen hizmetler" kapsamındadır. Ayrıca Alıcı, turnuva modülünü aktifleştirerek hizmetin ifasına onay vermiş sayılır ve Yönetmeliğin 15/1-h maddesi gereğince cayma hakkını kullanamaz. Bedel iadesi yapılamaz.</p>';
+
     var h = '<nav class="toc"><a href="#on-bilgi">Ön Bilgilendirme Formu</a><a href="#mesafeli">Mesafeli Satış Sözleşmesi</a>' +
       '<a href="#kvkk">KVKK Aydınlatma Metni</a><a href="/kosullar#ucretli-hizmet">Kullanım Koşulları</a></nav>' +
       '<p class="muted">' + esc(d.code) + ' · ' + esc(d.name || '') + ' · metin sürümü ' + DOC_VERSION + '</p>';
@@ -97,18 +100,18 @@ a{color:var(--accent)}
       (o.team_count ? '<li><b>Takım Başına Sezon Toplamı:</b> ' + tl(o.total / o.team_count) + '</li>' : '') +
       '<li><b>Toplam Hizmet Bedeli (KDV Dahil):</b> ' + tl(o.total) + '</li>' +
       '<li><b>Ödeme Yöntemi:</b> ' + pay + '</li></ul>' +
-      '<h2>4. CAYMA HAKKI İSTİSNASI</h2>' +
-      '<p>İşbu sözleşme konusu hizmet, Mesafeli Sözleşmeler Yönetmeliği madde 15/1-ğ uyarınca "elektronik ortamda anında ifa edilen hizmetler ve tüketiciye anında teslim edilen gayrimaddi mallar" kapsamında olduğundan cayma hakkı bulunmamaktadır. Hizmet, ödemenin onayı ile birlikte dijital olarak anında erişime açılacaktır.</p></section>';
+      '<h2>4. CAYMA HAKKI İSTİSNASI</h2>' + cayma + '</section>';
 
     h += '<section class="card" id="mesafeli"><h1>Mesafeli Satış Sözleşmesi</h1>' + parties + service +
       '<h2>3. HİZMETİN İFASI VE TESLİMAT</h2>' +
       '<p>3.1. Hizmet, Alıcı\'nın ' + tl(o.total) + ' tutarındaki toplam bedeli Satıcı\'nın belirteceği IBAN numarasına eksiksiz olarak transfer etmesi ve ödemenin Satıcı tarafından onaylanması ile ifa edilmiş sayılır.</p>' +
       '<p>3.2. Hizmetin ifası, ligmasasi.com mobil veya web uygulaması üzerinden Alıcı\'ya organizasyon yönetim yetkisi verilmesi ile tamamlanır.</p>' +
       '<h2>4. TARAFLARIN HAK VE YÜKÜMLÜLÜKLERİ</h2>' +
-      '<p>4.1. Satıcı, taahhüt edilen fikstür, canlı skor, puan durumu ve istatistik modüllerinin ' + o.match_count + ' maçlık sezon boyunca kesintisiz ve %99 uptime oranı ile çalışmasını sağlamakla yükümlüdür.</p>' +
-      '<p>4.2. Alıcı, turnuva kapsamında gerçekleşecek maçların sahada iptal olması, takımların maça çıkmaması veya organizasyonel aksaklıklar durumunda, Satıcı\'nın sağladığı dijital hizmet bedelinin maç başı veya toplu iadesini talep edemeyeceğini kabul eder.</p>' +
+      '<p>4.1. Satıcı, taahhüt edilen fikstür, canlı skor, puan durumu ve istatistik modüllerinin dijital altyapısını mevcut durumuyla ("olduğu gibi") sunar. Satıcı; zorunlu sistem güncellemeleri, rutin bakım çalışmaları, sunucu/veritabanı gibi üçüncü taraf altyapı sağlayıcılarından kaynaklanan sorunlar veya mücbir sebepler dolayısıyla yaşanabilecek geçici erişim kesintilerinden sorumlu tutulamaz. Hizmetin tamamen kesintisiz veya hatasız olacağına dair zımni veya açık bir garanti verilmemektedir.</p>' +
+      '<p>4.2. Alıcı; turnuva kapsamında gerçekleşecek maçların sahada iptal olması, takımların veya oyuncuların maça çıkmaması, diskalifiye durumları veya fiziki organizasyonel aksaklıklar gibi Satıcı\'nın dijital altyapısından kaynaklanmayan tüm durumlarda, hizmet bedelinin iadesini talep edemeyeceğini kabul eder. Ancak, Satıcı\'nın sistemlerinden kaynaklanan kalıcı ve giderilemeyen bir arıza nedeniyle uygulamanın kullanılamaz hale gelmesi durumunda, yalnızca oynanmayan maçlara isabet eden hizmet bedeli oransal olarak Alıcı\'ya iade edilebilir.</p>' +
       '<h2>5. SORUMSUZLUK BEYANI</h2>' +
-      '<p>Satıcı, yalnızca bir dijital istatistik ve lig yönetim yazılımı sağlamaktadır. Turnuvaların fiziki olarak oynandığı halı saha kiralama süreçleri, hakem atamaları, oyuncular arası yaşanabilecek maddi/manevi uyuşmazlıklar veya sportif yaralanma ve sakatlık durumlarında Satıcı\'nın hiçbir hukuki ve cezai sorumluluğu bulunmamaktadır.</p></section>';
+      '<p>Satıcı, yalnızca bir dijital istatistik ve lig yönetim yazılımı sağlamaktadır. Turnuvaların fiziki olarak oynandığı halı saha kiralama süreçleri, hakem atamaları, oyuncular arası yaşanabilecek maddi/manevi uyuşmazlıklar veya sportif yaralanma ve sakatlık durumlarında Satıcı\'nın hiçbir hukuki ve cezai sorumluluğu bulunmamaktadır.</p>' +
+      '<h2>6. CAYMA HAKKI İSTİSNASI</h2>' + cayma + '</section>';
 
     h += '<section class="card" id="kvkk"><h1>KVKK Aydınlatma Metni</h1>' +
       '<p><b>Veri Sorumlusu:</b> ' + v(s.name) + ' · ' + v(s.email) + '</p>' +
