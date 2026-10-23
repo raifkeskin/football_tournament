@@ -263,7 +263,7 @@ class _MatchHighlightsStripState extends State<MatchHighlightsStrip> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Maç özeti gol videoları hazırlanıyor',
+                          'Maç taranıyor',
                           style: TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.w800,
@@ -271,8 +271,8 @@ class _MatchHighlightsStripState extends State<MatchHighlightsStrip> {
                         ),
                         SizedBox(height: 2),
                         Text(
-                          'Yapay zekâ maç yayınından golleri buluyor; '
-                          'hazır olunca burada görünür.',
+                          'Maç özeti gol videoları hazırlanıyor; hazır '
+                          'olunca burada görünür.',
                           style: TextStyle(color: kAdminMuted, fontSize: 12),
                         ),
                       ],
@@ -780,7 +780,7 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
         context: context,
         title: 'Tüm video taranacak',
         message:
-            'Maç detayında gol kaydı yok. YZ videonun tamamını tarar; '
+            'Maç detayında gol kaydı yok. Videonun tamamı taranır; '
             'dakika, takım ve (spiker söylüyorsa) golü atanı bulur. '
             'Tahmini maliyet 1,5 saatlik videoda ~0,18 \$.',
         confirmLabel: 'TARAMAYI BAŞLAT',

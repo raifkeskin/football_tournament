@@ -8,6 +8,8 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:url_launcher/url_launcher.dart';
+import 'package:gal/gal.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 import '../../tournament/models/league_extras.dart';
@@ -1747,8 +1749,17 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
   final _urlCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   bool _isHomeTeam = true;
-  XFile? _pickedFile;
+
+  /// Seçilen görseller (galeriden çoklu seçim).
+  List<XFile> _pickedFiles = const [];
   bool _isUploading = false;
+
+  /// Yükleme sırasında "3 / 5" ilerlemesi.
+  int _uploaded = 0;
+
+  /// Takım Fotosu seçiminde gösterilen takım adları.
+  String _homeName = 'Ev Sahibi';
+  String _awayName = 'Deplasman';
 
   /// Maçtaki fotoğraf sayısı (sınır göstergesi ve kontrolü için).
   late final Stream<List<MatchMediaModel>> _mediaStream = ServiceLocator
@@ -1776,7 +1787,11 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
           final home = shortTeamName(name[m.homeTeamId] ?? '');
           final away = shortTeamName(name[m.awayTeamId] ?? '');
           if (!mounted || home.isEmpty || away.isEmpty) return;
-          setState(() => _broadcastTitle = '$home - $away | $_broadcastTitle');
+          setState(() {
+            _broadcastTitle = '$home - $away | $_broadcastTitle';
+            _homeName = home;
+            _awayName = away;
+          });
         })
         .catchError((_) {});
   }
@@ -2014,7 +2029,7 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
                               if (v != null && mounted) {
                                 setState(() {
                                   _selectedType = v;
-                                  _pickedFile = null;
+                                  _pickedFiles = const [];
                                 });
                               }
                             },
@@ -2042,12 +2057,29 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
                         onTap: _isUploading
                             ? null
                             : () async {
-                                final picked = await ImagePicker().pickImage(
-                                  source: ImageSource.gallery,
-                                  imageQuality: 85,
+                                final room = limit - _photoCount;
+                                if (room <= 0) return;
+                                final messenger = ScaffoldMessenger.of(context);
+                                // Çoklu seçim; sınırı aşanlar alınmaz.
+                                final picked = await ImagePicker()
+                                    .pickMultiImage(
+                                      imageQuality: 85,
+                                      limit: room > 1 ? room : null,
+                                    );
+                                if (picked.isEmpty || !mounted) return;
+                                setState(
+                                  () =>
+                                      _pickedFiles = picked.take(room).toList(),
                                 );
-                                if (picked != null && mounted) {
-                                  setState(() => _pickedFile = picked);
+                                if (picked.length > room) {
+                                  messenger.showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        'Sınır nedeniyle ilk $room fotoğraf '
+                                        'alındı.',
+                                      ),
+                                    ),
+                                  );
                                 }
                               },
                         trailing: const Icon(
@@ -2055,11 +2087,11 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
                           color: Colors.white54,
                         ),
                         child: Text(
-                          _pickedFile == null
-                              ? 'Galeriden seçin'
-                              : 'Görsel seçildi',
+                          _pickedFiles.isEmpty
+                              ? 'Galeriden seçin (birden çok seçilebilir)'
+                              : '${_pickedFiles.length} fotoğraf seçildi',
                           style: TextStyle(
-                            color: _pickedFile == null
+                            color: _pickedFiles.isEmpty
                                 ? Colors.white38
                                 : Colors.white,
                             fontSize: 15,
@@ -2071,7 +2103,7 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
                       AdminSelectRow(
                         icon: Icons.shield_outlined,
                         label: 'Takım',
-                        value: _isHomeTeam ? 'Ev Sahibi' : 'Deplasman',
+                        value: _isHomeTeam ? _homeName : _awayName,
                         placeholder: 'Seçin',
                         onTap: _isUploading
                             ? null
@@ -2081,7 +2113,7 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
                                   title: 'Takım',
                                   items: const [true, false],
                                   labelBuilder: (h) =>
-                                      h ? 'Ev Sahibi' : 'Deplasman',
+                                      h ? _homeName : _awayName,
                                   selected: _isHomeTeam,
                                 );
                                 if (v != null && mounted) {
@@ -2117,17 +2149,46 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
                     ),
                   ),
                 ],
-                if (!isLink && _pickedFile != null) ...[
+                if (!isLink && _pickedFiles.length == 1) ...[
                   const SizedBox(height: 14),
                   ClipRRect(
                     borderRadius: BorderRadius.circular(16),
                     child: AspectRatio(
                       aspectRatio: 16 / 9,
                       child: Image(
-                        image: pickedImageProvider(_pickedFile!),
+                        image: pickedImageProvider(_pickedFiles.first),
                         fit: BoxFit.cover,
                       ),
                     ),
+                  ),
+                ],
+                if (!isLink && _pickedFiles.length > 1) ...[
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    height: 84,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: _pickedFiles.length,
+                      separatorBuilder: (_, _) => const SizedBox(width: 8),
+                      itemBuilder: (_, i) => ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: SizedBox(
+                          width: 84,
+                          child: Image(
+                            image: pickedImageProvider(_pickedFiles[i]),
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+                if (_isUploading && _pickedFiles.length > 1) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    'Yükleniyor: $_uploaded / ${_pickedFiles.length}',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white70),
                   ),
                 ],
                 const SizedBox(height: 22),
@@ -2146,110 +2207,111 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
 
   Future<void> _save() async {
     final m = widget.match;
-    String finalUrl = '';
+    final desc = _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim();
+    final teamId = _selectedType == 'Takım Fotosu'
+        ? (_isHomeTeam ? m.homeTeamId : m.awayTeamId)
+        : null;
+    MatchMediaModel media(String url) => MatchMediaModel(
+      id: '',
+      matchId: m.id,
+      mediaType: _selectedType,
+      url: url,
+      description: desc,
+      teamId: teamId,
+      createdAt: DateTime.now(),
+    );
+    void snack(String text, {Color? color}) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(text), backgroundColor: color));
+    }
 
     if (_isUrlType) {
-      finalUrl = _urlCtrl.text.trim();
+      final finalUrl = _urlCtrl.text.trim();
       final uri = Uri.tryParse(finalUrl);
       if (finalUrl.isEmpty ||
           uri == null ||
           !(uri.scheme == 'http' || uri.scheme == 'https')) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              _selectedType == kMediaAlbumLink
-                  ? 'Lütfen geçerli bir albüm linki girin (https://...).'
-                  : _selectedType == kMediaVideoLink
-                  ? 'Lütfen geçerli bir video linki girin (https://...).'
-                  : 'Lütfen geçerli bir yayın linki girin.',
-            ),
-          ),
-        );
-        return;
-      }
-    } else {
-      if (_photoCount >= AppSettings.matchPhotoLimit.value) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Bu maç için fotoğraf sınırı '
-              '(${AppSettings.matchPhotoLimit.value}) doldu.',
-            ),
-          ),
-        );
-        return;
-      }
-      if (_pickedFile == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Lütfen bir görsel seçin.')),
+        snack(
+          _selectedType == kMediaAlbumLink
+              ? 'Lütfen geçerli bir albüm linki girin (https://...).'
+              : _selectedType == kMediaVideoLink
+              ? 'Lütfen geçerli bir video linki girin (https://...).'
+              : 'Lütfen geçerli bir yayın linki girin.',
         );
         return;
       }
       setState(() => _isUploading = true);
       try {
-        final uploadedUrl = await SupabaseImageUploadService().uploadImage(
-          _pickedFile!,
-          folder: MediaFolder.matches,
-        );
-        if (uploadedUrl == null) {
-          throw Exception('Görsel yüklenemedi.');
-        }
-        finalUrl = uploadedUrl;
-      } catch (e) {
-        setState(() => _isUploading = false);
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Yükleme hatası: $e')));
-        }
-        return;
-      }
-    }
-
-    final media = MatchMediaModel(
-      id: '',
-      matchId: m.id,
-      mediaType: _selectedType,
-      url: finalUrl,
-      description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
-      teamId: _selectedType == 'Takım Fotosu'
-          ? (_isHomeTeam ? m.homeTeamId : m.awayTeamId)
-          : null,
-      createdAt: DateTime.now(),
-    );
-
-    try {
-      await ServiceLocator.matchService.addMatchMedia(media);
-
-      if (mounted) {
+        await ServiceLocator.matchService.addMatchMedia(media(finalUrl));
+        if (!mounted) return;
         Navigator.pop(context);
         widget.onSuccess();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Medya başarıyla eklendi.'),
-            backgroundColor: Colors.green,
-          ),
+        snack('Medya başarıyla eklendi.', color: Colors.green);
+      } catch (e) {
+        snack(
+          e is PostgrestException ? e.message : 'Kayıt Hatası: $e',
+          color: Colors.red,
         );
+      } finally {
+        if (mounted && _isUploading) setState(() => _isUploading = false);
       }
-    } catch (e) {
-      // Kayıt reddedildiyse (ör. sınır aynı anda doldu) yüklenen dosya kalmasın.
-      if (!_isUrlType) {
-        unawaited(SupabaseImageUploadService().deleteImageByUrl(finalUrl));
+      return;
+    }
+
+    final limit = AppSettings.matchPhotoLimit.value;
+    if (_photoCount >= limit) {
+      snack('Bu maç için fotoğraf sınırı ($limit) doldu.');
+      return;
+    }
+    if (_pickedFiles.isEmpty) {
+      snack('Lütfen en az bir görsel seçin.');
+      return;
+    }
+    final files = _pickedFiles.take(limit - _photoCount).toList();
+    setState(() {
+      _isUploading = true;
+      _uploaded = 0;
+    });
+    var added = 0;
+    String? error;
+    final uploader = SupabaseImageUploadService();
+    for (final f in files) {
+      String? url;
+      try {
+        url = await uploader.uploadImage(f, folder: MediaFolder.matches);
+        if (url == null) throw Exception('Görsel yüklenemedi.');
+        await ServiceLocator.matchService.addMatchMedia(media(url));
+        added++;
+      } catch (e) {
+        // Kayıt reddedildiyse (ör. sınır aynı anda doldu) dosya kalmasın.
+        if (url != null) unawaited(uploader.deleteImageByUrl(url));
+        error = e is PostgrestException ? e.message : '$e';
+        break;
       }
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              e is PostgrestException ? e.message : 'Kayıt Hatası: $e',
-            ),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      if (mounted && _isUploading) {
-        setState(() => _isUploading = false);
-      }
+      if (mounted) setState(() => _uploaded = added);
+    }
+    if (!mounted) return;
+    setState(() => _isUploading = false);
+    if (added > 0) {
+      // Ekleme sonrası Fotoğraflar sekmesi açık kalır.
+      _mediaSectionByMatch[m.id] = 1;
+      Navigator.pop(context);
+      widget.onSuccess();
+    }
+    if (error != null) {
+      snack(
+        added > 0
+            ? '$added fotoğraf eklendi; kalanlar eklenemedi: $error'
+            : 'Yükleme hatası: $error',
+        color: Colors.red,
+      );
+    } else {
+      snack(
+        added == 1 ? 'Fotoğraf eklendi.' : '$added fotoğraf eklendi.',
+        color: Colors.green,
+      );
     }
   }
 }
@@ -2444,12 +2506,23 @@ class _HighlightsTabView extends StatefulWidget {
   State<_HighlightsTabView> createState() => _HighlightsTabViewState();
 }
 
+/// Medya alt sekmesi maç başına hatırlanır: ekleme sonrası sekme yeniden
+/// kurulunca (ör. fotoğraf eklendi) Gol Videoları'na dönmez.
+final Map<String, int> _mediaSectionByMatch = {};
+
 class _HighlightsTabViewState extends State<_HighlightsTabView> {
   /// null: tümü; aksi hâlde takım id'si.
   String? _teamFilter;
 
   /// Alt sekme: 0 Gol Videoları, 1 Fotoğraflar (null: içeriğe göre).
-  int? _section;
+  int? get _section => _mediaSectionByMatch[widget.match.id];
+  set _section(int? v) {
+    if (v == null) {
+      _mediaSectionByMatch.remove(widget.match.id);
+    } else {
+      _mediaSectionByMatch[widget.match.id] = v;
+    }
+  }
 
   Widget _sectionSwitch(int selected, int photoCount) {
     final accent = ActiveTournament.theme.value?.secondary ?? kAdminAccent;
@@ -2928,6 +3001,54 @@ class _PhotoGalleryScreen extends StatefulWidget {
 }
 
 class _PhotoGalleryScreenState extends State<_PhotoGalleryScreen> {
+  bool _downloading = false;
+
+  /// Fotoğrafı telefonun galerisine kaydeder (web'de indirir); tarayıcı
+  /// açılmaz.
+  Future<void> _download(String url) async {
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _downloading = true);
+    try {
+      final res = await http.get(Uri.parse(url));
+      if (res.statusCode != 200) throw Exception('HTTP ${res.statusCode}');
+      final name = 'ligmasasi_${DateTime.now().millisecondsSinceEpoch}';
+      if (kIsWeb) {
+        await XFile.fromData(
+          res.bodyBytes,
+          mimeType: 'image/jpeg',
+          name: '$name.jpg',
+        ).saveTo('$name.jpg');
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Fotoğraf indirildi.')),
+        );
+      } else {
+        if (!await Gal.hasAccess(toAlbum: false)) {
+          await Gal.requestAccess(toAlbum: false);
+        }
+        await Gal.putImageBytes(res.bodyBytes, name: name);
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Fotoğraf galeriye kaydedildi.')),
+        );
+      }
+    } on GalException catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            e.type == GalExceptionType.accessDenied
+                ? 'Galeriye kaydetmek için fotoğraf izni gerekli.'
+                : 'Kaydedilemedi: ${e.type.message}',
+          ),
+        ),
+      );
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Fotoğraf indirilemedi.')),
+      );
+    } finally {
+      if (mounted) setState(() => _downloading = false);
+    }
+  }
+
   late final PageController _page = PageController(
     initialPage: widget.initialIndex,
   );
@@ -2957,12 +3078,18 @@ class _PhotoGalleryScreenState extends State<_PhotoGalleryScreen> {
         ),
         actions: [
           IconButton(
-            tooltip: 'Aç / indir',
-            icon: const Icon(Icons.download_rounded),
-            onPressed: () => launchUrl(
-              Uri.parse(current.url),
-              mode: LaunchMode.externalApplication,
-            ),
+            tooltip: 'İndir',
+            icon: _downloading
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.download_rounded),
+            onPressed: _downloading ? null : () => _download(current.url),
           ),
         ],
       ),
