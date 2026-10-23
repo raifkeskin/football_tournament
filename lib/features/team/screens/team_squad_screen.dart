@@ -2210,7 +2210,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
   bool _removePhoto = false;
   bool _saving = false;
 
-  /// Açık sekme: 0 Kimlik, 1 Oyun.
+  /// Açık sekme: 0 Kimlik, 1 Özellik, 2 Profil (fotoğraf).
   int _tab = 0;
 
   /// Düzenlemede açılıştaki kişisel bilgiler; yalnızca forma no değiştiyse
@@ -2792,7 +2792,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                   ),
                   const SizedBox(height: 14),
                   AdminFormTabs(
-                    labels: const ['Kimlik', 'Oyun'],
+                    labels: const ['Kimlik', 'Özellik', 'Profil'],
                     selected: _tab,
                     onChanged: _saving ? null : (i) => setState(() => _tab = i),
                   ),
@@ -2803,9 +2803,8 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
                 children: [
+                  if (_tab == 2) Center(child: _photoCard()),
                   if (_tab == 0) ...[
-                    Center(child: _photoCard()),
-                    const SizedBox(height: 16),
                     AdminFormSection(
                       title: 'Kimlik',
                       child: AdminFieldGroup(
@@ -2877,7 +2876,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                     ),
                   if (_tab == 1)
                     AdminFormSection(
-                      title: 'Oyun',
+                      title: 'Özellik',
                       child: AdminFieldGroup(
                         children: [
                           AdminSelectRow(
