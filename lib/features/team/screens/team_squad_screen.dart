@@ -3563,10 +3563,21 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
   /// (admin için null: hepsi).
   Future<Set<String>?>? _allowedPlayers;
 
+  /// Yalnız pasif turnuvalarda yer alan oyuncular (admin dahil gizlenir).
+  Set<String> _hiddenPlayers = const {};
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _allowedPlayers ??= PanelScope.playerIds(AppSession.of(context).value);
+    _allowedPlayers ??= () async {
+      final session = AppSession.of(context).value;
+      final r = await Future.wait<Object?>([
+        PanelScope.playerIds(session),
+        PanelScope.hiddenPlayerIds(),
+      ]);
+      _hiddenPlayers = r[1] as Set<String>;
+      return r[0] as Set<String>?;
+    }();
   }
 
   @override
@@ -3690,8 +3701,9 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
                                     snap.data!
                                         .where(
                                           (p) =>
-                                              allowed == null ||
-                                              allowed.contains(p.id),
+                                              !_hiddenPlayers.contains(p.id) &&
+                                              (allowed == null ||
+                                                  allowed.contains(p.id)),
                                         )
                                         .where(
                                           (p) =>
