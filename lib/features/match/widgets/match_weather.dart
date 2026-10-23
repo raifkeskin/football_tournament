@@ -316,8 +316,9 @@ class _MatchWeatherPanelState extends State<MatchWeatherPanel> {
   static const _hiddenKey = 'match_weather_panel_hidden';
   static bool? _openPref;
 
-  /// Kullanıcı paneli tamamen gizlediyse yalnız küçük "Hava" düğmesi kalır.
-  static bool _hidden = false;
+  /// Varsayılan kapalı: yalnız "Hava durumu ⌄" düğmesi; dokununca panel
+  /// açılır, çarpıyla yine kapanır. Tercih cihazda hatırlanır.
+  static bool _hidden = true;
 
   bool get _open => _openPref ?? false;
 
@@ -328,7 +329,7 @@ class _MatchWeatherPanelState extends State<MatchWeatherPanel> {
       SharedPreferences.getInstance()
           .then((p) {
             final v = p.getBool(_prefKey) ?? false;
-            final h = p.getBool(_hiddenKey) ?? false;
+            final h = p.getBool(_hiddenKey) ?? true;
             if (_openPref == null && mounted) {
               setState(() {
                 _openPref = v;
@@ -381,9 +382,19 @@ class _MatchWeatherPanelState extends State<MatchWeatherPanel> {
                   minimumSize: const Size(0, 28),
                 ),
                 icon: const Icon(Icons.wb_cloudy_outlined, size: 15),
-                label: const Text(
-                  'Hava durumu',
-                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600),
+                label: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Hava durumu',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    SizedBox(width: 2),
+                    Icon(Icons.expand_more_rounded, size: 18),
+                  ],
                 ),
               ),
             ),
