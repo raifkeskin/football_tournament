@@ -1695,10 +1695,15 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                     sections: (v) => _sections(isAdminUser, scoped, v),
                     values: _filter,
                     onChanged: (v) => setState(() => _filter = v),
-                    count: (v) => scoped
-                        .where((t) => _matchesFilter(isAdminUser, t, v))
-                        .where(_matchesTeamSearch)
-                        .length,
+                    total: teams.length,
+                    counts: (v) async => ListFilterCounts.compute(
+                      _sections(isAdminUser, scoped, v),
+                      v,
+                      (x) => scoped
+                          .where((t) => _matchesFilter(isAdminUser, t, x))
+                          .where(_matchesTeamSearch)
+                          .length,
+                    ),
                   ),
                 ),
               if (snapshot.hasData)

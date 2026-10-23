@@ -26,15 +26,30 @@ class ConsentStatusCache {
 /// "X oyuncudan onay alınmadı" bilgisi. Yetkisi olmayan kullanıcıya durum
 /// dönmediği için hiçbir şey göstermez.
 class ConsentSummaryBanner extends StatelessWidget {
-  const ConsentSummaryBanner({super.key, required this.statuses});
+  ConsentSummaryBanner({
+    super.key,
+    required Map<String, ConsentStatus> statuses,
+  }) : _missing = statuses.values.where((s) => !s.complete).length,
+       _noAccount = statuses.values
+           .where((s) => !s.complete && !s.hasAccount)
+           .length;
 
-  final Map<String, ConsentStatus> statuses;
+  /// Sayılar sunucudan geldiğinde (Lisans Yönetimi).
+  const ConsentSummaryBanner.counts({
+    super.key,
+    required int missing,
+    required int noAccount,
+  }) : _missing = missing,
+       _noAccount = noAccount;
+
+  final int _missing;
+  final int _noAccount;
 
   @override
   Widget build(BuildContext context) {
-    final missing = statuses.values.where((s) => !s.complete).toList();
-    if (missing.isEmpty) return const SizedBox.shrink();
-    final noAccount = missing.where((s) => !s.hasAccount).length;
+    final missingCount = _missing;
+    if (missingCount == 0) return const SizedBox.shrink();
+    final noAccount = _noAccount;
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       decoration: BoxDecoration(
@@ -48,7 +63,7 @@ class ConsentSummaryBanner extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              '${missing.length} oyuncudan KVKK / sağlık onayı alınmadı'
+              '$missingCount oyuncudan KVKK / sağlık onayı alınmadı'
               '${noAccount > 0 ? ' ($noAccount oyuncunun hesabı yok)' : ''}.',
               style: const TextStyle(
                 color: Colors.white,
