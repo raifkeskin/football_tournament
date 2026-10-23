@@ -30,6 +30,13 @@ const _statuses = <(String, String, Color)>[
 
 const _openStatuses = {'new', 'contacted', 'offered'};
 
+/// Teklif sayfasından gelen cevap (tournament_offers.response).
+const _responses = <String, (String, Color)>{
+  'accepted': ('Kabul edildi', kAdminAccent),
+  'revision': ('Revize istendi', kRequestGold),
+  'rejected': ('Reddedildi', Color(0xFFF87171)),
+};
+
 (String, Color) _statusLook(String s) {
   for (final x in _statuses) {
     if (x.$1 == s) return (x.$2, x.$3);
@@ -283,6 +290,21 @@ class _AdminTournamentRequestsScreenState
                 _date(r['created_at']?.toString()),
                 style: const TextStyle(color: Colors.white38, fontSize: 11.5),
               ),
+              if (_responses[r['offer_response']] case (
+                final text,
+                final c,
+              )) ...[
+                const SizedBox(height: 4),
+                Text(
+                  'Teklif cevabı: $text · '
+                  '${_date(r['offer_responded_at']?.toString())}',
+                  style: TextStyle(
+                    color: c,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -403,15 +425,37 @@ class _AdminTournamentRequestsScreenState
                                   '${o['version'] == 1 ? 'İlk teklif' : 'Revize ${(o['version'] as num) - 1}'}'
                                   ' · ${_date(o['created_at']?.toString())}'
                                   '${o['viewed_at'] != null ? ' · görüldü' : ''}',
-                              child: Text(
-                                '${formatTl(num.parse('${o['per_match_price']}'))} / maç'
-                                ' · ${o['match_count']} maç'
-                                ' · ${formatTl(num.parse('${o['total']}'))}',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 14.5,
-                                  fontWeight: FontWeight.w700,
-                                ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '${formatTl(num.parse('${o['per_match_price']}'))} / maç'
+                                    ' · ${o['match_count']} maç'
+                                    ' · ${formatTl(num.parse('${o['total']}'))}',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 14.5,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  if (_responses[o['response']] case (
+                                    final text,
+                                    final c,
+                                  ))
+                                    Text(
+                                      [
+                                        '$text · '
+                                            '${_date(o['responded_at']?.toString())}',
+                                        (o['response_reason'] ?? '').toString(),
+                                        (o['response_note'] ?? '').toString(),
+                                      ].where((e) => e.isNotEmpty).join('\n'),
+                                      style: TextStyle(
+                                        color: c,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                ],
                               ),
                             ),
                         ],

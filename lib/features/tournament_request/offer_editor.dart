@@ -464,8 +464,8 @@ class _OfferSettingsDialogState extends State<_OfferSettingsDialog> {
                   icon: Icons.request_quote_outlined,
                   title: 'Teklif Ayarları',
                   subtitle:
-                      'Ödeme bilgisi yalnız WhatsApp\'tan giden teklif '
-                      'sayfasında görünür.',
+                      'Ödeme bilgisi teklif sayfasında yalnız teklif '
+                      'kabul edildikten sonra görünür.',
                 ),
                 const SizedBox(height: 16),
                 AdminFieldGroup(
