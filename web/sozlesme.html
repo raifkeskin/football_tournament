@@ -78,7 +78,7 @@ a{color:var(--accent)}
       : 'Satıcı\'ya ait, teklif kabul edildikten sonra teklif sayfasında gösterilen banka hesabına EFT/Havale.';
 
     var parties = '<h2>1. TARAFLAR</h2><ul>' +
-      '<li><b>Satıcı/Hizmet Sağlayıcı:</b> ' + v(s.name) + ', ' + v(s.address) + ', ' + v(s.tax_no) + ', ' + v(s.email) + '</li>' +
+      '<li><b>Satıcı/Hizmet Sağlayıcı:</b> ' + v(s.name) + ', ' + v(s.address) + (s.tax_no ? ', ' + esc(s.tax_no) : '') + ', ' + v(s.email) + '</li>' +
       '<li><b>Alıcı (Kullanıcı):</b> ' + buyer + '</li>' +
       '<li><b>Tarih:</b> ' + esc(day) + '</li></ul>';
     var service = '<h2>2. HİZMETİN NİTELİĞİ VE TEMEL ÖZELLİKLERİ</h2>' +
