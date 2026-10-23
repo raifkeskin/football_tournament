@@ -65,9 +65,7 @@ class _LoginScreenState extends State<LoginScreen> {
   // Telefon alanında klavyenin "ileri" tuşu doğrudan şifreye geçer; odak
   // sıralamasına bırakılırsa arkadaki sekmelere atlayabiliyor.
   final _passwordFocus = FocusNode();
-  // Varsayılan işaretli: işaretsiz girişte telefon uygulamayı arka planda
-  // kapatınca oturum da kapanıyordu.
-  bool _rememberMe = true;
+  bool _rememberMe = false;
   bool _loading = false;
   int _adminTapCount = 0;
   Timer? _adminTapTimer;
