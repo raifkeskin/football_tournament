@@ -32,7 +32,7 @@ a{color:var(--accent)}
 (function () {
   // Teklife özel sözleşme metinleri: ?t=<anahtar>#on-bilgi | #mesafeli | #kvkk.
   // Metin sürümü değişirse DOC_VERSION da değişir (teklif.html ile aynı).
-  var DOC_VERSION = '2026-10-23';
+  var DOC_VERSION = '2026-10-23b';
   var URL_ = 'https://qxdjebzszikeslobrozf.supabase.co/rest/v1/rpc/';
   var KEY = '__SUPABASE_ANON_KEY__';
   var root = document.getElementById('root');
@@ -98,7 +98,7 @@ a{color:var(--accent)}
       '<h2>3. FİYAT VE ÖDEME ŞARTLARI</h2><ul>' +
       '<li><b>Maç Başı Ücret:</b> ' + tl(o.per_match_price) + discount + '</li>' +
       (o.team_count ? '<li><b>Takım Başına Sezon Toplamı:</b> ' + tl(o.total / o.team_count) + '</li>' : '') +
-      '<li><b>Toplam Hizmet Bedeli (KDV Dahil):</b> ' + tl(o.total) + '</li>' +
+      '<li><b>Toplam Hizmet Bedeli:</b> ' + tl(o.total) + '</li>' +
       '<li><b>Ödeme Yöntemi:</b> ' + pay + '</li></ul>' +
       '<h2>4. CAYMA HAKKI İSTİSNASI</h2>' + cayma + '</section>';
 
@@ -118,9 +118,9 @@ a{color:var(--accent)}
       '<h2>1. İşlenen Kişisel Verileriniz</h2>' +
       '<p>Lig Masası uygulaması üzerinden hizmet satın almanız ve ödeme yapmanız süreçlerinde; kimlik verileriniz (Ad, Soyad), iletişim verileriniz (E-posta, Telefon Numarası), finansal verileriniz (IBAN, banka dekont bilgileri) ve işlem güvenliği verileriniz (IP adresi, log kayıtları) işlenmektedir.</p>' +
       '<h2>2. Kişisel Verilerin İşlenme Amacı</h2>' +
-      '<p>Verileriniz; Mesafeli Satış Sözleşmesinin kurulması ve ifası, faturalandırma süreçlerinin yürütülmesi, tarafınıza sunulan dijital uygulamanın yetkilendirmesi, olası iade/iptal süreçlerinin yönetilmesi ve yasal düzenlemelerden doğan yükümlülüklerimizin yerine getirilmesi amaçlarıyla işlenmektedir.</p>' +
+      '<p>Verileriniz; Mesafeli Satış Sözleşmesinin kurulması ve ifası, tarafınıza sunulan dijital uygulamanın yetkilendirmesi, olası iade/iptal süreçlerinin yönetilmesi ve yasal düzenlemelerden doğan yükümlülüklerimizin yerine getirilmesi amaçlarıyla işlenmektedir.</p>' +
       '<h2>3. Kişisel Verilerin Aktarımı</h2>' +
-      '<p>Toplanan kişisel verileriniz, yalnızca yasal yükümlülüklerin yerine getirilmesi amacıyla yetkili kamu kurum ve kuruluşları (Maliye Bakanlığı vb.) ile e-fatura/e-arşiv hizmeti alınan altyapı sağlayıcılarına aktarılabilir.</p>' +
+      '<p>Toplanan kişisel verileriniz, yalnızca yasal yükümlülüklerin yerine getirilmesi amacıyla yetkili kamu kurum ve kuruluşlarına (Maliye Bakanlığı vb.) aktarılabilir.</p>' +
       '<h2>4. Veri İşleme Şartı</h2>' +
       '<p>Verileriniz, 6698 sayılı Kanun\'un 5/2(c) maddesindeki "Bir sözleşmenin kurulması veya ifasıyla doğrudan doğruya ilgili olması kaydıyla sözleşmenin taraflarına ait kişisel verilerin işlenmesinin gerekli olması" ve 5/2(ç) "Veri sorumlusunun hukuki yükümlülüğünü yerine getirebilmesi için zorunlu olması" hukuki sebeplerine dayanılarak otomatik yollarla işlenmektedir.</p></section>';
 
