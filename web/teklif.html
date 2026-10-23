@@ -75,6 +75,8 @@ label.terms input{width:20px;height:20px;margin:1px 0 0;accent-color:#10b981;fle
   var KEY = '__SUPABASE_ANON_KEY__';
   var root = document.getElementById('root');
   var token = new URLSearchParams(location.search).get('t');
+  // sozlesme.html ile aynı metin sürümü.
+  var DOC_VERSION = '2026-10-23';
 
   var KINDS = {halisaha: 'Halı saha', okul: 'Okul', sirket: 'Şirket', dernek: 'Dernek', master: 'Master', diger: 'Diğer'};
   var EXTRAS = {setup: 'Kurulumu biz yapıyoruz (takım ve oyuncu listeleri)', live_draw: 'Canlı kura', instagram: 'Instagram paylaşım görselleri'};
@@ -156,10 +158,27 @@ label.terms input{width:20px;height:20px;margin:1px 0 0;accent-color:#10b981;fle
     var h = '';
     var reason = null;
     if (kind === 'accepted') {
+      // Üç ayrı, işaretsiz onay kutusu; metin adları kişiye özel sözleşme
+      // sayfasına bağlanır.
+      var doc = function (hash, text) {
+        return '<a href="/sozlesme?t=' + encodeURIComponent(token) + '#' + hash +
+          '" target="_blank" rel="noopener">' + text + '</a>';
+      };
       h += '<h3>Teklifi kabul ediyorum</h3>';
-      h += '<label class="terms"><input type="checkbox" id="terms"><span>' +
-        '<a href="/kosullar#ucretli-hizmet" target="_blank" rel="noopener">Kullanım ve Hizmet Koşulları</a>\'nı ' +
-        'okudum, kabul ediyorum.</span></label>';
+      if (!(d.seller && d.seller.name)) {
+        h += '<p class="hint">Sözleşme metinleri hazırlanıyor; kısa süre içinde onaylayabileceksiniz. ' +
+          'Sorularınız için WhatsApp sohbetine yazabilirsiniz.</p>';
+      } else {
+        h += '<label class="terms"><input type="checkbox" class="consent" data-k="pre_info"><span>' +
+          doc('on-bilgi', 'Ön Bilgilendirme Formu') + ' ve ' + doc('mesafeli', 'Mesafeli Satış Sözleşmesi') +
+          '\'ni okudum, onaylıyorum.</span></label>';
+        h += '<label class="terms"><input type="checkbox" class="consent" data-k="terms"><span>' +
+          '<a href="/kosullar#ucretli-hizmet" target="_blank" rel="noopener">Kullanım Koşulları</a>\'nı okudum; ' +
+          'platforma ekleyeceğim oyuncuların sağlık verileri dâhil kişisel verileri için KVKK kapsamında gerekli ' +
+          'Açık Rıza ve Aydınlatma onaylarını bizzat aldığımı beyan ederim.</span></label>';
+        h += '<label class="terms"><input type="checkbox" class="consent" data-k="privacy"><span>' +
+          doc('kvkk', 'KVKK Aydınlatma Metni') + '\'ni okudum, anladım.</span></label>';
+      }
     } else {
       h += '<h3>' + (kind === 'revision' ? 'Ne değişsin?' : 'Neden olmadı?') + '</h3><div class="chips">';
       REASONS[kind].forEach(function (x) { h += '<button class="chip" type="button">' + esc(x) + '</button>'; });
@@ -172,6 +191,7 @@ label.terms input{width:20px;height:20px;margin:1px 0 0;accent-color:#10b981;fle
       (kind === 'accepted' ? 'Onayla' : 'Gönder') + '</button>' +
       '<button class="btn no" id="back" style="color:var(--muted)">Vazgeç</button></div>';
     panel.innerHTML = h;
+    if (kind === 'accepted' && !(d.seller && d.seller.name)) document.getElementById('send').disabled = true;
     panel.querySelectorAll('.chip').forEach(function (c) {
       c.onclick = function () {
         panel.querySelectorAll('.chip').forEach(function (x) { x.classList.remove('on'); });
@@ -184,15 +204,19 @@ label.terms input{width:20px;height:20px;margin:1px 0 0;accent-color:#10b981;fle
       var err = document.getElementById('err');
       var noteEl = document.getElementById('note');
       var note = noteEl ? noteEl.value.trim() : '';
-      var terms = document.getElementById('terms');
-      if (kind === 'accepted' && !terms.checked) { err.textContent = 'Devam etmek için koşulları onaylayın.'; return; }
+      var consents = {doc_version: DOC_VERSION};
+      panel.querySelectorAll('.consent').forEach(function (c) { consents[c.getAttribute('data-k')] = c.checked; });
+      if (kind === 'accepted' && !(consents.pre_info && consents.terms && consents.privacy)) {
+        err.textContent = 'Devam etmek için üç onay kutusunu da işaretleyin.';
+        return;
+      }
       if (kind === 'revision' && !note) { err.textContent = 'Revize isteğinizi yazın.'; return; }
       var send = this;
       send.disabled = true;
       err.textContent = '';
       call('tournament_offer_respond', {
         p_token: token, p_version: d.offer.version, p_response: kind,
-        p_reason: reason, p_note: note, p_terms: kind === 'accepted'
+        p_reason: reason, p_note: note, p_consents: kind === 'accepted' ? consents : null
       }).then(function () {
         load();
       }).catch(function (e) {

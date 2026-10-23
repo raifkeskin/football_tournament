@@ -72,6 +72,14 @@ String _summary(Map<String, dynamic> r) {
   ].where((s) => s.isNotEmpty).join(' · ');
 }
 
+/// Kabulde alınan üç onayın kaydı (zaman ve IP).
+String _consentLine(Object? c) {
+  if (c is! Map || c['at'] == null) return '';
+  final ip = (c['ip'] ?? '').toString();
+  return '3 onay alındı · ${_date(c['at'].toString())}'
+      '${ip.isEmpty ? '' : ' · IP $ip'}';
+}
+
 String _date(String? iso) {
   final t = DateTime.tryParse(iso ?? '')?.toLocal();
   if (t == null) return '';
@@ -448,6 +456,7 @@ class _AdminTournamentRequestsScreenState
                                             '${_date(o['responded_at']?.toString())}',
                                         (o['response_reason'] ?? '').toString(),
                                         (o['response_note'] ?? '').toString(),
+                                        _consentLine(o['consents']),
                                       ].where((e) => e.isNotEmpty).join('\n'),
                                       style: TextStyle(
                                         color: c,
