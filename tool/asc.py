@@ -9,6 +9,7 @@ Kullanım:
       Sürümü açar (yoksa), derlemeyi seçer, tr yenilikler metnini yazar.
   python3 -I tool/asc.py screenshots <sürüm> <klasör>
       Ekran görüntüsü setlerini klasördeki iphone63_N/ipad13_N.png ile değiştirir.
+  python3 -I tool/asc.py release-type <sürüm> MANUAL|AFTER_APPROVAL
   python3 -I tool/asc.py submit <sürüm>
       Hazırlanan sürümü incelemeye gönderir (yalnız kullanıcı onayıyla).
 
@@ -157,7 +158,7 @@ def prepare(version, build_no, notes):
         v = call('POST', '/appStoreVersions', {'data': {
             'type': 'appStoreVersions',
             'attributes': {'platform': 'IOS', 'versionString': version,
-                           'releaseType': 'AFTER_APPROVAL'},
+                           'releaseType': 'MANUAL'},
             'relationships': {'app': {'data': {'type': 'apps', 'id': aid}}},
         }})['data']
         print('Sürüm açıldı:', version)
@@ -244,6 +245,21 @@ def screenshots(version, folder):
             print(f"{loc['attributes']['locale']} {dtype}: {len(ids)} görüntü yüklendi")
 
 
+def release_type(version, kind):
+    """MANUAL: onaydan sonra 'Yayınla' denene kadar bekler;
+    AFTER_APPROVAL: onaylanınca otomatik yayınlanır."""
+    aid = app_id()
+    v = next((x for x in versions(aid)
+              if x['attributes']['versionString'] == version), None)
+    if v is None:
+        sys.exit('Sürüm yok: ' + version)
+    call('PATCH', f"/appStoreVersions/{v['id']}", {'data': {
+        'type': 'appStoreVersions', 'id': v['id'],
+        'attributes': {'releaseType': kind},
+    }})
+    print(f'Yayın türü: {version} → {kind}')
+
+
 def submit(version):
     aid = app_id()
     v = next((x for x in versions(aid)
@@ -277,6 +293,9 @@ if __name__ == '__main__':
         prepare(sys.argv[2], sys.argv[3], sys.argv[4])
     elif cmd == 'screenshots' and len(sys.argv) == 4:
         screenshots(sys.argv[2], sys.argv[3])
+    elif cmd == 'release-type' and len(sys.argv) == 4 and sys.argv[3] in (
+            'MANUAL', 'AFTER_APPROVAL'):
+        release_type(sys.argv[2], sys.argv[3])
     elif cmd == 'submit' and len(sys.argv) == 3:
         submit(sys.argv[2])
     else:

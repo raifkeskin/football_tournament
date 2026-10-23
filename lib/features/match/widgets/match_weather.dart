@@ -313,7 +313,12 @@ class MatchWeatherPanel extends StatefulWidget {
 
 class _MatchWeatherPanelState extends State<MatchWeatherPanel> {
   static const _prefKey = 'match_weather_panel_open';
+  static const _hiddenKey = 'match_weather_panel_hidden';
   static bool? _openPref;
+
+  /// Varsayılan kapalı: yalnız "Hava durumu ⌄" düğmesi; dokununca panel
+  /// açılır, çarpıyla yine kapanır. Tercih cihazda hatırlanır.
+  static bool _hidden = true;
 
   bool get _open => _openPref ?? false;
 
@@ -324,7 +329,13 @@ class _MatchWeatherPanelState extends State<MatchWeatherPanel> {
       SharedPreferences.getInstance()
           .then((p) {
             final v = p.getBool(_prefKey) ?? false;
-            if (_openPref == null && mounted) setState(() => _openPref = v);
+            final h = p.getBool(_hiddenKey) ?? true;
+            if (_openPref == null && mounted) {
+              setState(() {
+                _openPref = v;
+                _hidden = h;
+              });
+            }
           })
           .catchError((_) {});
     }
@@ -334,6 +345,13 @@ class _MatchWeatherPanelState extends State<MatchWeatherPanel> {
     setState(() => _openPref = !_open);
     SharedPreferences.getInstance()
         .then((p) => p.setBool(_prefKey, _open))
+        .catchError((_) => false);
+  }
+
+  void _setHidden(bool v) {
+    setState(() => _hidden = v);
+    SharedPreferences.getInstance()
+        .then((p) => p.setBool(_hiddenKey, v))
         .catchError((_) => false);
   }
 
@@ -350,6 +368,38 @@ class _MatchWeatherPanelState extends State<MatchWeatherPanel> {
       valueListenable: MatchWeatherService.of(widget.matchId),
       builder: (context, w, _) {
         if (w == null) return const SizedBox.shrink();
+        if (_hidden) {
+          return Align(
+            alignment: Alignment.centerRight,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+              child: TextButton.icon(
+                onPressed: () => _setHidden(false),
+                style: TextButton.styleFrom(
+                  foregroundColor: _dim,
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: const Size(0, 28),
+                ),
+                icon: const Icon(Icons.wb_cloudy_outlined, size: 15),
+                label: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Hava durumu',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    SizedBox(width: 2),
+                    Icon(Icons.expand_more_rounded, size: 18),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
         return Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
           child: Material(
@@ -433,6 +483,12 @@ class _MatchWeatherPanelState extends State<MatchWeatherPanel> {
             ),
           ),
           const Icon(Icons.expand_more_rounded, color: _dim, size: 22),
+          IconButton(
+            tooltip: 'Gizle',
+            visualDensity: VisualDensity.compact,
+            onPressed: () => _setHidden(true),
+            icon: const Icon(Icons.close_rounded, color: _dim, size: 18),
+          ),
         ],
       ),
     );

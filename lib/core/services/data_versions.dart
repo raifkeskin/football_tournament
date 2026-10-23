@@ -23,6 +23,10 @@ class DataVersions {
   static Set<String> _pending = {};
   static Completer<void>? _batch;
 
+  /// Bu cihaz veri yazdı: paylaşılan sürümler unutulur, sonraki damga
+  /// sunucudan okunur.
+  static void forget() => _known.clear();
+
   /// Kapsamların şu anki sürümlerinden oluşan damga; okunamazsa `null`.
   static Future<String?> stamp(Iterable<String> scopes) async {
     final list = scopes.toSet().toList()..sort();

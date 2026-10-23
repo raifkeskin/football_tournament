@@ -6,9 +6,11 @@ import '../../team/widgets/team_page_tabs.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/active_tournament.dart';
+import '../../../core/services/app_session.dart';
 import '../../../core/widgets/youtube_player_page.dart';
 import '../../match/widgets/youtube_find_sheet.dart' show BroadcastThumb;
 import '../../tournament/models/league.dart';
+import '../../match/utils/minute_label.dart';
 import '../../tournament/screens/formation_tab.dart'
     show positionLineLabels, positionLineOf;
 import '../../../core/widgets/web_safe_image.dart';
@@ -64,14 +66,17 @@ Future<void> showPlayerCard(
   final isId = RegExp(
     r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
   ).hasMatch(key);
-  final future = Supabase.instance.client
-      .from('players')
-      .select(
-        'id, name, surname, photo_url, birth_date, height, weight, '
-        'main_position, sub_position',
-      )
-      .eq(isId ? 'id' : 'phone', key)
-      .limit(1);
+  // Oyuncu yalnız id ile açılır (telefon tablodan okunmaz).
+  final Future<List<Map<String, dynamic>>> future = !isId
+      ? Future.value(const <Map<String, dynamic>>[])
+      : Supabase.instance.client
+            .from('players')
+            .select(
+              'id, name, surname, photo_url, birth_date, height, weight, '
+              'main_position, sub_position',
+            )
+            .eq('id', key)
+            .limit(1);
   return Navigator.of(context).push(
     MaterialPageRoute<void>(
       builder: (ctx) => Scaffold(
@@ -315,20 +320,9 @@ class _PlayerCardState extends State<PlayerCard> {
   /// - Oynanan maç: esamede (match_rosters) olduğu ya da olayı bulunan bitmiş
   ///   maçlar
   /// Olayı olmayan sezonlarda player_season_stats kayıtları kullanılır.
-  /// Kart telefon ya da id ile açılabiliyor; id'ye çevirir.
-  Future<String?> _resolvePlayerId(String key) async {
-    if (_uuidLike.hasMatch(key)) return key;
-    try {
-      final r = await _sb
-          .from('players')
-          .select('id')
-          .eq('phone', key)
-          .limit(1);
-      return r.isEmpty ? null : (r.first['id'] ?? '').toString();
-    } catch (_) {
-      return null;
-    }
-  }
+  /// Kart oyuncu id'siyle açılır (telefonla eşleştirme yok).
+  Future<String?> _resolvePlayerId(String key) async =>
+      _uuidLike.hasMatch(key) ? key : null;
 
   Future<Map<String, _StatTotals>> _loadTotalsBySeason(String pid) async {
     final events = <Map<String, dynamic>>[];
@@ -456,7 +450,7 @@ class _PlayerCardState extends State<PlayerCard> {
     final pid = await _resolvePlayerId(widget.playerPhone.trim());
     if (pid == null || pid.isEmpty) return const [];
     const cols =
-        'id, match_id, minute, video_id, start_sec, end_sec, description, '
+        'id, match_id, minute, added_minute, video_id, start_sec, end_sec, description, '
         'player_id';
     final rows = <String, Map<String, dynamic>>{};
     try {
@@ -526,6 +520,9 @@ class _PlayerCardState extends State<PlayerCard> {
           startSec: _readInt(r['start_sec']),
           endSec: _readInt(r['end_sec']),
           minute: r['minute'] == null ? null : _readInt(r['minute']),
+          addedMinute: r['added_minute'] == null
+              ? null
+              : _readInt(r['added_minute']),
           description: (r['description'] ?? '').toString().trim(),
           home: name(m['home']),
           away: name(m['away']),
@@ -766,7 +763,8 @@ class _PlayerCardState extends State<PlayerCard> {
       if (g.date != null) DateFormat('d MMMM y', 'tr_TR').format(g.date!),
       if (g.week != null && g.week! > 0) '${g.week}. Hafta',
     ].join(' · ');
-    final title = "${g.minute != null ? "${g.minute}' " : ''}Gol";
+    final title =
+        "${g.minute != null ? '${minuteLabel(g.minute, g.addedMinute)} ' : ''}Gol";
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
@@ -798,7 +796,9 @@ class _PlayerCardState extends State<PlayerCard> {
                       ),
                       alignment: Alignment.center,
                       child: Text(
-                        g.minute != null ? "${g.minute}'" : 'Gol',
+                        g.minute != null
+                            ? minuteLabel(g.minute, g.addedMinute)
+                            : 'Gol',
                         style: TextStyle(
                           color: _on(_tone),
                           fontWeight: FontWeight.w800,
@@ -1452,6 +1452,7 @@ class _GoalClip {
     required this.startSec,
     required this.endSec,
     required this.minute,
+    this.addedMinute,
     required this.description,
     required this.home,
     required this.away,
@@ -1467,6 +1468,7 @@ class _GoalClip {
   final int startSec;
   final int endSec;
   final int? minute;
+  final int? addedMinute;
   final String description;
   final String home;
   final String away;
@@ -1606,7 +1608,13 @@ class _IdentityMenuState extends State<_IdentityMenu> {
     if (!_ready || !IdentityAccess.visibleIn(context)) {
       return const SizedBox.shrink();
     }
-    final canRead = !_verified && !kIsWeb;
+    // Başkasının kimliğini admin, kurucu başkan ve bölge sorumlusu okutur;
+    // diğerleri yalnız kendi profilinde.
+    final session = AppSession.of(context).value;
+    final canRead =
+        !_verified &&
+        !kIsWeb &&
+        (session.hasManagementPanel || session.playerId == widget.playerId);
     if (!canRead && !_canUnverify) return const SizedBox.shrink();
     return PopupMenuButton<String>(
       tooltip: 'Kimlik',

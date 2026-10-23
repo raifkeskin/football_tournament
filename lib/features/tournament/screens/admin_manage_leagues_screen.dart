@@ -62,6 +62,49 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
     });
   }
 
+  /// Turnuvayı kalıcı siler: yalnız sezonu ve maç kaydı yoksa. Sebep varsa
+  /// silmeden önce söylenir (pasife alma önerilir).
+  Future<void> _deleteLeague(League league, BuildContext popupContext) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final check = await _sb.rpc(
+        'league_delete_check',
+        params: {'p_league_id': league.id},
+      );
+      if (!popupContext.mounted) return;
+      final seasons = (check is Map ? check['seasons'] as num? : null) ?? 0;
+      final matches = (check is Map ? check['matches'] as num? : null) ?? 0;
+      if (seasons > 0 || matches > 0) {
+        await showAdminInfoDialog(
+          context: popupContext,
+          title: 'Turnuva silinemez',
+          message: [
+            if (seasons > 0) '$seasons sezonu var; önce sezonları silin.',
+            if (matches > 0)
+              '$matches maç kaydı var; maçı olan turnuva silinemez. '
+                  'Listeden kaldırmak için pasife alabilirsiniz.',
+          ].join('\n'),
+        );
+        return;
+      }
+      final ok = await showAdminConfirmDialog(
+        context: popupContext,
+        title: 'Turnuvayı sil',
+        message:
+            '${league.name} kalıcı olarak silinecek: sahipleri, sponsorları, '
+            'takipçileri ve ayarları da gider. Bu işlem geri alınamaz.',
+      );
+      if (!ok) return;
+      await _sb.rpc('league_delete', params: {'p_league_id': league.id});
+      if (popupContext.mounted) Navigator.of(popupContext).pop();
+      messenger.showSnackBar(
+        SnackBar(content: Text('${league.name} silindi.')),
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Silinemedi: $e')));
+    }
+  }
+
   static String _newAccessCode() {
     final n = 100000 + Random().nextInt(900000);
     return n.toString();
@@ -978,10 +1021,42 @@ class _AdminManageLeaguesScreenState extends State<AdminManageLeaguesScreen> {
                   ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 4, 20, 18),
-                    child: AdminPrimaryButton(
-                      label: isEdit ? 'GÜNCELLE' : 'KAYDET',
-                      busy: saving,
-                      onPressed: () => submit(popupContext, setPopupState),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        AdminPrimaryButton(
+                          label: isEdit ? 'GÜNCELLE' : 'KAYDET',
+                          busy: saving,
+                          onPressed: () => submit(popupContext, setPopupState),
+                        ),
+                        // Boş turnuva (sezonu ve maçı yok) kalıcı silinir.
+                        if (isEdit && isAdmin)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: TextButton.icon(
+                              onPressed: saving
+                                  ? null
+                                  : () => _deleteLeague(league, popupContext),
+                              style: TextButton.styleFrom(
+                                foregroundColor: kAdminDanger,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
+                              ),
+                              icon: const Icon(
+                                Icons.delete_outline_rounded,
+                                size: 20,
+                              ),
+                              label: const Text(
+                                'TURNUVAYI SİL',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 1.2,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                 ],

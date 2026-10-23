@@ -42,6 +42,27 @@ button.copy{margin-top:10px;width:100%;padding:12px;border-radius:12px;border:1.
 .msg{text-align:center;padding:28px 18px}
 .msg p{color:var(--muted);margin:6px 0 0}
 a.app{display:block;text-align:center;margin-top:22px;color:var(--accent);font-weight:700;text-decoration:none}
+.actions{display:grid;gap:10px}
+.btn{width:100%;padding:14px;border-radius:12px;border:1.5px solid var(--line);background:transparent;color:var(--text);font:700 15.5px/1 inherit;cursor:pointer}
+.btn.ok{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.rev{border-color:var(--accent);color:var(--accent)}
+.btn.no{border-color:transparent;color:#f87171}
+.btn:disabled{opacity:.5;cursor:default}
+.panel{margin-top:4px}
+.panel h3{font-size:16px;margin:0 0 10px;color:#fff}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.chip{padding:8px 12px;border-radius:999px;border:1.5px solid var(--line);background:transparent;color:var(--text);font:600 14px/1 inherit;cursor:pointer}
+.chip.on{border-color:var(--accent);background:rgba(16,185,129,.15);color:#fff}
+textarea{width:100%;min-height:90px;border-radius:12px;border:1.5px solid var(--line);background:#0f172a;color:var(--text);padding:10px 12px;font:15px/1.4 inherit;resize:vertical}
+label.terms{display:flex;gap:10px;align-items:flex-start;font-size:14.5px;margin:4px 0 12px;cursor:pointer}
+label.terms input{width:20px;height:20px;margin:1px 0 0;accent-color:#10b981;flex:none}
+.err{color:#f87171;font-size:14px;margin-top:8px}
+.state{border-left:4px solid var(--accent)}
+.state.revision{border-left-color:var(--gold)}
+.state.rejected{border-left-color:#f87171}
+.state b{color:#fff;font-size:16px}
+.state .q{white-space:pre-wrap;color:var(--muted);font-size:14px;margin-top:6px}
+.link{background:none;border:0;color:var(--accent);font:600 14px/1 inherit;cursor:pointer;padding:10px 0 0}
 </style>
 </head>
 <body>
@@ -54,6 +75,8 @@ a.app{display:block;text-align:center;margin-top:22px;color:var(--accent);font-w
   var KEY = '__SUPABASE_ANON_KEY__';
   var root = document.getElementById('root');
   var token = new URLSearchParams(location.search).get('t');
+  // sozlesme.html ile aynı metin sürümü.
+  var DOC_VERSION = '2026-10-23b';
 
   var KINDS = {halisaha: 'Halı saha', okul: 'Okul', sirket: 'Şirket', dernek: 'Dernek', master: 'Master', diger: 'Diğer'};
   var EXTRAS = {setup: 'Kurulumu biz yapıyoruz (takım ve oyuncu listeleri)', live_draw: 'Canlı kura', instagram: 'Instagram paylaşım görselleri'};
@@ -91,6 +114,131 @@ a.app{display:block;text-align:center;margin-top:22px;color:var(--accent);font-w
     return '<div class="row' + (cls ? ' ' + cls : '') + '"><span>' + esc(k) + '</span><b>' + v + '</b></div>';
   }
 
+
+  var STATES = {
+    accepted: ['Teklifi kabul ettiniz', 'Teşekkürler! Ödeme bilgileri aşağıda. Kurulum için sizinle iletişime geçeceğiz.'],
+    revision: ['Revize isteğiniz iletildi', 'İsteğinize göre yeni teklifi aynı bağlantıdan göreceksiniz.'],
+    rejected: ['Teklifi reddettiniz', 'Geri bildiriminiz için teşekkürler. Fikriniz değişirse cevabınızı değiştirebilirsiniz.']
+  };
+  var REASONS = {
+    revision: ['Fiyat', 'Maç sayısı / format', 'Diğer'],
+    rejected: ['Fiyat yüksek', 'Vazgeçtik', 'Başka çözüm', 'Diğer']
+  };
+
+  // Cevap alanı: verilen cevabın durumu ya da Kabul / Revize / Reddet.
+  function answer(d, editing) {
+    var o = d.offer, box = document.getElementById('answer');
+    if (d.closed) {
+      box.innerHTML = '<div class="card msg"><p>Bu teklif kapandı. Sorularınız için WhatsApp sohbetine yazabilirsiniz.</p></div>';
+      return;
+    }
+    if (o.response && !editing) {
+      var st = STATES[o.response];
+      var q = [o.response_reason, o.response_note].filter(Boolean).join(' · ');
+      box.innerHTML = '<div class="card state ' + o.response + '"><b>' + esc(st[0]) + '</b>' +
+        '<div class="hint">' + esc(st[1]) + (o.responded_at ? ' · ' + date(o.responded_at) : '') + '</div>' +
+        (q ? '<div class="q">' + esc(q) + '</div>' : '') +
+        '<button class="link" id="change">Cevabı değiştir</button></div>';
+      document.getElementById('change').onclick = function () { answer(d, true); };
+      return;
+    }
+    box.innerHTML = '<div class="card"><div class="actions" id="acts">' +
+      '<button class="btn ok" data-r="accepted">Kabul Et</button>' +
+      '<button class="btn rev" data-r="revision">Revize İste</button>' +
+      '<button class="btn no" data-r="rejected">Reddet</button></div>' +
+      '<div class="panel" id="panel"></div></div>';
+    box.querySelectorAll('#acts .btn').forEach(function (b) {
+      b.onclick = function () { form(d, b.getAttribute('data-r')); };
+    });
+  }
+
+  function form(d, kind) {
+    var panel = document.getElementById('panel');
+    document.getElementById('acts').style.display = 'none';
+    var h = '';
+    var reason = null;
+    if (kind === 'accepted') {
+      // Üç ayrı, işaretsiz onay kutusu; metin adları kişiye özel sözleşme
+      // sayfasına bağlanır.
+      var doc = function (hash, text) {
+        return '<a href="/sozlesme?t=' + encodeURIComponent(token) + '#' + hash +
+          '" target="_blank" rel="noopener">' + text + '</a>';
+      };
+      h += '<h3>Teklifi kabul ediyorum</h3>';
+      if (!(d.seller && d.seller.name)) {
+        h += '<p class="hint">Sözleşme metinleri hazırlanıyor; kısa süre içinde onaylayabileceksiniz. ' +
+          'Sorularınız için WhatsApp sohbetine yazabilirsiniz.</p>';
+      } else {
+        h += '<label class="terms"><input type="checkbox" class="consent" data-k="pre_info"><span>' +
+          doc('on-bilgi', 'Ön Bilgilendirme Formu') + ' ve ' + doc('mesafeli', 'Mesafeli Satış Sözleşmesi') +
+          '\'ni okudum, onaylıyorum.</span></label>';
+        h += '<label class="terms"><input type="checkbox" class="consent" data-k="terms"><span>' +
+          '<a href="/kosullar#ucretli-hizmet" target="_blank" rel="noopener">Kullanım Koşulları</a>\'nı okudum; ' +
+          'platforma ekleyeceğim oyuncuların sağlık verileri dâhil kişisel verileri için KVKK kapsamında gerekli ' +
+          'Açık Rıza ve Aydınlatma onaylarını bizzat aldığımı beyan ederim.</span></label>';
+        h += '<label class="terms"><input type="checkbox" class="consent" data-k="privacy"><span>' +
+          doc('kvkk', 'KVKK Aydınlatma Metni') + '\'ni okudum, anladım.</span></label>';
+      }
+    } else {
+      h += '<h3>' + (kind === 'revision' ? 'Ne değişsin?' : 'Neden olmadı?') + '</h3><div class="chips">';
+      REASONS[kind].forEach(function (x) { h += '<button class="chip" type="button">' + esc(x) + '</button>'; });
+      h += '</div><textarea id="note" maxlength="1000" placeholder="' +
+        (kind === 'revision' ? 'İsteğinizi yazın (ör. takım sayısı 12 olacak)' : 'Kısa bir not (isteğe bağlı)') +
+        '"></textarea>';
+    }
+    h += '<div class="err" id="err"></div><div class="actions" style="margin-top:12px">' +
+      '<button class="btn ' + (kind === 'rejected' ? '' : 'ok') + '" id="send">' +
+      (kind === 'accepted' ? 'Onayla' : 'Gönder') + '</button>' +
+      '<button class="btn no" id="back" style="color:var(--muted)">Vazgeç</button></div>';
+    panel.innerHTML = h;
+    if (kind === 'accepted' && !(d.seller && d.seller.name)) document.getElementById('send').disabled = true;
+    panel.querySelectorAll('.chip').forEach(function (c) {
+      c.onclick = function () {
+        panel.querySelectorAll('.chip').forEach(function (x) { x.classList.remove('on'); });
+        c.classList.add('on');
+        reason = c.textContent;
+      };
+    });
+    document.getElementById('back').onclick = function () { answer(d, true); };
+    document.getElementById('send').onclick = function () {
+      var err = document.getElementById('err');
+      var noteEl = document.getElementById('note');
+      var note = noteEl ? noteEl.value.trim() : '';
+      var consents = {doc_version: DOC_VERSION};
+      panel.querySelectorAll('.consent').forEach(function (c) { consents[c.getAttribute('data-k')] = c.checked; });
+      if (kind === 'accepted' && !(consents.pre_info && consents.terms && consents.privacy)) {
+        err.textContent = 'Devam etmek için üç onay kutusunu da işaretleyin.';
+        return;
+      }
+      if (kind === 'revision' && !note) { err.textContent = 'Revize isteğinizi yazın.'; return; }
+      var send = this;
+      send.disabled = true;
+      err.textContent = '';
+      call('tournament_offer_respond', {
+        p_token: token, p_version: d.offer.version, p_response: kind,
+        p_reason: reason, p_note: note, p_consents: kind === 'accepted' ? consents : null
+      }).then(function () {
+        load();
+      }).catch(function (e) {
+        send.disabled = false;
+        err.textContent = e.message || 'Gönderilemedi, lütfen tekrar deneyin.';
+      });
+    };
+  }
+
+  function call(fn, body) {
+    return fetch(URL_ + fn, {
+      method: 'POST',
+      headers: {'apikey': KEY, 'Authorization': 'Bearer ' + KEY, 'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    }).then(function (r) {
+      return r.json().then(function (j) {
+        if (!r.ok) throw new Error((j && j.message) || 'Gönderilemedi, lütfen tekrar deneyin.');
+        return j;
+      });
+    });
+  }
+
   function render(d) {
     var o = d.offer;
     var groups = d.group_count > 1 ? d.group_count + ' grup' : 'tek lig';
@@ -126,6 +274,8 @@ a.app{display:block;text-align:center;margin-top:22px;color:var(--accent);font-w
     extras.forEach(function (e) { h += '<li>' + esc(e) + ' <span>· ek istek</span></li>'; });
     h += '</ul></div>';
 
+    h += '<h2>Cevabınız</h2><div id="answer"></div>';
+
     var p = d.payment || {};
     if (p.iban) {
       h += '<h2>Ödeme</h2><div class="card">';
@@ -134,7 +284,7 @@ a.app{display:block;text-align:center;margin-top:22px;color:var(--accent);font-w
       if (p.bank) h += row('Banka', esc(p.bank));
       h += '<button class="copy" id="copy">IBAN\'ı kopyala</button>';
       h += '<div class="hint">Havale / EFT açıklamasına <b>' + esc(d.code) + '</b> yazmanız yeterli. ' +
-        'Ödemeyi teklifi kabul ettikten sonra yapın; turnuvanız ödeme sonrası kurulur.</div>';
+        'Turnuvanız ödeme sonrası kurulur.</div>';
       h += '</div>';
     }
 
@@ -150,6 +300,8 @@ a.app{display:block;text-align:center;margin-top:22px;color:var(--accent);font-w
     h += '<p class="hint" style="text-align:center">Sorularınız için bu teklifi gönderdiğimiz WhatsApp sohbetine yazabilirsiniz.</p>';
     root.innerHTML = h;
 
+    answer(d, false);
+
     var btn = document.getElementById('copy');
     if (btn) btn.onclick = function () {
       var text = String(p.iban).replace(/\s+/g, '');
@@ -163,16 +315,15 @@ a.app{display:block;text-align:center;margin-top:22px;color:var(--accent);font-w
     message('Bağlantı eksik', 'Teklif bağlantısını WhatsApp mesajındaki linkten açın.');
     return;
   }
-  fetch(URL_ + 'tournament_offer_view', {
-    method: 'POST',
-    headers: {'apikey': KEY, 'Authorization': 'Bearer ' + KEY, 'Content-Type': 'application/json'},
-    body: JSON.stringify({p_token: token})
-  }).then(function (r) { return r.json(); }).then(function (d) {
-    if (!d || !d.offer) message('Teklif bulunamadı', 'Bağlantı geçersiz ya da teklif kaldırılmış olabilir.');
-    else render(d);
-  }).catch(function () {
-    message('Bağlantı hatası', 'Teklif yüklenemedi, lütfen tekrar deneyin.');
-  });
+  function load() {
+    call('tournament_offer_view', {p_token: token}).then(function (d) {
+      if (!d || !d.offer) message('Teklif bulunamadı', 'Bağlantı geçersiz ya da teklif kaldırılmış olabilir.');
+      else render(d);
+    }).catch(function () {
+      message('Bağlantı hatası', 'Teklif yüklenemedi, lütfen tekrar deneyin.');
+    });
+  }
+  load();
 })();
 </script>
 </body>

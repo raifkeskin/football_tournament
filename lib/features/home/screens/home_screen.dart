@@ -7,14 +7,12 @@ import '../../tournament/models/season.dart';
 import '../../match/models/match.dart';
 import '../../../core/services/app_session.dart';
 import '../../../core/services/app_settings.dart';
-import '../../team/models/team.dart';
+import '../../team/services/team_directory.dart';
 import '../../tournament/services/interfaces/i_league_service.dart';
 import '../../match/services/interfaces/i_match_service.dart';
-import '../../team/services/interfaces/i_team_service.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/services/global_filter.dart';
 import '../../../core/services/active_tournament.dart';
-import '../../../core/utils/resilient_stream.dart';
 import '../../../core/widgets/app_date_picker.dart';
 import '../../tournament/screens/tournament_hub_screen.dart';
 import '../../match/screens/match_details_screen.dart';
@@ -63,7 +61,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final ILeagueService _leagueService = ServiceLocator.leagueService;
   final IMatchService _matchService = ServiceLocator.matchService;
-  final ITeamService _teamService = ServiceLocator.teamService;
   late List<DateTime> _tarihler;
   int _seciliIndeks = 2;
   String? _activeLeagueId;
@@ -949,28 +946,17 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Takımlar bir kez dinlenir (her rebuild'de yeniden sorgulanmaz).
-  late final Stream<List<Team>> _teamsStream = resilientStream(
-    () => _teamService.watchAllTeams(caller: 'HomeScreen'),
-  );
-
   Widget _buildMatchList(BuildContext context, League currentLeague) {
-    return StreamBuilder<List<Team>>(
-      stream: _teamsStream,
-      builder: (context, teamSnapshot) {
-        // Takım adları gelmeden kartlar çizilmez; aksi halde önce
-        // "Ev Sahibi / Deplasman" görünüp sonra adlar geliyordu.
-        if (!teamSnapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        final Map<String, String> logoMap = {};
-        final Map<String, String> nameMap = {};
-        if (teamSnapshot.hasData) {
-          for (final t in teamSnapshot.data!) {
-            logoMap[t.id] = t.logoUrl;
-            nameMap[t.id] = t.name;
-          }
-        }
+    // Yalnız listelenen maçların takımları okunur (tüm takımlar değil).
+    return ValueListenableBuilder<Map<String, TeamBrief>>(
+      valueListenable: TeamDirectory.known,
+      builder: (context, known, _) {
+        final Map<String, String> logoMap = {
+          for (final t in known.values) t.id: t.logoUrl,
+        };
+        final Map<String, String> nameMap = {
+          for (final t in known.values) t.id: t.name,
+        };
 
         return StreamBuilder<List<Season>>(
           stream: _showLeagueFilter
@@ -1010,6 +996,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 }
 
                 final matches = matchSnapshot.data ?? [];
+                // Takım adları gelmeden kartlar çizilmez; aksi halde önce
+                // "Ev Sahibi / Deplasman" görünüp sonra adlar geliyordu.
+                final missingTeams = TeamDirectory.missing([
+                  for (final m in matches) ...[m.homeTeamId, m.awayTeamId],
+                ]);
+                if (missingTeams.isNotEmpty) {
+                  TeamDirectory.ensure(missingTeams);
+                  return const Center(child: CircularProgressIndicator());
+                }
                 matches.sort((a, b) {
                   final timeA = (a.matchTime ?? '').trim();
                   final timeB = (b.matchTime ?? '').trim();

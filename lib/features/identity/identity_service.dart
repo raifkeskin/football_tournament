@@ -154,6 +154,24 @@ class IdentityService {
     changes.value++;
   }
 
+  /// Profilin numara durumu: none, unconfirmed, confirmed ya da forbidden.
+  static Future<String> phoneState(String playerId) async {
+    final r = await _sb.rpc(
+      'identity_phone_state',
+      params: {'p_player_id': playerId},
+    );
+    return (r ?? 'forbidden').toString();
+  }
+
+  /// Doğrulanan telefonsuz profile numara yazar (sunucu sonuç kodu döner).
+  static Future<String> setPhone(String playerId, String raw10) async {
+    final r = await _sb.rpc(
+      'identity_set_phone',
+      params: {'p_player_id': playerId, 'p_phone': raw10},
+    );
+    return (r ?? '').toString();
+  }
+
   /// Onayı kaldırma yetkisi: admin ya da oyuncunun turnuvasının kurucu
   /// başkanı.
   static Future<bool> canUnverify(String playerId) async {

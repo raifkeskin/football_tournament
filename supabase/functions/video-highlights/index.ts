@@ -68,6 +68,34 @@ async function youtubeLiveState(videoId: string): Promise<string> {
   }
 }
 
+/** Canlı yayının gerçek başlama saati (ms) ve video süresi (sn); YouTube
+ *  vermezse null. */
+async function youtubeTiming(
+  videoId: string,
+): Promise<{ startMs: number | null; durationSec: number | null }> {
+  const none = { startMs: null, durationSec: null };
+  if (!YOUTUBE_API_KEY) return none;
+  try {
+    const res = await fetch(
+      "https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails,contentDetails" +
+        `&id=${encodeURIComponent(videoId)}&key=${YOUTUBE_API_KEY}`,
+    );
+    if (!res.ok) return none;
+    const item = (await res.json())?.items?.[0];
+    const t = item?.liveStreamingDetails?.actualStartTime;
+    const ms = t ? Date.parse(t) : NaN;
+    // ISO 8601 süre: PT1H32M10S
+    const d = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/.exec(item?.contentDetails?.duration ?? "");
+    const dur = d ? (+(d[1] ?? 0)) * 3600 + (+(d[2] ?? 0)) * 60 + (+(d[3] ?? 0)) : 0;
+    return {
+      startMs: Number.isFinite(ms) ? ms : null,
+      durationSec: dur > 0 ? dur : null,
+    };
+  } catch (_) {
+    return none;
+  }
+}
+
 const admin = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
 // Düşük çözünürlükte saniye başına yaklaşık token (Gemini belgeleri).
@@ -83,6 +111,10 @@ const WIDE = 600;
 const HALFTIME_SLACK = 900;
 // Başlangıç tespitinde kare hızı (5 sn'de bir kare).
 const DETECT_FPS = 0.2;
+// Bulunamayan gol için ikinci tarama: ±5 dk.
+const RETRY_WINDOW = 300;
+// Skor tabelası okumada kare hızı (2 sn'de bir kare, 90 sn'lik aralık).
+const CLOCK_FPS = 0.5;
 // Tüm video taramasında kare hızı (varsayılan 2 sn'de bir kare; görüntü
 // maliyeti yarıya iner, ses aynı kalır).
 const FULL_FPS = Number(Deno.env.get("GEMINI_FULL_FPS") ?? "0.5");
@@ -144,6 +176,8 @@ type GoalEvent = {
   playerId: string | null;
   /** Dakika tutulmayan sezonda (halısaha) null. */
   minute: number | null;
+  /** Uzatma dakikası (30+2' → minute 30, added 2). */
+  added: number | null;
   teamId: string | null;
   teamName: string;
   player: string;
@@ -344,6 +378,163 @@ async function detectStart(
   return sec >= start - 30 && sec <= end + 30 ? sec : null;
 }
 
+const CLOCK_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    durum: { type: "STRING", enum: ["isliyor", "durmus", "yok"] },
+    video_ani: { type: "STRING", nullable: true },
+    tabela_suresi: { type: "STRING", nullable: true },
+  },
+  required: ["durum"],
+};
+
+type ClockRead =
+  | { state: "running"; videoSec: number; clockSec: number }
+  | { state: "stopped" | "none" };
+
+/** Skor tabelasındaki maç sayacını okur (kısa aralık, ucuz):
+ *  running: sayaç işliyor (videodaki an + tabeladaki süre),
+ *  stopped: tabela var ama sayaç 00:00 / "–" (maç başlamamış),
+ *  none: tabela yok ya da okunamıyor (hata da none sayılır). */
+async function readClock(
+  budget: Budget,
+  videoId: string,
+  start: number,
+  end: number,
+): Promise<ClockRead> {
+  budget.ensure(estimateCost(end - start, CLOCK_FPS));
+  const prompt = [
+    "Bu bir amatör futbol maçı yayınıdır.",
+    `Sana videonun ${fmt(start)} – ${fmt(end)} aralığı verildi.`,
+    "Ekranda skor tabelası ve üzerinde MAÇ SÜRESİ sayacı var mı bak.",
+    "durum: sayaç işliyorsa 'isliyor'; tabela var ama sayaç 00:00, boş ya da",
+    "'-' ise (maç başlamamış) 'durmus'; tabela/sayaç yoksa ya da okunamıyorsa 'yok'.",
+    "durum 'isliyor' ise sayacın net okunduğu tek bir an seç:",
+    "video_ani: o anın VİDEONUN EN BAŞINDAN İTİBAREN zamanı (SS:DD:ss),",
+    "tabela_suresi: o anda tabelada yazan maç süresi (DD:ss). Uydurma.",
+  ].join("\n");
+  try {
+    const { data, usage } = await askGemini({
+      videoId,
+      prompt,
+      schema: CLOCK_SCHEMA,
+      start,
+      end,
+      fps: CLOCK_FPS,
+    });
+    await budget.record("clock", usage);
+    if (data.durum === "durmus") return { state: "stopped" };
+    if (data.durum !== "isliyor") return { state: "none" };
+    let v = toSec(data.video_ani);
+    const c = toSec(data.tabela_suresi);
+    if (v == null || c == null) return { state: "none" };
+    if (v < start) v += start;
+    if (v < start - 30 || v > end + 30) return { state: "none" };
+    return { state: "running", videoSec: v, clockSec: c };
+  } catch (e) {
+    console.warn("readClock", (e as Error).message);
+    if ((e as Error).message.startsWith("Gemini:")) throw e; // erişim/kota
+    return { state: "none" };
+  }
+}
+
+/** Devre başlangıçlarını videoda bulur:
+ *  1. yarı: ilk 60 sn'de skor tabelası okunur.
+ *   - sayaç işliyor: yayın geç açılmış, başlangıç = an − süre (negatif
+ *     olabilir); düdük aranmaz.
+ *   - sayaç 00:00 / "–" ya da tabela yok: ilk düdük aranır.
+ *   - o da yoksa uygulamadaki düdük saati − YouTube yayın başlangıcı
+ *     (yalnız düdüklere maç sırasında basıldıysa).
+ *  2. yarı: tahmini başlangıcın birkaç dakika sonrası tabeladan; okunamazsa
+ *  2. yarı düdüğü aranır. */
+async function resolveStarts(
+  budget: Budget,
+  o: {
+    videoId: string;
+    period: number;
+    needSecond: boolean;
+    kickoffAt: string | null;
+    secondHalfAt: string | null;
+    yt: { startMs: number | null; durationSec: number | null };
+  },
+): Promise<{ kickoff: number | null; secondHalf: number | null; source: string }> {
+  const periodSec = o.period * 60;
+  const sources: string[] = [];
+
+  // Uygulama saatinden tahmin (ücretsiz, son çare).
+  const k = o.kickoffAt ? Date.parse(o.kickoffAt) : NaN;
+  const h = o.secondHalfAt ? Date.parse(o.secondHalfAt) : NaN;
+  const liveEntered = Number.isFinite(k) &&
+    (!Number.isFinite(h) || h - k >= (periodSec - 300) * 1000);
+  const fromApp = (iso: string | null) => {
+    if (!liveEntered || o.yt.startMs == null || !iso) return null;
+    const ms = Date.parse(iso);
+    if (!Number.isFinite(ms)) return null;
+    const sec = Math.round((ms - o.yt.startMs) / 1000);
+    const maxSec = o.yt.durationSec != null ? o.yt.durationSec - 600 : 4 * 3600;
+    return sec > -3600 && sec < maxSec ? sec : null;
+  };
+
+  // 1. yarı
+  let kickoff: number | null = null;
+  const c1 = await readClock(budget, o.videoId, 0, 60);
+  if (c1.state === "running" && c1.clockSec <= periodSec + 900) {
+    kickoff = c1.videoSec - c1.clockSec;
+    sources.push(c1.clockSec > 5 ? "tabela(geç yayın)" : "tabela");
+  } else {
+    kickoff = await detectStart(budget, o.videoId, "kickoff", 0, 1200);
+    if (kickoff != null) sources.push("düdük");
+    else {
+      kickoff = fromApp(o.kickoffAt);
+      if (kickoff != null) sources.push("saat");
+    }
+  }
+
+  // 2. yarı
+  let secondHalf: number | null = null;
+  if (o.needSecond && kickoff != null) {
+    const guess = fromApp(o.secondHalfAt) ?? kickoff + periodSec + 600;
+    const probe = Math.max(0, guess + 180);
+    const c2 = await readClock(budget, o.videoId, probe, probe + 60);
+    if (c2.state === "running") {
+      // Sayaç 2. yarıda devam ediyorsa (35:00) ya da sıfırlandıysa (05:00).
+      const intoHalf = c2.clockSec >= periodSec - 60
+        ? c2.clockSec - periodSec
+        : c2.clockSec;
+      const cand = c2.videoSec - intoHalf;
+      if (cand > kickoff + periodSec - 120) {
+        secondHalf = cand;
+        sources.push("tabela(2)");
+      }
+    }
+    if (secondHalf == null) {
+      const from = kickoff + periodSec;
+      secondHalf = await detectStart(budget, o.videoId, "second_half", from, from + 1500);
+      if (secondHalf != null) sources.push("düdük(2)");
+      else {
+        secondHalf = fromApp(o.secondHalfAt);
+        if (secondHalf != null) sources.push("saat(2)");
+      }
+    }
+  }
+  return { kickoff, secondHalf, source: sources.join("+") };
+}
+
+/** Golün videodaki tahmini anı (sn); başlangıç bilinmiyorsa null. */
+function goalVideoSec(
+  g: GoalEvent,
+  period: number,
+  kickoff: number | null,
+  secondHalf: number | null,
+): number | null {
+  if (g.minute == null || kickoff == null) return null;
+  const extra = (g.added ?? 0) * 60;
+  if (g.minute > period) {
+    return secondHalf == null ? null : secondHalf + (g.minute - period) * 60 + extra;
+  }
+  return kickoff + g.minute * 60 + extra;
+}
+
 // --- Gol taraması -------------------------------------------------------------
 
 const GOALS_SCHEMA = {
@@ -473,12 +664,14 @@ function goalsPrompt(
     for (const g of goals) {
       const extra = g.ownGoal ? " (kendi kalesine)" : g.penalty ? " (penaltı)" : "";
       lines.push(
-        `- olay_no ${g.no}: ${g.minute != null ? `${g.minute}' ` : ""}${g.teamName}${g.player ? ` – ${g.player}` : ""}${extra}`,
+        `- olay_no ${g.no}: ${g.minute != null ? `${g.minute}${g.added ? `+${g.added}` : ""}' ` : ""}${g.teamName}${g.player ? ` – ${g.player}` : ""}${extra}`,
       );
     }
     lines.push(
-      "Bu golleri videoda bul ve her biri için olay_no'yu yaz. Raporda olmayan",
-      "bir gol görürsen olay_no'yu boş bırakarak ekle.",
+      "Bu golleri videoda bul ve her biri için olay_no'yu yaz. Eşleştirmeyi",
+      "zamana ve takıma göre yap: spikerin söylediği oyuncu rapordakinden",
+      "farklı olsa da o gol aynı goldür, olay_no'yu yine yaz (raporu esas al).",
+      "Raporda olmayan bir gol görürsen olay_no'yu boş bırakarak ekle.",
       "",
     );
   }
@@ -489,7 +682,8 @@ function goalsPrompt(
     "- bitis: sevinç başladıktan ~5 sn sonra",
     "- atan_takim: golü atan takımın adı (yukarıdaki adlardan biri)",
     "- mac_dakikasi: tabelada okunuyorsa maç süresi, yoksa boş",
-    "- aciklama: kısa Türkçe açıklama (oyuncu adı anlatımda geçiyorsa kullan)",
+    "- aciklama: kısa Türkçe açıklama; olay_no verdiysen oyuncu adı yazma",
+    "  (golü atan maç raporundan gösterilir)",
     "- atan_oyuncu: golü atanın adı, yalnızca spiker söylüyorsa ya da",
     "  formasından kesin okunuyorsa (kadrodaki yazılışla); yoksa boş",
     "- forma_no: golü atanın forma numarası, kesin okunuyorsa; yoksa boş",
@@ -504,17 +698,20 @@ function buildWindows(
   period: number,
   kickoff: number | null,
   secondHalf: number | null,
+  narrow = NARROW,
 ): Window[] {
   const raw: Window[] = goals.map((g) => {
     const minute = g.minute ?? 0;
+    // Uzatma (30+2'): devre içinde süreye eklenir, devre değişmez.
+    const extra = (g.added ?? 0) * 60;
     const firstHalf = minute <= period;
     let center: number;
-    let before = NARROW;
-    let after = NARROW;
+    let before = narrow;
+    let after = narrow;
     if (!firstHalf && secondHalf != null) {
-      center = secondHalf + (minute - period) * 60;
+      center = secondHalf + (minute - period) * 60 + extra;
     } else {
-      center = (kickoff ?? 0) + minute * 60;
+      center = (kickoff ?? 0) + minute * 60 + extra;
       if (kickoff == null || !firstHalf) {
         // Başlangıç bilinmiyor: geniş pencere; 2. yarıda devre arası da eklenir.
         before = WIDE;
@@ -548,6 +745,9 @@ type RunOpts = {
   period: number;
   kickoff: number | null;
   secondHalf: number | null;
+  /** Uygulamada başlama / 2. yarı düdüğüne basılan an (ISO). */
+  kickoffAt: string | null;
+  secondHalfAt: string | null;
   limit: number;
   roster: RosterPlayer[];
   /** Sezon tercihi: kesitler doğrudan yayına girer. */
@@ -571,28 +771,47 @@ async function run(opts: RunOpts) {
   const budget = new Budget(matchId, opts.limit);
   let { kickoff, secondHalf } = opts;
   try {
-    // 1) Başlangıçlar verilmediyse YZ bulur (yalnızca gerektiğinde).
+    // 1) Başlangıçlar elle verilmediyse sistem bulur (bkz. resolveStarts).
+    const yt = await youtubeTiming(videoId);
     if (timed) {
-      if (kickoff == null) {
-        kickoff = await detectStart(budget, videoId, "kickoff", 0, 1200);
-      }
-      const needSecond = secondHalf == null && goals.some((g) => (g.minute ?? 0) > period);
-      if (needSecond && kickoff != null) {
-        const from = kickoff + period * 60;
-        secondHalf = await detectStart(budget, videoId, "second_half", from, from + 1500);
+      const needSecond = goals.some((g) => (g.minute ?? 0) > period);
+      if (kickoff == null || (needSecond && secondHalf == null)) {
+        const r = await resolveStarts(budget, {
+          videoId,
+          period,
+          needSecond: needSecond && secondHalf == null,
+          kickoffAt: opts.kickoffAt,
+          secondHalfAt: opts.secondHalfAt,
+          yt,
+        });
+        kickoff ??= r.kickoff;
+        secondHalf ??= r.secondHalf;
+        console.log("starts", matchId, r.source, kickoff, secondHalf);
       }
       await admin.from("match_highlight_jobs")
         .update({ kickoff_sec: kickoff, second_half_sec: secondHalf })
         .eq("match_id", matchId);
     }
 
+    // Yayında olmayan goller (yayın açılmadan önce ya da video bittikten
+    // sonra) taranmaz; hata sayılmaz, kesitleri olmaz.
+    const inVideo = (g: GoalEvent) => {
+      const t = goalVideoSec(g, period, kickoff, secondHalf);
+      if (t == null) return true; // başlangıç bilinmiyor: taranır
+      return t >= 15 && (yt.durationSec == null || t <= yt.durationSec - 5);
+    };
+    const covered = timed ? goals.filter(inVideo) : goals;
+    if (timed && covered.length < goals.length) {
+      console.log("outside stream", matchId, goals.length - covered.length);
+    }
+
     // 2) Taranacak aralıklar; 3) tavan: büyük kısmı kaplıyorsa tüm video.
     let windows: (Window | null)[] = timed
-      ? buildWindows(goals, period, kickoff, secondHalf)
+      ? (covered.length ? buildWindows(covered, period, kickoff, secondHalf) : [])
       : [null];
-    const covered = windows.reduce((a, w) => a + (w ? w.end - w.start : 0), 0);
-    const total = approxVideoLength(period, kickoff);
-    if (timed && covered > total * 0.7) windows = [null];
+    const coveredSec = windows.reduce((a, w) => a + (w ? w.end - w.start : 0), 0);
+    const total = yt.durationSec ?? approxVideoLength(period, kickoff);
+    if (timed && coveredSec > total * 0.7) windows = [null];
 
     const plannedCost = windows.reduce(
       (a, w) => a + (w ? estimateCost(w.end - w.start) : estimateCost(total, FULL_FPS)),
@@ -600,8 +819,8 @@ async function run(opts: RunOpts) {
     );
     budget.ensure(plannedCost);
 
-    const results = await Promise.all(
-      windows.map(async (w) => {
+    const scanWindows = (ws: (Window | null)[]) => Promise.all(
+      ws.map(async (w) => {
         const { data, usage } = await askGemini({
           videoId,
           prompt: goalsPrompt(home.name, away.name, w, w ? w.goals : goals, {
@@ -624,10 +843,13 @@ async function run(opts: RunOpts) {
       }),
     );
 
+    const results = await scanWindows(windows);
+
     const rows: Record<string, unknown>[] = [];
     const usedEvents = new Set<string>();
     const seenSec: number[] = [];
-    for (const { w, found } of results) {
+    const collect = (res: { w: Window | null; found: FoundGoal[] }[]) => {
+    for (const { w, found } of res) {
       for (const f of found) {
         let goalSec = toSec(f.gol_ani);
         if (goalSec == null) continue;
@@ -646,19 +868,28 @@ async function run(opts: RunOpts) {
         if (end == null || end < goalSec + 3 || end > goalSec + 20) end = goalSec + 8;
         start = Math.max(0, start);
 
-        const ev = f.olay_no != null
-          ? goals.find((g) => g.no === f.olay_no && !usedEvents.has(g.id))
-          : undefined;
-        if (ev) usedEvents.add(ev.id);
-
         const teamName = (f.atan_takim ?? "").toLocaleLowerCase("tr");
-        const teamId = ev
-          ? (ev.ownGoal ? (ev.teamId === home.id ? away.id : home.id) : ev.teamId)
-          : teamName && home.name.toLocaleLowerCase("tr").includes(teamName)
+        const sideOf = (g: GoalEvent) =>
+          g.ownGoal ? (g.teamId === home.id ? away.id : home.id) : g.teamId;
+        const foundTeam = teamName && home.name.toLocaleLowerCase("tr").includes(teamName)
           ? home.id
           : teamName && away.name.toLocaleLowerCase("tr").includes(teamName)
           ? away.id
           : null;
+        let ev = f.olay_no != null
+          ? goals.find((g) => g.no === f.olay_no && !usedEvents.has(g.id))
+          : undefined;
+        // YZ olay_no vermediyse (ör. spiker başka oyuncu adı söyledi) bu
+        // aralıktaki kullanılmamış gol olayı eşleşir: önce aynı takım, tek
+        // adaysa takım bilinmese de. Dakika ve oyuncu maç raporundan gelir.
+        if (!ev && w) {
+          const free = w.goals.filter((g) => !usedEvents.has(g.id));
+          const same = foundTeam ? free.filter((g) => sideOf(g) === foundTeam) : [];
+          ev = same[0] ?? (free.length === 1 && !foundTeam ? free[0] : undefined);
+        }
+        if (ev) usedEvents.add(ev.id);
+
+        const teamId = ev ? sideOf(ev) : foundTeam;
 
         // Dakika: maç detayından; yoksa tabeladan; o da yoksa videodaki
         // başlangıç anlarından hesaplanır.
@@ -677,6 +908,7 @@ async function run(opts: RunOpts) {
           team_id: teamId,
           player_id: playerId,
           minute: Number.isFinite(minuteRaw) ? minuteRaw : null,
+          added_minute: ev?.added ?? null,
           video_id: videoId,
           start_sec: start,
           end_sec: end,
@@ -687,6 +919,26 @@ async function run(opts: RunOpts) {
         });
       }
     }
+    };
+    collect(results);
+
+    // Görüntüsü bulunamayan goller: aralık bir kez genişletilip yeniden
+    // taranır (bütçe yetmezse atlanır). Hâlâ yoksa hata verilmez; o gol
+    // "yayında görüntü yok" sayılır, diğer kesitler yayınlanır.
+    let missing = timed ? covered.filter((g) => !usedEvents.has(g.id)) : [];
+    if (missing.length && windows.length && windows[0] != null) {
+      const retry = buildWindows(missing, period, kickoff, secondHalf, RETRY_WINDOW);
+      try {
+        budget.ensure(retry.reduce((t, w) => t + estimateCost(w.end - w.start), 0));
+        collect(await scanWindows(retry));
+      } catch (e) {
+        console.warn("retry skipped", matchId, (e as Error).message);
+      }
+      missing = covered.filter((g) => !usedEvents.has(g.id));
+    }
+    // Yayının kapsadığı gollerin yarısından azı bulunduysa yetkiliye haber.
+    const foundGoals = covered.length - missing.length;
+    const needsReview = timed && covered.length > 0 && foundGoals * 2 < covered.length;
 
     // Yeniden çalıştırmada sorumlunun dokunmadığı eski YZ kesitleri silinir;
     // onaylanan, düzeltilen ya da kaldırılanlar (reviewed_by dolu) kalır.
@@ -700,11 +952,19 @@ async function run(opts: RunOpts) {
       status: "done",
       kickoff_sec: kickoff,
       second_half_sec: secondHalf,
-      mode: windows[0] == null ? "full" : "events",
+      mode: windows.length && windows[0] == null ? "full" : "events",
       found: rows.length,
+      missing: missing.length,
+      needs_review: needsReview,
       cost_usd: Number(budget.spent.toFixed(5)),
       finished_at: new Date().toISOString(),
     }).eq("match_id", matchId);
+    if (needsReview) {
+      await admin.rpc("highlights_review_notify", {
+        p_match_id: matchId,
+        p_text: `${covered.length} golden ${foundGoals} tanesi yayında bulundu; kesitleri kontrol edin.`,
+      });
+    }
   } catch (e) {
     console.error("video-highlights", matchId, (e as Error).message);
     await admin.from("match_highlight_jobs").update({
@@ -762,7 +1022,8 @@ Deno.serve(async (req) => {
   }
 
   const { data: m } = await admin.from("matches")
-    .select("id, season_id, home_team_id, away_team_id").eq("id", matchId).maybeSingle();
+    .select("id, season_id, home_team_id, away_team_id, kickoff_at, second_half_at")
+    .eq("id", matchId).maybeSingle();
   if (!m) return json({ error: "Maç bulunamadı." }, 404);
   if (!(await seasonAiEnabled(admin, m.season_id, "clips"))) {
     return json({ error: "Bu sezonda gol videosu yakalama kapalı." }, 403);
@@ -803,14 +1064,22 @@ Deno.serve(async (req) => {
     });
   }
 
-  const [{ data: teams }, { data: season }, { data: events }] = await Promise.all([
+  const [{ data: teams }, { data: season }, { data: events, error: eventsError }] = await Promise.all([
     admin.from("teams").select("id, name").in("id", [m.home_team_id, m.away_team_id]),
     admin.from("seasons").select("match_period_duration").eq("id", m.season_id).maybeSingle(),
     admin.from("match_events")
-      .select("id, minute, team_id, player_id, player_name, is_own_goal, is_penalty")
+      // match_events'te oyuncu adı sütunu yok; ad players'tan gelir. (Eski
+      // sorgu olmayan sütunu istediği için hata dönüyor, maç dakikasız
+      // sayılıp otomatik taranmıyordu.)
+      .select("id, minute, added_minute, team_id, player_id, is_own_goal, is_penalty, " +
+        "player:players!match_events_player_id_fkey(name, surname)")
       .eq("match_id", matchId).eq("event_type", "goal")
-      .order("minute").order("created_at"),
+      .order("minute").order("added_minute", { nullsFirst: true }).order("created_at"),
   ]);
+  // Goller okunamazsa maç dakikasız sanılıp tüm video taranmasın.
+  if (eventsError) {
+    return json({ error: `Goller okunamadı: ${eventsError.message}` }, 500);
+  }
   const nameOf = (id: string) => (teams ?? []).find((t) => t.id === id)?.name ?? "";
   const home = { id: m.home_team_id, name: nameOf(m.home_team_id) || "Ev sahibi" };
   const away = { id: m.away_team_id, name: nameOf(m.away_team_id) || "Deplasman" };
@@ -823,9 +1092,10 @@ Deno.serve(async (req) => {
     id: e.id,
     playerId: e.player_id ?? null,
     minute: e.minute == null ? null : Number(e.minute) || 0,
+    added: Number((e as any).added_minute) > 0 ? Number((e as any).added_minute) : null,
     teamId: e.team_id,
     teamName: e.team_id === home.id ? home.name : e.team_id === away.id ? away.name : "",
-    player: (e.player_name ?? "").trim(),
+    player: `${(e as any).player?.name ?? ""} ${(e as any).player?.surname ?? ""}`.trim(),
     ownGoal: !!e.is_own_goal,
     penalty: !!e.is_penalty,
   }));
@@ -911,6 +1181,8 @@ Deno.serve(async (req) => {
     period,
     kickoff,
     secondHalf,
+    kickoffAt: m.kickoff_at ?? null,
+    secondHalfAt: m.second_half_at ?? null,
     limit: limits.perMatch,
     roster,
     autoPublish,

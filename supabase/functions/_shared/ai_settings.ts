@@ -51,6 +51,11 @@ export async function seasonAiEnabled(
   feature: "esame" | "clips",
 ): Promise<boolean> {
   const col = feature === "esame" ? "ai_esame_enabled" : "ai_clips_enabled";
-  const { data } = await admin.from("seasons").select(col).eq("id", seasonId).maybeSingle();
+  const { data } = await admin.from("seasons")
+    .select(`${col}, leagues(status, is_active)`)
+    .eq("id", seasonId).maybeSingle();
+  // Pasif turnuvada yapay zekâ işlemleri çalışmaz.
+  const league = data?.leagues;
+  if (league?.status === "passive" || league?.is_active === false) return false;
   return data?.[col] !== false;
 }

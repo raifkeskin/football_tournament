@@ -90,6 +90,30 @@ async function activeSeason(admin: SupabaseClient, leagueId: string): Promise<st
   return (data.find((s: any) => s.is_active) ?? data[0]).id;
 }
 
+/** Etiket karşılaştırması: Türkçe harfler ve büyük-küçük farkı yok sayılır. */
+function foldTag(t: string): string {
+  return t.toLocaleLowerCase("tr").replace(/^#/, "")
+    .replace(/ı/g, "i").replace(/ş/g, "s").replace(/ğ/g, "g")
+    .replace(/ü/g, "u").replace(/ö/g, "o").replace(/ç/g, "c");
+}
+
+const HASHTAG_ALL = /#([\p{L}\p{N}_]+)/gu;
+
+/** Sezonun Instagram etiketli bölgeleri (katlanmış etiket -> bölge id). */
+async function regionTags(admin: SupabaseClient, seasonId: string): Promise<Map<string, string>> {
+  const { data } = await admin
+    .from("season_regions")
+    .select("id, instagram_tag")
+    .eq("season_id", seasonId)
+    .not("instagram_tag", "is", null);
+  const map = new Map<string, string>();
+  for (const r of data ?? []) {
+    const t = foldTag(String(r.instagram_tag ?? "").trim());
+    if (t) map.set(t, String(r.id));
+  }
+  return map;
+}
+
 /** Gönderinin kopyalanacak görselleri (sırayla, en fazla 5). */
 function imageSources(m: any): string[] {
   const one = (x: any) => (x?.media_type === "VIDEO" ? x?.thumbnail_url : x?.media_url) ?? x?.thumbnail_url;
@@ -133,6 +157,7 @@ export async function syncAccount(admin: SupabaseClient, a: IgAccount): Promise<
 
     const seasonId = await activeSeason(admin, a.league_id);
     if (!seasonId) throw new Error("Turnuvanın sezonu yok.");
+    const tags = await regionTags(admin, seasonId);
 
     const url = new URL(`${GRAPH}/me/media`);
     url.searchParams.set(
@@ -173,13 +198,24 @@ export async function syncAccount(admin: SupabaseClient, a: IgAccount): Promise<
         if (u) urls.push(u);
       }
       const raw = String(m.caption ?? "");
-      // #ligmasasi etiketli gönderi hemen yayınlanır; etiketsiz olan onay bekler.
-      const tagged = APP_TAG.test(raw);
-      const caption = raw.replace(APP_TAG_ALL, " ").replace(/[ \t]+\n/g, "\n")
+      // #ligmasasi ya da bir bölgenin etiketi geçen gönderi hemen yayınlanır;
+      // etiketsiz olan onay bekler. Tek bölgenin etiketi geçiyorsa haber o
+      // bölgenindir, birden fazlaysa tüm turnuvanın.
+      const regions = new Set<string>();
+      const withoutRegionTags = raw.replace(HASHTAG_ALL, (all, t: string) => {
+        const rid = tags.get(foldTag(t));
+        if (!rid) return all;
+        regions.add(rid);
+        return " ";
+      });
+      const tagged = APP_TAG.test(raw) || regions.size > 0;
+      const regionId = regions.size === 1 ? [...regions][0] : null;
+      const caption = withoutRegionTags.replace(APP_TAG_ALL, " ").replace(/[ \t]+\n/g, "\n")
         .replace(/[ \t]{2,}/g, " ").trim();
       const isVideo = m.media_type === "VIDEO";
       const { error } = await admin.from("news").insert({
         season_id: seasonId,
+        region_id: regionId,
         content: caption || (isVideo ? "Instagram'da yeni video" : "Instagram'da yeni gönderi"),
         is_published: tagged,
         image_url: urls[0] ?? null,

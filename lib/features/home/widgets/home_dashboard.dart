@@ -14,6 +14,7 @@ import '../../../core/services/app_session.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../match/models/match.dart';
+import '../../match/services/supabase/supabase_match_service.dart';
 import '../../match/screens/match_details_screen.dart';
 import '../../player/widgets/player_card.dart';
 import '../../team/models/team.dart';
@@ -299,6 +300,17 @@ class _HomeDashboardState extends State<HomeDashboard> {
   /// Turnuva başına takip edilen takım (cihaz ayarı), bellekte.
   static final Map<String, String?> _followedCache = {};
   static const _freshFor = Duration(minutes: 2);
+  static const _recheckEvery = Duration(minutes: 5);
+
+  /// Bu cihazda maç değişince (ör. tarih girildi) saklanan pano bayatlar.
+  static final StreamSubscription<String> _localWrites = SupabaseMatchService
+      .localChanges
+      .listen((_) {
+        _fetchedAt.clear();
+        DataVersions.forget();
+      });
+  StreamSubscription<String>? _localSub;
+  Timer? _localDebounce;
 
   _DashData? _data;
   bool _failed = false;
@@ -319,6 +331,18 @@ class _HomeDashboardState extends State<HomeDashboard> {
   @override
   void initState() {
     super.initState();
+    _localWrites;
+    // Başka ekranda değişen maç ana sayfada hemen görünsün.
+    _localSub = SupabaseMatchService.localChanges.listen((_) {
+      _localDebounce?.cancel();
+      _localDebounce = Timer(const Duration(milliseconds: 600), () {
+        final key = _loadedFor;
+        if (!mounted || key == null) return;
+        unawaited(
+          _revalidate(AppSession.of(context).value, key, fromDisk: false),
+        );
+      });
+    });
     // Geri sayım ve canlı durum dakikada bir yenilensin. Maç günü (canlı ya
     // da 3 saat içinde başlayacak maç varken) sunucu da sorulur: başka
     // cihazdan başlatılan / geri alınan maç ekranda eski kalmasın (sürüm
@@ -327,7 +351,11 @@ class _HomeDashboardState extends State<HomeDashboard> {
       if (!mounted) return;
       setState(() {});
       final key = _loadedFor;
-      if (key != null && _isMatchTime(_memCache[key])) {
+      // Diğer zamanlarda 5 dakikada bir (başka cihazdan girilen tarih vb.).
+      final at = key == null ? null : _fetchedAt[key];
+      final stale =
+          at == null || DateTime.now().difference(at) >= _recheckEvery;
+      if (key != null && (_isMatchTime(_memCache[key]) || stale)) {
         unawaited(
           _revalidate(AppSession.of(context).value, key, fromDisk: false),
         );
@@ -338,6 +366,8 @@ class _HomeDashboardState extends State<HomeDashboard> {
   @override
   void dispose() {
     _tick?.cancel();
+    _localSub?.cancel();
+    _localDebounce?.cancel();
     super.dispose();
   }
 
@@ -1091,11 +1121,14 @@ class _HomeDashboardState extends State<HomeDashboard> {
     );
   }
 
-  /// Özetin grubu: seçilen grup, yoksa kişinin grubu, o da yoksa ilk grup
-  /// (gruplar karışmasın; her grubun haftası farklı olabilir).
+  /// Özetin grubu: seçilen grup, yoksa sorumlu olduğu bölgenin grubu, yoksa
+  /// kişinin grubu, o da yoksa ilk grup (gruplar karışmasın; her grubun
+  /// haftası farklı olabilir).
   String? _groupId(_DashData d) {
     final picked = _pickedGroupId;
     if (picked != null && d.groups.containsKey(picked)) return picked;
+    final region = _regionGroupId(d);
+    if (region != null) return region;
     final mine = _myGroupId(d);
     if (mine != null) return mine;
     if (d.groups.isEmpty) return null;
@@ -1105,6 +1138,25 @@ class _HomeDashboardState extends State<HomeDashboard> {
             d.groups[a]!.toLowerCase().compareTo(d.groups[b]!.toLowerCase()),
       );
     return ids.first;
+  }
+
+  /// Bölge sorumlusunun bu sezondaki ilk bölgesinin grubu.
+  String? _regionGroupId(_DashData d) {
+    final regions = AppSession.of(context).value.regionsInSeason(d.seasonId)
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    for (final r in regions) {
+      final ids =
+          [
+            for (final e in d.groupRegionId.entries)
+              if (e.value == r.id && d.groups.containsKey(e.key)) e.key,
+          ]..sort(
+            (a, b) => d.groups[a]!.toLowerCase().compareTo(
+              d.groups[b]!.toLowerCase(),
+            ),
+          );
+      if (ids.isNotEmpty) return ids.first;
+    }
+    return null;
   }
 
   /// Kişinin (ya da takip ettiği takımın) grubu.

@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Sözleşme Metinleri · Lig Masası</title>
+<style>
+:root{--bg:#0f172a;--card:#1e293b;--text:#e2e8f0;--muted:#94a3b8;--accent:#10b981;--line:#334155}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+header{background:linear-gradient(90deg,#064e3b,#10b981,#064e3b);padding:12px 16px;border-bottom:1.5px solid #fff}
+header a{display:flex;align-items:center;gap:12px;color:#fff;text-decoration:none;font-weight:800;letter-spacing:1.5px;font-style:italic;font-size:18px}
+header img{width:40px;height:40px}
+main{max-width:760px;margin:0 auto;padding:22px 16px 48px}
+nav.toc{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px}
+nav.toc a{color:var(--accent);font-size:14px;font-weight:600;text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:6px 12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;margin:16px 0;scroll-margin-top:12px}
+h1{font-size:20px;margin:0 0 4px}
+h2{font-size:15.5px;margin:18px 0 6px;color:#fff}
+p,li{font-size:15px}
+ul{padding-left:20px;margin:6px 0}
+.muted{color:var(--muted);font-size:13.5px}
+.missing{color:#fbbf24}
+a{color:var(--accent)}
+</style>
+</head>
+<body>
+<header><a href="/"><img src="/logo-lm.png" alt="">LİG MASASI</a></header>
+<main id="root"><div class="card"><p class="muted">Yükleniyor…</p></div></main>
+<script>
+(function () {
+  // Teklife özel sözleşme metinleri: ?t=<anahtar>#on-bilgi | #mesafeli | #kvkk.
+  // Metin sürümü değişirse DOC_VERSION da değişir (teklif.html ile aynı).
+  var DOC_VERSION = '2026-10-23b';
+  var URL_ = 'https://qxdjebzszikeslobrozf.supabase.co/rest/v1/rpc/';
+  var KEY = '__SUPABASE_ANON_KEY__';
+  var root = document.getElementById('root');
+  var token = new URLSearchParams(location.search).get('t');
+  var KINDS = {halisaha: 'Halı saha', okul: 'Okul', sirket: 'Şirket', dernek: 'Dernek', master: 'Master', diger: 'Diğer'};
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c];
+    });
+  }
+  function tl(n) {
+    return Number(n || 0).toLocaleString('tr-TR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' TL';
+  }
+  function date(iso) {
+    var d = iso ? new Date(iso) : new Date();
+    return isNaN(d) ? '' : d.toLocaleDateString('tr-TR', {day: 'numeric', month: 'long', year: 'numeric'});
+  }
+  // "11" → "11'li" (sesli uyumu son rakama göre).
+  function players(f) {
+    var s = String(f || '').trim();
+    if (!/^\d+$/.test(s)) return s;
+    var last = s.slice(-1), tens = s.length > 1 && last === '0' ? s.slice(-2) : null;
+    var map = {'1': 'li', '2': 'li', '3': 'lü', '4': 'lü', '5': 'li', '6': 'lı', '7': 'li', '8': 'li', '9': 'lu', '0': 'lu'};
+    var tensMap = {'10': 'lu', '20': 'li', '30': 'lu', '40': 'lı', '50': 'li', '60': 'lı', '70': 'li', '80': 'li', '90': 'lı'};
+    return s + "'" + ((tens && tensMap[tens]) || map[last]) + ' oyuncu formatı';
+  }
+  function v(x) {
+    return x ? esc(x) : '<span class="missing">[henüz girilmedi]</span>';
+  }
+
+  function render(d) {
+    var o = d.offer, s = d.seller || {}, p = d.payment || {};
+    var groups = d.group_count > 1 ? d.group_count + ' grup' : 'tek lig';
+    var format = [KINDS[d.kind], d.team_count ? d.team_count + ' takım' : '', groups,
+      d.double_round ? 'çift devre' : 'tek devre', d.knockout ? 'eleme' : '', players(d.players_format)]
+      .filter(Boolean).join(', ');
+    var day = date(o.response === 'accepted' ? o.responded_at : null);
+    var buyer = esc(d.contact_name) + (d.organization ? ' (' + esc(d.organization) + ')' : '');
+    var discount = Number(o.discount_pct) > 0 ? ' (%' + Number(o.discount_pct) + ' indirimli)' : '';
+    var pay = p.iban
+      ? 'Satıcı\'ya ait ' + esc(p.bank || '') + ' ' + esc(p.iban) + ' numaralı hesaba EFT/Havale.'
+      : 'Satıcı\'ya ait, teklif kabul edildikten sonra teklif sayfasında gösterilen banka hesabına EFT/Havale.';
+
+    var parties = '<h2>1. TARAFLAR</h2><ul>' +
+      '<li><b>Satıcı/Hizmet Sağlayıcı:</b> ' + v(s.name) + ', ' + v(s.address) + (s.tax_no ? ', ' + esc(s.tax_no) : '') + ', ' + v(s.email) + '</li>' +
+      '<li><b>Alıcı (Kullanıcı):</b> ' + buyer + '</li>' +
+      '<li><b>Tarih:</b> ' + esc(day) + '</li></ul>';
+    var service = '<h2>2. HİZMETİN NİTELİĞİ VE TEMEL ÖZELLİKLERİ</h2>' +
+      '<p>Alıcı, Lig Masası platformu üzerinden aşağıda nitelikleri belirtilen dijital turnuva yönetimi hizmetini satın almaktadır:</p><ul>' +
+      '<li><b>Organizasyon Adı:</b> ' + esc(d.name || '-') + '</li>' +
+      '<li><b>Format:</b> ' + esc(format) + '</li>' +
+      '<li><b>Hizmet Kapsamı:</b> Toplam ' + o.match_count + ' maçlık periyot için; fikstür ve kura oluşturma, canlı skor ve detay (gol, asist, kart) takibi, puan durumu ve istatistik listeleri, takım ve oyuncu profilleri dijital altyapı erişimi.</li></ul>';
+
+    // Ön Bilgilendirme ve Mesafeli Satış'ta aynı cayma maddesi.
+    var cayma = '<p>İşbu sözleşme konusu hizmet, Alıcı\'ya sunulan bir dijital arayüz ve yazılım kullanım hakkıdır. Hizmet, ödemenin onayı ile birlikte dijital ortamda anında erişime açıldığından Mesafeli Sözleşmeler Yönetmeliği madde 15/1-ğ uyarınca "elektronik ortamda anında ifa edilen hizmetler" kapsamındadır. Ayrıca Alıcı, turnuva modülünü aktifleştirerek hizmetin ifasına onay vermiş sayılır ve Yönetmeliğin 15/1-h maddesi gereğince cayma hakkını kullanamaz. Bedel iadesi yapılamaz.</p>';
+
+    var h = '<nav class="toc"><a href="#on-bilgi">Ön Bilgilendirme Formu</a><a href="#mesafeli">Mesafeli Satış Sözleşmesi</a>' +
+      '<a href="#kvkk">KVKK Aydınlatma Metni</a><a href="/kosullar#ucretli-hizmet">Kullanım Koşulları</a></nav>' +
+      '<p class="muted">' + esc(d.code) + ' · ' + esc(d.name || '') + ' · metin sürümü ' + DOC_VERSION + '</p>';
+
+    h += '<section class="card" id="on-bilgi"><h1>Ön Bilgilendirme Formu</h1>' + parties + service +
+      '<h2>3. FİYAT VE ÖDEME ŞARTLARI</h2><ul>' +
+      '<li><b>Maç Başı Ücret:</b> ' + tl(o.per_match_price) + discount + '</li>' +
+      (o.team_count ? '<li><b>Takım Başına Sezon Toplamı:</b> ' + tl(o.total / o.team_count) + '</li>' : '') +
+      '<li><b>Toplam Hizmet Bedeli:</b> ' + tl(o.total) + '</li>' +
+      '<li><b>Ödeme Yöntemi:</b> ' + pay + '</li></ul>' +
+      '<h2>4. CAYMA HAKKI İSTİSNASI</h2>' + cayma + '</section>';
+
+    h += '<section class="card" id="mesafeli"><h1>Mesafeli Satış Sözleşmesi</h1>' + parties + service +
+      '<h2>3. HİZMETİN İFASI VE TESLİMAT</h2>' +
+      '<p>3.1. Hizmet, Alıcı\'nın ' + tl(o.total) + ' tutarındaki toplam bedeli Satıcı\'nın belirteceği IBAN numarasına eksiksiz olarak transfer etmesi ve ödemenin Satıcı tarafından onaylanması ile ifa edilmiş sayılır.</p>' +
+      '<p>3.2. Hizmetin ifası, ligmasasi.com mobil veya web uygulaması üzerinden Alıcı\'ya organizasyon yönetim yetkisi verilmesi ile tamamlanır.</p>' +
+      '<h2>4. TARAFLARIN HAK VE YÜKÜMLÜLÜKLERİ</h2>' +
+      '<p>4.1. Satıcı, taahhüt edilen fikstür, canlı skor, puan durumu ve istatistik modüllerinin dijital altyapısını mevcut durumuyla ("olduğu gibi") sunar. Satıcı; zorunlu sistem güncellemeleri, rutin bakım çalışmaları, sunucu/veritabanı gibi üçüncü taraf altyapı sağlayıcılarından kaynaklanan sorunlar veya mücbir sebepler dolayısıyla yaşanabilecek geçici erişim kesintilerinden sorumlu tutulamaz. Hizmetin tamamen kesintisiz veya hatasız olacağına dair zımni veya açık bir garanti verilmemektedir.</p>' +
+      '<p>4.2. Alıcı; turnuva kapsamında gerçekleşecek maçların sahada iptal olması, takımların veya oyuncuların maça çıkmaması, diskalifiye durumları veya fiziki organizasyonel aksaklıklar gibi Satıcı\'nın dijital altyapısından kaynaklanmayan tüm durumlarda, hizmet bedelinin iadesini talep edemeyeceğini kabul eder. Ancak, Satıcı\'nın sistemlerinden kaynaklanan kalıcı ve giderilemeyen bir arıza nedeniyle uygulamanın kullanılamaz hale gelmesi durumunda, yalnızca oynanmayan maçlara isabet eden hizmet bedeli oransal olarak Alıcı\'ya iade edilebilir.</p>' +
+      '<h2>5. SORUMSUZLUK BEYANI</h2>' +
+      '<p>Satıcı, yalnızca bir dijital istatistik ve lig yönetim yazılımı sağlamaktadır. Turnuvaların fiziki olarak oynandığı halı saha kiralama süreçleri, hakem atamaları, oyuncular arası yaşanabilecek maddi/manevi uyuşmazlıklar veya sportif yaralanma ve sakatlık durumlarında Satıcı\'nın hiçbir hukuki ve cezai sorumluluğu bulunmamaktadır.</p>' +
+      '<h2>6. CAYMA HAKKI İSTİSNASI</h2>' + cayma + '</section>';
+
+    h += '<section class="card" id="kvkk"><h1>KVKK Aydınlatma Metni</h1>' +
+      '<p><b>Veri Sorumlusu:</b> ' + v(s.name) + ' · ' + v(s.email) + '</p>' +
+      '<h2>1. İşlenen Kişisel Verileriniz</h2>' +
+      '<p>Lig Masası uygulaması üzerinden hizmet satın almanız ve ödeme yapmanız süreçlerinde; kimlik verileriniz (Ad, Soyad), iletişim verileriniz (E-posta, Telefon Numarası), finansal verileriniz (IBAN, banka dekont bilgileri) ve işlem güvenliği verileriniz (IP adresi, log kayıtları) işlenmektedir.</p>' +
+      '<h2>2. Kişisel Verilerin İşlenme Amacı</h2>' +
+      '<p>Verileriniz; Mesafeli Satış Sözleşmesinin kurulması ve ifası, tarafınıza sunulan dijital uygulamanın yetkilendirmesi, olası iade/iptal süreçlerinin yönetilmesi ve yasal düzenlemelerden doğan yükümlülüklerimizin yerine getirilmesi amaçlarıyla işlenmektedir.</p>' +
+      '<h2>3. Kişisel Verilerin Aktarımı</h2>' +
+      '<p>Toplanan kişisel verileriniz, yalnızca yasal yükümlülüklerin yerine getirilmesi amacıyla yetkili kamu kurum ve kuruluşlarına (Maliye Bakanlığı vb.) aktarılabilir.</p>' +
+      '<h2>4. Veri İşleme Şartı</h2>' +
+      '<p>Verileriniz, 6698 sayılı Kanun\'un 5/2(c) maddesindeki "Bir sözleşmenin kurulması veya ifasıyla doğrudan doğruya ilgili olması kaydıyla sözleşmenin taraflarına ait kişisel verilerin işlenmesinin gerekli olması" ve 5/2(ç) "Veri sorumlusunun hukuki yükümlülüğünü yerine getirebilmesi için zorunlu olması" hukuki sebeplerine dayanılarak otomatik yollarla işlenmektedir.</p></section>';
+
+    h += '<p class="muted" style="text-align:center"><a href="/teklif?t=' + encodeURIComponent(token) + '">Teklife dön</a></p>';
+    root.innerHTML = h;
+    if (location.hash) {
+      var el = document.getElementById(location.hash.slice(1));
+      if (el) el.scrollIntoView();
+    }
+  }
+
+  if (!token) {
+    root.innerHTML = '<div class="card"><p>Bu metinler teklif bağlantısından açılır.</p></div>';
+    return;
+  }
+  fetch(URL_ + 'tournament_offer_view', {
+    method: 'POST',
+    headers: {'apikey': KEY, 'Authorization': 'Bearer ' + KEY, 'Content-Type': 'application/json'},
+    body: JSON.stringify({p_token: token})
+  }).then(function (r) { return r.json(); }).then(function (d) {
+    if (!d || !d.offer) root.innerHTML = '<div class="card"><p>Teklif bulunamadı.</p></div>';
+    else render(d);
+  }).catch(function () {
+    root.innerHTML = '<div class="card"><p>Metinler yüklenemedi, lütfen tekrar deneyin.</p></div>';
+  });
+})();
+</script>
+</body>
+</html>

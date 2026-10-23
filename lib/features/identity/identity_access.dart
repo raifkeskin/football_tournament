@@ -11,6 +11,7 @@ class IdentityAccess {
   static Listenable get changes => Listenable.merge([
     AppSettings.identityVerificationEnabled,
     AppSettings.identityVerificationUsers,
+    AppSettings.identityVerificationRoles,
   ]);
 
   static bool visible(AppSessionState s) {
@@ -18,7 +19,15 @@ class IdentityAccess {
     if (u == null || u.isAnonymous) return false;
     if (s.isAdmin) return true;
     if (AppSettings.identityVerificationEnabled.value) return true;
-    return AppSettings.identityVerificationUsers.value.contains(u.id);
+    if (AppSettings.identityVerificationUsers.value.contains(u.id)) {
+      return true;
+    }
+    // Kimlik Yönetimi'nde açılan roller (sunucu identity_allowed ile aynı).
+    final roles = AppSettings.identityVerificationRoles.value;
+    return (roles.contains('league_owner') && s.isLeagueOwner) ||
+        (roles.contains('region_owner') && s.isRegionOwner) ||
+        (roles.contains('team_manager') && s.managedTeams.isNotEmpty) ||
+        (roles.contains('player') && (s.playerId ?? '').isNotEmpty);
   }
 
   static bool visibleIn(BuildContext context) {

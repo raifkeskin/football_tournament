@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/app_navigator.dart';
+import '../../../core/widgets/youtube_player_page.dart';
 
 /// YZ'nin maç videosunda bulduğu an (şimdilik gol). Video kesilmez; YouTube
 /// yayınının [startSec]–[endSec] aralığı oynatılır.
@@ -19,6 +20,9 @@ class MatchHighlight {
   /// oyuncusu kullanılır.
   final String? playerId;
   final int? minute;
+
+  /// Uzatma dakikası (30+2'); yoksa null.
+  final int? addedMinute;
   final String videoId;
   final int startSec;
   final int endSec;
@@ -38,6 +42,7 @@ class MatchHighlight {
     this.teamId,
     this.playerId,
     this.minute,
+    this.addedMinute,
     required this.videoId,
     required this.startSec,
     required this.endSec,
@@ -65,6 +70,7 @@ class MatchHighlight {
       teamId: readStr(m['team_id']),
       playerId: readStr(m['player_id']),
       minute: readInt(m['minute']),
+      addedMinute: readInt(m['added_minute']),
       videoId: m['video_id'].toString(),
       startSec: readInt(m['start_sec']) ?? 0,
       endSec: readInt(m['end_sec']) ?? 0,
@@ -92,6 +98,12 @@ class MatchHighlightJob {
   final String status;
   final String? mode;
   final int? found;
+
+  /// Maç raporunda olup yayında görüntüsü bulunamayan gol sayısı.
+  final int? missing;
+
+  /// Sistem emin olamadı (başlangıç tutmadı / gollerin azı bulundu).
+  final bool needsReview;
   final String? error;
   final DateTime? startedAt;
 
@@ -106,6 +118,8 @@ class MatchHighlightJob {
     required this.status,
     this.mode,
     this.found,
+    this.missing,
+    this.needsReview = false,
     this.error,
     this.startedAt,
     this.costUsd,
@@ -163,7 +177,8 @@ class MatchHighlightService {
     final r = await _db
         .from('match_highlight_jobs')
         .select(
-          'status, mode, found, error, started_at, cost_usd, kickoff_sec, '
+          'status, mode, found, missing, needs_review, error, started_at, '
+          'cost_usd, kickoff_sec, '
           'second_half_sec',
         )
         .eq('match_id', matchId)
@@ -173,6 +188,8 @@ class MatchHighlightService {
       status: (r['status'] ?? '').toString(),
       mode: r['mode']?.toString(),
       found: r['found'] is num ? (r['found'] as num).toInt() : null,
+      missing: r['missing'] is num ? (r['missing'] as num).toInt() : null,
+      needsReview: r['needs_review'] == true,
       error: r['error']?.toString(),
       startedAt: DateTime.tryParse('${r['started_at'] ?? ''}'),
       costUsd: r['cost_usd'] is num
@@ -196,6 +213,36 @@ class MatchHighlightService {
         .eq('match_id', matchId)
         .eq('event_type', 'goal');
     return (rows as List).length;
+  }
+
+  /// Maçın YouTube yayın linkinin video kimliği (yoksa null).
+  static Future<String?> streamVideoId(String matchId) async {
+    try {
+      final rows = await _db
+          .from('match_media')
+          .select('url')
+          .eq('match_id', matchId)
+          .eq('media_type', 'Maç Yayın Linki');
+      for (final r in rows as List) {
+        final id = youtubeVideoId((r['url'] ?? '').toString());
+        if (id != null) return id;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Otomatik tarama durumu: 'running' sürüyor, 'pending' yayın bitince /
+  /// yeniden denenecek; null yok.
+  static Future<String?> autoStatus(String matchId) async {
+    try {
+      final v = await _db.rpc(
+        'highlights_auto_status',
+        params: {'p_match_id': matchId},
+      );
+      return v?.toString();
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Analizi başlatır; iş arka planda sürer. Hata metnini döner (yoksa null).

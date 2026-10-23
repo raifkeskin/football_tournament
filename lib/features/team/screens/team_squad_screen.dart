@@ -24,16 +24,14 @@ import '../../tournament/services/interfaces/i_league_service.dart';
 import '../../match/models/match.dart';
 import '../../player/widgets/player_card.dart';
 import '../../../core/services/app_session.dart';
-import '../../../core/services/panel_scope.dart';
+import '../../../core/widgets/list_filter.dart';
 import '../../../core/services/image_upload_service.dart';
 import '../models/team.dart';
 import '../services/interfaces/i_team_service.dart';
 import '../../../core/services/service_locator.dart';
 import '../services/supabase/supabase_team_service.dart';
-import '../../../core/utils/resilient_stream.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/app_date_picker.dart';
-import '../../../core/widgets/tc_masked_field.dart';
 import '../../../core/widgets/app_name_band.dart';
 import '../../../core/widgets/web_safe_image.dart';
 
@@ -779,8 +777,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     String tournamentId,
   ) async {
     final tId = tournamentId.trim();
-    // Telefonu olmayan oyuncular id ile bulunur.
-    final key = (p.phone ?? '').trim().isNotEmpty ? p.phone!.trim() : p.id;
+    final key = p.id;
     if (tId.isEmpty || key.trim().isEmpty) {
       ScaffoldMessenger.of(
         context,
@@ -1313,10 +1310,9 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
   }
 
   Future<void> _openPlayerCard(PlayerModel rosterPlayer) {
-    final phone = (rosterPlayer.phone ?? '').trim();
     return showPlayerCard(
       context,
-      playerKey: phone.isEmpty ? rosterPlayer.id : phone,
+      playerKey: rosterPlayer.id,
       number: (rosterPlayer.number ?? '').trim(),
     );
   }
@@ -1324,7 +1320,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
   void _prefetchPlayerPhotos(Iterable<PlayerModel> players) {
     final toFetch = <String>[];
     for (final p in players) {
-      final phone = (p.phone ?? '').trim();
+      final phone = p.id.trim();
       if (phone.isEmpty) continue;
       if (_playerPhotoUrlByPhone.containsKey(phone)) continue;
       if (_playerPhotoFetchInFlight.contains(phone)) continue;
@@ -2176,7 +2172,6 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
 
   final _nameController = TextEditingController();
   final _surnameController = TextEditingController();
-  final _identityNoController = TextEditingController();
   final _numberController = TextEditingController();
   final _birthDateController = TextEditingController();
   final _phoneController = TextEditingController();
@@ -2203,12 +2198,16 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
   String _subPosition = _unsetOption;
   String _preferredFoot = '';
   String? _existingPhotoUrl;
-  String? _implicitPhoneKey;
+
+  /// Düzenlemede oyuncunun kayıtlı numarası (yetkiliye `player_phones` ile
+  /// gelir; telefon tablodan okunmaz). Yüklenene kadar alan kapalı.
+  String? _loadedPhone;
+  bool _phoneReady = true;
   XFile? _pickedPhoto;
   bool _removePhoto = false;
   bool _saving = false;
 
-  /// Açık sekme: 0 Kimlik, 1 Oyun.
+  /// Açık sekme: 0 Kimlik, 1 Özellik, 2 Profil (fotoğraf).
   int _tab = 0;
 
   /// Düzenlemede açılıştaki kişisel bilgiler; yalnızca forma no değiştiyse
@@ -2219,7 +2218,6 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
   String _identitySnapshot() => [
     _nameController.text.trim(),
     _surnameController.text.trim(),
-    _identityNoController.text.trim(),
     _birthDateController.text.trim(),
     _phoneController.text.trim(),
     _heightController.text.trim(),
@@ -2313,7 +2311,6 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
     super.initState();
     final e = widget.editing;
     if (e != null) {
-      _identityNoController.text = (e.nationalId ?? '').toString();
       final full = e.name.trim().replaceAll(RegExp(r'\s+'), ' ');
       final parts = full.isEmpty ? const <String>[] : full.split(' ');
       _nameController.text = parts.isEmpty ? '' : parts.first;
@@ -2328,30 +2325,49 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
       _preferredFoot = _feet.contains(pf) ? pf : '';
       _heightController.text = (e.height ?? '').toString();
       _weightController.text = (e.weight ?? '').toString();
-      final phoneRaw = (e.phone ?? '').toString();
-      if (phoneRaw.startsWith('no_phone_')) {
-        _implicitPhoneKey = phoneRaw;
-        _phoneController.text = '';
-      } else {
-        _implicitPhoneKey = null;
-        _phoneController.text = PhoneMaskFormatter.formatFromRaw(phoneRaw);
-      }
       _existingPhotoUrl = (e.photoUrl ?? '').trim().isEmpty ? null : e.photoUrl;
       _initialIdentity = _identitySnapshot();
+      _phoneReady = false;
+      _loadPhone(e.id);
     }
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _hydrateExistingPhotoFromIdentity(),
     );
   }
 
+  /// Kayıtlı numarayı yetkiliye yükler; yetki yoksa ya da numara yoksa alan
+  /// boş açılır. Numara değişmedikçe kaydederken gönderilmez.
+  Future<void> _loadPhone(String playerId) async {
+    String? phone;
+    try {
+      final rows = await Supabase.instance.client.rpc(
+        'player_phones',
+        params: {
+          'p_ids': [playerId],
+        },
+      );
+      if (rows is List && rows.isNotEmpty) {
+        phone = (rows.first as Map)['phone']?.toString();
+      }
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() {
+      _loadedPhone = (phone ?? '').trim().isEmpty ? null : phone!.trim();
+      if (_phoneController.text.trim().isEmpty && _loadedPhone != null) {
+        _phoneController.text = PhoneMaskFormatter.formatFromRaw(_loadedPhone!);
+        _initialIdentity = _identitySnapshot();
+      }
+      _phoneReady = true;
+    });
+  }
+
   Future<void> _hydrateExistingPhotoFromIdentity() async {
     if (!mounted) return;
     if (_pickedPhoto != null) return;
     if (_removePhoto) return;
-    final phone = _rawPhone();
-    final keyPhone = phone.isNotEmpty ? phone : (_implicitPhoneKey ?? '');
-    if (keyPhone.trim().isEmpty) return;
-    final player = await _teamService.getPlayerByPhoneOnce(keyPhone.trim());
+    final id = (widget.editing?.id ?? '').trim();
+    if (id.isEmpty) return;
+    final player = await _teamService.getPlayerByPhoneOnce(id);
     final url = (player?.photoUrl ?? '').trim();
     if (!mounted) return;
     if (url.isEmpty) return;
@@ -2362,7 +2378,6 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
   void dispose() {
     _nameController.dispose();
     _surnameController.dispose();
-    _identityNoController.dispose();
     _numberController.dispose();
     _birthDateController.dispose();
     _phoneController.dispose();
@@ -2408,21 +2423,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
     return true;
   }
 
-  String _generateNoPhoneKey() {
-    final ts = DateTime.now().millisecondsSinceEpoch;
-    final rnd = Random().nextInt(1 << 31);
-    return 'no_phone_${ts}_$rnd';
-  }
-
   Future<void> _save() async {
-    final nationalId = _identityNoController.text
-        .replaceAll(RegExp(r'\D'), '')
-        .trim();
-    if (nationalId.isNotEmpty && nationalId.length != 11) {
-      _showError('Kimlik no 11 haneli olmalı.', tab: 0);
-      return;
-    }
-
     final firstName = _nameController.text.trim();
     final surname = _surnameController.text.trim();
     if (firstName.isEmpty || surname.isEmpty) {
@@ -2455,16 +2456,9 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
         _pickedPhoto != null ||
         _removePhoto ||
         _identitySnapshot() != _initialIdentity;
-    // Telefonu olmayan mevcut oyuncu düzenlenirken sahte "no_phone_" anahtarı
-    // üretilip telefon alanına yazılmaz; oyuncu id'si ile işlem yapılır.
-    final editingWithoutPhone =
-        isEditing && rawPhone.isEmpty && _implicitPhoneKey == null;
-    final keyPhone = rawPhone.isNotEmpty
-        ? rawPhone
-        : editingWithoutPhone
-        ? widget.editing!.id
-        : (_implicitPhoneKey ??= _generateNoPhoneKey());
-    final phoneToStore = editingWithoutPhone ? null : keyPhone;
+    if (!_phoneReady) return;
+    // Numara yalnız değiştiyse yazılır (tablodan okunmadığı için).
+    final phoneChanged = rawPhone != (_loadedPhone ?? '');
 
     setState(() => _saving = true);
     try {
@@ -2492,9 +2486,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
       final resolvedSubPosition = _isMainPositionSelected
           ? (_subPosition == _unsetOption ? null : _subPosition)
           : null;
-      final updateKey = (widget.editing?.id ?? '').toString().trim().isNotEmpty
-          ? widget.editing!.id
-          : keyPhone;
+      var playerId = (widget.editing?.id ?? '').toString().trim();
       final finalPhotoUrl = uploadedPhotoUrl != null
           ? uploadedPhotoUrl.trim()
           : _removePhoto
@@ -2503,26 +2495,33 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
           ? null
           : (_existingPhotoUrl ?? '').trim();
       if (!isEditing) {
-        await _teamService.upsertPlayerIdentity(
-          phone: keyPhone,
-          name: fullName,
-          nationalId: nationalId.isEmpty ? null : nationalId,
-          birthDate: resolvedBirthDate,
-          mainPosition: resolvedMainPosition,
-          preferredFoot: _preferredFoot.trim().isEmpty
-              ? null
-              : _preferredFoot.trim(),
-          height: int.tryParse(
-            _heightController.text.replaceAll(RegExp(r'\D'), '').trim(),
-          ),
-          weight: int.tryParse(
-            _weightController.text.replaceAll(RegExp(r'\D'), '').trim(),
-          ),
-        );
+        playerId =
+            (await _teamService.upsertPlayerIdentity(
+              phone: rawPhone.isEmpty ? null : rawPhone,
+              name: fullName,
+              birthDate: resolvedBirthDate,
+              mainPosition: resolvedMainPosition,
+              subPosition: resolvedSubPosition,
+              photoUrl: finalPhotoUrl,
+              preferredFoot: _preferredFoot.trim().isEmpty
+                  ? null
+                  : _preferredFoot.trim(),
+              height: int.tryParse(
+                _heightController.text.replaceAll(RegExp(r'\D'), '').trim(),
+              ),
+              weight: int.tryParse(
+                _weightController.text.replaceAll(RegExp(r'\D'), '').trim(),
+              ),
+            )) ??
+            '';
+        if (playerId.isEmpty) {
+          throw Exception('Oyuncu oluşturulamadı, lütfen tekrar deneyin.');
+        }
       }
-      if (identityChanged) {
+      // Yeni oyuncu tüm bilgileriyle açıldı; yalnız düzenlemede güncellenir.
+      if (isEditing && identityChanged) {
         await _teamService.updatePlayer(
-          playerId: updateKey,
+          playerId: playerId,
           data: {
             'name': firstName,
             'surname': surname,
@@ -2533,14 +2532,14 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
             'main_position': resolvedMainPosition,
             'sub_position': resolvedSubPosition,
             'photo_url': finalPhotoUrl,
-            'phone': phoneToStore,
+            if (isEditing && phoneChanged)
+              'phone': rawPhone.isEmpty ? null : rawPhone,
             'height': int.tryParse(
               _heightController.text.replaceAll(RegExp(r'\D'), '').trim(),
             ),
             'weight': int.tryParse(
               _weightController.text.replaceAll(RegExp(r'\D'), '').trim(),
             ),
-            'national_id': nationalId.isEmpty ? null : nationalId,
           },
         );
       }
@@ -2554,7 +2553,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
             await _teamService.upsertRosterEntry(
               tournamentId: tournamentId,
               teamId: teamId,
-              playerPhone: keyPhone,
+              playerPhone: playerId,
               playerName: fullName,
               jerseyNumber: sbTeamService == null ? number : null,
             );
@@ -2569,13 +2568,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                 : int.tryParse(currentText);
             final jerseyChanged = currentInt != jerseyInt;
             if (jerseyChanged) {
-              var pid = (widget.editing?.id ?? '').toString().trim();
-              if (pid.isEmpty) {
-                final resolved = await _teamService.getPlayerByPhoneOnce(
-                  keyPhone,
-                );
-                pid = (resolved?.id ?? '').toString().trim();
-              }
+              final pid = playerId;
               if (pid.isNotEmpty) {
                 await sbTeamService.setJerseyNumber(
                   pid,
@@ -2644,6 +2637,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
     String? prefixText,
     Widget? trailing,
     TextCapitalization capitalization = TextCapitalization.none,
+    bool enabled = true,
   }) {
     return AdminFieldRow(
       icon: icon,
@@ -2651,7 +2645,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
       trailing: trailing,
       child: TextField(
         controller: controller,
-        enabled: !_saving,
+        enabled: enabled && !_saving,
         keyboardType: keyboardType,
         inputFormatters: inputFormatters,
         textCapitalization: capitalization,
@@ -2795,7 +2789,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                   ),
                   const SizedBox(height: 14),
                   AdminFormTabs(
-                    labels: const ['Kimlik', 'Oyun'],
+                    labels: const ['Kimlik', 'Özellik', 'Profil'],
                     selected: _tab,
                     onChanged: _saving ? null : (i) => setState(() => _tab = i),
                   ),
@@ -2806,9 +2800,8 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
                 children: [
+                  if (_tab == 2) Center(child: _photoCard()),
                   if (_tab == 0) ...[
-                    Center(child: _photoCard()),
-                    const SizedBox(height: 16),
                     AdminFormSection(
                       title: 'Kimlik',
                       child: AdminFieldGroup(
@@ -2826,25 +2819,6 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                             controller: _surnameController,
                             hint: 'Soyad',
                             capitalization: TextCapitalization.words,
-                          ),
-                          // İlk 2 ve son 3 hane dışı gizli; yazılan
-                          // rakam 1 sn görünür.
-                          AdminFieldRow(
-                            icon: Icons.badge_outlined,
-                            label: 'Kimlik No',
-                            child: TcMaskedField(
-                              controller: _identityNoController,
-                              enabled: !_saving,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 1,
-                              ),
-                              decoration: adminInlineInputDecoration(
-                                hint: '11 haneli',
-                              ),
-                            ),
                           ),
                           _textRow(
                             icon: Icons.cake_outlined,
@@ -2865,6 +2839,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                           _textRow(
                             icon: Icons.phone_outlined,
                             label: 'Telefon',
+                            enabled: _phoneReady,
                             controller: _phoneController,
                             keyboardType: TextInputType.phone,
                             inputFormatters: [PhoneMaskFormatter()],
@@ -2898,7 +2873,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                     ),
                   if (_tab == 1)
                     AdminFormSection(
-                      title: 'Oyun',
+                      title: 'Özellik',
                       child: AdminFieldGroup(
                         children: [
                           AdminSelectRow(
@@ -3310,7 +3285,6 @@ class FootballerLicenseScreen extends StatefulWidget {
 }
 
 class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
-  final _consentCache = ConsentStatusCache();
   final ITeamService _teamService = ServiceLocator.teamService;
   final ILeagueService _leagueService = ServiceLocator.leagueService;
 
@@ -3320,10 +3294,6 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
 
   /// Arama alanı yalnız sağ alttaki büyüteçle açılır (kadro ekranındaki gibi).
   bool _searchOpen = false;
-
-  String _norm(String input) {
-    return input.replaceAll('İ', 'i').replaceAll('I', 'ı').toLowerCase().trim();
-  }
 
   String _normalizeUrl(String raw) {
     final url = raw.trim();
@@ -3347,14 +3317,14 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
       context,
       PlayerFormScreen(standalone: true, editing: editing),
     );
+    // Liste sunucudan geliyor: ekleme / düzenleme sonrası yenilenir.
+    if (mounted) _reload();
   }
 
   Future<void> _openPlayerCard(PlayerModel p) {
-    final phoneOrId = ((p.phone ?? '').trim().isNotEmpty ? p.phone! : p.id)
-        .trim();
     return showPlayerCard(
       context,
-      playerKey: phoneOrId,
+      playerKey: p.id.trim(),
       number: (p.number ?? '').trim(),
     );
   }
@@ -3549,24 +3519,295 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
+    _scroll.dispose();
     _searchController.dispose();
     _searchFocus.dispose();
     super.dispose();
   }
 
-  // Arama her harfte yeniden abone olmasın; arka plandan dönünce yenilensin.
-  late final Stream<List<PlayerModel>> _playersStream = resilientStream(
-    () => _teamService.watchAllPlayers(caller: 'FootballerLicenseScreen'),
-  );
+  // Liste sunucuda süzülür ve sayfa sayfa gelir (license_list): telefona
+  // tüm oyuncular inmez. Admin hepsini, kurucu başkan / bölge sorumlusu
+  // yalnız kendi etkin turnuva / bölge kadrolarını görür.
+  static const _pageSize = 50;
+  final _scroll = ScrollController();
+  List<PlayerModel> _rows = const [];
+  Map<String, ConsentStatus> _consent = const {};
+  Set<String> _free = const {};
+  Set<String> _verifiedIds = const {};
+  int _total = 0;
+  bool _loading = false;
+  bool _initial = true;
+  Object? _error;
+  Map<String, dynamic> _meta = const {};
+  int _req = 0;
+  Timer? _debounce;
 
-  /// Kurucu / bölge sorumlusu yalnızca kendi takımlarının oyuncularını görür
-  /// (admin için null: hepsi).
-  Future<Set<String>?>? _allowedPlayers;
+  /// Filtre seçimi (bölüm → değer; yoksa bölümün varsayılanı).
+  Map<String, String> _filter = const {};
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _allowedPlayers ??= PanelScope.playerIds(AppSession.of(context).value);
+  void initState() {
+    super.initState();
+    _scroll.addListener(() {
+      if (_scroll.position.extentAfter < 600) _loadMore();
+    });
+    _reload();
+  }
+
+  Future<Map<String, dynamic>> _call(
+    Map<String, String> filter, {
+    int offset = 0,
+    int limit = _pageSize,
+  }) async {
+    final r = await Supabase.instance.client.rpc(
+      'license_list',
+      params: {
+        'p_filter': filter,
+        'p_q': _q.trim(),
+        'p_offset': offset,
+        'p_limit': limit,
+      },
+    );
+    return r is Map ? Map<String, dynamic>.from(r) : const {};
+  }
+
+  void _absorb(Map<String, dynamic> r, {required bool append}) {
+    final rows = <PlayerModel>[];
+    final consent = <String, ConsentStatus>{};
+    final free = <String>{};
+    final verified = <String>{};
+    for (final any in (r['rows'] as List? ?? const [])) {
+      final row = Map<String, dynamic>.from(any as Map);
+      final id = (row['id'] ?? '').toString();
+      final display = [
+        (row['name'] ?? '').toString().trim(),
+        (row['surname'] ?? '').toString().trim(),
+      ].where((e) => e.isNotEmpty).join(' ');
+      rows.add(
+        PlayerModel.fromMap({
+          ...row,
+          if (display.isNotEmpty) 'name': display,
+        }, id),
+      );
+      consent[id] = ConsentStatus(
+        hasAccount: row['has_account'] == true,
+        complete: row['kvkk'] == true,
+      );
+      if (row['in_roster'] != true) free.add(id);
+      if (row['verified'] == true) verified.add(id);
+    }
+    _rows = append ? [..._rows, ...rows] : rows;
+    _consent = append ? {..._consent, ...consent} : consent;
+    _free = append ? {..._free, ...free} : free;
+    _verifiedIds = append ? {..._verifiedIds, ...verified} : verified;
+    _total = (r['total'] as num?)?.toInt() ?? _rows.length;
+    if (!append) _meta = r;
+  }
+
+  /// Filtre ya da arama değişince ilk sayfa yeniden okunur.
+  Future<void> _reload() async {
+    final id = ++_req;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final r = await _call(_filter);
+      if (!mounted || id != _req) return;
+      setState(() {
+        _absorb(r, append: false);
+        _loading = false;
+        _initial = false;
+      });
+      if (_scroll.hasClients) _scroll.jumpTo(0);
+    } catch (e) {
+      if (!mounted || id != _req) return;
+      setState(() {
+        _error = e;
+        _loading = false;
+        _initial = false;
+      });
+    }
+  }
+
+  /// Liste sonuna yaklaşınca sonraki sayfa.
+  Future<void> _loadMore() async {
+    if (_loading || _rows.length >= _total) return;
+    final id = _req;
+    setState(() => _loading = true);
+    try {
+      final r = await _call(_filter, offset: _rows.length);
+      if (!mounted || id != _req) return;
+      setState(() {
+        _absorb(r, append: true);
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _onSearch(String v) {
+    setState(() => _q = v);
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), _reload);
+  }
+
+  List<ListFilterSection> _sections(bool isAdmin) {
+    final leagues = Map<String, dynamic>.from(_meta['leagues'] as Map? ?? {});
+    final ids = leagues.keys.toList()
+      ..sort((a, b) => '${leagues[a]}'.compareTo('${leagues[b]}'));
+    return [
+      if (isAdmin)
+        const ListFilterSection(
+          key: 'roster',
+          label: 'Kadro durumu',
+          options: [('in', 'Kadroda'), ('free', 'Boşta'), ('all', 'Tümü')],
+          defaultValue: 'in',
+          hint: 'Boşta: hiçbir etkin turnuva kadrosunda olmayan oyuncu.',
+        ),
+      if (ids.length > 1)
+        ListFilterSection(
+          key: 'league',
+          label: 'Turnuva',
+          dropdown: true,
+          options: [
+            ('all', 'Tüm turnuvalar'),
+            for (final id in ids) (id, '${leagues[id]}'),
+          ],
+          defaultValue: 'all',
+        ),
+      const ListFilterSection(
+        key: 'profile',
+        label: 'Kimlik',
+        options: [('all', 'Tümü'), ('ver', 'Onaylı'), ('unv', 'Onaysız')],
+        defaultValue: 'all',
+      ),
+      const ListFilterSection(
+        key: 'account',
+        label: 'Hesap',
+        options: [('all', 'Tümü'), ('yes', 'Hesabı var'), ('no', 'Hesap yok')],
+        defaultValue: 'all',
+      ),
+      const ListFilterSection(
+        key: 'kvkk',
+        label: 'KVKK onayı',
+        options: [('all', 'Tümü'), ('ok', 'Onaylı'), ('wait', 'Bekliyor')],
+        defaultValue: 'all',
+      ),
+    ];
+  }
+
+  /// Filtre penceresindeki sayılar: sunucu her bölüm için hesaplar.
+  Future<ListFilterCounts> _counts(Map<String, String> v) async {
+    final r = await _call(v, limit: 0);
+    final facets = Map<String, dynamic>.from(r['facets'] as Map? ?? {});
+    return ListFilterCounts(
+      total: (r['total'] as num?)?.toInt() ?? 0,
+      options: {
+        for (final e in facets.entries)
+          e.key: {
+            for (final o in (e.value as Map? ?? {}).entries)
+              o.key.toString(): (o.value as num).toInt(),
+          },
+      },
+    );
+  }
+
+  Widget _serverList(bool isAdmin) {
+    const accent = Color(0xFF10B981);
+    if (_initial) {
+      return const Center(child: CircularProgressIndicator(color: accent));
+    }
+    if (_error != null && _rows.isEmpty) {
+      return Center(
+        child: TextButton.icon(
+          onPressed: _reload,
+          icon: const Icon(Icons.refresh_rounded),
+          label: const Text('Liste yüklenemedi, tekrar dene'),
+        ),
+      );
+    }
+    final banner = Map<String, dynamic>.from(_meta['banner'] as Map? ?? {});
+    final missing = (banner['missing'] as num?)?.toInt() ?? 0;
+    final noAccount = (banner['no_account'] as num?)?.toInt() ?? 0;
+    final head = (missing > 0 ? 1 : 0) + 1;
+    final more = _rows.length < _total;
+    return RefreshIndicator(
+      onRefresh: _reload,
+      color: accent,
+      child: ListView.builder(
+        controller: _scroll,
+        physics: const AlwaysScrollableScrollPhysics(),
+        // Sağ alttaki düğmeler son kartı kapatmasın.
+        padding: const EdgeInsets.only(
+          bottom: kAdminFabClearance + 2 * kAdminFabStep,
+        ),
+        itemCount: head + (_rows.isEmpty ? 1 : _rows.length) + (more ? 1 : 0),
+        itemBuilder: (context, i) {
+          if (missing > 0 && i == 0) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: ConsentSummaryBanner.counts(
+                missing: missing,
+                noAccount: noAccount,
+              ),
+            );
+          }
+          if (i == head - 1) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: ListFilterBar(
+                title: 'Futbolcuları filtrele',
+                unit: 'futbolcu',
+                sections: (_) => _sections(isAdmin),
+                values: _filter,
+                total: _total,
+                counts: _counts,
+                onChanged: (v) {
+                  setState(() => _filter = v);
+                  _reload();
+                },
+              ),
+            );
+          }
+          if (_rows.isEmpty) {
+            return const Padding(
+              padding: EdgeInsets.only(top: 40),
+              child: Center(
+                child: Text(
+                  'Futbolcu bulunamadı.',
+                  style: TextStyle(color: Colors.white54),
+                ),
+              ),
+            );
+          }
+          final k = i - head;
+          if (k >= _rows.length) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: accent,
+                  ),
+                ),
+              ),
+            );
+          }
+          final p = _rows[k];
+          return _licenseCard(
+            p,
+            consent: _consent[p.id],
+            free: _free.contains(p.id),
+          );
+        },
+      ),
+    );
   }
 
   @override
@@ -3644,10 +3885,12 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
                               onPressed: () {
                                 _searchController.clear();
                                 _searchFocus.unfocus();
+                                final had = _q.isNotEmpty;
                                 setState(() {
                                   _q = '';
                                   _searchOpen = false;
                                 });
+                                if (had) _reload();
                               },
                             ),
                             filled: true,
@@ -3663,106 +3906,12 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
                               borderSide: const BorderSide(color: accent),
                             ),
                           ),
-                          onChanged: (v) => setState(() => _q = v),
+                          onChanged: _onSearch,
                         ),
                       ),
                       const SizedBox(height: 12),
                     ],
-                    Expanded(
-                      child: FutureBuilder<Set<String>?>(
-                        future: _allowedPlayers,
-                        builder: (context, allowedSnap) =>
-                            StreamBuilder<List<PlayerModel>>(
-                              stream: _playersStream,
-                              builder: (context, snap) {
-                                if (!snap.hasData ||
-                                    allowedSnap.connectionState !=
-                                        ConnectionState.done) {
-                                  return const Center(
-                                    child: CircularProgressIndicator(
-                                      color: accent,
-                                    ),
-                                  );
-                                }
-                                final allowed = allowedSnap.data;
-                                final q = _norm(_q);
-                                final list =
-                                    snap.data!
-                                        .where(
-                                          (p) =>
-                                              allowed == null ||
-                                              allowed.contains(p.id),
-                                        )
-                                        .where(
-                                          (p) =>
-                                              q.isEmpty ||
-                                              _norm(p.name).contains(q),
-                                        )
-                                        .toList()
-                                      ..sort(
-                                        (a, b) => a.name
-                                            .toLowerCase()
-                                            .compareTo(b.name.toLowerCase()),
-                                      );
-
-                                if (list.isEmpty) {
-                                  return const Center(
-                                    child: Text(
-                                      'Futbolcu bulunamadı.',
-                                      style: TextStyle(color: Colors.white54),
-                                    ),
-                                  );
-                                }
-                                // Durum tüm futbolcular için bir kez yüklenir (aramada
-                                // yeniden sorgu atılmaz).
-                                final all = snap.data!
-                                    .where(
-                                      (p) =>
-                                          allowed == null ||
-                                          allowed.contains(p.id),
-                                    )
-                                    .map((p) => p.id);
-                                return FutureBuilder(
-                                  future: _consentCache.of(all),
-                                  builder: (context, cs) {
-                                    final st = cs.data ?? const {};
-                                    final showBanner = st.values.any(
-                                      (s) => !s.complete,
-                                    );
-                                    // Sağ alttaki düğmeler son kartı kapatmasın.
-                                    return ListView.builder(
-                                      padding: const EdgeInsets.only(
-                                        bottom:
-                                            kAdminFabClearance +
-                                            2 * kAdminFabStep,
-                                      ),
-                                      itemCount:
-                                          list.length + (showBanner ? 1 : 0),
-                                      itemBuilder: (context, i) {
-                                        if (showBanner && i == 0) {
-                                          return Padding(
-                                            padding: const EdgeInsets.only(
-                                              bottom: 10,
-                                            ),
-                                            child: ConsentSummaryBanner(
-                                              statuses: st,
-                                            ),
-                                          );
-                                        }
-                                        final p =
-                                            list[i - (showBanner ? 1 : 0)];
-                                        return _licenseCard(
-                                          p,
-                                          consent: st[p.id],
-                                        );
-                                      },
-                                    );
-                                  },
-                                );
-                              },
-                            ),
-                      ),
-                    ),
+                    Expanded(child: _serverList(isAdmin)),
                   ],
                 ),
               ),
@@ -3773,7 +3922,11 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
     );
   }
 
-  Widget _licenseCard(PlayerModel p, {ConsentStatus? consent}) {
+  Widget _licenseCard(
+    PlayerModel p, {
+    ConsentStatus? consent,
+    bool free = false,
+  }) {
     const accent = Color(0xFF10B981);
     final photo = _normalizeUrl((p.photoUrl ?? '').trim());
     return Container(
@@ -3834,6 +3987,27 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
                         if (consent != null && !consent.complete) ...[
                           const SizedBox(width: 6),
                           ConsentChip(status: consent),
+                        ],
+                        if (free) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF22304A),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: const Text(
+                              'Boşta',
+                              style: TextStyle(
+                                color: Color(0xFFCBD5E1),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
                         ],
                       ],
                     ),

@@ -9,6 +9,8 @@ import '../../../core/services/service_locator.dart';
 import '../../../core/utils/team_name.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
+import '../utils/match_clock.dart';
+import '../utils/minute_label.dart';
 import '../utils/season_match_settings.dart';
 
 class AdminMatchEventScreen extends StatefulWidget {
@@ -21,6 +23,19 @@ class AdminMatchEventScreen extends StatefulWidget {
 
 class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
   final _minuteController = TextEditingController();
+
+  /// Canlı maçta otomatik yazılan dakika (değiştirilmediyse form boş sayılır).
+  String _autoMinute = '';
+
+  /// Uzatma dakikası girişi: devre sonu (1. yarı / maç sonu) + uzatma.
+  bool _stoppage = false;
+  bool _stoppageSecondHalf = false;
+  final _addedController = TextEditingController();
+  String _autoAdded = '';
+
+  int get _period =>
+      SeasonMatchSettings.cached(widget.match.seasonId)?.periodMinutes ??
+      MatchClock.periodOf(widget.match.seasonId);
   final IMatchService _matchService = ServiceLocator.matchService;
   final ITeamService _teamService = ServiceLocator.teamService;
   String _eventType = 'goal';
@@ -58,6 +73,19 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
   void initState() {
     super.initState();
     _teamId = widget.match.homeTeamId;
+    // Canlı maçta dakika saatten gelir; sorumlu isterse değiştirir.
+    final live = MatchClock.liveMinuteParts(widget.match);
+    if (live != null) {
+      final added = live.added;
+      if (added == null) {
+        _minuteController.text = _autoMinute = '${live.minute}';
+      } else {
+        // Devre bitirilmeden süre aştıysa uzatma: 30+2'.
+        _stoppage = true;
+        _stoppageSecondHalf = widget.match.secondHalfAt != null;
+        _addedController.text = _autoAdded = '$added';
+      }
+    }
     SeasonMatchSettings.of(widget.match.seasonId).then((s) {
       if (mounted && s.tracksGoalMinutes != _tracksMinutes) {
         setState(() => _tracksMinutes = s.tracksGoalMinutes);
@@ -68,6 +96,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
   @override
   void dispose() {
     _minuteController.dispose();
+    _addedController.dispose();
     super.dispose();
   }
 
@@ -140,7 +169,19 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
     final player = _selectedPlayer;
     final isMotm = _eventType == 'man_of_the_match';
     // Maçın adamı maç bittikten sonra seçilir; dakikası yoktur (sona sıralanır).
-    final minuteStr = isMotm ? '999' : _minuteController.text.trim();
+    final stoppage = !isMotm && _tracksMinutes && _stoppage;
+    final minuteStr = isMotm
+        ? '999'
+        : stoppage
+        ? '${_stoppageSecondHalf ? _period * 2 : _period}'
+        : _minuteController.text.trim();
+    final added = stoppage ? int.tryParse(_addedController.text.trim()) : null;
+    if (stoppage && (added == null || added < 1 || added > 30)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Uzatma dakikasını girin (1-30).')),
+      );
+      return;
+    }
     if (isMotm && widget.match.status != MatchStatus.finished) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -177,6 +218,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
             ? (_penaltyScored ? 'goal' : 'penalty_missed')
             : _eventType,
         minute: minute,
+        addedMinute: added,
         eventName: player.name.trim(),
         playerId: player.playerId.trim().isEmpty
             ? null
@@ -215,7 +257,9 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
 
   /// "41' Erol Sancaklı (K.K.) · Gaziosmanpaşa Autur"
   String _goalLabel(MatchEvent g, String homeName, String awayName) {
-    final min = g.minute == null ? '' : "${g.minute}' ";
+    final min = g.minute == null
+        ? ''
+        : '${minuteLabel(g.minute, g.addedMinute)} ';
     final name = g.eventName.trim().isEmpty ? 'Gol' : g.eventName.trim();
     final tag = g.isOwnGoal
         ? ' (K.K.)'
@@ -292,7 +336,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
       );
     }
     return StreamBuilder<List<Team>>(
-      stream: _teamService.watchAllTeams(),
+      stream: _teamService.watchSeasonTeams(widget.match.seasonId),
       builder: (context, teamsSnap) {
         final nameById = <String, String>{};
         if (teamsSnap.hasData) {
@@ -581,6 +625,75 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                           ),
                         if (_eventType != 'man_of_the_match' && _tracksMinutes)
                           AdminFieldRow(
+                            icon: Icons.more_time_rounded,
+                            label: 'Uzatma Dakikası',
+                            onTap: _isLoading
+                                ? null
+                                : () => setState(() => _stoppage = !_stoppage),
+                            trailing: Switch(
+                              value: _stoppage,
+                              activeThumbColor: kAdminAccent,
+                              onChanged: _isLoading
+                                  ? null
+                                  : (v) => setState(() => _stoppage = v),
+                            ),
+                            child: Text(
+                              _stoppage ? 'Devre sonu + uzatma' : 'Normal süre',
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        if (_eventType != 'man_of_the_match' &&
+                            _tracksMinutes &&
+                            _stoppage)
+                          AdminFieldRow(
+                            icon: Icons.timer_outlined,
+                            label: 'Uzatma',
+                            child: Row(
+                              children: [
+                                for (final second in [false, true]) ...[
+                                  ChoiceChip(
+                                    label: Text(
+                                      "${second ? _period * 2 : _period}+",
+                                    ),
+                                    selected: _stoppageSecondHalf == second,
+                                    onSelected: _isLoading
+                                        ? null
+                                        : (_) => setState(
+                                            () => _stoppageSecondHalf = second,
+                                          ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                ],
+                                Expanded(
+                                  child: TextField(
+                                    controller: _addedController,
+                                    enabled: !_isLoading,
+                                    keyboardType: TextInputType.number,
+                                    inputFormatters: [
+                                      FilteringTextInputFormatter.digitsOnly,
+                                      LengthLimitingTextInputFormatter(2),
+                                    ],
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                    decoration: adminInlineInputDecoration(
+                                      hint: 'Örn. 2',
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (_eventType != 'man_of_the_match' &&
+                            _tracksMinutes &&
+                            !_stoppage)
+                          AdminFieldRow(
                             icon: Icons.timer_outlined,
                             label: 'Dakika',
                             child: TextField(
@@ -702,7 +815,10 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
 
   /// Formda girilmiş ama kaydedilmemiş bir şey var mı?
   bool get _isDirty =>
-      _minuteController.text.trim().isNotEmpty ||
+      (_minuteController.text.trim().isNotEmpty &&
+          _minuteController.text.trim() != _autoMinute) ||
+      (_addedController.text.trim().isNotEmpty &&
+          _addedController.text.trim() != _autoAdded) ||
       _selectedPlayer != null ||
       _selectedAssist != null ||
       _selectedSubIn != null ||

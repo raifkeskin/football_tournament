@@ -24,6 +24,7 @@ import '../../../core/widgets/admin_page.dart';
 import '../../../core/services/error_reporter.dart';
 import '../widgets/feedback_dialog.dart';
 import '../../identity/identity_access.dart';
+import '../../identity/identity_service.dart';
 import '../../identity/identity_verify_screen.dart';
 import '../../identity/verified_badge.dart';
 
@@ -661,84 +662,12 @@ class _MenuDrawer extends StatelessWidget {
                               padding: const EdgeInsets.only(bottom: 8),
                               child: _item(i, accent),
                             ),
+                          if (loggedIn &&
+                              !kIsWeb &&
+                              IdentityAccess.visible(session))
+                            _identityTile(context, accent),
                         ],
                       ),
-                    ),
-                    // Bildirim ayarları: yalnız misafire (giriş yapan profil
-                    // ekranından açar).
-                    if (!loggedIn)
-                      TextButton.icon(
-                        style: TextButton.styleFrom(foregroundColor: accent),
-                        icon: const Icon(
-                          Icons.notifications_active_outlined,
-                          size: 20,
-                        ),
-                        label: const Text(
-                          'Bildirim Ayarları',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        onPressed: () {
-                          final nav = Navigator.of(context);
-                          nav.pop(); // çekmeceyi kapat
-                          nav.push(
-                            MaterialPageRoute<void>(
-                              settings: const RouteSettings(
-                                name: 'NotificationSettingsScreen',
-                              ),
-                              builder: (_) =>
-                                  const NotificationSettingsScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                    if (AppSettings.privateLeaguesEnabled.value)
-                      TextButton.icon(
-                        style: TextButton.styleFrom(foregroundColor: accent),
-                        icon: const Icon(Icons.key_rounded, size: 20),
-                        label: const Text(
-                          'Turnuva Kodu Gir',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        onPressed: onEnterCode,
-                      ),
-                    // Kimlik doğrulama: giriş yapan herkes (çip yalnız
-                    // uygulamada okunur).
-                    if (loggedIn && !kIsWeb && IdentityAccess.visible(session))
-                      TextButton.icon(
-                        style: TextButton.styleFrom(
-                          foregroundColor: kVerifiedBlue,
-                        ),
-                        icon: const Icon(Icons.verified_rounded, size: 20),
-                        label: const Text(
-                          'Kimlik Doğrulama',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        onPressed: () {
-                          final nav = Navigator.of(context);
-                          final ctx = nav.context;
-                          nav.pop(); // çekmeceyi kapat
-                          IdentityVerifyScreen.open(ctx);
-                        },
-                      ),
-                    TextButton.icon(
-                      style: TextButton.styleFrom(foregroundColor: accent),
-                      icon: const Icon(
-                        Icons.chat_bubble_outline_rounded,
-                        size: 20,
-                      ),
-                      label: const Text(
-                        'Sorun Bildir / Öneri Gönder',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      onPressed: () {
-                        final nav = Navigator.of(context);
-                        final ctx = nav.context;
-                        nav.pop(); // çekmeceyi kapat
-                        showFeedbackDialog(
-                          ctx,
-                          role: loggedIn ? session.role : null,
-                        );
-                      },
                     ),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
@@ -747,7 +676,11 @@ class _MenuDrawer extends StatelessWidget {
                           : _loginButton(accent),
                     ),
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+                      padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+                      child: _iconStrip(context, accent),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
                       child: Text(
                         'LigMasası '
                         '${(ErrorReporter.version ?? '').split('+').first}',
@@ -898,12 +831,29 @@ class _MenuDrawer extends StatelessWidget {
 
   Widget _item(int i, Color accent) {
     final (icon, label, colors) = _items[i];
-    final selected = activeIndex == i;
+    return _tile(
+      icon: icon,
+      label: label,
+      colors: colors,
+      accent: accent,
+      selected: activeIndex == i,
+      onTap: () => onSelect(i),
+    );
+  }
+
+  Widget _tile({
+    required IconData icon,
+    required String label,
+    required List<Color> colors,
+    required Color accent,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
     return Material(
       color: selected ? Color.lerp(_surface, accent, 0.16) : _surface,
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
-        onTap: () => onSelect(i),
+        onTap: onTap,
         borderRadius: BorderRadius.circular(14),
         child: Container(
           height: 54,
@@ -947,8 +897,58 @@ class _MenuDrawer extends StatelessWidget {
     );
   }
 
+  /// Kimlik Doğrulama: admin, kurucu başkan ve bölge sorumlusu her zaman
+  /// görür (başkalarının kimliğini okutur); diğerleri yalnız kendi profili
+  /// onaylı değilken (kendisi ya da yönetici onaylayınca kaybolur).
+  Widget _identityTile(BuildContext context, Color accent) {
+    Widget tile() => Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: _tile(
+        icon: Icons.verified_rounded,
+        label: 'Kimlik Doğrulama',
+        colors: const [Color(0xFF38BDF8), kVerifiedBlue],
+        accent: accent,
+        selected: false,
+        onTap: () {
+          final nav = Navigator.of(context);
+          final ctx = nav.context;
+          nav.pop(); // çekmeceyi kapat
+          IdentityVerifyScreen.open(ctx);
+        },
+      ),
+    );
+    if (session.hasManagementPanel) return tile();
+    final playerId = (session.playerId ?? '').trim();
+    if (playerId.isEmpty) return const SizedBox.shrink();
+    return ValueListenableBuilder<int>(
+      valueListenable: IdentityService.changes,
+      builder: (context, _, _) => FutureBuilder<bool>(
+        future: IdentityService.isVerified(playerId),
+        initialData: IdentityService.cached(playerId),
+        builder: (context, snap) =>
+            snap.data == false ? tile() : const SizedBox.shrink(),
+      ),
+    );
+  }
+
   /// Giriş yapan kişi: kartına dokununca profil; altında çıkış.
+  /// Profil kartı; profili kimlikle doğrulanmışsa tik ve "Doğrulanmış
+  /// profil" yazısı.
   Widget _userBlock(Color accent) {
+    final playerId = (session.playerId ?? '').trim();
+    if (playerId.isEmpty) return _userCard(accent, verified: false);
+    return ValueListenableBuilder<int>(
+      valueListenable: IdentityService.changes,
+      builder: (context, _, _) => FutureBuilder<bool>(
+        future: IdentityService.isVerified(playerId),
+        initialData: IdentityService.cached(playerId),
+        builder: (context, snap) =>
+            _userCard(accent, verified: snap.data == true),
+      ),
+    );
+  }
+
+  Widget _userCard(Color accent, {required bool verified}) {
     final name = (session.displayName ?? '').trim();
     final photo = (session.photoUrl ?? '').trim();
     final selected = activeIndex == MainNavigator.profileTab;
@@ -1006,16 +1006,35 @@ class _MenuDrawer extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          name.isEmpty ? 'Profilim' : name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 15,
-                          ),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                name.isEmpty ? 'Profilim' : name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 15,
+                                ),
+                              ),
+                            ),
+                            if (verified) ...[
+                              const SizedBox(width: 5),
+                              const VerifiedBadge(size: 16),
+                            ],
+                          ],
                         ),
+                        if (verified)
+                          const Text(
+                            'Doğrulanmış profil',
+                            style: TextStyle(
+                              color: kVerifiedBlue,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -1028,25 +1047,71 @@ class _MenuDrawer extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 10),
-        OutlinedButton.icon(
-          style: OutlinedButton.styleFrom(
-            foregroundColor: const Color(0xFFFCA5A5),
-            side: BorderSide(
-              color: const Color(0xFFF87171).withValues(alpha: 0.4),
-            ),
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
+      ],
+    );
+  }
+
+  /// Alt ikon şeridi: Bildirim Ayarları (misafir), Turnuva Kodu Gir, Sorun
+  /// Bildir; sağda Çıkış. İkona basınca başlığı açılır, açıkken basınca
+  /// işlem yapılır.
+  Widget _iconStrip(BuildContext context, Color accent) {
+    void closeThen(void Function(BuildContext ctx) run) {
+      final nav = Navigator.of(context);
+      final ctx = nav.context;
+      nav.pop(); // çekmeceyi kapat
+      run(ctx);
+    }
+
+    return Row(
+      children: [
+        Expanded(
+          child: _DrawerIconStrip(
+            accent: accent,
+            items: [
+              if (!loggedIn)
+                (
+                  Icons.notifications_active_outlined,
+                  'Bildirimler',
+                  () => closeThen(
+                    (ctx) => Navigator.of(ctx).push(
+                      MaterialPageRoute<void>(
+                        settings: const RouteSettings(
+                          name: 'NotificationSettingsScreen',
+                        ),
+                        builder: (_) => const NotificationSettingsScreen(),
+                      ),
+                    ),
+                  ),
+                ),
+              if (AppSettings.privateLeaguesEnabled.value)
+                (Icons.key_rounded, 'Kod Gir', onEnterCode),
+              (
+                Icons.chat_bubble_outline_rounded,
+                'Sorun Bildir',
+                () => closeThen(
+                  (ctx) => showFeedbackDialog(
+                    ctx,
+                    role: loggedIn ? session.role : null,
+                  ),
+                ),
+              ),
+            ],
           ),
-          icon: const Icon(Icons.logout_rounded, size: 20),
-          label: const Text(
-            'Çıkış Yap',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-          onPressed: onLogout,
         ),
+        if (loggedIn)
+          TextButton.icon(
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFFF87171),
+              minimumSize: const Size(44, 44),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+            ),
+            icon: const Icon(Icons.logout_rounded, size: 20),
+            label: const Text(
+              'Çıkış',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            onPressed: onLogout,
+          ),
       ],
     );
   }
@@ -1067,6 +1132,112 @@ class _MenuDrawer extends StatelessWidget {
         style: TextStyle(fontWeight: FontWeight.bold),
       ),
       onPressed: () => onSelect(MainNavigator.profileTab),
+    );
+  }
+}
+
+/// Menünün alttaki küçük ikonları; basılan ikon genişleyip başlığını
+/// gösterir, açıkken basınca işlemi yapar.
+class _DrawerIconStrip extends StatefulWidget {
+  const _DrawerIconStrip({required this.accent, required this.items});
+
+  final Color accent;
+  final List<(IconData, String, VoidCallback)> items;
+
+  @override
+  State<_DrawerIconStrip> createState() => _DrawerIconStripState();
+}
+
+class _DrawerIconStripState extends State<_DrawerIconStrip> {
+  int? _open;
+
+  static const _size = 44.0;
+  static const _gap = 8.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = widget.accent;
+    final n = widget.items.length;
+    // Tek satır: kapalı ikonlar yuvarlak, açılan ikon Çıkış'a kadar kalan
+    // genişliği alır ve başlığı tam okunur.
+    return LayoutBuilder(
+      builder: (context, c) {
+        final openWidth = (c.maxWidth - (n - 1) * (_size + _gap)).clamp(
+          _size,
+          double.infinity,
+        );
+        return Row(
+          children: [
+            for (var i = 0; i < n; i++) ...[
+              if (i > 0) const SizedBox(width: _gap),
+              _pill(i, accent, open: _open == i, width: openWidth),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _pill(
+    int i,
+    Color accent, {
+    required bool open,
+    required double width,
+  }) {
+    final (icon, label, run) = widget.items[i];
+    return Tooltip(
+      message: label,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+        width: open ? width : _size,
+        height: _size,
+        child: Material(
+          color: open
+              ? Color.lerp(const Color(0xFF1E293B), accent, 0.2)
+              : const Color(0xFF1E293B),
+          shape: StadiumBorder(
+            side: BorderSide(
+              color: open ? accent : Colors.white.withValues(alpha: 0.08),
+            ),
+          ),
+          child: InkWell(
+            customBorder: const StadiumBorder(),
+            onTap: () {
+              if (open) {
+                run();
+              } else {
+                setState(() => _open = i);
+              }
+            },
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: open ? 12 : 0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, size: 20, color: accent),
+                  if (open) ...[
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.fade,
+                        style: TextStyle(
+                          color: accent,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
