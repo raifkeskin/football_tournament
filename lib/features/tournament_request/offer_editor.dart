@@ -388,6 +388,17 @@ class _OfferSettingsDialog extends StatefulWidget {
 
 class _OfferSettingsDialogState extends State<_OfferSettingsDialog> {
   static const _fields = [
+    // Satıcı bilgileri sözleşme metinlerine (Ön Bilgilendirme, Mesafeli
+    // Satış, KVKK Aydınlatma) dolar; unvan boşken teklif kabul edilemez.
+    ('offer_seller_name', Icons.store_outlined, 'Satıcı unvanı', false),
+    ('offer_seller_address', Icons.place_outlined, 'Satıcı adresi', false),
+    (
+      'offer_seller_tax_no',
+      Icons.badge_outlined,
+      'Vergi no / Mersis no',
+      false,
+    ),
+    ('offer_seller_email', Icons.alternate_email_rounded, 'E-posta', false),
     ('offer_iban', Icons.account_balance_outlined, 'IBAN', false),
     ('offer_account_name', Icons.person_outline_rounded, 'Hesap sahibi', false),
     ('offer_bank', Icons.account_balance_wallet_outlined, 'Banka', false),
@@ -464,6 +475,7 @@ class _OfferSettingsDialogState extends State<_OfferSettingsDialog> {
                   icon: Icons.request_quote_outlined,
                   title: 'Teklif Ayarları',
                   subtitle:
+                      'Satıcı bilgileri sözleşme metinlerine yazılır. '
                       'Ödeme bilgisi teklif sayfasında yalnız teklif '
                       'kabul edildikten sonra görünür.',
                 ),
@@ -484,6 +496,8 @@ class _OfferSettingsDialogState extends State<_OfferSettingsDialog> {
                               : null,
                           textCapitalization: f.$1 == 'offer_iban'
                               ? TextCapitalization.characters
+                              : f.$1 == 'offer_seller_email'
+                              ? TextCapitalization.none
                               : TextCapitalization.words,
                           style: const TextStyle(
                             color: Colors.white,
