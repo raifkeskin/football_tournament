@@ -14,6 +14,7 @@ import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/youtube_player_page.dart';
 import '../models/match.dart';
 import '../services/match_highlight_service.dart';
+import 'stream_moment_picker.dart';
 import '../utils/season_match_settings.dart';
 import '../../../core/services/app_session.dart';
 import '../../../core/utils/realtime_signal.dart';
@@ -101,6 +102,9 @@ class _MatchHighlightsStripState extends State<MatchHighlightsStrip> {
   StreamSubscription<RowChange>? _live;
   Timer? _liveDebounce;
 
+  /// Otomatik tarama bekliyor / sürüyor ('pending' / 'running').
+  String? _autoStatus;
+
   bool get _awaitsClips {
     final m = widget.match;
     if (m.status != MatchStatus.finished &&
@@ -166,6 +170,10 @@ class _MatchHighlightsStripState extends State<MatchHighlightsStrip> {
     try {
       final list = await MatchHighlightService.fetch(widget.match.id);
       if (mounted) setState(() => _items = list);
+      if (_awaitsClips && widget.match.status == MatchStatus.finished) {
+        final st = await MatchHighlightService.autoStatus(widget.match.id);
+        if (mounted && st != _autoStatus) setState(() => _autoStatus = st);
+      }
       await _loadScorers();
     } catch (_) {
       // Kesitler yüklenemezse Medya sekmesi yine çalışır.
@@ -208,7 +216,11 @@ class _MatchHighlightsStripState extends State<MatchHighlightsStrip> {
         aiClips &&
         widget.hasStream &&
         widget.match.status == MatchStatus.finished;
-    if (approved.isEmpty && !showReview && widget.trailing.isEmpty) {
+    final preparing = _autoStatus != null && approved.isEmpty;
+    if (approved.isEmpty &&
+        !showReview &&
+        !preparing &&
+        widget.trailing.isEmpty) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 48),
         child: Center(
@@ -225,6 +237,52 @@ class _MatchHighlightsStripState extends State<MatchHighlightsStrip> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (preparing) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF10B981).withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: const Color(0xFF10B981).withValues(alpha: 0.35),
+                ),
+              ),
+              child: const Row(
+                children: [
+                  SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Color(0xFF10B981),
+                    ),
+                  ),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Maç özeti gol videoları hazırlanıyor',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          'Yapay zekâ maç yayınından golleri buluyor; '
+                          'hazır olunca burada görünür.',
+                          style: TextStyle(color: kAdminMuted, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
           if (showReview) ...[
             Material(
               color: const Color(0xFF1E293B),
@@ -760,9 +818,11 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
       return;
     }
     if (!mounted) return;
+    final videoId = await MatchHighlightService.streamVideoId(m.id);
+    if (!mounted) return;
     final offsets = await showAdminPopup<({int? kickoff, int? second})>(
       context: context,
-      builder: (_) => const _AnalyzeDialog(),
+      builder: (_) => _AnalyzeDialog(videoId: videoId),
     );
     if (offsets == null || !mounted) return;
     final err = await MatchHighlightService.analyze(
@@ -1204,7 +1264,10 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
 /// Analizden önce isteğe bağlı: maçın ve 2. yarının videoda başladığı an.
 /// Verilirse taranan aralık daralır (daha ucuz, daha isabetli).
 class _AnalyzeDialog extends StatefulWidget {
-  const _AnalyzeDialog();
+  const _AnalyzeDialog({this.videoId});
+
+  /// Maç yayını; varsa anlar videodan "Şu an" ile seçilebilir.
+  final String? videoId;
 
   @override
   State<_AnalyzeDialog> createState() => _AnalyzeDialogState();
@@ -1342,10 +1405,38 @@ class _AnalyzeDialogState extends State<_AnalyzeDialog> {
                 ],
               ),
             ),
+            if (widget.videoId != null) ...[
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final r = await pickStreamMoments(
+                    context,
+                    videoId: widget.videoId!,
+                    kickoff: _kickoff,
+                    second: _second,
+                  );
+                  if (r == null || !mounted) return;
+                  setState(() {
+                    _kickoff = r.kickoff;
+                    _second = r.second;
+                  });
+                },
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  side: BorderSide(color: Colors.white.withValues(alpha: 0.25)),
+                  minimumSize: const Size.fromHeight(44),
+                ),
+                icon: const Icon(Icons.smart_display_rounded, size: 20),
+                label: const Text(
+                  'Videoda bul',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
             const Text(
-              'Girilirse her golün yalnızca ±2 dk çevresi taranır (en '
-              'ucuzu). Boş bırakılırsa başlangıçlar yayından bulunur '
-              '(birkaç sent ek maliyet).',
+              'Boş bırakın: sistem başlangıcı skor tabelasından ya da '
+              'düdükten kendisi bulur. Yalnız otomatik sonuç hatalıysa '
+              'girin; girilen anlar kullanılır.',
               style: TextStyle(color: kAdminMuted, fontSize: 12, height: 1.4),
             ),
             const SizedBox(height: 16),
