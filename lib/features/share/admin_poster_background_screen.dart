@@ -47,6 +47,11 @@ class _AdminPosterBackgroundScreenState
   /// Önizlemede kullanılan turnuva takımları ve grup adı.
   List<_Team> _teams = const [];
   String _groupName = '';
+  String _seasonName = '';
+
+  /// Afiş alt başlığı: "2026 Sezonu" (birden fazla grup varsa "· A Grubu").
+  String get _subtitle =>
+      [_seasonName, _groupName].where((e) => e.isNotEmpty).join(' · ');
 
   /// Seçili sekme: null = ortak, aksi halde afiş türü.
   PosterKind? _kind;
@@ -109,7 +114,7 @@ class _AdminPosterBackgroundScreenState
             .maybeSingle(),
         _sb
             .from('seasons')
-            .select('id, is_default, start_date')
+            .select('id, name, is_default, start_date')
             .eq('league_id', id)
             .order('start_date', ascending: false),
       ).wait;
@@ -118,6 +123,7 @@ class _AdminPosterBackgroundScreenState
           seasons.firstOrNull;
       var teams = <_Team>[];
       var groupName = '';
+      final groupNames = <String>{};
       if (season != null) {
         final rows = await _sb
             .from('season_teams')
@@ -131,10 +137,13 @@ class _AdminPosterBackgroundScreenState
             logo: (t['logo_url'] ?? '').toString().trim(),
           ));
           final g = r['groups'];
-          if (groupName.isEmpty && g is Map) {
-            groupName = (g['name'] ?? '').toString().trim();
+          if (g is Map) {
+            final n = (g['name'] ?? '').toString().trim();
+            if (n.isNotEmpty) groupNames.add(n);
           }
         }
+        // Tek grup varsa afişte grup adı yazmaz (gerçek afişlerle aynı).
+        if (groupNames.length > 1) groupName = groupNames.first;
         // Logolu takımlar önce: önizleme gerçeğe yakın görünsün.
         teams.sort((a, b) {
           final la = a.logo.isEmpty ? 1 : 0, lb = b.logo.isEmpty ? 1 : 0;
@@ -147,6 +156,7 @@ class _AdminPosterBackgroundScreenState
         _byKind = PosterBackgrounds.parseKinds(league?['poster_bgs']);
         _teams = teams;
         _groupName = groupName;
+        _seasonName = (season?['name'] ?? '').toString().trim();
       });
     } catch (e) {
       if (mounted) _snack('Afiş arka planı okunamadı: $e');
@@ -305,6 +315,20 @@ class _AdminPosterBackgroundScreenState
     ];
   }
 
+  /// Örnek puanlı satır: önizlemede lider vurgusu ve sıralama görünsün.
+  StandingEntry _sampleStanding(int i, int count) {
+    final won = (3 - i * 4 ~/ count).clamp(0, 3);
+    final drawn = i.isOdd && won < 3 ? 1 : 0;
+    return StandingEntry(teamId: '$i', name: _team(i).name, logo: _team(i).logo)
+      ..played = 3
+      ..won = won
+      ..drawn = drawn
+      ..lost = 3 - won - drawn
+      ..goalsFor = 8 - i
+      ..goalsAgainst = 2 + i
+      ..points = won * 3 + drawn;
+  }
+
   Widget _samplePoster(LeagueChoice? league, PosterKind kind) {
     final name = league?.name ?? '';
     final logo = league?.logoUrl ?? '';
@@ -329,12 +353,11 @@ class _AdminPosterBackgroundScreenState
         final results = kind == PosterKind.results;
         final matches = _sampleMatches(scores: results);
         final half = (matches.length / 2).ceil();
-        final title = results ? 'Maç Sonuçları' : 'Fikstür';
         return FixturePoster(
           leagueName: name,
           leagueLogo: logo,
-          subtitle: _groupName.isEmpty ? title : '$_groupName $title',
-          weekText: results ? '1. Hafta Maç Sonuçları' : '1. Hafta',
+          subtitle: _subtitle,
+          weekText: results ? '1. Hafta Maç Sonuçları' : '1. Hafta Fikstürü',
           days: [
             PosterDay(
               dateText: '17.10.2026 Cumartesi',
@@ -354,15 +377,8 @@ class _AdminPosterBackgroundScreenState
         return StandingsPoster(
           leagueName: name,
           leagueLogo: logo,
-          subtitle: _groupName,
-          rows: [
-            for (var i = 0; i < count; i++)
-              StandingEntry(
-                teamId: '$i',
-                name: _team(i).name,
-                logo: _team(i).logo,
-              ),
-          ],
+          subtitle: _subtitle,
+          rows: [for (var i = 0; i < count; i++) _sampleStanding(i, count)],
         );
     }
   }

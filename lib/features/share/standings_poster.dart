@@ -56,13 +56,16 @@ class StandingsPoster extends StatelessWidget {
   );
 
   Widget _header() {
-    final st = _cond(12, color: _gold, spacing: 0.6);
+    final st = _cond(
+      12,
+      color: Colors.white.withValues(alpha: 0.6),
+      spacing: 0.6,
+    );
     return Container(
-      height: 26,
+      height: 24,
       padding: const EdgeInsets.symmetric(horizontal: 6),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.25),
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+        border: Border(bottom: BorderSide(color: _gold.withValues(alpha: 0.6))),
       ),
       child: Row(
         children: [
@@ -74,54 +77,93 @@ class StandingsPoster extends StatelessWidget {
           _cell('B', _stat, st),
           _cell('M', _stat, st),
           _cell('AV', _av, st),
-          _cell('P', _pts, st),
+          _cell('P', _pts, st.copyWith(color: _gold)),
         ],
       ),
     );
   }
 
+  /// Lider (ilk sıra, maç oynanmışsa) listenin içinde dolu altın şerit:
+  /// daha yüksek satır, büyük ve lacivert yazı. Diğerleri sade çizgili.
   Widget _row(int i, StandingEntry r) {
     final leader = i == 0 && r.played > 0;
-    final num = _cond(15, color: Colors.white, w: FontWeight.w700);
+    final ink = leader ? _navy : Colors.white;
+    final num = _cond(
+      leader ? 17 : 15,
+      color: leader ? _navy : Colors.white.withValues(alpha: 0.85),
+      w: FontWeight.w700,
+    );
     final av = r.goalDiff;
-    return Container(
-      height: 30,
-      padding: const EdgeInsets.symmetric(horizontal: 6),
-      color: leader
-          ? _gold.withValues(alpha: 0.18)
-          : (i.isOdd
-                ? Colors.white.withValues(alpha: 0.05)
-                : Colors.transparent),
-      child: Row(
-        children: [
-          _cell(
-            '${i + 1}',
-            _rank,
-            _cond(15, color: leader ? _goldHi : Colors.white),
+    final content = Row(
+      children: [
+        _cell(
+          '${i + 1}',
+          _rank,
+          _cond(
+            leader ? 24 : 17,
+            color: leader ? _navy : Colors.white.withValues(alpha: 0.75),
+            italic: true,
           ),
-          const SizedBox(width: 4),
-          PosterLogo(url: r.logo, name: r.name, size: 22),
-          const SizedBox(width: 4),
-          // Afişte tam ad; sığmazsa yazı küçülür.
-          Expanded(
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                posterTeamName(r.name).trUpper,
-                maxLines: 1,
-                style: _cond(14.5, spacing: 0.2),
-              ),
+        ),
+        const SizedBox(width: 4),
+        PosterLogo(url: r.logo, name: r.name, size: leader ? 28 : 22),
+        const SizedBox(width: 6),
+        // Afişte tam ad; sığmazsa yazı küçülür (asla "..." ile kesilmez).
+        Expanded(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              posterTeamName(r.name).trUpper,
+              maxLines: 1,
+              style: _cond(leader ? 20 : 15, color: ink, spacing: 0.2),
             ),
           ),
-          _cell('${r.played}', _stat, num),
-          _cell('${r.won}', _stat, num),
-          _cell('${r.drawn}', _stat, num),
-          _cell('${r.lost}', _stat, num),
-          _cell(av > 0 ? '+$av' : '$av', _av, num),
-          _cell('${r.points}', _pts, _cond(17, color: _goldHi)),
-        ],
+        ),
+        _cell('${r.played}', _stat, num),
+        _cell('${r.won}', _stat, num),
+        _cell('${r.drawn}', _stat, num),
+        _cell('${r.lost}', _stat, num),
+        _cell(av > 0 ? '+$av' : '$av', _av, num),
+        _cell(
+          '${r.points}',
+          _pts,
+          _cond(leader ? 24 : 17, color: leader ? _navy : _goldHi),
+        ),
+      ],
+    );
+    if (leader) {
+      return Container(
+        height: 42,
+        margin: const EdgeInsets.symmetric(vertical: 3),
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          gradient: const LinearGradient(
+            begin: Alignment(-1, -0.4),
+            end: Alignment(1, 0.4),
+            colors: [Color(0xFFF0CD62), Color(0xFFC99A2E)],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.35),
+              blurRadius: 14,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: content,
+      );
+    }
+    return Container(
+      height: 31,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+        ),
       ),
+      child: content,
     );
   }
 
@@ -230,15 +272,20 @@ class StandingsPoster extends StatelessWidget {
                       alignment: Alignment.topCenter,
                       child: Container(
                         width: kPosterSize.width - 28,
-                        clipBehavior: Clip.antiAlias,
+                        // Fotoğraf zeminde okunurluk: kutusuz, hafif koyu
+                        // geçiş; satırlar ince çizgilerle ayrılır.
                         decoration: BoxDecoration(
-                          // Fotoğraf zeminde satırlar okunsun diye koyu panel.
-                          color: _navy.withValues(alpha: 0.86),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: _gold.withValues(alpha: 0.4),
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              _navy.withValues(alpha: 0.45),
+                              _navy.withValues(alpha: 0.6),
+                            ],
                           ),
+                          borderRadius: BorderRadius.circular(8),
                         ),
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
