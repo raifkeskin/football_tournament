@@ -8,7 +8,7 @@ import '../../../core/services/service_locator.dart';
 import '../../../core/utils/resilient_stream.dart';
 import '../../../core/utils/table_feed.dart';
 import '../../../core/widgets/app_date_picker.dart';
-import '../../team/models/team.dart';
+import '../../team/services/team_directory.dart';
 import '../../tournament/models/league.dart';
 import '../models/match.dart';
 import 'match_details_screen.dart';
@@ -68,8 +68,6 @@ class _BroadcastGuideScreenState extends State<BroadcastGuideScreen> {
 
   late final Stream<List<League>> _leagues = ServiceLocator.leagueService
       .watchLeagues();
-  late final Stream<List<Team>> _teams = ServiceLocator.teamService
-      .watchAllTeams();
 
   /// Gün başına akış (o güne dönünce yeniden kurulmaz).
   final Map<String, Stream<List<MatchModel>>> _byDay = {};
@@ -139,12 +137,11 @@ class _BroadcastGuideScreenState extends State<BroadcastGuideScreen> {
           final leagueName = {
             for (final l in leagueSnap.data ?? const <League>[]) l.id: l.name,
           };
-          return StreamBuilder<List<Team>>(
-            stream: _teams,
-            builder: (context, teamSnap) {
-              final teamName = {
-                for (final t in teamSnap.data ?? const <Team>[]) t.id: t.name,
-              };
+          // Yalnız o günün maçlarının takımları okunur.
+          return ValueListenableBuilder<Map<String, TeamBrief>>(
+            valueListenable: TeamDirectory.known,
+            builder: (context, known, _) {
+              final teamName = {for (final t in known.values) t.id: t.name};
               return StreamBuilder<List<MatchModel>>(
                 stream: _matchesOn(DateFormat('yyyy-MM-dd').format(day)),
                 builder: (context, snap) {
@@ -156,6 +153,13 @@ class _BroadcastGuideScreenState extends State<BroadcastGuideScreen> {
                     for (final m in snap.data!)
                       if (leagueName.containsKey(m.leagueId)) m,
                   ];
+                  final missingTeams = TeamDirectory.missing([
+                    for (final m in matches) ...[m.homeTeamId, m.awayTeamId],
+                  ]);
+                  if (missingTeams.isNotEmpty) {
+                    TeamDirectory.ensure(missingTeams);
+                    return const Center(child: CircularProgressIndicator());
+                  }
                   return ListView(
                     padding: const EdgeInsets.fromLTRB(12, 14, 12, 120),
                     children: [

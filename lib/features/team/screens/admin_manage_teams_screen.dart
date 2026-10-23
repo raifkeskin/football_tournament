@@ -153,7 +153,33 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
     ]);
     final allowed = scope[0] as Set<String>?;
     _mem = scope[1] as PanelMemberships;
-    final res = await client.from('teams').select();
+    // Satır sınırı (1000) aşılmasın: kapsamlı kullanıcıda yalnız kendi
+    // takımları, admin'de sayfa sayfa.
+    final res = <dynamic>[];
+    if (allowed != null) {
+      final ids = allowed.toList();
+      for (var i = 0; i < ids.length; i += 150) {
+        res.addAll(
+          await client
+              .from('teams')
+              .select()
+              .inFilter(
+                'id',
+                ids.sublist(i, i + 150 > ids.length ? ids.length : i + 150),
+              ),
+        );
+      }
+    } else {
+      for (var from = 0; ; from += 1000) {
+        final page = await client
+            .from('teams')
+            .select()
+            .order('id')
+            .range(from, from + 999);
+        res.addAll(page);
+        if (page.length < 1000) break;
+      }
+    }
     final teams =
         res
             .map((e) => Map<String, dynamic>.from((e as Map)))

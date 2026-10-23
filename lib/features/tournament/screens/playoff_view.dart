@@ -172,7 +172,7 @@ class _PlayoffViewState extends State<PlayoffView> {
     orderBy: 'match_date',
   );
   late final Stream<List<Team>> _teams = ServiceLocator.teamService
-      .watchAllTeams();
+      .watchSeasonTeams(widget.seasonId);
 
   List<CupBracket>? _brackets;
   int _cup = 0;

@@ -122,7 +122,27 @@ class SupabaseTeamService implements ITeamService {
     });
   }
 
-  Stream<List<Team>> _watchAllTeamsSource({String? caller}) {
+  final Map<String, Stream<List<Team>>> _seasonTeamsFeeds = {};
+  final Map<String, List<Team>> _seasonTeamsCache = {};
+
+  @override
+  Stream<List<Team>> watchSeasonTeams(String seasonId, {String? caller}) {
+    final id = seasonId.trim();
+    if (id.isEmpty) return watchAllTeams(caller: caller);
+    return _seasonTeamsFeeds[id] ??= resilientStream(() async* {
+      final cached = _seasonTeamsCache[id];
+      if (cached != null) yield cached;
+      await for (final list in _watchAllTeamsSource(
+        caller: caller,
+        seasonId: id,
+      )) {
+        _seasonTeamsCache[id] = list;
+        yield list;
+      }
+    });
+  }
+
+  Stream<List<Team>> _watchAllTeamsSource({String? caller, String? seasonId}) {
     try {
       _sbLog(
         table: 'season_teams',
@@ -138,8 +158,14 @@ class SupabaseTeamService implements ITeamService {
         filters: 'order=team_id asc',
       );
       return resilientStream(
-        () => watchTableRows(_client, table: 'season_teams', orderBy: 'team_id')
-            .asyncMap((rows) async {
+        () =>
+            watchTableRows(
+              _client,
+              table: 'season_teams',
+              column: seasonId == null ? null : 'season_id',
+              value: seasonId,
+              orderBy: 'team_id',
+            ).asyncMap((rows) async {
               final links = rows.cast<Map<String, dynamic>>();
               final teamIds = <String>{};
               final groupIds = <String>{};

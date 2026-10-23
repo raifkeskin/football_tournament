@@ -98,7 +98,7 @@ Future<void> shareGroupStandings(
           .select()
           .eq('league_id', leagueId)
           .eq('season_id', seasonId),
-      ServiceLocator.teamService.watchAllTeams().first,
+      ServiceLocator.teamService.watchSeasonTeams(seasonId).first,
       leagueService.watchGroups(seasonId).first,
       client
           .from('leagues')
@@ -239,7 +239,9 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
       widget.seasonId,
       widget.fetchGroupId,
     );
-    _teamsStream = ServiceLocator.teamService.watchAllTeams();
+    _teamsStream = ServiceLocator.teamService.watchSeasonTeams(
+      widget.seasonId,
+    );
   }
 
   Stream<List<Map<String, dynamic>>> _watchLeagueMatchesRaw(

@@ -336,7 +336,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
       );
     }
     return StreamBuilder<List<Team>>(
-      stream: _teamService.watchAllTeams(),
+      stream: _teamService.watchSeasonTeams(widget.match.seasonId),
       builder: (context, teamsSnap) {
         final nameById = <String, String>{};
         if (teamsSnap.hasData) {
