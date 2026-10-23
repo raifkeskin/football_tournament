@@ -16,6 +16,7 @@ import '../../../core/widgets/web_safe_image.dart';
 import 'package:football_tournament/core/widgets/picked_image.dart';
 import 'team_squad_screen.dart';
 import '../../../core/utils/reveal_search.dart';
+import '../../../core/widgets/list_filter.dart';
 import '../../auth/widgets/phone_input.dart';
 
 class AdminManageTeamsScreen extends StatefulWidget {
@@ -44,6 +45,94 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
   final _imageUploadService = SupabaseImageUploadService();
   Future<List<Map<String, dynamic>>>? _teamsFuture;
 
+  /// Etkin sezon üyelikleri (liste okunurken yüklenir).
+  PanelMemberships? _mem;
+
+  /// Filtre seçimi (bölüm → değer; yoksa bölümün varsayılanı).
+  Map<String, String> _filter = const {};
+
+  List<ListFilterSection> _sections(
+    bool isAdmin,
+    List<Map<String, dynamic>> all,
+    Map<String, String> v,
+  ) {
+    final mem = _mem;
+    if (mem == null) return const [];
+    final leagueIds =
+        <String>{
+          for (final t in all) ...mem.leaguesOf(mem.teams[t['id'].toString()]),
+        }.toList()..sort(
+          (a, b) => (mem.leagues[a] ?? '').compareTo(mem.leagues[b] ?? ''),
+        );
+    // Tek turnuva varsa (ör. kurucu başkan) sezonlar o turnuvadan.
+    final picked = v['league'] ?? 'all';
+    final league = picked == 'all' && leagueIds.length == 1
+        ? leagueIds.first
+        : picked;
+    final seasonIds = [
+      for (final e in mem.seasons.entries)
+        if (e.value.league == league &&
+            all.any(
+              (t) => mem.teams[t['id'].toString()]?.contains(e.key) ?? false,
+            ))
+          e.key,
+    ]..sort((a, b) => (mem.seasons[b]!.name).compareTo(mem.seasons[a]!.name));
+    return [
+      if (isAdmin)
+        const ListFilterSection(
+          key: 'state',
+          label: 'Durum',
+          options: [('in', 'Turnuvada'), ('free', 'Boşta'), ('all', 'Tümü')],
+          defaultValue: 'in',
+          hint: 'Boşta: hiçbir etkin turnuva sezonunda olmayan takım.',
+        ),
+      if (leagueIds.length > 1)
+        ListFilterSection(
+          key: 'league',
+          label: 'Turnuva',
+          dropdown: true,
+          options: [
+            ('all', 'Tüm turnuvalar'),
+            for (final id in leagueIds) (id, mem.leagues[id] ?? id),
+          ],
+          defaultValue: 'all',
+        ),
+      if (seasonIds.length > 1 ||
+          (leagueIds.length <= 1 && seasonIds.isNotEmpty))
+        ListFilterSection(
+          key: 'season',
+          label: 'Sezon',
+          dropdown: true,
+          options: [
+            ('all', 'Tüm sezonlar'),
+            for (final id in seasonIds) (id, mem.seasons[id]!.name),
+          ],
+          defaultValue: 'all',
+        ),
+    ];
+  }
+
+  bool _matchesFilter(
+    bool isAdmin,
+    Map<String, dynamic> t,
+    Map<String, String> v,
+  ) {
+    final mem = _mem;
+    if (mem == null) return true;
+    final seasons = mem.teams[t['id'].toString()];
+    final inSeason = seasons != null && seasons.isNotEmpty;
+    final state = v['state'] ?? (isAdmin ? 'in' : 'all');
+    if (state == 'in' && !inSeason) return false;
+    if (state == 'free' && inSeason) return false;
+    final league = v['league'] ?? 'all';
+    if (league != 'all' && !mem.leaguesOf(seasons).contains(league)) {
+      return false;
+    }
+    final season = v['season'] ?? 'all';
+    if (season != 'all' && !(seasons?.contains(season) ?? false)) return false;
+    return true;
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -59,19 +148,17 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
     final session = AppSession.of(context).value;
     final scope = await Future.wait<Object?>([
       PanelScope.teamIds(session),
-      // Yalnız pasif turnuvalarda yer alan takımlar admin dahil gizlenir.
-      PanelScope.hiddenTeamIds(),
+      // Etkin sezon üyelikleri: Turnuvada / Boşta, turnuva ve sezon filtresi.
+      PanelMemberships.load(),
     ]);
     final allowed = scope[0] as Set<String>?;
-    final hidden = scope[1] as Set<String>;
+    _mem = scope[1] as PanelMemberships;
     final res = await client.from('teams').select();
     final teams =
         res
             .map((e) => Map<String, dynamic>.from((e as Map)))
             .where(
-              (t) =>
-                  !hidden.contains(t['id'].toString()) &&
-                  (allowed == null || allowed.contains(t['id'].toString())),
+              (t) => allowed == null || allowed.contains(t['id'].toString()),
             )
             .toList()
           ..sort(
@@ -1472,8 +1559,12 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
             );
           }
 
-          final all = (snapshot.data ?? const <Map<String, dynamic>>[])
+          final isAdminUser = AppSession.of(context).value.isAdmin;
+          final scoped = (snapshot.data ?? const <Map<String, dynamic>>[])
               .where((d) => (d['id'] ?? '').toString() != 'free_agent_pool')
+              .toList();
+          final all = scoped
+              .where((t) => _matchesFilter(isAdminUser, t, _filter))
               .toList();
           final teams = all.where(_matchesTeamSearch).toList();
           final noManager = all
@@ -1497,7 +1588,9 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
               onRefresh: refresh,
               child: buildMessage(
                 all.isEmpty
-                    ? 'Henüz takım yok.'
+                    ? (scoped.isEmpty
+                          ? 'Henüz takım yok.'
+                          : 'Bu filtrelere uyan takım yok.')
                     : 'Aramayla eşleşen takım yok.',
               ),
             );
@@ -1565,6 +1658,21 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                         ),
                     onChanged: (val) =>
                         setState(() => _searchQuery = _toTurkishLow(val)),
+                  ),
+                ),
+              if (snapshot.hasData && _mem != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: ListFilterBar(
+                    title: 'Takımları filtrele',
+                    unit: 'takım',
+                    sections: (v) => _sections(isAdminUser, scoped, v),
+                    values: _filter,
+                    onChanged: (v) => setState(() => _filter = v),
+                    count: (v) => scoped
+                        .where((t) => _matchesFilter(isAdminUser, t, v))
+                        .where(_matchesTeamSearch)
+                        .length,
                   ),
                 ),
               if (snapshot.hasData)
