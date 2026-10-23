@@ -262,7 +262,23 @@ class _FixtureViewState extends State<FixtureView> {
     } catch (_) {
       // Bay bilgisi gelmezse afiş baysız hazırlanır.
     }
+    // Alt başlık sezon adı ("2026 Sezonu"); grup yalnız birden fazlaysa.
+    var seasonName = '';
+    try {
+      final row = await Supabase.instance.client
+          .from('seasons')
+          .select('name')
+          .eq('id', _seasonId)
+          .maybeSingle();
+      seasonName = (row?['name'] ?? '').toString().trim();
+    } catch (_) {
+      // Sezon adı gelmezse yalnız grup adı yazılır.
+    }
     if (!mounted) return;
+    final subtitle = [
+      seasonName,
+      groupName,
+    ].where((e) => e.trim().isNotEmpty).join(' · ');
 
     String dateText(String? ymd) {
       final d = DateTime.tryParse((ymd ?? '').trim());
@@ -322,11 +338,10 @@ class _FixtureViewState extends State<FixtureView> {
       poster: FixturePoster(
         leagueName: league.name,
         leagueLogo: league.logoUrl,
-        // Sonuç afişinde "Maç Sonuçları" hafta satırında; üstte yalnız grup.
-        subtitle: results
-            ? groupName
-            : (groupName.isEmpty ? 'Fikstür' : '$groupName Fikstür'),
-        weekText: results ? '$week. Hafta Maç Sonuçları' : '$week. Hafta',
+        subtitle: subtitle,
+        weekText: results
+            ? '$week. Hafta Maç Sonuçları'
+            : '$week. Hafta Fikstürü',
         days: posterDays,
         byes: byes,
       ),
