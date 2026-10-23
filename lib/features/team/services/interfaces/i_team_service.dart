@@ -5,6 +5,10 @@ import '../../models/team.dart';
 abstract class ITeamService {
   Stream<List<Team>> watchAllTeams({String? caller});
 
+  /// Yalnız bir sezonun takımları (sezona bağlı ekranlar; tüm takımlar
+  /// indirilmez).
+  Stream<List<Team>> watchSeasonTeams(String seasonId, {String? caller});
+
   Stream<List<Map<String, dynamic>>> watchAllTeamsRaw({String? caller});
 
   Future<String> getTeamName(String teamId, {String? caller});

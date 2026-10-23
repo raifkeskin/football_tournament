@@ -532,7 +532,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
           if (mounted && on) setState(() => _youtubeLive = true);
         })
         .catchError((_) {});
-    _teamsStream = _teamService.watchAllTeams();
+    _teamsStream = _teamService.watchSeasonTeams(widget.match.seasonId);
     _pitchesStream = _leagueService.watchPitches();
     _prefetchLineups(widget.match);
   }

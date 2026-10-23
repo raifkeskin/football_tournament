@@ -28,6 +28,32 @@ class ListFilterSection {
       options.firstWhere((o) => o.$1 == value, orElse: () => options.first).$2;
 }
 
+/// Filtre penceresindeki sayılar: seçimle kalan toplam ve her bölümde
+/// yalnız o bölüm değişirse kalacak sayı (bölüm → değer → sayı).
+class ListFilterCounts {
+  const ListFilterCounts({required this.total, required this.options});
+
+  final int total;
+  final Map<String, Map<String, int>> options;
+
+  int? of(String key, String value) => options[key]?[value];
+
+  /// Liste telefondaysa sayılar doğrudan hesaplanır.
+  static ListFilterCounts compute(
+    List<ListFilterSection> sections,
+    Map<String, String> values,
+    int Function(Map<String, String> values) count,
+  ) => ListFilterCounts(
+    total: count(values),
+    options: {
+      for (final s in sections)
+        s.key: {
+          for (final o in s.options) o.$1: count({...values, s.key: o.$1}),
+        },
+    },
+  );
+}
+
 /// Seçenekleri arasında olmayan seçimleri varsayılana çeker.
 Map<String, String> _normalize(
   List<ListFilterSection> Function(Map<String, String>) sections,
@@ -56,7 +82,8 @@ class ListFilterBar extends StatelessWidget {
     required this.sections,
     required this.values,
     required this.onChanged,
-    required this.count,
+    required this.total,
+    required this.counts,
     this.title = 'Filtrele',
     this.unit = 'kayıt',
   });
@@ -65,7 +92,12 @@ class ListFilterBar extends StatelessWidget {
   final List<ListFilterSection> Function(Map<String, String> values) sections;
   final Map<String, String> values;
   final ValueChanged<Map<String, String>> onChanged;
-  final int Function(Map<String, String> values) count;
+
+  /// Uygulanan seçimle görünen kayıt sayısı.
+  final int total;
+
+  /// Penceredeki sayılar (sunucudan ya da telefonda hesaplanır).
+  final Future<ListFilterCounts> Function(Map<String, String> values) counts;
   final String title;
   final String unit;
 
@@ -101,7 +133,7 @@ class ListFilterBar extends StatelessWidget {
                     unit: unit,
                     sections: sections,
                     initial: {for (final s in list) s.key: _value(s)},
-                    count: count,
+                    counts: counts,
                   ),
                 );
                 if (r != null) onChanged(r);
@@ -148,7 +180,7 @@ class ListFilterBar extends StatelessWidget {
             ),
             const SizedBox(width: 10),
             Text(
-              '${count(values)} $unit',
+              '$total $unit',
               style: const TextStyle(color: kAdminMuted, fontSize: 12.5),
             ),
           ],
@@ -190,14 +222,14 @@ class _FilterSheet extends StatefulWidget {
     required this.unit,
     required this.sections,
     required this.initial,
-    required this.count,
+    required this.counts,
   });
 
   final String title;
   final String unit;
   final List<ListFilterSection> Function(Map<String, String> values) sections;
   final Map<String, String> initial;
-  final int Function(Map<String, String> values) count;
+  final Future<ListFilterCounts> Function(Map<String, String> values) counts;
 
   @override
   State<_FilterSheet> createState() => _FilterSheetState();
@@ -205,6 +237,25 @@ class _FilterSheet extends StatefulWidget {
 
 class _FilterSheetState extends State<_FilterSheet> {
   late final Map<String, String> _v = {...widget.initial};
+
+  ListFilterCounts? _counts;
+  int _seq = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCounts();
+  }
+
+  /// Sayılar her seçim değişiminde yeniden istenir; geç gelen eski yanıt
+  /// yok sayılır.
+  Future<void> _loadCounts() async {
+    final seq = ++_seq;
+    try {
+      final c = await widget.counts({..._v});
+      if (mounted && seq == _seq) setState(() => _counts = c);
+    } catch (_) {}
+  }
 
   /// Seçim değişince bağlı bölümlerde geçersiz kalan seçim (ör. turnuva
   /// değişince sezon) varsayılana döner.
@@ -216,6 +267,7 @@ class _FilterSheetState extends State<_FilterSheet> {
         ..clear()
         ..addAll(fixed);
     });
+    _loadCounts();
   }
 
   Widget _caption(String text) => Padding(
@@ -271,7 +323,7 @@ class _FilterSheetState extends State<_FilterSheet> {
                         ),
                       ),
                       Text(
-                        '${widget.count({..._v, s.key: o.$1})}',
+                        '${_counts?.of(s.key, o.$1) ?? '–'}',
                         style: TextStyle(
                           color: _v[s.key] == o.$1
                               ? const Color(0xFF064E3B)
@@ -351,7 +403,7 @@ class _FilterSheetState extends State<_FilterSheet> {
                 ),
               ),
               Text(
-                '${widget.count(_v)} ${widget.unit}',
+                '${_counts?.total ?? '–'} ${widget.unit}',
                 style: const TextStyle(color: kAdminMuted, fontSize: 12.5),
               ),
             ],
@@ -382,6 +434,7 @@ class _FilterSheetState extends State<_FilterSheet> {
                     _v
                       ..clear()
                       ..addAll(fixed);
+                    _loadCounts();
                   }),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.white,

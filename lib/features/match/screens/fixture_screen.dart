@@ -149,7 +149,7 @@ class _FixtureViewState extends State<FixtureView> {
   @override
   void initState() {
     super.initState();
-    _teamsStream = _teamService.watchAllTeams();
+    _teamsStream = _teamService.watchSeasonTeams(_seasonId);
     _leagueStream = _leagueService.watchLeagueById(_leagueId);
     _groupsStream = _leagueService.watchGroups(_seasonId);
   }
