@@ -123,8 +123,12 @@ function teamIn(title: string, name: string, short: string | null): boolean {
   const words = full.trim().split(" ").filter((w) => w.length >= 3 && !STOP.has(w) && !/^\d+$/.test(w));
   if (!words.length) return false;
   const titleWords = title.trim().split(" ");
+  // Bitişik / ayrı yazım farkı ("Triokablo" ↔ "TRİO KABLO"): kelime,
+  // başlığın boşluksuz halinde de aranır (kısa kelimelerde yanlış eşleşmesin).
+  const compact = title.replace(/ /g, "");
   const found = words.filter((w) =>
-    titleWords.some((t) => t === w || (w.length >= 5 && near(w, t)))
+    titleWords.some((t) => t === w || (w.length >= 5 && near(w, t))) ||
+    (w.length >= 6 && compact.includes(w))
   ).length;
   return found * 2 >= words.length;
 }
