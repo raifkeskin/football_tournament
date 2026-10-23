@@ -4,8 +4,8 @@ import 'app_session.dart';
 
 /// Yönetim panelinde kullanıcının kapsamı: kurucu başkan kendi turnuvalarının,
 /// bölge sorumlusu kendi bölgelerinin takımlarını ve oyuncularını görür.
-/// Pasif (ya da silinmiş) turnuvalar kapsama girmez; yalnız pasif
-/// turnuvalarda yer alan takım ve oyuncular admin dahil kimseye listelenmez.
+/// Pasif (ya da silinmiş) turnuvalar kapsama girmez; etkin kadroda
+/// olmayanlar admin listesinde "Boşta" filtresiyle görünür.
 /// Yetkinin asıl kontrolü veritabanındadır (RLS); bu süzme yalnızca
 /// listeleri sadeleştirir.
 class PanelScope {
@@ -49,22 +49,6 @@ class PanelScope {
     };
   }
 
-  /// Yalnız pasif / silinmiş turnuvalarda yer alan takım ve oyuncular
-  /// (hiç sezonu / kadrosu olmayanlar gizlenmez). Sunucuda hesaplanır.
-  static Future<({Set<String> teams, Set<String> players})> _hidden() async {
-    final r = await _sb.rpc('panel_hidden_ids');
-    Set<String> ids(Object? v) => {
-      for (final e in (v is List ? v : const [])) e.toString(),
-    };
-    final m = r is Map ? r : const {};
-    return (teams: ids(m['teams']), players: ids(m['players']));
-  }
-
-  static Future<Set<String>> hiddenTeamIds() async => (await _hidden()).teams;
-
-  static Future<Set<String>> hiddenPlayerIds() async =>
-      (await _hidden()).players;
-
   /// Listede gösterilecek oyuncular: yönetebildiği takımların etkin
   /// sezon kadrolarındakiler. Admin: null.
   static Future<Set<String>?> playerIds(AppSessionState s) async {
@@ -76,5 +60,56 @@ class PanelScope {
       params: {'p_team_ids': teams.toList()},
     );
     return {for (final e in (r is List ? r : const [])) e.toString()};
+  }
+}
+
+/// Etkin sezonlardaki üyelikler (panel_memberships): filtreler için.
+class PanelMemberships {
+  PanelMemberships._(this.leagues, this.seasons, this.teams, this.players);
+
+  /// league id → ad
+  final Map<String, String> leagues;
+
+  /// season id → (ad, league id)
+  final Map<String, ({String name, String league})> seasons;
+
+  /// team / player id → etkin sezon id'leri (yoksa boşta).
+  final Map<String, Set<String>> teams;
+  final Map<String, Set<String>> players;
+
+  Set<String> leaguesOf(Set<String>? seasonIds) => {
+    for (final s in seasonIds ?? const <String>{})
+      if (seasons[s] != null) seasons[s]!.league,
+  };
+
+  static Future<PanelMemberships> load() async {
+    final r = await Supabase.instance.client.rpc('panel_memberships');
+    final m = r is Map ? r : const {};
+    Map<String, Set<String>> sets(Object? v) => {
+      if (v is Map)
+        for (final e in v.entries)
+          e.key.toString(): {
+            for (final s in (e.value is List ? e.value as List : const []))
+              s.toString(),
+          },
+    };
+    final rawSeasons = m['seasons'];
+    return PanelMemberships._(
+      {
+        if (m['leagues'] is Map)
+          for (final e in (m['leagues'] as Map).entries)
+            e.key.toString(): e.value.toString(),
+      },
+      {
+        if (rawSeasons is Map)
+          for (final e in rawSeasons.entries)
+            e.key.toString(): (
+              name: ((e.value as Map?)?['name'] ?? '').toString(),
+              league: ((e.value as Map?)?['league'] ?? '').toString(),
+            ),
+      },
+      sets(m['teams']),
+      sets(m['players']),
+    );
   }
 }
