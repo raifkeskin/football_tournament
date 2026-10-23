@@ -5284,21 +5284,22 @@ class _DetailEventTile extends StatelessWidget {
     );
   }
 
-  /// Ortadaki dakika rozeti; maçın adamında dakika yerine yıldız. Tüm
-  /// olaylarda tek renk (sade, okunaklı); olay türünü ikon gösterir.
+  /// Ortadaki dakika rozeti; maçın adamında dakika yerine yıldız. Gol
+  /// dakikası yeşil zeminde beyaz, diğer olaylar beyaz zeminde koyu yazı.
   Widget _minuteBadge(String min) {
+    final goal = type == 'goal';
+    final fg = goal ? Colors.white : const Color(0xFF0F172A);
     // Sabit boy: 2 haneli dakika sığar, satır genişliğine yayılmaz;
     // 60+4' gibi uzatma dakikası için biraz genişleyebilir.
     return Container(
       constraints: const BoxConstraints(minWidth: 34, minHeight: 22),
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A2335),
+        color: goal ? const Color(0xFF10B981) : Colors.white,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
       ),
       child: min.isEmpty
-          ? const Icon(Icons.star_rounded, size: 12, color: Colors.white70)
+          ? Icon(Icons.star_rounded, size: 12, color: fg)
           // widthFactor 1: rozet yazı kadar (en az minWidth), yazı ortada.
           : Center(
               widthFactor: 1,
@@ -5308,8 +5309,8 @@ class _DetailEventTile extends StatelessWidget {
                 maxLines: 1,
                 style: TextStyle(
                   fontSize: 10.5,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white70,
+                  fontWeight: FontWeight.w800,
+                  color: fg,
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
