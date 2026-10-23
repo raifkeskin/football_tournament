@@ -777,8 +777,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     String tournamentId,
   ) async {
     final tId = tournamentId.trim();
-    // Telefonu olmayan oyuncular id ile bulunur.
-    final key = (p.phone ?? '').trim().isNotEmpty ? p.phone!.trim() : p.id;
+    final key = p.id;
     if (tId.isEmpty || key.trim().isEmpty) {
       ScaffoldMessenger.of(
         context,
@@ -1311,10 +1310,9 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
   }
 
   Future<void> _openPlayerCard(PlayerModel rosterPlayer) {
-    final phone = (rosterPlayer.phone ?? '').trim();
     return showPlayerCard(
       context,
-      playerKey: phone.isEmpty ? rosterPlayer.id : phone,
+      playerKey: rosterPlayer.id,
       number: (rosterPlayer.number ?? '').trim(),
     );
   }
@@ -1322,7 +1320,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
   void _prefetchPlayerPhotos(Iterable<PlayerModel> players) {
     final toFetch = <String>[];
     for (final p in players) {
-      final phone = (p.phone ?? '').trim();
+      final phone = p.id.trim();
       if (phone.isEmpty) continue;
       if (_playerPhotoUrlByPhone.containsKey(phone)) continue;
       if (_playerPhotoFetchInFlight.contains(phone)) continue;
@@ -2200,7 +2198,11 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
   String _subPosition = _unsetOption;
   String _preferredFoot = '';
   String? _existingPhotoUrl;
-  String? _implicitPhoneKey;
+
+  /// Düzenlemede oyuncunun kayıtlı numarası (yetkiliye `player_phones` ile
+  /// gelir; telefon tablodan okunmaz). Yüklenene kadar alan kapalı.
+  String? _loadedPhone;
+  bool _phoneReady = true;
   XFile? _pickedPhoto;
   bool _removePhoto = false;
   bool _saving = false;
@@ -2323,30 +2325,49 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
       _preferredFoot = _feet.contains(pf) ? pf : '';
       _heightController.text = (e.height ?? '').toString();
       _weightController.text = (e.weight ?? '').toString();
-      final phoneRaw = (e.phone ?? '').toString();
-      if (phoneRaw.startsWith('no_phone_')) {
-        _implicitPhoneKey = phoneRaw;
-        _phoneController.text = '';
-      } else {
-        _implicitPhoneKey = null;
-        _phoneController.text = PhoneMaskFormatter.formatFromRaw(phoneRaw);
-      }
       _existingPhotoUrl = (e.photoUrl ?? '').trim().isEmpty ? null : e.photoUrl;
       _initialIdentity = _identitySnapshot();
+      _phoneReady = false;
+      _loadPhone(e.id);
     }
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _hydrateExistingPhotoFromIdentity(),
     );
   }
 
+  /// Kayıtlı numarayı yetkiliye yükler; yetki yoksa ya da numara yoksa alan
+  /// boş açılır. Numara değişmedikçe kaydederken gönderilmez.
+  Future<void> _loadPhone(String playerId) async {
+    String? phone;
+    try {
+      final rows = await Supabase.instance.client.rpc(
+        'player_phones',
+        params: {
+          'p_ids': [playerId],
+        },
+      );
+      if (rows is List && rows.isNotEmpty) {
+        phone = (rows.first as Map)['phone']?.toString();
+      }
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() {
+      _loadedPhone = (phone ?? '').trim().isEmpty ? null : phone!.trim();
+      if (_phoneController.text.trim().isEmpty && _loadedPhone != null) {
+        _phoneController.text = PhoneMaskFormatter.formatFromRaw(_loadedPhone!);
+        _initialIdentity = _identitySnapshot();
+      }
+      _phoneReady = true;
+    });
+  }
+
   Future<void> _hydrateExistingPhotoFromIdentity() async {
     if (!mounted) return;
     if (_pickedPhoto != null) return;
     if (_removePhoto) return;
-    final phone = _rawPhone();
-    final keyPhone = phone.isNotEmpty ? phone : (_implicitPhoneKey ?? '');
-    if (keyPhone.trim().isEmpty) return;
-    final player = await _teamService.getPlayerByPhoneOnce(keyPhone.trim());
+    final id = (widget.editing?.id ?? '').trim();
+    if (id.isEmpty) return;
+    final player = await _teamService.getPlayerByPhoneOnce(id);
     final url = (player?.photoUrl ?? '').trim();
     if (!mounted) return;
     if (url.isEmpty) return;
@@ -2402,12 +2423,6 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
     return true;
   }
 
-  String _generateNoPhoneKey() {
-    final ts = DateTime.now().millisecondsSinceEpoch;
-    final rnd = Random().nextInt(1 << 31);
-    return 'no_phone_${ts}_$rnd';
-  }
-
   Future<void> _save() async {
     final firstName = _nameController.text.trim();
     final surname = _surnameController.text.trim();
@@ -2441,16 +2456,9 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
         _pickedPhoto != null ||
         _removePhoto ||
         _identitySnapshot() != _initialIdentity;
-    // Telefonu olmayan mevcut oyuncu düzenlenirken sahte "no_phone_" anahtarı
-    // üretilip telefon alanına yazılmaz; oyuncu id'si ile işlem yapılır.
-    final editingWithoutPhone =
-        isEditing && rawPhone.isEmpty && _implicitPhoneKey == null;
-    final keyPhone = rawPhone.isNotEmpty
-        ? rawPhone
-        : editingWithoutPhone
-        ? widget.editing!.id
-        : (_implicitPhoneKey ??= _generateNoPhoneKey());
-    final phoneToStore = editingWithoutPhone ? null : keyPhone;
+    if (!_phoneReady) return;
+    // Numara yalnız değiştiyse yazılır (tablodan okunmadığı için).
+    final phoneChanged = rawPhone != (_loadedPhone ?? '');
 
     setState(() => _saving = true);
     try {
@@ -2478,9 +2486,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
       final resolvedSubPosition = _isMainPositionSelected
           ? (_subPosition == _unsetOption ? null : _subPosition)
           : null;
-      final updateKey = (widget.editing?.id ?? '').toString().trim().isNotEmpty
-          ? widget.editing!.id
-          : keyPhone;
+      var playerId = (widget.editing?.id ?? '').toString().trim();
       final finalPhotoUrl = uploadedPhotoUrl != null
           ? uploadedPhotoUrl.trim()
           : _removePhoto
@@ -2489,25 +2495,33 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
           ? null
           : (_existingPhotoUrl ?? '').trim();
       if (!isEditing) {
-        await _teamService.upsertPlayerIdentity(
-          phone: keyPhone,
-          name: fullName,
-          birthDate: resolvedBirthDate,
-          mainPosition: resolvedMainPosition,
-          preferredFoot: _preferredFoot.trim().isEmpty
-              ? null
-              : _preferredFoot.trim(),
-          height: int.tryParse(
-            _heightController.text.replaceAll(RegExp(r'\D'), '').trim(),
-          ),
-          weight: int.tryParse(
-            _weightController.text.replaceAll(RegExp(r'\D'), '').trim(),
-          ),
-        );
+        playerId =
+            (await _teamService.upsertPlayerIdentity(
+              phone: rawPhone.isEmpty ? null : rawPhone,
+              name: fullName,
+              birthDate: resolvedBirthDate,
+              mainPosition: resolvedMainPosition,
+              subPosition: resolvedSubPosition,
+              photoUrl: finalPhotoUrl,
+              preferredFoot: _preferredFoot.trim().isEmpty
+                  ? null
+                  : _preferredFoot.trim(),
+              height: int.tryParse(
+                _heightController.text.replaceAll(RegExp(r'\D'), '').trim(),
+              ),
+              weight: int.tryParse(
+                _weightController.text.replaceAll(RegExp(r'\D'), '').trim(),
+              ),
+            )) ??
+            '';
+        if (playerId.isEmpty) {
+          throw Exception('Oyuncu oluşturulamadı, lütfen tekrar deneyin.');
+        }
       }
-      if (identityChanged) {
+      // Yeni oyuncu tüm bilgileriyle açıldı; yalnız düzenlemede güncellenir.
+      if (isEditing && identityChanged) {
         await _teamService.updatePlayer(
-          playerId: updateKey,
+          playerId: playerId,
           data: {
             'name': firstName,
             'surname': surname,
@@ -2518,7 +2532,8 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
             'main_position': resolvedMainPosition,
             'sub_position': resolvedSubPosition,
             'photo_url': finalPhotoUrl,
-            'phone': phoneToStore,
+            if (isEditing && phoneChanged)
+              'phone': rawPhone.isEmpty ? null : rawPhone,
             'height': int.tryParse(
               _heightController.text.replaceAll(RegExp(r'\D'), '').trim(),
             ),
@@ -2538,7 +2553,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
             await _teamService.upsertRosterEntry(
               tournamentId: tournamentId,
               teamId: teamId,
-              playerPhone: keyPhone,
+              playerPhone: playerId,
               playerName: fullName,
               jerseyNumber: sbTeamService == null ? number : null,
             );
@@ -2553,13 +2568,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                 : int.tryParse(currentText);
             final jerseyChanged = currentInt != jerseyInt;
             if (jerseyChanged) {
-              var pid = (widget.editing?.id ?? '').toString().trim();
-              if (pid.isEmpty) {
-                final resolved = await _teamService.getPlayerByPhoneOnce(
-                  keyPhone,
-                );
-                pid = (resolved?.id ?? '').toString().trim();
-              }
+              final pid = playerId;
               if (pid.isNotEmpty) {
                 await sbTeamService.setJerseyNumber(
                   pid,
@@ -2628,6 +2637,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
     String? prefixText,
     Widget? trailing,
     TextCapitalization capitalization = TextCapitalization.none,
+    bool enabled = true,
   }) {
     return AdminFieldRow(
       icon: icon,
@@ -2635,7 +2645,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
       trailing: trailing,
       child: TextField(
         controller: controller,
-        enabled: !_saving,
+        enabled: enabled && !_saving,
         keyboardType: keyboardType,
         inputFormatters: inputFormatters,
         textCapitalization: capitalization,
@@ -2829,6 +2839,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                           _textRow(
                             icon: Icons.phone_outlined,
                             label: 'Telefon',
+                            enabled: _phoneReady,
                             controller: _phoneController,
                             keyboardType: TextInputType.phone,
                             inputFormatters: [PhoneMaskFormatter()],
@@ -3311,11 +3322,9 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
   }
 
   Future<void> _openPlayerCard(PlayerModel p) {
-    final phoneOrId = ((p.phone ?? '').trim().isNotEmpty ? p.phone! : p.id)
-        .trim();
     return showPlayerCard(
       context,
-      playerKey: phoneOrId,
+      playerKey: p.id.trim(),
       number: (p.number ?? '').trim(),
     );
   }

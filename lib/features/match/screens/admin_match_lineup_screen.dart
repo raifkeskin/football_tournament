@@ -98,10 +98,7 @@ class _AdminMatchLineupScreenState extends State<AdminMatchLineupScreen>
   bool _isSelectedInSubs(String playerId) =>
       _subs.any((e) => e.playerId == playerId);
 
-  String _playerKey(PlayerModel p) {
-    final pid = (p.phone ?? p.id).trim();
-    return pid.isEmpty ? p.id.trim() : pid;
-  }
+  String _playerKey(PlayerModel p) => p.id.trim();
 
   void _removeFrom(List<_LineupEntry> list, String playerId) {
     setState(() {

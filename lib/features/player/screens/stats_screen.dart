@@ -73,25 +73,19 @@ class _StatsViewState extends State<StatsView> {
     _playersKey = key;
     return _playersFuture = () async {
       if (ids.isEmpty) return const <String, _PlayerLite>{};
-      // İstatistik anahtarı oyuncunun telefonu, telefonu yoksa id'si.
+      // İstatistik anahtarı oyuncu id'si (telefon tablodan okunmaz).
       final uuid = RegExp(
         r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
         caseSensitive: false,
       );
       final byId = ids.where(uuid.hasMatch).toList();
-      final byPhone = ids.where((k) => !uuid.hasMatch(k)).toList();
       final client = Supabase.instance.client;
       final rows = [
         if (byId.isNotEmpty)
           ...await client
               .from('players')
-              .select('id, phone, name, surname, photo_url')
+              .select('id, name, surname, photo_url')
               .inFilter('id', byId),
-        if (byPhone.isNotEmpty)
-          ...await client
-              .from('players')
-              .select('id, phone, name, surname, photo_url')
-              .inFilter('phone', byPhone),
       ];
       final out = <String, _PlayerLite>{};
       for (final r in rows) {
@@ -102,10 +96,8 @@ class _StatsViewState extends State<StatsView> {
           ].where((e) => e.isNotEmpty).join(' '),
           photoUrl: (r['photo_url'] ?? '').toString().trim(),
         );
-        for (final k in [r['id'], r['phone']]) {
-          final key = (k ?? '').toString().trim();
-          if (key.isNotEmpty) out[key] = p;
-        }
+        final key = (r['id'] ?? '').toString().trim();
+        if (key.isNotEmpty) out[key] = p;
       }
       _playersKnown.addAll(out);
       return out;

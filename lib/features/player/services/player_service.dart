@@ -1,6 +1,7 @@
 import '../../../core/utils/table_feed.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../player_columns.dart';
 import '../../match/models/match.dart';
 
 class PlayerService {
@@ -12,9 +13,12 @@ class PlayerService {
   Stream<List<PlayerModel>> watchAllFootballers({String? caller}) {
     try {
       // Önce normal sorgu, canlı bağlantı arkadan (bkz. watchTableRows).
-      return watchTableRows(_client, table: 'players', orderBy: 'name').map((
-        rows,
-      ) {
+      return watchTableRows(
+        _client,
+        table: 'players',
+        orderBy: 'name',
+        columns: kPlayerColumns,
+      ).map((rows) {
         final list = <PlayerModel>[];
         for (final r in rows) {
           final row = Map<String, dynamic>.from(r);

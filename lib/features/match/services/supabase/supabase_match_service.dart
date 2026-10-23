@@ -1430,9 +1430,6 @@ class SupabaseMatchService implements IMatchService {
     return _SeasonApply.applied;
   }
 
-  /// Oyuncu id → ekranların kullandığı anahtar (telefon, yoksa id).
-  final Map<String, String> _playerKeyCache = {};
-
   /// [events] yalnızca bu sezonun maç olaylarıdır.
   ///
   /// Maç sayısı oynanmış maçların kadrolarından (esame) gelir; kadrosu
@@ -1537,26 +1534,9 @@ class SupabaseMatchService implements IMatchService {
     playerIds.remove('');
     if (playerIds.isEmpty) return const <PlayerStats>[];
 
-    // Ekranlar oyuncuyu "playerPhone" ile arar; telefon yoksa id kullanılır
-    // (getPlayerByPhoneOnce ikisini de çözer).
-    // Yalnızca bilinmeyen oyuncular sorgulanır (canlı maçta her olayda
-    // yeniden hesaplanır).
-    final keyById = _playerKeyCache;
-    final missing = playerIds.where((id) => !keyById.containsKey(id));
-    if (missing.isNotEmpty) {
-      try {
-        final res = await _client
-            .from('players')
-            .select('id, phone')
-            .inFilter('id', missing.toList());
-        for (final any in res) {
-          final r = (any as Map).cast<String, dynamic>();
-          final id = (r['id'] ?? '').toString();
-          final phone = (r['phone'] ?? '').toString().trim();
-          keyById[id] = phone.isEmpty ? id : phone;
-        }
-      } catch (_) {}
-    }
+    // Ekranlar oyuncuyu "playerPhone" alanıyla arar; anahtar artık her
+    // zaman oyuncu id'si (telefon tablodan okunmaz).
+    final keyById = <String, String>{for (final id in playerIds) id: id};
 
     int readInt(dynamic v) =>
         v is num ? v.toInt() : int.tryParse('${v ?? ''}') ?? 0;

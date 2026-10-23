@@ -66,14 +66,17 @@ Future<void> showPlayerCard(
   final isId = RegExp(
     r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
   ).hasMatch(key);
-  final future = Supabase.instance.client
-      .from('players')
-      .select(
-        'id, name, surname, photo_url, birth_date, height, weight, '
-        'main_position, sub_position',
-      )
-      .eq(isId ? 'id' : 'phone', key)
-      .limit(1);
+  // Oyuncu yalnız id ile açılır (telefon tablodan okunmaz).
+  final Future<List<Map<String, dynamic>>> future = !isId
+      ? Future.value(const <Map<String, dynamic>>[])
+      : Supabase.instance.client
+            .from('players')
+            .select(
+              'id, name, surname, photo_url, birth_date, height, weight, '
+              'main_position, sub_position',
+            )
+            .eq('id', key)
+            .limit(1);
   return Navigator.of(context).push(
     MaterialPageRoute<void>(
       builder: (ctx) => Scaffold(
@@ -317,20 +320,9 @@ class _PlayerCardState extends State<PlayerCard> {
   /// - Oynanan maç: esamede (match_rosters) olduğu ya da olayı bulunan bitmiş
   ///   maçlar
   /// Olayı olmayan sezonlarda player_season_stats kayıtları kullanılır.
-  /// Kart telefon ya da id ile açılabiliyor; id'ye çevirir.
-  Future<String?> _resolvePlayerId(String key) async {
-    if (_uuidLike.hasMatch(key)) return key;
-    try {
-      final r = await _sb
-          .from('players')
-          .select('id')
-          .eq('phone', key)
-          .limit(1);
-      return r.isEmpty ? null : (r.first['id'] ?? '').toString();
-    } catch (_) {
-      return null;
-    }
-  }
+  /// Kart oyuncu id'siyle açılır (telefonla eşleştirme yok).
+  Future<String?> _resolvePlayerId(String key) async =>
+      _uuidLike.hasMatch(key) ? key : null;
 
   Future<Map<String, _StatTotals>> _loadTotalsBySeason(String pid) async {
     final events = <Map<String, dynamic>>[];

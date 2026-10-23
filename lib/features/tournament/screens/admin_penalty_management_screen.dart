@@ -11,6 +11,7 @@ import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/custom_popup_selector.dart';
 import '../../../core/widgets/web_safe_image.dart';
+import '../../player/player_columns.dart';
 import '../../player/services/penalty_service.dart';
 
 class AdminPenaltyManagementScreen extends StatefulWidget {
@@ -302,7 +303,10 @@ class _AdminPenaltyManagementScreenState
         .toSet()
         .toList();
     if (ids.isEmpty) return const <String, Map<String, dynamic>>{};
-    final res = await _sb.from('players').select().inFilter('id', ids);
+    final res = await _sb
+        .from('players')
+        .select(kPlayerColumns)
+        .inFilter('id', ids);
     final out = <String, Map<String, dynamic>>{};
     for (final r in res) {
       final row = (r as Map).cast<String, dynamic>();

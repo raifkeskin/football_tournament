@@ -63,9 +63,14 @@ Stream<List<Map<String, dynamic>>> watchTableRows(
   String? orderBy,
   bool ascending = true,
   List<String>? broadcastTopics,
+
+  /// Okunacak sütunlar (null: hepsi). Kişisel veri sütunu olan tablolarda
+  /// (players) yalnız açık sütunlar istenir.
+  String? columns,
 }) {
   final key =
-      '$table|$column=$value|$orderBy|$ascending|${broadcastTopics?.join(',')}';
+      '$table|$column=$value|$orderBy|$ascending|${broadcastTopics?.join(',')}'
+      '${columns == null ? '' : '|$columns'}';
   // Görünen satırlar hesaba bağlı (gizli turnuva vb.): bellekteki akış ve
   // liste kullanıcıya göre ayrılır. Yoksa hesap değişince önceki hesabın
   // listesi, yeni hesabın (değişmemiş) sürüm damgasıyla geçerli sayılıyordu.
@@ -82,7 +87,7 @@ Stream<List<Map<String, dynamic>>> watchTableRows(
       const pageSize = 1000;
       final list = <Map<String, dynamic>>[];
       for (var from = 0; ; from += pageSize) {
-        var query = client.from(table).select();
+        var query = client.from(table).select(columns ?? '*');
         if (column != null && value != null) query = query.eq(column, value);
         final page = orderBy == null
             ? await query.range(from, from + pageSize - 1)
@@ -119,7 +124,10 @@ Stream<List<Map<String, dynamic>>> watchTableRows(
           ? cached
           : await fetch();
       if (!identical(rows, cached)) yield rows;
-      await for (final change in _withLocal(
+      // Yalnız istenen sütunlar listeye girer (realtime satırın tamamını
+      // getirir).
+      final keep = columns?.split(',').map((c) => c.trim()).toSet();
+      await for (final raw in _withLocal(
         table,
         realtimeRowChanges(
           client,
@@ -129,6 +137,12 @@ Stream<List<Map<String, dynamic>>> watchTableRows(
           broadcastTopics: broadcastTopics,
         ),
       )) {
+        final change = keep == null
+            ? raw
+            : RowChange(raw.type, {
+                for (final e in raw.newRow.entries)
+                  if (keep.contains(e.key)) e.key: e.value,
+              }, raw.oldRow);
         final next = applyRowChange(
           rows,
           change,

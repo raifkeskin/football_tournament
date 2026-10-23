@@ -332,13 +332,8 @@ class TeamStatsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // İstatistik anahtarı oyuncunun telefonu (yoksa id'si); ikisini de
-    // oyuncu id'sine çevir.
-    final idByKey = <String, String>{
-      for (final p in players) p.id: p.id,
-      for (final p in players)
-        if ((p.phone ?? '').trim().isNotEmpty) p.phone!.trim(): p.id,
-    };
+    // İstatistik anahtarı oyuncu id'si.
+    final idByKey = <String, String>{for (final p in players) p.id: p.id};
     return StreamBuilder<List<PlayerStats>>(
       stream: ServiceLocator.matchService.watchPlayerStats(
         tournamentId: seasonId,
