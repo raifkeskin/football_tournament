@@ -82,12 +82,21 @@ Stream<List<Map<String, dynamic>>> watchTableRows(
     Future<List<Map<String, dynamic>>> fetch() async {
       // Sürüm, veriyle aynı anda istenir (fazladan tur yok).
       final stampF = scopes == null ? null : DataVersions.stamp(scopes);
-      var query = client.from(table).select(columns ?? '*');
-      if (column != null && value != null) query = query.eq(column, value);
-      final rows = orderBy == null
-          ? await query
-          : await query.order(orderBy, ascending: ascending);
-      final list = rows.map((e) => Map<String, dynamic>.from(e)).toList();
+      // Sunucu tek istekte en fazla 1000 satır döner: sayfa sayfa okunur
+      // (ör. 1000'den fazla oyuncu olduğunda liste kesilmesin).
+      const pageSize = 1000;
+      final list = <Map<String, dynamic>>[];
+      for (var from = 0; ; from += pageSize) {
+        var query = client.from(table).select(columns ?? '*');
+        if (column != null && value != null) query = query.eq(column, value);
+        final page = orderBy == null
+            ? await query.range(from, from + pageSize - 1)
+            : await query
+                  .order(orderBy, ascending: ascending)
+                  .range(from, from + pageSize - 1);
+        list.addAll(page.map((e) => Map<String, dynamic>.from(e)));
+        if (page.length < pageSize) break;
+      }
       _cache[memKey] = list;
       if (scopes != null) {
         final stamp = await stampF;
