@@ -56,13 +56,22 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
   Future<List<Map<String, dynamic>>> _fetchTeamsOnce() async {
     final client = Supabase.instance.client;
     // Kurucu / bölge sorumlusu yalnızca kendi takımlarını görür.
-    final allowed = await PanelScope.teamIds(AppSession.of(context).value);
+    final session = AppSession.of(context).value;
+    final scope = await Future.wait<Object?>([
+      PanelScope.teamIds(session),
+      // Yalnız pasif turnuvalarda yer alan takımlar admin dahil gizlenir.
+      PanelScope.hiddenTeamIds(),
+    ]);
+    final allowed = scope[0] as Set<String>?;
+    final hidden = scope[1] as Set<String>;
     final res = await client.from('teams').select();
     final teams =
         res
             .map((e) => Map<String, dynamic>.from((e as Map)))
             .where(
-              (t) => allowed == null || allowed.contains(t['id'].toString()),
+              (t) =>
+                  !hidden.contains(t['id'].toString()) &&
+                  (allowed == null || allowed.contains(t['id'].toString())),
             )
             .toList()
           ..sort(
