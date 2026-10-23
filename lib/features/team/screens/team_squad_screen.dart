@@ -25,6 +25,8 @@ import '../../match/models/match.dart';
 import '../../player/widgets/player_card.dart';
 import '../../../core/services/app_session.dart';
 import '../../../core/services/panel_scope.dart';
+import '../../../core/widgets/list_filter.dart';
+import '../../identity/identity_service.dart';
 import '../../../core/services/image_upload_service.dart';
 import '../models/team.dart';
 import '../services/interfaces/i_team_service.dart';
@@ -3538,21 +3540,92 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
   /// (admin için null: hepsi).
   Future<Set<String>?>? _allowedPlayers;
 
-  /// Yalnız pasif turnuvalarda yer alan oyuncular (admin dahil gizlenir).
-  Set<String> _hiddenPlayers = const {};
+  /// Etkin sezon üyelikleri (Kadroda / Boşta, turnuva filtresi).
+  late final Future<PanelMemberships> _memberships = PanelMemberships.load();
+
+  /// Filtre seçimi (bölüm → değer; yoksa bölümün varsayılanı).
+  Map<String, String> _filter = const {};
+
+  Future<_LicenseStatus>? _statusFuture;
+  int _statusKey = 0;
+
+  /// Liste oyuncularının onay / kimlik durumu ve üyelikler; oyuncu kümesi
+  /// değişmedikçe yeniden okunmaz (aramada sorgu atılmaz).
+  Future<_LicenseStatus> _statusFor(List<String> ids) {
+    final key = Object.hashAllUnordered(ids);
+    if (_statusFuture != null && key == _statusKey) return _statusFuture!;
+    _statusKey = key;
+    return _statusFuture = () async {
+      final r = await Future.wait<Object>([
+        _consentCache.of(ids),
+        IdentityService.verifiedAmong(ids),
+        _memberships,
+      ]);
+      return _LicenseStatus(
+        r[0] as Map<String, ConsentStatus>,
+        r[1] as Set<String>,
+        r[2] as PanelMemberships,
+      );
+    }();
+  }
+
+  List<ListFilterSection> _sections(
+    bool isAdmin,
+    PanelMemberships? mem,
+    List<PlayerModel> scoped,
+  ) {
+    final leagueIds =
+        <String>{
+          if (mem != null)
+            for (final p in scoped) ...mem.leaguesOf(mem.players[p.id]),
+        }.toList()..sort(
+          (a, b) => (mem!.leagues[a] ?? '').compareTo(mem.leagues[b] ?? ''),
+        );
+    return [
+      if (isAdmin)
+        const ListFilterSection(
+          key: 'roster',
+          label: 'Kadro durumu',
+          options: [('in', 'Kadroda'), ('free', 'Boşta'), ('all', 'Tümü')],
+          defaultValue: 'in',
+          hint: 'Boşta: hiçbir etkin turnuva kadrosunda olmayan oyuncu.',
+        ),
+      if (leagueIds.length > 1)
+        ListFilterSection(
+          key: 'league',
+          label: 'Turnuva',
+          dropdown: true,
+          options: [
+            ('all', 'Tüm turnuvalar'),
+            for (final id in leagueIds) (id, mem!.leagues[id] ?? id),
+          ],
+          defaultValue: 'all',
+        ),
+      const ListFilterSection(
+        key: 'profile',
+        label: 'Kimlik',
+        options: [('all', 'Tümü'), ('ver', 'Onaylı'), ('unv', 'Onaysız')],
+        defaultValue: 'all',
+      ),
+      const ListFilterSection(
+        key: 'account',
+        label: 'Hesap',
+        options: [('all', 'Tümü'), ('yes', 'Hesabı var'), ('no', 'Hesap yok')],
+        defaultValue: 'all',
+      ),
+      const ListFilterSection(
+        key: 'kvkk',
+        label: 'KVKK onayı',
+        options: [('all', 'Tümü'), ('ok', 'Onaylı'), ('wait', 'Bekliyor')],
+        defaultValue: 'all',
+      ),
+    ];
+  }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _allowedPlayers ??= () async {
-      final session = AppSession.of(context).value;
-      final r = await Future.wait<Object?>([
-        PanelScope.playerIds(session),
-        PanelScope.hiddenPlayerIds(),
-      ]);
-      _hiddenPlayers = r[1] as Set<String>;
-      return r[0] as Set<String>?;
-    }();
+    _allowedPlayers ??= PanelScope.playerIds(AppSession.of(context).value);
   }
 
   @override
@@ -3671,51 +3744,100 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
                                   );
                                 }
                                 final allowed = allowedSnap.data;
-                                final q = _norm(_q);
-                                final list =
-                                    snap.data!
-                                        .where(
-                                          (p) =>
-                                              !_hiddenPlayers.contains(p.id) &&
-                                              (allowed == null ||
-                                                  allowed.contains(p.id)),
-                                        )
-                                        .where(
-                                          (p) =>
-                                              q.isEmpty ||
-                                              _norm(p.name).contains(q),
-                                        )
-                                        .toList()
-                                      ..sort(
-                                        (a, b) => a.name
-                                            .toLowerCase()
-                                            .compareTo(b.name.toLowerCase()),
-                                      );
-
-                                if (list.isEmpty) {
-                                  return const Center(
-                                    child: Text(
-                                      'Futbolcu bulunamadı.',
-                                      style: TextStyle(color: Colors.white54),
-                                    ),
-                                  );
-                                }
-                                // Durum tüm futbolcular için bir kez yüklenir (aramada
-                                // yeniden sorgu atılmaz).
-                                final all = snap.data!
+                                final scoped = snap.data!
                                     .where(
                                       (p) =>
                                           allowed == null ||
                                           allowed.contains(p.id),
                                     )
-                                    .map((p) => p.id);
-                                return FutureBuilder(
-                                  future: _consentCache.of(all),
+                                    .toList();
+                                return FutureBuilder<_LicenseStatus>(
+                                  future: _statusFor([
+                                    for (final p in scoped) p.id,
+                                  ]),
                                   builder: (context, cs) {
-                                    final st = cs.data ?? const {};
+                                    final st = cs.data?.consent ?? const {};
+                                    final verified =
+                                        cs.data?.verified ?? const <String>{};
+                                    final mem = cs.data?.memberships;
                                     final showBanner = st.values.any(
                                       (s) => !s.complete,
                                     );
+                                    final sections = _sections(
+                                      isAdmin,
+                                      mem,
+                                      scoped,
+                                    );
+                                    String val(
+                                      Map<String, String> v,
+                                      String key,
+                                    ) =>
+                                        v[key] ??
+                                        sections
+                                            .where((x) => x.key == key)
+                                            .map((x) => x.defaultValue)
+                                            .firstOrNull ??
+                                        'all';
+                                    bool match(
+                                      PlayerModel p,
+                                      Map<String, String> v,
+                                    ) {
+                                      final seasons = mem?.players[p.id];
+                                      final inRoster =
+                                          seasons != null && seasons.isNotEmpty;
+                                      final roster = val(v, 'roster');
+                                      if (mem != null) {
+                                        if (roster == 'in' && !inRoster) {
+                                          return false;
+                                        }
+                                        if (roster == 'free' && inRoster) {
+                                          return false;
+                                        }
+                                        final league = val(v, 'league');
+                                        if (league != 'all' &&
+                                            !mem
+                                                .leaguesOf(seasons)
+                                                .contains(league)) {
+                                          return false;
+                                        }
+                                      }
+                                      final profile = val(v, 'profile');
+                                      if (profile != 'all' &&
+                                          (profile == 'ver') !=
+                                              verified.contains(p.id)) {
+                                        return false;
+                                      }
+                                      final c = st[p.id];
+                                      final account = val(v, 'account');
+                                      if (account != 'all' &&
+                                          (account == 'yes') !=
+                                              (c?.hasAccount ?? false)) {
+                                        return false;
+                                      }
+                                      final kvkk = val(v, 'kvkk');
+                                      if (kvkk != 'all' &&
+                                          (kvkk == 'ok') !=
+                                              (c?.complete ?? false)) {
+                                        return false;
+                                      }
+                                      return true;
+                                    }
+
+                                    final q = _norm(_q);
+                                    bool byName(PlayerModel p) =>
+                                        q.isEmpty || _norm(p.name).contains(q);
+                                    final list =
+                                        scoped
+                                            .where((p) => match(p, _filter))
+                                            .where(byName)
+                                            .toList()
+                                          ..sort(
+                                            (a, b) =>
+                                                a.name.toLowerCase().compareTo(
+                                                  b.name.toLowerCase(),
+                                                ),
+                                          );
+                                    final head = (showBanner ? 1 : 0) + 1;
                                     // Sağ alttaki düğmeler son kartı kapatmasın.
                                     return ListView.builder(
                                       padding: const EdgeInsets.only(
@@ -3724,7 +3846,8 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
                                             2 * kAdminFabStep,
                                       ),
                                       itemCount:
-                                          list.length + (showBanner ? 1 : 0),
+                                          head +
+                                          (list.isEmpty ? 1 : list.length),
                                       itemBuilder: (context, i) {
                                         if (showBanner && i == 0) {
                                           return Padding(
@@ -3736,11 +3859,51 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
                                             ),
                                           );
                                         }
-                                        final p =
-                                            list[i - (showBanner ? 1 : 0)];
+                                        if (i == head - 1) {
+                                          return Padding(
+                                            padding: const EdgeInsets.only(
+                                              bottom: 10,
+                                            ),
+                                            child: ListFilterBar(
+                                              title: 'Futbolcuları filtrele',
+                                              unit: 'futbolcu',
+                                              sections: (v) => _sections(
+                                                isAdmin,
+                                                mem,
+                                                scoped,
+                                              ),
+                                              values: _filter,
+                                              onChanged: (v) =>
+                                                  setState(() => _filter = v),
+                                              count: (v) => scoped
+                                                  .where((p) => match(p, v))
+                                                  .where(byName)
+                                                  .length,
+                                            ),
+                                          );
+                                        }
+                                        if (list.isEmpty) {
+                                          return const Padding(
+                                            padding: EdgeInsets.only(top: 40),
+                                            child: Center(
+                                              child: Text(
+                                                'Futbolcu bulunamadı.',
+                                                style: TextStyle(
+                                                  color: Colors.white54,
+                                                ),
+                                              ),
+                                            ),
+                                          );
+                                        }
+                                        final p = list[i - head];
+                                        final seasons = mem?.players[p.id];
                                         return _licenseCard(
                                           p,
                                           consent: st[p.id],
+                                          free:
+                                              mem != null &&
+                                              (seasons == null ||
+                                                  seasons.isEmpty),
                                         );
                                       },
                                     );
@@ -3760,7 +3923,11 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
     );
   }
 
-  Widget _licenseCard(PlayerModel p, {ConsentStatus? consent}) {
+  Widget _licenseCard(
+    PlayerModel p, {
+    ConsentStatus? consent,
+    bool free = false,
+  }) {
     const accent = Color(0xFF10B981);
     final photo = _normalizeUrl((p.photoUrl ?? '').trim());
     return Container(
@@ -3821,6 +3988,27 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
                         if (consent != null && !consent.complete) ...[
                           const SizedBox(width: 6),
                           ConsentChip(status: consent),
+                        ],
+                        if (free) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF22304A),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: const Text(
+                              'Boşta',
+                              style: TextStyle(
+                                color: Color(0xFFCBD5E1),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
                         ],
                       ],
                     ),
@@ -4820,4 +5008,13 @@ class _PickerHint extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Lisans listesinin durum verisi: KVKK / hesap, kimlik onayı, üyelikler.
+class _LicenseStatus {
+  const _LicenseStatus(this.consent, this.verified, this.memberships);
+
+  final Map<String, ConsentStatus> consent;
+  final Set<String> verified;
+  final PanelMemberships memberships;
 }
