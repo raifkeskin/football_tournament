@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/app_navigator.dart';
+import '../../../core/widgets/youtube_player_page.dart';
 
 /// YZ'nin maç videosunda bulduğu an (şimdilik gol). Video kesilmez; YouTube
 /// yayınının [startSec]–[endSec] aralığı oynatılır.
@@ -212,6 +213,36 @@ class MatchHighlightService {
         .eq('match_id', matchId)
         .eq('event_type', 'goal');
     return (rows as List).length;
+  }
+
+  /// Maçın YouTube yayın linkinin video kimliği (yoksa null).
+  static Future<String?> streamVideoId(String matchId) async {
+    try {
+      final rows = await _db
+          .from('match_media')
+          .select('url')
+          .eq('match_id', matchId)
+          .eq('media_type', 'Maç Yayın Linki');
+      for (final r in rows as List) {
+        final id = youtubeVideoId((r['url'] ?? '').toString());
+        if (id != null) return id;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Otomatik tarama durumu: 'running' sürüyor, 'pending' yayın bitince /
+  /// yeniden denenecek; null yok.
+  static Future<String?> autoStatus(String matchId) async {
+    try {
+      final v = await _db.rpc(
+        'highlights_auto_status',
+        params: {'p_match_id': matchId},
+      );
+      return v?.toString();
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Analizi başlatır; iş arka planda sürer. Hata metnini döner (yoksa null).
