@@ -35,7 +35,6 @@ import '../services/supabase/supabase_team_service.dart';
 import '../../../core/utils/resilient_stream.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/app_date_picker.dart';
-import '../../../core/widgets/tc_masked_field.dart';
 import '../../../core/widgets/app_name_band.dart';
 import '../../../core/widgets/web_safe_image.dart';
 
@@ -2178,7 +2177,6 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
 
   final _nameController = TextEditingController();
   final _surnameController = TextEditingController();
-  final _identityNoController = TextEditingController();
   final _numberController = TextEditingController();
   final _birthDateController = TextEditingController();
   final _phoneController = TextEditingController();
@@ -2210,7 +2208,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
   bool _removePhoto = false;
   bool _saving = false;
 
-  /// Açık sekme: 0 Kimlik, 1 Oyun.
+  /// Açık sekme: 0 Kimlik, 1 Özellik, 2 Profil (fotoğraf).
   int _tab = 0;
 
   /// Düzenlemede açılıştaki kişisel bilgiler; yalnızca forma no değiştiyse
@@ -2221,7 +2219,6 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
   String _identitySnapshot() => [
     _nameController.text.trim(),
     _surnameController.text.trim(),
-    _identityNoController.text.trim(),
     _birthDateController.text.trim(),
     _phoneController.text.trim(),
     _heightController.text.trim(),
@@ -2315,7 +2312,6 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
     super.initState();
     final e = widget.editing;
     if (e != null) {
-      _identityNoController.text = (e.nationalId ?? '').toString();
       final full = e.name.trim().replaceAll(RegExp(r'\s+'), ' ');
       final parts = full.isEmpty ? const <String>[] : full.split(' ');
       _nameController.text = parts.isEmpty ? '' : parts.first;
@@ -2364,7 +2360,6 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
   void dispose() {
     _nameController.dispose();
     _surnameController.dispose();
-    _identityNoController.dispose();
     _numberController.dispose();
     _birthDateController.dispose();
     _phoneController.dispose();
@@ -2417,14 +2412,6 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
   }
 
   Future<void> _save() async {
-    final nationalId = _identityNoController.text
-        .replaceAll(RegExp(r'\D'), '')
-        .trim();
-    if (nationalId.isNotEmpty && nationalId.length != 11) {
-      _showError('Kimlik no 11 haneli olmalı.', tab: 0);
-      return;
-    }
-
     final firstName = _nameController.text.trim();
     final surname = _surnameController.text.trim();
     if (firstName.isEmpty || surname.isEmpty) {
@@ -2508,7 +2495,6 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
         await _teamService.upsertPlayerIdentity(
           phone: keyPhone,
           name: fullName,
-          nationalId: nationalId.isEmpty ? null : nationalId,
           birthDate: resolvedBirthDate,
           mainPosition: resolvedMainPosition,
           preferredFoot: _preferredFoot.trim().isEmpty
@@ -2542,7 +2528,6 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
             'weight': int.tryParse(
               _weightController.text.replaceAll(RegExp(r'\D'), '').trim(),
             ),
-            'national_id': nationalId.isEmpty ? null : nationalId,
           },
         );
       }
@@ -2797,7 +2782,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                   ),
                   const SizedBox(height: 14),
                   AdminFormTabs(
-                    labels: const ['Kimlik', 'Oyun'],
+                    labels: const ['Kimlik', 'Özellik', 'Profil'],
                     selected: _tab,
                     onChanged: _saving ? null : (i) => setState(() => _tab = i),
                   ),
@@ -2808,9 +2793,8 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
                 children: [
+                  if (_tab == 2) Center(child: _photoCard()),
                   if (_tab == 0) ...[
-                    Center(child: _photoCard()),
-                    const SizedBox(height: 16),
                     AdminFormSection(
                       title: 'Kimlik',
                       child: AdminFieldGroup(
@@ -2828,25 +2812,6 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                             controller: _surnameController,
                             hint: 'Soyad',
                             capitalization: TextCapitalization.words,
-                          ),
-                          // İlk 2 ve son 3 hane dışı gizli; yazılan
-                          // rakam 1 sn görünür.
-                          AdminFieldRow(
-                            icon: Icons.badge_outlined,
-                            label: 'Kimlik No',
-                            child: TcMaskedField(
-                              controller: _identityNoController,
-                              enabled: !_saving,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 1,
-                              ),
-                              decoration: adminInlineInputDecoration(
-                                hint: '11 haneli',
-                              ),
-                            ),
                           ),
                           _textRow(
                             icon: Icons.cake_outlined,
@@ -2900,7 +2865,7 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                     ),
                   if (_tab == 1)
                     AdminFormSection(
-                      title: 'Oyun',
+                      title: 'Özellik',
                       child: AdminFieldGroup(
                         children: [
                           AdminSelectRow(
