@@ -4745,8 +4745,35 @@ class _DetailTabView extends StatelessWidget {
                       : match.homeTeamId)
                 : teamId;
             final eventId = system ? '' : _readString(e['id']);
+            String? idOf(String snake, String camel) {
+              final s = _readString(e[snake]).isNotEmpty
+                  ? _readString(e[snake])
+                  : _readString(e[camel]);
+              return s.isEmpty ? null : s;
+            }
+
             return _DetailEventTile(
               eventId: eventId,
+              // Uzun basınca açılan düzenleme formu için olayın ham hali.
+              event: eventId.isEmpty
+                  ? null
+                  : MatchEvent(
+                      id: eventId,
+                      matchId: match.id,
+                      teamId: teamId,
+                      eventType: pickType(e),
+                      minute: minute,
+                      addedMinute: readAddedMinute(e),
+                      eventName: title,
+                      playerId: idOf('player_id', 'playerId'),
+                      assistPlayerId: idOf(
+                        'assist_player_id',
+                        'assistPlayerId',
+                      ),
+                      subInPlayerId: idOf('sub_in_player_id', 'subInPlayerId'),
+                      isOwnGoal: isOwnGoal,
+                      isPenalty: isPenalty,
+                    ),
               clip: type == 'goal' ? clips[eventId] : null,
               regionOwner: regionOwner,
               isPenalty: type == 'goal' && isPenalty,
@@ -5099,6 +5126,7 @@ class _SummaryRow {
 class _DetailEventTile extends StatelessWidget {
   /// Dolu ise yetkili kullanıcı uzun basarak olayı silebilir.
   final String eventId;
+  final MatchEvent? event;
   final MatchModel match;
 
   /// Penaltı golü: top yerine penaltı noktası ikonu.
@@ -5133,6 +5161,7 @@ class _DetailEventTile extends StatelessWidget {
   final bool regionOwner;
   const _DetailEventTile({
     required this.eventId,
+    this.event,
     this.clip,
     this.regionOwner = false,
     required this.match,
@@ -5509,11 +5538,8 @@ class _DetailEventTile extends StatelessWidget {
     // Gol iptali skor tetikleyicisi canlı DB'ye uygulanana kadar yalnız admin.
     final canVarGoal = type == 'goal' && session.isAdmin;
     final canVarCard = type == 'red_card';
-    // Dakika düzeltme: maçın adamında ve dakika tutulmayan sezonda yok.
-    final canEditMinute =
-        type != 'man_of_the_match' &&
-        !system &&
-        (SeasonMatchSettings.cached(match.seasonId)?.tracksGoalMinutes ?? true);
+    // Düzenleme: olay giriş formu kayıtlı değerlerle açılır.
+    final canEdit = !system && event != null;
     final (IconData icon, String kind) = switch (type) {
       'goal' => (Icons.sports_soccer, 'Gol'),
       'goal_cancelled' => (Icons.tv_off_rounded, 'VAR ile iptal edilen gol'),
@@ -5579,11 +5605,11 @@ class _DetailEventTile extends StatelessWidget {
               children: [
                 AdminDialogHeader(icon: icon, title: subject, subtitle: kind),
                 const SizedBox(height: 6),
-                if (canEditMinute)
+                if (canEdit)
                   action(
                     ctx,
                     'edit',
-                    'DAKİKAYI DÜZENLE',
+                    'DÜZENLE',
                     Icons.edit_rounded,
                     kAdminAccent,
                   ),
@@ -5659,46 +5685,9 @@ class _DetailEventTile extends StatelessWidget {
             ),
           );
         case 'edit':
-          final pattern = RegExp(r'^(\d{1,3})(?:\+(\d{1,2}))?$');
-          final value = await showAdminTextInputDialog(
+          await showDialog<void>(
             context: context,
-            title: 'Dakikayı düzenle',
-            subtitle: subject,
-            icon: Icons.edit_rounded,
-            label: 'Dakika',
-            fieldIcon: Icons.timer_outlined,
-            hint: 'Örn. 37 ya da 45+2',
-            initialValue: (addedMinute ?? 0) > 0
-                ? '$minute+$addedMinute'
-                : minute > 0
-                ? '$minute'
-                : '',
-            keyboardType: TextInputType.datetime,
-            inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'[0-9+]')),
-              LengthLimitingTextInputFormatter(6),
-            ],
-            validator: (v) {
-              final m = pattern.firstMatch(v.trim());
-              if (m == null) return "Dakikayı 37 ya da 45+2 gibi yazın.";
-              final base = int.parse(m.group(1)!);
-              final add = int.tryParse(m.group(2) ?? '');
-              if (base < 1 || base > 200) return 'Dakika 1-200 arası olmalı.';
-              if (add != null && (add < 1 || add > 30)) {
-                return 'Uzatma 1-30 arası olmalı.';
-              }
-              return null;
-            },
-          );
-          if (value == null) return;
-          final m = pattern.firstMatch(value.trim())!;
-          await svc.updateEventMinute(
-            eventId,
-            minute: int.parse(m.group(1)!),
-            added: int.tryParse(m.group(2) ?? ''),
-          );
-          messenger.showSnackBar(
-            const SnackBar(content: Text('Dakika güncellendi.')),
+            builder: (_) => AdminMatchEventScreen(match: match, event: event),
           );
         case 'restore':
           await svc.setGoalCancelled(eventId, cancelled: false);

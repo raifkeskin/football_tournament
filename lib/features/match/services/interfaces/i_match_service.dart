@@ -39,6 +39,10 @@ abstract class IMatchService {
     int? added,
   });
 
+  /// Olayın oyuncusunu, asistini, giren oyuncusunu ve dakikasını düzeltir.
+  /// Tür, takım ve skoru etkileyen alanlar değişmez.
+  Future<void> updateMatchEvent(MatchEvent event);
+
   /// Maçın geçerli golleri (dakika sırasıyla, oyuncu adıyla); VAR iptali
   /// için seçilir.
   Future<List<MatchEvent>> fetchGoalEvents(String matchId);
