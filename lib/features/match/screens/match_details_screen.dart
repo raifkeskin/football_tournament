@@ -38,6 +38,7 @@ import '../../share/lineup_poster.dart';
 import '../../share/match_poster.dart';
 import '../../share/match_result_poster.dart';
 import '../../share/poster_share.dart';
+import '../../share/pre_match_video.dart';
 import '../../share/squad_poster.dart';
 import '../../../core/utils/team_colors.dart';
 import '../../../core/widgets/pitch_token_style.dart';
@@ -1321,6 +1322,16 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                 // Maç afişi (öncesi ve sonucu): admin, turnuva sahibi ve
                 // maçtaki takımların sorumluları.
                 actions: [
+                  // Maç önü Reels videosu: şimdilik yalnız admin.
+                  if (session.isAdmin && m.status == MatchStatus.notStarted)
+                    IconButton(
+                      tooltip: 'Maç önü videosu',
+                      icon: const Icon(
+                        Icons.movie_creation_outlined,
+                        color: Colors.white,
+                      ),
+                      onPressed: () => openMatchPreviewVideo(m.id),
+                    ),
                   if (canManageLeague || managesHome || managesAway)
                     IconButton(
                       tooltip: m.status == MatchStatus.finished
@@ -5502,8 +5513,7 @@ class _DetailEventTile extends StatelessWidget {
     final canEditMinute =
         type != 'man_of_the_match' &&
         !system &&
-        (SeasonMatchSettings.cached(match.seasonId)?.tracksGoalMinutes ??
-            true);
+        (SeasonMatchSettings.cached(match.seasonId)?.tracksGoalMinutes ?? true);
     final (IconData icon, String kind) = switch (type) {
       'goal' => (Icons.sports_soccer, 'Gol'),
       'goal_cancelled' => (Icons.tv_off_rounded, 'VAR ile iptal edilen gol'),
