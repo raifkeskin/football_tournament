@@ -213,13 +213,24 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
     return p.id.trim();
   }
 
+  /// Bu maçın esamesindeki forma numaraları (sezon numarasından önce gelir;
+  /// Kadro sekmesi ve maç akışı da bunu gösterir).
+  Map<String, String> _matchNumbers = const {};
+
   List<LineupPlayer> _toLineupPlayers(List<PlayerModel> players) {
     final list = <LineupPlayer>[];
     for (final p in players) {
       final key = _playerKey(p);
       final name = p.name.trim();
       if (key.isEmpty || name.isEmpty) continue;
-      list.add(LineupPlayer(playerId: key, name: name, number: p.number));
+      final no = _matchNumbers[key];
+      list.add(
+        LineupPlayer(
+          playerId: key,
+          name: name,
+          number: (no != null && no.isNotEmpty) ? no : p.number,
+        ),
+      );
     }
     list.sort((a, b) {
       final an = int.tryParse((a.number ?? '').trim()) ?? 9999;
@@ -516,6 +527,11 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                 ),
           builder: (context, rosterSnap) {
             final rosters = rosterSnap.data ?? [];
+            _matchNumbers = {
+              for (final r in rosters)
+                if ((r.jerseyNumber ?? '').trim().isNotEmpty)
+                  r.playerId: r.jerseyNumber!.trim(),
+            };
             final rosterPlayerIds = rosters.map((r) => r.playerId).toSet();
             final startingIds = rosters
                 .where((r) => r.isStarting)
