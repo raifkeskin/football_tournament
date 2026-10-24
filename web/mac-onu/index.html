@@ -47,7 +47,7 @@ button:disabled{opacity:.5;cursor:default}
   <div class="cap" id="capBox" hidden>
     <label for="caption">Instagram açıklaması</label>
     <textarea id="caption" spellcheck="false"></textarea>
-    <p class="hint">Metni düzenleyebilirsin; takım hesaplarını @ ile ekle. Önce kopyala, sonra videoyu paylaş ve Instagram'da açıklama alanına yapıştır.</p>
+    <p class="hint">Metni düzenleyebilirsin. Takımın Instagram'ı Takımlar ekranında kayıtlıysa @etiketi kendiliğinden gelir. Önce kopyala, sonra videoyu paylaş ve Instagram'da açıklama alanına yapıştır.</p>
     <div class="btns"><button id="copyCap">Açıklamayı kopyala</button></div>
   </div>
 </main>
@@ -128,7 +128,7 @@ button:disabled{opacity:.5;cursor:default}
     var teamIds = [], pitchIds = [];
     matches.forEach(function (m) { teamIds.push(m.home_team_id, m.away_team_id); if (m.pitch_id) pitchIds.push(m.pitch_id); });
     return Promise.all([
-      get('teams?select=id,name,logo_url&id=in.' + inList(teamIds)),
+      get('teams?select=id,name,logo_url,instagram_url&id=in.' + inList(teamIds)),
       pitchIds.length ? get('pitches?select=id,name&id=in.' + inList(pitchIds)) : [],
       get('leagues?select=id,name,logo_url,instagram_url&id=eq.' + leagueId),
       get('match_weather?select=match_id,temp,description&match_id=in.' + inList(matches.map(function (m) { return m.id; })))
@@ -143,8 +143,8 @@ button:disabled{opacity:.5;cursor:default}
         return {
           id: m.id, date: m.match_date, time: hhmm(m.match_time), week: m.week,
           round: m.cup_round || m.cup_name || '', live: !!m.youtube_url,
-          home: { name: posterName(h.name), fullName: h.name || '', logoUrl: h.logo_url },
-          away: { name: posterName(a.name), fullName: a.name || '', logoUrl: a.logo_url },
+          home: { name: posterName(h.name), fullName: h.name || '', ig: igHandle(h.instagram_url), logoUrl: h.logo_url },
+          away: { name: posterName(a.name), fullName: a.name || '', ig: igHandle(a.instagram_url), logoUrl: a.logo_url },
           pitch: pitches[m.pitch_id] || '', weather: weatherText(weather[m.id])
         };
       });
@@ -630,8 +630,12 @@ button:disabled{opacity:.5;cursor:default}
       L.push('Canlı skor, kadrolar ve maç anları Lig Masası\'nda ⚽');
     }
     L.push('📲 Uygulamayı indirmek için profildeki linke dokun.');
-    var h = igHandle(d.league.instagram);
-    if (h) L.push('', h);
+    // Takım ve turnuva hesapları (Takımlar ekranındaki Instagram alanı).
+    var handles = [];
+    ms.forEach(function (m) { [m.home.ig, m.away.ig].forEach(function (x) { if (x && handles.indexOf(x) < 0) handles.push(x); }); });
+    var lh = igHandle(d.league.instagram);
+    if (lh && handles.indexOf(lh) < 0) handles.push(lh);
+    if (handles.length) L.push('', handles.join(' '));
     L.push('', tags.filter(Boolean).join(' '));
     return L.join('\n');
   }
