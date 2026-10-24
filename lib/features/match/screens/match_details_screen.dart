@@ -3567,6 +3567,15 @@ class _LineupTabState extends State<_LineupTab>
     super.didChangeDependencies();
     if (_regionChecked) return;
     _regionChecked = true;
+    // Takım sorumlusu kadro sekmesini kendi takımında açar.
+    final m0 = widget.match;
+    if (!widget.isSuperAdmin) {
+      if (_managesTeam(m0.homeTeamId)) {
+        _view = m0.homeTeamId;
+      } else if (_managesTeam(m0.awayTeamId)) {
+        _view = m0.awayTeamId;
+      }
+    }
     final session = AppSession.of(context).value;
     final m = widget.match;
     final groupId = (m.groupId ?? '').trim();
