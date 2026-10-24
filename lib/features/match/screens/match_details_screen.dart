@@ -1,3 +1,4 @@
+import '../widgets/quick_event_entry.dart';
 import '../widgets/quick_score_dialog.dart';
 import '../../../core/services/active_tournament.dart';
 import 'dart:async';
@@ -1369,6 +1370,19 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                       homeName: homeName,
                       awayName: awayName,
                     ),
+              // Canlı maçta yöneten yetkiliye hızlı olay girişi (Detay).
+              bottomNavigationBar:
+                  isSuperAdmin &&
+                      canControl &&
+                      _tabController.index == 0 &&
+                      (m.status == MatchStatus.live ||
+                          m.status == MatchStatus.halftime)
+                  ? QuickEventBar(
+                      match: m,
+                      homeName: homeName,
+                      awayName: awayName,
+                    )
+                  : null,
               body: Column(
                 children: [
                   // Alt köşeleri yuvarlak, gölgeli bant: içerikten net ayrılır.
@@ -3567,6 +3581,15 @@ class _LineupTabState extends State<_LineupTab>
     super.didChangeDependencies();
     if (_regionChecked) return;
     _regionChecked = true;
+    // Takım sorumlusu kadro sekmesini kendi takımında açar.
+    final m0 = widget.match;
+    if (!widget.isSuperAdmin) {
+      if (_managesTeam(m0.homeTeamId)) {
+        _view = m0.homeTeamId;
+      } else if (_managesTeam(m0.awayTeamId)) {
+        _view = m0.awayTeamId;
+      }
+    }
     final session = AppSession.of(context).value;
     final m = widget.match;
     final groupId = (m.groupId ?? '').trim();
@@ -3685,81 +3708,180 @@ class _LineupTabState extends State<_LineupTab>
             rivalName: widget.homeName,
           ),
         ],
-        // Takım başlıkları + VS
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Expanded(
-              child: _teamHeader(
-                name: widget.homeName,
-                color: _green,
-                teamId: m.homeTeamId,
-                alignEnd: false,
-              ),
-            ),
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 8),
-              width: 34,
-              height: 34,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFF1E293B), Color(0xFF064E3B)],
-                ),
-                border: Border.all(color: Colors.white24),
-              ),
-              child: const Text(
-                'VS',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 11,
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ),
-            Expanded(
-              child: _teamHeader(
-                name: widget.awayName,
-                color: _blue,
-                teamId: m.awayTeamId,
-                alignEnd: true,
-              ),
-            ),
-          ],
-        ),
+        _viewSwitch(m),
         const SizedBox(height: 10),
-        // İki kadro yan yana
-        IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: _TeamLineupColumn(
-                  match: m,
-                  teamId: m.homeTeamId,
-                  color: _green,
+        if (_view == null) ...[
+          // VS: iki ilk 11 yan yana; takım adına dokununca o takım açılır.
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _columnHead(widget.homeName, _green, m.homeTeamId),
+                      _TeamLineupColumn(
+                        match: m,
+                        teamId: m.homeTeamId,
+                        color: _green,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              Container(
-                width: 1,
-                margin: const EdgeInsets.symmetric(horizontal: 6),
-                color: Colors.white.withValues(alpha: 0.08),
-              ),
-              Expanded(
-                child: _TeamLineupColumn(
-                  match: m,
-                  teamId: m.awayTeamId,
-                  color: _blue,
+                Container(
+                  width: 1,
+                  margin: const EdgeInsets.symmetric(horizontal: 6),
+                  color: Colors.white.withValues(alpha: 0.08),
                 ),
-              ),
-            ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _columnHead(widget.awayName, _blue, m.awayTeamId),
+                      _TeamLineupColumn(
+                        match: m,
+                        teamId: m.awayTeamId,
+                        color: _blue,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ] else ...[
+          // Tek takım: başlık tam genişlikte, ilk 11 ve yedekler yan yana.
+          _teamHeader(
+            name: _view == m.homeTeamId ? widget.homeName : widget.awayName,
+            color: _view == m.homeTeamId ? _green : _blue,
+            teamId: _view!,
+            alignEnd: false,
+          ),
+          const SizedBox(height: 10),
+          _TeamLineupColumn(
+            key: ValueKey(_view),
+            match: m,
+            teamId: _view!,
+            color: _view == m.homeTeamId ? _green : _blue,
+            sideBySide: true,
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// Seçili görünüm: null iki takım yan yana (VS), değilse o takımın id'si.
+  String? _view;
+
+  /// Üstte Ev sahibi · VS · Deplasman sekmeleri (Diziliş'teki gibi).
+  Widget _viewSwitch(MatchModel m) {
+    Widget tab(String? id, Widget child, Color color) {
+      final on = _view == id;
+      return InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () => setState(() => _view = id),
+        child: Container(
+          height: 40,
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          decoration: BoxDecoration(
+            color: on ? const Color(0xFF1E293B) : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            border: on ? Border.all(color: color, width: 1.5) : null,
+          ),
+          child: DefaultTextStyle.merge(
+            style: TextStyle(
+              color: on ? Colors.white : Colors.white60,
+              fontWeight: FontWeight.w800,
+              fontSize: 13,
+            ),
+            child: child,
+          ),
+        ),
+      );
+    }
+
+    Widget team(String name, Color color) => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            shortTeamName(name),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       ],
+    );
+
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F172A),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: tab(m.homeTeamId, team(widget.homeName, _green), _green),
+          ),
+          const SizedBox(width: 4),
+          SizedBox(
+            width: 56,
+            child: tab(
+              null,
+              const Text('VS', style: TextStyle(letterSpacing: 0.5)),
+              Colors.white54,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: tab(m.awayTeamId, team(widget.awayName, _blue), _blue),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// VS görünümünde sütun başlığı: takım adı; dokununca o takım açılır.
+  Widget _columnHead(String name, Color color, String teamId) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () => setState(() => _view = teamId),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                shortTeamName(name),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, size: 18, color: color),
+          ],
+        ),
+      ),
     );
   }
 
@@ -4113,14 +4235,19 @@ class _LineupTabState extends State<_LineupTab>
 /// numarasına göre sıralı; sıkı satırlarla tüm ilk 11 tek ekrana sığar.
 class _TeamLineupColumn extends StatefulWidget {
   const _TeamLineupColumn({
+    super.key,
     required this.match,
     required this.teamId,
     required this.color,
+    this.sideBySide = false,
   });
 
   final MatchModel match;
   final String teamId;
   final Color color;
+
+  /// Tek takım görünümü: ilk 11 solda, yedekler sağda.
+  final bool sideBySide;
 
   @override
   State<_TeamLineupColumn> createState() => _TeamLineupColumnState();
@@ -4250,6 +4377,50 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
               ];
             }
 
+            if (widget.sideBySide) {
+              return IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _section('İlk ${starters.length}'),
+                          ...rows(starters, xi: true),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      width: 1,
+                      margin: const EdgeInsets.symmetric(horizontal: 6),
+                      color: Colors.white.withValues(alpha: 0.08),
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _section('Yedekler'),
+                          if (subs.isEmpty)
+                            const Padding(
+                              padding: EdgeInsets.only(top: 8),
+                              child: Text(
+                                'Yedek yok.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Colors.white54,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ...rows(subs),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -4696,7 +4867,7 @@ class _DetailTabView extends StatelessWidget {
 
         return ListView.separated(
           // Altta sağdaki menü düğmesi son satırları örtmesin.
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 104),
+          padding: const EdgeInsets.fromLTRB(12, 16, 12, 104),
           itemCount: normalized.length,
           separatorBuilder: (_, _) =>
               const SizedBox(height: 2, child: Center(child: _TimelineLine())),
@@ -5204,16 +5375,19 @@ class _DetailEventTile extends StatelessWidget {
         color: isIn ? const Color(0xFF22C55E) : const Color(0xFFEF4444),
       );
       final text = Flexible(
-        child: Text(
-          name,
-          overflow: TextOverflow.ellipsis,
-          style: isIn
-              ? const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)
-              : const TextStyle(
-                  fontSize: 11.5,
-                  color: Color(0xFF94A3B8),
-                  fontWeight: FontWeight.w500,
-                ),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            name,
+            maxLines: 1,
+            style: isIn
+                ? const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)
+                : const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF94A3B8),
+                    fontWeight: FontWeight.w500,
+                  ),
+          ),
         ),
       );
       return Row(
@@ -5244,22 +5418,25 @@ class _DetailEventTile extends StatelessWidget {
     final sub = (subtitle ?? '').trim();
     // VAR ile iptal edilen gol: ad soluk ve üstü çizili.
     final cancelled = type == 'goal_cancelled' || type == 'red_card_cancelled';
-    // Uzun ad kesilmez, en fazla iki satıra iner (rozete yaslı hizalanır).
-    final name = Text(
-      title.isEmpty ? '-' : title,
-      maxLines: 2,
-      textAlign: align == CrossAxisAlignment.end
-          ? TextAlign.right
-          : TextAlign.left,
-      style: TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.bold,
-        color: cancelled ? const Color(0xFF94A3B8) : null,
-        decoration: cancelled ? TextDecoration.lineThrough : null,
-        decorationColor: const Color(0xFFDC2626),
-        decorationThickness: 2,
+    // Ad tek satırda tam görünür (Kadro sekmesindeki gibi); yalnız sığmayan
+    // çok uzun ad, alana sığacak kadar küçülür.
+    final name = FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: align == CrossAxisAlignment.end
+          ? Alignment.centerRight
+          : Alignment.centerLeft,
+      child: Text(
+        title.isEmpty ? '-' : title,
+        maxLines: 1,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+          color: cancelled ? const Color(0xFF94A3B8) : null,
+          decoration: cancelled ? TextDecoration.lineThrough : null,
+          decorationColor: const Color(0xFFDC2626),
+          decorationThickness: 2,
+        ),
       ),
-      overflow: TextOverflow.ellipsis,
     );
     return Column(
       mainAxisSize: MainAxisSize.min,
