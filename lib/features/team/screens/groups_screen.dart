@@ -9,6 +9,7 @@ import 'team_squad_screen.dart';
 
 import '../../../core/widgets/web_safe_image.dart';
 import '../utils/standings.dart';
+import '../services/team_directory.dart';
 import '../../share/poster_background.dart';
 import '../../share/poster_share.dart';
 import '../../share/standings_poster.dart';
@@ -198,6 +199,18 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
     super.initState();
     _initStreams();
     _loadFormat();
+    if (widget.includeLive) TeamDirectory.known.addListener(_onTeamsKnown);
+  }
+
+  @override
+  void dispose() {
+    TeamDirectory.known.removeListener(_onTeamsKnown);
+    super.dispose();
+  }
+
+  /// Kısa adlar (teams.short_name) okununca canlı tablo yeniden çizilir.
+  void _onTeamsKnown() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _loadFormat() async {
@@ -404,10 +417,19 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
                 }
               }
               final hasBands = groups.any((g) => g.zone != null);
+              // Maç detayındaki canlı tablo dar: A/Y yok, varsa kısa ad.
+              final compact = widget.includeLive;
+              if (compact) {
+                TeamDirectory.ensure([for (final r in rows) r.teamId]);
+              }
 
               Widget row(int i) => _StandingsRow(
                 index: i,
                 entry: rows[i],
+                compact: compact,
+                shortName: compact
+                    ? TeamDirectory.known.value[rows[i].teamId]?.shortName
+                    : null,
                 zone: zoneAt(i),
                 highlight: widget.highlightTeamIds.contains(rows[i].teamId),
                 rankDelta: rankBefore.containsKey(rows[i].teamId)
@@ -452,7 +474,7 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
                         10,
                         7,
                       ),
-                      child: const _StandingsHeaderRow(),
+                      child: _StandingsHeaderRow(compact: compact),
                     ),
                     // Bölgeler: aynı bölgedeki satırlar bir arada, solda bölge
                     // adı 90° sola yatırılmış başlıkla.
@@ -585,7 +607,10 @@ class _StandingsCols {
 const _tabular = [FontFeature.tabularFigures()];
 
 class _StandingsHeaderRow extends StatelessWidget {
-  const _StandingsHeaderRow();
+  const _StandingsHeaderRow({this.compact = false});
+
+  /// Atılan / yenilen gol sütunları gizli (maç detayındaki canlı tablo).
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -623,8 +648,7 @@ class _StandingsHeaderRow extends StatelessWidget {
         h('G', c.stat),
         h('B', c.stat),
         h('M', c.stat),
-        h('A', c.stat),
-        h('Y', c.stat),
+        if (!compact) ...[h('A', c.stat), h('Y', c.stat)],
         h('AV', c.av),
         const SizedBox(width: 4),
         h('P', c.pts, highlight: true),
@@ -872,10 +896,18 @@ class _StandingsRow extends StatelessWidget {
     required this.onTap,
     this.highlight = false,
     this.rankDelta = 0,
+    this.compact = false,
+    this.shortName,
   });
 
   final int index;
   final StandingEntry entry;
+
+  /// Dar görünüm: A/Y sütunları yok, ad tek satır.
+  final bool compact;
+
+  /// Takımın kısa adı (teams.short_name); boşsa tam ad kısaltılarak yazılır.
+  final String? shortName;
 
   /// Satır vurgulu (açık olan maçın takımı).
   final bool highlight;
@@ -998,7 +1030,9 @@ class _StandingsRow extends StatelessWidget {
                   children: [
                     Text.rich(
                       TextSpan(
-                        text: shortTeamName(entry.name),
+                        text: (shortName ?? '').trim().isNotEmpty
+                            ? shortName!.trim()
+                            : shortTeamName(entry.name),
                         children: [
                           if (rankDelta != 0)
                             TextSpan(
@@ -1015,7 +1049,7 @@ class _StandingsRow extends StatelessWidget {
                             ),
                         ],
                       ),
-                      maxLines: 2,
+                      maxLines: compact ? 1 : 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontWeight: highlight
@@ -1057,8 +1091,10 @@ class _StandingsRow extends StatelessWidget {
               stat('${entry.won}', c.stat),
               stat('${entry.drawn}', c.stat),
               stat('${entry.lost}', c.stat),
-              stat('${entry.goalsFor}', c.stat),
-              stat('${entry.goalsAgainst}', c.stat),
+              if (!compact) ...[
+                stat('${entry.goalsFor}', c.stat),
+                stat('${entry.goalsAgainst}', c.stat),
+              ],
               stat(avText, c.av, color: avColor, w: FontWeight.w700),
               const SizedBox(width: 4),
               SizedBox(
