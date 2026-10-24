@@ -31,6 +31,14 @@ abstract class IMatchService {
   /// Olayı siler; canlı maçta silinen gol skordan da düşülür.
   Future<void> deleteMatchEvent(String eventId);
 
+  /// Olayın dakikasını düzeltir ([added] uzatma: 45+2'). Gol kesitleri yeni
+  /// dakikayla yeniden eşleşir (match_events_link_highlights).
+  Future<void> updateEventMinute(
+    String eventId, {
+    required int minute,
+    int? added,
+  });
+
   /// Maçın geçerli golleri (dakika sırasıyla, oyuncu adıyla); VAR iptali
   /// için seçilir.
   Future<List<MatchEvent>> fetchGoalEvents(String matchId);

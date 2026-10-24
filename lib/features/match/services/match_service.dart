@@ -247,6 +247,13 @@ class SupabaseMatchService implements IMatchService {
   Future<void> cancelRedCard(String eventId) => throw UnimplementedError();
 
   @override
+  Future<void> updateEventMinute(
+    String eventId, {
+    required int minute,
+    int? added,
+  }) => throw UnimplementedError();
+
+  @override
   Future<void> deleteMatchEvent(String eventId) async {
     await _supabase.from('match_events').delete().eq('id', eventId);
   }
