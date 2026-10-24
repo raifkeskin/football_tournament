@@ -5244,8 +5244,13 @@ class _DetailEventTile extends StatelessWidget {
     final sub = (subtitle ?? '').trim();
     // VAR ile iptal edilen gol: ad soluk ve üstü çizili.
     final cancelled = type == 'goal_cancelled' || type == 'red_card_cancelled';
+    // Uzun ad kesilmez, en fazla iki satıra iner (rozete yaslı hizalanır).
     final name = Text(
       title.isEmpty ? '-' : title,
+      maxLines: 2,
+      textAlign: align == CrossAxisAlignment.end
+          ? TextAlign.right
+          : TextAlign.left,
       style: TextStyle(
         fontWeight: FontWeight.bold,
         color: cancelled ? const Color(0xFF94A3B8) : null,
@@ -5441,21 +5446,22 @@ class _DetailEventTile extends StatelessWidget {
                             Flexible(
                               child: _titleBlock(CrossAxisAlignment.end),
                             ),
-                            const SizedBox(width: 8),
+                            const SizedBox(width: 6),
                             icon,
                           ],
                         )
                       : const SizedBox.shrink(),
                 ),
-                // Rozetle iki yandaki yazı arasında nefes payı.
-                SizedBox(width: 80, child: Center(child: _minuteBadge(min))),
+                // Rozetle iki yandaki yazı arasında nefes payı; dar tutulur
+                // ki oyuncu adlarına yer kalsın.
+                SizedBox(width: 52, child: Center(child: _minuteBadge(min))),
                 Expanded(
                   child: isHome
                       ? const SizedBox.shrink()
                       : Row(
                           children: [
                             icon,
-                            const SizedBox(width: 8),
+                            const SizedBox(width: 6),
                             Flexible(
                               child: _titleBlock(CrossAxisAlignment.start),
                             ),
