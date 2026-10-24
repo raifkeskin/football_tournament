@@ -5208,9 +5208,9 @@ class _DetailEventTile extends StatelessWidget {
           name,
           overflow: TextOverflow.ellipsis,
           style: isIn
-              ? const TextStyle(fontWeight: FontWeight.bold)
+              ? const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)
               : const TextStyle(
-                  fontSize: 12,
+                  fontSize: 11.5,
                   color: Color(0xFF94A3B8),
                   fontWeight: FontWeight.w500,
                 ),
@@ -5252,6 +5252,7 @@ class _DetailEventTile extends StatelessWidget {
           ? TextAlign.right
           : TextAlign.left,
       style: TextStyle(
+        fontSize: 13,
         fontWeight: FontWeight.bold,
         color: cancelled ? const Color(0xFF94A3B8) : null,
         decoration: cancelled ? TextDecoration.lineThrough : null,
@@ -5446,22 +5447,22 @@ class _DetailEventTile extends StatelessWidget {
                             Flexible(
                               child: _titleBlock(CrossAxisAlignment.end),
                             ),
-                            const SizedBox(width: 6),
+                            const SizedBox(width: 4),
                             icon,
                           ],
                         )
                       : const SizedBox.shrink(),
                 ),
-                // Rozetle iki yandaki yazı arasında nefes payı; dar tutulur
+                // Rozetle iki yandaki yazı arasında az boşluk; dar tutulur
                 // ki oyuncu adlarına yer kalsın.
-                SizedBox(width: 52, child: Center(child: _minuteBadge(min))),
+                SizedBox(width: 44, child: Center(child: _minuteBadge(min))),
                 Expanded(
                   child: isHome
                       ? const SizedBox.shrink()
                       : Row(
                           children: [
                             icon,
-                            const SizedBox(width: 6),
+                            const SizedBox(width: 4),
                             Flexible(
                               child: _titleBlock(CrossAxisAlignment.start),
                             ),
