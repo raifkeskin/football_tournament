@@ -4696,7 +4696,7 @@ class _DetailTabView extends StatelessWidget {
 
         return ListView.separated(
           // Altta sağdaki menü düğmesi son satırları örtmesin.
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 104),
+          padding: const EdgeInsets.fromLTRB(12, 16, 12, 104),
           itemCount: normalized.length,
           separatorBuilder: (_, _) =>
               const SizedBox(height: 2, child: Center(child: _TimelineLine())),
@@ -5204,16 +5204,19 @@ class _DetailEventTile extends StatelessWidget {
         color: isIn ? const Color(0xFF22C55E) : const Color(0xFFEF4444),
       );
       final text = Flexible(
-        child: Text(
-          name,
-          overflow: TextOverflow.ellipsis,
-          style: isIn
-              ? const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)
-              : const TextStyle(
-                  fontSize: 11.5,
-                  color: Color(0xFF94A3B8),
-                  fontWeight: FontWeight.w500,
-                ),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            name,
+            maxLines: 1,
+            style: isIn
+                ? const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)
+                : const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF94A3B8),
+                    fontWeight: FontWeight.w500,
+                  ),
+          ),
         ),
       );
       return Row(
@@ -5244,22 +5247,25 @@ class _DetailEventTile extends StatelessWidget {
     final sub = (subtitle ?? '').trim();
     // VAR ile iptal edilen gol: ad soluk ve üstü çizili.
     final cancelled = type == 'goal_cancelled' || type == 'red_card_cancelled';
-    // Uzun ad kesilmez, en fazla iki satıra iner (rozete yaslı hizalanır).
-    final name = Text(
-      title.isEmpty ? '-' : title,
-      maxLines: 2,
-      textAlign: align == CrossAxisAlignment.end
-          ? TextAlign.right
-          : TextAlign.left,
-      style: TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.bold,
-        color: cancelled ? const Color(0xFF94A3B8) : null,
-        decoration: cancelled ? TextDecoration.lineThrough : null,
-        decorationColor: const Color(0xFFDC2626),
-        decorationThickness: 2,
+    // Ad tek satırda tam görünür (Kadro sekmesindeki gibi); yalnız sığmayan
+    // çok uzun ad, alana sığacak kadar küçülür.
+    final name = FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: align == CrossAxisAlignment.end
+          ? Alignment.centerRight
+          : Alignment.centerLeft,
+      child: Text(
+        title.isEmpty ? '-' : title,
+        maxLines: 1,
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w700,
+          color: cancelled ? const Color(0xFF94A3B8) : null,
+          decoration: cancelled ? TextDecoration.lineThrough : null,
+          decorationColor: const Color(0xFFDC2626),
+          decorationThickness: 2,
+        ),
       ),
-      overflow: TextOverflow.ellipsis,
     );
     return Column(
       mainAxisSize: MainAxisSize.min,
