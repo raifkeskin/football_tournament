@@ -22,6 +22,11 @@ button:disabled{opacity:.5;cursor:default}
 .bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
 .msg{color:var(--muted);font-size:13px;min-height:20px}
 .msg.err{color:var(--danger)}
+.cap{display:flex;flex-direction:column;gap:8px}
+.cap label{font-weight:700;font-size:14px}
+.cap textarea{width:100%;min-height:260px;resize:vertical;background:var(--card);color:var(--text);border:1.5px solid var(--line);border-radius:12px;padding:12px;font:14px/1.5 inherit}
+.cap textarea:focus{outline:none;border-color:var(--accent)}
+.cap .hint{color:var(--muted);font-size:12px;margin:0}
 </style>
 </head>
 <body>
@@ -39,6 +44,12 @@ button:disabled{opacity:.5;cursor:default}
     <button id="save">Kaydet</button>
   </div>
   <div class="msg" id="msg"></div>
+  <div class="cap" id="capBox" hidden>
+    <label for="caption">Instagram açıklaması</label>
+    <textarea id="caption" spellcheck="false"></textarea>
+    <p class="hint">Metni düzenleyebilirsin; takım hesaplarını @ ile ekle. Önce kopyala, sonra videoyu paylaş ve Instagram'da açıklama alanına yapıştır.</p>
+    <div class="btns"><button id="copyCap">Açıklamayı kopyala</button></div>
+  </div>
 </main>
 <script src="/mac-onu/mp4-muxer.js"></script>
 <script>
@@ -55,6 +66,8 @@ button:disabled{opacity:.5;cursor:default}
   var DISPLAY = '"LM Display", "Arial Narrow", sans-serif';
   var BODY = '"LM Body", -apple-system, "Segoe UI", sans-serif';
   var MONTHS = ['OCAK', 'ŞUBAT', 'MART', 'NİSAN', 'MAYIS', 'HAZİRAN', 'TEMMUZ', 'AĞUSTOS', 'EYLÜL', 'EKİM', 'KASIM', 'ARALIK'];
+  var MONTHS_T = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+  var DAYS_T = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
   var DAYS = ['PAZAR', 'PAZARTESİ', 'SALI', 'ÇARŞAMBA', 'PERŞEMBE', 'CUMA', 'CUMARTESİ'];
 
   var cv = document.getElementById('cv'), ctx = cv.getContext('2d');
@@ -117,7 +130,7 @@ button:disabled{opacity:.5;cursor:default}
     return Promise.all([
       get('teams?select=id,name,logo_url&id=in.' + inList(teamIds)),
       pitchIds.length ? get('pitches?select=id,name&id=in.' + inList(pitchIds)) : [],
-      get('leagues?select=id,name,logo_url&id=eq.' + leagueId),
+      get('leagues?select=id,name,logo_url,instagram_url&id=eq.' + leagueId),
       get('match_weather?select=match_id,temp,description&match_id=in.' + inList(matches.map(function (m) { return m.id; })))
     ]).then(function (r) {
       var teams = {}, pitches = {}, weather = {};
@@ -130,8 +143,8 @@ button:disabled{opacity:.5;cursor:default}
         return {
           id: m.id, date: m.match_date, time: hhmm(m.match_time), week: m.week,
           round: m.cup_round || m.cup_name || '', live: !!m.youtube_url,
-          home: { name: posterName(h.name), logoUrl: h.logo_url },
-          away: { name: posterName(a.name), logoUrl: a.logo_url },
+          home: { name: posterName(h.name), fullName: h.name || '', logoUrl: h.logo_url },
+          away: { name: posterName(a.name), fullName: a.name || '', logoUrl: a.logo_url },
           pitch: pitches[m.pitch_id] || '', weather: weatherText(weather[m.id])
         };
       });
@@ -141,7 +154,7 @@ button:disabled{opacity:.5;cursor:default}
         var img = {};
         urls.forEach(function (u, i) { if (u) img[u] = imgs[i]; });
         list.forEach(function (m) { m.home.logo = img[m.home.logoUrl]; m.away.logo = img[m.away.logoUrl]; });
-        return { league: { name: league.name, logo: img[league.logo_url] }, matches: list,
+        return { league: { name: league.name, logo: img[league.logo_url], instagram: league.instagram_url || '' }, matches: list,
           lm: img['/mac-onu/lm-arma.png'], appStore: img['/mac-onu/app-store.png'], googlePlay: img['/mac-onu/google-play.png'] };
       });
     });
@@ -575,6 +588,64 @@ button:disabled{opacity:.5;cursor:default}
     }) : Promise.reject(new Error('Ses üretilemedi.'));
   }
 
+  /* ---------------- Instagram açıklaması ---------------- */
+  function igHandle(url) {
+    var m = String(url || '').match(/instagram\.com\/([A-Za-z0-9._]+)/);
+    return m ? '@' + m[1] : '';
+  }
+  function hashTag(s) {
+    var t = String(s || '').split(/\s+/).map(function (w) { return w.charAt(0).toLocaleUpperCase('tr-TR') + w.slice(1); }).join('');
+    t = t.replace(/[^\p{L}\p{N}]/gu, '');
+    return t ? '#' + t : '';
+  }
+  function dayWord(d) {
+    var x = dateOf(d);
+    if (!x) return '';
+    var t = new Date(); t.setHours(12, 0, 0, 0);
+    var diff = Math.round((x - t) / 864e5);
+    return diff === 0 ? 'Bugün' : diff === 1 ? 'Yarın' : x.getDate() + ' ' + MONTHS_T[x.getMonth()] + ' ' + DAYS_T[x.getDay()];
+  }
+  function dateText(d) { var x = dateOf(d); return x ? x.getDate() + ' ' + MONTHS_T[x.getMonth()] + ' ' + DAYS_T[x.getDay()] : ''; }
+  function stageText(m) { return m.round || (m.week ? m.week + '. Hafta' : ''); }
+  function buildCaption() {
+    var d = scene, ms = d.matches, L = [], tags = ['#LigMasası', hashTag(d.league.name), '#MaçGünü', '#AmatörFutbol', '#Futbol'];
+    var lg = d.league.name + (stageText(ms[0]) ? ' · ' + stageText(ms[0]) : '');
+    if (d.kind === 'match') {
+      var m = ms[0];
+      L.push('🔥 ' + (dayWord(m.date) || 'Yakında') + ' sahada dev randevu!', '');
+      L.push(m.home.fullName + ' 🆚 ' + m.away.fullName);
+      L.push('🏆 ' + lg);
+      L.push('🗓 ' + [dateText(m.date), m.time].filter(Boolean).join(' · '));
+      if (m.pitch) L.push('📍 ' + m.pitch);
+      if (m.weather) L.push('🌡 ' + m.weather);
+      L.push('');
+      L.push(m.live ? '🔴 Maç Lig Masası\'nda canlı yayında!' : 'Canlı skor, kadrolar ve maç anları Lig Masası\'nda ⚽');
+    } else {
+      L.push('⚽ ' + dayWord(d.day) + ' sahada ' + ms.length + ' maç var!', '');
+      L.push('🏆 ' + lg, '');
+      ms.forEach(function (m) { L.push('🕘 ' + (m.time || 'Saat yakında') + ' · ' + m.home.fullName + ' – ' + m.away.fullName); });
+      var pk = {}; ms.forEach(function (m) { if (m.pitch) pk[m.pitch] = 1; });
+      if (Object.keys(pk).length === 1) L.push('📍 ' + Object.keys(pk)[0]);
+      L.push('');
+      L.push('Canlı skor, kadrolar ve maç anları Lig Masası\'nda ⚽');
+    }
+    L.push('📲 Uygulamayı indirmek için profildeki linke dokun.');
+    var h = igHandle(d.league.instagram);
+    if (h) L.push('', h);
+    L.push('', tags.filter(Boolean).join(' '));
+    return L.join('\n');
+  }
+  function copyCaption(silent) {
+    var ta = $('caption'), text = ta.value;
+    function fallback() {
+      ta.focus(); ta.select();
+      try { document.execCommand('copy'); if (!silent) msg('Açıklama kopyalandı.'); } catch (e) { if (!silent) msg('Kopyalanamadı; metni seçip kopyala.', true); }
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { if (!silent) msg('Açıklama kopyalandı.'); }, fallback);
+    } else fallback();
+  }
+
   /* ---------------- Önizleme ---------------- */
   var live = null;
   function stopPreview() {
@@ -721,6 +792,7 @@ button:disabled{opacity:.5;cursor:default}
   $('make').onclick = make;
   $('share').onclick = share;
   $('save').onclick = save;
+  $('copyCap').onclick = function () { copyCaption(false); };
 
   Promise.all([loadData(), loadFonts()]).then(function (r) {
     scene = r[0];
@@ -732,6 +804,7 @@ button:disabled{opacity:.5;cursor:default}
       $('title').textContent = 'Günün Maçları · ' + scene.league.name;
       $('sub').textContent = dayLine(scene.day) + ' · ' + scene.matches.length + ' maç';
     }
+    $('caption').value = buildCaption(); $('capBox').hidden = false;
     draw(restTime());
     return renderAudio(duration());
   }).then(function (buf) {
