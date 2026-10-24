@@ -21,6 +21,7 @@ import '../../../core/widgets/admin_form.dart';
 import '../../share/poster_background.dart';
 import '../../share/fixture_poster.dart';
 import '../../share/poster_share.dart';
+import '../../share/pre_match_video.dart';
 import '../../../core/utils/team_name.dart';
 
 import '../../../core/widgets/app_date_picker.dart';
@@ -423,6 +424,20 @@ class _FixtureViewState extends State<FixtureView> {
               onSelect: _selectDay,
             ),
           ],
+          // Günün Maçları Reels videosu: şimdilik yalnız admin.
+          if (selectedDay != null && AppSession.of(context).value.isAdmin)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () => openDayPreviewVideo(_leagueId, selectedDay),
+                icon: const Icon(Icons.movie_creation_outlined, size: 18),
+                label: const Text('Günün maçları videosu'),
+                style: TextButton.styleFrom(
+                  foregroundColor: widget.accent,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+            ),
         ],
       ),
     );

@@ -25,6 +25,15 @@
         ]
       },
       {
+        "source": "/mac-onu/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      },
+      {
         "source": "/@(panel|katilim|teklif|sozlesme|kosullar|indir)?(.html)",
         "headers": [
           {
