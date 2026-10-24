@@ -523,6 +523,21 @@ class SupabaseMatchService implements IMatchService {
   }
 
   @override
+  Future<void> updateEventMinute(
+    String eventId, {
+    required int minute,
+    int? added,
+  }) async {
+    final updated = await _client
+        .from('match_events')
+        .update({'minute': minute, 'added_minute': added})
+        .eq('id', eventId)
+        .select('match_id');
+    if (updated.isEmpty) throw Exception('Olay güncellenemedi (yetki yok).');
+    notifyLocalChange('${updated.first['match_id']}');
+  }
+
+  @override
   Future<void> deleteMatchEvent(String eventId) async {
     final res = await _client
         .from('match_events')
