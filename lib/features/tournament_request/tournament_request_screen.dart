@@ -209,8 +209,8 @@ class TournamentRequestIntroScreen extends StatelessWidget {
                   icon: Icons.phone_in_talk_outlined,
                   label: '2 · Görüşme',
                   child: _RowText(
-                    'Telefon ya da WhatsApp ile dönüp sana özel teklif '
-                    'iletiriz.',
+                    'Telefon ya da WhatsApp ile dönüp turnuvanın kurulumunu '
+                    'birlikte planlarız.',
                   ),
                 ),
                 AdminFieldRow(

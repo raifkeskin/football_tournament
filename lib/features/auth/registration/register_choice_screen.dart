@@ -61,7 +61,7 @@ class RegisterChoiceScreen extends StatelessWidget {
             title: 'Turnuva Kurucu / Sorumlusu',
             text:
                 'Turnuvanı Lig Masası\'nda kurmak için talep oluştur; '
-                'teklif ve hesap bilgilerin bu adımda alınır.',
+                'seninle iletişime geçip kurulumu birlikte yapalım.',
             icon: Icons.emoji_events_rounded,
             colors: const [Color(0xFFF59E0B), Color(0xFF9A5B06)],
             // Turnuva sorumlusu turnuva talebi akışından gelir.
