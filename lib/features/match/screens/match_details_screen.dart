@@ -3738,12 +3738,12 @@ class _RosterInfoNote extends StatelessWidget {
             child: Text(
               hours == 0
                   ? 'Takım sorumluları, kendi takımlarının esamesini maç '
-                        'saatinde bu sekmedeki "Esame Girişi" butonundan girebilir. '
-                        'Bu saatten önce buton kilitli görünür.'
+                        'saatinde kendi takım sekmelerinde sağ alttaki menüden "Esame Girişi" ile girebilir. '
+                        'Bu saatten önce menüde açılış saati görünür.'
                   : 'Takım sorumluları, kendi takımlarının esamesini maç '
-                        'saatinden $hours saat önce bu sekmedeki "Esame Girişi" '
-                        'butonundan girebilir. Bu saatten önce buton kilitli '
-                        'görünür.',
+                        'saatinden $hours saat önce kendi takım sekmelerinde sağ '
+                        'alttaki menüden "Esame Girişi" ile girebilir. Bu '
+                        'saatten önce menüde açılış saati görünür.',
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 12.5,
@@ -3909,7 +3909,7 @@ class _LineupTabState extends State<_LineupTab>
   Widget build(BuildContext context) {
     super.build(context);
     final m = widget.match;
-    return ListView(
+    final list = ListView(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
       children: [
         // Esame bilgisi: düzenleme yetkisi olanlara (yetkililer ve maçın
@@ -3944,54 +3944,13 @@ class _LineupTabState extends State<_LineupTab>
         _viewSwitch(m),
         const SizedBox(height: 10),
         if (_view == null) ...[
-          // VS: iki ilk 11 yan yana; takım adına dokununca o takım açılır.
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _columnHead(widget.homeName, _green, m.homeTeamId),
-                      _TeamLineupColumn(
-                        match: m,
-                        teamId: m.homeTeamId,
-                        color: _green,
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  width: 1,
-                  margin: const EdgeInsets.symmetric(horizontal: 6),
-                  color: Colors.white.withValues(alpha: 0.08),
-                ),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _columnHead(widget.awayName, _blue, m.awayTeamId),
-                      _TeamLineupColumn(
-                        match: m,
-                        teamId: m.awayTeamId,
-                        color: _blue,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ] else ...[
-          // Tek takım: başlık tam genişlikte, ilk 11 ve yedekler yan yana.
-          _teamHeader(
-            name: _view == m.homeTeamId ? widget.homeName : widget.awayName,
-            color: _view == m.homeTeamId ? _green : _blue,
-            teamId: _view!,
-            alignEnd: false,
-          ),
-          const SizedBox(height: 10),
+          // VS: iki ilk 11 yan yana, altında iki takımın yedekleri yan yana;
+          // takım adına dokununca o takım açılır.
+          _vsRow(m, head: true, only: 'xi'),
+          const SizedBox(height: 12),
+          _vsRow(m, head: false, only: 'bench'),
+        ] else
+          // Tek takım: kadro ve yedekler yan yana.
           _TeamLineupColumn(
             key: ValueKey(_view),
             match: m,
@@ -3999,9 +3958,140 @@ class _LineupTabState extends State<_LineupTab>
             color: _view == m.homeTeamId ? _green : _blue,
             sideBySide: true,
           ),
-        ],
       ],
     );
+    return Stack(
+      children: [
+        list,
+        Positioned(right: 16, bottom: 16, child: _lineupFab(m)),
+      ],
+    );
+  }
+
+  Widget _vsRow(MatchModel m, {required bool head, required String only}) {
+    Widget col(String name, Color color, String teamId) => Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (head) _columnHead(name, color, teamId),
+          _TeamLineupColumn(match: m, teamId: teamId, color: color, only: only),
+        ],
+      ),
+    );
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          col(widget.homeName, _green, m.homeTeamId),
+          Container(
+            width: 1,
+            margin: const EdgeInsets.symmetric(horizontal: 6),
+            color: Colors.white.withValues(alpha: 0.08),
+          ),
+          col(widget.awayName, _blue, m.awayTeamId),
+        ],
+      ),
+    );
+  }
+
+  /// Sağ alt köşe. Takım sekmesinde menü: esame girişi/düzenleme ve kadro
+  /// afişi. VS'de yalnız paylaş (iki takımın da ilk oyuncuları tamamsa).
+  Widget _lineupFab(MatchModel m) {
+    final session = AppSession.of(context).value;
+    final view = _view;
+    if (view == null) {
+      final canShare =
+          session.canManageLeague(m.leagueId) ||
+          _managesTeam(m.homeTeamId) ||
+          _managesTeam(m.awayTeamId);
+      if (!canShare) return const SizedBox.shrink();
+      return StreamBuilder<List<MatchRosterModel>>(
+        stream: _rosterStream(m.homeTeamId),
+        builder: (context, home) => StreamBuilder<List<MatchRosterModel>>(
+          stream: _rosterStream(m.awayTeamId),
+          builder: (context, away) {
+            int xi(AsyncSnapshot<List<MatchRosterModel>> s) =>
+                (s.data ?? const []).where((r) => r.isStarting).length;
+            if (xi(home) < _startingCount || xi(away) < _startingCount) {
+              return const SizedBox.shrink();
+            }
+            return FloatingActionButton(
+              heroTag: 'vs_share_${m.id}',
+              backgroundColor: kAdminAccent,
+              foregroundColor: const Color(0xFF04130D),
+              tooltip: 'Kadro afişini paylaş',
+              onPressed: _shareFromVs,
+              child: const Icon(Icons.ios_share_rounded),
+            );
+          },
+        ),
+      );
+    }
+
+    // Esame: maç başlamadan eskisi gibi (yetkililer her zaman, takım
+    // sorumlusu açılış saatinden itibaren); başladıktan sonra yalnız admin
+    // ve kurucu başkan.
+    final managesThis = !_isStaff && _managesTeam(view);
+    final openAt = _rosterOpenAt(m, _openHours);
+    if (managesThis) _scheduleOpen(openAt);
+    final started = !_beforeKickoff(m);
+    final managerOpen =
+        managesThis &&
+        !started &&
+        openAt != null &&
+        !DateTime.now().toUtc().isBefore(openAt);
+    final locked = managesThis && !started && !managerOpen;
+    final canEsame = started
+        ? session.canManageLeague(m.leagueId)
+        : (_isStaff || managerOpen);
+    final canShare = session.canManageLeague(m.leagueId) || _managesTeam(view);
+    final actions = <_SpeedDialAction>[
+      if (canEsame)
+        _SpeedDialAction(
+          label: started ? 'Esameyi Düzenle' : 'Esame Girişi',
+          icon: Icons.edit_note_rounded,
+          onTap: () => _showRosterEditSheet(context, view),
+        )
+      else if (locked)
+        _SpeedDialAction(
+          label: openAt == null
+              ? 'Esame kapalı'
+              : "Esame ${DateFormat('HH:mm').format(openAt.add(const Duration(hours: 3)))}'de açılır",
+          icon: Icons.lock_clock_rounded,
+          onTap: () {},
+        ),
+      if (canShare)
+        _SpeedDialAction(
+          label: 'Kadro Afişini Paylaş',
+          icon: Icons.ios_share_rounded,
+          onTap: () => _shareLineup(view),
+        ),
+    ];
+    if (actions.isEmpty) return const SizedBox.shrink();
+    return _SpeedDialFab(key: ValueKey('lineup_fab_$view'), actions: actions);
+  }
+
+  Stream<List<MatchRosterModel>> _rosterStream(String teamId) =>
+      _rosterStreams.putIfAbsent(
+        teamId,
+        () => ServiceLocator.matchService
+            .watchMatchRosters(widget.match.id, teamId)
+            .asBroadcastStream(),
+      );
+
+  /// VS'den paylaşım: hangi takımın kadro afişi.
+  Future<void> _shareFromVs() async {
+    final m = widget.match;
+    final teamId = await showAdminOptionPicker<String>(
+      context: context,
+      title: 'Kadro afişi',
+      items: [m.homeTeamId, m.awayTeamId],
+      labelBuilder: (id) =>
+          id == m.homeTeamId ? widget.homeName : widget.awayName,
+      emptyText: '',
+    );
+    if (teamId == null || !mounted) return;
+    await _shareLineup(teamId);
   }
 
   /// Seçili görünüm: null iki takım yan yana (VS), değilse o takımın id'si.
@@ -4118,318 +4208,6 @@ class _LineupTabState extends State<_LineupTab>
     );
   }
 
-  Widget _teamHeader({
-    required String name,
-    required Color color,
-    required String teamId,
-    required bool alignEnd,
-  }) {
-    final label = Text(
-      name,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      textAlign: alignEnd ? TextAlign.right : TextAlign.left,
-      style: const TextStyle(
-        color: Colors.white,
-        fontWeight: FontWeight.w800,
-        fontSize: 14,
-      ),
-    );
-    // Esame: admin / turnuva sahibi / gözlemci her zaman; takım sorumlusu
-    // yalnızca kendi takımını, turnuvanın belirlediği süre kadar önce ve
-    // maç bitene kadar.
-    final m = widget.match;
-    final session = AppSession.of(context).value;
-    final managesThis = !_isStaff && _managesTeam(teamId);
-    final openAt = _rosterOpenAt(m, _openHours);
-    if (managesThis) _scheduleOpen(openAt);
-    final managerOpen =
-        managesThis &&
-        _beforeKickoff(m) &&
-        openAt != null &&
-        !DateTime.now().toUtc().isBefore(openAt);
-    // Maç başladıysa takım sorumlusuna ne kilit ne düzenleme düğmesi.
-    final locked = managesThis && _beforeKickoff(m) && !managerOpen;
-    final canEdit = _isStaff || managerOpen;
-    // Paylaşım: yalnızca o takımın sorumlusu ve lig yöneticileri.
-    final canShare =
-        session.canManageLeague(widget.match.leagueId) || _managesTeam(teamId);
-    final cross = alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start;
-    final box = BoxDecoration(
-      color: color.withValues(alpha: 0.12),
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: color.withValues(alpha: 0.4)),
-    );
-    if (!canShare && !canEdit && !locked) {
-      return Container(
-        padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
-        decoration: box,
-        child: label,
-      );
-    }
-
-    return StreamBuilder<List<MatchRosterModel>>(
-      stream: _rosterStreams.putIfAbsent(
-        teamId,
-        () => ServiceLocator.matchService.watchMatchRosters(m.id, teamId),
-      ),
-      builder: (context, snap) {
-        final rosters = snap.data ?? const <MatchRosterModel>[];
-        final starters = rosters.where((r) => r.isStarting).length;
-        final subs = rosters.length - starters;
-        final need = _startingCount;
-        final complete = starters >= need;
-
-        final share = canShare
-            ? _shareButton(color, teamId, complete, starters, need)
-            : null;
-
-        Widget? status;
-        if (snap.hasData) {
-          status = rosters.isEmpty
-              ? _statusLine(
-                  Icons.warning_amber_rounded,
-                  'Esame girilmedi',
-                  kAdminAmber,
-                  alignEnd,
-                )
-              : complete
-              ? _statusLine(
-                  Icons.check_circle_rounded,
-                  subs > 0
-                      ? 'İlk $need tamam · $subs yedek'
-                      : 'İlk $need tamam',
-                  kAdminAccent,
-                  alignEnd,
-                )
-              : _statusLine(
-                  Icons.groups_rounded,
-                  'İlk $need: $starters / $need',
-                  kAdminAmber,
-                  alignEnd,
-                );
-        }
-
-        Widget? action;
-        if (locked) {
-          action = Tooltip(
-            message: _openHours == 0
-                ? 'Esame maç saatinde açılır.'
-                : 'Esame maçtan $_openHours saat önce açılır.',
-            child: Container(
-              height: 36,
-              alignment: Alignment.center,
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.04),
-                borderRadius: BorderRadius.circular(9),
-                border: Border.all(color: Colors.white24),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.lock_clock_rounded,
-                    size: 15,
-                    color: Colors.white38,
-                  ),
-                  const SizedBox(width: 4),
-                  Flexible(
-                    child: Text(
-                      openAt == null
-                          ? 'Esame kapalı'
-                          : 'Esame ${DateFormat('HH:mm').format(openAt.add(const Duration(hours: 3)))}\'de açılır',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white38,
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        } else if (canEdit) {
-          final filled = !complete;
-          action = SizedBox(
-            height: 36,
-            child: Material(
-              color: filled ? color : Colors.transparent,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(9),
-                side: filled
-                    ? BorderSide.none
-                    : BorderSide(color: color, width: 1.5),
-              ),
-              child: InkWell(
-                onTap: () => _showRosterEditSheet(context, teamId),
-                borderRadius: BorderRadius.circular(9),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.edit_note_rounded,
-                          size: 18,
-                          color: filled ? Colors.white : color,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          rosters.isEmpty
-                              ? 'ESAME GİRİŞİ'
-                              : complete
-                              ? 'ESAMEYİ DÜZENLE'
-                              : 'ESAME GİRİŞİNE DEVAM',
-                          style: TextStyle(
-                            color: filled ? Colors.white : color,
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.4,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          );
-        }
-
-        return Container(
-          padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-          decoration: box,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: alignEnd
-                    ? [?share, Expanded(child: label)]
-                    : [Expanded(child: label), ?share],
-              ),
-              if (status != null) ...[
-                const SizedBox(height: 6),
-                Align(
-                  alignment: alignEnd
-                      ? Alignment.centerRight
-                      : Alignment.centerLeft,
-                  child: status,
-                ),
-              ],
-              if (action != null) ...[
-                const SizedBox(height: 6),
-                Column(crossAxisAlignment: cross, children: [action]),
-              ],
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _statusLine(IconData icon, String text, Color color, bool alignEnd) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 13, color: color),
-        const SizedBox(width: 3),
-        Flexible(
-          child: Text(
-            text,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: color,
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// Paylaş: simge + yazı. İlk 11 (sezonun ilk oyuncu sayısı) tamamlanmadan
-  /// soluk görünür; basılınca "Esame girişini tamamlayın" balonu çıkar.
-  Widget _shareButton(
-    Color color,
-    String teamId,
-    bool complete,
-    int starters,
-    int need,
-  ) {
-    final c = complete ? color : Colors.white38;
-    final body = Container(
-      margin: const EdgeInsets.only(left: 4, right: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(7),
-        border: Border.all(
-          color: complete ? color.withValues(alpha: 0.45) : Colors.white12,
-        ),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.ios_share_rounded, size: 15, color: c),
-          Text(
-            'Paylaş',
-            style: TextStyle(
-              color: c,
-              fontSize: 9.5,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.3,
-            ),
-          ),
-        ],
-      ),
-    );
-    if (complete) {
-      return InkWell(
-        onTap: () => _shareLineup(teamId),
-        borderRadius: BorderRadius.circular(7),
-        child: body,
-      );
-    }
-    return Tooltip(
-      triggerMode: TooltipTriggerMode.tap,
-      showDuration: const Duration(seconds: 3),
-      preferBelow: true,
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-      richMessage: TextSpan(
-        style: const TextStyle(
-          color: Color(0xFF0F172A),
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          height: 1.3,
-        ),
-        children: [
-          const TextSpan(
-            text: 'Esame girişini tamamlayın\n',
-            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
-          ),
-          TextSpan(
-            text:
-                'Paylaşmak için ilk $need oyuncunun tamamını seçin. '
-                'Şu an $starters / $need.',
-          ),
-        ],
-      ),
-      child: body,
-    );
-  }
-
   Future<void> _shareLineup(String teamId) => shareLineupPoster(
     context,
     match: widget.match,
@@ -4473,14 +4251,18 @@ class _TeamLineupColumn extends StatefulWidget {
     required this.teamId,
     required this.color,
     this.sideBySide = false,
+    this.only,
   });
 
   final MatchModel match;
   final String teamId;
   final Color color;
 
-  /// Tek takım görünümü: ilk 11 solda, yedekler sağda.
+  /// Tek takım görünümü: kadro solda, yedekler sağda.
   final bool sideBySide;
+
+  /// VS görünümü: yalnız 'xi' (ilk oyuncular) ya da 'bench' (yedekler).
+  final String? only;
 
   @override
   State<_TeamLineupColumn> createState() => _TeamLineupColumnState();
@@ -4610,6 +4392,27 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
               ];
             }
 
+            if (widget.only == 'xi') {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: rows(starters, xi: true),
+              );
+            }
+            if (widget.only == 'bench') {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _section('Yedekler'),
+                  if (subs.isEmpty)
+                    const Text(
+                      '-',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white38),
+                    ),
+                  ...rows(subs),
+                ],
+              );
+            }
             if (widget.sideBySide) {
               return IntrinsicHeight(
                 child: Row(
@@ -4619,7 +4422,7 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          _section('İlk ${starters.length}'),
+                          _section('Kadro'),
                           ...rows(starters, xi: true),
                         ],
                       ),
