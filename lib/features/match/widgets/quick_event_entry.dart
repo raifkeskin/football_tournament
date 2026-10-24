@@ -248,8 +248,10 @@ class _QuickEventSheetState extends State<_QuickEventSheet> {
   String? _card;
   _Pick? _player;
 
-  /// Kendi kalesine gol: oyuncu rakip takımdan seçilir.
-  bool _ownGoal = false;
+  /// Gol türü: normal, 'pen' (penaltı golü), 'miss' (penaltı kaçtı) ya da
+  /// 'own' (rakip kendi kalesine; oyuncu rakip takımdan seçilir).
+  String _goalMode = 'normal';
+  bool get _ownGoal => _goalMode == 'own';
   bool _saving = false;
 
   late final bool _tracksMinutes =
@@ -368,9 +370,13 @@ class _QuickEventSheetState extends State<_QuickEventSheet> {
     switch (widget.kind) {
       case _Kind.goal:
         if (_player == null) {
-          return _ownGoal
-              ? '${shortTeamName(widget.rivalName)} · Kendi kalesine atan?'
-              : '$team · Golü kim attı?';
+          return switch (_goalMode) {
+            'own' =>
+              '${shortTeamName(widget.rivalName)} · Kendi kalesine atan?',
+            'pen' => '$team · Penaltıyı kim attı?',
+            'miss' => '$team · Penaltıyı kim kaçırdı?',
+            _ => '$team · Golü kim attı?',
+          };
         }
         return 'Asisti kim yaptı?';
       case _Kind.card:
@@ -386,19 +392,20 @@ class _QuickEventSheetState extends State<_QuickEventSheet> {
       _player = null;
     } else if (_card != null) {
       _card = null;
-    } else if (_ownGoal) {
-      _ownGoal = false;
+    } else if (_goalMode != 'normal') {
+      _goalMode = 'normal';
     }
   });
 
-  bool get _canGoBack => _player != null || _card != null || _ownGoal;
+  bool get _canGoBack =>
+      _player != null || _card != null || _goalMode != 'normal';
 
   Future<void> _save({_Pick? assist, _Pick? subIn}) async {
     final p = _player;
     if (p == null || _saving) return;
     setState(() => _saving = true);
     final type = switch (widget.kind) {
-      _Kind.goal => 'goal',
+      _Kind.goal => _goalMode == 'miss' ? 'penalty_missed' : 'goal',
       _Kind.card => _card!,
       _Kind.sub => 'substitution',
     };
@@ -416,6 +423,7 @@ class _QuickEventSheetState extends State<_QuickEventSheet> {
       assistPlayerId: assist?.id,
       subInPlayerId: subIn?.id,
       isOwnGoal: _ownGoal,
+      isPenalty: _goalMode == 'pen',
     );
     try {
       await ServiceLocator.matchService.addMatchEvent(event);
@@ -435,7 +443,8 @@ class _QuickEventSheetState extends State<_QuickEventSheet> {
         _player = p;
         _save();
       case _Kind.goal:
-        if (_ownGoal) {
+        // Penaltı ve kendi kalesine golde asist sorulmaz.
+        if (_goalMode != 'normal') {
           _player = p;
           _save();
         } else if (_player == null) {
@@ -568,7 +577,12 @@ class _QuickEventSheetState extends State<_QuickEventSheet> {
 
   Widget _crumbs() {
     final kind = switch (widget.kind) {
-      _Kind.goal => _ownGoal ? 'Kendi kalesine' : 'Gol',
+      _Kind.goal => switch (_goalMode) {
+        'own' => 'Kendi kalesine',
+        'pen' => 'Penaltı golü',
+        'miss' => 'Penaltı kaçtı',
+        _ => 'Gol',
+      },
       _Kind.card =>
         _card == null
             ? 'Kart'
@@ -687,22 +701,34 @@ class _QuickEventSheetState extends State<_QuickEventSheet> {
         }
         return _grid(own.onPitch);
       case _Kind.goal:
-        if (_ownGoal) return _grid(rival.onPitch);
         if (_player == null) {
+          Widget mode(String key, String label, IconData icon) => ChoiceChip(
+            avatar: Icon(icon, size: 16),
+            label: Text(label),
+            selected: _goalMode == key,
+            onSelected: _saving
+                ? null
+                : (on) => setState(() => _goalMode = on ? key : 'normal'),
+          );
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Center(
-                child: ActionChip(
-                  avatar: const Icon(Icons.u_turn_left_rounded, size: 16),
-                  label: const Text('Rakip kendi kalesine attı'),
-                  onPressed: _saving
-                      ? null
-                      : () => setState(() => _ownGoal = true),
-                ),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  mode('pen', 'Penaltı golü', Icons.adjust_rounded),
+                  mode('miss', 'Penaltı kaçtı', Icons.close_rounded),
+                  mode(
+                    'own',
+                    'Rakip kendi kalesine',
+                    Icons.u_turn_left_rounded,
+                  ),
+                ],
               ),
-              const SizedBox(height: 8),
-              _grid(own.onPitch),
+              const SizedBox(height: 10),
+              _grid(_ownGoal ? rival.onPitch : own.onPitch),
             ],
           );
         }

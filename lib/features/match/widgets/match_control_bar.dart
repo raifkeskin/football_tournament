@@ -199,16 +199,50 @@ class _MatchControlBarState extends State<MatchControlBar> {
       );
     }
     if (mine) {
-      return _frame(
-        color: kAdminAccent,
-        icon: Icons.sports_rounded,
-        title: 'Maçı sen yönetiyorsun',
-        subtitle: 'Olay girişi, devreler ve skor sende.',
-        action: _button(
-          'Bırak',
-          Colors.white24,
-          () => _call('match_control_release'),
-          outlined: true,
+      // Yer kaplamasın: küçük rozet; devre butonları yanında durur.
+      return Container(
+        height: 32,
+        padding: const EdgeInsets.only(left: 10, right: 4),
+        decoration: BoxDecoration(
+          color: kAdminAccent.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(99),
+          border: Border.all(color: kAdminAccent.withValues(alpha: 0.45)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.sports_rounded, color: kAdminAccent, size: 15),
+            const SizedBox(width: 5),
+            const Flexible(
+              child: Text(
+                'Yönetiyorsun',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+            TextButton(
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFF9FE8C9),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: const Size(0, 28),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              onPressed: _busy ? null : () => _call('match_control_release'),
+              child: const Text(
+                'Bırak',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 12,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ),
+          ],
         ),
       );
     }
@@ -249,7 +283,6 @@ class _MatchControlBarState extends State<MatchControlBar> {
     required Widget action,
   }) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
       padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
