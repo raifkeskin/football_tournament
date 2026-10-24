@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lig Masası'nı İndir</title>
+<meta name="description" content="Lig Masası: canlı skor, puan durumu, kadro ve maç bildirimleri.">
+<meta property="og:title" content="Lig Masası'nı İndir">
+<meta property="og:description" content="Canlı skor, puan durumu, kadro ve maç bildirimleri. iPhone ve Android.">
+<meta property="og:image" content="https://ligmasasi.com/logo-lm.png">
+<style>
+:root{--bg:#0f172a;--card:#1e293b;--text:#e2e8f0;--muted:#94a3b8;--accent:#10b981;--line:#334155}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+header{background:linear-gradient(90deg,#064e3b,#10b981,#064e3b);padding:12px 16px;border-bottom:1.5px solid #fff}
+header a{display:flex;align-items:center;gap:12px;color:#fff;text-decoration:none;font-weight:800;letter-spacing:1.5px;font-style:italic;font-size:18px}
+header img{width:40px;height:40px}
+main{max-width:520px;margin:0 auto;padding:28px 16px 40px;text-align:center}
+.logo{width:96px;height:96px;margin:0 auto 12px;display:block}
+h1{font-size:22px;margin:0 0 6px}
+.sub{color:var(--muted);margin:0 0 22px;font-size:15px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px;margin-bottom:14px}
+.btn{display:flex;align-items:center;justify-content:center;gap:10px;padding:14px;border-radius:14px;background:#000;border:1.5px solid #fff3;color:#fff;font-weight:700;font-size:16px;text-decoration:none;margin-top:10px}
+.btn.web{background:var(--accent);border-color:var(--accent)}
+.btn svg{width:22px;height:22px;fill:#fff}
+.note{color:var(--muted);font-size:14px;margin:0}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<header><a href="/"><img src="/logo-lm.png" alt="">LİG MASASI</a></header>
+<main>
+  <img class="logo" src="/logo-lm.png" alt="Lig Masası">
+  <h1>Lig Masası</h1>
+  <p class="sub">Canlı skor, puan durumu, kadro ve maç bildirimleri.</p>
+
+  <div class="card">
+    <a id="ios" class="btn" href="https://apps.apple.com/tr/app/lig-masas%C4%B1/id6820082632">
+      <svg viewBox="0 0 24 24"><path d="M16.37 12.6c-.02-2.3 1.88-3.4 1.96-3.46-1.07-1.56-2.73-1.78-3.32-1.8-1.41-.14-2.76.83-3.48.83-.72 0-1.82-.81-3-.79-1.54.02-2.96.9-3.76 2.27-1.6 2.78-.41 6.9 1.15 9.16.76 1.1 1.67 2.34 2.86 2.3 1.15-.05 1.58-.74 2.97-.74 1.38 0 1.77.74 2.98.72 1.23-.02 2.01-1.12 2.76-2.23.87-1.28 1.23-2.52 1.25-2.58-.03-.01-2.4-.92-2.42-3.66zM14.1 5.86c.63-.77 1.06-1.83.94-2.89-.91.04-2.02.61-2.67 1.37-.58.67-1.09 1.76-.96 2.8 1.02.08 2.06-.52 2.69-1.28z"/></svg>
+      App Store'dan İndir
+    </a>
+    <a id="play" class="btn hidden" href="https://play.google.com/store/apps/details?id=com.ligmasasi.app">
+      <svg viewBox="0 0 24 24"><path d="M3.6 1.8 13.4 12l-9.8 10.2c-.36-.2-.6-.6-.6-1.1V2.9c0-.5.24-.9.6-1.1zm11 11.4 2.6 2.7-11.5 6.6 8.9-9.3zm0-2.4L5.7 1.5l11.5 6.6-2.6 2.7zm3.9-1.9 3 1.7c.8.5.8 1.6 0 2.1l-3 1.7L15.7 12l2.8-2.9z"/></svg>
+      Google Play'den İndir
+    </a>
+  </div>
+
+  <div id="android-soon" class="card hidden">
+    <p class="note">Android uygulaması çok yakında Google Play'de. O zamana kadar Lig Masası'nı tarayıcıdan kullanabilirsin.</p>
+    <a class="btn web" href="/">Web'de Aç</a>
+  </div>
+</main>
+<script>
+// Google Play'de üretim onayı gelince true yapılıp yeniden yayınlanır.
+var PLAY_LIVE = false;
+
+var ua = navigator.userAgent || '';
+var isIOS = /iPhone|iPad|iPod/i.test(ua) ||
+  (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+var isAndroid = /Android/i.test(ua);
+var ios = document.getElementById('ios').href;
+var play = document.getElementById('play').href;
+
+if (PLAY_LIVE) document.getElementById('play').classList.remove('hidden');
+else document.getElementById('android-soon').classList.remove('hidden');
+
+if (isIOS) {
+  location.replace(ios);
+} else if (isAndroid) {
+  if (PLAY_LIVE) location.replace(play);
+  else document.getElementById('ios').classList.add('hidden');
+}
+</script>
+</body>
+</html>
