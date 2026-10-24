@@ -15,6 +15,7 @@ import '../../../core/widgets/team_crest.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import 'package:football_tournament/core/widgets/picked_image.dart';
 import 'team_squad_screen.dart';
+import '../../../core/utils/instagram_handle.dart';
 import '../../../core/utils/reveal_search.dart';
 import '../../../core/widgets/list_filter.dart';
 import '../../auth/widgets/phone_input.dart';
@@ -640,6 +641,14 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
           .toString()
           .trim(),
     );
+    final instagramController = TextEditingController(
+      text: () {
+        final h = instagramHandle(existing?['instagram_url']?.toString());
+        return h == null ? '' : '@$h';
+      }(),
+    );
+    // Instagram alanı şimdilik yalnız admin (maç önü videosu açıklaması).
+    final showInstagram = AppSession.of(context).value.isAdmin;
     final existingLogoUrl =
         (existing?['logo_url'] ?? existing?['logoUrl'] ?? '').toString().trim();
     String managerPhone = (existing?['manager_phone'] ?? '').toString().trim();
@@ -680,6 +689,17 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
         );
         return;
       }
+      final instagramRaw = instagramController.text.trim();
+      final instagram = instagramUrl(instagramRaw);
+      if (showInstagram && instagramRaw.isNotEmpty && instagram == null) {
+        setSheetState(() => tab = 0);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Instagram kullanıcı adı geçersiz (örn. @takimadi).'),
+          ),
+        );
+        return;
+      }
 
       setSheetState(() => saving = true);
       try {
@@ -707,6 +727,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
           'founded_year': ?foundedYear,
           'first_color': firstColor,
           'second_color': secondColor,
+          if (showInstagram) 'instagram_url': instagram,
         };
 
         var savedTeamId = teamId ?? '';
@@ -1025,6 +1046,26 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
                                     ),
                                   ),
                                 ),
+                                if (showInstagram)
+                                  AdminFieldRow(
+                                    icon: Icons.camera_alt_outlined,
+                                    label: 'Instagram (opsiyonel)',
+                                    child: TextField(
+                                      controller: instagramController,
+                                      enabled: !saving,
+                                      keyboardType: TextInputType.url,
+                                      autocorrect: false,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                      cursorColor: kAdminAccent,
+                                      decoration: adminInlineInputDecoration(
+                                        hint: '@takimadi ya da profil linki',
+                                      ),
+                                    ),
+                                  ),
                                 AdminSelectRow(
                                   icon: Icons.badge_outlined,
                                   label: 'Takım Sorumlusu',
@@ -1139,6 +1180,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
       nameController,
       shortNameController,
       foundedController,
+      instagramController,
     ]);
   }
 
