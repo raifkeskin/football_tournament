@@ -4364,6 +4364,9 @@ class _DetailTabState extends State<_DetailTab>
     MatchHighlightService.cached(widget.match.id),
   );
 
+  /// Maçın bölgesinin sorumlusu mu (olaya uzun basınca düzenle/sil).
+  bool _regionOwner = false;
+
   @override
   void initState() {
     super.initState();
@@ -4379,6 +4382,33 @@ class _DetailTabState extends State<_DetailTab>
   void dispose() {
     MatchHighlightService.changes.removeListener(_onClipsChanged);
     super.dispose();
+  }
+
+  bool _regionChecked = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_regionChecked) return;
+    _regionChecked = true;
+    final session = AppSession.of(context).value;
+    final m = widget.match;
+    final groupId = (m.groupId ?? '').trim();
+    if (groupId.isEmpty || session.regionsInSeason(m.seasonId).isEmpty) {
+      return;
+    }
+    Supabase.instance.client
+        .from('groups')
+        .select('region_id')
+        .eq('id', groupId)
+        .maybeSingle()
+        .then((row) {
+          final regionId = row?['region_id']?.toString();
+          if (mounted && session.ownedRegions.any((r) => r.id == regionId)) {
+            setState(() => _regionOwner = true);
+          }
+        })
+        .catchError((_) {});
   }
 
   static Map<String, MatchHighlight> _clipsByEvent(List<MatchHighlight>? l) => {
@@ -4405,6 +4435,7 @@ class _DetailTabState extends State<_DetailTab>
       eventsStream: _eventsStream,
       settingsFuture: _settingsFuture,
       clips: _clips,
+      regionOwner: _regionOwner,
     );
   }
 }
@@ -4414,11 +4445,13 @@ class _DetailTabView extends StatelessWidget {
   final Stream<List<Map<String, dynamic>>> eventsStream;
   final Future<SeasonMatchSettings> settingsFuture;
   final Map<String, MatchHighlight> clips;
+  final bool regionOwner;
   const _DetailTabView({
     required this.match,
     required this.eventsStream,
     required this.settingsFuture,
     this.clips = const {},
+    this.regionOwner = false,
   });
 
   String _friendlyLoadError(Object? error) {
@@ -4704,6 +4737,7 @@ class _DetailTabView extends StatelessWidget {
             return _DetailEventTile(
               eventId: eventId,
               clip: type == 'goal' ? clips[eventId] : null,
+              regionOwner: regionOwner,
               isPenalty: type == 'goal' && isPenalty,
               isOwnGoal: type == 'goal' && isOwnGoal,
               match: match,
@@ -5083,9 +5117,13 @@ class _DetailEventTile extends StatelessWidget {
 
   /// Onaylı YZ gol kesiti; varsa gol satırında video ikonu çıkar.
   final MatchHighlight? clip;
+
+  /// Maçın bölge sorumlusu (turnuva sorumlusu) da olayı düzenler/siler.
+  final bool regionOwner;
   const _DetailEventTile({
     required this.eventId,
     this.clip,
+    this.regionOwner = false,
     required this.match,
     this.isPenalty = false,
     this.isOwnGoal = false,
@@ -5395,10 +5433,12 @@ class _DetailEventTile extends StatelessWidget {
       ],
     );
     final session = AppSession.of(context).value;
-    // Olay girebilenler (admin, turnuva sahibi, gözlemci) silebilir.
+    // Olay girebilenler (admin, turnuva sahibi, bölge sorumlusu, gözlemci)
+    // düzenleyip silebilir.
     final canDelete =
         eventId.isNotEmpty &&
         (session.canManageLeague(match.leagueId) ||
+            regionOwner ||
             (match.observerId != null && match.observerId == session.user?.id));
     if (playerId.isEmpty && !canDelete) return tile;
     return InkWell(
