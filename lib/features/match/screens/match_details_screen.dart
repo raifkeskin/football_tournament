@@ -1,3 +1,4 @@
+import '../widgets/quick_event_entry.dart';
 import '../widgets/quick_score_dialog.dart';
 import '../../../core/services/active_tournament.dart';
 import 'dart:async';
@@ -1369,6 +1370,19 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                       homeName: homeName,
                       awayName: awayName,
                     ),
+              // Canlı maçta yöneten yetkiliye hızlı olay girişi (Detay).
+              bottomNavigationBar:
+                  isSuperAdmin &&
+                      canControl &&
+                      _tabController.index == 0 &&
+                      (m.status == MatchStatus.live ||
+                          m.status == MatchStatus.halftime)
+                  ? QuickEventBar(
+                      match: m,
+                      homeName: homeName,
+                      awayName: awayName,
+                    )
+                  : null,
               body: Column(
                 children: [
                   // Alt köşeleri yuvarlak, gölgeli bant: içerikten net ayrılır.

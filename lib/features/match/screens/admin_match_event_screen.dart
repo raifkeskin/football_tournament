@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/match.dart';
 import '../../team/models/team.dart';
 import '../../../core/services/app_session.dart';
@@ -128,9 +129,47 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
     return list.where((p) => p.playerId == key).firstOrNull;
   }
 
+  /// Maçta oyundan çıkan / kırmızı kart gören ve oyuna giren oyuncular.
+  Set<String> _sentOff = const {};
+  Set<String> _subbedIn = const {};
+
+  Future<void> _loadPitchState() async {
+    try {
+      final rows = await Supabase.instance.client
+          .from('match_events')
+          .select('id, event_type, player_id, sub_in_player_id')
+          .eq('match_id', widget.match.id);
+      final off = <String>{}, inn = <String>{};
+      final yellows = <String, int>{};
+      for (final e in rows) {
+        // Düzenlenen olay kendi listesini daraltmasın.
+        if (e['id']?.toString() == widget.event?.id) continue;
+        final pid = e['player_id']?.toString() ?? '';
+        switch (e['event_type']) {
+          case 'substitution':
+            off.add(pid);
+            final i = e['sub_in_player_id']?.toString() ?? '';
+            if (i.isNotEmpty) inn.add(i);
+          case 'red_card':
+            off.add(pid);
+          case 'yellow_card':
+            yellows[pid] = (yellows[pid] ?? 0) + 1;
+            if (yellows[pid]! >= 2) off.add(pid);
+        }
+      }
+      if (mounted) {
+        setState(() {
+          _sentOff = off;
+          _subbedIn = inn;
+        });
+      }
+    } catch (_) {}
+  }
+
   @override
   void initState() {
     super.initState();
+    _loadPitchState();
     _teamId = widget.match.homeTeamId;
     final editing = widget.event;
     if (editing != null) {
@@ -501,11 +540,27 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                       .where((p) => rosterPlayerIds.contains(p.id))
                       .toList(),
                 );
+                // Değişiklikte çıkan: sahadakiler (ilk 11 − çıkanlar − atılanlar
+                // + girenler); giren: henüz oyuna girmemiş yedekler.
                 final startingPlayers = _toLineupPlayers(
-                  allPlayers.where((p) => startingIds.contains(p.id)).toList(),
+                  allPlayers
+                      .where(
+                        (p) =>
+                            (startingIds.contains(p.id) ||
+                                _subbedIn.contains(p.id)) &&
+                            !_sentOff.contains(p.id),
+                      )
+                      .toList(),
                 );
                 final subsPlayers = _toLineupPlayers(
-                  allPlayers.where((p) => subIds.contains(p.id)).toList(),
+                  allPlayers
+                      .where(
+                        (p) =>
+                            subIds.contains(p.id) &&
+                            !_subbedIn.contains(p.id) &&
+                            !_sentOff.contains(p.id),
+                      )
+                      .toList(),
                 );
                 final enabled = players.isNotEmpty && !_isLoading;
 
