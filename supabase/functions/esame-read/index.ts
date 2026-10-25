@@ -11,6 +11,12 @@
 // Gizli değerler: GEMINI_API_KEY; isteğe bağlı ESAME_MODEL (varsayılan
 // gemini-flash-latest; 2026-10-17 örnek kağıtta Flash ve Pro ikisi de 17/17
 // doğru okudu, Flash ~6 kat ucuz). Zor el yazısında gemini-pro-latest.
+//
+// Yapay Zekâ Yönetimi'nden (app_private_settings):
+//  * ai_thinking_esame: low (kısa düşünme, varsayılan) | high (uzun; zor
+//    kâğıtta yeniden okuturken). Maliyetin çoğu düşünme kısmıdır.
+//  * ai_esame_read_limit: bir maçta bir takımın esamesi en fazla kaç kez
+//    okutulur (varsayılan 3; admin bu sınıra takılmaz).
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { aiModel, refreshUsdTry, seasonAiEnabled } from "../_shared/ai_settings.ts";
@@ -74,6 +80,18 @@ async function monthlyLimit(): Promise<number> {
   return Number.isFinite(v) && v > 0 ? v : 5;
 }
 
+async function esameOptions(): Promise<{ thinking: string; limit: number }> {
+  const { data } = await admin.from("app_private_settings")
+    .select("key, value").in("key", ["ai_thinking_esame", "ai_esame_read_limit"]);
+  // deno-lint-ignore no-explicit-any
+  const get = (k: string) => String((data ?? []).find((r: any) => r.key === k)?.value ?? "");
+  const limit = Number(get("ai_esame_read_limit"));
+  return {
+    thinking: get("ai_thinking_esame") === "high" ? "high" : "low",
+    limit: Number.isFinite(limit) && limit > 0 ? limit : 3,
+  };
+}
+
 async function spentThisMonth(): Promise<number> {
   const now = new Date();
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
@@ -114,11 +132,25 @@ Deno.serve(async (req) => {
 
   // Model yalnız admin tarafından değiştirilebilir (karşılaştırma testi).
   // Model Yapay Zekâ Yönetimi'nden (flash / pro); yoksa ESAME_MODEL.
+  const { data: isAdminRes } = await userClient.rpc("is_admin");
+  const isAdmin = isAdminRes === true;
   let model = await aiModel(admin, "esame", ESAME_MODEL);
   const wanted = String(body?.model ?? "").trim();
   if (wanted && wanted !== model) {
-    const { data: isAdmin } = await userClient.rpc("is_admin");
-    if (isAdmin === true && /^gemini-[a-z0-9.-]+$/.test(wanted)) model = wanted;
+    if (isAdmin && /^gemini-[a-z0-9.-]+$/.test(wanted)) model = wanted;
+  }
+
+  // Aynı esame sürekli okutulmasın: maç + takım başına sınır.
+  const opts = await esameOptions();
+  const { count: readCount } = await admin.from("ai_usage_log")
+    .select("id", { count: "exact", head: true })
+    .eq("purpose", "esame").eq("match_id", matchId).eq("team_id", teamId);
+  const used = readCount ?? 0;
+  if (!isAdmin && used >= opts.limit) {
+    return json({
+      error: `Bu takımın esamesi bu maç için ${opts.limit} kez okutuldu; ` +
+        "okuma hakkı doldu. Esameyi elle düzenleyebilirsiniz.",
+    }, 429);
   }
 
   if ((await spentThisMonth()) + WORST_COST > (await monthlyLimit())) {
@@ -183,6 +215,7 @@ Deno.serve(async (req) => {
           mediaResolution: "MEDIA_RESOLUTION_HIGH",
           responseMimeType: "application/json",
           responseSchema: SCHEMA,
+          thinkingConfig: { thinkingLevel: opts.thinking },
         },
       }),
     },
@@ -200,6 +233,7 @@ Deno.serve(async (req) => {
   const cost = (inTokens * priceIn + outTokens * priceOut) / 1e6;
   await admin.from("ai_usage_log").insert({
     match_id: matchId,
+    team_id: teamId,
     model,
     purpose: "esame",
     text_tokens: inTokens,
@@ -218,12 +252,12 @@ Deno.serve(async (req) => {
   }
 
   const byKey = new Map(roster.map((p) => [p.key, p.id]));
-  const used = new Set<string>();
+  const taken = new Set<string>();
   // deno-lint-ignore no-explicit-any
   const rows = (data?.satirlar ?? []).map((r: any) => {
     let pid = byKey.get(String(r?.oyuncu ?? "")) ?? null;
-    if (pid && used.has(pid)) pid = null;
-    if (pid) used.add(pid);
+    if (pid && taken.has(pid)) pid = null;
+    if (pid) taken.add(pid);
     return {
       jersey: r?.forma == null ? null : String(r.forma).trim() || null,
       name: String(r?.ad ?? "").trim(),
@@ -237,6 +271,8 @@ Deno.serve(async (req) => {
     team_name: data?.takim ?? null,
     rows,
     model,
+    thinking: opts.thinking,
     cost_usd: Number(cost.toFixed(4)),
+    reads_left: isAdmin ? null : Math.max(0, opts.limit - used - 1),
   });
 });

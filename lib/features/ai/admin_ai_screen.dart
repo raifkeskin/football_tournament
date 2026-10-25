@@ -13,6 +13,8 @@ import '../match/utils/season_match_settings.dart';
 ///    ücretli üyelik özelliği).
 ///  * Esame ve gol videosu için model (Flash / Pro); sunucu her işlemde
 ///    okur, uygulama güncellemesi gerekmez.
+///  * Esame okuma düşünme seviyesi (kısa / uzun) ve maç başına takım okuma
+///    sınırı (admin hariç).
 ///  * İşlem başına maliyet (TL, işlem anındaki TCMB kuruyla).
 class AdminAiScreen extends StatefulWidget {
   const AdminAiScreen({super.key});
@@ -295,6 +297,49 @@ class _AdminAiScreenState extends State<AdminAiScreen> {
     }
   }
 
+  Future<void> _setOption(String key, String value) async {
+    setState(() => _busy = true);
+    try {
+      await _sb.rpc(
+        'ai_admin_set_option',
+        params: {'p_key': key, 'p_value': value},
+      );
+      await _loadSettings();
+    } catch (e) {
+      if (mounted) _snack('Kaydedilemedi: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _pickThinking() async {
+    final current = '${_settings?['ai_thinking_esame'] ?? 'low'}';
+    final picked = await showAdminOptionPicker<String>(
+      context: context,
+      title: 'Esame düşünme süresi',
+      items: const ['low', 'high'],
+      labelBuilder: (t) => t == 'high'
+          ? 'Uzun · zor el yazısında, yaklaşık 2 kat pahalı'
+          : 'Kısa · hızlı ve ucuz (önerilen)',
+      selected: current,
+    );
+    if (picked == null || picked == current) return;
+    await _setOption('ai_thinking_esame', picked);
+  }
+
+  Future<void> _pickReadLimit() async {
+    final current = int.tryParse('${_settings?['ai_esame_read_limit']}') ?? 3;
+    final picked = await showAdminOptionPicker<int>(
+      context: context,
+      title: 'Esame okuma sınırı',
+      items: const [1, 2, 3, 4, 5, 10],
+      labelBuilder: (n) => 'Maç başına takım için $n okuma',
+      selected: current,
+    );
+    if (picked == null || picked == current) return;
+    await _setOption('ai_esame_read_limit', '$picked');
+  }
+
   Future<void> _pickMonth() async {
     final now = DateTime.now();
     final items = [
@@ -568,6 +613,29 @@ class _AdminAiScreenState extends State<AdminAiScreen> {
                   'Esame okuma',
                 ),
                 _modelRow('clips', Icons.movie_filter_outlined, 'Gol videosu'),
+              ],
+            ),
+          ),
+          AdminFormSection(
+            title: 'Esame okuma',
+            child: AdminFieldGroup(
+              children: [
+                AdminSelectRow(
+                  icon: Icons.psychology_outlined,
+                  label: 'Düşünme süresi',
+                  value: '${_settings?['ai_thinking_esame'] ?? 'low'}' == 'high'
+                      ? 'Uzun'
+                      : 'Kısa',
+                  placeholder: '',
+                  onTap: _busy || _settings == null ? null : _pickThinking,
+                ),
+                AdminSelectRow(
+                  icon: Icons.repeat_rounded,
+                  label: 'Okuma sınırı (maç / takım)',
+                  value: '${_settings?['ai_esame_read_limit'] ?? 3} okuma',
+                  placeholder: '',
+                  onTap: _busy || _settings == null ? null : _pickReadLimit,
+                ),
               ],
             ),
           ),
