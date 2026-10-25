@@ -502,15 +502,15 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
           ),
         );
       case TournamentHubTab.fixture:
-        // Gün videosu paylaş düğmesinin üstünde, ikincil renkte.
+        // Gün videosu paylaş düğmesinin solunda, ikincil renkte.
         return ListenableBuilder(
           listenable: Listenable.merge([_fixtureShare, _fixtureVideo]),
           builder: (context, _) {
             final share = _fixtureShare.value;
             final video = _fixtureVideo.value;
-            return Column(
+            return Row(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 if (video != null)
                   FloatingActionButton.small(
@@ -521,7 +521,7 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
                     onPressed: video,
                     child: const Icon(Icons.movie_creation_outlined),
                   ),
-                if (video != null && share != null) const SizedBox(height: 10),
+                if (video != null && share != null) const SizedBox(width: 12),
                 if (share != null) fab(share),
               ],
             );
