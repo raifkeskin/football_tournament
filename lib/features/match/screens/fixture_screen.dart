@@ -408,9 +408,12 @@ class _FixtureViewState extends State<FixtureView> {
     final selectedDay = days.contains(_day)
         ? _day
         : (days.isEmpty ? null : days.first);
-    // Günün Maçları Reels videosu: şimdilik yalnız admin.
+    // Günün Maçları Reels videosu: şimdilik yalnız admin; günün bütün
+    // maçları oynanınca kalkar.
     final VoidCallback? video =
-        selectedDay != null && AppSession.of(context).value.isAdmin
+        selectedDay != null &&
+            dayStatus[selectedDay] != _FixtureDayStrip.done &&
+            AppSession.of(context).value.isAdmin
         ? () => openDayPreviewVideo(_leagueId, selectedDay)
         : null;
     WidgetsBinding.instance.addPostFrameCallback((_) {
