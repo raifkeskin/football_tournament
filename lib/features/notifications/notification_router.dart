@@ -1,3 +1,4 @@
+import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -8,6 +9,7 @@ import '../../core/push/push_bridge_stub.dart'
 import '../../core/push/native_push.dart';
 import '../../core/services/app_session.dart';
 import '../match/models/match.dart';
+import '../match/widgets/attendance_card.dart';
 import '../match/screens/match_details_screen.dart';
 import '../news/screens/news_feed_screen.dart';
 import '../tournament/screens/admin_penalty_management_screen.dart';
@@ -25,6 +27,11 @@ class NotificationRouter {
 
   /// Açılış adresindeki ve açıkken gelen bildirim tıklamalarını dinler.
   static void init() {
+    if (!kIsWeb) {
+      // ligmasasi://katilim?m=<maç>: katılım sayfasındaki "Lig Masası'nı aç".
+      // Açılışta gelen bağlantı da bu akıştan gelir.
+      AppLinks().uriLinkStream.listen(_openLink, onError: (_) {});
+    }
     if (NativePush.supported) {
       // Uygulama (Android/iOS): FCM bildirimine basılınca.
       NativePush.setOpenHandler((url) {
@@ -40,6 +47,15 @@ class NotificationRouter {
       final t = Uri.tryParse(url)?.queryParameters['n'];
       if (t != null && t.isNotEmpty) _queue(t);
     });
+  }
+
+  static void _openLink(Uri uri) {
+    final path = uri.scheme == 'ligmasasi' ? uri.host : uri.path;
+    final match = uri.queryParameters['m'];
+    if (!path.contains('katilim') || match == null || match.isEmpty) return;
+    // Kadro sekmesi açılınca oyuncuya katılım durumu hemen sorulur.
+    AttendanceCard.promptMatchId = match;
+    _queue('attend-$match');
   }
 
   static void _queue(String tag) {

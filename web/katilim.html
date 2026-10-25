@@ -47,6 +47,10 @@ a.app{display:block;text-align:center;margin-top:22px;color:var(--accent);font-w
   var root = document.getElementById('root');
   var q = new URLSearchParams(location.search);
   var token = q.get('k');
+  var matchId = q.get('m');
+  var ua = navigator.userAgent || '';
+  var isAndroid = /android/i.test(ua);
+  var isIOS = /iphone|ipad|ipod/i.test(ua) || (/macintosh/i.test(ua) && 'ontouchend' in document);
   try {
     if (token) localStorage.setItem('lm_k', token);
     else token = localStorage.getItem('lm_k');
@@ -69,9 +73,33 @@ a.app{display:block;text-align:center;margin-top:22px;color:var(--accent);font-w
       });
     });
   }
-  function message(icon, title, text) {
+  // "Lig Masası'nı aç": uygulama yüklüyse ligmasasi://katilim?m=<maç> ile
+  // uygulama açılır (maçın katılım sorusu sorulur); yüklü değilse indirme
+  // sayfası. Bilgisayarda web uygulaması.
+  var INDIR = 'https://ligmasasi.com/indir';
+  function appHref() {
+    var path = 'katilim' + (matchId ? '?m=' + encodeURIComponent(matchId) : '');
+    if (isAndroid) {
+      return 'intent://' + path + '#Intent;scheme=ligmasasi;package=com.ligmasasi.app;' +
+        'S.browser_fallback_url=' + encodeURIComponent(INDIR) + ';end';
+    }
+    if (isIOS) return 'ligmasasi://' + path;
+    return '/';
+  }
+  function openApp() {
+    location.href = appHref();
+    // iOS: uygulama yoksa sayfa yerinde kalır; kısa süre sonra indirme sayfası.
+    if (isIOS) {
+      var t = setTimeout(function () { if (!document.hidden) location.href = INDIR; }, 1500);
+      document.addEventListener('visibilitychange', function () { if (document.hidden) clearTimeout(t); });
+    }
+  }
+  function appLink(label) {
+    return '<a class="app" href="' + esc(appHref()) + '" data-app="1">' + esc(label || 'Lig Masası\'nı aç') + '</a>';
+  }
+  function message(icon, title, text, label) {
     root.innerHTML = '<div class="card msg"><div class="icon">' + icon + '</div><h1>' + esc(title) +
-      '</h1><p>' + esc(text) + '</p></div><a class="app" href="/">Lig Masası\'nı aç</a>';
+      '</h1><p>' + esc(text) + '</p></div>' + appLink(label);
   }
   function when(p) {
     if (!p.date) return 'Tarih belirlenmedi';
@@ -99,7 +127,7 @@ a.app{display:block;text-align:center;margin-top:22px;color:var(--accent);font-w
         '<div class="count">' + p.yes + ' geliyor · ' + p.no + ' gelemiyor</div>' +
         '</div>';
     });
-    html += '<a class="app" href="/">Lig Masası\'nı aç</a>';
+    html += appLink();
     root.innerHTML = html;
   }
   function load() {
@@ -115,6 +143,12 @@ a.app{display:block;text-align:center;margin-top:22px;color:var(--accent);font-w
   }
 
   root.addEventListener('click', function (e) {
+    var a = e.target.closest('a[data-app]');
+    if (a && isIOS) {
+      e.preventDefault();
+      openApp();
+      return;
+    }
     var b = e.target.closest('button[data-s]');
     if (!b) return;
     var card = b.closest('.card');
@@ -127,7 +161,12 @@ a.app{display:block;text-align:center;margin-top:22px;color:var(--accent);font-w
       });
   });
 
-  if (!token) {
+  if (!token && matchId) {
+    // Grup bağlantısı: uygulamada yanıtlanır. Android'de uygulama hemen
+    // açılmayı dener (tarayıcı izin vermezse düğme kalır).
+    message('📲', 'Uygulamada yanıtla', 'Lig Masası yüklüyse katılım durumunu uygulamada bildir. Hesabın yoksa takım sorumlunun sana gönderdiği kişisel bağlantıyı aç.', 'Uygulamada aç ve yanıtla');
+    if (isAndroid) location.href = appHref();
+  } else if (!token) {
     message('🔗', 'Kişisel bağlantı gerekli', 'Katılım durumunu bildirmek için takım sorumlunun sana gönderdiği kişisel bağlantıyı bir kez aç; sonra bu sayfa seni tanır.');
   } else {
     load();
