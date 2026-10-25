@@ -72,6 +72,10 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
   bool _isSaving = false;
   bool _dirty = false;
 
+  /// Ekran açıldığında (ya da son kayıtta) kayıtlı esamenin özeti. Kayıtta
+  /// sunucudaki hâl bundan farklıysa esameyi başka bir sorumlu değiştirmiştir.
+  String? _baseSig;
+
   /// Numarası yazılan oyuncu: satırı vurgulanır, klavyenin üstündeki
   /// şeritte adı görünür.
   String? _editingId;
@@ -136,6 +140,50 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
     super.dispose();
   }
 
+  static String _sigOf(
+    Iterable<(String, bool, String?, bool)> rows,
+  ) {
+    final parts = [
+      for (final r in rows)
+        '${r.$1}|${r.$2 ? 1 : 0}|${(r.$3 ?? '').trim()}|${r.$4 ? 1 : 0}',
+    ]..sort();
+    return parts.join(',');
+  }
+
+  /// Sunucudaki güncel esamenin özeti.
+  Future<String> _serverSig() async {
+    final rows = await Supabase.instance.client
+        .from('match_rosters')
+        .select('player_id, is_starting, jersey_number, is_captain')
+        .eq('match_id', widget.match.id)
+        .eq('team_id', widget.teamId);
+    return _sigOf([
+      for (final r in rows)
+        (
+          r['player_id'].toString(),
+          r['is_starting'] == true,
+          r['jersey_number']?.toString(),
+          r['is_captain'] == true,
+        ),
+    ]);
+  }
+
+  /// Esameyi sunucudan yeniden yükler (yerel değişiklikler atılır).
+  Future<void> _reload() async {
+    setState(() {
+      _isLoading = true;
+      _starters.clear();
+      _subs.clear();
+      _captainId = null;
+      for (final c in _jersey.values) {
+        c.dispose();
+      }
+      _jersey.clear();
+      _dirty = false;
+    });
+    await _loadData();
+  }
+
   Future<void> _loadData() async {
     try {
       Future<Map<String, dynamic>?> loadSeasonLimits() async {
@@ -180,6 +228,10 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
         _players = [...players]..sort(_compare);
         _byId = {for (final p in _players) p.id: p};
         _penalized = penalties;
+        _baseSig = _sigOf([
+          for (final r in rosters)
+            (r.playerId, r.isStarting, r.jerseyNumber, r.isCaptain),
+        ]);
         // Kayıtlı kaleci (pos_x = 0) ilk sırada.
         final gk = rosters
             .where((x) => x.isStarting && x.slot == 0)
@@ -611,6 +663,31 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
     }
 
     setState(() => _isSaving = true);
+    // Aynı esameyi iki sorumlu birlikte düzenlerse sonraki kayıt öncekini
+    // ezmesin: açıldığından beri değiştiyse kaydetmeden haber ver.
+    try {
+      if (_baseSig != null && await _serverSig() != _baseSig) {
+        if (!mounted) return false;
+        setState(() => _isSaving = false);
+        final reload = await showAdminConfirmDialog(
+          context: context,
+          title: 'Esame değişti',
+          message:
+              'Bu kayıt, siz düzenlerken başka bir sorumlu tarafından '
+              'düzenlendi. Güncel esameyi yükleyip değişikliklerinizi '
+              'yeniden yapın.',
+          confirmLabel: 'GÜNCEL ESAMEYİ YÜKLE',
+          destructive: false,
+          icon: Icons.sync_problem_rounded,
+        );
+        if (reload && mounted) await _reload();
+        return false;
+      }
+    } catch (_) {
+      // Kontrol yapılamazsa kayıt eskisi gibi devam eder.
+    }
+    if (!mounted) return false;
+    setState(() => _isSaving = true);
     try {
       final rosters = <MatchRosterModel>[
         for (final id in ids)
@@ -637,6 +714,10 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
         rosters: rosters,
       );
       _dirty = false;
+      _baseSig = _sigOf([
+        for (final r in rosters)
+          (r.playerId, r.isStarting, r.jerseyNumber, r.isCaptain),
+      ]);
       if (mounted && close) Navigator.pop(context, true);
       return true;
     } catch (e) {
