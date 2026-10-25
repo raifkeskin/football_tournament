@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -52,6 +53,10 @@ Future<bool> _aiConsent(BuildContext context) async {
   return ok;
 }
 
+const _connectionError =
+    'Bağlantı yavaş ya da koptu, esame okunamadı. İnternet bağlantınızı '
+    'kontrol edip tekrar deneyin.';
+
 /// Esame kağıdının fotoğrafını kamerayla çektirir ya da galeriden seçtirir, sunucuda (esame-read,
 /// Gemini) okutur ve sonucu kontrol penceresinde gösterir. Onaylanan
 /// satırlar döner; vazgeçilirse ya da okuma başarısızsa null.
@@ -76,9 +81,10 @@ Future<List<EsamePick>?> scanEsameFromPhoto(
   if (source == null || !context.mounted) return null;
   final picked = await ImagePicker().pickImage(
     source: source,
-    maxWidth: 2000,
-    maxHeight: 2000,
-    imageQuality: 85,
+    // Zayıf bağlantıda yükleme uzamasın: el yazısı okumaya 1600 px yeter.
+    maxWidth: 1600,
+    maxHeight: 1600,
+    imageQuality: 75,
   );
   if (picked == null || !context.mounted) return null;
 
@@ -88,7 +94,8 @@ Future<List<EsamePick>?> scanEsameFromPhoto(
       ? picked.mimeType!
       : 'image/jpeg';
 
-  // Okuma 5-20 sn sürer; bu sırada bekleme penceresi açık kalır.
+  // Okuma 5-20 sn sürer; bu sırada bekleme penceresi açık kalır. Bağlantı
+  // takılırsa 45 sn sonra vazgeçilir.
   showDialog<void>(
     context: context,
     barrierDismissible: false,
@@ -97,21 +104,32 @@ Future<List<EsamePick>?> scanEsameFromPhoto(
   Map<String, dynamic>? data;
   String? error;
   try {
-    final res = await Supabase.instance.client.functions.invoke(
-      'esame-read',
-      body: {
-        'match_id': matchId,
-        'team_id': teamId,
-        'image_base64': base64Encode(bytes),
-        'mime': mime,
-      },
-    );
+    final res = await Supabase.instance.client.functions
+        .invoke(
+          'esame-read',
+          body: {
+            'match_id': matchId,
+            'team_id': teamId,
+            'image_base64': base64Encode(bytes),
+            'mime': mime,
+          },
+        )
+        .timeout(const Duration(seconds: 45));
     data = Map<String, dynamic>.from(res.data as Map);
   } on FunctionException catch (e) {
     final d = e.details;
     error = d is Map && d['error'] != null ? '${d['error']}' : '$d';
+  } on TimeoutException {
+    error = _connectionError;
   } catch (e) {
-    error = '$e';
+    // Bağlantı koptu (ClientException, SocketException): teknik metin yerine.
+    final t = '$e';
+    error =
+        t.contains('ClientException') ||
+            t.contains('SocketException') ||
+            t.contains('connection')
+        ? _connectionError
+        : t;
   }
   if (!context.mounted) return null;
   Navigator.of(context, rootNavigator: true).pop();
