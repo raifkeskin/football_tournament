@@ -68,6 +68,29 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
+  /// Uygulama içi bildirimlerin hepsini siler (onaydan sonra).
+  Future<void> _clear() async {
+    final ok = await showAdminConfirmDialog(
+      context: context,
+      title: 'Bildirimleri temizle',
+      message: 'Tüm bildirimleriniz listeden silinecek. Emin misiniz?',
+      confirmLabel: 'TEMİZLE',
+      icon: Icons.delete_sweep_rounded,
+    );
+    if (!ok || !mounted) return;
+    final before = _items;
+    setState(() => _items = const []);
+    try {
+      await Supabase.instance.client.rpc('clear_my_notifications');
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _items = before);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bildirimler silinemedi, tekrar deneyin.')),
+      );
+    }
+  }
+
   Future<void> _open(_Item item) =>
       NotificationRouter.open(context, item.kind, item.refId);
 
@@ -101,6 +124,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
     return AdminPageScaffold(
       title: 'Bildirimler',
+      actions: [
+        if (items?.isNotEmpty ?? false)
+          AdminBarAction(
+            icon: Icons.delete_sweep_rounded,
+            tooltip: 'Temizle',
+            onPressed: _clear,
+          ),
+      ],
       body: RefreshIndicator(onRefresh: _load, child: body),
     );
   }
