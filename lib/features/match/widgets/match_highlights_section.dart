@@ -3,6 +3,7 @@ import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../utils/minute_label.dart';
 
 import '../../../core/widgets/match_event_icons.dart';
@@ -20,6 +21,44 @@ import '../../../core/services/app_session.dart';
 import '../../../core/utils/realtime_signal.dart';
 import '../../../core/utils/resilient_stream.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+/// Videodaki an girişi: yalnız rakam yazılır, iki noktayı alan koyar
+/// (3. rakamda "12:3", sonra "12:34"; 5 rakamda "123:45"). Silerken
+/// iki nokta da rakamla birlikte gider.
+class _ClockInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    var digits = newValue.text.replaceAll(RegExp(r'\D'), '');
+    final oldDigits = oldValue.text.replaceAll(RegExp(r'\D'), '');
+    // Yalnız iki nokta silindiyse onunla birlikte önündeki rakam gider.
+    if (digits == oldDigits && newValue.text.length < oldValue.text.length) {
+      digits = digits.isEmpty ? '' : digits.substring(0, digits.length - 1);
+    }
+    if (digits.length > 5) digits = digits.substring(0, 5);
+    final text = digits.length <= 2
+        ? digits
+        : '${digits.substring(0, digits.length - 2)}:'
+              '${digits.substring(digits.length - 2)}';
+    // "12:3" yazarken: ilk iki rakamdan sonra iki nokta, kalanlar saniye.
+    final shown = digits.length == 3
+        ? '${digits.substring(0, 2)}:${digits.substring(2)}'
+        : text;
+    return TextEditingValue(
+      text: shown,
+      selection: TextSelection.collapsed(offset: shown.length),
+    );
+  }
+}
+
+/// Saniye → "dakika:saniye" (dakika 59'u geçebilir: 65:28).
+String _mmss(int sec) {
+  final s = sec < 0 ? 0 : sec;
+  return '${(s ~/ 60).toString().padLeft(2, '0')}:'
+      '${(s % 60).toString().padLeft(2, '0')}';
+}
 
 /// "05:28", "1:05:28" ya da "328" → saniye; okunamazsa null.
 int? _parseClock(String v) {
@@ -737,12 +776,13 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
       icon: Icons.timer_outlined,
       label: 'VİDEODAKİ AN',
       fieldIcon: Icons.schedule_rounded,
-      initialValue: _clock(start ? a : b),
-      hint: 'Örn. 05:28 ya da 1:05:28',
+      initialValue: _mmss(start ? a : b),
+      hint: 'dakika:saniye, örn. 05:28',
       subtitle: start
           ? 'Kesitin uzunluğu (${b - a} sn) korunur.'
           : 'Kesit en az 5, en çok 60 sn olabilir.',
-      keyboardType: TextInputType.datetime,
+      keyboardType: TextInputType.number,
+      inputFormatters: [_ClockInputFormatter()],
       validator: (v) {
         final t = _parseClock(v);
         if (t == null) return 'Saati 05:28 biçiminde yazın.';
@@ -755,6 +795,43 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
     if (text == null) return;
     final t = _parseClock(text)!;
     _setRange(h, start ? (t, t + (b - a)) : (a, t));
+  }
+
+  /// Videodaki maç (ya da 2. yarı) başlangıcını yazdırır; o devredeki
+  /// bütün kesitler aradaki fark kadar kayar.
+  Future<void> _typeStart({required bool second}) async {
+    final job = _job;
+    final current = second ? job?.secondHalfSec : job?.kickoffSec;
+    final text = await showAdminTextInputDialog(
+      context: context,
+      title: second ? '2. Yarı Başlangıcı' : 'Maç Başlangıcı',
+      icon: Icons.sports_rounded,
+      label: 'VİDEODAKİ AN',
+      fieldIcon: Icons.schedule_rounded,
+      initialValue: current == null ? '' : _mmss(current),
+      hint: 'dakika:saniye, örn. 07:15',
+      subtitle: second
+          ? '2. yarıdaki bütün kesitler bu ana göre kayar.'
+          : 'Bütün kesitler bu ana göre kayar.',
+      keyboardType: TextInputType.number,
+      inputFormatters: [_ClockInputFormatter()],
+      validator: (v) =>
+          _parseClock(v) == null ? 'Saati 07:15 biçiminde yazın.' : null,
+    );
+    if (text == null || !mounted) return;
+    final t = _parseClock(text)!;
+    try {
+      await MatchHighlightService.shiftStarts(
+        widget.match.id,
+        kickoffSec: second ? null : t,
+        secondHalfSec: second ? t : null,
+      );
+      _draft.clear();
+      await _refresh();
+      _snack('Kesitler yeni başlangıca göre kaydırıldı.');
+    } catch (e) {
+      _snack('Kaydırılamadı: $e');
+    }
   }
 
   Future<void> _saveDraft(MatchHighlight h) async {
@@ -1014,6 +1091,25 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
                   style: const TextStyle(color: kAdminMuted, fontSize: 11.5),
                 ),
               ],
+              if (job != null && !running) ...[
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    _startChip(
+                      'Başlangıç',
+                      job.kickoffSec,
+                      () => _typeStart(second: false),
+                    ),
+                    _startChip(
+                      '2. yarı',
+                      job.secondHalfSec,
+                      () => _typeStart(second: true),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
@@ -1021,12 +1117,30 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
     );
   }
 
-  /// Maliyet ve videoda bulunan/girilen başlangıç anları.
+  /// Videodaki devre başlangıcı: dokununca düzeltilir, kesitler kayar.
+  Widget _startChip(String label, int? sec, VoidCallback onTap) => SizedBox(
+    height: 30,
+    child: OutlinedButton.icon(
+      onPressed: onTap,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        minimumSize: const Size(0, 30),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+        visualDensity: VisualDensity.compact,
+      ),
+      icon: const Icon(Icons.edit_rounded, size: 14),
+      label: Text(
+        '$label ${sec == null ? '—' : _mmss(sec)}',
+        style: const TextStyle(fontSize: 12),
+      ),
+    ),
+  );
+
+  /// Maliyet ve analiz özeti (başlangıçlar düğmelerde).
   String _jobDetails(MatchHighlightJob job) => [
     if (job.needsReview) 'Kontrol önerilir',
     if ((job.missing ?? 0) > 0) '${job.missing} gol yayında bulunamadı',
-    if (job.kickoffSec != null) 'Başlangıç ${_clock(job.kickoffSec!)}',
-    if (job.secondHalfSec != null) '2. yarı ${_clock(job.secondHalfSec!)}',
     if (job.costUsd != null) 'Maliyet ${job.costUsd!.toStringAsFixed(3)} \$',
   ].join(' · ');
 
@@ -1223,8 +1337,8 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
               nudge('−5 sn', start > 0 ? () => _shift(h, -5) : null),
               nudge('+5 sn', () => _shift(h, 5)),
               const SizedBox(width: 6),
-              nudge('Başl. ${_clock(start)}', () => _typeTime(h, start: true)),
-              nudge('Bitiş ${_clock(end)}', () => _typeTime(h, start: false)),
+              nudge('Başl. ${_mmss(start)}', () => _typeTime(h, start: true)),
+              nudge('Bitiş ${_mmss(end)}', () => _typeTime(h, start: false)),
             ],
           ),
           if (dirty) ...[

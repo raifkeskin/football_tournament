@@ -298,6 +298,25 @@ class MatchHighlightService {
     changes.value++;
   }
 
+  /// Videodaki maç / 2. yarı başlangıcı düzeltilince o devrenin bütün
+  /// kesitleri aradaki fark kadar kayar (uzunluk korunur).
+  static Future<void> shiftStarts(
+    String matchId, {
+    int? kickoffSec,
+    int? secondHalfSec,
+  }) async {
+    await _db.rpc(
+      'shift_match_highlights',
+      params: {
+        'p_match_id': matchId,
+        'p_kickoff_sec': kickoffSec,
+        'p_second_half_sec': secondHalfSec,
+      },
+    );
+    await fetch(matchId);
+    changes.value++;
+  }
+
   /// Esame (yoksa sezon kadrosu) oyuncuları; golü atan seçimi ve gösterim
   /// için. Forma numarası esameden, yoksa kadrodan.
   static Future<List<HighlightRosterPlayer>> roster({
