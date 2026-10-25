@@ -255,6 +255,31 @@ class SupabaseMatchService implements IMatchService {
   /// Bu cihazda değişen maçların id'leri (ana sayfa yenilensin diye).
   static Stream<String> get localChanges => _localChanges.stream;
 
+  /// Canlı akışa bu cihazın değişikliklerini katar (null = yerel değişiklik).
+  /// Kendi girdiğimiz olay/skor canlı bildirimin dönmesini (1-3 sn)
+  /// beklemeden hemen yeniden okunur.
+  static Stream<T?> _withLocal<T>(Stream<T> source, String id) {
+    late StreamController<T?> out;
+    final subs = <StreamSubscription<Object?>>[];
+    out = StreamController<T?>(
+      onListen: () {
+        subs
+          ..add(source.listen(out.add, onError: out.addError, onDone: out.close))
+          ..add(
+            _localChanges.stream
+                .where((m) => m == id)
+                .listen((_) => out.add(null)),
+          );
+      },
+      onCancel: () async {
+        for (final s in subs) {
+          await s.cancel();
+        }
+      },
+    );
+    return out.stream;
+  }
+
   @override
   Stream<MatchModel> watchMatch(String matchId) {
     final id = matchId.trim();
@@ -269,12 +294,13 @@ class SupabaseMatchService implements IMatchService {
       final cached = _matchCache[id];
       if (cached != null) yield cached;
       // Yalnızca bu maçın satırı dinlenir (önceden tüm tablo indiriliyordu).
-      await for (final rows in watchTableRows(
-        _client,
-        table: 'matches',
-        column: 'id',
-        value: id,
+      await for (final live in _withLocal(
+        watchTableRows(_client, table: 'matches', column: 'id', value: id),
+        id,
       )) {
+        final rows =
+            live ??
+            await _client.from('matches').select().eq('id', id).limit(1);
         final row = rows.isEmpty
             ? const <String, dynamic>{}
             : rows.first.cast<String, dynamic>();
@@ -363,12 +389,19 @@ class SupabaseMatchService implements IMatchService {
         }
         return;
       }
-      await for (final c in realtimeRowChanges(
-        _client,
-        table: 'match_events',
-        column: 'match_id',
-        value: id,
+      await for (final c in _withLocal(
+        realtimeRowChanges(
+          _client,
+          table: 'match_events',
+          column: 'match_id',
+          value: id,
+        ),
+        id,
       )) {
+        if (c == null) {
+          yield await _fetchInlineMatchEvents(id);
+          continue;
+        }
         final next = applyRowChange(
           _eventsCache[id] ?? const [],
           c,
