@@ -22,40 +22,73 @@ import '../../../core/utils/realtime_signal.dart';
 import '../../../core/utils/resilient_stream.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// Videodaki an girişi: yalnız rakam yazılır, iki noktayı alan koyar
-/// (3. rakamda "12:3", sonra "12:34"; 5 rakamda "123:45"). Silerken
-/// iki nokta da rakamla birlikte gider.
+/// Videodaki an girişi: alan hep "dakika:saniye" (00:00) düzenindedir.
+/// Yazılan rakam imlecin önündeki haneye yazılır (05:28'de baştan
+/// yazarken 0 → 7 → 1 → 5 = 07:15); silinen hane 0'a döner, alan boşalmaz.
 class _ClockInputFormatter extends TextInputFormatter {
+  static const _slots = [0, 1, 3, 4];
+
+  static int _offsetAfter(int k) => k == 0 ? 0 : _slots[k - 1] + 1;
+
   @override
   TextEditingValue formatEditUpdate(
     TextEditingValue oldValue,
     TextEditingValue newValue,
   ) {
-    var digits = newValue.text.replaceAll(RegExp(r'\D'), '');
-    final oldDigits = oldValue.text.replaceAll(RegExp(r'\D'), '');
-    // Yalnız iki nokta silindiyse onunla birlikte önündeki rakam gider.
-    if (digits == oldDigits && newValue.text.length < oldValue.text.length) {
-      digits = digits.isEmpty ? '' : digits.substring(0, digits.length - 1);
+    var old = oldValue.text;
+    if (!RegExp(r'^\d\d:\d\d$').hasMatch(old)) old = '00:00';
+    final chars = old.split('');
+    // İmlecin önündeki dolu hane sayısı.
+    final cursor = oldValue.selection.isValid
+        ? oldValue.selection.baseOffset.clamp(0, 5)
+        : 5;
+    var k = _slots.where((p) => p < cursor).length;
+    final added = newValue.text.length - oldValue.text.length;
+    final newDigits = newValue.text.replaceAll(RegExp(r'\D'), '');
+
+    if (newValue.text.isEmpty || !oldValue.selection.isCollapsed && added < 0) {
+      // Tümü seçilip silindi: sıfırlanır.
+      return const TextEditingValue(
+        text: '00:00',
+        selection: TextSelection.collapsed(offset: 0),
+      );
     }
-    if (digits.length > 5) digits = digits.substring(0, 5);
-    final text = digits.length <= 2
-        ? digits
-        : '${digits.substring(0, digits.length - 2)}:'
-              '${digits.substring(digits.length - 2)}';
-    // "12:3" yazarken: ilk iki rakamdan sonra iki nokta, kalanlar saniye.
-    final shown = digits.length == 3
-        ? '${digits.substring(0, 2)}:${digits.substring(2)}'
-        : text;
+    if (added > 1) {
+      // Yapıştırma: son dört rakam.
+      final d = newDigits.padLeft(4, '0');
+      final t = d.substring(d.length - 4);
+      final text = '${t.substring(0, 2)}:${t.substring(2)}';
+      return TextEditingValue(
+        text: text,
+        selection: const TextSelection.collapsed(offset: 5),
+      );
+    }
+    if (added > 0) {
+      final at = newValue.selection.baseOffset - 1;
+      final ch = at >= 0 && at < newValue.text.length ? newValue.text[at] : '';
+      if (RegExp(r'\d').hasMatch(ch)) {
+        // Alan doluyken yazmaya başlanırsa baştan yazılır.
+        if (k >= 4) {
+          chars.setAll(0, '00:00'.split(''));
+          k = 0;
+        }
+        chars[_slots[k]] = ch;
+        k++;
+      }
+    } else if (added < 0 && k > 0) {
+      k--;
+      chars[_slots[k]] = '0';
+    }
     return TextEditingValue(
-      text: shown,
-      selection: TextSelection.collapsed(offset: shown.length),
+      text: chars.join(),
+      selection: TextSelection.collapsed(offset: _offsetAfter(k)),
     );
   }
 }
 
-/// Saniye → "dakika:saniye" (dakika 59'u geçebilir: 65:28).
+/// Saniye → "dakika:saniye" (dakika 59'u geçebilir: 65:28; en çok 99:59).
 String _mmss(int sec) {
-  final s = sec < 0 ? 0 : sec;
+  final s = sec < 0 ? 0 : (sec > 5999 ? 5999 : sec);
   return '${(s ~/ 60).toString().padLeft(2, '0')}:'
       '${(s % 60).toString().padLeft(2, '0')}';
 }
@@ -808,11 +841,10 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
       icon: Icons.sports_rounded,
       label: 'VİDEODAKİ AN',
       fieldIcon: Icons.schedule_rounded,
-      initialValue: current == null ? '' : _mmss(current),
+      initialValue: _mmss(current ?? 0),
       hint: 'dakika:saniye, örn. 07:15',
-      subtitle: second
-          ? '2. yarıdaki bütün kesitler bu ana göre kayar.'
-          : 'Bütün kesitler bu ana göre kayar.',
+      subtitle: 'Kaydettikten sonra "Uygula" ile onay bekleyen '
+          'kesitler gol dakikasına göre bu andan yerleşir.',
       keyboardType: TextInputType.number,
       inputFormatters: [_ClockInputFormatter()],
       validator: (v) =>
@@ -821,16 +853,30 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
     if (text == null || !mounted) return;
     final t = _parseClock(text)!;
     try {
-      await MatchHighlightService.shiftStarts(
+      await MatchHighlightService.setStarts(
         widget.match.id,
         kickoffSec: second ? null : t,
         secondHalfSec: second ? t : null,
       );
+      await _refresh();
+    } catch (e) {
+      _snack('Kaydedilemedi: $e');
+    }
+  }
+
+  /// Onay bekleyen kesitleri girilen başlangıçlara göre yeniden konumlar.
+  Future<void> _applyStarts() async {
+    try {
+      final n = await MatchHighlightService.applyStarts(widget.match.id);
       _draft.clear();
       await _refresh();
-      _snack('Kesitler yeni başlangıca göre kaydırıldı.');
+      _snack(
+        n == 0
+            ? 'Onay bekleyen kesit yok.'
+            : '$n kesit gol dakikasına göre yerleşti.',
+      );
     } catch (e) {
-      _snack('Kaydırılamadı: $e');
+      _snack('Uygulanamadı: $e');
     }
   }
 
@@ -1106,6 +1152,28 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
                       '2. yarı',
                       job.secondHalfSec,
                       () => _typeStart(second: true),
+                    ),
+                    SizedBox(
+                      height: 30,
+                      child: FilledButton.icon(
+                        onPressed: job.kickoffSec == null
+                            ? null
+                            : _applyStarts,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: kAdminAccent,
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          minimumSize: const Size(0, 30),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        icon: const Icon(Icons.sync_rounded, size: 16),
+                        label: const Text(
+                          'Uygula',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                 ),
