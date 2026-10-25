@@ -12,13 +12,30 @@ import '../../../core/widgets/web_safe_image.dart';
 import '../../../core/utils/string_utils.dart';
 import '../../../core/utils/team_colors.dart';
 import '../../../core/services/app_session.dart';
+import '../../../core/widgets/admin_form.dart';
+import '../../share/king_poster.dart';
+import '../../share/poster_background.dart';
+import '../../share/poster_share.dart';
 
 /// Bir sezonun oyuncu istatistikleri (gol, asist, maçın oyuncusu, kartlar).
 /// Başlık çubuğu yok; Turnuva Sayfası'nın İstatistik sekmesinde gösterilir.
 class StatsView extends StatefulWidget {
-  const StatsView({super.key, required this.seasonId, this.groupId});
+  const StatsView({
+    super.key,
+    required this.seasonId,
+    this.groupId,
+    this.leagueId,
+    this.shareAction,
+  });
 
   final String seasonId;
+
+  /// Afiş paylaşımı için (turnuva adı/logosu, yetki).
+  final String? leagueId;
+
+  /// Gol / Asist sekmesinde yetkiliye afiş paylaşma eylemi (sağ alttaki
+  /// düğme Turnuva Sayfası'nda); diğer sekmelerde null.
+  final ValueNotifier<VoidCallback?>? shareAction;
 
   /// Verilirse yalnız bu gruptaki takımların oyuncuları sayılır.
   final String? groupId;
@@ -173,6 +190,10 @@ class _StatsViewState extends State<StatsView> {
                     stats: stats,
                     teamById: teamById,
                     players: pSnap.data!,
+                    seasonId: widget.seasonId,
+                    groupId: widget.groupId,
+                    leagueId: widget.leagueId,
+                    shareAction: widget.shareAction,
                   );
                 },
               );
@@ -185,9 +206,14 @@ class _StatsViewState extends State<StatsView> {
 }
 
 class _MiniTeamLogo extends StatelessWidget {
-  const _MiniTeamLogo({required this.logoUrl, required this.fallbackText});
+  const _MiniTeamLogo({
+    required this.logoUrl,
+    required this.fallbackText,
+    this.size = 16,
+  });
   final String logoUrl;
   final String fallbackText;
+  final double size;
 
   String _normalizeUrl(String raw) {
     final url = raw.trim();
@@ -201,10 +227,10 @@ class _MiniTeamLogo extends StatelessWidget {
     final url = _normalizeUrl(logoUrl);
     return WebSafeImage(
       url: url,
-      width: 16,
-      height: 16,
+      width: size,
+      height: size,
       fit: BoxFit.contain,
-      fallbackIconSize: 12,
+      fallbackIconSize: size * 0.75,
     );
   }
 }
@@ -332,11 +358,19 @@ class _StatsTabs extends StatefulWidget {
     required this.stats,
     required this.teamById,
     required this.players,
+    required this.seasonId,
+    required this.groupId,
+    required this.leagueId,
+    required this.shareAction,
   });
 
   final List<PlayerStats> stats;
   final Map<String, Team> teamById;
   final Map<String, _PlayerLite> players;
+  final String seasonId;
+  final String? groupId;
+  final String? leagueId;
+  final ValueNotifier<VoidCallback?>? shareAction;
 
   @override
   State<_StatsTabs> createState() => _StatsTabsState();
@@ -344,6 +378,116 @@ class _StatsTabs extends StatefulWidget {
 
 class _StatsTabsState extends State<_StatsTabs> {
   int _cat = 0;
+
+  /// Gol ve Asist krallık düzeninde (E tasarımı) ve afişle paylaşılır.
+  bool get _king => _cat <= 1;
+
+  @override
+  void dispose() {
+    final a = widget.shareAction;
+    if (a != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => a.value = null);
+    }
+    super.dispose();
+  }
+
+  /// Sağ alttaki paylaş düğmesi: Gol / Asist'te, admin ve kurucu başkana.
+  void _syncShare(List<_Ranked> rows) {
+    final a = widget.shareAction;
+    if (a == null) return;
+    final can =
+        _king &&
+        rows.isNotEmpty &&
+        AppSession.of(context).value.canManageLeague(widget.leagueId);
+    final cat = _categories[_cat];
+    final top = rows.take(10).toList();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      a.value = can ? () => _share(cat, top) : null;
+    });
+  }
+
+  Future<void> _share(_Category cat, List<_Ranked> rows) async {
+    final design = await showAdminOptionPicker<int>(
+      context: context,
+      title: '${cat.label} krallığı afişi',
+      items: const [1, 2],
+      labelBuilder: (d) => d == 1
+          ? 'Afiş 1 · Lider fotoğraflı liste'
+          : 'Afiş 2 · Fotoğraflı şeritler',
+      emptyText: '',
+    );
+    if (design == null || !mounted) return;
+    final client = Supabase.instance.client;
+    final groupId = widget.groupId;
+    final (league, season, group) = await (
+      widget.leagueId == null
+          ? Future<Map<String, dynamic>?>.value()
+          : client
+                .from('leagues')
+                .select('name, logo_url')
+                .eq('id', widget.leagueId!)
+                .maybeSingle()
+                .catchError((_) => null),
+      client
+          .from('seasons')
+          .select('name')
+          .eq('id', widget.seasonId)
+          .maybeSingle()
+          .catchError((_) => null),
+      groupId == null
+          ? Future<Map<String, dynamic>?>.value()
+          : client
+                .from('groups')
+                .select('name')
+                .eq('id', groupId)
+                .maybeSingle()
+                .catchError((_) => null),
+    ).wait;
+    if (!mounted) return;
+    final groupName = (group?['name'] ?? '').toString().trim();
+    final title = '${cat.label.trUpper} KRALLIĞI';
+    final data = KingPosterData(
+      title: title,
+      unit: cat.label.trUpper,
+      leagueName: (league?['name'] ?? '').toString(),
+      leagueLogo: (league?['logo_url'] ?? '').toString(),
+      subtitle: [
+        (season?['name'] ?? '').toString().trim(),
+        // Tek grup "Genel" gibi adlandırılmış olabilir; yine de yazılır.
+        groupName,
+      ].where((e) => e.isNotEmpty).join(' · '),
+      rows: [
+        for (final r in rows)
+          KingRow(
+            rank: r.rank,
+            name: (widget.players[r.stats.playerPhone]?.name ?? '').isEmpty
+                ? 'Oyuncu'
+                : widget.players[r.stats.playerPhone]!.name,
+            team: widget.teamById[r.stats.teamId]?.name ?? '',
+            teamLogo: widget.teamById[r.stats.teamId]?.logoUrl ?? '',
+            photoUrl: widget.players[r.stats.playerPhone]?.photoUrl ?? '',
+            value: r.value,
+          ),
+      ],
+    );
+    final slug = cat.label.toLowerCase() == 'gol' ? 'gol' : 'asist';
+    await showPosterPreview(
+      context: context,
+      fileName: '${slug}_kralligi_afis$design',
+      title: '$title afişi',
+      formats: const [PosterFormat.post, PosterFormat.story],
+      imageUrls: [
+        data.leagueLogo,
+        for (final r in data.rows) ...[r.teamLogo, r.photoUrl],
+      ].where((u) => u.trim().isNotEmpty).toList(),
+      poster: design == 2 ? KingStripPoster(data: data) : null,
+      photoPoster: design == 1
+          ? (photo) => KingPhotoPoster(data: data, photo: photo)
+          : null,
+      photoUrl: design == 1 ? data.rows.first.photoUrl : null,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -354,6 +498,7 @@ class _StatsTabsState extends State<_StatsTabs> {
     };
     final cat = _categories[_cat];
     final rows = _rank(widget.stats, cat.value, tieRed: _cat == 4);
+    _syncShare(rows);
     return Column(
       children: [
         SizedBox(
@@ -394,14 +539,23 @@ class _StatsTabsState extends State<_StatsTabs> {
           ),
         ),
         Expanded(
-          child: _Board(
-            key: ValueKey(_cat),
-            category: cat,
-            rows: rows,
-            teamById: widget.teamById,
-            players: widget.players,
-            mine: mine,
-          ),
+          child: _king
+              ? _KingBoard(
+                  key: ValueKey(_cat),
+                  category: cat,
+                  rows: rows.take(10).toList(),
+                  teamById: widget.teamById,
+                  players: widget.players,
+                  mine: mine,
+                )
+              : _Board(
+                  key: ValueKey(_cat),
+                  category: cat,
+                  rows: rows,
+                  teamById: widget.teamById,
+                  players: widget.players,
+                  mine: mine,
+                ),
         ),
       ],
     );
@@ -870,6 +1024,415 @@ class _PlayerAvatar extends StatelessWidget {
                 fontWeight: FontWeight.w800,
               ),
             ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Gol / Asist krallığı (E tasarımı): ilk 3 profil fotoğraflı şeritlerde,
+// lider yeşil zeminde; 4-10 sade satırlar. Paylaşım afişleriyle aynı dil.
+// ---------------------------------------------------------------------------
+
+const _lime = Color(0xFFA3E635);
+const _ink = Color(0xFF0B1220);
+
+TextStyle _kCond(
+  double size, {
+  Color color = Colors.white,
+  FontWeight w = FontWeight.w800,
+}) => TextStyle(
+  fontFamily: 'BarlowCondensed',
+  fontSize: size,
+  color: color,
+  fontWeight: w,
+  height: 1,
+);
+
+/// Ad ince, soyad kalın büyük harf: "Ali Cansun BEGEÇARSLAN".
+Widget _kName(
+  String name,
+  double size, {
+  Color first = const Color(0xFFCBD5E1),
+  Color last = Colors.white,
+}) {
+  final w = name.trim().split(RegExp(r'\s+'));
+  final head = w.length < 2 ? '' : '${w.sublist(0, w.length - 1).join(' ')} ';
+  return Text.rich(
+    TextSpan(
+      children: [
+        if (head.isNotEmpty)
+          TextSpan(
+            text: head,
+            style: _kCond(size, color: first, w: FontWeight.w600),
+          ),
+        TextSpan(
+          text: w.last.trUpper,
+          style: _kCond(size, color: last, w: FontWeight.w900),
+        ),
+      ],
+    ),
+    maxLines: 1,
+    overflow: TextOverflow.ellipsis,
+  );
+}
+
+/// Üstü yuvarlak kesik oyuncu fotoğrafı; yoksa baş harfler.
+class _KingPhoto extends StatelessWidget {
+  const _KingPhoto({
+    required this.name,
+    required this.photoUrl,
+    required this.width,
+    required this.height,
+    required this.fill,
+    required this.textColor,
+  });
+
+  final String name;
+  final String photoUrl;
+  final double width;
+  final double height;
+  final Color fill;
+  final Color textColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final initials = name
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .take(2)
+        .map((w) => w.characters.first)
+        .join()
+        .trUpper;
+    return ClipRRect(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(width / 2)),
+      child: Container(
+        width: width,
+        height: height,
+        color: fill,
+        alignment: Alignment.center,
+        child: photoUrl.isNotEmpty
+            ? WebSafeImage(
+                url: photoUrl,
+                width: width,
+                height: height,
+                fit: BoxFit.cover,
+                fallbackIconSize: width * 0.4,
+              )
+            : Text(initials, style: _kCond(width * 0.36, color: textColor)),
+      ),
+    );
+  }
+}
+
+class _KingBoard extends StatelessWidget {
+  const _KingBoard({
+    super.key,
+    required this.category,
+    required this.rows,
+    required this.teamById,
+    required this.players,
+    required this.mine,
+  });
+
+  final _Category category;
+  final List<_Ranked> rows;
+  final Map<String, Team> teamById;
+  final Map<String, _PlayerLite> players;
+  final Set<String> mine;
+
+  @override
+  Widget build(BuildContext context) {
+    if (rows.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(category.icon, size: 48, color: Colors.white24),
+            const SizedBox(height: 10),
+            Text(
+              'Henüz ${category.label.toLowerCase()} kaydı yok.',
+              style: const TextStyle(color: Colors.white54),
+            ),
+          ],
+        ),
+      );
+    }
+    String nameOf(_Ranked r) {
+      final n = players[r.stats.playerPhone]?.name ?? '';
+      return n.isEmpty ? 'Oyuncu' : n;
+    }
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 120),
+      children: [
+        for (var i = 0; i < rows.length; i++)
+          Padding(
+            padding: EdgeInsets.only(bottom: i < 3 ? 8 : 6),
+            child: i < 3
+                ? _KingTopCard(
+                    row: rows[i],
+                    leader: i == 0,
+                    name: nameOf(rows[i]),
+                    photoUrl:
+                        players[rows[i].stats.playerPhone]?.photoUrl ?? '',
+                    team: teamById[rows[i].stats.teamId],
+                    category: category,
+                    isMe: mine.contains(rows[i].stats.playerPhone),
+                  )
+                : _KingListRow(
+                    row: rows[i],
+                    name: nameOf(rows[i]),
+                    team: teamById[rows[i].stats.teamId],
+                    isMe: mine.contains(rows[i].stats.playerPhone),
+                  ),
+          ),
+      ],
+    );
+  }
+}
+
+/// İlk 3: fotoğraf, ad, takım ve değer kutusu. Lider yeşil zeminde, taçlı.
+class _KingTopCard extends StatelessWidget {
+  const _KingTopCard({
+    required this.row,
+    required this.leader,
+    required this.name,
+    required this.photoUrl,
+    required this.team,
+    required this.category,
+    required this.isMe,
+  });
+
+  final _Ranked row;
+  final bool leader;
+  final String name;
+  final String photoUrl;
+  final Team? team;
+  final _Category category;
+  final bool isMe;
+
+  @override
+  Widget build(BuildContext context) {
+    final h = leader ? 104.0 : 80.0;
+    final ink = leader ? _ink : Colors.white;
+    return GestureDetector(
+      onTap: () => showPlayerCard(context, playerKey: row.stats.playerPhone),
+      child: Container(
+        height: h,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          gradient: leader
+              ? const LinearGradient(
+                  colors: [Color(0xFF84CC16), _lime, Color(0xFFD9F99D)],
+                )
+              : null,
+          color: leader ? null : _card,
+          border: leader
+              ? null
+              : Border.all(
+                  color: isMe ? _accent : const Color(0xFF334155),
+                  width: isMe ? 1.5 : 1,
+                ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              width: leader ? 92 : 96,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (!leader)
+                    Padding(
+                      padding: EdgeInsets.only(right: 4, bottom: h * 0.36),
+                      child: Text(
+                        '${row.rank}',
+                        style: _kCond(18, color: _muted, w: FontWeight.w800),
+                      ),
+                    ),
+                  Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      if (leader)
+                        const Icon(
+                          Icons.workspace_premium_rounded,
+                          color: _ink,
+                          size: 22,
+                        ),
+                      _KingPhoto(
+                        name: name,
+                        photoUrl: photoUrl,
+                        width: leader ? 74 : 60,
+                        height: leader ? 76 : 70,
+                        fill: leader
+                            ? _ink.withValues(alpha: 0.2)
+                            : const Color(0xFF334155),
+                        textColor: leader ? _ink : Colors.white70,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (leader)
+                    Text(
+                      category.crown,
+                      style: _kCond(12, color: _ink, w: FontWeight.w800),
+                    ),
+                  if (leader) const SizedBox(height: 3),
+                  _kName(
+                    name,
+                    leader ? 22 : 20,
+                    first: leader ? _ink : const Color(0xFFCBD5E1),
+                    last: ink,
+                  ),
+                  const SizedBox(height: 4),
+                  if (team != null)
+                    Row(
+                      children: [
+                        _MiniTeamLogo(
+                          logoUrl: team!.logoUrl,
+                          fallbackText: team!.name,
+                        ),
+                        const SizedBox(width: 5),
+                        Flexible(
+                          child: Text(
+                            team!.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: leader ? _ink : _muted,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+            if (leader)
+              Container(
+                width: 76,
+                color: _ink,
+                alignment: Alignment.center,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      '${row.value}',
+                      style: _kCond(44, color: _lime, w: FontWeight.w900),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      category.unit.trUpper,
+                      style: _kCond(11, color: _lime, w: FontWeight.w700),
+                    ),
+                  ],
+                ),
+              )
+            else
+              Container(
+                width: 60,
+                margin: const EdgeInsets.fromLTRB(4, 10, 10, 10),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: _lime,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '${row.value}',
+                  style: _kCond(32, color: _ink, w: FontWeight.w900),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 4-10: sıra, takım logosu, ad ve yeşil çerçeveli değer.
+class _KingListRow extends StatelessWidget {
+  const _KingListRow({
+    required this.row,
+    required this.name,
+    required this.team,
+    required this.isMe,
+  });
+
+  final _Ranked row;
+  final String name;
+  final Team? team;
+  final bool isMe;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 46,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: Material(
+              color: isMe
+                  ? Color.lerp(_card, _accent, 0.14)
+                  : _card.withValues(alpha: 0.75),
+              borderRadius: BorderRadius.circular(8),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () =>
+                    showPlayerCard(context, playerKey: row.stats.playerPhone),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 20,
+                        child: Text(
+                          '${row.rank}',
+                          style: _kCond(16, color: _muted, w: FontWeight.w700),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      _MiniTeamLogo(
+                        logoUrl: team?.logoUrl ?? '',
+                        fallbackText: team?.name ?? '',
+                        size: 24,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(child: _kName(name, 18)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Container(
+            width: 46,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: _card,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: _lime),
+            ),
+            child: Text(
+              '${row.value}',
+              style: _kCond(22, color: _lime, w: FontWeight.w900),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
