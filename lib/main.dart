@@ -446,9 +446,15 @@ class _MyAppState extends State<MyApp> {
               ),
             ),
           ),
+          // Yüzen düğmeler içeriği kapatmasın: varsayılan 56 yerine 48.
           floatingActionButtonTheme: FloatingActionButtonThemeData(
             backgroundColor: _accent,
             foregroundColor: Colors.white,
+            sizeConstraints: const BoxConstraints.tightFor(
+              width: 48,
+              height: 48,
+            ),
+            iconSize: 22,
           ),
         ),
         builder: (context, child) {

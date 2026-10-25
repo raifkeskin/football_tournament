@@ -37,6 +37,7 @@ class FixtureView extends StatefulWidget {
     required this.seasonId,
     required this.groupId,
     this.shareAction,
+    this.videoAction,
     this.accent = const Color(0xFF10B981),
   });
 
@@ -47,6 +48,10 @@ class FixtureView extends StatefulWidget {
   /// Seçili haftanın afişini paylaşma işlevi (yetki ve maç varsa dolu);
   /// paylaş düğmesi sayfanın kendisinde.
   final ValueNotifier<VoidCallback?>? shareAction;
+
+  /// Seçili günün "Günün maçları" videosunu açma işlevi (şimdilik yalnız
+  /// admin); düğmesi paylaş düğmesinin üstünde, sayfanın kendisinde.
+  final ValueNotifier<VoidCallback?>? videoAction;
 
   /// Turnuvanın rengi (sekmelerle aynı); hafta ve gün seçimi bu renkte.
   final Color accent;
@@ -169,6 +174,7 @@ class _FixtureViewState extends State<FixtureView> {
   @override
   void dispose() {
     widget.shareAction?.value = null;
+    widget.videoAction?.value = null;
     super.dispose();
   }
 
@@ -402,6 +408,14 @@ class _FixtureViewState extends State<FixtureView> {
     final selectedDay = days.contains(_day)
         ? _day
         : (days.isEmpty ? null : days.first);
+    // Günün Maçları Reels videosu: şimdilik yalnız admin.
+    final VoidCallback? video =
+        selectedDay != null && AppSession.of(context).value.isAdmin
+        ? () => openDayPreviewVideo(_leagueId, selectedDay)
+        : null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.videoAction?.value = video;
+    });
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
@@ -424,20 +438,6 @@ class _FixtureViewState extends State<FixtureView> {
               onSelect: _selectDay,
             ),
           ],
-          // Günün Maçları Reels videosu: şimdilik yalnız admin.
-          if (selectedDay != null && AppSession.of(context).value.isAdmin)
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: () => openDayPreviewVideo(_leagueId, selectedDay),
-                icon: const Icon(Icons.movie_creation_outlined, size: 18),
-                label: const Text('Günün maçları videosu'),
-                style: TextButton.styleFrom(
-                  foregroundColor: widget.accent,
-                  visualDensity: VisualDensity.compact,
-                ),
-              ),
-            ),
         ],
       ),
     );

@@ -169,6 +169,9 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
   /// Fikstür sekmesinin seçili hafta afişi (yetki ve maç varsa dolu).
   final _fixtureShare = ValueNotifier<VoidCallback?>(null);
 
+  /// Fikstür sekmesinin seçili gün videosu (şimdilik yalnız admin).
+  final _fixtureVideo = ValueNotifier<VoidCallback?>(null);
+
   @override
   void initState() {
     super.initState();
@@ -189,6 +192,7 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
     LeagueSwitchScope.setPageBand(_route, null);
     _tabs.dispose();
     _fixtureShare.dispose();
+    _fixtureVideo.dispose();
     super.dispose();
   }
 
@@ -440,6 +444,7 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
             seasonId: season.id,
             groupId: group.id,
             shareAction: _fixtureShare,
+            videoAction: _fixtureVideo,
             accent: accent,
           ),
         );
@@ -465,7 +470,7 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
   /// Puan Durumu ve Fikstür sekmelerinde sağ altta yüzen afiş paylaşma
   /// düğmesi.
   Widget? _shareButton(GroupModel? group, Color accent) {
-    Widget fab(VoidCallback onPressed) => FloatingActionButton(
+    Widget fab(VoidCallback onPressed) => FloatingActionButton.small(
       heroTag: null,
       tooltip: 'Afişi paylaş',
       backgroundColor: accent,
@@ -491,10 +496,30 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
           ),
         );
       case TournamentHubTab.fixture:
-        return ValueListenableBuilder<VoidCallback?>(
-          valueListenable: _fixtureShare,
-          builder: (context, share, _) =>
-              share == null ? const SizedBox.shrink() : fab(share),
+        // Gün videosu paylaş düğmesinin üstünde, ikincil renkte.
+        return ListenableBuilder(
+          listenable: Listenable.merge([_fixtureShare, _fixtureVideo]),
+          builder: (context, _) {
+            final share = _fixtureShare.value;
+            final video = _fixtureVideo.value;
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if (video != null)
+                  FloatingActionButton.small(
+                    heroTag: null,
+                    tooltip: 'Günün maçları videosu',
+                    backgroundColor: const Color(0xFF1E293B),
+                    foregroundColor: accent,
+                    onPressed: video,
+                    child: const Icon(Icons.movie_creation_outlined),
+                  ),
+                if (video != null && share != null) const SizedBox(height: 10),
+                if (share != null) fab(share),
+              ],
+            );
+          },
         );
       case TournamentHubTab.playoff:
       case TournamentHubTab.stats:
