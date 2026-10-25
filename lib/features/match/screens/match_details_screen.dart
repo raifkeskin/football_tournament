@@ -4922,9 +4922,9 @@ class _DetailTabView extends StatelessWidget {
                 return title.isEmpty ? 'Değişiklik' : title;
               }
               if (type == 'goal' || type == 'goal_cancelled') {
+                // Penaltı ikonda (P rozeti) belli; adın yanına yazılmaz.
                 // Kendi kalesine: adın altında soluk alt satırda yazılır.
-                final suffix = isPenalty && !isOwnGoal ? ' (P)' : '';
-                return '${title.isEmpty ? 'Gol' : title}$suffix';
+                return title.isEmpty ? 'Gol' : title;
               }
               return title;
             }
@@ -5249,15 +5249,12 @@ class _MinutelessSummary extends StatelessWidget {
         icons.add(card(const Color(0xFFEF4444)));
       }
     }
+    // Birden fazla gol: penaltıdan bağımsız yalnız sayı, ör. "Ali (2)".
     final suffix = !goal
         ? ''
         : r.ownGoal
         ? ' (K.K.)'
-        : r.penalties == 0
-        ? ''
-        : r.count == 1
-        ? ' (P)'
-        : ' (${r.penalties} P)';
+        : '';
     final nameText = Text(
       '${r.name.isEmpty ? '-' : r.name}$suffix',
       overflow: TextOverflow.ellipsis,
