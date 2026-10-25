@@ -340,6 +340,19 @@ class _AdminAiScreenState extends State<AdminAiScreen> {
     await _setOption('ai_esame_read_limit', '$picked');
   }
 
+  Future<void> _pickScanLimit() async {
+    final current = int.tryParse('${_settings?['ai_clip_scan_limit']}') ?? 3;
+    final picked = await showAdminOptionPicker<int>(
+      context: context,
+      title: 'Gol videosu tarama sınırı',
+      items: const [1, 2, 3, 4, 5, 10],
+      labelBuilder: (n) => 'Maç başına $n tarama',
+      selected: current,
+    );
+    if (picked == null || picked == current) return;
+    await _setOption('ai_clip_scan_limit', '$picked');
+  }
+
   Future<void> _pickMonth() async {
     final now = DateTime.now();
     final items = [
@@ -635,6 +648,20 @@ class _AdminAiScreenState extends State<AdminAiScreen> {
                   value: '${_settings?['ai_esame_read_limit'] ?? 3} okuma',
                   placeholder: '',
                   onTap: _busy || _settings == null ? null : _pickReadLimit,
+                ),
+              ],
+            ),
+          ),
+          AdminFormSection(
+            title: 'Gol videosu',
+            child: AdminFieldGroup(
+              children: [
+                AdminSelectRow(
+                  icon: Icons.repeat_rounded,
+                  label: 'Tarama sınırı (maç)',
+                  value: '${_settings?['ai_clip_scan_limit'] ?? 3} tarama',
+                  placeholder: '',
+                  onTap: _busy || _settings == null ? null : _pickScanLimit,
                 ),
               ],
             ),

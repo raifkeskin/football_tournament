@@ -13,10 +13,12 @@
 //     maliyet maç başı veya aylık sınırı (app_private_settings) aşıyorsa
 //     Gemini'ye hiç gidilmez.
 //
-// İstek: POST { match_id, kickoff_sec?, second_half_sec? } — kullanıcının
-// oturum belirteciyle; yalnızca owns_match() true olanlar (admin, kurucu
-// başkan, bölge sorumlusu) çalıştırabilir. İş arka planda sürer; durum
-// match_highlight_jobs tablosundan izlenir.
+// İstek: POST { match_id, kickoff_sec?, second_half_sec?, replace? } —
+// kullanıcının oturum belirteciyle; yalnızca owns_match() true olanlar (admin,
+// kurucu başkan, bölge sorumlusu) çalıştırabilir. Kesiti olan maçta yeniden
+// tarama replace: true ister (tüm eski kesitler silinir); maç başı tarama
+// sayısı ai_clip_scan_limit ile sınırlı (admin hariç). İş arka planda sürer;
+// durum match_highlight_jobs tablosundan izlenir.
 //
 // Gizli değerler (supabase secrets): GEMINI_API_KEY; isteğe bağlı
 // GEMINI_MODEL (varsayılan gemini-flash-latest), GEMINI_THINKING (düşünme
@@ -278,6 +280,14 @@ async function readLimits() {
     perMatch: get("ai_clip_max_usd_per_match", 0.5),
     monthly: get("ai_clip_monthly_usd", 5),
   };
+}
+
+/** Kurucu başkan / bölge sorumlusu bir maçı en fazla kaç kez taratabilir. */
+async function readScanLimit(): Promise<number> {
+  const { data } = await admin.from("app_private_settings")
+    .select("value").eq("key", "ai_clip_scan_limit").maybeSingle();
+  const v = Number(data?.value);
+  return Number.isFinite(v) && v > 0 ? v : 3;
 }
 
 async function spentThisMonth(): Promise<number> {
@@ -764,6 +774,8 @@ type RunOpts = {
   roster: RosterPlayer[];
   /** Sezon tercihi: kesitler doğrudan yayına girer. */
   autoPublish: boolean;
+  /** Onaylı yeniden tarama: başarılı bitince maçın tüm eski kesitleri silinir. */
+  replace: boolean;
 };
 
 /** Tüm gollerin dakikası girilmiş mi? (pencereli tarama yapılabilir) */
@@ -953,10 +965,11 @@ async function run(opts: RunOpts) {
     const foundGoals = covered.length - missing.length;
     const needsReview = timed && covered.length > 0 && foundGoals * 2 < covered.length;
 
-    // Yeniden çalıştırmada sorumlunun dokunmadığı eski YZ kesitleri silinir;
-    // onaylanan, düzeltilen ya da kaldırılanlar (reviewed_by dolu) kalır.
-    await admin.from("match_highlights").delete()
-      .eq("match_id", matchId).eq("source", "ai").is("reviewed_by", null);
+    // Onaylı yeniden taramada maçın tüm eski kesitleri silinir (iş hata
+    // verirse buraya gelinmez, eskiler kalır). Otomatik çalıştırmada yalnız
+    // sorumlunun dokunmadığı YZ kesitleri silinir.
+    const stale = admin.from("match_highlights").delete().eq("match_id", matchId);
+    await (opts.replace ? stale : stale.eq("source", "ai").is("reviewed_by", null));
     if (rows.length) {
       const { error } = await admin.from("match_highlights").insert(rows);
       if (error) throw new Error(error.message);
@@ -1090,12 +1103,41 @@ Deno.serve(async (req) => {
 
   // Aynı maçta süren bir iş varsa (10 dk'dan yeni) yenisi başlatılmaz.
   const { data: job } = await admin.from("match_highlight_jobs")
-    .select("status, started_at").eq("match_id", matchId).maybeSingle();
+    .select("status, started_at, scan_count").eq("match_id", matchId).maybeSingle();
   if (
     job?.status === "running" &&
     Date.now() - new Date(job.started_at).getTime() < 10 * 60 * 1000
   ) {
     return json({ error: "Bu maç için analiz zaten sürüyor." }, 409);
+  }
+  const scanCount = Number(job?.scan_count ?? 0);
+
+  // Maç başı tarama sınırı (otomatik tarama da sayılır; admin hariç).
+  if (!auto) {
+    const { data: isAdmin } = await userClient.rpc("is_admin");
+    if (isAdmin !== true) {
+      const scanLimit = await readScanLimit();
+      if (scanCount >= scanLimit) {
+        return json({
+          error: `Bu maç için tarama hakkı doldu (${scanCount}/${scanLimit}).`,
+        }, 429);
+      }
+    }
+  }
+
+  // Yeniden taramada mevcut kesitlerin (elle düzeltilenler dahil) tamamı
+  // silinir; bu yüzden uygulamada onaylanmış olmalı (replace: true). Onay
+  // penceresi olmayan eski sürümler buradan geçemez.
+  const replace = !auto && body?.replace === true;
+  if (!auto && !replace) {
+    const { count } = await admin.from("match_highlights")
+      .select("id", { count: "exact", head: true }).eq("match_id", matchId);
+    if ((count ?? 0) > 0) {
+      return json({
+        error: "Yeniden taramada mevcut kesitler silinir. Uygulamayı " +
+          "güncelleyip tekrar deneyin.",
+      }, 409);
+    }
   }
 
   const { data: m } = await admin.from("matches")
@@ -1246,6 +1288,7 @@ Deno.serve(async (req) => {
     requested_by: userId,
     started_at: new Date().toISOString(),
     finished_at: null,
+    scan_count: scanCount + 1,
   });
 
   // Analiz birkaç dakika sürebilir; yanıt hemen döner, iş arka planda sürer.
@@ -1263,6 +1306,7 @@ Deno.serve(async (req) => {
     limit: limits.perMatch,
     roster,
     autoPublish,
+    replace,
   });
   // deno-lint-ignore no-explicit-any
   const rt = (globalThis as any).EdgeRuntime;
