@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/services/error_reporter.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../models/match.dart';
@@ -81,10 +82,11 @@ Future<List<EsamePick>?> scanEsameFromPhoto(
   if (source == null || !context.mounted) return null;
   final picked = await ImagePicker().pickImage(
     source: source,
-    // Zayıf bağlantıda yükleme uzamasın: el yazısı okumaya 1600 px yeter.
-    maxWidth: 1600,
-    maxHeight: 1600,
-    imageQuality: 75,
+    // Sahadaki mobil bağlantıda ~1 MB'lık gönderim kopuyordu (2026-10-25);
+    // el yazısı okumaya 1280 px yeter (~200 KB).
+    maxWidth: 1280,
+    maxHeight: 1280,
+    imageQuality: 70,
   );
   if (picked == null || !context.mounted) return null;
 
@@ -119,9 +121,10 @@ Future<List<EsamePick>?> scanEsameFromPhoto(
   } on FunctionException catch (e) {
     final d = e.details;
     error = d is Map && d['error'] != null ? '${d['error']}' : '$d';
-  } on TimeoutException {
+  } on TimeoutException catch (e, st) {
     error = _connectionError;
-  } catch (e) {
+    ErrorReporter.report(e, st, context: 'esame-read ${bytes.length} B');
+  } catch (e, st) {
     // Bağlantı koptu (ClientException, SocketException): teknik metin yerine.
     final t = '$e';
     error =
@@ -130,6 +133,7 @@ Future<List<EsamePick>?> scanEsameFromPhoto(
             t.contains('connection')
         ? _connectionError
         : t;
+    ErrorReporter.report(e, st, context: 'esame-read ${bytes.length} B');
   }
   if (!context.mounted) return null;
   Navigator.of(context, rootNavigator: true).pop();
