@@ -21,6 +21,16 @@ import '../../../core/utils/realtime_signal.dart';
 import '../../../core/utils/resilient_stream.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+/// "05:28", "1:05:28" ya da "328" → saniye; okunamazsa null.
+int? _parseClock(String v) {
+  final parts = v.trim().replaceAll('.', ':').split(':');
+  if (parts.isEmpty || parts.length > 3) return null;
+  final n = parts.map(int.tryParse).toList();
+  if (n.any((x) => x == null || x < 0)) return null;
+  if (n.length > 1 && n.skip(1).any((x) => x! > 59)) return null;
+  return n.fold<int>(0, (a, x) => a * 60 + x!);
+}
+
 String _clock(int sec) {
   final h = sec ~/ 3600;
   final m = (sec % 3600) ~/ 60;
@@ -699,9 +709,7 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
   }
 
   /// Taslak aralığı değiştirir ve yeni aralığı hemen oynatır.
-  void _nudge(MatchHighlight h, {int startBy = 0, int endBy = 0}) {
-    final (a, b) = _draft[h.id] ?? (h.startSec, h.endSec);
-    final next = (a + startBy, b + endBy);
+  void _setRange(MatchHighlight h, (int, int) next) {
     setState(() {
       if (next == (h.startSec, h.endSec)) {
         _draft.remove(h.id);
@@ -710,6 +718,43 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
       }
     });
     _play(h);
+  }
+
+  /// Kesiti bütün olarak kaydırır; uzunluk değişmez.
+  void _shift(MatchHighlight h, int by) {
+    final (a, b) = _draft[h.id] ?? (h.startSec, h.endSec);
+    final d = a + by < 0 ? -a : by;
+    _setRange(h, (a + d, b + d));
+  }
+
+  /// Başlangıç ya da bitiş saatini elle yazdırır (05:28 ya da 1:05:28).
+  /// Başlangıç değişince uzunluk korunur; bitiş uzunluğu değiştirir.
+  Future<void> _typeTime(MatchHighlight h, {required bool start}) async {
+    final (a, b) = _draft[h.id] ?? (h.startSec, h.endSec);
+    final text = await showAdminTextInputDialog(
+      context: context,
+      title: start ? 'Kesit Başlangıcı' : 'Kesit Bitişi',
+      icon: Icons.timer_outlined,
+      label: 'VİDEODAKİ AN',
+      fieldIcon: Icons.schedule_rounded,
+      initialValue: _clock(start ? a : b),
+      hint: 'Örn. 05:28 ya da 1:05:28',
+      subtitle: start
+          ? 'Kesitin uzunluğu (${b - a} sn) korunur.'
+          : 'Kesit en az 5, en çok 60 sn olabilir.',
+      keyboardType: TextInputType.datetime,
+      validator: (v) {
+        final t = _parseClock(v);
+        if (t == null) return 'Saati 05:28 biçiminde yazın.';
+        if (!start && (t - a < 5 || t - a > 60)) {
+          return 'Bitiş, başlangıçtan 5–60 sn sonra olmalı.';
+        }
+        return null;
+      },
+    );
+    if (text == null) return;
+    final t = _parseClock(text)!;
+    _setRange(h, start ? (t, t + (b - a)) : (a, t));
   }
 
   Future<void> _saveDraft(MatchHighlight h) async {
@@ -1172,24 +1217,14 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               const Text(
-                'Başlangıç',
+                'Kaydır',
                 style: TextStyle(color: kAdminMuted, fontSize: 12),
               ),
-              nudge('−5 sn', start >= 5 ? () => _nudge(h, startBy: -5) : null),
-              nudge(
-                '+5 sn',
-                end - start > 6 ? () => _nudge(h, startBy: 5) : null,
-              ),
+              nudge('−5 sn', start > 0 ? () => _shift(h, -5) : null),
+              nudge('+5 sn', () => _shift(h, 5)),
               const SizedBox(width: 6),
-              const Text(
-                'Bitiş',
-                style: TextStyle(color: kAdminMuted, fontSize: 12),
-              ),
-              nudge(
-                '−5 sn',
-                end - start > 6 ? () => _nudge(h, endBy: -5) : null,
-              ),
-              nudge('+5 sn', () => _nudge(h, endBy: 5)),
+              nudge('Başl. ${_clock(start)}', () => _typeTime(h, start: true)),
+              nudge('Bitiş ${_clock(end)}', () => _typeTime(h, start: false)),
             ],
           ),
           if (dirty) ...[
