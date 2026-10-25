@@ -246,6 +246,8 @@ Kalıcı maliyet: sonrasında her yeni özellik iki dilde yazılır.
   - esame
   - sponsor logosunun arka plan temizliği
 
+- **Uzatma dakikası ve olay düzenleme (2026-10-25):** dakika alanı devre süresi dolunca 30+2 önerir, elle 45+2 yazılabilir (`desk_add_event.p_added`). Olay satırında Düzenle: oyuncu, asist, giren oyuncu ve dakika değişir; takım ve tür değişmez.
+
 ### Web'e taşınacaklar
 Uygulamada yapılan ve panele de dokunan değişiklikler buraya yazılır. Kullanıcı "web'e uygula" deyince toplu olarak işlenir, sonra liste temizlenir. Veritabanı kuralları (RPC, tetikleyici, RLS) iki tarafa kendiliğinden yansır, buraya yazılmaz.
 - (boş)
