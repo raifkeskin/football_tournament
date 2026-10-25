@@ -987,6 +987,68 @@ async function run(opts: RunOpts) {
   }
 }
 
+/** Yalnız gizli anahtarla: her model için generateContent ve Interactions
+ *  API'ye 30 sn'lik kısa bir YouTube aralığı sorar; durum ve istem birimi döner. */
+async function probeModels(videoId: string, models: unknown) {
+  const list = Array.isArray(models) && models.length
+    ? models.map(String)
+    : ["gemini-3-flash-preview", "gemini-3.5-flash", "gemini-3.8-flash", "gemini-flash-latest"];
+  const url = `https://www.youtube.com/watch?v=${videoId}`;
+  const q = "Bu videonun 10:00-10:30 aralığında ekrandaki skor tabelasında ne yazıyor? Tek cümle.";
+  const out: Record<string, unknown>[] = [];
+  for (const model of list) {
+    for (const api of ["generateContent", "interactions"]) {
+      try {
+        const res = api === "generateContent"
+          ? await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY },
+              body: JSON.stringify({
+                contents: [{
+                  role: "user",
+                  parts: [
+                    { fileData: { fileUri: url }, videoMetadata: { startOffset: "600s", endOffset: "630s" } },
+                    { text: q },
+                  ],
+                }],
+                generationConfig: { mediaResolution: "MEDIA_RESOLUTION_LOW" },
+              }),
+            },
+          )
+          : await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-goog-api-key": GEMINI_API_KEY,
+              "Api-Revision": "2026-05-20",
+            },
+            body: JSON.stringify({
+              model,
+              input: [{ type: "text", text: q }, { type: "video", uri: url }],
+            }),
+          });
+        const b = await res.json().catch(() => ({}));
+        out.push({
+          model,
+          api,
+          status: res.status,
+          error: b?.error?.message ?? null,
+          usage: b?.usageMetadata ?? b?.usage ?? null,
+          text: String(
+            b?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? "").join("") ??
+              JSON.stringify(b?.outputs ?? b?.output ?? "").slice(0, 400),
+          ).slice(0, 300),
+        });
+      } catch (e) {
+        out.push({ model, api, error: (e as Error).message });
+      }
+    }
+  }
+  return { videoId, results: out };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "POST bekleniyor" }, 405);
@@ -1012,6 +1074,8 @@ Deno.serve(async (req) => {
       return json({ error: "Geçersiz anahtar." }, 401);
     }
     auto = true;
+    // Model denemesi: hangi model/API YouTube videosunu gerçekten okuyor?
+    if (body?.probe) return json(await probeModels(String(body.video_id ?? ""), body.models));
   }
   let userId: string | null = null;
   if (!auto) {
