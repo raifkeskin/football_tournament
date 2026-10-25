@@ -172,6 +172,9 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
   /// Fikstür sekmesinin seçili gün videosu (şimdilik yalnız admin).
   final _fixtureVideo = ValueNotifier<VoidCallback?>(null);
 
+  /// İstatistik sekmesinin Gol / Asist krallığı afişi.
+  final _statsShare = ValueNotifier<VoidCallback?>(null);
+
   @override
   void initState() {
     super.initState();
@@ -193,6 +196,7 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
     _tabs.dispose();
     _fixtureShare.dispose();
     _fixtureVideo.dispose();
+    _statsShare.dispose();
     super.dispose();
   }
 
@@ -454,6 +458,8 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
             key: ValueKey('ss|${season.id}|${group.id}'),
             seasonId: season.id,
             groupId: group.id,
+            leagueId: widget.leagueId,
+            shareAction: _statsShare,
           ),
         );
       case TournamentHubTab.news:
@@ -521,8 +527,13 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
             );
           },
         );
-      case TournamentHubTab.playoff:
       case TournamentHubTab.stats:
+        return ValueListenableBuilder<VoidCallback?>(
+          valueListenable: _statsShare,
+          builder: (context, share, _) =>
+              share == null ? const SizedBox.shrink() : fab(share),
+        );
+      case TournamentHubTab.playoff:
       case TournamentHubTab.news:
         return null;
     }

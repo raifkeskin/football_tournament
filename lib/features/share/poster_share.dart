@@ -7,6 +7,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:gal/gal.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -43,9 +44,16 @@ const _kPrefScorers = 'poster_scorers';
 ///
 /// [formats]: afişin desteklediği boyutlar (birden fazlaysa sekme çıkar).
 /// [scorersOption]: "Gol atanlar" anahtarı gösterilsin mi.
+///
+/// [photoPoster] verilirse afiş seçilen fotoğrafla çizilir ve pencerede
+/// "Fotoğraf seç" çıkar: galeriden seçilen fotoğraf yalnız bu afişte
+/// kullanılır, hiçbir yere kaydedilmez. Başlangıçta [photoUrl] (ör.
+/// oyuncunun profil fotoğrafı) kullanılır.
 Future<void> showPosterPreview({
   required BuildContext context,
-  required Widget poster,
+  Widget? poster,
+  Widget Function(ImageProvider? photo)? photoPoster,
+  String? photoUrl,
   required String fileName,
   List<String> imageUrls = const [],
   String? shareText,
@@ -60,6 +68,8 @@ Future<void> showPosterPreview({
     context: context,
     builder: (_) => _PosterPreviewDialog(
       poster: poster,
+      photoPoster: photoPoster,
+      photoUrl: photoUrl,
       fileName: fileName,
       imageUrls: imageUrls,
       shareText: shareText,
@@ -76,6 +86,8 @@ Future<void> showPosterPreview({
 class _PosterPreviewDialog extends StatefulWidget {
   const _PosterPreviewDialog({
     required this.poster,
+    required this.photoPoster,
+    required this.photoUrl,
     required this.fileName,
     required this.imageUrls,
     required this.title,
@@ -87,7 +99,9 @@ class _PosterPreviewDialog extends StatefulWidget {
     this.kind,
   });
 
-  final Widget poster;
+  final Widget? poster;
+  final Widget Function(ImageProvider? photo)? photoPoster;
+  final String? photoUrl;
   final String fileName;
   final List<String> imageUrls;
   final String title;
@@ -141,6 +155,32 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
   }
 
   late PosterFormat _format = widget.formats.first;
+
+  /// Fotoğraflı afişte kullanılan fotoğraf; [_picked] seçildiyse o.
+  late final ImageProvider? _profile =
+      (widget.photoUrl ?? '').trim().isEmpty
+      ? null
+      : NetworkImage(widget.photoUrl!.trim());
+  ImageProvider? _picked;
+  ImageProvider? get _photo => _picked ?? _profile;
+
+  Future<void> _pickPhoto() async {
+    try {
+      final f = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1600,
+        maxHeight: 1600,
+        imageQuality: 90,
+      );
+      if (f == null || !mounted) return;
+      final image = MemoryImage(await f.readAsBytes());
+      if (!mounted) return;
+      await precacheImage(image, context);
+      if (mounted) setState(() => _picked = image);
+    } catch (e) {
+      _say('Fotoğraf açılamadı: $e', error: true);
+    }
+  }
   bool _plain = false;
   bool _scorers = true;
 
@@ -170,6 +210,8 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
       if (bg != null) precacheImage(bg, context, onError: (_, _) => ok = false),
       for (final u in widget.imageUrls.where((u) => u.trim().isNotEmpty))
         precacheImage(NetworkImage(u), context, onError: (_, _) {}),
+      if (_profile != null)
+        precacheImage(_profile, context, onError: (_, _) {}),
     ]);
     // Görsel inmezse varsayılan zemin kullanılır. Kayıtlı boyut (gönderi /
     // hikâye) da burada okunduğu için bütün ekran yeniden çizilir; yoksa
@@ -500,6 +542,55 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
                       ),
                     ),
                   ),
+                if (widget.photoPoster != null) ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _busy ? null : _pickPhoto,
+                          icon: const Icon(Icons.photo_library_outlined),
+                          label: const Text('FOTOĞRAF SEÇ'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size.fromHeight(44),
+                            side: BorderSide(
+                              color: Colors.white.withValues(alpha: 0.25),
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            textStyle: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (_picked != null) ...[
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextButton(
+                            onPressed: _busy
+                                ? null
+                                : () => setState(() => _picked = null),
+                            style: TextButton.styleFrom(
+                              foregroundColor: kAdminAccent,
+                              minimumSize: const Size.fromHeight(44),
+                            ),
+                            child: Text(
+                              _profile == null
+                                  ? 'FOTOĞRAFI KALDIR'
+                                  : 'PROFİL FOTOĞRAFI',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                ],
                 const SizedBox(height: 8),
                 FutureBuilder<void>(
                   future: _ready,
@@ -530,7 +621,12 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
                                         ),
                                         child: PosterBackground(
                                           image: _plain ? null : _background,
-                                          child: widget.poster,
+                                          child:
+                                              widget.photoPoster?.call(
+                                                _photo,
+                                              ) ??
+                                              widget.poster ??
+                                              const SizedBox(),
                                         ),
                                       ),
                                     ),
