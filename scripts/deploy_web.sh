@@ -42,6 +42,10 @@ for f in build/web/katilim.html build/web/panel.html build/web/teklif.html build
   sed -i '' "s|__SUPABASE_ANON_KEY__|$ANON_KEY|g" "$f"
 done
 
+# Uygulama bağlantısı doğrulama dosyaları (Android App Links / iOS Universal
+# Links): derleme gizli klasörü atlarsa diye açıkça kopyalanır.
+cp -R web/.well-known build/web/
+
 echo "==> firebase deploy --only hosting"
 firebase deploy --only hosting
 
