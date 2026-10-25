@@ -1147,10 +1147,11 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     if (match.status == MatchStatus.cancelled) return null;
 
     if (tabIndex == 0) {
-      // Canlı maçta menü yok: olaylar alttaki hızlı girişten, devre ve
-      // Geri Al skorun altındaki butonlardan; düzeltme olaya uzun basarak.
+      // Canlı ve bitmiş maçta menü yok: olaylar alttaki hızlı girişten, devre
+      // ve Geri Al skorun altındaki butonlardan; düzeltme olaya uzun basarak.
       if (match.status == MatchStatus.live ||
-          match.status == MatchStatus.halftime) {
+          match.status == MatchStatus.halftime ||
+          match.status == MatchStatus.finished) {
         return null;
       }
       // Maçın bölge sorumlusu yalnızca tarih, saat ve stadı girer.
@@ -4748,25 +4749,9 @@ class _DetailTabView extends StatelessWidget {
     }
   }
 
+  // Hava durumu yalnız maç öncesi başlıkta (tek satır); akışa yer kalsın.
   @override
-  Widget build(BuildContext context) {
-    final time = (match.matchTime ?? '').trim();
-    final played =
-        match.status != MatchStatus.notStarted &&
-        match.status != MatchStatus.postponed;
-    // Hava paneli (veri yoksa hiç yer kaplamaz) + olay akışı.
-    return Column(
-      children: [
-        if (match.status != MatchStatus.cancelled)
-          MatchWeatherPanel(
-            matchId: match.id,
-            kickoffLabel: time.isEmpty || time == 'null' ? null : time,
-            played: played,
-          ),
-        Expanded(child: _events(context)),
-      ],
-    );
-  }
+  Widget build(BuildContext context) => _events(context);
 
   Widget _events(BuildContext context) {
     return FutureBuilder<SeasonMatchSettings>(
