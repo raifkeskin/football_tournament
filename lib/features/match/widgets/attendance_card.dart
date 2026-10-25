@@ -250,7 +250,8 @@ class _AttendanceCardState extends State<AttendanceCard> {
   @override
   Widget build(BuildContext context) {
     final s = _s;
-    if (s == null) return const SizedBox.shrink();
+    // Maç başladıktan sonra katılım sorgusunun anlamı kalmaz: kart kalkar.
+    if (s == null || !s.matchOpen) return const SizedBox.shrink();
     if (s.pollId == null || s.closed) {
       // Sorgu yok ya da sonlandırıldı: kart kalkar; yalnızca sorumlu, maç
       // başlamadıysa (yeniden) başlatabilir. Sonlanan sorgunun cevapları
