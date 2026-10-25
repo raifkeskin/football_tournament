@@ -1453,6 +1453,24 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
                   child: Text(h.isApproved ? 'Yayından Kaldır' : 'Sil'),
                 ),
               ),
+              // Yayındaki kesit onay beklemeye döner: izleyiciden gizlenir,
+              // "Uygula" ile yeniden konumlanabilir.
+              if (h.isApproved) ...[
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: busy
+                        ? null
+                        : () => _update(h, status: 'pending'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: kAdminAmber,
+                      side: const BorderSide(color: kAdminAmber),
+                    ),
+                    icon: const Icon(Icons.undo_rounded, size: 18),
+                    label: const Text('Onayı Geri Al'),
+                  ),
+                ),
+              ],
               if (h.isPending) ...[
                 const SizedBox(width: 10),
                 Expanded(
