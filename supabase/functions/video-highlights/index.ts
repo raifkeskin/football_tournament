@@ -224,8 +224,10 @@ function usageOf(meta: Record<string, unknown> | undefined): Usage {
   const details = (meta?.promptTokensDetails ?? []) as { modality?: string; tokenCount?: number }[];
   const by = (m: string) =>
     details.filter((d) => d.modality === m).reduce((a, d) => a + (d.tokenCount ?? 0), 0);
-  const text = by("TEXT") + by("IMAGE");
-  const video = by("VIDEO");
+  // Ayrıntı gelmezse (bazı modeller) toplam istem sayısı videoya yazılır.
+  const prompt = Number(meta?.promptTokenCount ?? 0);
+  const text = details.length ? by("TEXT") + by("IMAGE") : 0;
+  const video = details.length ? by("VIDEO") : prompt;
   const audio = by("AUDIO");
   const output = Number(meta?.candidatesTokenCount ?? 0) + Number(meta?.thoughtsTokenCount ?? 0);
   const cost = ((text + video) * priceInput() + audio * priceAudio() + output * priceOutput()) / 1e6;
@@ -325,6 +327,15 @@ async function askGemini(opts: {
   if (!res.ok) {
     const msg = body?.error?.message ?? `HTTP ${res.status}`;
     throw new Error(`Gemini: ${msg}`);
+  }
+  // Model videoyu hiç almadıysa (yalnız metinle) yanıtı uydurur: 25.10.2026'da
+  // gemini-3-flash-preview YouTube linkini sessizce atlayıp gol anlarını
+  // dakikalardan tahmin etti. Kısa bir aralık bile binlerce birim tutar.
+  const promptTokens = Number(body?.usageMetadata?.promptTokenCount ?? 0);
+  const seconds = opts.end != null ? opts.end - (opts.start ?? 0) : 60;
+  if (promptTokens < Math.min(1500, seconds * 20)) {
+    console.warn("video not seen", GEMINI_MODEL, promptTokens, JSON.stringify(body?.usageMetadata));
+    throw new Error(`Gemini: video okunmadı (${GEMINI_MODEL}, ${promptTokens} birim)`);
   }
   const text: string = body?.candidates?.[0]?.content?.parts
     ?.map((p: { text?: string }) => p.text ?? "")
