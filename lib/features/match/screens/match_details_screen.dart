@@ -1348,7 +1348,16 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                 toolbarHeight: 44,
                 // Başlamış/bitmiş maçta tarih ve saat üst çubukta ortalı.
                 centerTitle: true,
-                title: showKickoff
+                // Yayın düğmesi geri/paylaş düğmeleriyle aynı satırda.
+                title: _hasStream
+                    ? _LiveWatchButton(
+                        live:
+                            m.status == MatchStatus.live ||
+                            m.status == MatchStatus.halftime,
+                        open: _streamOpen,
+                        onTap: () => setState(() => _streamOpen = !_streamOpen),
+                      )
+                    : showKickoff
                     ? null
                     : Text(
                         _dateTimeLine(m),
@@ -1465,16 +1474,19 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                             padding: const EdgeInsets.fromLTRB(14, 0, 14, 9),
                             child: Column(
                               children: [
-                                if (_hasStream)
+                                // Yayın düğmesi üst çubukta; başlamış maçın
+                                // tarihi o zaman skorun üstüne iner.
+                                if (_hasStream && !showKickoff)
                                   Padding(
-                                    padding: const EdgeInsets.only(bottom: 6),
-                                    child: _LiveWatchButton(
-                                      live:
-                                          m.status == MatchStatus.live ||
-                                          m.status == MatchStatus.halftime,
-                                      open: _streamOpen,
-                                      onTap: () => setState(
-                                        () => _streamOpen = !_streamOpen,
+                                    padding: const EdgeInsets.only(bottom: 4),
+                                    child: Text(
+                                      _dateTimeLine(m),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 0.3,
+                                        shadows: _hdrShadow,
                                       ),
                                     ),
                                   ),
@@ -3947,7 +3959,7 @@ class _LineupTabState extends State<_LineupTab>
         if (_view == null) ...[
           // VS: iki ilk 11 yan yana, altında iki takımın yedekleri yan yana;
           // takım adına dokununca o takım açılır.
-          _vsRow(m, head: true, only: 'xi'),
+          _vsRow(m, head: false, only: 'xi'),
           const SizedBox(height: 12),
           _vsRow(m, head: false, only: 'bench'),
         ] else
@@ -4334,6 +4346,8 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
             }
             final rosters = snapshot.data ?? const <MatchRosterModel>[];
             if (rosters.isEmpty) {
+              // Esame yoksa uyarı bir kez (ilk 11 bölümünde) görünür.
+              if (widget.only == 'bench') return const SizedBox.shrink();
               return const Padding(
                 padding: EdgeInsets.symmetric(vertical: 24),
                 child: Text(
