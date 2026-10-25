@@ -923,6 +923,44 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
   }
 
   Future<void> _startAnalysis() async {
+    // Daha önce taranan maçta: önce tarama hakkı, sonra (kesit varsa)
+    // mevcut kesitlerin silineceği onayı.
+    final rescan = _job != null || _items.isNotEmpty;
+    final replace = _items.isNotEmpty;
+    if (rescan) {
+      final quota = await MatchHighlightService.scanQuota(widget.match.id);
+      if (!mounted) return;
+      final left = quota == null || quota.unlimited
+          ? null
+          : quota.limit - quota.used;
+      if (left != null && left <= 0) {
+        await showAdminConfirmDialog(
+          context: context,
+          title: 'Tarama hakkı doldu',
+          message:
+              'Bu maç ${quota!.limit} kez tarandı; maç başına en fazla '
+              '${quota.limit} tarama yapılabilir.',
+          confirmLabel: 'TAMAM',
+          destructive: false,
+          icon: Icons.info_outline_rounded,
+        );
+        return;
+      }
+      if (replace) {
+        final ok = await showAdminConfirmDialog(
+          context: context,
+          title: 'Yeniden taransın mı?',
+          message:
+              'Mevcut taramalar silinecektir (elle düzeltilen kesitler '
+              'dahil). Yeni tarama başarıyla biterse eski kesitlerin yerini '
+              'alır.${left == null ? '' : '\n\nKalan tarama hakkı: $left/${quota!.limit}'}'
+              '\n\nOnaylıyor musunuz?',
+          confirmLabel: 'SİL VE TARA',
+          icon: Icons.refresh_rounded,
+        );
+        if (!ok || !mounted) return;
+      }
+    }
     // Gol kayıtları skorla eşit değilse tarama yapılmaz (boşa maliyet).
     final m = widget.match;
     final total = m.homeScore + m.awayScore;
@@ -956,7 +994,10 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
         icon: Icons.auto_awesome_rounded,
       );
       if (!ok || !mounted) return;
-      final err = await MatchHighlightService.analyze(widget.match.id);
+      final err = await MatchHighlightService.analyze(
+        widget.match.id,
+        replace: replace,
+      );
       if (!mounted) return;
       if (err != null) {
         _snack(err);
@@ -997,6 +1038,7 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
       widget.match.id,
       kickoffSec: offsets.kickoff,
       secondHalfSec: offsets.second,
+      replace: replace,
     );
     if (!mounted) return;
     if (err != null) {
