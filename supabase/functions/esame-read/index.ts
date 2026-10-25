@@ -73,6 +73,30 @@ const SCHEMA = {
   required: ["satirlar"],
 };
 
+/** Türkçe harfleri sadeleştirip küçültür ("Çelebi" → "celebi"). */
+function norm(s: string): string {
+  return s.toLocaleLowerCase("tr").replace(/\(k\)/g, "")
+    .replace(/[çc]/g, "c").replace(/[ğg]/g, "g").replace(/[ıi]/g, "i")
+    .replace(/[öo]/g, "o").replace(/[şs]/g, "s").replace(/[üu]/g, "u")
+    .replace(/[^a-z ]/g, "").replace(/\s+/g, " ").trim();
+}
+
+/** Levenshtein benzerliği (0..1). */
+function sim(a: string, b: string): number {
+  if (!a || !b) return 0;
+  const d: number[] = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    let prev = d[0];
+    d[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const t = d[j];
+      d[j] = Math.min(d[j] + 1, d[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = t;
+    }
+  }
+  return 1 - d[b.length] / Math.max(a.length, b.length);
+}
+
 async function monthlyLimit(): Promise<number> {
   const { data } = await admin.from("app_private_settings")
     .select("value").eq("key", "ai_clip_monthly_usd").maybeSingle();
@@ -252,6 +276,7 @@ Deno.serve(async (req) => {
   }
 
   const byKey = new Map(roster.map((p) => [p.key, p.id]));
+  const byId = new Map(roster.map((p) => [p.id, p]));
   const taken = new Set<string>();
   // deno-lint-ignore no-explicit-any
   const rows = (data?.satirlar ?? []).map((r: any) => {
@@ -266,6 +291,36 @@ Deno.serve(async (req) => {
       player_id: pid,
     };
   }).filter((r: { name: string }) => r.name);
+
+  // Model eşleştiremediği satırlar: adı aynı, soyadı benzer ya da doğum yılı
+  // ±1 olan kadro oyuncusu önerilir (el yazısında "Akar"/"Okan", 1978/1979).
+  // Uygulama bu satırları "kontrol edin" diye gösterir.
+  for (const r of rows) {
+    if (r.player_id) continue;
+    const [first, ...rest] = norm(r.name).split(" ");
+    const sur = rest.join(" ");
+    let best: { id: string; score: number } | null = null;
+    let second = 0;
+    for (const p of roster) {
+      if (taken.has(p.id)) continue;
+      const [pf, ...pr] = norm(p.name).split(" ");
+      if (!first || pf !== first) continue;
+      const surSim = sim(sur, pr.join(" "));
+      const dy = r.year && p.year ? Math.abs(r.year - p.year) : null;
+      if (dy != null && dy > 1) continue;
+      if (surSim < 0.5 && dy == null) continue;
+      const score = surSim + (dy === 0 ? 0.3 : dy === 1 ? 0.15 : 0);
+      if (!best || score > best.score) {
+        second = best?.score ?? 0;
+        best = { id: p.id, score };
+      } else if (score > second) second = score;
+    }
+    // Aynı adlı iki oyuncu birbirine çok yakınsa öneri yapılmaz.
+    if (best && best.score - second >= 0.15 && byId.has(best.id)) {
+      r.player_id = best.id;
+      taken.add(best.id);
+    }
+  }
 
   return json({
     team_name: data?.takim ?? null,
