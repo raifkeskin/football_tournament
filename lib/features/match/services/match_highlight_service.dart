@@ -298,23 +298,33 @@ class MatchHighlightService {
     changes.value++;
   }
 
-  /// Videodaki maç / 2. yarı başlangıcı düzeltilince o devrenin bütün
-  /// kesitleri aradaki fark kadar kayar (uzunluk korunur).
-  static Future<void> shiftStarts(
+  /// Videodaki maç / 2. yarı başlangıcını kaydeder (kesitler kaymaz).
+  static Future<void> setStarts(
     String matchId, {
     int? kickoffSec,
     int? secondHalfSec,
   }) async {
     await _db.rpc(
-      'shift_match_highlights',
+      'set_highlight_starts',
       params: {
         'p_match_id': matchId,
         'p_kickoff_sec': kickoffSec,
         'p_second_half_sec': secondHalfSec,
       },
     );
+    changes.value++;
+  }
+
+  /// Onay bekleyen kesitleri gol dakikasından yeniden konumlar
+  /// (başlangıç + dakika, 15 sn); yapay zekâ çalışmaz. Değişen kesit sayısı.
+  static Future<int> applyStarts(String matchId) async {
+    final n = await _db.rpc(
+      'apply_highlight_starts',
+      params: {'p_match_id': matchId},
+    );
     await fetch(matchId);
     changes.value++;
+    return (n as num?)?.toInt() ?? 0;
   }
 
   /// Esame (yoksa sezon kadrosu) oyuncuları; golü atan seçimi ve gösterim
