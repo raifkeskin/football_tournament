@@ -1,0 +1,16 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "P3ZTCQ2236.com.ligmasasi.app",
+        "appIDs": ["P3ZTCQ2236.com.ligmasasi.app"],
+        "paths": ["/katilim/mac", "/katilim/mac/*"],
+        "components": [
+          { "/": "/katilim/mac" },
+          { "/": "/katilim/mac/*" }
+        ]
+      }
+    ]
+  }
+}

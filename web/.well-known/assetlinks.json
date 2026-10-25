@@ -1,0 +1,13 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.ligmasasi.app",
+      "sha256_cert_fingerprints": [
+        "42:95:DD:93:E5:9A:ED:5D:07:4F:84:26:0C:1C:D5:D9:46:64:F7:86:F9:ED:88:C9:C2:D2:2F:88:29:D3:D7:08",
+        "13:75:8D:9C:C2:CB:03:28:9A:B0:B0:8F:D2:88:03:8A:85:0D:2A:46:F6:DD:D8:4A:83:F9:16:5A:89:1B:B2:B6"
+      ]
+    }
+  }
+]

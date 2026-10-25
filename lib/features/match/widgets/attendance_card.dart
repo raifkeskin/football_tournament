@@ -146,7 +146,7 @@ class _AttendanceCardState extends State<AttendanceCard> {
       ShareParams(
         text:
             '⚽ Katılım Durum Sorgulama\n${_matchLine()}\n\n'
-            'Katılım durumunu bildir: $_linkBase?m=${widget.match.id}\n'
+            'Katılım durumunu bildir: $_linkBase/mac?m=${widget.match.id}\n'
             '(Uygulama yüklüyse uygulamada açılır; değilse ilk seferde sana '
             'özel gönderilen bağlantıyı aç.)',
       ),

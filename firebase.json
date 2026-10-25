@@ -4,11 +4,16 @@
     "public": "build/web",
     "ignore": [
       "firebase.json",
-      "**/.*",
+      "**/.DS_Store",
+      "**/.last_build_id",
       "**/node_modules/**",
       "**/*.map"
     ],
     "rewrites": [
+      {
+        "source": "/katilim/**",
+        "destination": "/katilim.html"
+      },
       {
         "source": "**",
         "destination": "/index.html"
@@ -39,6 +44,15 @@
           {
             "key": "Cache-Control",
             "value": "no-cache"
+          }
+        ]
+      },
+      {
+        "source": "/.well-known/apple-app-site-association",
+        "headers": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
           }
         ]
       }
