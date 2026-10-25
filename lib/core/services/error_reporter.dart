@@ -57,6 +57,13 @@ class ErrorReporter {
 
     PlatformDispatcher.instance.onError = (error, stack) {
       debugPrint('Yakalanmamış hata: $error');
+      // youtube_player_iframe 6.0.2: oynarken oynatıcı kapanınca/değişince
+      // getVideoData() null döner ve paket kendi içinde düşer; ekrana
+      // etkisi yok, kayda yazılmaz.
+      if (stack.toString().contains('youtube_player_iframe') &&
+          error.toString().contains("'Null' is not a subtype")) {
+        return true;
+      }
       report(error, stack, context: 'async');
       return true;
     };

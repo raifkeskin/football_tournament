@@ -245,11 +245,37 @@ class MatchHighlightService {
     }
   }
 
+  /// Maçın tarama hakkı: kaç kez tarandı, sınır, admin mi (sınırsız).
+  /// Okunamazsa null (sunucu yine de sınırı uygular).
+  static Future<({int used, int limit, bool unlimited})?> scanQuota(
+    String matchId,
+  ) async {
+    try {
+      final v = await _db.rpc(
+        'highlight_scan_quota',
+        params: {'p_match_id': matchId},
+      );
+      if (v is! Map) return null;
+      int readInt(dynamic x, int d) =>
+          x is num ? x.toInt() : int.tryParse('${x ?? ''}') ?? d;
+      return (
+        used: readInt(v['used'], 0),
+        limit: readInt(v['limit'], 3),
+        unlimited: v['unlimited'] == true,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Analizi başlatır; iş arka planda sürer. Hata metnini döner (yoksa null).
+  /// [replace]: kesiti olan maçta yeniden tarama onaylandı; tarama başarılı
+  /// biterse maçın tüm eski kesitleri (elle düzeltilenler dahil) silinir.
   static Future<String?> analyze(
     String matchId, {
     int? kickoffSec,
     int? secondHalfSec,
+    bool replace = false,
   }) async {
     try {
       await _db.functions.invoke(
@@ -258,6 +284,7 @@ class MatchHighlightService {
           'match_id': matchId,
           'kickoff_sec': ?kickoffSec,
           'second_half_sec': ?secondHalfSec,
+          if (replace) 'replace': true,
         },
       );
       return null;
@@ -296,6 +323,35 @@ class MatchHighlightService {
     await _db.from('match_highlights').update(patch).eq('id', h.id);
     await fetch(h.matchId);
     changes.value++;
+  }
+
+  /// Videodaki maç / 2. yarı başlangıcını kaydeder (kesitler kaymaz).
+  static Future<void> setStarts(
+    String matchId, {
+    int? kickoffSec,
+    int? secondHalfSec,
+  }) async {
+    await _db.rpc(
+      'set_highlight_starts',
+      params: {
+        'p_match_id': matchId,
+        'p_kickoff_sec': kickoffSec,
+        'p_second_half_sec': secondHalfSec,
+      },
+    );
+    changes.value++;
+  }
+
+  /// Onay bekleyen kesitleri gol dakikasından yeniden konumlar
+  /// (başlangıç + dakika, 15 sn); yapay zekâ çalışmaz. Değişen kesit sayısı.
+  static Future<int> applyStarts(String matchId) async {
+    final n = await _db.rpc(
+      'apply_highlight_starts',
+      params: {'p_match_id': matchId},
+    );
+    await fetch(matchId);
+    changes.value++;
+    return (n as num?)?.toInt() ?? 0;
   }
 
   /// Esame (yoksa sezon kadrosu) oyuncuları; golü atan seçimi ve gösterim

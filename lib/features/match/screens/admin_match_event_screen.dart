@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/match.dart';
 import '../../team/models/team.dart';
 import '../../../core/services/app_session.dart';
@@ -15,7 +16,11 @@ import '../utils/season_match_settings.dart';
 
 class AdminMatchEventScreen extends StatefulWidget {
   final MatchModel match;
-  const AdminMatchEventScreen({super.key, required this.match});
+
+  /// Dolu ise form bu olayı düzenler: oyuncu, asist, giren oyuncu ve dakika
+  /// değişir; tür, takım ve skoru etkileyen seçimler kilitli kalır.
+  final MatchEvent? event;
+  const AdminMatchEventScreen({super.key, required this.match, this.event});
 
   @override
   State<AdminMatchEventScreen> createState() => _AdminMatchEventScreenState();
@@ -69,10 +74,114 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
     return _teamId == m.homeTeamId ? m.awayTeamId : m.homeTeamId;
   }
 
+  bool get _editing => widget.event != null;
+
+  /// Kartta oyuncu değişmez: ceza olay girilirken oyuncuya yazılır.
+  bool get _playerLocked =>
+      _editing &&
+      (_eventType == 'yellow_card' ||
+          _eventType == 'red_card' ||
+          _eventType == 'red_card_cancelled');
+
+  /// Düzenlenen uzatmalı olayın devre sonu ilk/ikinci devre değilse aynen
+  /// korunur (ör. eski süreyle girilmiş 45+2').
+  int? _stoppageBase;
+
+  /// Düzenlemede asist/giren oyuncu adları kadro yüklenince bulunur.
+  String? _pendingAssistId;
+  String? _pendingSubInId;
+
+  void _fillFrom(MatchEvent e) {
+    final penalty =
+        (e.eventType == 'goal' && e.isPenalty) ||
+        e.eventType == 'penalty_missed';
+    _eventType = penalty ? 'penalty' : e.eventType;
+    _penaltyScored = e.eventType != 'penalty_missed';
+    _isOwnGoal = e.isOwnGoal;
+    final m = widget.match;
+    // Kendi kalesine golde form golü yazılan (rakip) takımı tutar.
+    _teamId = e.isOwnGoal
+        ? (e.teamId == m.homeTeamId ? m.awayTeamId : m.homeTeamId)
+        : e.teamId;
+    final pid = (e.playerId ?? '').trim();
+    if (pid.isNotEmpty || e.eventName.trim().isNotEmpty) {
+      _selectedPlayer = LineupPlayer(playerId: pid, name: e.eventName.trim());
+    }
+    _pendingAssistId = e.assistPlayerId;
+    _pendingSubInId = e.subInPlayerId;
+    final added = e.addedMinute ?? 0;
+    if (added > 0) {
+      _stoppage = true;
+      _stoppageSecondHalf = e.minute == _period * 2;
+      if (e.minute != _period && e.minute != _period * 2) {
+        _stoppageBase = e.minute;
+      }
+      _addedController.text = _autoAdded = '$added';
+    } else if ((e.minute ?? 0) > 0 && e.minute != 999) {
+      _minuteController.text = _autoMinute = '${e.minute}';
+    }
+  }
+
+  /// Listeden adı/numarası belli oyuncuyu bulur (yoksa elimizdekini korur).
+  LineupPlayer? _resolve(List<LineupPlayer> list, String? id) {
+    final key = (id ?? '').trim();
+    if (key.isEmpty) return null;
+    return list.where((p) => p.playerId == key).firstOrNull;
+  }
+
+  /// Maçta oyundan çıkan / kırmızı kart gören ve oyuna giren oyuncular.
+  Set<String> _sentOff = const {};
+  Set<String> _subbedIn = const {};
+
+  Future<void> _loadPitchState() async {
+    try {
+      final rows = await Supabase.instance.client
+          .from('match_events')
+          .select('id, event_type, player_id, sub_in_player_id')
+          .eq('match_id', widget.match.id);
+      final off = <String>{}, inn = <String>{};
+      final yellows = <String, int>{};
+      for (final e in rows) {
+        // Düzenlenen olay kendi listesini daraltmasın.
+        if (e['id']?.toString() == widget.event?.id) continue;
+        final pid = e['player_id']?.toString() ?? '';
+        switch (e['event_type']) {
+          case 'substitution':
+            off.add(pid);
+            final i = e['sub_in_player_id']?.toString() ?? '';
+            if (i.isNotEmpty) inn.add(i);
+          case 'red_card':
+            off.add(pid);
+          case 'yellow_card':
+            yellows[pid] = (yellows[pid] ?? 0) + 1;
+            if (yellows[pid]! >= 2) off.add(pid);
+        }
+      }
+      if (mounted) {
+        setState(() {
+          _sentOff = off;
+          _subbedIn = inn;
+        });
+      }
+    } catch (_) {}
+  }
+
   @override
   void initState() {
     super.initState();
+    _loadPitchState();
     _teamId = widget.match.homeTeamId;
+    final editing = widget.event;
+    if (editing != null) {
+      _fillFrom(editing);
+      _initialSnapshot = _snapshot();
+      SeasonMatchSettings.of(widget.match.seasonId).then((s) {
+        if (mounted && s.tracksGoalMinutes != _tracksMinutes) {
+          setState(() => _tracksMinutes = s.tracksGoalMinutes);
+        }
+      });
+      return;
+    }
     // Canlı maçta dakika saatten gelir; sorumlu isterse değiştirir.
     final live = MatchClock.liveMinuteParts(widget.match);
     if (live != null) {
@@ -104,13 +213,24 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
     return p.id.trim();
   }
 
+  /// Bu maçın esamesindeki forma numaraları (sezon numarasından önce gelir;
+  /// Kadro sekmesi ve maç akışı da bunu gösterir).
+  Map<String, String> _matchNumbers = const {};
+
   List<LineupPlayer> _toLineupPlayers(List<PlayerModel> players) {
     final list = <LineupPlayer>[];
     for (final p in players) {
       final key = _playerKey(p);
       final name = p.name.trim();
       if (key.isEmpty || name.isEmpty) continue;
-      list.add(LineupPlayer(playerId: key, name: name, number: p.number));
+      final no = _matchNumbers[key];
+      list.add(
+        LineupPlayer(
+          playerId: key,
+          name: name,
+          number: (no != null && no.isNotEmpty) ? no : p.number,
+        ),
+      );
     }
     list.sort((a, b) {
       final an = int.tryParse((a.number ?? '').trim()) ?? 9999;
@@ -173,7 +293,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
     final minuteStr = isMotm
         ? '999'
         : stoppage
-        ? '${_stoppageSecondHalf ? _period * 2 : _period}'
+        ? '${_stoppageBase ?? (_stoppageSecondHalf ? _period * 2 : _period)}'
         : _minuteController.text.trim();
     final added = stoppage ? int.tryParse(_addedController.text.trim()) : null;
     if (stoppage && (added == null || added < 1 || added > 30)) {
@@ -182,7 +302,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
       );
       return;
     }
-    if (isMotm && widget.match.status != MatchStatus.finished) {
+    if (isMotm && !_editing && widget.match.status != MatchStatus.finished) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Maçın adamı maç bittikten sonra seçilebilir.'),
@@ -207,6 +327,51 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
     if (_tracksMinutes && minute == null) return;
 
     setState(() => _isLoading = true);
+    final editing = widget.event;
+    if (editing != null) {
+      try {
+        // Maçın adamı dakikası değişmez (999: sona sıralanır).
+        await _matchService.updateMatchEvent(
+          MatchEvent(
+            id: editing.id,
+            matchId: editing.matchId,
+            teamId: editing.teamId,
+            eventType: editing.eventType,
+            minute: isMotm ? editing.minute : minute,
+            addedMinute: isMotm ? editing.addedMinute : added,
+            eventName: player.name.trim(),
+            playerId: player.playerId.trim().isEmpty
+                ? null
+                : player.playerId.trim(),
+            assistPlayerId: editing.eventType == 'goal' && !_isOwnGoal
+                ? _selectedAssist?.playerId.trim()
+                : editing.assistPlayerId,
+            subInPlayerId: editing.eventType == 'substitution'
+                ? _selectedSubIn?.playerId.trim()
+                : editing.subInPlayerId,
+            isOwnGoal: editing.isOwnGoal,
+            isPenalty: editing.isPenalty,
+          ),
+        );
+        if (!mounted) return;
+        final messenger = ScaffoldMessenger.of(context);
+        Navigator.pop(context);
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('Olay güncellendi.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red),
+        );
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
+      return;
+    }
     try {
       final event = MatchEvent(
         id: '',
@@ -362,6 +527,11 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                 ),
           builder: (context, rosterSnap) {
             final rosters = rosterSnap.data ?? [];
+            _matchNumbers = {
+              for (final r in rosters)
+                if ((r.jerseyNumber ?? '').trim().isNotEmpty)
+                  r.playerId: r.jerseyNumber!.trim(),
+            };
             final rosterPlayerIds = rosters.map((r) => r.playerId).toSet();
             final startingIds = rosters
                 .where((r) => r.isStarting)
@@ -386,15 +556,59 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                       .where((p) => rosterPlayerIds.contains(p.id))
                       .toList(),
                 );
+                // Değişiklikte çıkan: sahadakiler (ilk 11 − çıkanlar − atılanlar
+                // + girenler); giren: henüz oyuna girmemiş yedekler.
                 final startingPlayers = _toLineupPlayers(
-                  allPlayers.where((p) => startingIds.contains(p.id)).toList(),
+                  allPlayers
+                      .where(
+                        (p) =>
+                            (startingIds.contains(p.id) ||
+                                _subbedIn.contains(p.id)) &&
+                            !_sentOff.contains(p.id),
+                      )
+                      .toList(),
                 );
                 final subsPlayers = _toLineupPlayers(
-                  allPlayers.where((p) => subIds.contains(p.id)).toList(),
+                  allPlayers
+                      .where(
+                        (p) =>
+                            subIds.contains(p.id) &&
+                            !_subbedIn.contains(p.id) &&
+                            !_sentOff.contains(p.id),
+                      )
+                      .toList(),
                 );
                 final enabled = players.isNotEmpty && !_isLoading;
 
-                if (enabled &&
+                // Düzenlemede kayıtlı asist / giren oyuncu kadrodan bulunur;
+                // seçili oyuncu adı/numarasıyla güncellenir.
+                if (_editing && players.isNotEmpty) {
+                  final assist = _resolve(players, _pendingAssistId);
+                  final subIn =
+                      _resolve(subsPlayers, _pendingSubInId) ??
+                      _resolve(players, _pendingSubInId);
+                  final current = _resolve(players, _selectedPlayer?.playerId);
+                  final refresh =
+                      current != null &&
+                      (current.number != _selectedPlayer!.number ||
+                          current.name != _selectedPlayer!.name);
+                  if (_pendingAssistId != null ||
+                      _pendingSubInId != null ||
+                      refresh) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (!mounted) return;
+                      setState(() {
+                        if (_pendingAssistId != null) _selectedAssist = assist;
+                        if (_pendingSubInId != null) _selectedSubIn = subIn;
+                        _pendingAssistId = _pendingSubInId = null;
+                        if (current != null) _selectedPlayer = current;
+                      });
+                    });
+                  }
+                }
+
+                if (!_editing &&
+                    enabled &&
                     _selectedPlayer != null &&
                     !players.any(
                       (p) => p.playerId == _selectedPlayer!.playerId,
@@ -418,7 +632,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                   label: 'Olay Türü',
                   value: eventLabel,
                   placeholder: 'Seçiniz',
-                  onTap: _isLoading
+                  onTap: _isLoading || _editing
                       ? null
                       : () async {
                           final picked = await _pick<String>(
@@ -529,8 +743,12 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                 return _frame(
                   children: [
                     AdminDialogHeader(
-                      icon: Icons.sports_soccer_rounded,
-                      title: 'Maç Olayı Ekle',
+                      icon: _editing
+                          ? Icons.edit_rounded
+                          : Icons.sports_soccer_rounded,
+                      title: _editing
+                          ? 'Maç Olayını Düzenle'
+                          : 'Maç Olayı Ekle',
                       subtitle:
                           '${shortTeamName(homeName)} - ${shortTeamName(awayName)}',
                     ),
@@ -545,7 +763,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                               ? homeName
                               : awayName,
                           placeholder: 'Seçiniz',
-                          onTap: _isLoading
+                          onTap: _isLoading || _editing
                               ? null
                               : () async {
                                   final picked = await _pick<String>(
@@ -582,7 +800,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                           placeholder: players.isEmpty
                               ? 'Kadroda oyuncu yok'
                               : 'Seçiniz',
-                          onTap: enabled
+                          onTap: enabled && !_playerLocked
                               ? () async {
                                   final picked = await _pick<LineupPlayer>(
                                     title: isSub ? 'Çıkan Oyuncu' : 'Futbolcu',
@@ -654,17 +872,28 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                             label: 'Uzatma',
                             child: Row(
                               children: [
+                                if (_stoppageBase != null) ...[
+                                  ChoiceChip(
+                                    label: Text('$_stoppageBase+'),
+                                    selected: true,
+                                    onSelected: null,
+                                  ),
+                                  const SizedBox(width: 6),
+                                ],
                                 for (final second in [false, true]) ...[
                                   ChoiceChip(
                                     label: Text(
                                       "${second ? _period * 2 : _period}+",
                                     ),
-                                    selected: _stoppageSecondHalf == second,
+                                    selected:
+                                        _stoppageBase == null &&
+                                        _stoppageSecondHalf == second,
                                     onSelected: _isLoading
                                         ? null
-                                        : (_) => setState(
-                                            () => _stoppageSecondHalf = second,
-                                          ),
+                                        : (_) => setState(() {
+                                            _stoppageSecondHalf = second;
+                                            _stoppageBase = null;
+                                          }),
                                   ),
                                   const SizedBox(width: 6),
                                 ],
@@ -718,7 +947,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                           AdminFieldRow(
                             icon: Icons.u_turn_left_rounded,
                             label: 'Kendi Kalesine',
-                            onTap: _isLoading
+                            onTap: _isLoading || _editing
                                 ? null
                                 : () => setState(() {
                                     _isOwnGoal = !_isOwnGoal;
@@ -729,7 +958,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                             trailing: Switch(
                               value: _isOwnGoal,
                               activeThumbColor: kAdminAccent,
-                              onChanged: _isLoading
+                              onChanged: _isLoading || _editing
                                   ? null
                                   : (v) => setState(() {
                                       _isOwnGoal = v;
@@ -752,7 +981,7 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
                             label: 'Sonuç',
                             value: _penaltyScored ? 'Gol' : 'Kaçtı',
                             placeholder: 'Seçiniz',
-                            onTap: _isLoading
+                            onTap: _isLoading || _editing
                                 ? null
                                 : () async {
                                     final picked = await _pick<bool>(
@@ -813,18 +1042,33 @@ class _AdminMatchEventScreenState extends State<AdminMatchEventScreen> {
     );
   }
 
+  /// Düzenlemede açılıştaki değerler (kaydedilmemiş değişikliği bulmak için).
+  String _initialSnapshot = '';
+
+  String _snapshot() => [
+    _minuteController.text.trim(),
+    _addedController.text.trim(),
+    _stoppage,
+    _stoppageSecondHalf,
+    _stoppageBase,
+    _selectedPlayer?.playerId,
+    _selectedAssist?.playerId ?? _pendingAssistId,
+    _selectedSubIn?.playerId ?? _pendingSubInId,
+  ].join('|');
+
   /// Formda girilmiş ama kaydedilmemiş bir şey var mı?
-  bool get _isDirty =>
-      (_minuteController.text.trim().isNotEmpty &&
-          _minuteController.text.trim() != _autoMinute) ||
-      (_addedController.text.trim().isNotEmpty &&
-          _addedController.text.trim() != _autoAdded) ||
-      _selectedPlayer != null ||
-      _selectedAssist != null ||
-      _selectedSubIn != null ||
-      _isOwnGoal ||
-      _eventType != 'goal' ||
-      _teamId != widget.match.homeTeamId;
+  bool get _isDirty => _editing
+      ? _snapshot() != _initialSnapshot
+      : (_minuteController.text.trim().isNotEmpty &&
+                _minuteController.text.trim() != _autoMinute) ||
+            (_addedController.text.trim().isNotEmpty &&
+                _addedController.text.trim() != _autoAdded) ||
+            _selectedPlayer != null ||
+            _selectedAssist != null ||
+            _selectedSubIn != null ||
+            _isOwnGoal ||
+            _eventType != 'goal' ||
+            _teamId != widget.match.homeTeamId;
 
   /// Boşluğa dokunma, geri tuşu ya da kapat: kaydedilmemiş değişiklik
   /// varsa önce onay ister.

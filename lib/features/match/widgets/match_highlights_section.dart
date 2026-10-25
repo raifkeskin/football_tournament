@@ -3,6 +3,7 @@ import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../utils/minute_label.dart';
 
 import '../../../core/widgets/match_event_icons.dart';
@@ -20,6 +21,87 @@ import '../../../core/services/app_session.dart';
 import '../../../core/utils/realtime_signal.dart';
 import '../../../core/utils/resilient_stream.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+/// Videodaki an girişi: alan hep "dakika:saniye" (00:00) düzenindedir.
+/// Yazılan rakam imlecin önündeki haneye yazılır (05:28'de baştan
+/// yazarken 0 → 7 → 1 → 5 = 07:15); silinen hane 0'a döner, alan boşalmaz.
+class _ClockInputFormatter extends TextInputFormatter {
+  static const _slots = [0, 1, 3, 4];
+
+  static int _offsetAfter(int k) => k == 0 ? 0 : _slots[k - 1] + 1;
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    var old = oldValue.text;
+    if (!RegExp(r'^\d\d:\d\d$').hasMatch(old)) old = '00:00';
+    final chars = old.split('');
+    // İmlecin önündeki dolu hane sayısı.
+    final cursor = oldValue.selection.isValid
+        ? oldValue.selection.baseOffset.clamp(0, 5)
+        : 5;
+    var k = _slots.where((p) => p < cursor).length;
+    final added = newValue.text.length - oldValue.text.length;
+    final newDigits = newValue.text.replaceAll(RegExp(r'\D'), '');
+
+    if (newValue.text.isEmpty || !oldValue.selection.isCollapsed && added < 0) {
+      // Tümü seçilip silindi: sıfırlanır.
+      return const TextEditingValue(
+        text: '00:00',
+        selection: TextSelection.collapsed(offset: 0),
+      );
+    }
+    if (added > 1) {
+      // Yapıştırma: son dört rakam.
+      final d = newDigits.padLeft(4, '0');
+      final t = d.substring(d.length - 4);
+      final text = '${t.substring(0, 2)}:${t.substring(2)}';
+      return TextEditingValue(
+        text: text,
+        selection: const TextSelection.collapsed(offset: 5),
+      );
+    }
+    if (added > 0) {
+      final at = newValue.selection.baseOffset - 1;
+      final ch = at >= 0 && at < newValue.text.length ? newValue.text[at] : '';
+      if (RegExp(r'\d').hasMatch(ch)) {
+        // Alan doluyken yazmaya başlanırsa baştan yazılır.
+        if (k >= 4) {
+          chars.setAll(0, '00:00'.split(''));
+          k = 0;
+        }
+        chars[_slots[k]] = ch;
+        k++;
+      }
+    } else if (added < 0 && k > 0) {
+      k--;
+      chars[_slots[k]] = '0';
+    }
+    return TextEditingValue(
+      text: chars.join(),
+      selection: TextSelection.collapsed(offset: _offsetAfter(k)),
+    );
+  }
+}
+
+/// Saniye → "dakika:saniye" (dakika 59'u geçebilir: 65:28; en çok 99:59).
+String _mmss(int sec) {
+  final s = sec < 0 ? 0 : (sec > 5999 ? 5999 : sec);
+  return '${(s ~/ 60).toString().padLeft(2, '0')}:'
+      '${(s % 60).toString().padLeft(2, '0')}';
+}
+
+/// "05:28", "1:05:28" ya da "328" → saniye; okunamazsa null.
+int? _parseClock(String v) {
+  final parts = v.trim().replaceAll('.', ':').split(':');
+  if (parts.isEmpty || parts.length > 3) return null;
+  final n = parts.map(int.tryParse).toList();
+  if (n.any((x) => x == null || x < 0)) return null;
+  if (n.length > 1 && n.skip(1).any((x) => x! > 59)) return null;
+  return n.fold<int>(0, (a, x) => a * 60 + x!);
+}
 
 String _clock(int sec) {
   final h = sec ~/ 3600;
@@ -699,9 +781,7 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
   }
 
   /// Taslak aralığı değiştirir ve yeni aralığı hemen oynatır.
-  void _nudge(MatchHighlight h, {int startBy = 0, int endBy = 0}) {
-    final (a, b) = _draft[h.id] ?? (h.startSec, h.endSec);
-    final next = (a + startBy, b + endBy);
+  void _setRange(MatchHighlight h, (int, int) next) {
     setState(() {
       if (next == (h.startSec, h.endSec)) {
         _draft.remove(h.id);
@@ -710,6 +790,94 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
       }
     });
     _play(h);
+  }
+
+  /// Kesiti bütün olarak kaydırır; uzunluk değişmez.
+  void _shift(MatchHighlight h, int by) {
+    final (a, b) = _draft[h.id] ?? (h.startSec, h.endSec);
+    final d = a + by < 0 ? -a : by;
+    _setRange(h, (a + d, b + d));
+  }
+
+  /// Başlangıç ya da bitiş saatini elle yazdırır (05:28 ya da 1:05:28).
+  /// Başlangıç değişince uzunluk korunur; bitiş uzunluğu değiştirir.
+  Future<void> _typeTime(MatchHighlight h, {required bool start}) async {
+    final (a, b) = _draft[h.id] ?? (h.startSec, h.endSec);
+    final text = await showAdminTextInputDialog(
+      context: context,
+      title: start ? 'Kesit Başlangıcı' : 'Kesit Bitişi',
+      icon: Icons.timer_outlined,
+      label: 'VİDEODAKİ AN',
+      fieldIcon: Icons.schedule_rounded,
+      initialValue: _mmss(start ? a : b),
+      hint: 'dakika:saniye, örn. 05:28',
+      subtitle: start
+          ? 'Kesitin uzunluğu (${b - a} sn) korunur.'
+          : 'Kesit en az 5, en çok 60 sn olabilir.',
+      keyboardType: TextInputType.number,
+      inputFormatters: [_ClockInputFormatter()],
+      validator: (v) {
+        final t = _parseClock(v);
+        if (t == null) return 'Saati 05:28 biçiminde yazın.';
+        if (!start && (t - a < 5 || t - a > 60)) {
+          return 'Bitiş, başlangıçtan 5–60 sn sonra olmalı.';
+        }
+        return null;
+      },
+    );
+    if (text == null) return;
+    final t = _parseClock(text)!;
+    _setRange(h, start ? (t, t + (b - a)) : (a, t));
+  }
+
+  /// Videodaki maç (ya da 2. yarı) başlangıcını yazdırır; o devredeki
+  /// bütün kesitler aradaki fark kadar kayar.
+  Future<void> _typeStart({required bool second}) async {
+    final job = _job;
+    final current = second ? job?.secondHalfSec : job?.kickoffSec;
+    final text = await showAdminTextInputDialog(
+      context: context,
+      title: second ? '2. Yarı Başlangıcı' : 'Maç Başlangıcı',
+      icon: Icons.sports_rounded,
+      label: 'VİDEODAKİ AN',
+      fieldIcon: Icons.schedule_rounded,
+      initialValue: _mmss(current ?? 0),
+      hint: 'dakika:saniye, örn. 07:15',
+      subtitle: 'Kaydettikten sonra "Uygula" ile onay bekleyen '
+          'kesitler gol dakikasına göre bu andan yerleşir.',
+      keyboardType: TextInputType.number,
+      inputFormatters: [_ClockInputFormatter()],
+      validator: (v) =>
+          _parseClock(v) == null ? 'Saati 07:15 biçiminde yazın.' : null,
+    );
+    if (text == null || !mounted) return;
+    final t = _parseClock(text)!;
+    try {
+      await MatchHighlightService.setStarts(
+        widget.match.id,
+        kickoffSec: second ? null : t,
+        secondHalfSec: second ? t : null,
+      );
+      await _refresh();
+    } catch (e) {
+      _snack('Kaydedilemedi: $e');
+    }
+  }
+
+  /// Onay bekleyen kesitleri girilen başlangıçlara göre yeniden konumlar.
+  Future<void> _applyStarts() async {
+    try {
+      final n = await MatchHighlightService.applyStarts(widget.match.id);
+      _draft.clear();
+      await _refresh();
+      _snack(
+        n == 0
+            ? 'Onay bekleyen kesit yok.'
+            : '$n kesit gol dakikasına göre yerleşti.',
+      );
+    } catch (e) {
+      _snack('Uygulanamadı: $e');
+    }
   }
 
   Future<void> _saveDraft(MatchHighlight h) async {
@@ -755,6 +923,44 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
   }
 
   Future<void> _startAnalysis() async {
+    // Daha önce taranan maçta: önce tarama hakkı, sonra (kesit varsa)
+    // mevcut kesitlerin silineceği onayı.
+    final rescan = _job != null || _items.isNotEmpty;
+    final replace = _items.isNotEmpty;
+    if (rescan) {
+      final quota = await MatchHighlightService.scanQuota(widget.match.id);
+      if (!mounted) return;
+      final left = quota == null || quota.unlimited
+          ? null
+          : quota.limit - quota.used;
+      if (left != null && left <= 0) {
+        await showAdminConfirmDialog(
+          context: context,
+          title: 'Tarama hakkı doldu',
+          message:
+              'Bu maç ${quota!.limit} kez tarandı; maç başına en fazla '
+              '${quota.limit} tarama yapılabilir.',
+          confirmLabel: 'TAMAM',
+          destructive: false,
+          icon: Icons.info_outline_rounded,
+        );
+        return;
+      }
+      if (replace) {
+        final ok = await showAdminConfirmDialog(
+          context: context,
+          title: 'Yeniden taransın mı?',
+          message:
+              'Mevcut taramalar silinecektir (elle düzeltilen kesitler '
+              'dahil). Yeni tarama başarıyla biterse eski kesitlerin yerini '
+              'alır.${left == null ? '' : '\n\nKalan tarama hakkı: $left/${quota!.limit}'}'
+              '\n\nOnaylıyor musunuz?',
+          confirmLabel: 'SİL VE TARA',
+          icon: Icons.refresh_rounded,
+        );
+        if (!ok || !mounted) return;
+      }
+    }
     // Gol kayıtları skorla eşit değilse tarama yapılmaz (boşa maliyet).
     final m = widget.match;
     final total = m.homeScore + m.awayScore;
@@ -788,7 +994,10 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
         icon: Icons.auto_awesome_rounded,
       );
       if (!ok || !mounted) return;
-      final err = await MatchHighlightService.analyze(widget.match.id);
+      final err = await MatchHighlightService.analyze(
+        widget.match.id,
+        replace: replace,
+      );
       if (!mounted) return;
       if (err != null) {
         _snack(err);
@@ -829,6 +1038,7 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
       widget.match.id,
       kickoffSec: offsets.kickoff,
       secondHalfSec: offsets.second,
+      replace: replace,
     );
     if (!mounted) return;
     if (err != null) {
@@ -969,6 +1179,47 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
                   style: const TextStyle(color: kAdminMuted, fontSize: 11.5),
                 ),
               ],
+              if (job != null && !running) ...[
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    _startChip(
+                      'Başlangıç',
+                      job.kickoffSec,
+                      () => _typeStart(second: false),
+                    ),
+                    _startChip(
+                      '2. yarı',
+                      job.secondHalfSec,
+                      () => _typeStart(second: true),
+                    ),
+                    SizedBox(
+                      height: 30,
+                      child: FilledButton.icon(
+                        onPressed: job.kickoffSec == null
+                            ? null
+                            : _applyStarts,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: kAdminAccent,
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          minimumSize: const Size(0, 30),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        icon: const Icon(Icons.sync_rounded, size: 16),
+                        label: const Text(
+                          'Uygula',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
@@ -976,12 +1227,30 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
     );
   }
 
-  /// Maliyet ve videoda bulunan/girilen başlangıç anları.
+  /// Videodaki devre başlangıcı: dokununca düzeltilir, kesitler kayar.
+  Widget _startChip(String label, int? sec, VoidCallback onTap) => SizedBox(
+    height: 30,
+    child: OutlinedButton.icon(
+      onPressed: onTap,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        minimumSize: const Size(0, 30),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+        visualDensity: VisualDensity.compact,
+      ),
+      icon: const Icon(Icons.edit_rounded, size: 14),
+      label: Text(
+        '$label ${sec == null ? '—' : _mmss(sec)}',
+        style: const TextStyle(fontSize: 12),
+      ),
+    ),
+  );
+
+  /// Maliyet ve analiz özeti (başlangıçlar düğmelerde).
   String _jobDetails(MatchHighlightJob job) => [
     if (job.needsReview) 'Kontrol önerilir',
     if ((job.missing ?? 0) > 0) '${job.missing} gol yayında bulunamadı',
-    if (job.kickoffSec != null) 'Başlangıç ${_clock(job.kickoffSec!)}',
-    if (job.secondHalfSec != null) '2. yarı ${_clock(job.secondHalfSec!)}',
     if (job.costUsd != null) 'Maliyet ${job.costUsd!.toStringAsFixed(3)} \$',
   ].join(' · ');
 
@@ -1172,24 +1441,14 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               const Text(
-                'Başlangıç',
+                'Kaydır',
                 style: TextStyle(color: kAdminMuted, fontSize: 12),
               ),
-              nudge('−5 sn', start >= 5 ? () => _nudge(h, startBy: -5) : null),
-              nudge(
-                '+5 sn',
-                end - start > 6 ? () => _nudge(h, startBy: 5) : null,
-              ),
+              nudge('−5 sn', start > 0 ? () => _shift(h, -5) : null),
+              nudge('+5 sn', () => _shift(h, 5)),
               const SizedBox(width: 6),
-              const Text(
-                'Bitiş',
-                style: TextStyle(color: kAdminMuted, fontSize: 12),
-              ),
-              nudge(
-                '−5 sn',
-                end - start > 6 ? () => _nudge(h, endBy: -5) : null,
-              ),
-              nudge('+5 sn', () => _nudge(h, endBy: 5)),
+              nudge('Başl. ${_mmss(start)}', () => _typeTime(h, start: true)),
+              nudge('Bitiş ${_mmss(end)}', () => _typeTime(h, start: false)),
             ],
           ),
           if (dirty) ...[
@@ -1236,6 +1495,24 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
                   child: Text(h.isApproved ? 'Yayından Kaldır' : 'Sil'),
                 ),
               ),
+              // Yayındaki kesit onay beklemeye döner: izleyiciden gizlenir,
+              // "Uygula" ile yeniden konumlanabilir.
+              if (h.isApproved) ...[
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: busy
+                        ? null
+                        : () => _update(h, status: 'pending'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: kAdminAmber,
+                      side: const BorderSide(color: kAdminAmber),
+                    ),
+                    icon: const Icon(Icons.undo_rounded, size: 18),
+                    label: const Text('Onayı Geri Al'),
+                  ),
+                ),
+              ],
               if (h.isPending) ...[
                 const SizedBox(width: 10),
                 Expanded(

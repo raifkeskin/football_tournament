@@ -29,6 +29,10 @@ class AttendanceCard extends StatefulWidget {
   final String teamName;
   final String rivalName;
 
+  /// Katılım bağlantısından (ligmasasi://katilim?m=) açılan maç: kart
+  /// yüklenince oyuncuya katılım durumu hemen sorulur (bir kez).
+  static String? promptMatchId;
+
   @override
   State<AttendanceCard> createState() => _AttendanceCardState();
 }
@@ -52,8 +56,37 @@ class _AttendanceCardState extends State<AttendanceCard> {
       );
       if (!mounted) return;
       setState(() => _s = raw is Map ? _Summary.fromJson(raw) : null);
+      _maybePrompt();
     } catch (_) {
       // Sorgu özelliği yoksa ya da yetki yoksa kart görünmez.
+    }
+  }
+
+  /// Bağlantıyla gelindiyse ve oyuncu bu takımın sorgusunda yanıt
+  /// verebiliyorsa "Geliyorum / Gelemiyorum" hemen sorulur.
+  Future<void> _maybePrompt() async {
+    final s = _s;
+    if (AttendanceCard.promptMatchId != widget.match.id || s == null) return;
+    final me = s.me == null
+        ? null
+        : s.players.where((p) => p.id == s.me).firstOrNull;
+    if (me == null || s.closed || !s.matchOpen) return;
+    AttendanceCard.promptMatchId = null;
+    final picked = await showAdminOptionPicker<String>(
+      context: context,
+      title: 'Katılım durumun · ${_matchLine().replaceAll('\n', ' · ')}',
+      items: const ['yes', 'no'],
+      labelBuilder: (v) => v == 'yes' ? 'Geliyorum' : 'Gelemiyorum',
+      selected: me.status,
+    );
+    if (picked == null || picked == me.status || !mounted) return;
+    await _set(me.id, picked);
+    if (mounted) {
+      _toast(
+        picked == 'yes'
+            ? 'Geliyorum olarak işaretlendi.'
+            : 'Gelemiyorum olarak işaretlendi.',
+      );
     }
   }
 
@@ -113,8 +146,9 @@ class _AttendanceCardState extends State<AttendanceCard> {
       ShareParams(
         text:
             '⚽ Katılım Durum Sorgulama\n${_matchLine()}\n\n'
-            'Katılım durumunu bildir: $_linkBase\n'
-            '(İlk seferde sana özel gönderilen bağlantıyı aç.)',
+            'Katılım durumunu bildir: $_linkBase/mac?m=${widget.match.id}\n'
+            '(Uygulama yüklüyse uygulamada açılır; değilse ilk seferde sana '
+            'özel gönderilen bağlantıyı aç.)',
       ),
     );
   }

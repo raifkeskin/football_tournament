@@ -15,9 +15,17 @@ export async function aiModel(
   purpose: "esame" | "clips",
   fallback: string,
 ): Promise<string> {
-  const { data } = await admin.from("app_private_settings")
-    .select("value").eq("key", `ai_model_${purpose}`).maybeSingle();
-  return MODELS[String(data?.value ?? "")] ?? fallback;
+  // ai_model_id_<amaç> doluysa tam model adı odur (ör. gemini-3-flash-preview):
+  // "latest" takma adı yeni modele geçip bozulursa sürüm çıkmadan DB'den
+  // sabitlenir. Boşsa admin seçimi (flash / pro).
+  const { data: rows } = await admin.from("app_private_settings")
+    .select("key, value")
+    .in("key", [`ai_model_id_${purpose}`, `ai_model_${purpose}`]);
+  const get = (k: string) =>
+    String((rows ?? []).find((r: any) => r.key === k)?.value ?? "").trim();
+  const exact = get(`ai_model_id_${purpose}`);
+  if (exact) return exact;
+  return MODELS[get(`ai_model_${purpose}`)] ?? fallback;
 }
 
 /** TCMB kuru bugün güncellenmediyse günceller; hata olursa eski kur kalır. */

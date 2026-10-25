@@ -257,3 +257,14 @@ Uygulamada yapılan ve panele de dokunan değişiklikler buraya yazılır. Kulla
 - Eski derlemeler futbolcu seçerek `manager_id` yazmaya devam edebilir; ad ve telefon futbolcudan doldurulur.
 - **Vazgeçildi:** ikinci yetkili (kaptan).
 - **Sonra:** kurucu başkan ve bölge sorumlusu ekleme pencerelerinde de telefonla otomatik ad.
+
+## 25. Buton görüntüleme yetkileri veritabanında — SONRA (2026-10-25)
+- **Amaç:** Canlıdayız; biri "bu butonu göremiyorum" deyince sürüm çıkmadan veritabanından anında açıp kapatabilmek.
+- **Yetki tablosu:** buton anahtarı → onu görebilen en düşük rol. Örnek: `fikstur_video → admin`, `esame_mac_sonrasi → kurucu başkan`.
+- **Kişiye özel istisna (önerildi, karar bekliyor):** rolden bağımsız olarak belirli bir kişiye aç ya da kapat.
+- **Davranış:**
+  - Uygulama tabloyu önbellekte tutar (data_versions ile); değişince yeniden açmadan güncellenir.
+  - Kaydı olmayan buton bugünkü kod kuralıyla çalışır, böylece geçiş sırasında bir şey bozulmaz.
+- **Sınır:** Tablo yalnız görünürlüğü yönetir. Kayıt yetkisi RLS/RPC'de kalır; gerekiyorsa ayrıca açılır.
+- **Aşama A:** altyapı, ardından maç kontrolü, olay girişi, esame, Geri Al, afiş paylaşımı ve fikstür videosu.
+- **Aşama B:** kalan yönetim butonları ve admin düzenleme ekranı.

@@ -60,9 +60,10 @@ class HomeWarmup {
     final newsF = _first(ServiceLocator.leagueService.watchNewsFeed());
     final leagues = _leagues = await leaguesF;
     final s = session.value;
+    // Pasif turnuva admin dahil kimseye gösterilmez (verisi de gelmez).
     final visible = [
       for (final l in leagues)
-        if (s.isAdmin || l.isActive) l,
+        if (l.isActive) l,
     ];
     if (visible.isEmpty || !context.mounted) return;
     // Ana sayfanın seçtiği turnuva: uygulamanın büründüğü, yoksa varsayılan.

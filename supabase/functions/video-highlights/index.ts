@@ -13,10 +13,12 @@
 //     maliyet maç başı veya aylık sınırı (app_private_settings) aşıyorsa
 //     Gemini'ye hiç gidilmez.
 //
-// İstek: POST { match_id, kickoff_sec?, second_half_sec? } — kullanıcının
-// oturum belirteciyle; yalnızca owns_match() true olanlar (admin, kurucu
-// başkan, bölge sorumlusu) çalıştırabilir. İş arka planda sürer; durum
-// match_highlight_jobs tablosundan izlenir.
+// İstek: POST { match_id, kickoff_sec?, second_half_sec?, replace? } —
+// kullanıcının oturum belirteciyle; yalnızca owns_match() true olanlar (admin,
+// kurucu başkan, bölge sorumlusu) çalıştırabilir. Kesiti olan maçta yeniden
+// tarama replace: true ister (tüm eski kesitler silinir); maç başı tarama
+// sayısı ai_clip_scan_limit ile sınırlı (admin hariç). İş arka planda sürer;
+// durum match_highlight_jobs tablosundan izlenir.
 //
 // Gizli değerler (supabase secrets): GEMINI_API_KEY; isteğe bağlı
 // GEMINI_MODEL (varsayılan gemini-flash-latest), GEMINI_THINKING (düşünme
@@ -117,6 +119,7 @@ const RETRY_WINDOW = 300;
 const CLOCK_FPS = 0.5;
 // Tüm video taramasında kare hızı (varsayılan 2 sn'de bir kare; görüntü
 // maliyeti yarıya iner, ses aynı kalır).
+const CLIP_SEC = 15;
 const FULL_FPS = Number(Deno.env.get("GEMINI_FULL_FPS") ?? "0.5");
 
 const CORS = {
@@ -224,8 +227,10 @@ function usageOf(meta: Record<string, unknown> | undefined): Usage {
   const details = (meta?.promptTokensDetails ?? []) as { modality?: string; tokenCount?: number }[];
   const by = (m: string) =>
     details.filter((d) => d.modality === m).reduce((a, d) => a + (d.tokenCount ?? 0), 0);
-  const text = by("TEXT") + by("IMAGE");
-  const video = by("VIDEO");
+  // Ayrıntı gelmezse (bazı modeller) toplam istem sayısı videoya yazılır.
+  const prompt = Number(meta?.promptTokenCount ?? 0);
+  const text = details.length ? by("TEXT") + by("IMAGE") : 0;
+  const video = details.length ? by("VIDEO") : prompt;
   const audio = by("AUDIO");
   const output = Number(meta?.candidatesTokenCount ?? 0) + Number(meta?.thoughtsTokenCount ?? 0);
   const cost = ((text + video) * priceInput() + audio * priceAudio() + output * priceOutput()) / 1e6;
@@ -277,6 +282,14 @@ async function readLimits() {
   };
 }
 
+/** Kurucu başkan / bölge sorumlusu bir maçı en fazla kaç kez taratabilir. */
+async function readScanLimit(): Promise<number> {
+  const { data } = await admin.from("app_private_settings")
+    .select("value").eq("key", "ai_clip_scan_limit").maybeSingle();
+  const v = Number(data?.value);
+  return Number.isFinite(v) && v > 0 ? v : 3;
+}
+
 async function spentThisMonth(): Promise<number> {
   const now = new Date();
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
@@ -325,6 +338,15 @@ async function askGemini(opts: {
   if (!res.ok) {
     const msg = body?.error?.message ?? `HTTP ${res.status}`;
     throw new Error(`Gemini: ${msg}`);
+  }
+  // Model videoyu hiç almadıysa (yalnız metinle) yanıtı uydurur: 25.10.2026'da
+  // gemini-3-flash-preview YouTube linkini sessizce atlayıp gol anlarını
+  // dakikalardan tahmin etti. Kısa bir aralık bile binlerce birim tutar.
+  const promptTokens = Number(body?.usageMetadata?.promptTokenCount ?? 0);
+  const seconds = opts.end != null ? opts.end - (opts.start ?? 0) : 60;
+  if (promptTokens < Math.min(1500, seconds * 20)) {
+    console.warn("video not seen", GEMINI_MODEL, promptTokens, JSON.stringify(body?.usageMetadata));
+    throw new Error(`Gemini: video okunmadı (${GEMINI_MODEL}, ${promptTokens} birim)`);
   }
   const text: string = body?.candidates?.[0]?.content?.parts
     ?.map((p: { text?: string }) => p.text ?? "")
@@ -752,6 +774,8 @@ type RunOpts = {
   roster: RosterPlayer[];
   /** Sezon tercihi: kesitler doğrudan yayına girer. */
   autoPublish: boolean;
+  /** Onaylı yeniden tarama: başarılı bitince maçın tüm eski kesitleri silinir. */
+  replace: boolean;
 };
 
 /** Tüm gollerin dakikası girilmiş mi? (pencereli tarama yapılabilir) */
@@ -864,9 +888,10 @@ async function run(opts: RunOpts) {
         let end = toSec(f.bitis);
         if (w && start != null && start < w.start) start += w.start;
         if (w && end != null && end < w.start) end += w.start;
-        if (start == null || start > goalSec - 3 || start < goalSec - 30) start = goalSec - 12;
-        if (end == null || end < goalSec + 3 || end > goalSec + 20) end = goalSec + 8;
-        start = Math.max(0, start);
+        if (start == null || start > goalSec - 3 || start < goalSec - 30) start = goalSec - 11;
+        // Bir gol için 15 sn yeterli (atak + gol + kısa sevinç).
+        start = Math.max(0, Math.max(start, goalSec - 11));
+        end = start + CLIP_SEC;
 
         const teamName = (f.atan_takim ?? "").toLocaleLowerCase("tr");
         const sideOf = (g: GoalEvent) =>
@@ -940,10 +965,11 @@ async function run(opts: RunOpts) {
     const foundGoals = covered.length - missing.length;
     const needsReview = timed && covered.length > 0 && foundGoals * 2 < covered.length;
 
-    // Yeniden çalıştırmada sorumlunun dokunmadığı eski YZ kesitleri silinir;
-    // onaylanan, düzeltilen ya da kaldırılanlar (reviewed_by dolu) kalır.
-    await admin.from("match_highlights").delete()
-      .eq("match_id", matchId).eq("source", "ai").is("reviewed_by", null);
+    // Onaylı yeniden taramada maçın tüm eski kesitleri silinir (iş hata
+    // verirse buraya gelinmez, eskiler kalır). Otomatik çalıştırmada yalnız
+    // sorumlunun dokunmadığı YZ kesitleri silinir.
+    const stale = admin.from("match_highlights").delete().eq("match_id", matchId);
+    await (opts.replace ? stale : stale.eq("source", "ai").is("reviewed_by", null));
     if (rows.length) {
       const { error } = await admin.from("match_highlights").insert(rows);
       if (error) throw new Error(error.message);
@@ -976,6 +1002,68 @@ async function run(opts: RunOpts) {
   }
 }
 
+/** Yalnız gizli anahtarla: her model için generateContent ve Interactions
+ *  API'ye 30 sn'lik kısa bir YouTube aralığı sorar; durum ve istem birimi döner. */
+async function probeModels(videoId: string, models: unknown) {
+  const list = Array.isArray(models) && models.length
+    ? models.map(String)
+    : ["gemini-3-flash-preview", "gemini-3.5-flash", "gemini-3.8-flash", "gemini-flash-latest"];
+  const url = `https://www.youtube.com/watch?v=${videoId}`;
+  const q = "Bu videonun 10:00-10:30 aralığında ekrandaki skor tabelasında ne yazıyor? Tek cümle.";
+  const out: Record<string, unknown>[] = [];
+  for (const model of list) {
+    for (const api of ["generateContent", "interactions"]) {
+      try {
+        const res = api === "generateContent"
+          ? await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY },
+              body: JSON.stringify({
+                contents: [{
+                  role: "user",
+                  parts: [
+                    { fileData: { fileUri: url }, videoMetadata: { startOffset: "600s", endOffset: "630s" } },
+                    { text: q },
+                  ],
+                }],
+                generationConfig: { mediaResolution: "MEDIA_RESOLUTION_LOW" },
+              }),
+            },
+          )
+          : await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-goog-api-key": GEMINI_API_KEY,
+              "Api-Revision": "2026-05-20",
+            },
+            body: JSON.stringify({
+              model,
+              input: [{ type: "text", text: q }, { type: "video", uri: url }],
+            }),
+          });
+        const b = await res.json().catch(() => ({}));
+        out.push({
+          model,
+          api,
+          status: res.status,
+          error: b?.error?.message ?? null,
+          usage: b?.usageMetadata ?? b?.usage ?? null,
+          text: String(
+            b?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? "").join("") ??
+              JSON.stringify(b?.outputs ?? b?.output ?? "").slice(0, 400),
+          ).slice(0, 300),
+        });
+      } catch (e) {
+        out.push({ model, api, error: (e as Error).message });
+      }
+    }
+  }
+  return { videoId, results: out };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "POST bekleniyor" }, 405);
@@ -1001,6 +1089,8 @@ Deno.serve(async (req) => {
       return json({ error: "Geçersiz anahtar." }, 401);
     }
     auto = true;
+    // Model denemesi: hangi model/API YouTube videosunu gerçekten okuyor?
+    if (body?.probe) return json(await probeModels(String(body.video_id ?? ""), body.models));
   }
   let userId: string | null = null;
   if (!auto) {
@@ -1013,12 +1103,41 @@ Deno.serve(async (req) => {
 
   // Aynı maçta süren bir iş varsa (10 dk'dan yeni) yenisi başlatılmaz.
   const { data: job } = await admin.from("match_highlight_jobs")
-    .select("status, started_at").eq("match_id", matchId).maybeSingle();
+    .select("status, started_at, scan_count").eq("match_id", matchId).maybeSingle();
   if (
     job?.status === "running" &&
     Date.now() - new Date(job.started_at).getTime() < 10 * 60 * 1000
   ) {
     return json({ error: "Bu maç için analiz zaten sürüyor." }, 409);
+  }
+  const scanCount = Number(job?.scan_count ?? 0);
+
+  // Maç başı tarama sınırı (otomatik tarama da sayılır; admin hariç).
+  if (!auto) {
+    const { data: isAdmin } = await userClient.rpc("is_admin");
+    if (isAdmin !== true) {
+      const scanLimit = await readScanLimit();
+      if (scanCount >= scanLimit) {
+        return json({
+          error: `Bu maç için tarama hakkı doldu (${scanCount}/${scanLimit}).`,
+        }, 429);
+      }
+    }
+  }
+
+  // Yeniden taramada mevcut kesitlerin (elle düzeltilenler dahil) tamamı
+  // silinir; bu yüzden uygulamada onaylanmış olmalı (replace: true). Onay
+  // penceresi olmayan eski sürümler buradan geçemez.
+  const replace = !auto && body?.replace === true;
+  if (!auto && !replace) {
+    const { count } = await admin.from("match_highlights")
+      .select("id", { count: "exact", head: true }).eq("match_id", matchId);
+    if ((count ?? 0) > 0) {
+      return json({
+        error: "Yeniden taramada mevcut kesitler silinir. Uygulamayı " +
+          "güncelleyip tekrar deneyin.",
+      }, 409);
+    }
   }
 
   const { data: m } = await admin.from("matches")
@@ -1169,6 +1288,7 @@ Deno.serve(async (req) => {
     requested_by: userId,
     started_at: new Date().toISOString(),
     finished_at: null,
+    scan_count: scanCount + 1,
   });
 
   // Analiz birkaç dakika sürebilir; yanıt hemen döner, iş arka planda sürer.
@@ -1186,6 +1306,7 @@ Deno.serve(async (req) => {
     limit: limits.perMatch,
     roster,
     autoPublish,
+    replace,
   });
   // deno-lint-ignore no-explicit-any
   const rt = (globalThis as any).EdgeRuntime;

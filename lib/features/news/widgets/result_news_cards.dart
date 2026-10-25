@@ -63,12 +63,11 @@ class _Scorer {
   final List<int> minutes;
   final List<String> labels;
 
-  /// "Ali Can (2)", "Veli Er (P)", "Mehmet Ak (K.K.)"
+  /// "Ali Can (2)", "Mehmet Ak (K.K.)"; penaltı ayrıca yazılmaz.
   String get label {
     final b = StringBuffer(name);
     if (og) b.write(' (K.K.)');
     if (n > 1) b.write(' ($n)');
-    if (!og && pen > 0) b.write(n == 1 ? ' (P)' : ' ($pen P)');
     return b.toString();
   }
 

@@ -31,16 +31,20 @@ flutter build web --release --source-maps --dart-define=BUILD_ID="$BUILD_ID"
 mkdir -p "build_maps/$BUILD_ID"
 find build/web -name '*.js.map' -exec mv {} "build_maps/$BUILD_ID/" \;
 
-# Statik sayfalar (katilim.html, panel.html, teklif.html, sozlesme.html) uygulamanın herkese açık anon anahtarını
+# Statik sayfalar (katilim.html, panel.html, teklif.html, sozlesme.html, mac-onu/) uygulamanın herkese açık anon anahtarını
 # kullanır; anahtar tek yerde (app_config.dart) durur, burada yerleştirilir.
 ANON_KEY="$(grep -A2 "'SUPABASE_ANON_KEY'" lib/core/config/app_config.dart | grep -oE "eyJ[A-Za-z0-9._-]+")"
 if [[ -z "$ANON_KEY" ]]; then
   echo "Anon anahtar bulunamadı (app_config.dart)." >&2
   exit 1
 fi
-for f in build/web/katilim.html build/web/panel.html build/web/teklif.html build/web/sozlesme.html; do
+for f in build/web/katilim.html build/web/panel.html build/web/teklif.html build/web/sozlesme.html build/web/mac-onu/index.html; do
   sed -i '' "s|__SUPABASE_ANON_KEY__|$ANON_KEY|g" "$f"
 done
+
+# Uygulama bağlantısı doğrulama dosyaları (Android App Links / iOS Universal
+# Links): derleme gizli klasörü atlarsa diye açıkça kopyalanır.
+cp -R web/.well-known build/web/
 
 echo "==> firebase deploy --only hosting"
 firebase deploy --only hosting

@@ -4,11 +4,16 @@
     "public": "build/web",
     "ignore": [
       "firebase.json",
-      "**/.*",
+      "**/.DS_Store",
+      "**/.last_build_id",
       "**/node_modules/**",
       "**/*.map"
     ],
     "rewrites": [
+      {
+        "source": "/katilim/**",
+        "destination": "/katilim.html"
+      },
       {
         "source": "**",
         "destination": "/index.html"
@@ -25,11 +30,29 @@
         ]
       },
       {
+        "source": "/mac-onu/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      },
+      {
         "source": "/@(panel|katilim|teklif|sozlesme|kosullar|indir)?(.html)",
         "headers": [
           {
             "key": "Cache-Control",
             "value": "no-cache"
+          }
+        ]
+      },
+      {
+        "source": "/.well-known/apple-app-site-association",
+        "headers": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
           }
         ]
       }

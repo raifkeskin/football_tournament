@@ -551,14 +551,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                final isAdmin = AppSession.of(context).value.isAdmin;
-
                 // GÜNCELLENDİ: isPrivate olanları listede TUTUYORUZ (Kilitli göstermek için)
                 final allLeagues = (leagueSnapshot.data ?? const <League>[]).where((
                   l,
                 ) {
-                  if (isAdmin) return true; // Admin her şeyi görür
-                  if (!l.isActive) return false; // Pasif turnuvalar görünmez
+                  // Pasif turnuvalar admin dahil görünmez (verisi de gelmez).
+                  if (!l.isActive) return false;
                   return true; // isPrivate olanlar da gelsin, UI'da kilitleyeceğiz
                 }).toList();
 
@@ -612,13 +610,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 _visibleLeagueIds = _calendar
                     ? {
                         for (final l in allLeagues)
-                          if (isAdmin || l.isActive) l.id,
+                          if (l.isActive) l.id,
                       }
                     : _showLeagueFilter
                     ? {currentLeague.id}
                     : {
                         for (final l in allLeagues)
-                          if (isAdmin || l.isActive) l.id,
+                          if (l.isActive) l.id,
                       };
                 _leagueNameById = {for (final l in allLeagues) l.id: l.name};
                 _leagueLogoById = {for (final l in allLeagues) l.id: l.logoUrl};
