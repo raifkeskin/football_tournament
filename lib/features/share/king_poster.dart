@@ -134,10 +134,13 @@ ImageProvider? _net(String url) =>
 
 /// Afişin üst satırı: turnuva logosu, adı ve sezon/grup.
 class _Head extends StatelessWidget {
-  const _Head({required this.data, this.center = false});
+  const _Head({required this.data, this.center = false, this.end = false});
 
   final KingPosterData data;
   final bool center;
+
+  /// Sağa yaslı (Afiş 1'de başlığın üstünde).
+  final bool end;
 
   @override
   Widget build(BuildContext context) {
@@ -145,6 +148,8 @@ class _Head extends StatelessWidget {
     return Row(
       mainAxisAlignment: center
           ? MainAxisAlignment.center
+          : end
+          ? MainAxisAlignment.end
           : MainAxisAlignment.start,
       children: [
         PosterLogo(
@@ -208,8 +213,8 @@ class KingPhotoPoster extends StatelessWidget {
     final w = size.width;
     final h = size.height;
     final rows = data.rows.take(st.isPost ? 6 : 8).toList();
-    final photoW = w * 0.52;
-    final photoH = h * (st.isPost ? 0.74 : 0.7);
+    final photoW = w * 0.62;
+    final photoH = h;
     final rowH = st.pick(40, 36);
     final titleWords = data.title.split(' ');
     return Container(
@@ -231,7 +236,8 @@ class KingPhotoPoster extends StatelessWidget {
               ),
             ),
           ),
-          // Liderin fotoğrafı: altta ve sağda zemine karışır.
+          // Liderin fotoğrafı tam boy; sağa ve yukarıya doğru yumuşakça
+          // zemine karışır.
           Positioned(
             left: 0,
             bottom: 0,
@@ -240,39 +246,53 @@ class KingPhotoPoster extends StatelessWidget {
             child: ShaderMask(
               blendMode: BlendMode.dstIn,
               shaderCallback: (r) => const LinearGradient(
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
-                colors: [Colors.black, Colors.black, Colors.transparent],
-                stops: [0, 0.7, 1],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Colors.transparent, Colors.black54, Colors.black],
+                stops: [0, 0.1, 0.24],
               ).createShader(r),
-              child: photo == null
-                  ? Container(
-                      color: _card,
-                      child: _Silhouette(size: photoW * 0.7),
-                    )
-                  : ClipRect(
-                      child: Transform.scale(
-                        scale: frame.zoom,
-                        alignment: frame.align,
-                        child: Image(
-                          image: photo!,
-                          width: photoW,
-                          height: photoH,
-                          fit: BoxFit.cover,
+              child: ShaderMask(
+                blendMode: BlendMode.dstIn,
+                shaderCallback: (r) => const LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [
+                    Colors.black,
+                    Colors.black,
+                    Colors.black54,
+                    Colors.transparent,
+                  ],
+                  stops: [0, 0.45, 0.72, 1],
+                ).createShader(r),
+                child: photo == null
+                    ? Container(
+                        color: _card,
+                        child: _Silhouette(size: photoW * 0.7),
+                      )
+                    : ClipRect(
+                        child: Transform.scale(
+                          scale: frame.zoom,
                           alignment: frame.align,
-                          filterQuality: FilterQuality.high,
-                          errorBuilder: (_, _, _) => Container(
-                            color: _card,
-                            child: _Silhouette(size: photoW * 0.7),
+                          child: Image(
+                            image: photo!,
+                            width: photoW,
+                            height: photoH,
+                            fit: BoxFit.cover,
+                            alignment: frame.align,
+                            filterQuality: FilterQuality.high,
+                            errorBuilder: (_, _, _) => Container(
+                              color: _card,
+                              child: _Silhouette(size: photoW * 0.7),
+                            ),
                           ),
                         ),
                       ),
-                    ),
+              ),
             ),
           ),
           Positioned(
-            left: photoW * 0.18,
-            bottom: photoH - st.pick(30, 26),
+            left: photoW * 0.22,
+            top: h * (st.isPost ? 0.16 : 0.2),
             child: Transform.rotate(
               angle: -0.14,
               child: Icon(
@@ -283,14 +303,14 @@ class KingPhotoPoster extends StatelessWidget {
             ),
           ),
           Positioned(
-            left: 16,
             right: 16,
-            top: st.pick(22, 16),
-            child: _Head(data: data),
+            top: st.pick(26, 18),
+            width: w * 0.6,
+            child: _Head(data: data, end: true),
           ),
           Positioned(
             right: 16,
-            top: st.pick(70, 54),
+            top: st.pick(66, 52),
             width: w * 0.56,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
