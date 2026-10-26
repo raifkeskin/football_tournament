@@ -17,6 +17,7 @@ class AppSettings {
   static const _kIdentity = 'identity_verification_enabled';
   static const _kIdentityUsers = 'identity_verification_users';
   static const _kIdentityRoles = 'identity_verification_roles';
+  static const _kManualPlayerCreate = 'manual_player_create_enabled';
 
   /// Gizli turnuva özelliği. Kapalıyken "Turnuva Kodu Gir" ve "Gizli turnuva"
   /// alanları gizlenir; veritabanı da tüm turnuvaları herkese açar.
@@ -54,6 +55,11 @@ class AppSettings {
   /// (league_owner, region_owner, team_manager, player).
   static final identityVerificationRoles = ValueNotifier<Set<String>>({});
 
+  /// Elle yeni futbolcu ekleme (lisans listesi, kadro talebi). Kapalıyken
+  /// yalnız admin ekler; diğerleri futbolcunun uygulamadan kaydını bekleyip
+  /// listeden seçer. Veritabanı da aynı kuralı uygular.
+  static final manualPlayerCreateEnabled = ValueNotifier<bool>(true);
+
   static SupabaseClient get _sb => Supabase.instance.client;
 
   static Future<void> load() async {
@@ -86,6 +92,8 @@ class AppSettings {
             if (v is List)
               for (final x in v) x.toString(),
           };
+        } else if (r['key'] == _kManualPlayerCreate) {
+          manualPlayerCreateEnabled.value = r['value'] != false;
         } else if (r['key'] == _kMatchPhotoLimit) {
           final v = r['value'];
           if (v is num && v > 0) matchPhotoLimit.value = v.toInt();
@@ -168,6 +176,15 @@ class AppSettings {
       'updated_at': DateTime.now().toUtc().toIso8601String(),
     });
     identityVerificationRoles.value = next;
+  }
+
+  static Future<void> setManualPlayerCreateEnabled(bool enabled) async {
+    await _sb.from('app_settings').upsert({
+      'key': _kManualPlayerCreate,
+      'value': enabled,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    });
+    manualPlayerCreateEnabled.value = enabled;
   }
 
   static Future<void> setSelfRegistrationEnabled(bool enabled) async {
