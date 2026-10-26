@@ -230,16 +230,25 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
           for (final r in rosters)
             (r.playerId, r.isStarting, r.jerseyNumber, r.isCaptain),
         ]);
+        // Esame sırası kayıtlıysa (list_order) aynen o sırayla açılır.
+        final ordered = rosters.every((r) => r.listOrder != null)
+            ? ([...rosters]
+                ..sort((a, b) => a.listOrder!.compareTo(b.listOrder!)))
+            : const <MatchRosterModel>[];
+        for (final r in ordered) {
+          if (!_byId.containsKey(r.playerId)) continue;
+          (r.isStarting ? _starters : _subs).add(r.playerId);
+        }
         // Kayıtlı kaleci (pos_x = 0) ilk sırada.
-        final gk = rosters
-            .where((x) => x.isStarting && x.slot == 0)
-            .firstOrNull;
+        final gk = ordered.isNotEmpty
+            ? null
+            : rosters.where((x) => x.isStarting && x.slot == 0).firstOrNull;
         if (gk != null && _byId.containsKey(gk.playerId)) {
           _starters.add(gk.playerId);
         }
         for (final p in _players) {
           final r = rosters.where((x) => x.playerId == p.id).firstOrNull;
-          if (r != null && !_starters.contains(p.id)) {
+          if (r != null && !_starters.contains(p.id) && !_subs.contains(p.id)) {
             (r.isStarting ? _starters : _subs).add(p.id);
           }
           if (r != null && r.isCaptain && r.isStarting) _captainId = p.id;

@@ -817,6 +817,9 @@ class MatchRosterModel {
 
   /// Diziliş sekmesinde oyuncunun saha sırası (match_rosters.pos_x).
   final int? slot;
+
+  /// Esamedeki sıra (match_rosters.list_order); eski kayıtlarda null.
+  final int? listOrder;
   final PlayerModel? playerInfo;
 
   const MatchRosterModel({
@@ -831,6 +834,7 @@ class MatchRosterModel {
     this.jerseyNumber,
     this.isCaptain = false,
     this.slot,
+    this.listOrder,
     this.playerInfo,
   });
 
@@ -851,6 +855,7 @@ class MatchRosterModel {
       jerseyNumber: map['jersey_number']?.toString(),
       isCaptain: map['is_captain'] == true,
       slot: (map['pos_x'] as num?)?.toInt(),
+      listOrder: (map['list_order'] as num?)?.toInt(),
       playerInfo: playerInfo,
     );
   }

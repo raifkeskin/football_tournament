@@ -4438,13 +4438,21 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
                   : match.awayFormation,
             );
             final starterById = {for (final r in starterRosters) r.playerId: r};
-            final starters = [
-              for (final id in formationIds)
-                if (starterById[id] != null) starterById[id]!,
-            ];
+            // Esame sırası kayıtlıysa İlk 11 ve yedekler esamedeki sırayla
+            // (forma numarasına göre değil); eski kayıtlarda diziliş/mevki.
+            final hasOrder =
+                rosters.isNotEmpty && rosters.every((r) => r.listOrder != null);
+            int byList(MatchRosterModel a, MatchRosterModel b) =>
+                a.listOrder!.compareTo(b.listOrder!);
+            final starters = hasOrder
+                ? (starterRosters..sort(byList))
+                : [
+                    for (final id in formationIds)
+                      if (starterById[id] != null) starterById[id]!,
+                  ];
             final gkId = formationIds.isEmpty ? null : formationIds.first;
             final subs = rosters.where((r) => !r.isStarting).toList()
-              ..sort(order);
+              ..sort(hasOrder ? byList : order);
 
             List<Widget> rows(List<MatchRosterModel> list, {bool xi = false}) {
               return [
