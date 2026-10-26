@@ -39,6 +39,7 @@ class PendingAction {
     required this.teamId,
     required this.submittedBy,
     required this.payload,
+    this.submitterLabel,
     this.reviewNote,
     this.reviewedBy,
     this.reviewedAt,
@@ -52,6 +53,9 @@ class PendingAction {
   final String seasonId;
   final String teamId;
   final String submittedBy;
+
+  /// Talebi açanın adı, ör. "Ali Veli (takım sorumlusu)"; sunucu doldurur.
+  final String? submitterLabel;
   final Map<String, dynamic> payload;
   final String? reviewNote;
   final String? reviewedBy;
@@ -98,6 +102,7 @@ class PendingAction {
       seasonId: (map['season_id'] ?? '').toString(),
       teamId: (map['team_id'] ?? '').toString(),
       submittedBy: (map['submitted_by'] ?? '').toString(),
+      submitterLabel: map['submitter_label']?.toString(),
       payload: payload is Map
           ? Map<String, dynamic>.from(payload)
           : const <String, dynamic>{},

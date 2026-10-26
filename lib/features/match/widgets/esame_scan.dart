@@ -9,6 +9,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/services/error_reporter.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
+import '../../identity/id_card_reader.dart';
+import '../../identity/identity_access.dart';
+import '../../identity/identity_service.dart';
+import '../../identity/identity_verify_screen.dart';
 import '../models/match.dart';
 
 /// Kağıttan okunup onaylanan esame satırı.
@@ -176,6 +180,8 @@ Future<List<EsamePick>?> scanEsameFromPhoto(
     builder: (_) => _ReviewDialog(
       rows: rows,
       players: players,
+      matchId: matchId,
+      teamId: teamId,
       teamName: teamName,
       teamWarning: readTeam.isNotEmpty && _similarity(readTeam, teamName) < 0.4
           ? readTeam
@@ -229,6 +235,9 @@ class _Row {
   final int? readYear;
   bool starting;
   PlayerModel? player;
+
+  /// Kimlikle eklendi, kadro talebi onay bekliyor (esameye onayla yazılır).
+  String? pendingName;
 }
 
 /// Türkçe büyük/küçük harf ve aksan farkını yok sayan sadeleştirme.
@@ -274,12 +283,16 @@ class _ReviewDialog extends StatefulWidget {
   const _ReviewDialog({
     required this.rows,
     required this.players,
+    required this.matchId,
+    required this.teamId,
     required this.teamName,
     this.teamWarning,
   });
 
   final List<_Row> rows;
   final List<PlayerModel> players;
+  final String matchId;
+  final String teamId;
   final String teamName;
 
   /// Formda okunan takım adı, seçili takıma benzemiyorsa.
@@ -295,13 +308,43 @@ class _ReviewDialogState extends State<_ReviewDialog> {
   static const _red = Color(0xFFF87171);
   static const _blue = Color(0xFF3B82F6);
 
+  /// Kimlikle eklenen (kadroya yeni giren) oyuncular; seçicide de çıkar.
+  final List<PlayerModel> _added = [];
+
+  /// "Kadroda yok" satırı: kimlik okutularak oyuncu takıma eklenir.
+  Future<void> _addById(_Row r) async {
+    final res = await IdentityVerifyScreen.addToRoster(
+      context,
+      RosterTarget(
+        matchId: widget.matchId,
+        teamId: widget.teamId,
+        teamName: widget.teamName,
+        jersey: r.jersey,
+        readName: r.readName,
+      ),
+    );
+    if (res == null || !mounted) return;
+    setState(() {
+      if (res.pending) {
+        r.pendingName = res.name;
+      } else {
+        final p = PlayerModel(id: res.playerId, name: res.name);
+        _added.add(p);
+        r.player = p;
+      }
+    });
+  }
+
   Future<void> _pick(_Row r) async {
     const none = PlayerModel(id: '', name: 'Esameye ekleme');
     final taken = {
       for (final x in widget.rows)
         if (x != r && x.player != null) x.player!.id,
     };
-    final items = [none, ...widget.players.where((p) => !taken.contains(p.id))];
+    final items = [
+      none,
+      ...[...widget.players, ..._added].where((p) => !taken.contains(p.id)),
+    ];
     final picked = await showAdminOptionPicker<PlayerModel>(
       context: context,
       title: '${r.jersey ?? '-'} · ${r.readName}',
@@ -363,6 +406,11 @@ class _ReviewDialogState extends State<_ReviewDialog> {
                 _legend(_green, '${counts[2]} eşleşti'),
                 if (counts[1] > 0) _legend(_amber, '${counts[1]} kontrol edin'),
                 if (counts[0] > 0) _legend(_red, '${counts[0]} kadroda yok'),
+                if (_canAddById && counts[0] > 0)
+                  const Text(
+                    'Kadroda olmayan oyuncuyu kimliğini okutarak ekleyin.',
+                    style: TextStyle(color: Colors.white54, fontSize: 12),
+                  ),
               ],
             ),
           ),
@@ -449,6 +497,10 @@ class _ReviewDialogState extends State<_ReviewDialog> {
     ],
   );
 
+  /// Kimlikle ekleme: yalnız uygulamada (NFC) ve kimlik özelliği açıksa.
+  bool get _canAddById =>
+      IdCardReader.supported && IdentityAccess.visibleIn(context);
+
   Widget _rowTile(_Row r) {
     final conf = _confidence(r);
     final color = [_red, _amber, _green][conf];
@@ -486,13 +538,19 @@ class _ReviewDialogState extends State<_ReviewDialog> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      p == null
+                      r.pendingName != null
+                          ? 'Onay bekliyor: ${r.pendingName}'
+                          : p == null
                           ? 'Kadroda bulunamadı'
                           : '${p.name}${year == null ? '' : '  ($year)'}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: p == null ? _red : Colors.white,
+                        color: r.pendingName != null
+                            ? _amber
+                            : p == null
+                            ? _red
+                            : Colors.white,
                         fontWeight: FontWeight.w700,
                         fontSize: 13.5,
                       ),
@@ -510,6 +568,25 @@ class _ReviewDialogState extends State<_ReviewDialog> {
                   ],
                 ),
               ),
+              if (p == null && r.pendingName == null && _canAddById) ...[
+                OutlinedButton.icon(
+                  onPressed: () => _addById(r),
+                  icon: const Icon(Icons.badge_outlined, size: 16),
+                  label: const Text('Kimlik okut'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: _red,
+                    side: BorderSide(color: _red.withValues(alpha: 0.6)),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: const Size(0, 32),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    textStyle: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+              ],
               // İlk 11 / yedek: dokununca değişir.
               GestureDetector(
                 onTap: () => setState(() => r.starting = !r.starting),

@@ -18,6 +18,7 @@ class AppSettings {
   static const _kIdentityUsers = 'identity_verification_users';
   static const _kIdentityRoles = 'identity_verification_roles';
   static const _kManualPlayerCreate = 'manual_player_create_enabled';
+  static const _kSuspendedTab = 'suspended_tab_enabled';
 
   /// Gizli turnuva özelliği. Kapalıyken "Turnuva Kodu Gir" ve "Gizli turnuva"
   /// alanları gizlenir; veritabanı da tüm turnuvaları herkese açar.
@@ -60,6 +61,10 @@ class AppSettings {
   /// listeden seçer. Veritabanı da aynı kuralı uygular.
   static final manualPlayerCreateEnabled = ValueNotifier<bool>(true);
 
+  /// İstatistiklerdeki "Cezalı" sekmesi herkese açık mı; kapalıyken yalnız
+  /// admin görür.
+  static final suspendedTabEnabled = ValueNotifier<bool>(false);
+
   static SupabaseClient get _sb => Supabase.instance.client;
 
   static Future<void> load() async {
@@ -94,6 +99,8 @@ class AppSettings {
           };
         } else if (r['key'] == _kManualPlayerCreate) {
           manualPlayerCreateEnabled.value = r['value'] != false;
+        } else if (r['key'] == _kSuspendedTab) {
+          suspendedTabEnabled.value = r['value'] == true;
         } else if (r['key'] == _kMatchPhotoLimit) {
           final v = r['value'];
           if (v is num && v > 0) matchPhotoLimit.value = v.toInt();

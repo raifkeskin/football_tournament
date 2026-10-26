@@ -3,6 +3,42 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'id_card.dart';
+
+/// [IdentityService.addToRoster] sonucu.
+class RosterAddResult {
+  const RosterAddResult({
+    required this.pending,
+    required this.playerId,
+    required this.name,
+  });
+
+  /// Takım sorumlusu ekledi: onay bekliyor.
+  final bool pending;
+  final String playerId;
+  final String name;
+}
+
+/// Esamede "Kadroda yok" satırı için hedef: kimliği okunan oyuncu bu maçın
+/// bu takımına eklenir.
+class RosterTarget {
+  const RosterTarget({
+    required this.matchId,
+    required this.teamId,
+    required this.teamName,
+    this.jersey,
+    this.readName,
+  });
+
+  final String matchId;
+  final String teamId;
+  final String teamName;
+
+  /// Kağıttaki forma numarası ve ad (Türkçe yazım için).
+  final String? jersey;
+  final String? readName;
+}
+
 /// Kimlik çipinden okunan bilgilere uyan profil (`identity_candidates`).
 class IdentityCandidate {
   const IdentityCandidate({
@@ -152,6 +188,44 @@ class IdentityService {
     );
     _cache[playerId] = true;
     changes.value++;
+  }
+
+  /// Esamede "Kadroda yok": kimliği okunan oyuncuyu takıma ekler.
+  /// [playerId] seçilen mevcut profil; null ise TC'yle onaylı profil ya da
+  /// çipteki bilgilerle yeni onaylı profil kullanılır. Admin, kurucu başkan
+  /// ve bölge sorumlusunda doğrudan eklenir ('added'); takım sorumlusunda
+  /// kadro talebi açılır ('pending'), onaylanınca maçın esamesine yazılır.
+  static Future<RosterAddResult> addToRoster({
+    required String matchId,
+    required String teamId,
+    required IdCardData card,
+    String? playerId,
+    String? jersey,
+    String? display,
+  }) async {
+    final r = await _sb.rpc(
+      'identity_add_to_roster',
+      params: {
+        'p_match_id': matchId,
+        'p_team_id': teamId,
+        'p_first': card.firstName,
+        'p_last': card.lastName,
+        'p_birth': _date(card.birthDate),
+        'p_tc': card.tc,
+        'p_player_id': playerId,
+        'p_jersey': int.tryParse((jersey ?? '').trim()),
+        'p_display': display,
+      },
+    );
+    final m = Map<String, dynamic>.from(r as Map);
+    final id = (m['player_id'] ?? '').toString();
+    _cache[id] = true;
+    changes.value++;
+    return RosterAddResult(
+      pending: m['status'] == 'pending',
+      playerId: id,
+      name: (m['name'] ?? '').toString(),
+    );
   }
 
   /// Profilin numara durumu: none, unconfirmed, confirmed ya da forbidden.

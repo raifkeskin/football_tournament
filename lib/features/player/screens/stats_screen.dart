@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/player_stats.dart';
@@ -13,6 +15,8 @@ import '../../../core/widgets/web_safe_image.dart';
 import '../../../core/utils/string_utils.dart';
 import '../../../core/utils/team_colors.dart';
 import '../../../core/services/app_session.dart';
+import '../../../core/services/app_settings.dart';
+import '../services/penalty_service.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../share/king_poster.dart';
 import '../../share/poster_background.dart';
@@ -233,6 +237,7 @@ class _StatsViewState extends State<StatsView> {
                     players: pSnap.data!,
                     seasonId: widget.seasonId,
                     groupId: widget.groupId,
+                    groupTeams: _groupTeams,
                     leagueId: widget.leagueId,
                     shareAction: widget.shareAction,
                   );
@@ -388,6 +393,14 @@ final _categories = <_Category>[
     perMatch: false,
     detail: (s) => '${s.yellowCards} sarı · ${s.redCards} kırmızı',
   ),
+  _Category(
+    label: 'Cezalı',
+    unit: 'maç',
+    crown: 'CEZALI',
+    icon: Icons.block_rounded,
+    value: (_) => 0,
+    perMatch: false,
+  ),
 ];
 
 /// "1,50" biçiminde maç başı ortalama; maç sayısı yoksa null.
@@ -407,6 +420,7 @@ class _StatsTabs extends StatefulWidget {
     required this.players,
     required this.seasonId,
     required this.groupId,
+    required this.groupTeams,
     required this.leagueId,
     required this.shareAction,
   });
@@ -417,6 +431,9 @@ class _StatsTabs extends StatefulWidget {
   final Map<String, _PlayerLite> players;
   final String seasonId;
   final String? groupId;
+
+  /// Gruptaki takımlar (null: süzme yok); Cezalı listesi de buna göre.
+  final Set<String>? groupTeams;
   final String? leagueId;
   final ValueNotifier<VoidCallback?>? shareAction;
 
@@ -430,8 +447,94 @@ class _StatsTabsState extends State<_StatsTabs> {
   /// Gol ve Asist krallık düzeninde (E tasarımı) ve afişle paylaşılır.
   bool get _king => _cat <= 1;
 
+  /// Süren cezası olan oyuncular (Cezalı sekmesi; boşsa sekme yok).
+  static final Map<String, List<_Suspended>> _suspendedCache = {};
+  List<_Suspended> _suspended = const [];
+  StreamSubscription<Map<String, PlayerPenalty>>? _penaltySub;
+
+  String get _suspendedKey => '${widget.seasonId}|${widget.groupId ?? ''}';
+
+  @override
+  void initState() {
+    super.initState();
+    _suspended = _suspendedCache[_suspendedKey] ?? const [];
+    _penaltySub = PenaltyService()
+        .watchActivePenaltiesByPlayerId(widget.seasonId)
+        .listen(_resolveSuspended, onError: (_) {});
+  }
+
+  /// Cezalı oyuncuların takımı ve adı okunur; takımı yalnız istatistikte
+  /// yoksa kadrodan bakılır.
+  Future<void> _resolveSuspended(Map<String, PlayerPenalty> byPlayer) async {
+    final pens = [
+      for (final p in byPlayer.values)
+        if ((p.remainingMatches ?? p.matchCount) > 0) p,
+    ];
+    final ids = {for (final p in pens) p.playerId};
+    final teamOf = <String, String>{
+      for (final s in widget.stats)
+        if (ids.contains(s.playerPhone)) s.playerPhone: s.teamId,
+    };
+    final known = _StatsViewState._playersKnown;
+    final missingTeam = ids.where((id) => !teamOf.containsKey(id)).toList();
+    final missingName = ids.where((id) => !known.containsKey(id)).toList();
+    final client = Supabase.instance.client;
+    try {
+      final (roster, people) = await (
+        missingTeam.isEmpty
+            ? Future.value(const <Map<String, dynamic>>[])
+            : client
+                  .from('season_team_players')
+                  .select('player_id, team_id, is_active')
+                  .eq('season_id', widget.seasonId)
+                  .inFilter('player_id', missingTeam),
+        missingName.isEmpty
+            ? Future.value(const <Map<String, dynamic>>[])
+            : client
+                  .from('players')
+                  .select('id, name, surname, photo_url')
+                  .inFilter('id', missingName),
+      ).wait;
+      for (final r in roster) {
+        final pid = (r['player_id'] ?? '').toString();
+        // Aktif kadro kaydı öncelikli.
+        if (teamOf.containsKey(pid) && r['is_active'] != true) continue;
+        teamOf[pid] = (r['team_id'] ?? '').toString();
+      }
+      for (final r in people) {
+        known[(r['id'] ?? '').toString()] = _PlayerLite(
+          name: [
+            (r['name'] ?? '').toString().trim(),
+            (r['surname'] ?? '').toString().trim(),
+          ].where((e) => e.isNotEmpty).join(' '),
+          photoUrl: (r['photo_url'] ?? '').toString().trim(),
+        );
+      }
+    } catch (_) {
+      // Okunamayan takım/ad: satır takımsız ya da "Oyuncu" olarak görünür.
+    }
+    final inGroup = widget.groupTeams;
+    final out =
+        <_Suspended>[
+          for (final p in pens)
+            if (inGroup == null || inGroup.contains(teamOf[p.playerId]))
+              _Suspended(
+                penalty: p,
+                teamId: teamOf[p.playerId] ?? '',
+                player: known[p.playerId],
+              ),
+        ]..sort((a, b) {
+          final c = b.remaining.compareTo(a.remaining);
+          if (c != 0) return c;
+          return a.name.compareTo(b.name);
+        });
+    _suspendedCache[_suspendedKey] = out;
+    if (mounted) setState(() => _suspended = out);
+  }
+
   @override
   void dispose() {
+    _penaltySub?.cancel();
     final a = widget.shareAction;
     if (a != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) => a.value = null);
@@ -447,7 +550,7 @@ class _StatsTabsState extends State<_StatsTabs> {
         _king &&
         rows.isNotEmpty &&
         AppSession.of(context).value.canManageLeague(widget.leagueId);
-    final cat = _categories[_cat];
+    final cat = _visible[_cat];
     final top = rows.take(10).toList();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -546,6 +649,24 @@ class _StatsTabsState extends State<_StatsTabs> {
     );
   }
 
+  /// Turnuvada hiç maçın adamı seçilmediyse o sekme gösterilmez; Cezalı
+  /// yalnız süren ceza varken (açılana dek yalnız admine) görünür.
+  List<_Category> get _visible {
+    final suspended =
+        _suspended.isNotEmpty &&
+        (AppSettings.suspendedTabEnabled.value ||
+            AppSession.of(context).value.isAdmin);
+    return [
+      for (final c in _categories)
+        if (identical(c, _categories[2])
+            ? widget.stats.any((s) => s.manOfTheMatch > 0)
+            : identical(c, _categories[4])
+            ? suspended
+            : true)
+          c,
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final session = AppSession.of(context).value;
@@ -553,11 +674,13 @@ class _StatsTabsState extends State<_StatsTabs> {
       if ((session.playerId ?? '').isNotEmpty) session.playerId!,
       if (session.phone.isNotEmpty) session.phone,
     };
-    final cat = _categories[_cat];
+    final visible = _visible;
+    if (_cat >= visible.length) _cat = 0;
+    final cat = visible[_cat];
     final rows = _rank(
       widget.stats,
       cat.value,
-      tieRed: _cat == 4,
+      tieRed: !cat.perMatch,
       teamPos: widget.teamPos,
     );
     _syncShare(rows);
@@ -568,7 +691,7 @@ class _StatsTabsState extends State<_StatsTabs> {
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: _categories.length,
+            itemCount: visible.length,
             separatorBuilder: (_, _) => const SizedBox(width: 8),
             itemBuilder: (context, i) {
               final on = i == _cat;
@@ -588,7 +711,7 @@ class _StatsTabsState extends State<_StatsTabs> {
                     ),
                   ),
                   child: Text(
-                    _categories[i].label,
+                    visible[i].label,
                     style: TextStyle(
                       color: on ? const Color(0xFF0B1220) : _muted,
                       fontSize: 13,
@@ -608,6 +731,22 @@ class _StatsTabsState extends State<_StatsTabs> {
                   rows: rows.take(10).toList(),
                   teamById: widget.teamById,
                   players: widget.players,
+                  mine: mine,
+                )
+              : identical(cat, _categories[3])
+              ? _CardsBoard(
+                  key: ValueKey(_cat),
+                  stats: widget.stats,
+                  teamById: widget.teamById,
+                  teamPos: widget.teamPos,
+                  players: widget.players,
+                  seasonId: widget.seasonId,
+                )
+              : identical(cat, _categories[4])
+              ? _SuspendedBoard(
+                  key: ValueKey(_cat),
+                  rows: _suspended,
+                  teamById: widget.teamById,
                   mine: mine,
                 )
               : _Board(
@@ -1516,6 +1655,787 @@ class _KingListRow extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Kartlar (B tasarımı): üstte toplam sarı/kırmızı, takımlar en çok karttan
+// aza çubuklu satırlarda; takıma dokununca oyuncuların kartları alt sayfada.
+// ---------------------------------------------------------------------------
+
+const _yellow = Color(0xFFFACC15);
+const _red = Color(0xFFEF4444);
+
+class _TeamCards {
+  _TeamCards(this.teamId);
+  final String teamId;
+  int yellow = 0;
+  int red = 0;
+  final List<PlayerStats> players = [];
+  int get total => yellow + red;
+}
+
+/// Kart rengi küçük dikdörtgen.
+Widget _cardGlyph(Color c, {double w = 11, double h = 15}) => Container(
+  width: w,
+  height: h,
+  decoration: BoxDecoration(color: c, borderRadius: BorderRadius.circular(2)),
+);
+
+class _CardsBoard extends StatelessWidget {
+  const _CardsBoard({
+    super.key,
+    required this.stats,
+    required this.teamById,
+    required this.teamPos,
+    required this.players,
+    required this.seasonId,
+  });
+
+  final List<PlayerStats> stats;
+  final Map<String, Team> teamById;
+  final Map<String, int> teamPos;
+  final Map<String, _PlayerLite> players;
+  final String seasonId;
+
+  @override
+  Widget build(BuildContext context) {
+    final byTeam = <String, _TeamCards>{};
+    for (final s in stats) {
+      if (s.yellowCards + s.redCards <= 0) continue;
+      final t = byTeam.putIfAbsent(s.teamId, () => _TeamCards(s.teamId));
+      t.yellow += s.yellowCards;
+      t.red += s.redCards;
+      t.players.add(s);
+    }
+    // En çok kart üstte; eşitlikte kırmızısı çok olan, sonra puan sırası.
+    final teams = byTeam.values.toList()
+      ..sort((a, b) {
+        final c = b.total.compareTo(a.total);
+        if (c != 0) return c;
+        if (a.red != b.red) return b.red.compareTo(a.red);
+        return (teamPos[a.teamId] ?? 999).compareTo(teamPos[b.teamId] ?? 999);
+      });
+    if (teams.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.style_rounded, size: 48, color: Colors.white24),
+            SizedBox(height: 10),
+            Text(
+              'Henüz kart kaydı yok.',
+              style: TextStyle(color: Colors.white54),
+            ),
+          ],
+        ),
+      );
+    }
+    final max = teams.first.total;
+    final totalY = teams.fold<int>(0, (a, t) => a + t.yellow);
+    final totalR = teams.fold<int>(0, (a, t) => a + t.red);
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 120),
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _CardTotal(
+                color: _yellow,
+                value: totalY,
+                label: 'Sarı kart',
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _CardTotal(
+                color: _red,
+                value: totalR,
+                label: 'Kırmızı kart',
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        for (var i = 0; i < teams.length; i++)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: _TeamCardsRow(
+              rank:
+                  i > 0 &&
+                      teams[i - 1].total == teams[i].total &&
+                      teams[i - 1].red == teams[i].red
+                  ? null
+                  : i + 1,
+              data: teams[i],
+              team: teamById[teams[i].teamId],
+              max: max,
+              onTap: () => _showTeamCards(
+                context,
+                data: teams[i],
+                team: teamById[teams[i].teamId],
+                teamById: teamById,
+                players: players,
+                seasonId: seasonId,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _CardTotal extends StatelessWidget {
+  const _CardTotal({
+    required this.color,
+    required this.value,
+    required this.label,
+  });
+
+  final Color color;
+  final int value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          _cardGlyph(color, w: 18, h: 24),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '$value',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  height: 1.1,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: _muted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TeamCardsRow extends StatelessWidget {
+  const _TeamCardsRow({
+    required this.rank,
+    required this.data,
+    required this.team,
+    required this.max,
+    required this.onTap,
+  });
+
+  /// Eşitlikte üstteki sırayı paylaşan satırda null (boş).
+  final int? rank;
+  final _TeamCards data;
+  final Team? team;
+  final int max;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    const indent = 36.0;
+    final m = max <= 0 ? 1 : max;
+    return Material(
+      color: _card,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  SizedBox(
+                    width: 18,
+                    child: Text(
+                      rank == null ? '' : '$rank',
+                      style: const TextStyle(
+                        color: _muted,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  _MiniTeamLogo(
+                    logoUrl: team?.logoUrl ?? '',
+                    fallbackText: team?.name ?? '',
+                    size: 26,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      team?.name ?? 'Takım',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '${data.total} kart',
+                    style: const TextStyle(
+                      color: Color(0xFFCBD5E1),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.only(left: indent),
+                child: LayoutBuilder(
+                  builder: (context, c) {
+                    final w = c.maxWidth - 3;
+                    return Row(
+                      children: [
+                        if (data.yellow > 0)
+                          Container(
+                            width: w * data.yellow / m,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: _yellow,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                        if (data.yellow > 0 && data.red > 0)
+                          const SizedBox(width: 3),
+                        if (data.red > 0)
+                          Container(
+                            width: w * data.red / m,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: _red,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.only(left: indent),
+                child: Text(
+                  '${data.yellow} sarı · ${data.red} kırmızı · '
+                  '${data.players.length} oyuncu',
+                  style: const TextStyle(
+                    color: _muted,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Takımdaki bir kart olayı (alt sayfadaki satır).
+class _CardEvent {
+  const _CardEvent({
+    required this.playerId,
+    required this.red,
+    required this.text,
+    required this.sort,
+  });
+  final String playerId;
+  final bool red;
+  final String text;
+  final String sort;
+}
+
+/// Takımın kart olayları (sezon|takım); sayfa her açılışta beklemesin.
+final Map<String, List<_CardEvent>> _cardEventsCache = {};
+
+Future<List<_CardEvent>> _loadCardEvents(
+  String seasonId,
+  String teamId,
+  Map<String, Team> teamById,
+) async {
+  final rows = await Supabase.instance.client
+      .from('match_events')
+      .select(
+        'player_id, event_type, minute, added_minute, '
+        'matches(week, cup_round, match_date, home_team_id, away_team_id)',
+      )
+      .eq('season_id', seasonId)
+      .eq('team_id', teamId)
+      .inFilter('event_type', ['yellow_card', 'red_card']);
+  final out = <_CardEvent>[];
+  for (final r in rows) {
+    final m = (r['matches'] as Map?) ?? const {};
+    final week = (m['week'] as num?)?.toInt();
+    final round = (m['cup_round'] ?? '').toString().trim();
+    final home = (m['home_team_id'] ?? '').toString();
+    final away = (m['away_team_id'] ?? '').toString();
+    final opp = teamById[home == teamId ? away : home]?.name ?? '';
+    final minute = (r['minute'] as num?)?.toInt();
+    final added = (r['added_minute'] as num?)?.toInt() ?? 0;
+    final date = (m['match_date'] ?? '').toString();
+    out.add(
+      _CardEvent(
+        playerId: (r['player_id'] ?? '').toString(),
+        red: r['event_type'] == 'red_card',
+        text: [
+          if (week != null && week > 0)
+            '$week. hafta'
+          else if (round.isNotEmpty)
+            round,
+          if (opp.isNotEmpty) opp,
+          if (minute != null && minute > 0)
+            added > 0 ? "$minute+$added'" : "$minute'",
+        ].join(' · '),
+        // Hafta, sonra tarih; aynı maçta dakika sırası.
+        sort: [
+          '${week ?? 0}'.padLeft(3, '0'),
+          date,
+          '${minute ?? 0}'.padLeft(3, '0'),
+          '$added'.padLeft(2, '0'),
+        ].join('|'),
+      ),
+    );
+  }
+  out.sort((a, b) => a.sort.compareTo(b.sort));
+  return out;
+}
+
+void _showTeamCards(
+  BuildContext context, {
+  required _TeamCards data,
+  required Team? team,
+  required Map<String, Team> teamById,
+  required Map<String, _PlayerLite> players,
+  required String seasonId,
+}) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: const Color(0xFF111A2E),
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+    ),
+    builder: (context) => _TeamCardsSheet(
+      data: data,
+      team: team,
+      teamById: teamById,
+      players: players,
+      seasonId: seasonId,
+    ),
+  );
+}
+
+class _TeamCardsSheet extends StatefulWidget {
+  const _TeamCardsSheet({
+    required this.data,
+    required this.team,
+    required this.teamById,
+    required this.players,
+    required this.seasonId,
+  });
+
+  final _TeamCards data;
+  final Team? team;
+  final Map<String, Team> teamById;
+  final Map<String, _PlayerLite> players;
+  final String seasonId;
+
+  @override
+  State<_TeamCardsSheet> createState() => _TeamCardsSheetState();
+}
+
+class _TeamCardsSheetState extends State<_TeamCardsSheet> {
+  String get _key => '${widget.seasonId}|${widget.data.teamId}';
+  late List<_CardEvent>? _events = _cardEventsCache[_key];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCardEvents(widget.seasonId, widget.data.teamId, widget.teamById)
+        .then((e) {
+          _cardEventsCache[_key] = e;
+          if (mounted) setState(() => _events = e);
+        })
+        .catchError((_) {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Kırmızısı çok olan, sonra toplam kartı çok olan üstte.
+    final list = [...widget.data.players]
+      ..sort((a, b) {
+        if (a.redCards != b.redCards) return b.redCards.compareTo(a.redCards);
+        return (b.yellowCards + b.redCards).compareTo(
+          a.yellowCards + a.redCards,
+        );
+      });
+    final events = _events;
+    return SafeArea(
+      top: false,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.75,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF334155),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  _MiniTeamLogo(
+                    logoUrl: widget.team?.logoUrl ?? '',
+                    fallbackText: widget.team?.name ?? '',
+                    size: 34,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.team?.name ?? 'Takım',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Text(
+                          '${widget.data.yellow} sarı · '
+                          '${widget.data.red} kırmızı',
+                          style: const TextStyle(color: _muted, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: list.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  itemBuilder: (context, i) {
+                    final s = list[i];
+                    final p = widget.players[s.playerPhone];
+                    return _PlayerCardsTile(
+                      name: (p?.name ?? '').isEmpty ? 'Oyuncu' : p!.name,
+                      photoUrl: p?.photoUrl ?? '',
+                      yellow: s.yellowCards,
+                      red: s.redCards,
+                      // Olaylar gelene dek yalnız kart sayıları görünür.
+                      events: events
+                          ?.where((e) => e.playerId == s.playerPhone)
+                          .toList(),
+                      onTap: () =>
+                          showPlayerCard(context, playerKey: s.playerPhone),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PlayerCardsTile extends StatelessWidget {
+  const _PlayerCardsTile({
+    required this.name,
+    required this.photoUrl,
+    required this.yellow,
+    required this.red,
+    required this.events,
+    required this.onTap,
+  });
+
+  final String name;
+  final String photoUrl;
+  final int yellow;
+  final int red;
+  final List<_CardEvent>? events;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ev = events ?? const <_CardEvent>[];
+    return Material(
+      color: _card,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  _PlayerAvatar(name: name, photoUrl: photoUrl, size: 28),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  for (var i = 0; i < yellow; i++) ...[
+                    const SizedBox(width: 3),
+                    _cardGlyph(_yellow),
+                  ],
+                  for (var i = 0; i < red; i++) ...[
+                    const SizedBox(width: 3),
+                    _cardGlyph(_red),
+                  ],
+                ],
+              ),
+              for (final e in ev)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6, left: 38),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: _cardGlyph(e.red ? _red : _yellow, w: 8, h: 8),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          e.text,
+                          style: const TextStyle(color: _muted, fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Cezalı: süren cezası olan oyuncular (bu hafta oynayamaz).
+// ---------------------------------------------------------------------------
+
+class _Suspended {
+  const _Suspended({
+    required this.penalty,
+    required this.teamId,
+    required this.player,
+  });
+
+  final PlayerPenalty penalty;
+  final String teamId;
+  final _PlayerLite? player;
+
+  String get name => (player?.name ?? '').isEmpty ? 'Oyuncu' : player!.name;
+  int get remaining => penalty.remainingMatches ?? penalty.matchCount;
+
+  String get reason => switch (penalty.kind) {
+    'red_card' => 'Kırmızı kart',
+    'second_yellow' => 'İkinci sarı kart',
+    _ => penalty.reason.isNotEmpty ? penalty.reason : 'Disiplin cezası',
+  };
+}
+
+class _SuspendedBoard extends StatelessWidget {
+  const _SuspendedBoard({
+    super.key,
+    required this.rows,
+    required this.teamById,
+    required this.mine,
+  });
+
+  final List<_Suspended> rows;
+  final Map<String, Team> teamById;
+  final Set<String> mine;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 120),
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(bottom: 10),
+          child: Text(
+            'Cezası süren oyuncular takımlarının sıradaki maçlarında '
+            'oynayamaz.',
+            style: TextStyle(color: _muted, fontSize: 12),
+          ),
+        ),
+        for (final r in rows)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: _SuspendedRow(
+              row: r,
+              team: teamById[r.teamId],
+              isMe: mine.contains(r.penalty.playerId),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _SuspendedRow extends StatelessWidget {
+  const _SuspendedRow({
+    required this.row,
+    required this.team,
+    required this.isMe,
+  });
+
+  final _Suspended row;
+  final Team? team;
+  final bool isMe;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: isMe ? Color.lerp(_card, _red, 0.12) : _card,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => showPlayerCard(context, playerKey: row.penalty.playerId),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isMe ? _red : Colors.white.withValues(alpha: 0.07),
+            ),
+          ),
+          child: Row(
+            children: [
+              _PlayerAvatar(
+                name: row.name,
+                photoUrl: row.player?.photoUrl ?? '',
+                size: 38,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      row.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        if (team != null) ...[
+                          _MiniTeamLogo(
+                            logoUrl: team!.logoUrl,
+                            fallbackText: team!.name,
+                            size: 14,
+                          ),
+                          const SizedBox(width: 5),
+                        ],
+                        Flexible(
+                          child: Text(
+                            [
+                              if (team != null) team!.name,
+                              row.reason,
+                            ].join(' · '),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: _muted,
+                              fontSize: 11.5,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                decoration: BoxDecoration(
+                  color: _red.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '${row.remaining} maç',
+                  style: const TextStyle(
+                    color: Color(0xFFFCA5A5),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

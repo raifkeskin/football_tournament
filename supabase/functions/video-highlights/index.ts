@@ -1112,7 +1112,7 @@ Deno.serve(async (req) => {
   }
   const scanCount = Number(job?.scan_count ?? 0);
 
-  // Maç başı tarama sınırı (otomatik tarama da sayılır; admin hariç).
+  // Maç başı tarama sınırı (admin hariç). Otomatik denemeler hakka sayılmaz.
   if (!auto) {
     const { data: isAdmin } = await userClient.rpc("is_admin");
     if (isAdmin !== true) {
@@ -1288,7 +1288,7 @@ Deno.serve(async (req) => {
     requested_by: userId,
     started_at: new Date().toISOString(),
     finished_at: null,
-    scan_count: scanCount + 1,
+    scan_count: auto ? scanCount : scanCount + 1,
   });
 
   // Analiz birkaç dakika sürebilir; yanıt hemen döner, iş arka planda sürer.
