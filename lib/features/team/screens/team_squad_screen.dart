@@ -23,6 +23,7 @@ import '../../tournament/models/league.dart';
 import '../../tournament/services/interfaces/i_league_service.dart';
 import '../../match/models/match.dart';
 import '../../player/widgets/player_card.dart';
+import '../../../core/services/app_settings.dart';
 import '../../../core/services/app_session.dart';
 import '../../../core/widgets/list_filter.dart';
 import '../../../core/services/image_upload_service.dart';
@@ -3848,7 +3849,9 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
               ).fab(small: true),
               const SizedBox(height: 12),
             ],
-            if (session.hasManagementPanel)
+            if (session.isAdmin ||
+                (session.hasManagementPanel &&
+                    AppSettings.manualPlayerCreateEnabled.value))
               AdminBarAction(
                 icon: Icons.person_add_alt_1_rounded,
                 tooltip: 'Futbolcu Ekle',

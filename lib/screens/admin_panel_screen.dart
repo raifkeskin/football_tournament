@@ -353,6 +353,20 @@ class AdminPanelWidget extends StatelessWidget {
                     offText: 'Kapalı · eski kayıt talebi akışı',
                   ),
                   const SizedBox(height: 8),
+                  _SettingSwitch(
+                    setting: AppSettings.manualPlayerCreateEnabled,
+                    save: AppSettings.setManualPlayerCreateEnabled,
+                    title: 'Elle Futbolcu Ekleme',
+                    onIcon: Icons.person_add_alt_1_rounded,
+                    offIcon: Icons.how_to_reg_rounded,
+                    onText:
+                        'Açık · kurucu başkan ve bölge sorumlusu yeni '
+                        'futbolcu ekleyebilir',
+                    offText:
+                        'Kapalı · futbolcu uygulamadan kayıt olur, listeden '
+                        'seçilir (admin ekleyebilir)',
+                  ),
+                  const SizedBox(height: 8),
                   const _PhotoLimitSetting(),
                   const SizedBox(height: 8),
                   _SettingSwitch(

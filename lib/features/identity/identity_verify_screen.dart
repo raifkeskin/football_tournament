@@ -219,10 +219,14 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
       final ok = await showAdminConfirmDialog(
         context: context,
         title: 'Bu profil mi?',
-        message:
-            'Kimlikteki ad: ${card.fullName}\nProfil: ${c.fullName}\n\n'
-            'Ad soyad tam tutmuyor. Doğru kişi olduğundan eminseniz '
-            'onaylayın.',
+        message: c.matchKind == 'year' || c.matchKind == 'name'
+            ? 'Kimlikteki ad: ${card.fullName}\nProfil: ${c.fullName}\n\n'
+                  'Doğum tarihi${c.matchKind == 'name' ? ' ve ad soyad' : ''} '
+                  'tutmuyor. Doğru kişiyse onaylayın; profil kimlikteki '
+                  'bilgilerle düzeltilir.'
+            : 'Kimlikteki ad: ${card.fullName}\nProfil: ${c.fullName}\n\n'
+                  'Ad soyad tam tutmuyor. Doğru kişi olduğundan eminseniz '
+                  'onaylayın.',
         confirmLabel: 'ONAYLA',
         destructive: false,
         icon: Icons.verified_outlined,
@@ -664,6 +668,12 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
     } else if (c.matchKind == 'exact') {
       tag = 'Eşleşti';
       tagColor = kAdminAccent;
+    } else if (c.matchKind == 'year') {
+      tag = 'Doğum tarihi farklı';
+      tagColor = kAdminAmber;
+    } else if (c.matchKind == 'name') {
+      tag = 'Benzer kayıt';
+      tagColor = kAdminAmber;
     } else {
       tag = 'Ad soyad farklı';
       tagColor = kAdminAmber;
