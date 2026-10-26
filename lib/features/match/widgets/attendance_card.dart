@@ -238,6 +238,7 @@ class _AttendanceCardState extends State<AttendanceCard> {
             summary: _s!,
             title: widget.teamName,
             onPick: (p) => act(() => _pickFor(p)),
+            onSet: (p, status) => act(() => _set(p.id, status)),
             onSend: _sendPersonal,
             onShareGroup: _shareGroup,
             onToggleClosed: () => act(_toggleClosed),
@@ -533,6 +534,7 @@ class _AttendanceList extends StatelessWidget {
     required this.summary,
     required this.title,
     required this.onPick,
+    required this.onSet,
     required this.onSend,
     required this.onShareGroup,
     required this.onToggleClosed,
@@ -541,6 +543,10 @@ class _AttendanceList extends StatelessWidget {
   final _Summary summary;
   final String title;
   final ValueChanged<_Player> onPick;
+
+  /// Sorumlunun tek dokunuşla "geliyor" / "gelemiyor" işaretlemesi; seçili
+  /// olana yeniden dokunulursa cevap silinir (null).
+  final void Function(_Player p, String? status) onSet;
   final ValueChanged<_Player> onSend;
   final VoidCallback onShareGroup;
   final VoidCallback onToggleClosed;
@@ -671,6 +677,10 @@ class _AttendanceList extends StatelessWidget {
                 ],
               ),
             ),
+            if (summary.canManage) ...[
+              _mark(p, 'yes', Icons.check_rounded, kAdminAccent, 'Geliyor'),
+              _mark(p, 'no', Icons.close_rounded, kAdminDanger, 'Gelemiyor'),
+            ],
             if (summary.canManage)
               IconButton(
                 tooltip: 'Kişisel bağlantıyı WhatsApp\'tan gönder',
@@ -683,6 +693,40 @@ class _AttendanceList extends StatelessWidget {
                 ),
               ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+extension on _AttendanceList {
+  /// Sorumlu için onay / ret düğmesi: seçiliyse dolu, değilse çerçeveli.
+  Widget _mark(
+    _Player p,
+    String status,
+    IconData icon,
+    Color color,
+    String label,
+  ) {
+    final on = p.status == status;
+    return Padding(
+      padding: const EdgeInsets.only(left: 6),
+      child: Tooltip(
+        message: on ? '$label işaretini kaldır' : label,
+        child: Material(
+          color: on ? color : Colors.transparent,
+          shape: CircleBorder(
+            side: BorderSide(color: color.withValues(alpha: on ? 1 : 0.6)),
+          ),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: () => onSet(p, on ? null : status),
+            child: SizedBox(
+              width: 34,
+              height: 34,
+              child: Icon(icon, size: 19, color: on ? Colors.white : color),
+            ),
+          ),
         ),
       ),
     );
