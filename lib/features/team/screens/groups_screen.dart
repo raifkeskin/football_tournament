@@ -252,9 +252,7 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
       widget.seasonId,
       widget.fetchGroupId,
     );
-    _teamsStream = ServiceLocator.teamService.watchSeasonTeams(
-      widget.seasonId,
-    );
+    _teamsStream = ServiceLocator.teamService.watchSeasonTeams(widget.seasonId);
   }
 
   Stream<List<Map<String, dynamic>>> _watchLeagueMatchesRaw(
@@ -359,7 +357,7 @@ class _GroupStandingsTableState extends State<_GroupStandingsTable> {
                   padding: const EdgeInsets.symmetric(vertical: 24),
                   child: Center(
                     child: Text(
-                      '${widget.groupName} için henüz takım/maç verisi yok.',
+                      'Henüz takım/maç verisi yok.',
                       style: const TextStyle(color: Colors.white70),
                     ),
                   ),
