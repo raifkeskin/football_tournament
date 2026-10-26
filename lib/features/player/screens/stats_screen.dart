@@ -447,7 +447,7 @@ class _StatsTabsState extends State<_StatsTabs> {
         _king &&
         rows.isNotEmpty &&
         AppSession.of(context).value.canManageLeague(widget.leagueId);
-    final cat = _categories[_cat];
+    final cat = _visible[_cat];
     final top = rows.take(10).toList();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -546,6 +546,14 @@ class _StatsTabsState extends State<_StatsTabs> {
     );
   }
 
+  /// Turnuvada hiç maçın adamı seçilmediyse o sekme gösterilmez.
+  List<_Category> get _visible => [
+    for (final c in _categories)
+      if (!identical(c, _categories[2]) ||
+          widget.stats.any((s) => s.manOfTheMatch > 0))
+        c,
+  ];
+
   @override
   Widget build(BuildContext context) {
     final session = AppSession.of(context).value;
@@ -553,11 +561,13 @@ class _StatsTabsState extends State<_StatsTabs> {
       if ((session.playerId ?? '').isNotEmpty) session.playerId!,
       if (session.phone.isNotEmpty) session.phone,
     };
-    final cat = _categories[_cat];
+    final visible = _visible;
+    if (_cat >= visible.length) _cat = 0;
+    final cat = visible[_cat];
     final rows = _rank(
       widget.stats,
       cat.value,
-      tieRed: _cat == 4,
+      tieRed: !cat.perMatch,
       teamPos: widget.teamPos,
     );
     _syncShare(rows);
@@ -568,7 +578,7 @@ class _StatsTabsState extends State<_StatsTabs> {
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: _categories.length,
+            itemCount: visible.length,
             separatorBuilder: (_, _) => const SizedBox(width: 8),
             itemBuilder: (context, i) {
               final on = i == _cat;
@@ -588,7 +598,7 @@ class _StatsTabsState extends State<_StatsTabs> {
                     ),
                   ),
                   child: Text(
-                    _categories[i].label,
+                    visible[i].label,
                     style: TextStyle(
                       color: on ? const Color(0xFF0B1220) : _muted,
                       fontSize: 13,
