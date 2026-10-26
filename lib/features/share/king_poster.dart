@@ -290,6 +290,7 @@ class KingPhotoPoster extends StatelessWidget {
               ),
             ),
           ),
+          Positioned(
             right: 16,
             top: st.pick(26, 18),
             width: w * 0.6,
