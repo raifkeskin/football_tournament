@@ -867,6 +867,32 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     final tid = teamId.trim();
     if (lid.isEmpty || tid.isEmpty) return;
 
+    // Lig başladıysa ekleme yalnız transfer döneminde; dönem dışında yalnız
+    // admin ve kurucu başkan (veritabanı da aynı kuralı uygular).
+    if (!AppSession.of(context).value.isAdmin) {
+      var allowed = true;
+      try {
+        allowed =
+            await Supabase.instance.client.rpc(
+              'roster_add_allowed',
+              params: {'p_season_id': lid},
+            ) !=
+            false;
+      } catch (_) {}
+      if (!mounted) return;
+      if (!allowed) {
+        await showAdminInfoDialog(
+          context: context,
+          title: 'Kadroya ekleme kapalı',
+          message:
+              'Lig başladığı için kadroya ekleme yalnızca transfer döneminde '
+              'yapılabilir. Dönem dışında yalnızca admin ve kurucu başkan '
+              'ekleyebilir.',
+        );
+        return;
+      }
+    }
+
     final added = await showAdminPopup<bool>(
       context: context,
       builder: (_) => _SeasonPlayerPicker(
