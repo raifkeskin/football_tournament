@@ -22,10 +22,26 @@ class IdentityVerifyScreen extends StatefulWidget {
     this.expectedPlayerId,
     this.expectedName,
     this.registration = false,
+    this.rosterTarget,
   });
 
   final String? expectedPlayerId;
   final String? expectedName;
+
+  /// Esamede "Kadroda yok": okunan kişi bu maçın takımına eklenir; ekran
+  /// [RosterAddResult] ile kapanır.
+  final RosterTarget? rosterTarget;
+
+  /// Esameden kimlikle oyuncu ekleme. Vazgeçilirse null.
+  static Future<RosterAddResult?> addToRoster(
+    BuildContext context,
+    RosterTarget target,
+  ) => Navigator.of(context).push<RosterAddResult>(
+    MaterialPageRoute(
+      settings: const RouteSettings(name: 'IdentityAddToRosterScreen'),
+      builder: (_) => IdentityVerifyScreen(rosterTarget: target),
+    ),
+  );
 
   /// Kayıt Ol (giriş yapılmamış): çip okununca profil aranmaz, okunan
   /// bilgilerle ekran kapanır ([readForRegistration]).
@@ -212,6 +228,47 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
     }
   }
 
+  /// Esameden gelindiyse: seçilen profil ([c]) ya da yeni profil (null)
+  /// takıma eklenir; ekran sonuçla kapanır.
+  Future<void> _addToRoster(IdentityCandidate? c) async {
+    final card = _card;
+    final t = widget.rosterTarget;
+    if (card == null || t == null) return;
+    if (c != null && c.matchKind != 'exact' && c.matchKind != 'tc') {
+      final ok = await showAdminConfirmDialog(
+        context: context,
+        title: 'Bu profil mi?',
+        message:
+            'Kimlikteki ad: ${card.fullName}\nProfil: ${c.fullName}\n\n'
+            'Bilgiler tam tutmuyor. Doğru kişiyse ekleyin; profil kimlikteki '
+            'bilgilerle düzeltilir.',
+        confirmLabel: 'EKLE',
+        destructive: false,
+        icon: Icons.verified_outlined,
+      );
+      if (!ok || !mounted) return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final r = await IdentityService.addToRoster(
+        matchId: t.matchId,
+        teamId: t.teamId,
+        card: card,
+        playerId: c?.playerId,
+        jersey: t.jersey,
+        display: t.readName,
+      );
+      if (mounted) Navigator.of(context).pop(r);
+    } catch (e) {
+      if (mounted) setState(() => _error = IdentityService.errorText(e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _verify(IdentityCandidate c) async {
     final card = _card;
     if (card == null) return;
@@ -320,7 +377,11 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
   @override
   Widget build(BuildContext context) {
     return AdminPageScaffold(
-      title: widget.registration ? 'Kimliğini Doğrula' : 'Kimlik Doğrulama',
+      title: widget.registration
+          ? 'Kimliğini Doğrula'
+          : widget.rosterTarget != null
+          ? 'Kimlikle Oyuncu Ekle'
+          : 'Kimlik Doğrulama',
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
@@ -335,6 +396,14 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
               _note(
                 Icons.person_search_rounded,
                 'Okutulacak: ${widget.expectedName}',
+              ),
+            if (widget.rosterTarget case final t?)
+              _note(
+                Icons.group_add_rounded,
+                '${t.teamName} kadrosuna eklenecek'
+                '${(t.readName ?? '').isEmpty ? '' : ' (kağıtta: ${t.readName})'}. '
+                'Kimliği okutun, eşleşen profili seçin; profil yoksa '
+                'kimlikteki bilgilerle yeni profil açılır.',
               ),
             _nfcSection(),
             if (_nfc == NfcState.available) ...[
@@ -642,7 +711,20 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
                 ? const _EmptyMatch()
                 : Column(children: [for (final c in list) _candidateTile(c)]),
           ),
-        if (_verifiedId != null || (list != null && list.isEmpty)) ...[
+        if (widget.rosterTarget != null &&
+            list != null &&
+            !list.any((c) => c.matchKind == 'tc')) ...[
+          const SizedBox(height: 4),
+          AdminPrimaryButton(
+            label: list.isEmpty
+                ? 'PROFİL AÇ VE EKLE'
+                : 'LİSTEDE YOK · YENİ PROFİL AÇ',
+            icon: Icons.person_add_alt_1_rounded,
+            onPressed: _busy ? null : () => _addToRoster(null),
+          ),
+        ],
+        if (widget.rosterTarget == null &&
+            (_verifiedId != null || (list != null && list.isEmpty))) ...[
           const SizedBox(height: 4),
           AdminPrimaryButton(
             label: 'SIRADAKİ KİMLİK',
@@ -678,7 +760,10 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
       tag = 'Ad soyad farklı';
       tagColor = kAdminAmber;
     }
-    final canPick = !done && !c.verifiedOther && _verifiedId == null && !_busy;
+    final adding = widget.rosterTarget != null;
+    final canPick = adding
+        ? !c.verifiedOther && !_busy
+        : !done && !c.verifiedOther && _verifiedId == null && !_busy;
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
@@ -773,7 +858,7 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
               SizedBox(
                 height: 44,
                 child: ElevatedButton.icon(
-                  onPressed: () => _verify(c),
+                  onPressed: () => adding ? _addToRoster(c) : _verify(c),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _blue,
                     foregroundColor: const Color(0xFF0F172A),
@@ -782,9 +867,9 @@ class _IdentityVerifyScreenState extends State<IdentityVerifyScreen>
                     ),
                   ),
                   icon: const Icon(Icons.verified_rounded, size: 20),
-                  label: const Text(
-                    'PROFİLİ ONAYLA',
-                    style: TextStyle(fontWeight: FontWeight.w800),
+                  label: Text(
+                    adding ? 'BU OYUNCUYU EKLE' : 'PROFİLİ ONAYLA',
+                    style: const TextStyle(fontWeight: FontWeight.w800),
                   ),
                 ),
               ),
