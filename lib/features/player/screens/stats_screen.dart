@@ -483,7 +483,8 @@ class _StatsTabsState extends State<_StatsTabs> {
       ].where((u) => u.trim().isNotEmpty).toList(),
       poster: design == 2 ? KingStripPoster(data: data) : null,
       photoPoster: design == 1
-          ? (photo) => KingPhotoPoster(data: data, photo: photo)
+          ? (photo, frame) =>
+                KingPhotoPoster(data: data, photo: photo, frame: frame)
           : null,
       photoUrl: design == 1 ? data.rows.first.photoUrl : null,
     );
@@ -1378,7 +1379,7 @@ class _KingListRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 46,
+      height: 52,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1410,7 +1411,29 @@ class _KingListRow extends StatelessWidget {
                         size: 24,
                       ),
                       const SizedBox(width: 10),
-                      Expanded(child: _kName(name, 18)),
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _kName(name, 18),
+                            if (team != null) ...[
+                              const SizedBox(height: 3),
+                              Text(
+                                team!.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: _muted,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  height: 1,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
