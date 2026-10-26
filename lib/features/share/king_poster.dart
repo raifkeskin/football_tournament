@@ -188,10 +188,18 @@ class _Head extends StatelessWidget {
 /// Afiş 1: solda liderin büyük fotoğrafı ve tacı, sağda başlık ve liste.
 /// [photo] paylaşım penceresinde seçilen fotoğraf (yoksa profil fotoğrafı).
 class KingPhotoPoster extends StatelessWidget {
-  const KingPhotoPoster({super.key, required this.data, this.photo});
+  const KingPhotoPoster({
+    super.key,
+    required this.data,
+    this.photo,
+    this.frame = const PhotoFrame(),
+  });
 
   final KingPosterData data;
   final ImageProvider? photo;
+
+  /// Fotoğrafın kadrajı (pencerede sürükleyip yakınlaştırarak ayarlanır).
+  final PhotoFrame frame;
 
   @override
   Widget build(BuildContext context) {
@@ -242,14 +250,22 @@ class KingPhotoPoster extends StatelessWidget {
                       color: _card,
                       child: _Silhouette(size: photoW * 0.7),
                     )
-                  : Image(
-                      image: photo!,
-                      fit: BoxFit.cover,
-                      alignment: Alignment.topCenter,
-                      filterQuality: FilterQuality.high,
-                      errorBuilder: (_, _, _) => Container(
-                        color: _card,
-                        child: _Silhouette(size: photoW * 0.7),
+                  : ClipRect(
+                      child: Transform.scale(
+                        scale: frame.zoom,
+                        alignment: frame.align,
+                        child: Image(
+                          image: photo!,
+                          width: photoW,
+                          height: photoH,
+                          fit: BoxFit.cover,
+                          alignment: frame.align,
+                          filterQuality: FilterQuality.high,
+                          errorBuilder: (_, _, _) => Container(
+                            color: _card,
+                            child: _Silhouette(size: photoW * 0.7),
+                          ),
+                        ),
                       ),
                     ),
             ),
@@ -282,7 +298,11 @@ class KingPhotoPoster extends StatelessWidget {
                 for (final t in titleWords)
                   Text(
                     t,
-                    style: _cond(st.pick(50, 40), color: _lime, w: FontWeight.w900),
+                    style: _cond(
+                      st.pick(50, 40),
+                      color: _lime,
+                      w: FontWeight.w900,
+                    ),
                   ),
               ],
             ),
@@ -312,7 +332,11 @@ class KingPhotoPoster extends StatelessWidget {
                             ),
                             child: Text(
                               '${r.value}',
-                              style: _cond(rowH * 0.62, color: _bg, w: FontWeight.w900),
+                              style: _cond(
+                                rowH * 0.62,
+                                color: _bg,
+                                w: FontWeight.w900,
+                              ),
                             ),
                           ),
                         ],
@@ -428,7 +452,10 @@ class KingStripPoster extends StatelessWidget {
               children: [
                 for (var i = 0; i < rows.length; i++) ...[
                   if (i > 0) SizedBox(height: st.pick(8, 6)),
-                  Expanded(flex: i == 0 ? 13 : 10, child: _strip(rows[i], i == 0)),
+                  Expanded(
+                    flex: i == 0 ? 13 : 10,
+                    child: _strip(rows[i], i == 0),
+                  ),
                 ],
                 // Az oyuncu varsa şeritler uzamasın.
                 for (var i = rows.length; i < (st.isPost ? 4 : 6); i++) ...[
