@@ -571,6 +571,28 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
       players: _players,
     );
     if (picks == null || !mounted) return;
+    // Kimlikle kadroya yeni eklenen oyuncular: liste yeniden okunur.
+    if (picks.any((p) => !_byId.containsKey(p.playerId))) {
+      try {
+        final fresh = await _teamService.getEligiblePlayers(
+          widget.teamId,
+          widget.match.seasonId,
+        );
+        if (!mounted) return;
+        setState(() {
+          _players = [...fresh]..sort(_compare);
+          _byId = {for (final p in _players) p.id: p};
+          for (final p in _players) {
+            _jersey.putIfAbsent(
+              p.id,
+              () => TextEditingController(text: p.number ?? ''),
+            );
+          }
+        });
+        await _loadVerified();
+        if (!mounted) return;
+      } catch (_) {}
+    }
     final skipped = <String>[];
     final unverified = <String>[];
     var overflow = 0;
