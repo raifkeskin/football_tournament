@@ -863,7 +863,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
                     size: 34,
                   ),
                   title: Text(t.name, style: _barlow(weight: FontWeight.w700)),
-                  subtitle: t.groupId == null
+                  subtitle: t.groupId == null || data.groups.length < 2
                       ? null
                       : Text(
                           data.groups[t.groupId] ?? '',
@@ -984,8 +984,8 @@ class _HomeDashboardState extends State<HomeDashboard> {
         ? 'Misafir girişi'
         : [
             if (data != null && data.seasonName.isNotEmpty) data.seasonName,
-            if (group != null && !multi)
-              data!.groupRegion[group] ?? data.groups[group] ?? '',
+            // Tek grupta grup adı yazılmaz; bölge varsa bölge yazılır.
+            if (group != null && !multi) data!.groupRegion[group] ?? '',
           ].where((s) => s.isNotEmpty).join(' · ');
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
@@ -2069,7 +2069,10 @@ class _HomeDashboardState extends State<HomeDashboard> {
           ),
       ],
     );
-    final title = d.groupRegion[groupId] ?? d.groups[groupId] ?? '';
+    final title =
+        d.groupRegion[groupId] ??
+        (d.groups.length > 1 ? d.groups[groupId] : null) ??
+        'PUAN DURUMU';
     final head = _barlow(
       size: 11,
       weight: FontWeight.w800,

@@ -420,7 +420,7 @@ class _StatsTabsState extends State<_StatsTabs> {
     if (design == null || !mounted) return;
     final client = Supabase.instance.client;
     final groupId = widget.groupId;
-    final (league, season, group) = await (
+    final (league, season, groups) = await (
       widget.leagueId == null
           ? Future<Map<String, dynamic>?>.value()
           : client
@@ -436,16 +436,25 @@ class _StatsTabsState extends State<_StatsTabs> {
           .maybeSingle()
           .catchError((_) => null),
       groupId == null
-          ? Future<Map<String, dynamic>?>.value()
+          ? Future<List<Map<String, dynamic>>>.value(const [])
           : client
                 .from('groups')
-                .select('name')
-                .eq('id', groupId)
-                .maybeSingle()
-                .catchError((_) => null),
+                .select('id, name')
+                .eq('season_id', widget.seasonId)
+                .isFilter('deleted_at', null)
+                .catchError((_) => <Map<String, dynamic>>[]),
     ).wait;
     if (!mounted) return;
-    final groupName = (group?['name'] ?? '').toString().trim();
+    // Sezonda tek grup varsa grup adı yazılmaz.
+    final groupName = groups.length < 2
+        ? ''
+        : (groups.firstWhere(
+                    (g) => g['id'] == groupId,
+                    orElse: () => const {},
+                  )['name'] ??
+                  '')
+              .toString()
+              .trim();
     final title = '${cat.label.trUpper} KRALLIĞI';
     final data = KingPosterData(
       title: title,
@@ -454,7 +463,6 @@ class _StatsTabsState extends State<_StatsTabs> {
       leagueLogo: (league?['logo_url'] ?? '').toString(),
       subtitle: [
         (season?['name'] ?? '').toString().trim(),
-        // Tek grup "Genel" gibi adlandırılmış olabilir; yine de yazılır.
         groupName,
       ].where((e) => e.isNotEmpty).join(' · '),
       rows: [
