@@ -264,7 +264,9 @@ class SupabaseMatchService implements IMatchService {
     out = StreamController<T?>(
       onListen: () {
         subs
-          ..add(source.listen(out.add, onError: out.addError, onDone: out.close))
+          ..add(
+            source.listen(out.add, onError: out.addError, onDone: out.close),
+          )
           ..add(
             _localChanges.stream
                 .where((m) => m == id)
@@ -1298,8 +1300,11 @@ class SupabaseMatchService implements IMatchService {
     // eklenmemiş veritabanında kaptansız kayıt çalışmaya devam eder.
     final hasCaptain = rosters.any((r) => r.isCaptain);
     List<Map<String, dynamic>> rows({required bool withCaptain}) {
+      // Listedeki sıra esamedeki sıradır (Kadro sekmesi bununla dizer).
+      var i = 0;
       return rosters.map((r) {
         return {
+          'list_order': i++,
           'match_id': matchId,
           'league_id': leagueId,
           if (seasonId.trim().isNotEmpty) 'season_id': seasonId,
