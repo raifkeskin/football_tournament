@@ -9,55 +9,62 @@ const _mid = Color(0xFF94A3B8);
 const _pitch = Color(0xFF2D4468);
 const _pitchLine = Color(0xFF8AA2C6);
 
-/// Oynayabildiği mevki seçenekleri (alt mevki listesiyle aynı; veritabanı
-/// `players_other_positions_check` ile de sınırlar).
+/// Oynayabildiği mevki seçenekleri; bek ve kanatlar sol / sağ ayrı (FIFA
+/// gibi). Veritabanı `players_other_positions_check` ile de sınırlar.
 const kOtherPositionOptions = <String>[
   'Kaleci',
   'Stoper',
-  'Bek',
+  'Sol Bek',
+  'Sağ Bek',
   'Defansif',
   'Merkez',
   'Ofansif',
-  'Kanat',
+  'Sol Kanat',
+  'Sağ Kanat',
   'Santrfor',
-  'Kanat Forvet',
+  'Sol Kanat Forvet',
+  'Sağ Kanat Forvet',
 ];
 
 const _maxOther = 3;
 
-/// Sahadaki yerler (x, y oranı; hücum yukarı). Tarafı tutulmayan Bek ve
-/// kanatlar iki kanatta birden gösterilir.
-const _spots = <String, List<Offset>>{
-  'Santrfor': [Offset(0.5, 0.12)],
-  'Kanat Forvet': [Offset(0.16, 0.18), Offset(0.84, 0.18)],
-  'Ofansif': [Offset(0.5, 0.32)],
-  'Kanat': [Offset(0.16, 0.41), Offset(0.84, 0.41)],
-  'Merkez': [Offset(0.5, 0.48)],
-  'Defansif': [Offset(0.5, 0.62)],
-  'Bek': [Offset(0.16, 0.72), Offset(0.84, 0.72)],
-  'Stoper': [Offset(0.5, 0.79)],
-  'Kaleci': [Offset(0.5, 0.92)],
+/// Sahadaki yerler (x, y oranı; hücum yukarı).
+const _spots = <String, Offset>{
+  'Santrfor': Offset(0.5, 0.11),
+  'Sol Kanat Forvet': Offset(0.17, 0.17),
+  'Sağ Kanat Forvet': Offset(0.83, 0.17),
+  'Ofansif': Offset(0.5, 0.30),
+  'Sol Kanat': Offset(0.15, 0.42),
+  'Sağ Kanat': Offset(0.85, 0.42),
+  'Merkez': Offset(0.5, 0.47),
+  'Defansif': Offset(0.5, 0.62),
+  'Sol Bek': Offset(0.15, 0.73),
+  'Sağ Bek': Offset(0.85, 0.73),
+  'Stoper': Offset(0.5, 0.79),
+  'Kaleci': Offset(0.5, 0.92),
 };
 
-/// Asıl mevkinin sahadaki karşılığı: alt mevki varsa o, yoksa ana mevki
-/// (eski serbest değerler dahil).
-String? _mainSpotKey(String main, String sub) {
-  if (_spots.containsKey(sub)) return sub;
-  switch (main) {
-    case 'Kaleci':
-      return 'Kaleci';
-    case 'Defans':
-      return 'Stoper';
-    case 'Orta Saha':
-      return 'Merkez';
-    case 'Forvet':
-      return 'Santrfor';
-    case 'On Numara':
-      return 'Ofansif';
+/// Asıl mevkinin sahadaki yeri: alt mevki varsa o, yoksa ana mevki (eski
+/// serbest değerler dahil). Asıl mevkide taraf tutulmadığından Bek, Kanat
+/// ve Kanat Forvet iki yanda birden gösterilir (veritabanı da iki yanı asıl
+/// sayar).
+Set<String> _mainSpotKeys(String main, String sub) {
+  final v = sub.isNotEmpty ? sub : main;
+  switch (v) {
+    case 'Bek':
     case 'Kanat':
-      return 'Kanat';
+    case 'Kanat Forvet':
+      return {'Sol $v', 'Sağ $v'};
+    case 'Defans':
+      return {'Stoper'};
+    case 'Orta Saha':
+      return {'Merkez'};
+    case 'Forvet':
+      return {'Santrfor'};
+    case 'On Numara':
+      return {'Ofansif'};
   }
-  return null;
+  return _spots.containsKey(v) ? {v} : const {};
 }
 
 /// Oyuncu kartının "Mevki" sekmesi: asıl mevki büyük beyaz halka, oynayabildiği
@@ -148,7 +155,7 @@ class _PlayerPositionsTabState extends State<PlayerPositionsTab> {
       context: context,
       builder: (_) => _OtherPositionsEditor(
         playerId: widget.playerId,
-        mainKey: _mainSpotKey(_main, _sub),
+        mainKeys: _mainSpotKeys(_main, _sub),
         initial: _other,
         accent: widget.accent,
       ),
@@ -168,7 +175,7 @@ class _PlayerPositionsTabState extends State<PlayerPositionsTab> {
         child: Center(child: CircularProgressIndicator()),
       );
     }
-    final mainKey = _mainSpotKey(_main, _sub);
+    final mainKeys = _mainSpotKeys(_main, _sub);
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -192,7 +199,7 @@ class _PlayerPositionsTabState extends State<PlayerPositionsTab> {
           ),
           const SizedBox(height: 14),
           _PositionsPitch(
-            mainKey: mainKey,
+            mainKeys: mainKeys,
             other: _other,
             accent: widget.accent,
           ),
@@ -295,13 +302,13 @@ class _Ring extends StatelessWidget {
 /// Saha çizimi; [onTap] verilirse her mevki dokunulabilir olur (düzenleme).
 class _PositionsPitch extends StatelessWidget {
   const _PositionsPitch({
-    required this.mainKey,
+    required this.mainKeys,
     required this.other,
     required this.accent,
     this.onTap,
   });
 
-  final String? mainKey;
+  final Set<String> mainKeys;
   final List<String> other;
   final Color accent;
   final ValueChanged<String>? onTap;
@@ -361,7 +368,7 @@ class _PositionsPitch extends StatelessWidget {
 
           for (final e in _spots.entries) {
             final key = e.key;
-            final isMain = key == mainKey;
+            final isMain = mainKeys.contains(key);
             final isOther = !isMain && other.contains(key);
             if (!editing && !isMain && !isOther) continue;
             final ring = isMain
@@ -377,63 +384,60 @@ class _PositionsPitch extends StatelessWidget {
                       border: Border.all(color: _pitchLine, width: 2),
                     ),
                   );
-            for (final o in e.value) {
-              const boxW = 84.0, boxH = 58.0;
-              Widget mark = Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ring,
-                  if (editing) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      key,
-                      maxLines: 1,
-                      style: TextStyle(
-                        color: isMain || isOther
-                            ? Colors.white
-                            : const Color(0xFFC9D6EA),
-                        fontSize: 11,
-                        fontWeight: isMain || isOther
-                            ? FontWeight.w800
-                            : FontWeight.w600,
-                        shadows: const [
-                          Shadow(color: _bgDark, blurRadius: 3),
-                        ],
-                      ),
-                    ),
-                  ],
-                ],
-              );
-              if (editing) {
-                mark = Semantics(
-                  button: true,
-                  selected: isOther,
-                  label: isMain ? '$key, asıl mevki' : key,
-                  child: InkWell(
-                    onTap: isMain ? null : () => onTap!(key),
-                    borderRadius: BorderRadius.circular(12),
-                    child: SizedBox(
-                      width: boxW,
-                      height: boxH,
-                      child: Center(child: mark),
+            final o = e.value;
+            const boxW = 96.0, boxH = 58.0;
+            Widget mark = Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ring,
+                if (editing) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    key,
+                    maxLines: 1,
+                    style: TextStyle(
+                      color: isMain || isOther
+                          ? Colors.white
+                          : const Color(0xFFC9D6EA),
+                      fontSize: 11,
+                      fontWeight: isMain || isOther
+                          ? FontWeight.w800
+                          : FontWeight.w600,
+                      shadows: const [Shadow(color: _bgDark, blurRadius: 3)],
                     ),
                   ),
-                );
-              } else {
-                mark = SizedBox(
-                  width: boxW,
-                  height: boxH,
-                  child: Center(child: mark),
-                );
-              }
-              children.add(
-                Positioned(
-                  left: (o.dx * w - boxW / 2).clamp(0, w - boxW),
-                  top: (o.dy * h - boxH / 2).clamp(0, h - boxH),
-                  child: mark,
+                ],
+              ],
+            );
+            if (editing) {
+              mark = Semantics(
+                button: true,
+                selected: isOther,
+                label: isMain ? '$key, asıl mevki' : key,
+                child: InkWell(
+                  onTap: isMain ? null : () => onTap!(key),
+                  borderRadius: BorderRadius.circular(12),
+                  child: SizedBox(
+                    width: boxW,
+                    height: boxH,
+                    child: Center(child: mark),
+                  ),
                 ),
               );
+            } else {
+              mark = SizedBox(
+                width: boxW,
+                height: boxH,
+                child: Center(child: mark),
+              );
             }
+            children.add(
+              Positioned(
+                left: (o.dx * w - boxW / 2).clamp(0, w - boxW),
+                top: (o.dy * h - boxH / 2).clamp(0, h - boxH),
+                child: mark,
+              ),
+            );
           }
 
           return Container(
@@ -455,13 +459,13 @@ class _PositionsPitch extends StatelessWidget {
 class _OtherPositionsEditor extends StatefulWidget {
   const _OtherPositionsEditor({
     required this.playerId,
-    required this.mainKey,
+    required this.mainKeys,
     required this.initial,
     required this.accent,
   });
 
   final String playerId;
-  final String? mainKey;
+  final Set<String> mainKeys;
   final List<String> initial;
   final Color accent;
 
@@ -472,7 +476,7 @@ class _OtherPositionsEditor extends StatefulWidget {
 class _OtherPositionsEditorState extends State<_OtherPositionsEditor> {
   late final List<String> _picked = [
     for (final p in widget.initial)
-      if (p != widget.mainKey) p,
+      if (!widget.mainKeys.contains(p) && _spots.containsKey(p)) p,
   ];
   bool _saving = false;
 
@@ -542,7 +546,7 @@ class _OtherPositionsEditorState extends State<_OtherPositionsEditor> {
           ),
           const SizedBox(height: 12),
           _PositionsPitch(
-            mainKey: widget.mainKey,
+            mainKeys: widget.mainKeys,
             other: _picked,
             accent: widget.accent,
             onTap: _toggle,
