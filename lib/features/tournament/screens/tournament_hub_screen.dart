@@ -781,8 +781,8 @@ class _KeepAliveState extends State<_KeepAlive>
 }
 
 /// Turnuva ekranının zemini: üstten turnuva renginden koyuya geçiş, sol üstte
-/// ikinci rengin hafif parıltısı, sağda eğik turnuva logosu silüeti, sol altta
-/// küçük uygulama logosu silüeti. Tüm sekmelerin arkasında durur.
+/// ikinci rengin hafif parıltısı, sağda eğik soluk turnuva logosu, sol altta
+/// küçük soluk uygulama logosu. Tüm sekmelerin arkasında durur.
 class _HubBackdrop extends StatelessWidget {
   const _HubBackdrop({
     required this.primary,
@@ -796,11 +796,17 @@ class _HubBackdrop extends StatelessWidget {
 
   static const _base = Color(0xFF0B1220);
 
-  /// Logoyu beyaz silüete çevirir.
+  /// Logoyu gri tonlu ve soluk çizer. Düz beyaz silüet kullanılmaz: logolar
+  /// çoğunlukla dolu arma olduğundan silüet içi boş bir lekeye döner.
   static Widget _silhouette(Widget child, double opacity) => Opacity(
     opacity: opacity,
     child: ColorFiltered(
-      colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+      colorFilter: const ColorFilter.matrix([
+        0.3, 0.59, 0.11, 0, 0, //
+        0.3, 0.59, 0.11, 0, 0, //
+        0.3, 0.59, 0.11, 0, 0, //
+        0, 0, 0, 1, 0,
+      ]),
       child: child,
     ),
   );
@@ -854,7 +860,7 @@ class _HubBackdrop extends StatelessWidget {
                   angle: -0.21,
                   child: _silhouette(
                     WebSafeImage(url: logoUrl, fit: BoxFit.contain),
-                    0.08,
+                    0.14,
                   ),
                 ),
               ),
@@ -862,7 +868,7 @@ class _HubBackdrop extends StatelessWidget {
               left: 20,
               bottom: 22,
               width: 56,
-              child: _silhouette(Image.asset(AppLogo.asset), 0.1),
+              child: _silhouette(Image.asset(AppLogo.asset), 0.18),
             ),
           ],
         );
