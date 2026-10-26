@@ -9,7 +9,9 @@ import '../../../core/services/global_filter.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/utils/table_feed.dart';
 import '../../../core/services/active_tournament.dart';
+import '../../../core/widgets/app_logo.dart';
 import '../../../core/widgets/app_name_band.dart';
+import '../../../core/widgets/web_safe_image.dart';
 import '../../match/models/match.dart';
 import '../../match/screens/fixture_screen.dart';
 import '../../news/screens/news_feed_screen.dart';
@@ -172,6 +174,9 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
   /// Fikstür sekmesinin seçili gün videosu (şimdilik yalnız admin).
   final _fixtureVideo = ValueNotifier<VoidCallback?>(null);
 
+  /// İstatistik sekmesinin Gol / Asist krallığı afişi.
+  final _statsShare = ValueNotifier<VoidCallback?>(null);
+
   @override
   void initState() {
     super.initState();
@@ -193,6 +198,7 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
     _tabs.dispose();
     _fixtureShare.dispose();
     _fixtureVideo.dispose();
+    _statsShare.dispose();
     super.dispose();
   }
 
@@ -353,48 +359,67 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
                   backgroundColor: _bgDark,
                   // Afiş paylaşma: sekmelerin yanında değil, sağ altta yüzer.
                   floatingActionButton: _shareButton(group, accent),
-                  body: SafeArea(
-                    top: false,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const SizedBox(height: 8),
-                        // Birden fazla grup varsa sekmelerin üstünde ortalı
-                        // grup çipleri; tek gruplu turnuvada satır yok.
-                        if (groups.length > 1 && group != null)
-                          _GroupChips(
-                            groups: groups,
-                            selectedId: group.id,
-                            accent: accent,
-                            onSelect: (id) => setState(() => _groupId = id),
+                  body: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: _HubBackdrop(
+                          primary: _color(
+                            league?.themePrimary,
+                            const Color(0xFF13223F),
                           ),
-                        _HubTabBar(
-                          controller: _tabs,
-                          accent: accent,
-                          tabs: _visible,
+                          glow: _color(
+                            league?.themeSecondary,
+                            const Color(0xFFC0C7D1),
+                          ),
+                          logoUrl: league?.logoUrl ?? '',
                         ),
-                        Expanded(
-                          child: season == null || group == null
-                              ? Center(
-                                  child: groupSnap.hasData && seasonSnap.hasData
-                                      ? const Text(
-                                          'Bu sezonda henüz grup yok.',
-                                          style: TextStyle(
-                                            color: Colors.white70,
-                                          ),
-                                        )
-                                      : const CircularProgressIndicator(),
-                                )
-                              : TabBarView(
-                                  controller: _tabs,
-                                  children: [
-                                    for (final t in _visible)
-                                      _tabView(t, season, group, accent),
-                                  ],
-                                ),
+                      ),
+                      SafeArea(
+                        top: false,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const SizedBox(height: 8),
+                            // Birden fazla grup varsa sekmelerin üstünde ortalı
+                            // grup çipleri; tek gruplu turnuvada satır yok.
+                            if (groups.length > 1 && group != null)
+                              _GroupChips(
+                                groups: groups,
+                                selectedId: group.id,
+                                accent: accent,
+                                onSelect: (id) => setState(() => _groupId = id),
+                              ),
+                            _HubTabBar(
+                              controller: _tabs,
+                              accent: accent,
+                              tabs: _visible,
+                            ),
+                            Expanded(
+                              child: season == null || group == null
+                                  ? Center(
+                                      child:
+                                          groupSnap.hasData &&
+                                              seasonSnap.hasData
+                                          ? const Text(
+                                              'Bu sezonda henüz grup yok.',
+                                              style: TextStyle(
+                                                color: Colors.white70,
+                                              ),
+                                            )
+                                          : const CircularProgressIndicator(),
+                                    )
+                                  : TabBarView(
+                                      controller: _tabs,
+                                      children: [
+                                        for (final t in _visible)
+                                          _tabView(t, season, group, accent),
+                                      ],
+                                    ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 );
               },
@@ -454,6 +479,8 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
             key: ValueKey('ss|${season.id}|${group.id}'),
             seasonId: season.id,
             groupId: group.id,
+            leagueId: widget.leagueId,
+            shareAction: _statsShare,
           ),
         );
       case TournamentHubTab.news:
@@ -496,15 +523,15 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
           ),
         );
       case TournamentHubTab.fixture:
-        // Gün videosu paylaş düğmesinin üstünde, ikincil renkte.
+        // Gün videosu paylaş düğmesinin solunda, ikincil renkte.
         return ListenableBuilder(
           listenable: Listenable.merge([_fixtureShare, _fixtureVideo]),
           builder: (context, _) {
             final share = _fixtureShare.value;
             final video = _fixtureVideo.value;
-            return Column(
+            return Row(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 if (video != null)
                   FloatingActionButton.small(
@@ -515,14 +542,19 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
                     onPressed: video,
                     child: const Icon(Icons.movie_creation_outlined),
                   ),
-                if (video != null && share != null) const SizedBox(height: 10),
+                if (video != null && share != null) const SizedBox(width: 12),
                 if (share != null) fab(share),
               ],
             );
           },
         );
-      case TournamentHubTab.playoff:
       case TournamentHubTab.stats:
+        return ValueListenableBuilder<VoidCallback?>(
+          valueListenable: _statsShare,
+          builder: (context, share, _) =>
+              share == null ? const SizedBox.shrink() : fab(share),
+        );
+      case TournamentHubTab.playoff:
       case TournamentHubTab.news:
         return null;
     }
@@ -745,5 +777,102 @@ class _KeepAliveState extends State<_KeepAlive>
   Widget build(BuildContext context) {
     super.build(context);
     return widget.child;
+  }
+}
+
+/// Turnuva ekranının zemini: üstten turnuva renginden koyuya geçiş, sol üstte
+/// ikinci rengin hafif parıltısı, sağda eğik soluk turnuva logosu, sol altta
+/// küçük soluk uygulama logosu. Tüm sekmelerin arkasında durur.
+class _HubBackdrop extends StatelessWidget {
+  const _HubBackdrop({
+    required this.primary,
+    required this.glow,
+    required this.logoUrl,
+  });
+
+  final Color primary;
+  final Color glow;
+  final String logoUrl;
+
+  static const _base = Color(0xFF0B1220);
+
+  /// Logoyu gri tonlu ve soluk çizer. Düz beyaz silüet kullanılmaz: logolar
+  /// çoğunlukla dolu arma olduğundan silüet içi boş bir lekeye döner.
+  static Widget _silhouette(Widget child, double opacity) => Opacity(
+    opacity: opacity,
+    child: ColorFiltered(
+      colorFilter: const ColorFilter.matrix([
+        0.3, 0.59, 0.11, 0, 0, //
+        0.3, 0.59, 0.11, 0, 0, //
+        0.3, 0.59, 0.11, 0, 0, //
+        0, 0, 0, 1, 0,
+      ]),
+      child: child,
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    // Açık/canlı turnuva renkleri (ör. kırmızı) tabloyu boğmasın: koyuyla
+    // karıştırılır.
+    final top = Color.lerp(primary, _base, 0.25)!;
+    final mid = Color.lerp(primary, _base, 0.7)!;
+    return LayoutBuilder(
+      builder: (context, box) {
+        final logoW = math.min(box.maxWidth * 1.0, 420.0);
+        return Stack(
+          clipBehavior: Clip.hardEdge,
+          children: [
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [top, mid, _base],
+                    stops: const [0, 0.38, 0.78],
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              left: -120,
+              top: -60,
+              width: 420,
+              height: 420,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: RadialGradient(
+                    colors: [
+                      glow.withValues(alpha: 0.16),
+                      glow.withValues(alpha: 0),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            if (logoUrl.trim().isNotEmpty)
+              Positioned(
+                right: -logoW * 0.3,
+                top: box.maxHeight * 0.36,
+                width: logoW,
+                child: Transform.rotate(
+                  angle: -0.21,
+                  child: _silhouette(
+                    WebSafeImage(url: logoUrl, fit: BoxFit.contain),
+                    0.14,
+                  ),
+                ),
+              ),
+            Positioned(
+              left: 20,
+              bottom: 22,
+              width: 56,
+              child: _silhouette(Image.asset(AppLogo.asset), 0.18),
+            ),
+          ],
+        );
+      },
+    );
   }
 }

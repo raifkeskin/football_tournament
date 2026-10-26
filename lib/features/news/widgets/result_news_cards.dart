@@ -452,20 +452,14 @@ class _ScorerColumn extends StatelessWidget {
 
   final List<_Scorer> scorers;
 
-  /// Takımın skoru: gol atmış ama golcü girilmemişse "Gol yok" yazılmaz.
+  /// Takımın skoru.
   final int goals;
   final bool end;
 
   @override
   Widget build(BuildContext context) {
-    if (scorers.isEmpty) {
-      if (goals > 0) return const SizedBox.shrink();
-      return Text(
-        'Gol yok',
-        textAlign: end ? TextAlign.right : TextAlign.left,
-        style: const TextStyle(color: _muted, fontSize: 12.5),
-      );
-    }
+    // Golcü yoksa boş kalır ("Gol yok" yazılmaz).
+    if (scorers.isEmpty) return const SizedBox.shrink();
     final ball = Icon(
       Icons.sports_soccer_rounded,
       size: 13,

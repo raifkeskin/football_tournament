@@ -1174,6 +1174,20 @@ button.tile:hover { border-color: #33476e; }
     if (d.second_half_at) return d.period + since(d.second_half_at);
     return since(d.kickoff_at);
   }
+  // Olay girişindeki dakika (uygulamadaki MatchClock gibi): devre süresi
+  // dolunca devre sonu + uzatma (30+2'). Uzatma devresinde düz dakika.
+  function minParts(d) {
+    var mn = curMinute(d);
+    if (mn == null) return null;
+    if (d.status !== 'live' || d.extra_time_at || d.shootout) return {minute: mn, added: null};
+    var limit = d.second_half_at ? 2 * d.period : d.period;
+    return mn > limit ? {minute: limit, added: Math.min(30, mn - limit)} : {minute: mn, added: null};
+  }
+  function minLabel(m, a) {
+    if (m == null || m === 999) return '';
+    return a > 0 ? m + '+' + a + '\'' : m + '\'';
+  }
+  function partsText(p) { return p == null ? '' : p.added ? p.minute + '+' + p.added : String(p.minute); }
   function clockText(d) {
     if (d.status === 'notStarted') return '<span class="pill mute">BAŞLAMADI</span>';
     if (d.status === 'postponed') return '<span class="pill warn">ERTELENDİ</span>';
@@ -1181,9 +1195,9 @@ button.tile:hover { border-color: #33476e; }
     if (d.status === 'finished') return '<span class="pill ok">MAÇ BİTTİ</span>';
     if (d.status === 'halftime') return '<span class="pill live">DEVRE ARASI</span>';
     if (d.shootout) return '<span class="pill live">PENALTILAR</span>';
-    var mn = curMinute(d);
+    var mp = minParts(d);
     var part = d.extra_time_at ? 'UZATMA' : d.second_half_at ? '2. YARI' : '1. YARI';
-    return '<span class="pill live" id="lclock">' + part + ' · ' + mn + '\'</span>';
+    return '<span class="pill live" id="lclock">' + part + ' · ' + minLabel(mp.minute, mp.added) + '</span>';
   }
   function tick() {
     var d = state.live;
@@ -1191,12 +1205,12 @@ button.tile:hover { border-color: #33476e; }
     var c = document.getElementById('lclock');
     if (c && d.status === 'live' && !d.shootout) {
       var part = d.extra_time_at ? 'UZATMA' : d.second_half_at ? '2. YARI' : '1. YARI';
-      c.textContent = part + ' · ' + curMinute(d) + '\'';
+      var mp = minParts(d);
+      c.textContent = part + ' · ' + minLabel(mp.minute, mp.added);
     }
     var mi = document.getElementById('lmin');
     if (mi && !state.minuteManual && document.activeElement !== mi) {
-      var v = curMinute(d);
-      mi.value = v == null ? '' : v;
+      mi.value = partsText(minParts(d));
     }
   }
 
@@ -1294,6 +1308,7 @@ button.tile:hover { border-color: #33476e; }
       if (locked) return evRow(e, d, '');
       if (e.type === 'goal' && d.status !== 'notStarted') acts += '<button class="btn ghost" data-var="' + e.id + '" title="VAR: gol iptali">VAR</button>';
       if (e.type === 'red_card') acts += '<button class="btn ghost" data-varr="' + e.id + '" title="VAR: kart iptali">VAR</button>';
+      if (!/_cancelled$/.test(e.type)) acts += '<button class="btn ghost" data-edit="' + e.id + '" title="Oyuncu, asist ya da dakikayı düzelt">Düzenle</button>';
       acts += '<button class="btn ghost" data-del="' + e.id + '" title="Yanlış girildiyse sil">Sil</button>';
       return evRow(e, d, acts);
     }).join('');
@@ -1301,7 +1316,7 @@ button.tile:hover { border-color: #33476e; }
   function evRow(e, d, acts) {
     var cancelled = /_cancelled$/.test(e.type);
     return '<div class="ev' + (e.team_id === d.away_id ? ' away' : '') + (cancelled ? ' cancelled' : '') + '">' +
-      '<span class="m num">' + (e.minute == null || e.minute === 999 ? '' : e.minute + '\'') + '</span>' +
+      '<span class="m num">' + minLabel(e.minute, e.added) + '</span>' +
       '<span>' + evIcon(e) + '</span><div class="tx">' + evText(e, d) + '</div><div class="acts">' + acts + '</div></div>';
   }
 
@@ -1486,9 +1501,8 @@ button.tile:hover { border-color: #33476e; }
       return '<button class="tool" data-mode="' + x.id + '" aria-pressed="' + (mode === x.id) + '"' + (dis ? ' disabled title="Maç bittikten sonra"' : '') + '>' +
         x.icon + ' ' + esc(x.name) + ' <span class="kbd">' + x.key + '</span></button>';
     }).join('');
-    var mn = curMinute(d);
     var minute = d.track_minutes
-      ? '<label class="minute">Dakika <input id="lmin" class="num" inputmode="numeric" maxlength="3" value="' + (mn == null ? '' : mn) + '"> <span class="kbd">M</span></label>'
+      ? '<label class="minute" title="Uzatma için 45+2 yazın">Dakika <input id="lmin" class="num" maxlength="6" value="' + partsText(minParts(d)) + '"> <span class="kbd">M</span></label>'
       : '<span class="minute">Bu sezonda dakika tutulmuyor</span>';
     function side(name, logo, r) {
       return '<div class="side-t' + (r ? ' r' : '') + '">' + (r ? '<span>' + esc(name) + '</span>' : '') +
@@ -1520,7 +1534,7 @@ button.tile:hover { border-color: #33476e; }
     document.getElementById('lref').onclick = function () { loadLive(); };
     var mi = document.getElementById('lmin');
     if (mi) {
-      mi.addEventListener('input', function () { mi.value = mi.value.replace(/\D/g, ''); state.minuteManual = true; });
+      mi.addEventListener('input', function () { mi.value = cleanMin(mi.value); state.minuteManual = true; });
       mi.addEventListener('focus', function () { mi.select(); });
       mi.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); mi.blur(); } });
     }
@@ -1534,6 +1548,7 @@ button.tile:hover { border-color: #33476e; }
     each('[data-phase]', function (b) { b.onclick = function () { phase(b.getAttribute('data-phase'), b); }; });
     each('[data-kick]', function (b) { b.onclick = function () { kick(b.getAttribute('data-kick'), b); }; });
     each('[data-del]', function (b) { b.onclick = function () { delEvent(b.getAttribute('data-del')); }; });
+    each('[data-edit]', function (b) { b.onclick = function () { editEvent(b.getAttribute('data-edit')); }; });
     each('[data-var]', function (b) { b.onclick = function () { varGoal(b.getAttribute('data-var')); }; });
     each('[data-varr]', function (b) { b.onclick = function () { varRed(b.getAttribute('data-varr')); }; });
   }
@@ -1549,12 +1564,23 @@ button.tile:hover { border-color: #33476e; }
     state.mode = null;
     renderDetail();
   }
+  // Dakika alanı: yalnız rakam ve bir '+' (45+2).
+  function cleanMin(v) {
+    v = String(v).replace(/[^0-9+]/g, '');
+    var i = v.indexOf('+');
+    return i < 0 ? v : v.slice(0, i + 1) + v.slice(i + 1).replace(/\+/g, '');
+  }
+  function parseMin(v) {
+    var p = cleanMin(v).split('+');
+    var m = parseInt(p[0], 10), a = parseInt(p[1], 10);
+    if (isNaN(m)) return null;
+    return {minute: m, added: isNaN(a) || a <= 0 ? null : Math.min(30, a)};
+  }
   function minuteVal() {
     var d = state.live;
     if (!d.track_minutes) return null;
     var mi = document.getElementById('lmin');
-    var v = mi ? parseInt(mi.value, 10) : NaN;
-    return isNaN(v) ? null : v;
+    return mi ? parseMin(mi.value) : null;
   }
   function nameOf(pid) {
     var r = state.live.roster.filter(function (x) { return x.player_id === pid; })[0];
@@ -1605,10 +1631,12 @@ button.tile:hover { border-color: #33476e; }
     var d = state.live;
     var body = {
       p_match_id: d.id, p_type: o.type, p_team_id: o.team, p_player_id: o.player,
-      p_minute: o.minute !== undefined ? o.minute : minuteVal(),
+      p_minute: null, p_added: null,
       p_assist_id: o.assist || null, p_sub_in_id: o.sub_in || null,
       p_own_goal: !!o.own, p_penalty: !!o.pen
     };
+    var mv = o.minute !== undefined ? o.minute : minuteVal();
+    if (mv) { body.p_minute = mv.minute; body.p_added = mv.added; }
     state.pick = null;
     state.mode = null;
     state.minuteManual = false;
@@ -1674,7 +1702,7 @@ button.tile:hover { border-color: #33476e; }
   function evById(id) { return state.live.events.filter(function (e) { return e.id === id; })[0]; }
   function delEvent(id) {
     var e = evById(id);
-    confirmBox('Olayı sil', (e ? (e.minute != null && e.minute !== 999 ? e.minute + '\' ' : '') + (e.player || '') : '') + ' kaydı silinecek. Yanlış girilen olaylar için kullanın; VAR kararı için VAR düğmesini kullanın.', 'Sil', true).then(function (ok) {
+    confirmBox('Olayı sil', (e ? (minLabel(e.minute, e.added) ? minLabel(e.minute, e.added) + ' ' : '') + (e.player || '') : '') + ' kaydı silinecek. Yanlış girilen olaylar için kullanın; VAR kararı için VAR düğmesini kullanın.', 'Sil', true).then(function (ok) {
       if (!ok) return;
       api('rpc/desk_delete_event', {method: 'POST', body: {p_event_id: id}}).then(function () {
         toast('Olay silindi.');
@@ -1682,6 +1710,72 @@ button.tile:hover { border-color: #33476e; }
       }, function (err) { toast(err.message, true); });
     });
   }
+  // Olayı düzenle (uygulamadaki uzun basış DÜZENLE gibi): oyuncu, asist,
+  // giren oyuncu ve dakika. Takım ve olay türü değişmez; skor etkilenmez.
+  function editEvent(id) {
+    var d = state.live, e = evById(id);
+    if (!e || state.dlg) return;
+    var team = d.roster.filter(function (r) { return r.team_id === e.team_id; });
+    function opts(sel, none) {
+      return (none ? '<option value="">' + esc(none) + '</option>' : '') + team.map(function (r) {
+        return '<option value="' + esc(r.player_id) + '"' + (r.player_id === sel ? ' selected' : '') + '>' +
+          (r.no == null ? '' : r.no + ' · ') + esc(r.name) + '</option>';
+      }).join('');
+    }
+    var isGoal = e.type === 'goal' && !e.own;
+    var isSub = e.type === 'substitution';
+    var hasMin = d.track_minutes && e.type !== 'man_of_the_match';
+    var title = {goal: e.own ? 'Kendi kalesine gol' : e.pen ? 'Penaltı golü' : 'Gol', penalty_missed: 'Kaçan penaltı', yellow_card: 'Sarı kart', red_card: 'Kırmızı kart', substitution: 'Değişiklik', man_of_the_match: 'Maçın adamı'}[e.type] || 'Olay';
+    var ov = document.createElement('div');
+    ov.className = 'ov';
+    ov.innerHTML = '<div class="dlg" role="dialog" aria-modal="true"><h3>Olayı düzenle</h3>' +
+      '<div class="sub">' + esc(title + ' · ' + (e.team_id === d.home_id ? d.home : d.away)) + '</div>' +
+      '<div class="form"><label>' + (isSub ? 'Çıkan oyuncu' : 'Oyuncu') + '<select id="ep" class="sel">' + opts(e.player_id) + '</select></label>' +
+      (isSub ? '<label>Giren oyuncu<select id="ei" class="sel">' + opts(e.sub_in_id) + '</select></label>' : '') +
+      (isGoal ? '<label>Asist<select id="ea" class="sel">' + opts(e.assist_id, 'Asist yok') + '</select></label>' : '') +
+      (hasMin ? '<label>Dakika (uzatma için 45+2)<input id="em" class="inp num" maxlength="6" value="' + esc(e.minute == null ? '' : e.minute + (e.added ? '+' + e.added : '')) + '"></label>' : '') +
+      '</div><div class="acts"><span class="hint"><span class="kbd">Enter</span> kaydet · <span class="kbd">Esc</span> vazgeç</span>' +
+      '<button class="btn" data-n>Vazgeç</button><button class="btn primary" data-y>Kaydet</button></div></div>';
+    document.body.appendChild(ov);
+    state.dlg = ov;
+    function close() { ov.remove(); state.dlg = null; }
+    var em = ov.querySelector('#em');
+    if (em) em.addEventListener('input', function () { em.value = cleanMin(em.value); });
+    function save() {
+      var body = {player_id: ov.querySelector('#ep').value};
+      if (isSub) {
+        body.sub_in_player_id = ov.querySelector('#ei').value;
+        if (body.sub_in_player_id === body.player_id) { toast('Giren ve çıkan aynı oyuncu olamaz.', true); return; }
+      }
+      if (isGoal) {
+        body.assist_player_id = ov.querySelector('#ea').value || null;
+        if (body.assist_player_id === body.player_id) { toast('Golü atan asist yapamaz.', true); return; }
+      }
+      if (hasMin) {
+        var mv = parseMin(em.value);
+        if (!mv) { toast('Dakikayı yazın.', true); em.focus(); return; }
+        body.minute = mv.minute;
+        body.added_minute = mv.added;
+      }
+      var btn = ov.querySelector('[data-y]');
+      btn.disabled = true;
+      api('match_events?id=eq.' + id + '&select=id', {method: 'PATCH', body: body, prefer: 'return=representation'}).then(function (r) {
+        if (!r || !r.length) throw new Error('Olay güncellenemedi: bu maçı düzenleme yetkiniz yok.');
+        close();
+        toast('Olay güncellendi.');
+        return loadLive();
+      }).catch(function (err) { btn.disabled = false; toast(err.message, true); });
+    }
+    ov.querySelector('[data-n]').onclick = close;
+    ov.querySelector('[data-y]').onclick = save;
+    ov.onclick = function (ev) { if (ev.target === ov) close(); };
+    ov.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape') { ev.preventDefault(); close(); }
+      else if (ev.key === 'Enter' && ev.target.tagName !== 'SELECT') { ev.preventDefault(); save(); }
+    });
+    (em || ov.querySelector('#ep')).focus();
+  }
+
   // VAR: uygulamadaki gibi olay türü değişir; skor ve bildirim tetikleyicide.
   function varGoal(id) {
     var e = evById(id);

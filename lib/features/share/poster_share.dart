@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:gal/gal.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -43,9 +45,17 @@ const _kPrefScorers = 'poster_scorers';
 ///
 /// [formats]: afişin desteklediği boyutlar (birden fazlaysa sekme çıkar).
 /// [scorersOption]: "Gol atanlar" anahtarı gösterilsin mi.
+///
+/// [photoPoster] verilirse afiş seçilen fotoğrafla çizilir ve pencerede
+/// "Fotoğraf seç" çıkar: galeriden seçilen fotoğraf yalnız bu afişte
+/// kullanılır, hiçbir yere kaydedilmez. Başlangıçta [photoUrl] (ör.
+/// oyuncunun profil fotoğrafı) kullanılır. Önizlemede fotoğraf sürüklenerek
+/// kaydırılır, iki parmakla yakınlaştırılır ([PhotoFrame]).
 Future<void> showPosterPreview({
   required BuildContext context,
-  required Widget poster,
+  Widget? poster,
+  Widget Function(ImageProvider? photo, PhotoFrame frame)? photoPoster,
+  String? photoUrl,
   required String fileName,
   List<String> imageUrls = const [],
   String? shareText,
@@ -60,6 +70,8 @@ Future<void> showPosterPreview({
     context: context,
     builder: (_) => _PosterPreviewDialog(
       poster: poster,
+      photoPoster: photoPoster,
+      photoUrl: photoUrl,
       fileName: fileName,
       imageUrls: imageUrls,
       shareText: shareText,
@@ -73,9 +85,30 @@ Future<void> showPosterPreview({
   );
 }
 
+/// Fotoğraflı afişte fotoğrafın kadrajı: [align] görünen bölge
+/// (BoxFit.cover hizası), [zoom] 1–3 arası yakınlaştırma.
+class PhotoFrame {
+  const PhotoFrame({this.align = Alignment.topCenter, this.zoom = 1});
+
+  final Alignment align;
+  final double zoom;
+}
+
+/// Önizlemedeki fotoğraf sürüklemesi pencerenin kaydırmasına kaptırılmasın:
+/// parmak önizlemeye değer değmez hareketi üstlenir.
+class _EagerScale extends ScaleGestureRecognizer {
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    super.addAllowedPointer(event);
+    resolve(GestureDisposition.accepted);
+  }
+}
+
 class _PosterPreviewDialog extends StatefulWidget {
   const _PosterPreviewDialog({
     required this.poster,
+    required this.photoPoster,
+    required this.photoUrl,
     required this.fileName,
     required this.imageUrls,
     required this.title,
@@ -87,7 +120,9 @@ class _PosterPreviewDialog extends StatefulWidget {
     this.kind,
   });
 
-  final Widget poster;
+  final Widget? poster;
+  final Widget Function(ImageProvider? photo, PhotoFrame frame)? photoPoster;
+  final String? photoUrl;
   final String fileName;
   final List<String> imageUrls;
   final String title;
@@ -141,6 +176,54 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
   }
 
   late PosterFormat _format = widget.formats.first;
+
+  /// Fotoğraflı afişte kullanılan fotoğraf; [_picked] seçildiyse o.
+  late final ImageProvider? _profile = (widget.photoUrl ?? '').trim().isEmpty
+      ? null
+      : NetworkImage(widget.photoUrl!.trim());
+  ImageProvider? _picked;
+  ImageProvider? get _photo => _picked ?? _profile;
+  PhotoFrame _frame = const PhotoFrame();
+  double _zoomStart = 1;
+
+  /// Önizlemede sürükleme/yakınlaştırma. Parmak sağa giderse fotoğraf da
+  /// sağa kayar (hiza sola döner); [width] önizlemenin ekrandaki genişliği.
+  void _moveFrame(ScaleUpdateDetails d, double width) {
+    final k = 2 / (width * 0.6 * _frame.zoom);
+    setState(() {
+      _frame = PhotoFrame(
+        align: Alignment(
+          (_frame.align.x - d.focalPointDelta.dx * k).clamp(-1.0, 1.0),
+          (_frame.align.y - d.focalPointDelta.dy * k).clamp(-1.0, 1.0),
+        ),
+        zoom: (_zoomStart * d.scale).clamp(1.0, 3.0),
+      );
+    });
+  }
+
+  Future<void> _pickPhoto() async {
+    try {
+      final f = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1600,
+        maxHeight: 1600,
+        imageQuality: 90,
+      );
+      if (f == null || !mounted) return;
+      final image = MemoryImage(await f.readAsBytes());
+      if (!mounted) return;
+      await precacheImage(image, context);
+      if (mounted) {
+        setState(() {
+          _picked = image;
+          _frame = const PhotoFrame();
+        });
+      }
+    } catch (e) {
+      _say('Fotoğraf açılamadı: $e', error: true);
+    }
+  }
+
   bool _plain = false;
   bool _scorers = true;
 
@@ -170,6 +253,8 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
       if (bg != null) precacheImage(bg, context, onError: (_, _) => ok = false),
       for (final u in widget.imageUrls.where((u) => u.trim().isNotEmpty))
         precacheImage(NetworkImage(u), context, onError: (_, _) {}),
+      if (_profile != null)
+        precacheImage(_profile, context, onError: (_, _) {}),
     ]);
     // Görsel inmezse varsayılan zemin kullanılır. Kayıtlı boyut (gönderi /
     // hikâye) da burada okunduğu için bütün ekran yeniden çizilir; yoksa
@@ -500,6 +585,67 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
                       ),
                     ),
                   ),
+                if (widget.photoPoster != null) ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _busy ? null : _pickPhoto,
+                          icon: const Icon(Icons.photo_library_outlined),
+                          label: const Text('FOTOĞRAF SEÇ'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size.fromHeight(44),
+                            side: BorderSide(
+                              color: Colors.white.withValues(alpha: 0.25),
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            textStyle: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (_picked != null) ...[
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextButton(
+                            onPressed: _busy
+                                ? null
+                                : () => setState(() {
+                                    _picked = null;
+                                    _frame = const PhotoFrame();
+                                  }),
+                            style: TextButton.styleFrom(
+                              foregroundColor: kAdminAccent,
+                              minimumSize: const Size.fromHeight(44),
+                            ),
+                            child: Text(
+                              _profile == null
+                                  ? 'FOTOĞRAFI KALDIR'
+                                  : 'PROFİL FOTOĞRAFI',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  if (_photo != null)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 6),
+                      child: Text(
+                        'Fotoğrafı sürükleyerek kaydır, iki parmakla yakınlaştır.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white60, fontSize: 12.5),
+                      ),
+                    ),
+                  const SizedBox(height: 6),
+                ],
                 const SizedBox(height: 8),
                 FutureBuilder<void>(
                   future: _ready,
@@ -515,22 +661,49 @@ class _PosterPreviewDialogState extends State<_PosterPreviewDialog> {
                                   color: kAdminAccent,
                                 ),
                               )
-                            : ClipRRect(
-                                borderRadius: BorderRadius.circular(14),
-                                child: FittedBox(
-                                  child: RepaintBoundary(
-                                    key: _boundaryKey,
-                                    child: SizedBox.fromSize(
-                                      size: size,
-                                      child: PosterOptions(
-                                        style: PosterStyle(
-                                          format: _format,
-                                          plain: _plain,
-                                          showScorers: _scorers,
-                                        ),
-                                        child: PosterBackground(
-                                          image: _plain ? null : _background,
-                                          child: widget.poster,
+                            : LayoutBuilder(
+                                builder: (context, box) => RawGestureDetector(
+                                  gestures: {
+                                    if (widget.photoPoster != null &&
+                                        _photo != null)
+                                      _EagerScale:
+                                          GestureRecognizerFactoryWithHandlers<
+                                            _EagerScale
+                                          >(_EagerScale.new, (g) {
+                                            g.onStart = (_) {
+                                              _zoomStart = _frame.zoom;
+                                            };
+                                            g.onUpdate = (d) {
+                                              _moveFrame(d, box.maxWidth);
+                                            };
+                                          }),
+                                  },
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(14),
+                                    child: FittedBox(
+                                      child: RepaintBoundary(
+                                        key: _boundaryKey,
+                                        child: SizedBox.fromSize(
+                                          size: size,
+                                          child: PosterOptions(
+                                            style: PosterStyle(
+                                              format: _format,
+                                              plain: _plain,
+                                              showScorers: _scorers,
+                                            ),
+                                            child: PosterBackground(
+                                              image: _plain
+                                                  ? null
+                                                  : _background,
+                                              child:
+                                                  widget.photoPoster?.call(
+                                                    _photo,
+                                                    _frame,
+                                                  ) ??
+                                                  widget.poster ??
+                                                  const SizedBox(),
+                                            ),
+                                          ),
                                         ),
                                       ),
                                     ),

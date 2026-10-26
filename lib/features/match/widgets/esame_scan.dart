@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -5,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/services/error_reporter.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../models/match.dart';
@@ -52,6 +54,10 @@ Future<bool> _aiConsent(BuildContext context) async {
   return ok;
 }
 
+const _connectionError =
+    'Bağlantı yavaş ya da koptu, esame okunamadı. İnternet bağlantınızı '
+    'kontrol edip tekrar deneyin.';
+
 /// Esame kağıdının fotoğrafını kamerayla çektirir ya da galeriden seçtirir, sunucuda (esame-read,
 /// Gemini) okutur ve sonucu kontrol penceresinde gösterir. Onaylanan
 /// satırlar döner; vazgeçilirse ya da okuma başarısızsa null.
@@ -76,9 +82,11 @@ Future<List<EsamePick>?> scanEsameFromPhoto(
   if (source == null || !context.mounted) return null;
   final picked = await ImagePicker().pickImage(
     source: source,
-    maxWidth: 2000,
-    maxHeight: 2000,
-    imageQuality: 85,
+    // Sahadaki mobil bağlantıda ~1 MB'lık gönderim kopuyordu (2026-10-25);
+    // el yazısı okumaya 1280 px yeter (~200 KB).
+    maxWidth: 1280,
+    maxHeight: 1280,
+    imageQuality: 70,
   );
   if (picked == null || !context.mounted) return null;
 
@@ -88,7 +96,8 @@ Future<List<EsamePick>?> scanEsameFromPhoto(
       ? picked.mimeType!
       : 'image/jpeg';
 
-  // Okuma 5-20 sn sürer; bu sırada bekleme penceresi açık kalır.
+  // Okuma 5-20 sn sürer; bu sırada bekleme penceresi açık kalır. Bağlantı
+  // takılırsa 45 sn sonra vazgeçilir.
   showDialog<void>(
     context: context,
     barrierDismissible: false,
@@ -97,21 +106,34 @@ Future<List<EsamePick>?> scanEsameFromPhoto(
   Map<String, dynamic>? data;
   String? error;
   try {
-    final res = await Supabase.instance.client.functions.invoke(
-      'esame-read',
-      body: {
-        'match_id': matchId,
-        'team_id': teamId,
-        'image_base64': base64Encode(bytes),
-        'mime': mime,
-      },
-    );
+    final res = await Supabase.instance.client.functions
+        .invoke(
+          'esame-read',
+          body: {
+            'match_id': matchId,
+            'team_id': teamId,
+            'image_base64': base64Encode(bytes),
+            'mime': mime,
+          },
+        )
+        .timeout(const Duration(seconds: 45));
     data = Map<String, dynamic>.from(res.data as Map);
   } on FunctionException catch (e) {
     final d = e.details;
     error = d is Map && d['error'] != null ? '${d['error']}' : '$d';
-  } catch (e) {
-    error = '$e';
+  } on TimeoutException catch (e, st) {
+    error = _connectionError;
+    ErrorReporter.report(e, st, context: 'esame-read ${bytes.length} B');
+  } catch (e, st) {
+    // Bağlantı koptu (ClientException, SocketException): teknik metin yerine.
+    final t = '$e';
+    error =
+        t.contains('ClientException') ||
+            t.contains('SocketException') ||
+            t.contains('connection')
+        ? _connectionError
+        : t;
+    ErrorReporter.report(e, st, context: 'esame-read ${bytes.length} B');
   }
   if (!context.mounted) return null;
   Navigator.of(context, rootNavigator: true).pop();

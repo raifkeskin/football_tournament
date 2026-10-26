@@ -4008,10 +4008,15 @@ class _LineupTabState extends State<_LineupTab>
   }
 
   /// Sağ alt köşe. Takım sekmesinde menü: esame girişi/düzenleme ve kadro
-  /// afişi. VS'de yalnız paylaş (iki takımın da ilk oyuncuları tamamsa).
+  /// afişi. VS'de yetkililere (admin, kurucu başkan, bölge sorumlusu) iki
+  /// takımın esamesi ve paylaş menüsü; diğerlerine yalnız paylaş (iki
+  /// takımın da ilk oyuncuları tamamsa).
   Widget _lineupFab(MatchModel m) {
     final session = AppSession.of(context).value;
     final view = _view;
+    if (view == null && (session.canManageLeague(m.leagueId) || _regionOwner)) {
+      return _vsStaffFab(m);
+    }
     if (view == null) {
       final canShare =
           session.canManageLeague(m.leagueId) ||
@@ -4082,6 +4087,54 @@ class _LineupTabState extends State<_LineupTab>
     ];
     if (actions.isEmpty) return const SizedBox.shrink();
     return _SpeedDialFab(key: ValueKey('lineup_fab_$view'), actions: actions);
+  }
+
+  /// VS'de yetkililerin menüsü: takımlar esameyi giremediyse iki takımın
+  /// esamesi buradan girilir (maç başladıktan sonra yalnız admin ve kurucu
+  /// başkan, takım sekmesindeki kuralla aynı).
+  Widget _vsStaffFab(MatchModel m) {
+    final session = AppSession.of(context).value;
+    final started = !_beforeKickoff(m);
+    final canEsame = started ? session.canManageLeague(m.leagueId) : true;
+    return StreamBuilder<List<MatchRosterModel>>(
+      stream: _rosterStream(m.homeTeamId),
+      builder: (context, home) => StreamBuilder<List<MatchRosterModel>>(
+        stream: _rosterStream(m.awayTeamId),
+        builder: (context, away) {
+          int xi(AsyncSnapshot<List<MatchRosterModel>> s) =>
+              (s.data ?? const []).where((r) => r.isStarting).length;
+          bool has(AsyncSnapshot<List<MatchRosterModel>> s) =>
+              (s.data ?? const []).isNotEmpty;
+          String label(String name, bool exists) =>
+              '$name · ${exists ? 'Esameyi Düzenle' : 'Esame Girişi'}';
+          final actions = <_SpeedDialAction>[
+            if (canEsame) ...[
+              _SpeedDialAction(
+                label: label(widget.homeName, has(home)),
+                icon: Icons.edit_note_rounded,
+                onTap: () => _showRosterEditSheet(context, m.homeTeamId),
+              ),
+              _SpeedDialAction(
+                label: label(widget.awayName, has(away)),
+                icon: Icons.edit_note_rounded,
+                onTap: () => _showRosterEditSheet(context, m.awayTeamId),
+              ),
+            ],
+            if (xi(home) >= _startingCount && xi(away) >= _startingCount)
+              _SpeedDialAction(
+                label: 'Kadro Afişini Paylaş',
+                icon: Icons.ios_share_rounded,
+                onTap: _shareFromVs,
+              ),
+          ];
+          if (actions.isEmpty) return const SizedBox.shrink();
+          return _SpeedDialFab(
+            key: ValueKey('lineup_fab_vs_${m.id}'),
+            actions: actions,
+          );
+        },
+      ),
+    );
   }
 
   Stream<List<MatchRosterModel>> _rosterStream(String teamId) =>
@@ -4385,13 +4438,21 @@ class _TeamLineupColumnState extends State<_TeamLineupColumn> {
                   : match.awayFormation,
             );
             final starterById = {for (final r in starterRosters) r.playerId: r};
-            final starters = [
-              for (final id in formationIds)
-                if (starterById[id] != null) starterById[id]!,
-            ];
+            // Esame sırası kayıtlıysa İlk 11 ve yedekler esamedeki sırayla
+            // (forma numarasına göre değil); eski kayıtlarda diziliş/mevki.
+            final hasOrder =
+                rosters.isNotEmpty && rosters.every((r) => r.listOrder != null);
+            int byList(MatchRosterModel a, MatchRosterModel b) =>
+                a.listOrder!.compareTo(b.listOrder!);
+            final starters = hasOrder
+                ? (starterRosters..sort(byList))
+                : [
+                    for (final id in formationIds)
+                      if (starterById[id] != null) starterById[id]!,
+                  ];
             final gkId = formationIds.isEmpty ? null : formationIds.first;
             final subs = rosters.where((r) => !r.isStarting).toList()
-              ..sort(order);
+              ..sort(hasOrder ? byList : order);
 
             List<Widget> rows(List<MatchRosterModel> list, {bool xi = false}) {
               return [
