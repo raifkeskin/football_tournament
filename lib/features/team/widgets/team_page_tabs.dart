@@ -55,12 +55,17 @@ class TeamPageTabBar extends StatelessWidget {
                     ),
                   ),
                   alignment: Alignment.center,
-                  child: Text(
-                    labels[i],
-                    style: TextStyle(
-                      color: i == index ? Colors.white : _muted,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800,
+                  // Dar ekranda dört sekme sığsın diye yazı küçülür.
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      labels[i],
+                      maxLines: 1,
+                      style: TextStyle(
+                        color: i == index ? Colors.white : _muted,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ),
                 ),

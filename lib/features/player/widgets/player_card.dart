@@ -6,6 +6,7 @@ import '../../team/widgets/team_page_tabs.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/active_tournament.dart';
+import '../../../core/services/app_settings.dart';
 import '../../../core/services/app_session.dart';
 import '../../../core/widgets/youtube_player_page.dart';
 import '../../match/widgets/youtube_find_sheet.dart' show BroadcastThumb;
@@ -21,6 +22,7 @@ import '../../identity/identity_access.dart';
 import '../../identity/identity_service.dart';
 import '../../identity/identity_verify_screen.dart';
 import '../../identity/verified_badge.dart';
+import 'player_positions_tab.dart';
 
 // Uygulamanın ortak renkleri
 const _bgDark = Color(0xFF0F172A);
@@ -199,8 +201,24 @@ class _PlayerCardState extends State<PlayerCard> {
   /// Açık gol satırı (dar listede dokununca ayrıntısı açılır).
   String? _openGoal;
 
-  /// Alt bölüm sekmesi: 0 Özet, 1 Turnuvalar, 2 Goller.
+  /// Alt bölüm sekmesi: 0 Özet, 1 Turnuvalar, 2 Goller, 3 Mevki.
   int _tab = 0;
+
+  /// Kartın oyuncu id'si (eski girişler id'yi [PlayerCard.playerPhone]'da
+  /// taşır).
+  String get _cardPlayerId {
+    final id = widget.playerId.trim();
+    if (id.isNotEmpty) return id;
+    final key = widget.playerPhone.trim();
+    return _uuidLike.hasMatch(key) ? key : '';
+  }
+
+  /// Mevki sekmesi: açılana dek yalnız admin (veritabanı da aynı anahtarla
+  /// kaydı açar).
+  bool get _showPositionsTab =>
+      _cardPlayerId.isNotEmpty &&
+      (AppSettings.positionsTabEnabled.value ||
+          AppSession.of(context).value.isAdmin);
 
   /// Kart, uygulamanın içinde bulunduğu turnuvanın renklerini alır; teması
   /// olmayan turnuvada varsayılan yeşil.
@@ -221,6 +239,7 @@ class _PlayerCardState extends State<PlayerCard> {
       'Özet',
       'Turnuvalar',
       goalCount > 0 ? 'Goller ($goalCount)' : 'Goller',
+      if (_showPositionsTab) 'Mevki',
     ],
     indicatorColor: _tone,
     onChanged: (i) => setState(() => _tab = i),
@@ -691,7 +710,12 @@ class _PlayerCardState extends State<PlayerCard> {
                       builder: (context, g) => _tabBar(g.data?.length ?? 0),
                     ),
                     const SizedBox(height: 10),
-                    if (_tab == 2)
+                    if (_tab == 3 && _showPositionsTab)
+                      PlayerPositionsTab(
+                        playerId: _cardPlayerId,
+                        accent: _tone,
+                      )
+                    else if (_tab == 2)
                       _goalsTab()
                     else if (loading)
                       const Padding(
