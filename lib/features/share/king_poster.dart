@@ -190,7 +190,7 @@ class _Head extends StatelessWidget {
   }
 }
 
-/// Afiş 1: solda liderin büyük fotoğrafı ve tacı, sağda başlık ve liste.
+/// Afiş 1: solda liderin büyük fotoğrafı, sağda başlık ve liste.
 /// [photo] paylaşım penceresinde seçilen fotoğraf (yoksa profil fotoğrafı).
 class KingPhotoPoster extends StatelessWidget {
   const KingPhotoPoster({
@@ -290,19 +290,6 @@ class KingPhotoPoster extends StatelessWidget {
               ),
             ),
           ),
-          Positioned(
-            left: photoW * 0.22,
-            top: h * (st.isPost ? 0.16 : 0.2),
-            child: Transform.rotate(
-              angle: -0.14,
-              child: Icon(
-                Icons.workspace_premium_rounded,
-                color: _lime,
-                size: st.pick(54, 46),
-              ),
-            ),
-          ),
-          Positioned(
             right: 16,
             top: st.pick(26, 18),
             width: w * 0.6,
