@@ -185,6 +185,7 @@ class SeasonManagementScreen extends StatelessWidget {
     var isDoubleRound = season?.isDoubleRound ?? false;
     var trackGoalMinutes = season?.trackGoalMinutes ?? true;
     var requireVerifiedId = season?.requireVerifiedId ?? false;
+    var goalkeeperAddAnytime = season?.goalkeeperAddAnytime ?? false;
     // Lig Formatı kaydedilince satırda onay (popup açıkken alt mesaj
     // görünmüyor).
     var formatSaved = false;
@@ -281,6 +282,7 @@ class SeasonManagementScreen extends StatelessWidget {
         isDoubleRound: isDoubleRound,
         trackGoalMinutes: trackGoalMinutes,
         requireVerifiedId: requireVerifiedId,
+        goalkeeperAddAnytime: goalkeeperAddAnytime,
         transferStartDate: transferStartDate,
         transferEndDate: transferEndDate,
         teamsPerGroup: int.tryParse(teamsPerGroupController.text.trim()) ?? 4,
@@ -555,6 +557,17 @@ class SeasonManagementScreen extends StatelessWidget {
                                 (v) =>
                                     setSheetState(() => requireVerifiedId = v),
                               ),
+                            switchRow(
+                              Icons.sports_handball_rounded,
+                              'Kaleci İstisnası',
+                              goalkeeperAddAnytime
+                                  ? 'Lig başladıktan sonra transfer dönemi '
+                                        'dışında da kaleci eklenebilir'
+                                  : 'Kapalı: kaleci de transfer dönemine bağlı',
+                              goalkeeperAddAnytime,
+                              (v) =>
+                                  setSheetState(() => goalkeeperAddAnytime = v),
+                            ),
                           ],
                         ),
                       ),

@@ -23,6 +23,7 @@ class Season {
     this.isDoubleRound = false,
     this.trackGoalMinutes = true,
     this.requireVerifiedId = false,
+    this.goalkeeperAddAnytime = false,
   });
 
   final String id;
@@ -56,6 +57,10 @@ class Season {
   /// Onaylı kimlik zorunlu mu? Açıksa kimliği çipten doğrulanmamış oyuncu
   /// esameye eklenemez (sunucu da engeller).
   final bool requireVerifiedId;
+
+  /// Kaleci istisnası: lig başladıktan sonra transfer dönemi dışında da ana
+  /// mevkisi kaleci olan oyuncu kadroya eklenebilir (sunucu da uygular).
+  final bool goalkeeperAddAnytime;
 
   factory Season.fromMap(Map<String, dynamic> map) {
     dynamic v(String camel, String snake) => map[camel] ?? map[snake];
@@ -127,6 +132,10 @@ class Season {
         v('requireVerifiedId', 'require_verified_id'),
         fallback: false,
       ),
+      goalkeeperAddAnytime: boolFrom(
+        v('goalkeeperAddAnytime', 'goalkeeper_add_anytime'),
+        fallback: false,
+      ),
       transferStartDate: _readDate(
         v('transferStartDate', 'transfer_start_date'),
       ),
@@ -174,6 +183,7 @@ class Season {
       'is_double_round': isDoubleRound,
       'track_goal_minutes': trackGoalMinutes,
       'require_verified_id': requireVerifiedId,
+      'goalkeeper_add_anytime': goalkeeperAddAnytime,
       'league_id': leagueId.trim().isEmpty ? null : leagueId.trim(),
     };
   }
@@ -211,6 +221,7 @@ class Season {
         'isDoubleRound': isDoubleRound,
         'trackGoalMinutes': trackGoalMinutes,
         'requireVerifiedId': requireVerifiedId,
+        'goalkeeperAddAnytime': goalkeeperAddAnytime,
         'teamsPerGroup': teamsPerGroup,
       };
     }
