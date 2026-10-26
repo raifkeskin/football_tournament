@@ -158,7 +158,9 @@ class QuickEventBar extends StatelessWidget {
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          duration: const Duration(seconds: 5),
+          // Düğmeli SnackBar varsayılan olarak kalıcı; kendiliğinden kapansın.
+          persist: false,
+          duration: const Duration(seconds: 3),
           content: Text('Kaydedildi: ${_describe(saved)}'),
           action: SnackBarAction(
             label: 'GERİ AL',

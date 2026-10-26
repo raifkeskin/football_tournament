@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/player_stats.dart';
 import '../widgets/player_card.dart';
 import '../../team/models/team.dart';
+import '../../team/utils/standings.dart';
 import '../../match/services/interfaces/i_match_service.dart';
 import '../../team/services/interfaces/i_team_service.dart';
 import '../../../core/services/service_locator.dart';
@@ -54,9 +55,48 @@ class _StatsViewState extends State<StatsView> {
   static final Map<String, Set<String>> _groupTeamsCache = {};
   Set<String>? _groupTeams;
 
+  /// Takımların puan tablosundaki sırası (grubunda); krallıkta eşit
+  /// değerdeki oyuncular üstteki takımın oyuncusu önde olacak şekilde dizilir.
+  static final Map<String, Map<String, int>> _teamPosCache = {};
+  Map<String, int> _teamPos = const {};
+
+  Future<void> _loadTeamPos() async {
+    try {
+      final sid = widget.seasonId;
+      final (matches, teams) = await (
+        Supabase.instance.client.from('matches').select().eq('season_id', sid),
+        _teamService.watchSeasonTeams(sid).first,
+      ).wait;
+      final rows = [for (final m in matches) Map<String, dynamic>.from(m)];
+      final groups = <String>{
+        for (final m in rows) (m['group_id'] ?? '').toString().trim(),
+        for (final t in teams) (t.groupId ?? '').toString().trim(),
+      }..remove('');
+      final pos = <String, int>{};
+      for (final g in groups) {
+        final table = computeGroupStandings(
+          leagueId: sid,
+          groupId: g,
+          groupName: '',
+          seasonMatches: rows,
+          allTeams: teams,
+        );
+        for (var i = 0; i < table.length; i++) {
+          pos.putIfAbsent(table[i].teamId, () => i + 1);
+        }
+      }
+      _teamPosCache[sid] = pos;
+      if (mounted) setState(() => _teamPos = pos);
+    } catch (_) {
+      // Sıra okunamazsa eşitlikte eski kural (az maç) geçerli.
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    _teamPos = _teamPosCache[widget.seasonId] ?? const {};
+    _loadTeamPos();
     final g = widget.groupId;
     if (g == null) return;
     _groupTeams = _groupTeamsCache[g];
@@ -189,6 +229,7 @@ class _StatsViewState extends State<StatsView> {
                   return _StatsTabs(
                     stats: stats,
                     teamById: teamById,
+                    teamPos: _teamPos,
                     players: pSnap.data!,
                     seasonId: widget.seasonId,
                     groupId: widget.groupId,
@@ -262,6 +303,7 @@ List<_Ranked> _rank(
   List<PlayerStats> all,
   int Function(PlayerStats) value, {
   bool tieRed = false,
+  Map<String, int> teamPos = const {},
 }) {
   final list = all.where((s) => value(s) > 0).toList()
     ..sort((a, b) {
@@ -271,7 +313,11 @@ List<_Ranked> _rank(
       if (tieRed && a.redCards != b.redCards) {
         return b.redCards.compareTo(a.redCards);
       }
-      // Eşitlikte daha az maçta yapan önde.
+      // Eşitlikte puan tablosunda üstteki takımın oyuncusu önde.
+      final pa = teamPos[a.teamId] ?? 999;
+      final pb = teamPos[b.teamId] ?? 999;
+      if (pa != pb) return pa.compareTo(pb);
+      // Sonra daha az maçta yapan önde.
       return a.matchesPlayed.compareTo(b.matchesPlayed);
     });
   final out = <_Ranked>[];
@@ -357,6 +403,7 @@ class _StatsTabs extends StatefulWidget {
   const _StatsTabs({
     required this.stats,
     required this.teamById,
+    required this.teamPos,
     required this.players,
     required this.seasonId,
     required this.groupId,
@@ -366,6 +413,7 @@ class _StatsTabs extends StatefulWidget {
 
   final List<PlayerStats> stats;
   final Map<String, Team> teamById;
+  final Map<String, int> teamPos;
   final Map<String, _PlayerLite> players;
   final String seasonId;
   final String? groupId;
@@ -506,7 +554,12 @@ class _StatsTabsState extends State<_StatsTabs> {
       if (session.phone.isNotEmpty) session.phone,
     };
     final cat = _categories[_cat];
-    final rows = _rank(widget.stats, cat.value, tieRed: _cat == 4);
+    final rows = _rank(
+      widget.stats,
+      cat.value,
+      tieRed: _cat == 4,
+      teamPos: widget.teamPos,
+    );
     _syncShare(rows);
     return Column(
       children: [

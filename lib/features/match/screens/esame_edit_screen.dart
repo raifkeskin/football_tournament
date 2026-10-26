@@ -140,9 +140,7 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
     super.dispose();
   }
 
-  static String _sigOf(
-    Iterable<(String, bool, String?, bool)> rows,
-  ) {
+  static String _sigOf(Iterable<(String, bool, String?, bool)> rows) {
     final parts = [
       for (final r in rows)
         '${r.$1}|${r.$2 ? 1 : 0}|${(r.$3 ?? '').trim()}|${r.$4 ? 1 : 0}',
@@ -626,6 +624,20 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
       await _showQuotaDialog(issues);
       return false;
     }
+    // Kaptan seçilmeden kaydedilmez: uyarı pazubant seçimine götürür.
+    if (close && _starters.isNotEmpty && _captainId == null) {
+      final pick = await showAdminConfirmDialog(
+        context: context,
+        title: 'Kaptan seçilmedi',
+        message: "Kaydetmeden önce İlk 11'den takım kaptanını seçin.",
+        confirmLabel: 'KAPTAN SEÇ',
+        destructive: false,
+        icon: Icons.shield_outlined,
+      );
+      if (!pick || !mounted) return false;
+      await _pickCaptain();
+      if (_captainId == null || !mounted) return false;
+    }
     final ids = [..._starters, ..._subs];
     final notVerified = ids.where(_unverified).toList();
     if (notVerified.isNotEmpty) {
@@ -1047,13 +1059,13 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
         const Expanded(
           child: Text.rich(
             TextSpan(
-              text: "Kaptanı seçmek için İlk 11'deki oyuncunun ",
+              text: 'Kaptanı seçmek için ',
               children: [
                 TextSpan(
-                  text: 'adına dokunun',
+                  text: 'kırmızı-beyaz pazubant',
                   style: TextStyle(fontWeight: FontWeight.w800),
                 ),
-                TextSpan(text: ' ve "Kaptan yap"ı seçin.'),
+                TextSpan(text: ' düğmesine dokunun.'),
               ],
             ),
             style: TextStyle(
@@ -1208,6 +1220,8 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
           if (_showCaptainHint) _captainHint(),
           Row(
             children: [
+              _captainButton(),
+              const SizedBox(width: 8),
               button(
                 'Dizilişi Ayarla',
                 Icons.sports_soccer_rounded,
@@ -1226,6 +1240,146 @@ class _EsameEditScreenState extends State<EsameEditScreen> {
         ],
       ),
     );
+  }
+
+  /// Kırmızı-beyaz pazubant: kaptan seçimi. Kaptan seçiliyse yeşil çerçeve.
+  Widget _captainButton() {
+    final set = _captainId != null && _starters.contains(_captainId);
+    return Tooltip(
+      message: 'Kaptan seç',
+      child: Material(
+        color: const Color(0xFFDC2626).withValues(alpha: 0.12),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(9),
+          side: BorderSide(
+            color: set
+                ? _green
+                : const Color(0xFFDC2626).withValues(alpha: 0.6),
+            width: set ? 1.6 : 1,
+          ),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(9),
+          onTap: _isSaving ? null : _pickCaptain,
+          child: SizedBox(
+            width: 52,
+            height: 34,
+            child: Center(child: _armband(size: 20)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Kaptan pazubandı: kırmızı zemin, beyaz şerit ve "C".
+  static Widget _armband({double size = 20}) => Container(
+    width: size * 1.5,
+    height: size,
+    decoration: BoxDecoration(
+      color: const Color(0xFFDC2626),
+      borderRadius: BorderRadius.circular(size * 0.22),
+      border: Border.all(color: Colors.white, width: size * 0.09),
+    ),
+    alignment: Alignment.center,
+    child: Text(
+      'C',
+      style: TextStyle(
+        color: Colors.white,
+        fontSize: size * 0.68,
+        fontWeight: FontWeight.w900,
+        height: 1,
+      ),
+    ),
+  );
+
+  /// İlk 11'den kaptan seçimi.
+  Future<void> _pickCaptain() async {
+    FocusScope.of(context).unfocus();
+    if (_starters.isEmpty) {
+      _toast("Önce İlk 11'e oyuncu ekleyin.");
+      return;
+    }
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      backgroundColor: _bg,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(ctx).size.height * 0.75,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+              child: Row(
+                children: [
+                  _armband(size: 18),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      'Kaptanı Seçin',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+                children: [
+                  for (final id in _starters)
+                    if (_byId[id] != null)
+                      ListTile(
+                        onTap: () => Navigator.pop(ctx, id),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        tileColor: id == _captainId
+                            ? _green.withValues(alpha: 0.12)
+                            : null,
+                        leading: SizedBox(
+                          width: 30,
+                          child: Text(
+                            _jersey[id]?.text.trim() ?? '',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: _mid,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        title: Text(
+                          _byId[id]!.name,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        trailing: id == _captainId ? _armband(size: 16) : null,
+                      ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _captainId = picked;
+      _dirty = true;
+    });
   }
 
   Widget _boxes() {
