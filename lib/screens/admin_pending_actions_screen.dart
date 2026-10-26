@@ -805,6 +805,7 @@ class _AdminPendingActionsScreenState extends State<AdminPendingActionsScreen> {
           info('Oyuncu', _playerLabel(a)),
           if (a.type != PendingActionType.rosterRemove)
             info('Forma', jersey?.toString() ?? '-'),
+          info('Talep eden', a.submitterLabel ?? '-'),
           const SizedBox(height: 6),
           Text(
             'Talep: ${_formatDate(a.createdAt)}',
