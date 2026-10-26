@@ -49,6 +49,8 @@ import '../utils/match_clock.dart';
 import '../utils/minute_label.dart';
 import '../services/match_highlight_service.dart';
 import '../widgets/match_highlights_section.dart';
+import '../../media_credits/media_credit.dart';
+import '../../media_credits/media_credit_card.dart';
 import '../widgets/youtube_find_sheet.dart';
 import '../widgets/match_weather.dart';
 import '../services/youtube_autolink_service.dart';
@@ -2789,6 +2791,11 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
                   // Altta sağdaki menü düğmesi son kartı örtmesin.
                   padding: const EdgeInsets.only(bottom: 104),
                   children: [
+                    if (hasStream)
+                      MediaCreditChip(
+                        leagueId: widget.match.leagueId,
+                        kind: MediaCreditKind.broadcast,
+                      ),
                     MatchHighlightsStrip(
                       match: widget.match,
                       homeName: widget.homeName,
@@ -2811,6 +2818,11 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
         }
         final header = <Widget>[
           switcher,
+          if (photos.isNotEmpty || albums.isNotEmpty)
+            MediaCreditChip(
+              leagueId: widget.match.leagueId,
+              kind: MediaCreditKind.photo,
+            ),
           for (final a in albums) _albumCard(context, a),
           if (widget.isSuperAdmin)
             Padding(

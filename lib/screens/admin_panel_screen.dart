@@ -11,6 +11,7 @@ import '../features/match/screens/admin_live_draws_screen.dart';
 import '../features/news/screens/admin_manage_news_screen.dart';
 import '../features/share/admin_poster_background_screen.dart';
 import '../features/sponsors/admin_sponsors_screen.dart';
+import '../features/media_credits/admin_media_credits_screen.dart';
 import '../features/tournament/screens/admin_penalty_management_screen.dart';
 import 'admin_pending_actions_screen.dart';
 import '../features/auth/screens/admin_otp_monitor_screen.dart';
@@ -155,6 +156,23 @@ class AdminPanelWidget extends StatelessWidget {
               MaterialPageRoute(
                 settings: const RouteSettings(name: 'AdminSponsorsScreen'),
                 builder: (_) => const AdminSponsorsScreen(),
+              ),
+            );
+          },
+        ),
+      // Medya künyesi (fotoğrafçı / yayıncı): admin ve kurucu başkan.
+      if (isAdmin || session.isLeagueOwner)
+        _AdminMenuData(
+          baslik: 'Medya Künyesi',
+          renkler: const [Color(0xFF7DD3FC), Color(0xFF0284C7)],
+          ikon: Icons.photo_camera_rounded,
+          resimYolu: 'assets/images/admin_tournament.jpg',
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                settings: const RouteSettings(name: 'AdminMediaCreditsScreen'),
+                builder: (_) => const AdminMediaCreditsScreen(),
               ),
             );
           },
