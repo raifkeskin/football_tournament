@@ -270,3 +270,13 @@ Uygulamada yapılan ve panele de dokunan değişiklikler buraya yazılır. Kulla
 - **Sınır:** Tablo yalnız görünürlüğü yönetir. Kayıt yetkisi RLS/RPC'de kalır; gerekiyorsa ayrıca açılır.
 - **Aşama A:** altyapı, ardından maç kontrolü, olay girişi, esame, Geri Al, afiş paylaşımı ve fikstür videosu.
 - **Aşama B:** kalan yönetim butonları ve admin düzenleme ekranı.
+
+## 26. Fotoğrafçı fotoğraflarının yüksek çözünürlüklü indirilmesi — SONRA (2026-10-26)
+- **Bağlam:** Fotoğrafçı fotoğrafları Drive'daki maç klasörüne (`fotograflar/`) bırakır. Biz küçültülmüş hâlini (1600 px, ~200 KB + ~30 KB küçük resim) alıp albümde gösteririz. Maç başı en fazla 50 fotoğraf ve hepsi gösterilir.
+- **İstek:** Kullanıcı fotoğrafın yüksek çözünürlüklü hâlini de indirebilsin.
+- **Plan:**
+  - Fotoğraf açılınca iki seçenek olur. "İndir" bizdeki 1600 px hâli indirir. "Orijinali indir" Drive'daki yüksek çözünürlüklü dosyayı açar.
+  - Orijinaller sezon sonuna kadar Drive'da kalır. Dosya Drive'da yoksa "Orijinali indir" görünmez.
+  - Bize maliyeti yoktur, çünkü indirme trafiği Google'dan gider. Alan ise yükleyenin, yani fotoğrafçının kotasından yer: maç başı ~500 MB, sezonda ~30 GB.
+- **Fotoğrafçıya sorulacak:** Drive'ında sezon boyunca yeterli yer var mı?
+- **Bağlı olduğu iş:** Drive'dan otomatik alma akışı (yayıncı gol MP4'leri ve fotoğraflar). Bu akış henüz yapılmadı; yayıncının ve fotoğrafçının cevapları bekleniyor.
