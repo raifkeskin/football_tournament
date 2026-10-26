@@ -9,7 +9,9 @@ import '../../../core/services/global_filter.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/utils/table_feed.dart';
 import '../../../core/services/active_tournament.dart';
+import '../../../core/widgets/app_logo.dart';
 import '../../../core/widgets/app_name_band.dart';
+import '../../../core/widgets/web_safe_image.dart';
 import '../../match/models/match.dart';
 import '../../match/screens/fixture_screen.dart';
 import '../../news/screens/news_feed_screen.dart';
@@ -357,48 +359,67 @@ class _TournamentHubScreenState extends State<TournamentHubScreen>
                   backgroundColor: _bgDark,
                   // Afiş paylaşma: sekmelerin yanında değil, sağ altta yüzer.
                   floatingActionButton: _shareButton(group, accent),
-                  body: SafeArea(
-                    top: false,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const SizedBox(height: 8),
-                        // Birden fazla grup varsa sekmelerin üstünde ortalı
-                        // grup çipleri; tek gruplu turnuvada satır yok.
-                        if (groups.length > 1 && group != null)
-                          _GroupChips(
-                            groups: groups,
-                            selectedId: group.id,
-                            accent: accent,
-                            onSelect: (id) => setState(() => _groupId = id),
+                  body: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: _HubBackdrop(
+                          primary: _color(
+                            league?.themePrimary,
+                            const Color(0xFF13223F),
                           ),
-                        _HubTabBar(
-                          controller: _tabs,
-                          accent: accent,
-                          tabs: _visible,
+                          glow: _color(
+                            league?.themeSecondary,
+                            const Color(0xFFC0C7D1),
+                          ),
+                          logoUrl: league?.logoUrl ?? '',
                         ),
-                        Expanded(
-                          child: season == null || group == null
-                              ? Center(
-                                  child: groupSnap.hasData && seasonSnap.hasData
-                                      ? const Text(
-                                          'Bu sezonda henüz grup yok.',
-                                          style: TextStyle(
-                                            color: Colors.white70,
-                                          ),
-                                        )
-                                      : const CircularProgressIndicator(),
-                                )
-                              : TabBarView(
-                                  controller: _tabs,
-                                  children: [
-                                    for (final t in _visible)
-                                      _tabView(t, season, group, accent),
-                                  ],
-                                ),
+                      ),
+                      SafeArea(
+                        top: false,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const SizedBox(height: 8),
+                            // Birden fazla grup varsa sekmelerin üstünde ortalı
+                            // grup çipleri; tek gruplu turnuvada satır yok.
+                            if (groups.length > 1 && group != null)
+                              _GroupChips(
+                                groups: groups,
+                                selectedId: group.id,
+                                accent: accent,
+                                onSelect: (id) => setState(() => _groupId = id),
+                              ),
+                            _HubTabBar(
+                              controller: _tabs,
+                              accent: accent,
+                              tabs: _visible,
+                            ),
+                            Expanded(
+                              child: season == null || group == null
+                                  ? Center(
+                                      child:
+                                          groupSnap.hasData &&
+                                              seasonSnap.hasData
+                                          ? const Text(
+                                              'Bu sezonda henüz grup yok.',
+                                              style: TextStyle(
+                                                color: Colors.white70,
+                                              ),
+                                            )
+                                          : const CircularProgressIndicator(),
+                                    )
+                                  : TabBarView(
+                                      controller: _tabs,
+                                      children: [
+                                        for (final t in _visible)
+                                          _tabView(t, season, group, accent),
+                                      ],
+                                    ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 );
               },
@@ -756,5 +777,96 @@ class _KeepAliveState extends State<_KeepAlive>
   Widget build(BuildContext context) {
     super.build(context);
     return widget.child;
+  }
+}
+
+/// Turnuva ekranının zemini: üstten turnuva renginden koyuya geçiş, sol üstte
+/// ikinci rengin hafif parıltısı, sağda eğik turnuva logosu silüeti, sol altta
+/// küçük uygulama logosu silüeti. Tüm sekmelerin arkasında durur.
+class _HubBackdrop extends StatelessWidget {
+  const _HubBackdrop({
+    required this.primary,
+    required this.glow,
+    required this.logoUrl,
+  });
+
+  final Color primary;
+  final Color glow;
+  final String logoUrl;
+
+  static const _base = Color(0xFF0B1220);
+
+  /// Logoyu beyaz silüete çevirir.
+  static Widget _silhouette(Widget child, double opacity) => Opacity(
+    opacity: opacity,
+    child: ColorFiltered(
+      colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+      child: child,
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    // Açık/canlı turnuva renkleri (ör. kırmızı) tabloyu boğmasın: koyuyla
+    // karıştırılır.
+    final top = Color.lerp(primary, _base, 0.25)!;
+    final mid = Color.lerp(primary, _base, 0.7)!;
+    return LayoutBuilder(
+      builder: (context, box) {
+        final logoW = math.min(box.maxWidth * 1.0, 420.0);
+        return Stack(
+          clipBehavior: Clip.hardEdge,
+          children: [
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [top, mid, _base],
+                    stops: const [0, 0.38, 0.78],
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              left: -120,
+              top: -60,
+              width: 420,
+              height: 420,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: RadialGradient(
+                    colors: [
+                      glow.withValues(alpha: 0.16),
+                      glow.withValues(alpha: 0),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            if (logoUrl.trim().isNotEmpty)
+              Positioned(
+                right: -logoW * 0.3,
+                top: box.maxHeight * 0.36,
+                width: logoW,
+                child: Transform.rotate(
+                  angle: -0.21,
+                  child: _silhouette(
+                    WebSafeImage(url: logoUrl, fit: BoxFit.contain),
+                    0.08,
+                  ),
+                ),
+              ),
+            Positioned(
+              left: 20,
+              bottom: 22,
+              width: 56,
+              child: _silhouette(Image.asset(AppLogo.asset), 0.1),
+            ),
+          ],
+        );
+      },
+    );
   }
 }
