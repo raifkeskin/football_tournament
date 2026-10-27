@@ -139,6 +139,9 @@ class MatchModel {
   final int? week;
   final String? pitchId;
   final String? pitchName;
+
+  /// Maç bilgisi: hakemin adı (Maçı Düzenle'den girilir).
+  final String? refereeName;
   final MatchStatus status;
   final int? minute;
 
@@ -185,6 +188,7 @@ class MatchModel {
     this.week,
     this.pitchId,
     this.pitchName,
+    this.refereeName,
     this.minute,
     this.kickoffAt,
     this.secondHalfAt,
@@ -340,6 +344,9 @@ class MatchModel {
 
     final pitchIdRaw = (v('pitchId', 'pitch_id') ?? '').toString().trim();
     final pitchNameRaw = (v('pitchName', 'pitch_name') ?? '').toString().trim();
+    final refereeRaw = (v('refereeName', 'referee_name') ?? '')
+        .toString()
+        .trim();
 
     final rawStatus = (v('status', 'status') ?? '').toString().trim();
     final resolvedStatus = MatchStatus.values.firstWhere(
@@ -378,6 +385,7 @@ class MatchModel {
       week: readScore(v('week', 'week')),
       pitchId: pitchIdRaw.isEmpty ? null : pitchIdRaw,
       pitchName: pitchNameRaw.isEmpty ? null : pitchNameRaw,
+      refereeName: refereeRaw.isEmpty ? null : refereeRaw,
       status: resolvedStatus,
       minute: readScore(v('minute', 'minute')),
       kickoffAt: readDate(v('kickoffAt', 'kickoff_at'))?.toUtc(),
@@ -437,6 +445,7 @@ class MatchModel {
         'week': week,
         'pitchId': pitchId,
         'pitchName': pitchName,
+        'refereeName': refereeName,
         'status': status.name,
         'minute': minute,
         'seasonId': seasonId,

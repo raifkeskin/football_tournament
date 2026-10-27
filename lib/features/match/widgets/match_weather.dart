@@ -305,7 +305,11 @@ class MatchWeatherPanel extends StatefulWidget {
     required this.matchId,
     this.kickoffLabel,
     this.played = false,
+    this.embedded = false,
   });
+
+  /// Maç bilgisi kartının içinde: gizlenmez, yalnız açılır/kapanır.
+  final bool embedded;
 
   @override
   State<MatchWeatherPanel> createState() => _MatchWeatherPanelState();
@@ -368,7 +372,7 @@ class _MatchWeatherPanelState extends State<MatchWeatherPanel> {
       valueListenable: MatchWeatherService.of(widget.matchId),
       builder: (context, w, _) {
         if (w == null) return const SizedBox.shrink();
-        if (_hidden) {
+        if (_hidden && !widget.embedded) {
           return Align(
             alignment: Alignment.centerRight,
             child: Padding(
@@ -401,7 +405,9 @@ class _MatchWeatherPanelState extends State<MatchWeatherPanel> {
           );
         }
         return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          padding: widget.embedded
+              ? EdgeInsets.zero
+              : const EdgeInsets.fromLTRB(16, 12, 16, 0),
           child: Material(
             color: const Color(0xFF1E293B).withValues(alpha: 0.7),
             shape: RoundedRectangleBorder(
@@ -483,12 +489,13 @@ class _MatchWeatherPanelState extends State<MatchWeatherPanel> {
             ),
           ),
           const Icon(Icons.expand_more_rounded, color: _dim, size: 22),
-          IconButton(
-            tooltip: 'Gizle',
-            visualDensity: VisualDensity.compact,
-            onPressed: () => _setHidden(true),
-            icon: const Icon(Icons.close_rounded, color: _dim, size: 18),
-          ),
+          if (!widget.embedded)
+            IconButton(
+              tooltip: 'Gizle',
+              visualDensity: VisualDensity.compact,
+              onPressed: () => _setHidden(true),
+              icon: const Icon(Icons.close_rounded, color: _dim, size: 18),
+            ),
         ],
       ),
     );

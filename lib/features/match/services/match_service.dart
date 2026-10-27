@@ -396,6 +396,7 @@ class SupabaseMatchService implements IMatchService {
     required String matchTime,
     String? pitchId,
     String? pitchName,
+    String? refereeName,
   }) async {
     await _supabase
         .from('matches')
@@ -404,6 +405,7 @@ class SupabaseMatchService implements IMatchService {
           'match_time': matchTime,
           'pitch_id': pitchId,
           'pitch_name': pitchName,
+          'referee_name': refereeName,
         })
         .eq('id', matchId);
   }

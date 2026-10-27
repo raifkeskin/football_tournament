@@ -197,6 +197,9 @@ Future<bool> showAdminConfirmDialog({
   String confirmLabel = 'SİL',
   bool destructive = true,
   IconData icon = Icons.delete_outline_rounded,
+
+  /// Verilirse onay düğmesinin solunda vazgeç düğmesi de olur.
+  String? cancelLabel,
 }) async {
   final ok = await showDialog<bool>(
     context: context,
@@ -245,24 +248,52 @@ Future<bool> showAdminConfirmDialog({
                 style: const TextStyle(color: Colors.white70, height: 1.4),
               ),
               const SizedBox(height: 22),
-              SizedBox(
-                height: 48,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: destructive
-                        ? const Color(0xFFDC2626)
-                        : kAdminAccent,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+              Row(
+                children: [
+                  if (cancelLabel != null) ...[
+                    Expanded(
+                      child: SizedBox(
+                        height: 48,
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            side: const BorderSide(color: Colors.white24),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: Text(
+                            cancelLabel,
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                  ],
+                  Expanded(
+                    child: SizedBox(
+                      height: 48,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: destructive
+                              ? const Color(0xFFDC2626)
+                              : kAdminAccent,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: Text(
+                          confirmLabel,
+                          style: const TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                      ),
                     ),
                   ),
-                  onPressed: () => Navigator.pop(ctx, true),
-                  child: Text(
-                    confirmLabel,
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                ),
+                ],
               ),
             ],
           ),

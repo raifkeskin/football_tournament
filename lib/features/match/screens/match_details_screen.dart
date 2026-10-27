@@ -52,6 +52,7 @@ import '../widgets/match_highlights_section.dart';
 import '../../media_credits/media_credit.dart';
 import '../../media_credits/media_credit_card.dart';
 import '../widgets/youtube_find_sheet.dart';
+import '../widgets/match_info_card.dart';
 import '../widgets/match_weather.dart';
 import '../services/youtube_autolink_service.dart';
 import '../../team/screens/team_squad_screen.dart';
@@ -4836,7 +4837,7 @@ class _DetailTabView extends StatelessWidget {
     }
   }
 
-  // Hava durumu yalnız maç öncesi başlıkta (tek satır); akışa yer kalsın.
+  // Hava durumu başlıkta tek satır, ayrıntısı en alttaki Maç bilgisi kartında.
   @override
   Widget build(BuildContext context) => _events(context);
 
@@ -4976,10 +4977,16 @@ class _DetailTabView extends StatelessWidget {
         return ListView.separated(
           // Altta sağdaki menü düğmesi son satırları örtmesin.
           padding: const EdgeInsets.fromLTRB(12, 16, 12, 104),
-          itemCount: normalized.length,
-          separatorBuilder: (_, _) =>
-              const SizedBox(height: 2, child: Center(child: _TimelineLine())),
+          // Son satır: maç bilgisi (olaylar eklendikçe aşağı iner).
+          itemCount: normalized.length + 1,
+          separatorBuilder: (_, i) => i == normalized.length - 1
+              ? const SizedBox(height: 12)
+              : const SizedBox(
+                  height: 2,
+                  child: Center(child: _TimelineLine()),
+                ),
           itemBuilder: (context, i) {
+            if (i == normalized.length) return MatchInfoCard(match: match);
             final e = normalized[i];
             final type = secondYellows.contains(e)
                 ? 'second_yellow'
@@ -5182,18 +5189,19 @@ class _MinutelessSummary extends StatelessWidget {
         }
 
         final hasCards = cards.values.any((m) => m.isNotEmpty);
+        final hasGoals = goals.values.any((m) => m.isNotEmpty);
         return ListView(
           // Altta sağdaki menü düğmesi son satırları örtmesin.
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 104),
           children: [
-            _section(
-              context,
-              goals[match.homeTeamId]!.values.toList(),
-              goals[match.awayTeamId]!.values.toList(),
-              emptyHome: match.homeScore > 0 ? '' : 'Gol yok',
-              emptyAway: match.awayScore > 0 ? '' : 'Gol yok',
-              goal: true,
-            ),
+            // Gol yoksa bölüm hiç çıkmaz ("Gol yok" yazılmaz).
+            if (hasGoals)
+              _section(
+                context,
+                goals[match.homeTeamId]!.values.toList(),
+                goals[match.awayTeamId]!.values.toList(),
+                goal: true,
+              ),
             if (hasCards)
               _section(
                 context,
@@ -5230,6 +5238,8 @@ class _MinutelessSummary extends StatelessWidget {
                   ),
                 ),
               ),
+            // Olaylar eklendikçe maç bilgisi aşağı iner.
+            MatchInfoCard(match: match),
           ],
         );
       },

@@ -814,12 +814,17 @@ class _PlayerCardState extends State<PlayerCard> {
             .select(
               'id, season_id, match_date, week, home_score, away_score, '
               'home_team_id, away_team_id, '
-              'home:teams!matches_home_team_id_fkey(name, logo_url), '
-              'away:teams!matches_away_team_id_fkey(name, logo_url)',
+              'home:teams!matches_home_team_id_fkey(name, short_name, logo_url), '
+              'away:teams!matches_away_team_id_fkey(name, short_name, logo_url)',
             )
             .inFilter('id', stats.played.toList());
-        String nm(dynamic v) =>
-            v is Map ? (v['name'] ?? '').toString().trim() : '';
+        // Kısa ad girilmişse o, yoksa tam ad (gerekirse iki satır).
+        String nm(dynamic v) {
+          if (v is! Map) return '';
+          final short = (v['short_name'] ?? '').toString().trim();
+          return short.isNotEmpty ? short : (v['name'] ?? '').toString().trim();
+        }
+
         String lg(dynamic v) =>
             v is Map ? (v['logo_url'] ?? '').toString().trim() : '';
         for (final m in res) {
@@ -1417,12 +1422,14 @@ class _PlayerCardState extends State<PlayerCard> {
     final sel = multi && _seasonTab < entries.length ? _seasonTab : -1;
     final _StatTotals t;
     final String caption;
+    var captionLogo = '';
     if (entries.isEmpty) {
       t = data.overall;
       caption = 'Bu sezon kaydı yok · tüm turnuvalar';
     } else if (!multi || sel >= 0) {
       final e = entries[multi ? sel : 0];
       t = e.totals;
+      captionLogo = e.teamLogo;
       // Çok turnuvada turnuva adı sekmede yazar; altta yalnız takım.
       caption = multi
           ? e.teamName
@@ -1575,13 +1582,33 @@ class _PlayerCardState extends State<PlayerCard> {
               children: [
                 Padding(
                   padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
-                  child: Text(
-                    caption,
-                    style: const TextStyle(
-                      color: Color(0xFFC9D1E2),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
+                  child: Row(
+                    children: [
+                      if (captionLogo.isNotEmpty) ...[
+                        SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: WebSafeImage(
+                            url: _normalizeUrl(captionLogo),
+                            fit: BoxFit.contain,
+                            fallbackIconSize: 14,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
+                      Expanded(
+                        child: Text(
+                          caption,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color(0xFFC9D1E2),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 Row(
@@ -1759,9 +1786,9 @@ class _PlayerCardState extends State<PlayerCard> {
           Expanded(
             child: Text(
               name,
-              maxLines: 1,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: style,
+              style: style.copyWith(height: 1.15),
             ),
           ),
           const SizedBox(width: 8),
@@ -2489,13 +2516,18 @@ class _IdentityMenuState extends State<_IdentityMenu> {
   }
 
   Future<void> _unverify() async {
+    final own = AppSession.of(context).value.playerId == widget.playerId;
     final ok = await showAdminConfirmDialog(
       context: context,
       title: 'Onayı kaldır',
-      message:
-          '${widget.playerName} profilinin kimlik onayı kaldırılsın mı? '
-          'Kimlik yeniden okutulana kadar profil onaysız görünür.',
+      message: own
+          ? 'Onaylı profilinizi kaldırmak istediğinize emin misiniz? '
+                'Kimliğinizi yeniden okutana kadar profiliniz onaysız görünür.'
+          : '${widget.playerName} profilinin onayını kaldırmak istediğinize '
+                'emin misiniz? Kimlik yeniden okutulana kadar profil onaysız '
+                'görünür.',
       confirmLabel: 'KALDIR',
+      cancelLabel: 'VAZGEÇ',
       icon: Icons.gpp_bad_outlined,
     );
     if (!ok || !mounted) return;
@@ -2523,22 +2555,10 @@ class _IdentityMenuState extends State<_IdentityMenu> {
     // Onaysız profilde hiçbir simge yok; kimlik menüden okutulur.
     if (!_ready || !_verified || !_canUnverify) return badge;
     if (!IdentityAccess.visibleIn(context)) return badge;
-    return PopupMenuButton<String>(
-      tooltip: 'Kimlik',
-      padding: EdgeInsets.zero,
-      color: const Color(0xFF1E293B),
-      onSelected: (v) {
-        if (v == 'unverify') _unverify();
-      },
-      itemBuilder: (_) => [
-        const PopupMenuItem(
-          value: 'unverify',
-          child: Text(
-            'Onayı kaldır',
-            style: TextStyle(color: Color(0xFFF87171)),
-          ),
-        ),
-      ],
+    // Dokununca doğrudan onay kaldırma sorusu açılır.
+    return InkWell(
+      customBorder: const CircleBorder(),
+      onTap: _unverify,
       child: Container(
         width: 30,
         height: 30,

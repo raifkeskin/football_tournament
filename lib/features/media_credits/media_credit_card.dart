@@ -15,11 +15,15 @@ class MediaCreditChip extends StatefulWidget {
     required this.leagueId,
     required this.kind,
     this.padding = const EdgeInsets.fromLTRB(12, 10, 12, 0),
+    this.asRow = false,
   });
 
   final String leagueId;
   final MediaCreditKind kind;
   final EdgeInsets padding;
+
+  /// Maç bilgisi kartında: çerçevesiz satır (ikon · etiket · ad).
+  final bool asRow;
 
   @override
   State<MediaCreditChip> createState() => _MediaCreditChipState();
@@ -64,6 +68,26 @@ class _MediaCreditChipState extends State<MediaCreditChip> {
         ?.where((c) => c.kind == widget.kind && c.isActive)
         .firstOrNull;
     if (credit == null) return const SizedBox.shrink();
+    if (widget.asRow) {
+      return InkWell(
+        onTap: () => showMediaCreditCard(context, credit),
+        child: Padding(
+          padding: widget.padding,
+          child: MatchInfoLine(
+            icon: credit.kind == MediaCreditKind.photo
+                ? Icons.photo_camera_outlined
+                : Icons.videocam_outlined,
+            label: credit.kind.label,
+            value: credit.name,
+            trailing: const Icon(
+              Icons.chevron_right_rounded,
+              size: 18,
+              color: Colors.white38,
+            ),
+          ),
+        ),
+      );
+    }
     return Padding(
       padding: widget.padding,
       child: Align(
@@ -400,6 +424,56 @@ class _MediaCreditCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Maç bilgisi satırı: ikon, soluk etiket ve kalın değer.
+class MatchInfoLine extends StatelessWidget {
+  const MatchInfoLine({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.trailing,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 17, color: kAdminAccent),
+        const SizedBox(width: 10),
+        SizedBox(
+          width: 86,
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: kAdminMuted,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        ?trailing,
+      ],
     );
   }
 }

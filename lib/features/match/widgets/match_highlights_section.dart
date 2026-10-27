@@ -843,7 +843,8 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
       fieldIcon: Icons.schedule_rounded,
       initialValue: _mmss(current ?? 0),
       hint: 'dakika:saniye, örn. 07:15',
-      subtitle: 'Kaydettikten sonra "Uygula" ile onay bekleyen '
+      subtitle:
+          'Kaydettikten sonra "Uygula" ile onay bekleyen '
           'kesitler gol dakikasına göre bu andan yerleşir.',
       keyboardType: TextInputType.number,
       inputFormatters: [_ClockInputFormatter()],
@@ -1198,9 +1199,7 @@ class _MatchHighlightReviewPageState extends State<MatchHighlightReviewPage> {
                     SizedBox(
                       height: 30,
                       child: FilledButton.icon(
-                        onPressed: job.kickoffSec == null
-                            ? null
-                            : _applyStarts,
+                        onPressed: job.kickoffSec == null ? null : _applyStarts,
                         style: FilledButton.styleFrom(
                           backgroundColor: kAdminAccent,
                           padding: const EdgeInsets.symmetric(horizontal: 10),
