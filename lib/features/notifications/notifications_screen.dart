@@ -86,7 +86,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       if (!mounted) return;
       setState(() => _items = before);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Bildirimler silinemedi, tekrar deneyin.')),
+        const SnackBar(
+          content: Text('Bildirimler silinemedi, tekrar deneyin.'),
+        ),
       );
     }
   }

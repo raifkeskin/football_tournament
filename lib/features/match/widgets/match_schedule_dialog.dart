@@ -27,6 +27,7 @@ Future<void> showMatchScheduleDialog(
       ? rawInitialTime.substring(0, 5)
       : rawInitialTime;
   final tCtrl = TextEditingController(text: initialTimeText);
+  final refCtrl = TextEditingController(text: match.refereeName ?? '');
   final dateFocus = FocusNode();
   final timeFocus = FocusNode();
 
@@ -322,6 +323,13 @@ Future<void> showMatchScheduleDialog(
                       ),
                     ),
                   ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: refCtrl,
+                    textCapitalization: TextCapitalization.words,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: deco('Hakem', Icons.sports_rounded),
+                  ),
                   const SizedBox(height: 24),
                   SizedBox(
                     height: 50,
@@ -375,6 +383,7 @@ Future<void> showMatchScheduleDialog(
                             matchTime: timeText,
                             pitchId: selectedPitchId,
                             pitchName: selectedPitchName,
+                            refereeName: refCtrl.text,
                           );
                           if (c.mounted) Navigator.pop(c);
                           if (context.mounted) {
@@ -421,6 +430,7 @@ Future<void> showMatchScheduleDialog(
     timeFocus.dispose();
     dCtrl.dispose();
     tCtrl.dispose();
+    refCtrl.dispose();
   });
 }
 
