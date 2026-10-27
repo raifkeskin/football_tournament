@@ -1040,8 +1040,8 @@ class _PlayerCardState extends State<PlayerCard> {
     border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
   );
 
-  /// Üst bölüm: ortada vesikalık fotoğraf, solda bu sezon oynadığı
-  /// takımların armaları, sağda kimlik onayı; altında ad soyad.
+  /// Üst bölüm: ortada vesikalık fotoğraf (sağ üst köşesinde kimlik onayı),
+  /// solda bu sezon oynadığı takımların armaları; altında ad soyad.
   Widget _hero(BuildContext context, _PlayerCardData data) {
     final photo = _normalizeUrl(widget.photoUrl);
     final topInset = MediaQuery.paddingOf(context).top;
@@ -1056,15 +1056,9 @@ class _PlayerCardState extends State<PlayerCard> {
 
     Widget crest(_CurrentEntry e) => Tooltip(
       message: e.teamName,
-      child: Container(
-        width: 44,
-        height: 44,
-        padding: const EdgeInsets.all(5),
-        decoration: BoxDecoration(
-          color: _bgDark.withValues(alpha: 0.6),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-        ),
+      child: SizedBox(
+        width: 40,
+        height: 40,
         child: e.teamLogo.isEmpty
             ? const Icon(Icons.shield_outlined, color: _mid, size: 22)
             : WebSafeImage(
@@ -1087,94 +1081,97 @@ class _PlayerCardState extends State<PlayerCard> {
           ],
         ),
       ),
-      // Tam ekran: üst bölüm durum çubuğunun altına uzanır.
-      padding: EdgeInsets.fromLTRB(16, topInset, 16, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      // Tam ekran: üst bölüm durum çubuğunun altına uzanır; kapat düğmesi
+      // fotoğraf satırının üstüne biner, bölüm dar kalır.
+      padding: EdgeInsets.fromLTRB(16, topInset + 12, 16, 14),
+      child: Stack(
+        clipBehavior: Clip.none,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (widget.playerId.isNotEmpty)
-                _IdentityMenu(
-                  playerId: widget.playerId,
-                  playerName: widget.name,
-                ),
-              IconButton(
-                onPressed: () => Navigator.of(context).maybePop(),
-                icon: const Icon(Icons.close_rounded, color: Colors.white70),
-                tooltip: 'Kapat',
-              ),
-            ],
-          ),
-          Row(
-            children: [
-              Expanded(
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      for (var i = 0; i < crests.length && i < 3; i++) ...[
-                        if (i > 0) const SizedBox(height: 6),
-                        crest(crests[i]),
-                      ],
-                    ],
+              Row(
+                children: [
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          for (var i = 0; i < crests.length && i < 3; i++) ...[
+                            if (i > 0) const SizedBox(height: 6),
+                            crest(crests[i]),
+                          ],
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              Container(
-                width: 84,
-                height: 108,
-                clipBehavior: Clip.antiAlias,
-                decoration: BoxDecoration(
-                  color: _bgDark,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: _tone, width: 2),
-                ),
-                child: photo.isEmpty
-                    ? Center(
-                        child: Text(
-                          _initials(name),
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 30,
-                            fontWeight: FontWeight.w800,
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Container(
+                        width: 84,
+                        height: 108,
+                        clipBehavior: Clip.antiAlias,
+                        decoration: BoxDecoration(
+                          color: _bgDark,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: _tone, width: 2),
+                        ),
+                        child: photo.isEmpty
+                            ? Center(
+                                child: Text(
+                                  _initials(name),
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 30,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              )
+                            : WebSafeImage(
+                                url: photo,
+                                fit: BoxFit.cover,
+                                fallbackIconSize: 32,
+                              ),
+                      ),
+                      if (widget.playerId.isNotEmpty)
+                        Positioned(
+                          top: -12,
+                          right: -12,
+                          child: _IdentityMenu(
+                            playerId: widget.playerId,
+                            playerName: widget.name,
                           ),
                         ),
-                      )
-                    : WebSafeImage(
-                        url: photo,
-                        fit: BoxFit.cover,
-                        fallbackIconSize: 32,
-                      ),
+                    ],
+                  ),
+                  const Expanded(child: SizedBox()),
+                ],
               ),
-              Expanded(
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: widget.playerId.isEmpty
-                      ? const SizedBox.shrink()
-                      : VerifiedBadgeFor(
-                          playerId: widget.playerId,
-                          size: 34,
-                          leading: 0,
-                        ),
+              const SizedBox(height: 8),
+              Text(
+                name,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  height: 1.1,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          Text(
-            name,
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              height: 1.1,
+          Positioned(
+            top: -10,
+            right: -8,
+            child: IconButton(
+              onPressed: () => Navigator.of(context).maybePop(),
+              icon: const Icon(Icons.close_rounded, color: Colors.white70),
+              tooltip: 'Kapat',
             ),
           ),
         ],
@@ -1297,10 +1294,10 @@ class _PlayerCardState extends State<PlayerCard> {
     } else if (!multi || sel >= 0) {
       final e = entries[multi ? sel : 0];
       t = e.totals;
-      caption = [
-        e.leagueName,
-        if (e.teamName.isNotEmpty) e.teamName,
-      ].join(' · ');
+      // Çok turnuvada turnuva adı sekmede yazar; altta yalnız takım.
+      caption = multi
+          ? e.teamName
+          : [e.leagueName, if (e.teamName.isNotEmpty) e.teamName].join(' · ');
     } else {
       t = entries.fold(const _StatTotals(), (a, e) => a + e.totals);
       caption = 'Sezon toplamı · ${entries.length} turnuva';
@@ -1412,7 +1409,30 @@ class _PlayerCardState extends State<PlayerCard> {
                     for (var i = 0; i < entries.length; i++)
                       tab(
                         i,
-                        logo(entries[i]),
+                        sel == i
+                            ? Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  logo(entries[i]),
+                                  const SizedBox(width: 8),
+                                  ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 190,
+                                    ),
+                                    child: Text(
+                                      entries[i].leagueName,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : logo(entries[i]),
                         '${entries[i].leagueName}, ${entries[i].teamName}',
                       ),
                   ],
@@ -1861,9 +1881,13 @@ class _IdentityMenuState extends State<_IdentityMenu> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_ready || !IdentityAccess.visibleIn(context)) {
-      return const SizedBox.shrink();
-    }
+    // Seçenek yoksa yalnız onay rozeti (onaysızsa hiçbir şey).
+    final badge = VerifiedBadgeFor(
+      playerId: widget.playerId,
+      size: 28,
+      leading: 0,
+    );
+    if (!_ready || !IdentityAccess.visibleIn(context)) return badge;
     // Başkasının kimliğini admin, kurucu başkan ve bölge sorumlusu okutur;
     // diğerleri yalnız kendi profilinde.
     final session = AppSession.of(context).value;
@@ -1871,13 +1895,10 @@ class _IdentityMenuState extends State<_IdentityMenu> {
         !_verified &&
         !kIsWeb &&
         (session.hasManagementPanel || session.playerId == widget.playerId);
-    if (!canRead && !_canUnverify) return const SizedBox.shrink();
+    if (!canRead && !_canUnverify) return badge;
     return PopupMenuButton<String>(
       tooltip: 'Kimlik',
-      icon: Icon(
-        _verified ? Icons.verified_rounded : Icons.verified_outlined,
-        color: _verified ? kVerifiedBlue : Colors.white70,
-      ),
+      padding: EdgeInsets.zero,
       color: const Color(0xFF1E293B),
       onSelected: (v) {
         if (v == 'read') {
@@ -1905,6 +1926,21 @@ class _IdentityMenuState extends State<_IdentityMenu> {
             ),
           ),
       ],
+      child: Container(
+        width: 30,
+        height: 30,
+        decoration: BoxDecoration(
+          color: _bgDark,
+          shape: BoxShape.circle,
+          border: Border.all(color: _bgDark, width: 1),
+        ),
+        alignment: Alignment.center,
+        child: Icon(
+          _verified ? Icons.verified_rounded : Icons.verified_outlined,
+          color: _verified ? kVerifiedBlue : Colors.white70,
+          size: 26,
+        ),
+      ),
     );
   }
 }
