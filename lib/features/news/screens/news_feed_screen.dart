@@ -240,6 +240,21 @@ class _NewsViewState extends State<NewsView> {
                       onShare: () => _share(n),
                     );
             }
+            if (n.isWeeklyPick) {
+              return WeeklyPickNewsCard(
+                key: _keys.putIfAbsent(n.id, GlobalKey.new),
+                item: n,
+                meta: [
+                  _timeAgo(n.createdAt),
+                  if (n.regionName.isNotEmpty) n.regionName,
+                ].join(' · '),
+                loggedIn: loggedIn,
+                liked: liked,
+                likeCount: count,
+                onToggleLike: () => _toggleLike(n, liked),
+                onShare: () => _share(n),
+              );
+            }
             if (n.isMatchResult || n.isWeekResults) {
               final meta = [
                 if (n.isMatchResult && n.week != null) '${n.week}. Hafta',
