@@ -45,10 +45,12 @@ abstract final class ProfileField {
 /// Mevki seçenekleri (kadro formuyla aynı).
 const kMainPositions = <String>['Kaleci', 'Defans', 'Orta Saha', 'Forvet'];
 const kSubPositionsByMain = <String, List<String>>{
-  'Kaleci': ['Kaleci'],
-  'Defans': ['Stoper', 'Bek'],
-  'Orta Saha': ['Defansif', 'Merkez', 'Ofansif', 'Kanat'],
-  'Forvet': ['Santrfor', 'Kanat Forvet'],
+  // Kalecinin alt mevkisi yok; kanat ve bekler sol / sağ ayrı (Mevki
+  // sekmesindeki seçeneklerle aynı).
+  'Kaleci': [],
+  'Defans': ['Stoper', 'Sol Bek', 'Sağ Bek'],
+  'Orta Saha': ['Defansif', 'Merkez', 'Ofansif', 'Sol Kanat', 'Sağ Kanat'],
+  'Forvet': ['Santrfor', 'Sol Kanat Forvet', 'Sağ Kanat Forvet'],
 };
 
 /// Giriş yapan futbolcunun oyuncu kaydı.

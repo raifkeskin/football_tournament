@@ -121,7 +121,8 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
     setState(() {
       _mainPosition = v;
       final subs = kSubPositionsByMain[v] ?? const [];
-      _subPosition = subs.length == 1 ? subs.first : null;
+      // Kalecinin alt mevkisi yok: eskisi boşaltılır.
+      _subPosition = subs.isEmpty ? '' : null;
       _error = null;
     });
   }
@@ -149,6 +150,7 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
       return;
     }
     if (changes.containsKey(ProfileField.mainPosition) &&
+        (kSubPositionsByMain[_mainPosition] ?? const []).isNotEmpty &&
         (_subPosition ?? '').isEmpty) {
       setState(() => _error = 'Alt mevkiyi de seçin.');
       return;

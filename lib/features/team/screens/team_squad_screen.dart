@@ -2214,10 +2214,10 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
     'Forvet',
   ];
   static const Map<String, List<String>> _subPositionsByMain = {
-    'Kaleci': ['Kaleci'],
-    'Defans': ['Stoper', 'Bek'],
-    'Orta Saha': ['Defansif', 'Merkez', 'Ofansif', 'Kanat'],
-    'Forvet': ['Santrfor', 'Kanat Forvet'],
+    'Kaleci': [],
+    'Defans': ['Stoper', 'Sol Bek', 'Sağ Bek'],
+    'Orta Saha': ['Defansif', 'Merkez', 'Ofansif', 'Sol Kanat', 'Sağ Kanat'],
+    'Forvet': ['Santrfor', 'Sol Kanat Forvet', 'Sağ Kanat Forvet'],
   };
   static const _feet = <String>['Sağ', 'Sol', 'Her İkisi'];
 
@@ -2321,8 +2321,6 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
     final s = (subOrLegacy ?? '').trim();
     if (options.contains(s)) return s;
     switch (s) {
-      case 'GK':
-        return 'Kaleci';
       case 'DEF':
         return 'Stoper';
       case 'ORT':
@@ -2330,7 +2328,8 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
       case 'FOR':
         return 'Santrfor';
     }
-    return options.first;
+    // Tarafı bilinmeyen eski değer (Bek, Kanat) yeniden seçtirilir.
+    return _unsetOption;
   }
 
   @override
@@ -2511,7 +2510,9 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
           ? _mainPosition
           : null;
       final resolvedSubPosition = _isMainPositionSelected
-          ? (_subPosition == _unsetOption ? null : _subPosition)
+          ? (_subPosition == _unsetOption || _subPosition.isEmpty
+                ? null
+                : _subPosition)
           : null;
       var playerId = (widget.editing?.id ?? '').toString().trim();
       final finalPhotoUrl = uploadedPhotoUrl != null
@@ -2921,14 +2922,19 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
                                     onPicked: (v) {
                                       _mainPosition = v;
                                       // Yeni mevkinin ilk alt mevkisi otomatik seçilir.
-                                      _subPosition =
-                                          (_subPositionsByMain[v] ??
-                                                  const <String>[])
-                                              .first;
+                                      final subs =
+                                          _subPositionsByMain[v] ??
+                                          const <String>[];
+                                      _subPosition = subs.isEmpty
+                                          ? ''
+                                          : subs.first;
                                     },
                                   ),
                           ),
-                          if (_isMainPositionSelected)
+                          if (_isMainPositionSelected &&
+                              (_subPositionsByMain[_mainPosition] ??
+                                      const <String>[])
+                                  .isNotEmpty)
                             AdminSelectRow(
                               icon: Icons.sports_outlined,
                               label: 'Alt Mevki',
