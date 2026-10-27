@@ -215,7 +215,7 @@ class _PlayerPositionsTabState extends State<PlayerPositionsTab> {
     }
     final mainKeys = _mainSpotKeys(_main, _sub);
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(16),
