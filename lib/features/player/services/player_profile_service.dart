@@ -513,9 +513,14 @@ class PlayerProfileService {
 
   Future<void> deletePhoto(String? url) => _uploads.deleteImageByUrl(url);
 
-  /// Talep açar; değişmeyen alanlar sunucuda atılır.
-  Future<void> submit(Map<String, dynamic> changes) async {
-    await _client.rpc('submit_profile_change', params: {'p_changes': changes});
+  /// Mevki doğrudan yazılır; diğer alanlar varsa talep açılır.
+  /// Talep açıldıysa true döner.
+  Future<bool> submit(Map<String, dynamic> changes) async {
+    final id = await _client.rpc(
+      'submit_profile_change',
+      params: {'p_changes': changes},
+    );
+    return id != null;
   }
 
   /// Bekleyen talebi geri çeker; yüklenmiş yeni fotoğrafı da siler.
