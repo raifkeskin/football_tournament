@@ -656,6 +656,7 @@ class _PlayerCardState extends State<PlayerCard> {
     final teamIdBySeason = <String, String>{};
     final teamName = <String, String>{};
     final teamLogo = <String, String>{};
+    final teamShort = <String, String>{};
     try {
       final links = await _sb
           .from('season_team_players')
@@ -666,11 +667,13 @@ class _PlayerCardState extends State<PlayerCard> {
       if (teamIds.isNotEmpty) {
         final res = await _sb
             .from('teams')
-            .select('id, name, logo_url')
+            .select('id, name, short_name, logo_url')
             .inFilter('id', teamIds.toList());
         for (final t in res) {
           final id = (t['id'] ?? '').toString();
           teamName[id] = (t['name'] ?? '').toString().trim();
+          final short = (t['short_name'] ?? '').toString().trim();
+          if (short.isNotEmpty) teamShort[id] = short;
           teamLogo[id] = (t['logo_url'] ?? '').toString().trim();
         }
       }
@@ -813,12 +816,14 @@ class _PlayerCardState extends State<PlayerCard> {
             .select(
               'id, season_id, match_date, week, home_score, away_score, '
               'home_team_id, away_team_id, '
-              'home:teams!matches_home_team_id_fkey(name), '
-              'away:teams!matches_away_team_id_fkey(name)',
+              'home:teams!matches_home_team_id_fkey(name, logo_url), '
+              'away:teams!matches_away_team_id_fkey(name, logo_url)',
             )
             .inFilter('id', stats.played.toList());
         String nm(dynamic v) =>
             v is Map ? (v['name'] ?? '').toString().trim() : '';
+        String lg(dynamic v) =>
+            v is Map ? (v['logo_url'] ?? '').toString().trim() : '';
         for (final m in res) {
           final id = (m['id'] ?? '').toString();
           final sid = (m['season_id'] ?? '').toString();
@@ -834,6 +839,8 @@ class _PlayerCardState extends State<PlayerCard> {
               week: m['week'] == null ? null : _readInt(m['week']),
               home: nm(m['home']),
               away: nm(m['away']),
+              homeLogo: lg(m['home']),
+              awayLogo: lg(m['away']),
               homeScore: m['home_score'] == null
                   ? null
                   : _readInt(m['home_score']),
@@ -873,7 +880,8 @@ class _PlayerCardState extends State<PlayerCard> {
       final prev = career[key];
       career[key] = _CareerRow(
         year: year,
-        teamName: teamName[tid] ?? '',
+        // Kariyerde varsa kısa ad.
+        teamName: teamShort[tid] ?? teamName[tid] ?? '',
         teamLogo: teamLogo[tid] ?? '',
         totals: (prev?.totals ?? const _StatTotals()) + t,
       );
@@ -932,13 +940,17 @@ class _PlayerCardState extends State<PlayerCard> {
               _hero(context, data),
               Padding(
                 // Üst kart ile sekmeler arası dar tutulur.
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                // Sekme içerikleri ekran kenarına yakın (dar kenar boşluğu).
+                padding: const EdgeInsets.fromLTRB(4, 4, 4, 24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    FutureBuilder<List<_GoalClip>>(
-                      future: _goals,
-                      builder: (context, g) => _tabBar(g.data?.length ?? 0),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: FutureBuilder<List<_GoalClip>>(
+                        future: _goals,
+                        builder: (context, g) => _tabBar(g.data?.length ?? 0),
+                      ),
                     ),
                     const SizedBox(height: 10),
                     if (_tab == 4 && _showPositionsTab)
@@ -1726,7 +1738,7 @@ class _PlayerCardState extends State<PlayerCard> {
             ),
     );
 
-    Widget teamLine(String name, int? score, bool mine) {
+    Widget teamLine(String name, String logoUrl, int? score, bool mine) {
       final style = TextStyle(
         color: Colors.white,
         fontSize: 14,
@@ -1734,6 +1746,18 @@ class _PlayerCardState extends State<PlayerCard> {
       );
       return Row(
         children: [
+          SizedBox(
+            width: 16,
+            height: 16,
+            child: logoUrl.isEmpty
+                ? const Icon(Icons.shield_outlined, color: _mid, size: 14)
+                : WebSafeImage(
+                    url: _normalizeUrl(logoUrl),
+                    fit: BoxFit.contain,
+                    fallbackIconSize: 12,
+                  ),
+          ),
+          const SizedBox(width: 6),
           Expanded(
             child: Text(
               name,
@@ -1760,7 +1784,7 @@ class _PlayerCardState extends State<PlayerCard> {
         onTap: () => _openMatch(m.id),
         child: Container(
           constraints: const BoxConstraints(minHeight: 60),
-          padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),
+          padding: const EdgeInsets.fromLTRB(8, 10, 8, 10),
           decoration: BoxDecoration(
             border: Border(
               bottom: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
@@ -1769,7 +1793,7 @@ class _PlayerCardState extends State<PlayerCard> {
           child: Row(
             children: [
               SizedBox(
-                width: 44,
+                width: 40,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -1791,27 +1815,30 @@ class _PlayerCardState extends State<PlayerCard> {
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Expanded(
                 child: Column(
                   children: [
                     teamLine(
-                      shortTeamName(m.home),
+                      m.home,
+                      m.homeLogo,
                       m.homeScore,
                       m.mineHome == true,
                     ),
                     const SizedBox(height: 4),
                     teamLine(
-                      shortTeamName(m.away),
+                      m.away,
+                      m.awayLogo,
                       m.awayScore,
                       m.mineHome == false,
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 62,
+              const SizedBox(width: 6),
+              // İkon alanı yalnız ikon kadar yer kaplar.
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 62),
                 child: Wrap(
                   alignment: WrapAlignment.end,
                   crossAxisAlignment: WrapCrossAlignment.center,
@@ -1868,8 +1895,8 @@ class _PlayerCardState extends State<PlayerCard> {
               ),
               const SizedBox(width: 6),
               Container(
-                width: 26,
-                height: 26,
+                width: 24,
+                height: 24,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: resColor,
@@ -1956,7 +1983,7 @@ class _PlayerCardState extends State<PlayerCard> {
               ),
             ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            padding: const EdgeInsets.fromLTRB(8, 12, 8, 12),
             child: Row(
               children: [
                 const Expanded(
@@ -2002,7 +2029,7 @@ class _PlayerCardState extends State<PlayerCard> {
   Widget _careerTab(_PlayerCardData data) {
     final rows = data.career;
     if (rows.isEmpty) return _emptyPanel('Henüz kariyer verisi yok.');
-    const colW = 32.0;
+    const colW = 26.0;
     Widget cell(Widget child) => SizedBox(
       width: colW,
       child: Center(child: child),
@@ -2031,11 +2058,11 @@ class _PlayerCardState extends State<PlayerCard> {
 
     final header = Container(
       color: Colors.white.withValues(alpha: 0.05),
-      padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+      padding: const EdgeInsets.fromLTRB(8, 12, 6, 12),
       child: Row(
         children: [
           const SizedBox(
-            width: 50,
+            width: 40,
             child: Text(
               'Sezon',
               style: TextStyle(
@@ -2097,7 +2124,7 @@ class _PlayerCardState extends State<PlayerCard> {
     );
 
     Widget line(_CareerRow c) => Container(
-      padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+      padding: const EdgeInsets.fromLTRB(8, 10, 6, 10),
       decoration: BoxDecoration(
         border: Border(
           bottom: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
@@ -2106,7 +2133,7 @@ class _PlayerCardState extends State<PlayerCard> {
       child: Row(
         children: [
           SizedBox(
-            width: 50,
+            width: 40,
             child: Text(
               c.year,
               style: const TextStyle(
@@ -2117,8 +2144,8 @@ class _PlayerCardState extends State<PlayerCard> {
             ),
           ),
           SizedBox(
-            width: 26,
-            height: 26,
+            width: 22,
+            height: 22,
             child: c.teamLogo.isEmpty
                 ? const Icon(Icons.shield_outlined, color: _mid, size: 20)
                 : WebSafeImage(
@@ -2130,9 +2157,9 @@ class _PlayerCardState extends State<PlayerCard> {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              c.teamName.isEmpty ? '-' : shortTeamName(c.teamName),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+              // Uzun ad alt satıra iner (kesilmez).
+              c.teamName.isEmpty ? '-' : c.teamName,
+              maxLines: 2,
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 14,
@@ -2156,7 +2183,7 @@ class _PlayerCardState extends State<PlayerCard> {
           for (final c in rows) line(c),
           Container(
             color: Colors.white.withValues(alpha: 0.05),
-            padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+            padding: const EdgeInsets.fromLTRB(8, 12, 6, 12),
             child: Row(
               children: [
                 const Expanded(
@@ -2265,6 +2292,8 @@ class _MatchRow {
     required this.week,
     required this.home,
     required this.away,
+    this.homeLogo = '',
+    this.awayLogo = '',
     required this.homeScore,
     required this.awayScore,
     required this.mineHome,
@@ -2277,6 +2306,8 @@ class _MatchRow {
   final int? week;
   final String home;
   final String away;
+  final String homeLogo;
+  final String awayLogo;
   final int? homeScore;
   final int? awayScore;
 
