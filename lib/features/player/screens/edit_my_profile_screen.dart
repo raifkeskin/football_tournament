@@ -53,6 +53,10 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
     text: widget.player.lastName,
   );
   XFile? _photo;
+
+  /// Kimliği onaylı mı: onaylıda adda yalnız Türkçe harf düzeltilir
+  /// (onaysız); onaysızda ad soyad değişebilir ama onaya gider.
+  late bool _verified = IdentityService.cached(widget.player.id) ?? false;
   bool _busy = false;
   String? _error;
 
@@ -73,6 +77,11 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
     _weightController.addListener(_onEdit);
     _firstController.addListener(_onEdit);
     _lastController.addListener(_onEdit);
+    IdentityService.isVerified(widget.player.id)
+        .then((v) {
+          if (mounted && v != _verified) setState(() => _verified = v);
+        })
+        .catchError((_) {});
   }
 
   void _onEdit() => setState(() => _error = null);
@@ -187,10 +196,11 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
       setState(() => _error = 'Değişiklik yapmadınız.');
       return;
     }
-    // Ad soyadda yalnız Türkçe harfler düzeltilebilir (Bılge → Bilge).
+    // Onaylı profilde adda yalnız Türkçe harfler düzeltilebilir.
     for (final k in [ProfileField.firstName, ProfileField.lastName]) {
       final v = changes[k];
-      if (v is String &&
+      if (_verified &&
+          v is String &&
           trFoldName(v) != trFoldName(widget.player.values[k] ?? '')) {
         setState(
           () => _error =
@@ -235,7 +245,8 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
         SnackBar(
           content: Text(
             pending
-                ? 'Talebin turnuva sorumlusu onayına gönderildi.'
+                ? 'Ad soyad değişikliğin turnuva sorumlusu onayına '
+                      'gönderildi; diğer bilgilerin kaydedildi.'
                 : 'Bilgilerin güncellendi.',
           ),
         ),
@@ -325,16 +336,18 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
 
   Widget _nameRow({
     required String label,
+    required String key,
     required TextEditingController controller,
   }) => AdminFieldRow(
     icon: Icons.badge_outlined,
     label: label,
+    trailing: _locked(key) ? _lockedTrailing(key) : null,
     child: TextField(
       controller: controller,
-      enabled: !_busy,
+      enabled: !_busy && !_locked(key),
       textCapitalization: TextCapitalization.words,
-      style: const TextStyle(
-        color: Colors.white,
+      style: TextStyle(
+        color: _locked(key) ? Colors.white54 : Colors.white,
         fontSize: 15,
         fontWeight: FontWeight.w700,
       ),
@@ -487,17 +500,28 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
             title: 'Ad Soyad',
             child: AdminFieldGroup(
               children: [
-                _nameRow(label: 'Ad', controller: _firstController),
-                _nameRow(label: 'Soyad', controller: _lastController),
+                _nameRow(
+                  label: 'Ad',
+                  key: ProfileField.firstName,
+                  controller: _firstController,
+                ),
+                _nameRow(
+                  label: 'Soyad',
+                  key: ProfileField.lastName,
+                  controller: _lastController,
+                ),
               ],
             ),
           ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(4, 0, 4, 14),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 0, 4, 14),
             child: Text(
-              'Yalnız Türkçe harfler (ı, ğ, ş, ü, ö, ç) düzeltilebilir; '
-              'ad değiştirilemez.',
-              style: TextStyle(color: kAdminMuted, fontSize: 12),
+              _verified
+                  ? 'Kimliğin onaylı: yalnız Türkçe harfler (ı, ğ, ş, ü, ö, '
+                        'ç) düzeltilebilir.'
+                  : 'Ad soyad değişikliği turnuva sorumlusu onayından sonra '
+                        'görünür.',
+              style: const TextStyle(color: kAdminMuted, fontSize: 12),
             ),
           ),
           AdminFormSection(
