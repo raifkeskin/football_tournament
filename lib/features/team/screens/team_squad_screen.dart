@@ -36,6 +36,7 @@ import '../../../core/widgets/app_date_picker.dart';
 import '../../../core/widgets/app_name_band.dart';
 import '../../../core/widgets/web_safe_image.dart';
 
+import 'package:football_tournament/core/widgets/photo_crop_screen.dart';
 import 'package:football_tournament/core/widgets/picked_image.dart';
 import 'package:football_tournament/core/widgets/admin_form.dart';
 
@@ -2415,16 +2416,38 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
   // Sıkıştırma yükleme servisinde yapılır; burada yalnızca seçilir. Dosya
   // sistemi kullanılmaz (web'de çalışmıyordu).
   Future<void> _pickPhoto() async {
-    final picked = await _picker.pickImage(source: ImageSource.gallery);
-    if (picked == null) return;
-    if (await picked.length() > 10 * 1024 * 1024) {
+    final raw = await _picker.pickImage(source: ImageSource.gallery);
+    if (raw == null) return;
+    if (await raw.length() > 10 * 1024 * 1024) {
       if (!mounted) return;
       _showError(
         'Dosya boyutu çok yüksek (Max 10MB). Lütfen daha düşük boyutlu bir görsel seçiniz.',
       );
       return;
     }
+    final bytes = await raw.readAsBytes();
     if (!mounted) return;
+    _setPicked(await cropPortraitPhoto(context, bytes));
+  }
+
+  /// Seçili ya da kayıtlı fotoğrafın kadrajını yeniden ayarlar.
+  Future<void> _reframePhoto() async {
+    final XFile? picked;
+    if (_pickedPhoto != null) {
+      final bytes = await _pickedPhoto!.readAsBytes();
+      if (!mounted) return;
+      picked = await cropPortraitPhoto(context, bytes);
+    } else {
+      picked = await cropPortraitPhotoFromUrl(
+        context,
+        widget.normalizeUrl((_existingPhotoUrl ?? '').trim()),
+      );
+    }
+    _setPicked(picked);
+  }
+
+  void _setPicked(XFile? picked) {
+    if (picked == null || !mounted) return;
     setState(() {
       _pickedPhoto = picked;
       _removePhoto = false;
@@ -2769,6 +2792,13 @@ class _PlayerFormScreenState extends State<PlayerFormScreen> {
           ),
         ),
         const SizedBox(height: 10),
+        if (hasPhoto)
+          TextButton.icon(
+            onPressed: _saving ? null : _reframePhoto,
+            icon: const Icon(Icons.crop_rounded, size: 18),
+            label: const Text('Kadrajı düzenle'),
+            style: TextButton.styleFrom(foregroundColor: kAdminAccent),
+          ),
         if (hasPhoto)
           TextButton.icon(
             onPressed: _saving

@@ -280,3 +280,12 @@ Uygulamada yapılan ve panele de dokunan değişiklikler buraya yazılır. Kulla
   - Bize maliyeti yoktur, çünkü indirme trafiği Google'dan gider. Alan ise yükleyenin, yani fotoğrafçının kotasından yer: maç başı ~500 MB, sezonda ~30 GB.
 - **Fotoğrafçıya sorulacak:** Drive'ında sezon boyunca yeterli yer var mı?
 - **Bağlı olduğu iş:** Drive'dan otomatik alma akışı (yayıncı gol MP4'leri ve fotoğraflar). Bu akış henüz yapılmadı; yayıncının ve fotoğrafçının cevapları bekleniyor.
+
+## 27. Maç fotoğraflarında "Bu benim" ve oyuncu galerisi — SONRAKİ SÜRÜM (2026-10-27)
+- **İstek:** Futbolcu maç albümünde kendisinin olduğu fotoğrafa "Bu benim" diyebilsin. İşaretlediği fotoğraflar oyuncu kartında ve profilinde "Galeri" bölümünde görünsün.
+- **Bağlam:** Ana profil fotoğrafı vesikalık olarak kalır. Galeriye ayrıca fotoğraf yüklenmez, yalnız maç albümündeki fotoğraflar işaretlenir.
+- **Açık sorular:**
+  - İşaret onaya gitsin mi, yoksa doğrudan mı görünsün?
+  - Bir fotoğrafta birden çok futbolcu kendini işaretleyebilsin mi?
+  - Galeride en fazla kaç fotoğraf olsun?
+- **Vazgeçildi:** Instagram hesabı bağlama ve ikonu (2026-10-27).
