@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../core/app_navigator.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'; // Supabase kontrolü için
 import 'package:football_tournament/screens/admin_panel_screen.dart';
 import '../../home/screens/main_navigator.dart';
@@ -14,6 +13,7 @@ import '../../../core/widgets/admin_form.dart';
 import 'my_profile_view.dart';
 import '../../../core/services/image_upload_service.dart';
 import '../../../core/widgets/web_safe_image.dart';
+import '../../../core/widgets/photo_crop_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, required this.onRequestHomeTab});
@@ -472,12 +472,7 @@ class _StaffHeaderCardState extends State<_StaffHeaderCard> {
     final controller = AppSession.of(context);
     final uid = Supabase.instance.client.auth.currentUser?.id;
     if (uid == null) return;
-    final file = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 800,
-      maxHeight: 800,
-      imageQuality: 85,
-    );
+    final file = await pickAndCropPortraitPhoto(context);
     if (file == null || !mounted) return;
     setState(() => _uploading = true);
     try {

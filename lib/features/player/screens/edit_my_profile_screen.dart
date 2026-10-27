@@ -3,8 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/services/app_session.dart';
+import '../../../core/services/app_settings.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
+import '../../../core/widgets/photo_crop_screen.dart';
 import '../../../core/widgets/picked_image.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../auth/widgets/phone_input.dart';
@@ -101,7 +103,25 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
   }
 
   Future<void> _pickPhoto() async {
-    final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
+    final picked = await pickAndCropPortraitPhoto(context);
+    _setPhoto(picked);
+  }
+
+  /// Seçili ya da yüklü fotoğrafın kadrajını yeniden ayarlar.
+  Future<void> _reframePhoto() async {
+    final current = (widget.player.photoUrl ?? '').trim();
+    final XFile? picked;
+    if (_photo != null) {
+      final bytes = await _photo!.readAsBytes();
+      if (!mounted) return;
+      picked = await cropPortraitPhoto(context, bytes);
+    } else {
+      picked = await cropPortraitPhotoFromUrl(context, current);
+    }
+    _setPhoto(picked);
+  }
+
+  void _setPhoto(XFile? picked) {
     if (picked == null || !mounted) return;
     setState(() {
       _photo = picked;
@@ -121,7 +141,8 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
     setState(() {
       _mainPosition = v;
       final subs = kSubPositionsByMain[v] ?? const [];
-      _subPosition = subs.length == 1 ? subs.first : null;
+      // Kalecinin alt mevkisi yok: eskisi boşaltılır.
+      _subPosition = subs.isEmpty ? '' : null;
       _error = null;
     });
   }
@@ -149,6 +170,7 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
       return;
     }
     if (changes.containsKey(ProfileField.mainPosition) &&
+        (kSubPositionsByMain[_mainPosition] ?? const []).isNotEmpty &&
         (_subPosition ?? '').isEmpty) {
       setState(() => _error = 'Alt mevkiyi de seçin.');
       return;
@@ -349,6 +371,13 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
             ],
           ),
         ),
+        if (!locked && (_photo != null || current.isNotEmpty))
+          TextButton.icon(
+            onPressed: _busy ? null : _reframePhoto,
+            style: TextButton.styleFrom(foregroundColor: kAdminAccent),
+            icon: const Icon(Icons.crop_rounded, size: 18),
+            label: const Text('Kadrajı düzenle'),
+          ),
         if (locked || _photo != null) ...[
           const SizedBox(height: 10),
           Container(
@@ -374,6 +403,10 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final positionLocked = _positionLocked;
+    // Mevki sekmesi açıksa mevkiler oyuncu kartının Mevki sekmesinden düzenlenir.
+    final positionsInTab =
+        AppSettings.positionsTabEnabled.value ||
+        AppSession.of(context).value.isAdmin;
     final pendingPos = [
       _pendingValues[ProfileField.mainPosition],
       _pendingValues[ProfileField.subPosition],
@@ -412,31 +445,32 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
             title: 'Futbol ve Kişisel',
             child: AdminFieldGroup(
               children: [
-                positionLocked
-                    ? AdminFieldRow(
-                        icon: Icons.sports_soccer_rounded,
-                        label: 'Mevki',
-                        trailing: _lockedTrailing(
-                          ProfileField.mainPosition,
-                          label: pendingPos,
-                        ),
-                        child: Text(
-                          _mainPosition ?? '-',
-                          style: const TextStyle(
-                            color: Colors.white54,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      )
-                    : AdminSelectRow(
-                        icon: Icons.sports_soccer_rounded,
-                        label: 'Mevki',
-                        value: _mainPosition,
-                        placeholder: 'Seçin',
-                        onTap: _busy ? null : _pickMainPosition,
+                if (!positionsInTab && positionLocked)
+                  AdminFieldRow(
+                    icon: Icons.sports_soccer_rounded,
+                    label: 'Mevki',
+                    trailing: _lockedTrailing(
+                      ProfileField.mainPosition,
+                      label: pendingPos,
+                    ),
+                    child: Text(
+                      _mainPosition ?? '-',
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
                       ),
-                if (!positionLocked && subs.length > 1)
+                    ),
+                  )
+                else if (!positionsInTab)
+                  AdminSelectRow(
+                    icon: Icons.sports_soccer_rounded,
+                    label: 'Mevki',
+                    value: _mainPosition,
+                    placeholder: 'Seçin',
+                    onTap: _busy ? null : _pickMainPosition,
+                  ),
+                if (!positionsInTab && !positionLocked && subs.length > 1)
                   AdminSelectRow(
                     icon: Icons.tune_rounded,
                     label: 'Alt Mevki',

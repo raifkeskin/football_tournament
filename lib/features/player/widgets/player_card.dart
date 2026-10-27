@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -6,6 +5,7 @@ import '../../team/widgets/team_page_tabs.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/active_tournament.dart';
+import '../../../core/services/app_settings.dart';
 import '../../../core/services/app_session.dart';
 import '../../../core/widgets/youtube_player_page.dart';
 import '../../match/widgets/youtube_find_sheet.dart' show BroadcastThumb;
@@ -19,8 +19,10 @@ import '../../../core/utils/team_name.dart';
 import '../../../core/widgets/admin_page.dart' show showAdminConfirmDialog;
 import '../../identity/identity_access.dart';
 import '../../identity/identity_service.dart';
-import '../../identity/identity_verify_screen.dart';
 import '../../identity/verified_badge.dart';
+import '../../match/models/match.dart';
+import '../../match/screens/match_details_screen.dart';
+import 'player_positions_tab.dart';
 
 // Uygulamanın ortak renkleri
 const _bgDark = Color(0xFF0F172A);
@@ -199,8 +201,30 @@ class _PlayerCardState extends State<PlayerCard> {
   /// Açık gol satırı (dar listede dokununca ayrıntısı açılır).
   String? _openGoal;
 
-  /// Alt bölüm sekmesi: 0 Özet, 1 Turnuvalar, 2 Goller.
+  /// Alt bölüm sekmesi: 0 Özet, 1 Maçlar, 2 Kariyer, 3 Goller, 4 Mevki.
   int _tab = 0;
+
+  /// Maçlar sekmesi turnuva süzgeci: -1 tümü, diğerleri bu sezonun sırası.
+  int _matchFilter = -1;
+
+  /// Özet › Bu sezon sekmesi: -1 toplam, diğerleri turnuva sırası.
+  int _seasonTab = -1;
+
+  /// Kartın oyuncu id'si (eski girişler id'yi [PlayerCard.playerPhone]'da
+  /// taşır).
+  String get _cardPlayerId {
+    final id = widget.playerId.trim();
+    if (id.isNotEmpty) return id;
+    final key = widget.playerPhone.trim();
+    return _uuidLike.hasMatch(key) ? key : '';
+  }
+
+  /// Mevki sekmesi: açılana dek yalnız admin (veritabanı da aynı anahtarla
+  /// kaydı açar).
+  bool get _showPositionsTab =>
+      _cardPlayerId.isNotEmpty &&
+      (AppSettings.positionsTabEnabled.value ||
+          AppSession.of(context).value.isAdmin);
 
   /// Kart, uygulamanın içinde bulunduğu turnuvanın renklerini alır; teması
   /// olmayan turnuvada varsayılan yeşil.
@@ -219,8 +243,10 @@ class _PlayerCardState extends State<PlayerCard> {
     index: _tab,
     labels: [
       'Özet',
-      'Turnuvalar',
+      'Maçlar',
+      'Kariyer',
       goalCount > 0 ? 'Goller ($goalCount)' : 'Goller',
+      if (_showPositionsTab) 'Mevki',
     ],
     indicatorColor: _tone,
     onChanged: (i) => setState(() => _tab = i),
@@ -261,23 +287,16 @@ class _PlayerCardState extends State<PlayerCard> {
     return age < 0 ? null : age;
   }
 
-  /// "16/09/1989 (37)"; tarih okunamazsa yalnız yıl, o da yoksa "-".
-  String _birthText(int? age) {
+  /// "13.06.1987"; tarih okunamazsa yalnız yıl, o da yoksa "-".
+  String _birthDateText() {
     final s = widget.birthDate.trim();
     final m = RegExp(r'^(\d{4})-(\d{2})-(\d{2})').firstMatch(s);
-    final ageText = age == null ? '' : ' ($age)';
-    if (m != null) return '${m[3]}/${m[2]}/${m[1]}$ageText';
-    final y = RegExp(r'(\d{4})').firstMatch(s)?.group(1);
-    return y == null ? '-' : '$y$ageText';
-  }
-
-  /// "175 cm · 80 kg"; biri yoksa yalnız diğeri, ikisi de yoksa "-".
-  String _bodyText() {
-    final parts = [
-      if (widget.height != null) '${widget.height} cm',
-      if (widget.weight != null) '${widget.weight} kg',
-    ];
-    return parts.isEmpty ? '-' : parts.join(' · ');
+    if (m != null) return '${m[3]}.${m[2]}.${m[1]}';
+    final dmy = RegExp(r'^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$').firstMatch(s);
+    if (dmy != null) {
+      return '${dmy[1]!.padLeft(2, '0')}.${dmy[2]!.padLeft(2, '0')}.${dmy[3]}';
+    }
+    return RegExp(r'(\d{4})').firstMatch(s)?.group(1) ?? '-';
   }
 
   String _normalizeUrl(String raw) {
@@ -324,26 +343,37 @@ class _PlayerCardState extends State<PlayerCard> {
   Future<String?> _resolvePlayerId(String key) async =>
       _uuidLike.hasMatch(key) ? key : null;
 
-  Future<Map<String, _StatTotals>> _loadTotalsBySeason(String pid) async {
+  Future<_StatsLoad> _loadStats(String pid) async {
     final events = <Map<String, dynamic>>[];
     final rosterMatchIds = <String>{};
+    final startedMatchIds = <String>{};
+    // Maçta oynadığı takım (esameden).
+    final teamByMatch = <String, String>{};
     try {
       final res = await _sb
           .from('match_events')
           .select(
-            'match_id, event_type, player_id, assist_player_id, is_own_goal',
+            'match_id, event_type, player_id, assist_player_id, '
+            'sub_in_player_id, is_own_goal, minute',
           )
-          .or('player_id.eq.$pid,assist_player_id.eq.$pid');
+          .or(
+            'player_id.eq.$pid,assist_player_id.eq.$pid,'
+            'sub_in_player_id.eq.$pid',
+          );
       events.addAll(res.cast<Map<String, dynamic>>());
     } catch (_) {}
     try {
       final res = await _sb
           .from('match_rosters')
-          .select('match_id')
+          .select('match_id, team_id, is_starting')
           .eq('player_id', pid);
       for (final r in res) {
         final id = (r['match_id'] ?? '').toString();
-        if (id.isNotEmpty) rosterMatchIds.add(id);
+        if (id.isEmpty) continue;
+        rosterMatchIds.add(id);
+        final tid = (r['team_id'] ?? '').toString();
+        if (tid.isNotEmpty) teamByMatch[id] = tid;
+        if (r['is_starting'] == true) startedMatchIds.add(id);
       }
     } catch (_) {}
 
@@ -351,6 +381,9 @@ class _PlayerCardState extends State<PlayerCard> {
       ...rosterMatchIds,
       for (final e in events) (e['match_id'] ?? '').toString(),
     }..remove('');
+
+    // Maç süresi (dakika) sezonun devre süresinden.
+    final periodBySeason = <String, int>{};
 
     final seasonByMatch = <String, String>{};
     final finished = <String>{};
@@ -373,11 +406,28 @@ class _PlayerCardState extends State<PlayerCard> {
       } catch (_) {}
     }
 
+    final seasonIdsForPeriods = seasonByMatch.values.toSet();
+    if (seasonIdsForPeriods.isNotEmpty) {
+      try {
+        final res = await _sb
+            .from('seasons')
+            .select('id, match_period_duration')
+            .inFilter('id', seasonIdsForPeriods.toList());
+        for (final r in res) {
+          periodBySeason[(r['id'] ?? '').toString()] = _readInt(
+            r['match_period_duration'],
+          );
+        }
+      } catch (_) {}
+    }
+
     final out = <String, _StatTotals>{};
+    final byMatch = <String, _StatTotals>{};
     void add(String? matchId, _StatTotals t) {
       final sid = seasonByMatch[matchId ?? ''];
       if (sid == null) return;
       out[sid] = (out[sid] ?? const _StatTotals()) + t;
+      byMatch[matchId!] = (byMatch[matchId] ?? const _StatTotals()) + t;
     }
 
     // Oynanan maç: esamede olduğu ya da olayı olan bitmiş maçlar (tekil).
@@ -386,9 +436,45 @@ class _PlayerCardState extends State<PlayerCard> {
       for (final e in events)
         if ((e['player_id'] ?? '').toString() == pid)
           (e['match_id'] ?? '').toString(),
-    }.where(finished.contains);
+    }.where(finished.contains).toSet();
     for (final mid in played) {
       add(mid, const _StatTotals(matches: 1));
+    }
+
+    // İlk 11 ve dakika: ilk 11'de başladıysa 0. dakikadan, oyuna girdiyse
+    // giriş dakikasından; oyundan çıkış ya da kırmızı kartta biter. Dakikası
+    // girilmemiş değişiklikle giren oyuncuya dakika yazılmaz.
+    int? minuteOf(Map<String, dynamic> e) =>
+        e['minute'] == null ? null : _readInt(e['minute']);
+    for (final mid in finished) {
+      final started = startedMatchIds.contains(mid);
+      if (started) add(mid, const _StatTotals(starts: 1));
+      final duration = 2 * (periodBySeason[seasonByMatch[mid]] ?? 0);
+      final mine = [
+        for (final e in events)
+          if ((e['match_id'] ?? '').toString() == mid) e,
+      ];
+      int? inAt = started ? 0 : null;
+      if (!started) {
+        for (final e in mine) {
+          if (e['event_type'] == 'substitution' &&
+              (e['sub_in_player_id'] ?? '').toString() == pid) {
+            inAt = minuteOf(e);
+          }
+        }
+      }
+      if (inAt == null || duration <= 0) continue;
+      var outAt = duration;
+      for (final e in mine) {
+        final type = (e['event_type'] ?? '').toString();
+        final isOut =
+            (type == 'substitution' || type == 'red_card') &&
+            (e['player_id'] ?? '').toString() == pid;
+        final m = minuteOf(e);
+        if (isOut && m != null && m < outAt) outAt = m;
+      }
+      final mins = (outAt - inAt).clamp(0, duration);
+      add(mid, _StatTotals(minutes: mins));
     }
 
     final yellowMatches = <String>{};
@@ -423,6 +509,7 @@ class _PlayerCardState extends State<PlayerCard> {
     }
 
     // Olayı olmayan sezonlar için kayıtlı sezon istatistikleri (ör. mock veri).
+    final fallbackSeasons = <String>{};
     try {
       final res = await _sb
           .from('player_season_stats')
@@ -431,6 +518,7 @@ class _PlayerCardState extends State<PlayerCard> {
       for (final r in res) {
         final sid = (r['season_id'] ?? '').toString();
         if (sid.isEmpty || out.containsKey(sid)) continue;
+        fallbackSeasons.add(sid);
         out[sid] = _StatTotals(
           matches: _readInt(r['matches_played']),
           goals: _readInt(r['goals']),
@@ -441,7 +529,14 @@ class _PlayerCardState extends State<PlayerCard> {
       }
     } catch (_) {}
 
-    return out;
+    return _StatsLoad(
+      bySeason: out,
+      byMatch: byMatch,
+      played: played,
+      seasonByMatch: seasonByMatch,
+      teamByMatch: teamByMatch,
+      fallbackSeasons: fallbackSeasons,
+    );
   }
 
   /// Oyuncunun onaylı gol videoları, en yeni maç üstte. Kesit oyuncuya
@@ -551,36 +646,57 @@ class _PlayerCardState extends State<PlayerCard> {
 
     final pid = await _resolvePlayerId(playerKey);
     if (pid == null || pid.isEmpty) return _PlayerCardData.empty();
-    final totalsBySeason = await _loadTotalsBySeason(pid);
+    final stats = await _loadStats(pid);
+    final totalsBySeason = stats.bySeason;
 
-    // Sezon başına oynadığı takım(lar).
+    // Sezon başına oynadığı takım(lar); bu sezonun armaları için id ve logo.
     final teamsBySeason = <String, List<String>>{};
+    final teamIdBySeason = <String, String>{};
+    final teamName = <String, String>{};
+    final teamLogo = <String, String>{};
+    final teamShort = <String, String>{};
     try {
       final links = await _sb
           .from('season_team_players')
-          .select('season_id, team_id')
+          .select('season_id, team_id, is_active')
           .eq('player_id', pid);
       final teamIds = {for (final l in links) (l['team_id'] ?? '').toString()}
         ..remove('');
-      final teamName = <String, String>{};
       if (teamIds.isNotEmpty) {
         final res = await _sb
             .from('teams')
-            .select('id, name')
+            .select('id, name, short_name, logo_url')
             .inFilter('id', teamIds.toList());
         for (final t in res) {
-          teamName[(t['id'] ?? '').toString()] = (t['name'] ?? '')
-              .toString()
-              .trim();
+          final id = (t['id'] ?? '').toString();
+          teamName[id] = (t['name'] ?? '').toString().trim();
+          final short = (t['short_name'] ?? '').toString().trim();
+          if (short.isNotEmpty) teamShort[id] = short;
+          teamLogo[id] = (t['logo_url'] ?? '').toString().trim();
         }
       }
       for (final l in links) {
         final sid = (l['season_id'] ?? '').toString();
-        final n = teamName[(l['team_id'] ?? '').toString()] ?? '';
+        final tid = (l['team_id'] ?? '').toString();
+        final n = teamName[tid] ?? '';
         if (sid.isEmpty || n.isEmpty) continue;
         final list = teamsBySeason.putIfAbsent(sid, () => []);
         if (!list.contains(n)) list.add(n);
+        // Sezon içinde takım değiştirdiyse güncel (aktif) kayıt.
+        if (l['is_active'] != false || !teamIdBySeason.containsKey(sid)) {
+          teamIdBySeason[sid] = tid;
+        }
       }
+    } catch (_) {}
+
+    var foot = '';
+    try {
+      final r = await _sb
+          .from('players')
+          .select('preferred_foot')
+          .eq('id', pid)
+          .maybeSingle();
+      foot = (r?['preferred_foot'] ?? '').toString().trim();
     } catch (_) {}
 
     // Maçı / esamesi olmasa da kayıtlı olduğu aktif sezonlar da listelenir.
@@ -592,7 +708,10 @@ class _PlayerCardState extends State<PlayerCard> {
       try {
         final res = await _sb
             .from('seasons')
-            .select('id, name, league_id, start_date, is_active')
+            .select(
+              'id, name, league_id, start_date, is_active, deleted_at, '
+              'season_year',
+            )
             .inFilter('id', seasonIds);
         for (final row in res) {
           final id = (row['id'] ?? '').toString().trim();
@@ -608,7 +727,7 @@ class _PlayerCardState extends State<PlayerCard> {
         try {
           final res = await _sb
               .from('leagues')
-              .select('id, name')
+              .select('id, name, logo_url')
               .inFilter('id', leagueIds.toList());
           for (final row in res) {
             final id = (row['id'] ?? '').toString().trim();
@@ -660,7 +779,144 @@ class _PlayerCardState extends State<PlayerCard> {
       (a, b) => b.seasons.first.sortKey.compareTo(a.seasons.first.sortKey),
     );
 
-    return _PlayerCardData(overall: overall, tournaments: tournaments);
+    // Bu sezon: kayıtlı olduğu aktif sezonlar (turnuva başına bir sekme).
+    final current = <_CurrentEntry>[];
+    for (final sid in seasonIds) {
+      final row = seasonById[sid];
+      if (row == null ||
+          row['is_active'] != true ||
+          row['deleted_at'] != null) {
+        continue;
+      }
+      final league = leagueById[(row['league_id'] ?? '').toString().trim()];
+      final tid = teamIdBySeason[sid] ?? '';
+      current.add(
+        _CurrentEntry(
+          seasonId: sid,
+          leagueName: (league?['name'] ?? 'Turnuva').toString().trim(),
+          leagueLogo: (league?['logo_url'] ?? '').toString().trim(),
+          teamId: tid,
+          teamName: teamName[tid] ?? '',
+          teamLogo: teamLogo[tid] ?? '',
+          sortKey: (row['start_date'] ?? row['name'] ?? '').toString(),
+          totals: totalsBySeason[sid] ?? const _StatTotals(),
+        ),
+      );
+    }
+    current.sort((a, b) => b.sortKey.compareTo(a.sortKey));
+
+    // Maçlar: oynadığı bitmiş maçlar, en yeni üstte.
+    final matchRows = <_MatchRow>[];
+    if (stats.played.isNotEmpty) {
+      try {
+        final res = await _sb
+            .from('matches')
+            .select(
+              'id, season_id, match_date, week, home_score, away_score, '
+              'home_team_id, away_team_id, '
+              'home:teams!matches_home_team_id_fkey(name, logo_url), '
+              'away:teams!matches_away_team_id_fkey(name, logo_url)',
+            )
+            .inFilter('id', stats.played.toList());
+        String nm(dynamic v) =>
+            v is Map ? (v['name'] ?? '').toString().trim() : '';
+        String lg(dynamic v) =>
+            v is Map ? (v['logo_url'] ?? '').toString().trim() : '';
+        for (final m in res) {
+          final id = (m['id'] ?? '').toString();
+          final sid = (m['season_id'] ?? '').toString();
+          final home = (m['home_team_id'] ?? '').toString();
+          final away = (m['away_team_id'] ?? '').toString();
+          var mine = stats.teamByMatch[id] ?? teamIdBySeason[sid] ?? '';
+          if (mine != home && mine != away) mine = '';
+          matchRows.add(
+            _MatchRow(
+              id: id,
+              seasonId: sid,
+              date: DateTime.tryParse((m['match_date'] ?? '').toString()),
+              week: m['week'] == null ? null : _readInt(m['week']),
+              home: nm(m['home']),
+              away: nm(m['away']),
+              homeLogo: lg(m['home']),
+              awayLogo: lg(m['away']),
+              homeScore: m['home_score'] == null
+                  ? null
+                  : _readInt(m['home_score']),
+              awayScore: m['away_score'] == null
+                  ? null
+                  : _readInt(m['away_score']),
+              mineHome: mine.isEmpty ? null : mine == home,
+              totals: stats.byMatch[id] ?? const _StatTotals(),
+            ),
+          );
+        }
+      } catch (_) {}
+    }
+    matchRows.sort((a, b) {
+      final da = a.date, db = b.date;
+      if (da != null && db != null) return db.compareTo(da);
+      return da == null ? 1 : -1;
+    });
+
+    // Kariyer: sezon yılı + takım; turnuvadan bağımsız toplanır.
+    String yearOf(String sid) {
+      final row = seasonById[sid];
+      final y = (row?['season_year'] ?? '').toString().trim();
+      if (y.isNotEmpty) return y;
+      return RegExp(r'(\d{4})')
+              .firstMatch((row?['start_date'] ?? row?['name'] ?? '').toString())
+              ?.group(1) ??
+          '-';
+    }
+
+    final career = <String, _CareerRow>{};
+    void addCareer(String sid, String tid, _StatTotals t) {
+      final row = seasonById[sid];
+      if (row == null || row['deleted_at'] != null) return;
+      final year = yearOf(sid);
+      final key = '$year|$tid';
+      final prev = career[key];
+      career[key] = _CareerRow(
+        year: year,
+        // Kariyerde varsa kısa ad.
+        teamName: teamShort[tid] ?? teamName[tid] ?? '',
+        teamLogo: teamLogo[tid] ?? '',
+        totals: (prev?.totals ?? const _StatTotals()) + t,
+      );
+    }
+
+    final seasonsWithMatches = <String>{};
+    stats.byMatch.forEach((mid, t) {
+      final sid = stats.seasonByMatch[mid] ?? '';
+      if (sid.isEmpty) return;
+      seasonsWithMatches.add(sid);
+      addCareer(sid, stats.teamByMatch[mid] ?? teamIdBySeason[sid] ?? '', t);
+    });
+    for (final sid in {...stats.fallbackSeasons, ...teamIdBySeason.keys}) {
+      if (seasonsWithMatches.contains(sid)) continue;
+      // Kayıtlı ama maçı yok: yalnız aktif sezon ya da eski sezon istatistiği.
+      final active = seasonById[sid]?['is_active'] == true;
+      if (!active && !stats.fallbackSeasons.contains(sid)) continue;
+      addCareer(
+        sid,
+        teamIdBySeason[sid] ?? '',
+        totalsBySeason[sid] ?? const _StatTotals(),
+      );
+    }
+    final careerRows = career.values.toList()
+      ..sort((a, b) {
+        final c = b.year.compareTo(a.year);
+        return c != 0 ? c : a.teamName.compareTo(b.teamName);
+      });
+
+    return _PlayerCardData(
+      overall: overall,
+      tournaments: tournaments,
+      current: current,
+      foot: foot,
+      matches: matchRows,
+      career: careerRows,
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -679,19 +935,25 @@ class _PlayerCardState extends State<PlayerCard> {
           return ListView(
             padding: EdgeInsets.zero,
             children: [
-              _hero(context),
+              _hero(context, data),
               Padding(
                 // Üst kart ile sekmeler arası dar tutulur.
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                // Sekme içerikleri ekran kenarına yakın (dar kenar boşluğu).
+                padding: const EdgeInsets.fromLTRB(4, 4, 4, 24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    FutureBuilder<List<_GoalClip>>(
-                      future: _goals,
-                      builder: (context, g) => _tabBar(g.data?.length ?? 0),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: FutureBuilder<List<_GoalClip>>(
+                        future: _goals,
+                        builder: (context, g) => _tabBar(g.data?.length ?? 0),
+                      ),
                     ),
                     const SizedBox(height: 10),
-                    if (_tab == 2)
+                    if (_tab == 4 && _showPositionsTab)
+                      PlayerPositionsTab(playerId: _cardPlayerId, accent: _tone)
+                    else if (_tab == 3)
                       _goalsTab()
                     else if (loading)
                       const Padding(
@@ -699,19 +961,11 @@ class _PlayerCardState extends State<PlayerCard> {
                         child: Center(child: CircularProgressIndicator()),
                       )
                     else if (_tab == 0)
-                      _summaryGrid(data.overall)
-                    else if (data.tournaments.isEmpty)
-                      Container(
-                        padding: const EdgeInsets.all(18),
-                        decoration: _panel(),
-                        child: const Text(
-                          'Henüz turnuva verisi yok.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: _mid),
-                        ),
-                      )
+                      _summary(data)
+                    else if (_tab == 1)
+                      _matchesTab(data)
                     else
-                      _historyTable(data.tournaments),
+                      _careerTab(data),
                   ],
                 ),
               ),
@@ -915,71 +1169,36 @@ class _PlayerCardState extends State<PlayerCard> {
     border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
   );
 
-  /// Üst bölüm: solda büyük oyuncu görseli (~%62), sağda yaş / boy / kilo /
-  /// doğum alt alta; altında isim ve mevki.
-  Widget _hero(BuildContext context) {
+  /// Üst bölüm: ortada vesikalık fotoğraf (sağ üst köşesinde kimlik onayı),
+  /// solda bu sezon oynadığı takımların armaları; altında ad soyad.
+  Widget _hero(BuildContext context, _PlayerCardData data) {
     final photo = _normalizeUrl(widget.photoUrl);
-    final number = widget.number.trim();
-    final pos = widget.position.trim();
     final topInset = MediaQuery.paddingOf(context).top;
     final name = widget.name.trim().isEmpty ? '-' : widget.name.trim();
-    final age = _ageFromBirthDate(widget.birthDate);
-    final photoHeight = (MediaQuery.of(context).size.height * 0.26).clamp(
-      212.0,
-      244.0,
-    );
 
-    Widget info(IconData icon, String label, String value) => Expanded(
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.22),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Row(
-              children: [
-                Icon(icon, size: 13, color: _tone),
-                const SizedBox(width: 5),
-                Text(
-                  label,
-                  style: const TextStyle(
-                    color: _mid,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 2),
-            // Değer sağa yaslı; etiket solda kalır.
-            Align(
-              alignment: Alignment.centerRight,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerRight,
-                child: Text(
-                  value,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 15,
-                    fontFeatures: [FontFeature.tabularFigures()],
-                  ),
-                ),
+    // Aynı takım birden çok turnuvadaysa arması bir kez gösterilir.
+    final crests = <_CurrentEntry>[];
+    for (final e in data.current) {
+      if (e.teamId.isEmpty || crests.any((c) => c.teamId == e.teamId)) continue;
+      crests.add(e);
+    }
+
+    Widget crest(_CurrentEntry e) => Tooltip(
+      message: e.teamName,
+      child: SizedBox(
+        width: 40,
+        height: 40,
+        child: e.teamLogo.isEmpty
+            ? const Icon(Icons.shield_outlined, color: _mid, size: 22)
+            : WebSafeImage(
+                url: _normalizeUrl(e.teamLogo),
+                fit: BoxFit.contain,
+                fallbackIconSize: 20,
               ),
-            ),
-          ],
-        ),
       ),
     );
 
-    final hero = Container(
+    return Container(
       decoration: BoxDecoration(
         // Turnuva renginin koyulaştırılmış degradesi; beyaz yazı okunur kalır.
         gradient: LinearGradient(
@@ -990,47 +1209,52 @@ class _PlayerCardState extends State<PlayerCard> {
             Color.lerp(_primary, Colors.black, 0.5)!,
           ],
         ),
-        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(28)),
       ),
-      // Tam ekran: üst bölüm durum çubuğunun altına uzanır.
-      padding: EdgeInsets.fromLTRB(16, topInset + 44, 16, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      // Tam ekran: üst bölüm durum çubuğunun altına uzanır; kapat düğmesi
+      // fotoğraf satırının üstüne biner, bölüm dar kalır.
+      padding: EdgeInsets.fromLTRB(16, topInset + 12, 16, 14),
+      child: Stack(
+        clipBehavior: Clip.none,
         children: [
-          SizedBox(
-            height: photoHeight,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  flex: 62,
-                  child: Stack(
-                    fit: StackFit.expand,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          for (var i = 0; i < crests.length && i < 3; i++) ...[
+                            if (i > 0) const SizedBox(height: 6),
+                            crest(crests[i]),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                  Stack(
+                    clipBehavior: Clip.none,
                     children: [
                       Container(
+                        width: 84,
+                        height: 108,
                         clipBehavior: Clip.antiAlias,
                         decoration: BoxDecoration(
                           color: _bgDark,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: _tone.withValues(alpha: 0.6),
-                            width: 1.5,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: _tone.withValues(alpha: 0.18),
-                              blurRadius: 20,
-                            ),
-                          ],
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: _tone, width: 2),
                         ),
                         child: photo.isEmpty
-                            ? Align(
-                                alignment: const Alignment(0, -0.25),
+                            ? Center(
                                 child: Text(
                                   _initials(name),
                                   style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 56,
+                                    color: Colors.white70,
+                                    fontSize: 30,
                                     fontWeight: FontWeight.w800,
                                   ),
                                 ),
@@ -1038,181 +1262,71 @@ class _PlayerCardState extends State<PlayerCard> {
                             : WebSafeImage(
                                 url: photo,
                                 fit: BoxFit.cover,
-                                fallbackIconSize: 48,
+                                fallbackIconSize: 32,
                               ),
                       ),
-                      // İsim ve mevki görselin altında, okunsun diye koyulaşma.
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        child: Container(
-                          padding: const EdgeInsets.fromLTRB(12, 28, 12, 10),
-                          decoration: const BoxDecoration(
-                            borderRadius: BorderRadius.vertical(
-                              bottom: Radius.circular(20),
-                            ),
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [Color(0x000F172A), Color(0xE60F172A)],
-                            ),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text.rich(
-                                TextSpan(
-                                  text: name,
-                                  children: [
-                                    if (widget.playerId.isNotEmpty)
-                                      WidgetSpan(
-                                        alignment: PlaceholderAlignment.middle,
-                                        child: VerifiedBadgeFor(
-                                          playerId: widget.playerId,
-                                          size: 19,
-                                          leading: 6,
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 19,
-                                  fontWeight: FontWeight.w800,
-                                  height: 1.1,
-                                  shadows: [
-                                    Shadow(
-                                      color: Colors.black54,
-                                      blurRadius: 10,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      if (number.isNotEmpty)
+                      if (widget.playerId.isNotEmpty)
                         Positioned(
-                          top: 10,
-                          left: 10,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: _tone,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              '#$number',
-                              style: TextStyle(
-                                color: _on(_tone),
-                                fontWeight: FontWeight.w800,
-                                fontSize: 15,
-                              ),
-                            ),
+                          top: -12,
+                          right: -12,
+                          child: _IdentityMenu(
+                            playerId: widget.playerId,
+                            playerName: widget.name,
                           ),
                         ),
                     ],
                   ),
+                  const Expanded(child: SizedBox()),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                name,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  height: 1.1,
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  flex: 38,
-                  child: Column(
-                    children: [
-                      // "16/09/1989 (37)"
-                      info(
-                        Icons.cake_outlined,
-                        'Doğum Tarihi',
-                        _birthText(age),
-                      ),
-                      const SizedBox(height: 8),
-                      info(Icons.height_rounded, 'Boy / Kilo', _bodyText()),
-                      const SizedBox(height: 8),
-                      info(
-                        Icons.sports_soccer_outlined,
-                        'Ana Mevki',
-                        (pos.isEmpty || pos == '-') &&
-                                widget.mainPosition.trim().isEmpty
-                            ? '-'
-                            : positionLineLabels[positionLineOf(
-                                widget.mainPosition,
-                                pos,
-                              )],
-                      ),
-                      const SizedBox(height: 8),
-                      info(
-                        Icons.my_location_rounded,
-                        'Alt Mevki',
-                        widget.subPosition.trim().isEmpty
-                            ? '-'
-                            : widget.subPosition.trim(),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+              ),
+            ],
+          ),
+          Positioned(
+            top: -10,
+            right: -8,
+            child: IconButton(
+              onPressed: () => Navigator.of(context).maybePop(),
+              icon: const Icon(Icons.close_rounded, color: Colors.white70),
+              tooltip: 'Kapat',
             ),
           ),
         ],
       ),
     );
-    return Stack(
-      children: [
-        hero,
-        Positioned(
-          top: topInset,
-          right: 0,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (widget.playerId.isNotEmpty)
-                _IdentityMenu(
-                  playerId: widget.playerId,
-                  playerName: widget.name,
-                ),
-              IconButton(
-                onPressed: () => Navigator.of(context).maybePop(),
-                icon: const Icon(Icons.close_rounded, color: Colors.white70),
-                tooltip: 'Kapat',
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
   }
 
-  Widget _summaryGrid(_StatTotals t) {
-    Widget tile(String label, int value, IconData icon, Color color) {
-      return Container(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.10),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withValues(alpha: 0.28)),
-        ),
+  /// Özet: künye kutuları (3×2) ve bu sezonun istatistikleri; birden çok
+  /// turnuvada oynuyorsa üstte "Toplam" + turnuva logoları sekmeleri.
+  Widget _summary(_PlayerCardData data) {
+    final age = _ageFromBirthDate(widget.birthDate);
+    final pos = widget.position.trim();
+    final line =
+        (pos.isEmpty || pos == '-') && widget.mainPosition.trim().isEmpty
+        ? '-'
+        : positionLineLabels[positionLineOf(widget.mainPosition, pos)];
+    final sub = widget.subPosition.trim();
+
+    Widget info(String label, String value, [String note = '']) => Expanded(
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 62),
+        padding: const EdgeInsets.all(10),
+        decoration: _panel(),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Icon(icon, color: color, size: 18),
-            Text(
-              '$value',
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-                fontSize: 24,
-                height: 1.1,
-              ),
-            ),
             Text(
               label,
               maxLines: 1,
@@ -1220,91 +1334,579 @@ class _PlayerCardState extends State<PlayerCard> {
               style: const TextStyle(
                 color: _mid,
                 fontSize: 11,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w700,
               ),
             ),
+            const SizedBox(height: 3),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                value,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            if (note.isNotEmpty)
+              Text(note, style: const TextStyle(color: _mid, fontSize: 11)),
           ],
         ),
-      );
-    }
+      ),
+    );
 
-    return GridView.count(
-      crossAxisCount: 3,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      padding: EdgeInsets.zero,
-      crossAxisSpacing: 8,
-      mainAxisSpacing: 8,
-      childAspectRatio: 1.15,
+    Widget heading(String t) => Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(
+        t,
+        style: const TextStyle(
+          color: _mid,
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 1.2,
+        ),
+      ),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        tile('Maç', t.matches, Icons.sports_soccer_rounded, _mid),
-        tile('Gol', t.goals, Icons.sports_score_rounded, _accent),
-        tile('Asist', t.assists, Icons.assistant_direction_rounded, _purple),
-        tile('Maçın Adamı', t.motm, Icons.star_rounded, _yellow),
-        tile('Sarı Kart', t.yellow, Icons.rectangle_rounded, _yellow),
-        tile('Kırmızı Kart', t.red, Icons.rectangle_rounded, _red),
+        heading('KÜNYE'),
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              info(
+                'Doğum tarihi',
+                _birthDateText(),
+                age == null ? '' : '$age yaş',
+              ),
+              const SizedBox(width: 8),
+              info('Boy', widget.height == null ? '-' : '${widget.height} cm'),
+              const SizedBox(width: 8),
+              info('Kilo', widget.weight == null ? '-' : '${widget.weight} kg'),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              info('Ana mevki', line),
+              const SizedBox(width: 8),
+              info('Alt mevki', sub.isEmpty ? '-' : sub),
+              const SizedBox(width: 8),
+              info('Kullandığı ayak', data.foot.isEmpty ? '-' : data.foot),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+        heading('BU SEZON'),
+        _seasonBox(data),
       ],
     );
   }
 
-  /// Turnuva > sezon satırları; sütunlar: M G A S K.
-  Widget _historyTable(List<_TournamentNode> tournaments) {
-    const colW = 30.0;
-    Widget cell(String v, {Color color = Colors.white, bool bold = false}) =>
-        SizedBox(
-          width: colW,
-          child: Text(
-            v,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: color,
-              fontSize: 13,
-              fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
-            ),
-          ),
-        );
+  /// Bu sezonun istatistik kutusu (8 değer); birden çok turnuvada sekmeli.
+  Widget _seasonBox(_PlayerCardData data) {
+    final entries = data.current;
+    final multi = entries.length > 1;
+    final sel = multi && _seasonTab < entries.length ? _seasonTab : -1;
+    final _StatTotals t;
+    final String caption;
+    if (entries.isEmpty) {
+      t = data.overall;
+      caption = 'Bu sezon kaydı yok · tüm turnuvalar';
+    } else if (!multi || sel >= 0) {
+      final e = entries[multi ? sel : 0];
+      t = e.totals;
+      // Çok turnuvada turnuva adı sekmede yazar; altta yalnız takım.
+      caption = multi
+          ? e.teamName
+          : [e.leagueName, if (e.teamName.isNotEmpty) e.teamName].join(' · ');
+    } else {
+      t = entries.fold(const _StatTotals(), (a, e) => a + e.totals);
+      caption = 'Sezon toplamı · ${entries.length} turnuva';
+    }
 
-    Widget header() => Padding(
-      padding: const EdgeInsets.fromLTRB(14, 10, 10, 6),
-      child: Row(
-        children: [
-          const Expanded(
-            child: Text(
-              'Turnuva / Sezon',
-              style: TextStyle(
-                color: _mid,
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
+    Widget tab(int index, Widget child, String label) {
+      final on = sel == index;
+      return Semantics(
+        selected: on,
+        button: true,
+        label: label,
+        child: InkWell(
+          onTap: () => setState(() => _seasonTab = index),
+          child: Container(
+            height: 48,
+            constraints: const BoxConstraints(minWidth: 56),
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: on ? _tone : Colors.transparent,
+                  width: 3,
+                ),
               ),
             ),
+            child: Opacity(opacity: on ? 1 : 0.55, child: child),
           ),
-          for (final h in const ['M', 'G', 'A', 'S', 'K'])
-            cell(h, color: _mid, bold: true),
+        ),
+      );
+    }
+
+    Widget logo(_CurrentEntry e) => SizedBox(
+      width: 28,
+      height: 28,
+      child: e.leagueLogo.isEmpty
+          ? const Icon(Icons.emoji_events_outlined, color: _yellow, size: 22)
+          : WebSafeImage(
+              url: _normalizeUrl(e.leagueLogo),
+              fit: BoxFit.contain,
+              isCircle: true,
+              fallbackIconSize: 18,
+            ),
+    );
+
+    Widget stat(String value, String label, Color color) => Expanded(
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: TextStyle(
+              color: color,
+              fontSize: 26,
+              fontWeight: FontWeight.w800,
+              height: 1,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: _mid,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ],
       ),
     );
 
-    // Ağaç: turnuva başlık satırı, altında girintili sezonlar (takım adıyla).
-    final children = <Widget>[header()];
-    for (final t in tournaments) {
-      children.add(
-        Container(
-          width: double.infinity,
-          color: Colors.white.withValues(alpha: 0.04),
-          padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: Color.lerp(_bgDark, _tone, 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _tone.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (multi)
+            Container(
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(color: _tone.withValues(alpha: 0.3)),
+                ),
+              ),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Row(
+                  children: [
+                    tab(
+                      -1,
+                      const Text(
+                        'Toplam',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      'Toplam',
+                    ),
+                    for (var i = 0; i < entries.length; i++)
+                      tab(
+                        i,
+                        sel == i
+                            ? Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  logo(entries[i]),
+                                  const SizedBox(width: 8),
+                                  ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 190,
+                                    ),
+                                    child: Text(
+                                      entries[i].leagueName,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : logo(entries[i]),
+                        '${entries[i].leagueName}, ${entries[i].teamName}',
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 12, 4, 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
+                  child: Text(
+                    caption,
+                    style: const TextStyle(
+                      color: Color(0xFFC9D1E2),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                Row(
+                  children: [
+                    stat('${t.matches}', 'Maç', Colors.white),
+                    stat('${t.starts}', 'İlk 11', Colors.white),
+                    stat("${t.minutes}'", 'Dakika', Colors.white),
+                    stat('${t.goals}', 'Gol', _tone),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    stat('${t.assists}', 'Asist', _purple),
+                    stat('${t.yellow}', 'Sarı kart', _yellow),
+                    stat('${t.red}', 'Kırmızı kart', _red),
+                    stat('${t.motm}', 'Maçın adamı', _yellow),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _emptyPanel(String text) => Container(
+    padding: const EdgeInsets.all(18),
+    decoration: _panel(),
+    child: Text(
+      text,
+      textAlign: TextAlign.center,
+      style: const TextStyle(color: _mid),
+    ),
+  );
+
+  static const _assistIcon = 'assets/images/assist.png';
+
+  Widget _cardRect(Color c) => Container(
+    width: 10,
+    height: 14,
+    decoration: BoxDecoration(color: c, borderRadius: BorderRadius.circular(2)),
+  );
+
+  Widget _countIcon(Widget icon, int n, String label) => Semantics(
+    label: n > 1 ? '$n $label' : label,
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        icon,
+        if (n > 1)
+          Text(
+            '×$n',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+      ],
+    ),
+  );
+
+  Future<void> _openMatch(String id) async {
+    final nav = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final isAdmin = AppSession.of(context).value.isAdmin;
+    try {
+      final row = await _sb.from('matches').select().eq('id', id).single();
+      if (!mounted) return;
+      await nav.push(
+        MaterialPageRoute<void>(
+          settings: const RouteSettings(name: 'MatchDetailsScreen'),
+          builder: (_) => MatchDetailsScreen(
+            match: MatchModel.fromMap(row, id),
+            isAdmin: isAdmin,
+          ),
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Maç açılamadı: $e')));
+    }
+  }
+
+  /// Maçlar: oynadığı maçlar (bu sezon; sezonu yoksa tümü), üstte "Tümü" +
+  /// turnuva logoları süzgeci. Satır: tarih, skor, katkı ikonları, dakika,
+  /// sonuç; dokununca maç detayı.
+  Widget _matchesTab(_PlayerCardData data) {
+    final entries = data.current;
+    final seasons = {for (final e in entries) e.seasonId};
+    final sel = entries.length > 1 && _matchFilter < entries.length
+        ? _matchFilter
+        : -1;
+    final rows = [
+      for (final m in data.matches)
+        if (seasons.isEmpty ||
+            (sel >= 0
+                ? m.seasonId == entries[sel].seasonId
+                : seasons.contains(m.seasonId)))
+          m,
+    ];
+    var w = 0, d = 0, l = 0;
+    for (final m in rows) {
+      switch (m.result) {
+        case 'G':
+          w++;
+        case 'B':
+          d++;
+        case 'M':
+          l++;
+      }
+    }
+
+    Widget filterTab(int index, Widget child, String label) {
+      final on = sel == index;
+      return Semantics(
+        selected: on,
+        button: true,
+        label: label,
+        child: InkWell(
+          onTap: () => setState(() => _matchFilter = index),
+          child: Container(
+            height: 48,
+            constraints: const BoxConstraints(minWidth: 56),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: on ? _tone : Colors.transparent,
+                  width: 3,
+                ),
+              ),
+            ),
+            child: Opacity(opacity: on ? 1 : 0.55, child: child),
+          ),
+        ),
+      );
+    }
+
+    Widget logo(_CurrentEntry e) => SizedBox(
+      width: 28,
+      height: 28,
+      child: e.leagueLogo.isEmpty
+          ? const Icon(Icons.emoji_events_outlined, color: _yellow, size: 22)
+          : WebSafeImage(
+              url: _normalizeUrl(e.leagueLogo),
+              fit: BoxFit.contain,
+              isCircle: true,
+              fallbackIconSize: 18,
+            ),
+    );
+
+    Widget teamLine(String name, String logoUrl, int? score, bool mine) {
+      final style = TextStyle(
+        color: Colors.white,
+        fontSize: 14,
+        fontWeight: mine ? FontWeight.w800 : FontWeight.w500,
+      );
+      return Row(
+        children: [
+          SizedBox(
+            width: 16,
+            height: 16,
+            child: logoUrl.isEmpty
+                ? const Icon(Icons.shield_outlined, color: _mid, size: 14)
+                : WebSafeImage(
+                    url: _normalizeUrl(logoUrl),
+                    fit: BoxFit.contain,
+                    fallbackIconSize: 12,
+                  ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: style,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(score == null ? '-' : '$score', style: style),
+        ],
+      );
+    }
+
+    Widget row(_MatchRow m) {
+      final t = m.totals;
+      final res = m.result;
+      final resColor = res == 'G'
+          ? const Color(0xFF1F9D63)
+          : res == 'M'
+          ? const Color(0xFFD9434B)
+          : const Color(0xFF6B7489);
+      return InkWell(
+        onTap: () => _openMatch(m.id),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 60),
+          padding: const EdgeInsets.fromLTRB(8, 10, 8, 10),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
+            ),
+          ),
           child: Row(
             children: [
-              const Icon(Icons.emoji_events_outlined, size: 15, color: _accent),
+              SizedBox(
+                width: 40,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      m.date == null
+                          ? '-'
+                          : DateFormat('dd.MM').format(m.date!),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    if (m.week != null && m.week! > 0)
+                      Text(
+                        '${m.week}. hf',
+                        style: const TextStyle(color: _mid, fontSize: 11),
+                      ),
+                  ],
+                ),
+              ),
               const SizedBox(width: 6),
               Expanded(
+                child: Column(
+                  children: [
+                    teamLine(
+                      m.home,
+                      m.homeLogo,
+                      m.homeScore,
+                      m.mineHome == true,
+                    ),
+                    const SizedBox(height: 4),
+                    teamLine(
+                      m.away,
+                      m.awayLogo,
+                      m.awayScore,
+                      m.mineHome == false,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 6),
+              // Sabit genişlik: skorlar ikon sayısından bağımsız aynı
+              // sütunda durur.
+              SizedBox(
+                width: 62,
+                child: Wrap(
+                  alignment: WrapAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: [
+                    if (t.goals > 0)
+                      _countIcon(
+                        const Icon(
+                          Icons.sports_soccer_rounded,
+                          color: Colors.white,
+                          size: 15,
+                        ),
+                        t.goals,
+                        'gol',
+                      ),
+                    if (t.assists > 0)
+                      _countIcon(
+                        Image.asset(_assistIcon, width: 17, height: 17),
+                        t.assists,
+                        'asist',
+                      ),
+                    if (t.yellow > 0)
+                      Semantics(label: 'Sarı kart', child: _cardRect(_yellow)),
+                    if (t.red > 0)
+                      Semantics(label: 'Kırmızı kart', child: _cardRect(_red)),
+                    if (t.motm > 0)
+                      const Icon(
+                        Icons.star_rounded,
+                        color: _yellow,
+                        size: 17,
+                        semanticLabel: 'Maçın adamı',
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 6),
+              Container(
+                height: 24,
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.white24),
+                ),
                 child: Text(
-                  t.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  "${t.minutes}'",
                   style: const TextStyle(
-                    color: _accent,
-                    fontWeight: FontWeight.w800,
+                    color: Color(0xFFC9D1E2),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Container(
+                width: 24,
+                height: 24,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: resColor,
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: Text(
+                  res ?? '-',
+                  style: const TextStyle(
+                    color: Colors.white,
                     fontSize: 13,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
               ),
@@ -1312,104 +1914,6 @@ class _PlayerCardState extends State<PlayerCard> {
           ),
         ),
       );
-      for (var i = 0; i < t.seasons.length; i++) {
-        final sn = t.seasons[i];
-        final last = i == t.seasons.length - 1;
-        final x = sn.totals;
-        children.add(
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Ağaç çizgisi: son sezonda yarıda biter (└), diğerlerinde ├.
-                SizedBox(
-                  width: 34,
-                  child: Stack(
-                    children: [
-                      Positioned(
-                        left: 21,
-                        top: 0,
-                        bottom: last ? null : 0,
-                        height: last ? 22 : null,
-                        child: Container(
-                          width: 1.5,
-                          color: Colors.white.withValues(alpha: 0.18),
-                        ),
-                      ),
-                      Positioned(
-                        left: 21,
-                        top: 21,
-                        child: Container(
-                          width: 9,
-                          height: 1.5,
-                          color: Colors.white.withValues(alpha: 0.18),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(0, 10, 10, 10),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                sn.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              if (sn.teams.isNotEmpty) ...[
-                                const SizedBox(height: 2),
-                                Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.shield_outlined,
-                                      size: 11,
-                                      color: _mid,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Expanded(
-                                      child: Text(
-                                        sn.teams.join(', '),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          color: _mid,
-                                          fontSize: 11.5,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                        cell('${x.matches}'),
-                        cell('${x.goals}', color: _accent, bold: true),
-                        cell('${x.assists}', color: _purple, bold: true),
-                        cell('${x.yellow}', color: _yellow),
-                        cell('${x.red}', color: _red),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      }
     }
 
     return Container(
@@ -1418,12 +1922,281 @@ class _PlayerCardState extends State<PlayerCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          ...children,
-          const Padding(
-            padding: EdgeInsets.fromLTRB(14, 6, 14, 10),
+          if (entries.length > 1)
+            Container(
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                    color: Colors.white.withValues(alpha: 0.08),
+                  ),
+                ),
+              ),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Row(
+                  children: [
+                    filterTab(
+                      -1,
+                      const Text(
+                        'Tümü',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      'Tümü',
+                    ),
+                    for (var i = 0; i < entries.length; i++)
+                      filterTab(
+                        i,
+                        sel == i
+                            ? Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  logo(entries[i]),
+                                  const SizedBox(width: 8),
+                                  ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 190,
+                                    ),
+                                    child: Text(
+                                      entries[i].leagueName,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : logo(entries[i]),
+                        entries[i].leagueName,
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 12, 8, 12),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Oynadığı maçlar',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                if (rows.isNotEmpty)
+                  Text(
+                    '${w}G · ${d}B · ${l}M',
+                    style: const TextStyle(
+                      color: _mid,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          if (rows.isEmpty)
+            const Padding(
+              padding: EdgeInsets.fromLTRB(14, 4, 14, 18),
+              child: Text(
+                'Henüz oynadığı maç yok.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: _mid),
+              ),
+            )
+          else
+            for (final m in rows) row(m),
+        ],
+      ),
+    );
+  }
+
+  /// Kariyer: sezon yılı + takım satırları (turnuvadan bağımsız), altta
+  /// toplam. Sütunlar: maç, ilk 11, gol, asist, sarı, kırmızı.
+  Widget _careerTab(_PlayerCardData data) {
+    final rows = data.career;
+    if (rows.isEmpty) return _emptyPanel('Henüz kariyer verisi yok.');
+    const colW = 26.0;
+    Widget cell(Widget child) => SizedBox(
+      width: colW,
+      child: Center(child: child),
+    );
+    Widget num(int v, {bool bold = false}) => cell(
+      Text(
+        '$v',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 14,
+          fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ),
+      ),
+    );
+    List<Widget> nums(_StatTotals t, {bool bold = false}) => [
+      num(t.matches, bold: bold),
+      num(t.starts, bold: bold),
+      num(t.goals, bold: bold),
+      num(t.assists, bold: bold),
+      num(t.yellow, bold: bold),
+      num(t.red, bold: bold),
+    ];
+    Widget head(Widget icon, String tip) =>
+        cell(Tooltip(message: tip, child: icon));
+
+    final header = Container(
+      color: Colors.white.withValues(alpha: 0.05),
+      padding: const EdgeInsets.fromLTRB(8, 12, 6, 12),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 40,
             child: Text(
-              'M: Maç  G: Gol  A: Asist  S: Sarı kart  K: Kırmızı kart',
-              style: TextStyle(color: _mid, fontSize: 10),
+              'Sezon',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const Expanded(
+            child: Text(
+              'Takım',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          head(
+            const Icon(
+              Icons.checkroom_rounded,
+              color: Colors.white70,
+              size: 18,
+            ),
+            'Maç',
+          ),
+          head(
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.white70, width: 1.4),
+                borderRadius: BorderRadius.circular(3),
+              ),
+              child: const Text(
+                '11',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            'İlk 11',
+          ),
+          head(
+            const Icon(
+              Icons.sports_soccer_rounded,
+              color: Colors.white70,
+              size: 17,
+            ),
+            'Gol',
+          ),
+          head(Image.asset(_assistIcon, width: 18, height: 18), 'Asist'),
+          head(_cardRect(_yellow), 'Sarı kart'),
+          head(_cardRect(_red), 'Kırmızı kart'),
+        ],
+      ),
+    );
+
+    Widget line(_CareerRow c) => Container(
+      padding: const EdgeInsets.fromLTRB(8, 10, 6, 10),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
+        ),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 40,
+            child: Text(
+              c.year,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 22,
+            height: 22,
+            child: c.teamLogo.isEmpty
+                ? const Icon(Icons.shield_outlined, color: _mid, size: 20)
+                : WebSafeImage(
+                    url: _normalizeUrl(c.teamLogo),
+                    fit: BoxFit.contain,
+                    fallbackIconSize: 16,
+                  ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              // Uzun ad alt satıra iner (kesilmez).
+              c.teamName.isEmpty ? '-' : c.teamName,
+              maxLines: 2,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          ...nums(c.totals),
+        ],
+      ),
+    );
+
+    final total = rows.fold(const _StatTotals(), (a, c) => a + c.totals);
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: _panel(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          header,
+          for (final c in rows) line(c),
+          Container(
+            color: Colors.white.withValues(alpha: 0.05),
+            padding: const EdgeInsets.fromLTRB(8, 12, 6, 12),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Toplam',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                ...nums(total, bold: true),
+              ],
             ),
           ),
         ],
@@ -1433,15 +2206,140 @@ class _PlayerCardState extends State<PlayerCard> {
 }
 
 class _PlayerCardData {
-  const _PlayerCardData({required this.overall, required this.tournaments});
+  const _PlayerCardData({
+    required this.overall,
+    required this.tournaments,
+    this.current = const [],
+    this.foot = '',
+    this.matches = const [],
+    this.career = const [],
+  });
+
+  /// Oynadığı bitmiş maçlar, en yeni üstte.
+  final List<_MatchRow> matches;
+
+  /// Kariyer: sezon yılı + takım satırları, en yeni üstte.
+  final List<_CareerRow> career;
 
   final _StatTotals overall;
   final List<_TournamentNode> tournaments;
+
+  /// Bu sezon oynadığı turnuvalar (aktif sezonlar), en yenisi önde.
+  final List<_CurrentEntry> current;
+
+  /// Kullandığı ayak.
+  final String foot;
 
   factory _PlayerCardData.empty() => const _PlayerCardData(
     overall: _StatTotals(),
     tournaments: <_TournamentNode>[],
   );
+}
+
+/// Bu sezonun bir turnuvası: Özet'te sekme, üstte takım arması.
+class _CurrentEntry {
+  const _CurrentEntry({
+    required this.seasonId,
+    required this.leagueName,
+    required this.leagueLogo,
+    required this.teamId,
+    required this.teamName,
+    required this.teamLogo,
+    required this.sortKey,
+    required this.totals,
+  });
+
+  final String seasonId;
+  final String leagueName;
+  final String leagueLogo;
+  final String teamId;
+  final String teamName;
+  final String teamLogo;
+  final String sortKey;
+  final _StatTotals totals;
+}
+
+/// [_PlayerCardState._loadStats] sonucu: sezon ve maç bazında sayılar.
+class _StatsLoad {
+  const _StatsLoad({
+    required this.bySeason,
+    required this.byMatch,
+    required this.played,
+    required this.seasonByMatch,
+    required this.teamByMatch,
+    required this.fallbackSeasons,
+  });
+
+  final Map<String, _StatTotals> bySeason;
+  final Map<String, _StatTotals> byMatch;
+
+  /// Oynadığı bitmiş maçlar.
+  final Set<String> played;
+  final Map<String, String> seasonByMatch;
+  final Map<String, String> teamByMatch;
+
+  /// Sayıları maç olaylarından değil player_season_stats'tan gelen sezonlar.
+  final Set<String> fallbackSeasons;
+}
+
+/// Oyuncu kartı › Maçlar satırı.
+class _MatchRow {
+  const _MatchRow({
+    required this.id,
+    required this.seasonId,
+    required this.date,
+    required this.week,
+    required this.home,
+    required this.away,
+    this.homeLogo = '',
+    this.awayLogo = '',
+    required this.homeScore,
+    required this.awayScore,
+    required this.mineHome,
+    required this.totals,
+  });
+
+  final String id;
+  final String seasonId;
+  final DateTime? date;
+  final int? week;
+  final String home;
+  final String away;
+  final String homeLogo;
+  final String awayLogo;
+  final int? homeScore;
+  final int? awayScore;
+
+  /// Oyuncunun takımı ev sahibi mi (bilinmiyorsa null).
+  final bool? mineHome;
+  final _StatTotals totals;
+
+  /// G / B / M; skor ya da takım bilinmiyorsa null.
+  String? get result {
+    final hs = homeScore, as = awayScore, h = mineHome;
+    if (hs == null || as == null || h == null) return null;
+    final mine = h ? hs : as, other = h ? as : hs;
+    return mine > other
+        ? 'G'
+        : mine < other
+        ? 'M'
+        : 'B';
+  }
+}
+
+/// Oyuncu kartı › Kariyer satırı (sezon yılı + takım).
+class _CareerRow {
+  const _CareerRow({
+    required this.year,
+    required this.teamName,
+    required this.teamLogo,
+    required this.totals,
+  });
+
+  final String year;
+  final String teamName;
+  final String teamLogo;
+  final _StatTotals totals;
 }
 
 /// Oyuncu kartı › Goller satırı.
@@ -1508,6 +2406,8 @@ class _StatTotals {
     this.yellow = 0,
     this.red = 0,
     this.motm = 0,
+    this.starts = 0,
+    this.minutes = 0,
   });
 
   final int matches;
@@ -1517,6 +2417,13 @@ class _StatTotals {
   final int red;
   final int motm;
 
+  /// İlk 11'de başladığı maç sayısı (esameden).
+  final int starts;
+
+  /// Oynadığı dakika: ilk 11 / oyuna giriş ile oyundan çıkış ya da kırmızı
+  /// kart arası; maç süresi sezonun devre süresinin iki katı.
+  final int minutes;
+
   _StatTotals operator +(_StatTotals other) {
     return _StatTotals(
       matches: matches + other.matches,
@@ -1525,6 +2432,8 @@ class _StatTotals {
       yellow: yellow + other.yellow,
       red: red + other.red,
       motm: motm + other.motm,
+      starts: starts + other.starts,
+      minutes: minutes + other.minutes,
     );
   }
 }
@@ -1605,50 +2514,46 @@ class _IdentityMenuState extends State<_IdentityMenu> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_ready || !IdentityAccess.visibleIn(context)) {
-      return const SizedBox.shrink();
-    }
-    // Başkasının kimliğini admin, kurucu başkan ve bölge sorumlusu okutur;
-    // diğerleri yalnız kendi profilinde.
-    final session = AppSession.of(context).value;
-    final canRead =
-        !_verified &&
-        !kIsWeb &&
-        (session.hasManagementPanel || session.playerId == widget.playerId);
-    if (!canRead && !_canUnverify) return const SizedBox.shrink();
+    // Seçenek yoksa yalnız onay rozeti (onaysızsa hiçbir şey).
+    final badge = VerifiedBadgeFor(
+      playerId: widget.playerId,
+      size: 28,
+      leading: 0,
+    );
+    // Onaysız profilde hiçbir simge yok; kimlik menüden okutulur.
+    if (!_ready || !_verified || !_canUnverify) return badge;
+    if (!IdentityAccess.visibleIn(context)) return badge;
     return PopupMenuButton<String>(
       tooltip: 'Kimlik',
-      icon: Icon(
-        _verified ? Icons.verified_rounded : Icons.verified_outlined,
-        color: _verified ? kVerifiedBlue : Colors.white70,
-      ),
+      padding: EdgeInsets.zero,
       color: const Color(0xFF1E293B),
       onSelected: (v) {
-        if (v == 'read') {
-          IdentityVerifyScreen.open(
-            context,
-            expectedPlayerId: widget.playerId,
-            expectedName: widget.playerName,
-          );
-        } else if (v == 'unverify') {
-          _unverify();
-        }
+        if (v == 'unverify') _unverify();
       },
       itemBuilder: (_) => [
-        if (canRead)
-          const PopupMenuItem(
-            value: 'read',
-            child: Text('Kimliği okut', style: TextStyle(color: Colors.white)),
+        const PopupMenuItem(
+          value: 'unverify',
+          child: Text(
+            'Onayı kaldır',
+            style: TextStyle(color: Color(0xFFF87171)),
           ),
-        if (_canUnverify)
-          const PopupMenuItem(
-            value: 'unverify',
-            child: Text(
-              'Onayı kaldır',
-              style: TextStyle(color: Color(0xFFF87171)),
-            ),
-          ),
+        ),
       ],
+      child: Container(
+        width: 30,
+        height: 30,
+        decoration: BoxDecoration(
+          color: _bgDark,
+          shape: BoxShape.circle,
+          border: Border.all(color: _bgDark, width: 1),
+        ),
+        alignment: Alignment.center,
+        child: const Icon(
+          Icons.verified_rounded,
+          color: kVerifiedBlue,
+          size: 26,
+        ),
+      ),
     );
   }
 }
