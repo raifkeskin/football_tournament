@@ -9,6 +9,9 @@ const _mid = Color(0xFF94A3B8);
 const _pitch = Color(0xFF2D4468);
 const _pitchLine = Color(0xFF8AA2C6);
 
+/// Asıl mevki her zaman turuncu; oynayabildiği mevkiler takım renginde.
+const _mainColor = Color(0xFFF97316);
+
 /// Oynayabildiği mevki seçenekleri; bek ve kanatlar sol / sağ ayrı (FIFA
 /// gibi). Veritabanı `players_other_positions_check` ile de sınırlar.
 const kOtherPositionOptions = <String>[
@@ -27,6 +30,23 @@ const kOtherPositionOptions = <String>[
 ];
 
 const _maxOther = 3;
+
+/// Alt mevkinin bağlı olduğu ana mevki (hat).
+String _lineOf(String position) {
+  switch (position) {
+    case 'Kaleci':
+      return 'Kaleci';
+    case 'Stoper':
+    case 'Sol Bek':
+    case 'Sağ Bek':
+      return 'Defans';
+    case 'Santrfor':
+    case 'Sol Kanat Forvet':
+    case 'Sağ Kanat Forvet':
+      return 'Forvet';
+  }
+  return 'Orta Saha';
+}
 
 /// Sahadaki yerler (x, y oranı; hücum yukarı).
 const _spots = <String, Offset>{
@@ -67,9 +87,11 @@ Set<String> _mainSpotKeys(String main, String sub) {
   return _spots.containsKey(v) ? {v} : const {};
 }
 
-/// Oyuncu kartının "Mevki" sekmesi: asıl mevki büyük beyaz halka, oynayabildiği
-/// mevkiler küçük halkalar. Futbolcunun kendisi ve onu yönetenler (admin,
-/// kurucu başkan, bölge sorumlusu) "Düzenle" ile en çok 3 mevki seçer.
+/// Oyuncu kartının "Mevki" sekmesi: asıl mevki büyük turuncu halka,
+/// oynayabildiği mevkiler küçük halkalar. Futbolcunun kendisi ve onu
+/// yönetenler (admin, kurucu başkan, bölge sorumlusu) "Düzenle" ile asıl
+/// mevkiyi ve en çok 3 mevkiyi seçer; futbolcunun asıl mevki değişikliği
+/// onaya gider.
 class PlayerPositionsTab extends StatefulWidget {
   const PlayerPositionsTab({
     super.key,
@@ -93,6 +115,10 @@ class _PlayerPositionsTabState extends State<PlayerPositionsTab> {
   List<String> _other = const [];
   bool _canEdit = false;
 
+  /// Yöneten (admin / kurucu başkan / bölge sorumlusu) asıl mevkiyi doğrudan
+  /// değiştirir; yalnız futbolcunun kendisiyse talep açılır.
+  bool _manages = false;
+
   bool _started = false;
 
   @override
@@ -108,6 +134,7 @@ class _PlayerPositionsTabState extends State<PlayerPositionsTab> {
     var main = '', sub = '';
     var other = <String>[];
     var canEdit = session.isAdmin;
+    var manages = session.isAdmin;
     try {
       final r = await _sb
           .from('players')
@@ -124,13 +151,14 @@ class _PlayerPositionsTabState extends State<PlayerPositionsTab> {
           canEdit = true;
         }
       }
-      if (!canEdit && session.hasManagementPanel) {
-        canEdit =
+      if (!manages && session.hasManagementPanel) {
+        manages =
             await _sb.rpc(
               'owns_player',
               params: {'p_player_id': widget.playerId},
             ) ==
             true;
+        canEdit = canEdit || manages;
       }
     } catch (_) {}
     if (!mounted) return;
@@ -139,32 +167,46 @@ class _PlayerPositionsTabState extends State<PlayerPositionsTab> {
       _sub = sub;
       _other = other;
       _canEdit = canEdit;
+      _manages = manages;
       _loading = false;
     });
   }
 
+  /// Asıl mevki alt mevkiyle yazılır ("Merkez"); kalecide ana mevki.
   String get _mainLabel {
-    if (_sub.isNotEmpty && _sub != _main) {
-      return _main.isEmpty ? _sub : '$_main · $_sub';
-    }
+    if (_sub.isNotEmpty) return _sub;
     return _main.isEmpty ? '-' : _main;
   }
 
   Future<void> _edit() async {
-    final saved = await showAdminPopup<List<String>>(
+    final saved = await showAdminPopup<_SavedPositions>(
       context: context,
-      builder: (_) => _OtherPositionsEditor(
+      builder: (_) => _PositionsEditor(
         playerId: widget.playerId,
         mainKeys: _mainSpotKeys(_main, _sub),
         initial: _other,
         accent: widget.accent,
+        manages: _manages,
       ),
     );
     if (saved == null || !mounted) return;
-    setState(() => _other = saved);
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Mevkiler kaydedildi.')));
+    setState(() {
+      _other = saved.other;
+      final m = saved.main;
+      if (m != null && !saved.pending) {
+        _main = _lineOf(m);
+        _sub = m == 'Kaleci' ? '' : m;
+      }
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          saved.pending
+              ? 'Mevkiler kaydedildi; asıl mevki değişikliği onaya gönderildi.'
+              : 'Mevkiler kaydedildi.',
+        ),
+      ),
+    );
   }
 
   @override
@@ -187,7 +229,7 @@ class _PlayerPositionsTabState extends State<PlayerPositionsTab> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _infoRow(
-            ring: _Ring.main(Colors.white, size: 14),
+            ring: _Ring.main(_mainColor, size: 14),
             label: 'Asıl mevki',
             value: _mainLabel,
           ),
@@ -208,7 +250,7 @@ class _PlayerPositionsTabState extends State<PlayerPositionsTab> {
             OutlinedButton.icon(
               onPressed: _edit,
               icon: Icon(Icons.edit_rounded, color: widget.accent, size: 18),
-              label: const Text('Oynayabildiği mevkileri düzenle'),
+              label: const Text('Mevkileri düzenle'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.white,
                 minimumSize: const Size.fromHeight(46),
@@ -260,7 +302,7 @@ class _PlayerPositionsTabState extends State<PlayerPositionsTab> {
   }
 }
 
-/// Halka işareti: asıl mevki kalın beyaz, oynayabildiği ince renkli.
+/// Halka işareti: asıl mevki kalın turuncu, oynayabildiği ince takım renkli.
 class _Ring extends StatelessWidget {
   const _Ring({
     required this.color,
@@ -372,7 +414,7 @@ class _PositionsPitch extends StatelessWidget {
             final isOther = !isMain && other.contains(key);
             if (!editing && !isMain && !isOther) continue;
             final ring = isMain
-                ? _Ring.main(Colors.white)
+                ? _Ring.main(_mainColor)
                 : isOther
                 ? _Ring.other(accent)
                 : Container(
@@ -415,7 +457,7 @@ class _PositionsPitch extends StatelessWidget {
                 selected: isOther,
                 label: isMain ? '$key, asıl mevki' : key,
                 child: InkWell(
-                  onTap: isMain ? null : () => onTap!(key),
+                  onTap: () => onTap!(key),
                   borderRadius: BorderRadius.circular(12),
                   child: SizedBox(
                     width: boxW,
@@ -455,33 +497,66 @@ class _PositionsPitch extends StatelessWidget {
   }
 }
 
-/// Oynayabildiği mevkileri seçme penceresi (asıl mevki sabit, en çok 3).
-class _OtherPositionsEditor extends StatefulWidget {
-  const _OtherPositionsEditor({
+/// Düzenleme sonucu: [main] seçilen asıl mevki (değişmediyse null);
+/// [pending] asıl mevki onaya gittiyse true.
+class _SavedPositions {
+  const _SavedPositions(this.other, {this.main, this.pending = false});
+
+  final List<String> other;
+  final String? main;
+  final bool pending;
+}
+
+/// Mevki düzenleme penceresi: üstte "Asıl mevki" / "Oynayabildiği" seçimi,
+/// altta dokunulabilir saha (asıl tek, oynayabildiği en çok 3).
+class _PositionsEditor extends StatefulWidget {
+  const _PositionsEditor({
     required this.playerId,
     required this.mainKeys,
     required this.initial,
     required this.accent,
+    required this.manages,
   });
 
   final String playerId;
   final Set<String> mainKeys;
   final List<String> initial;
   final Color accent;
+  final bool manages;
 
   @override
-  State<_OtherPositionsEditor> createState() => _OtherPositionsEditorState();
+  State<_PositionsEditor> createState() => _PositionsEditorState();
 }
 
-class _OtherPositionsEditorState extends State<_OtherPositionsEditor> {
+class _PositionsEditorState extends State<_PositionsEditor> {
+  SupabaseClient get _sb => Supabase.instance.client;
+
+  /// Asıl mevki tek yerdir; kayıtlı değer tarafsız kalmışsa (iki yan) seçim
+  /// yeniden yapılana dek ikisi de gösterilir.
+  late Set<String> _mainKeys = {...widget.mainKeys};
   late final List<String> _picked = [
     for (final p in widget.initial)
       if (!widget.mainKeys.contains(p) && _spots.containsKey(p)) p,
   ];
+  bool _mainMode = false;
   bool _saving = false;
 
-  void _toggle(String key) {
+  String? get _newMain {
+    if (_mainKeys.length != 1) return null;
+    final m = _mainKeys.first;
+    return widget.mainKeys.length == 1 && widget.mainKeys.contains(m)
+        ? null
+        : m;
+  }
+
+  void _tap(String key) {
     setState(() {
+      if (_mainMode) {
+        _mainKeys = {key};
+        _picked.remove(key);
+        return;
+      }
+      if (_mainKeys.contains(key)) return;
       if (_picked.contains(key)) {
         _picked.remove(key);
       } else if (_picked.length < _maxOther) {
@@ -498,16 +573,44 @@ class _OtherPositionsEditorState extends State<_OtherPositionsEditor> {
 
   Future<void> _save() async {
     setState(() => _saving = true);
+    final main = _newMain;
+    var pending = false;
     try {
-      final res = await Supabase.instance.client.rpc(
+      if (main != null) {
+        if (widget.manages) {
+          await _sb.rpc(
+            'set_player_main_position',
+            params: {'p_player_id': widget.playerId, 'p_position': main},
+          );
+        } else {
+          await _sb.rpc(
+            'submit_profile_change',
+            params: {
+              'p_changes': {
+                'main_position': _lineOf(main),
+                'sub_position': main == 'Kaleci' ? '' : main,
+              },
+            },
+          );
+          pending = true;
+        }
+      }
+      final res = await _sb.rpc(
         'set_player_other_positions',
         params: {'p_player_id': widget.playerId, 'p_positions': _picked},
       );
       if (!mounted) return;
-      Navigator.of(context).pop<List<String>>([
-        if (res is List)
-          for (final x in res) x.toString(),
-      ]);
+      Navigator.of(context).pop<_SavedPositions>(
+        _SavedPositions(
+          [
+            if (res is List)
+              for (final x in res)
+                if (!pending || x.toString() != main) x.toString(),
+          ],
+          main: main,
+          pending: pending,
+        ),
+      );
     } on PostgrestException catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
@@ -523,33 +626,108 @@ class _OtherPositionsEditorState extends State<_OtherPositionsEditor> {
     }
   }
 
+  Widget _segment(String label, bool selected, VoidCallback onTap) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          height: 42,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected ? const Color(0xFFF1F5F9) : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected ? _bgDark : _mid,
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final mainText = _mainKeys.length == 1 ? _mainKeys.first : '-';
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Text(
-            'Oynayabildiği mevkiler',
+            'Mevkiler',
             style: TextStyle(
               color: Colors.white,
               fontSize: 17,
               fontWeight: FontWeight.w800,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                _segment(
+                  'Asıl mevki',
+                  _mainMode,
+                  () => setState(() => _mainMode = true),
+                ),
+                _segment(
+                  'Oynayabildiği (${_picked.length}/$_maxOther)',
+                  !_mainMode,
+                  () => setState(() => _mainMode = false),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
           Text(
-            'Asıl mevki dışında en çok 3 yere dokun (${_picked.length}/$_maxOther). '
-            'Asıl mevki profil düzenlemeden değişir.',
+            _mainMode
+                ? widget.manages
+                      ? 'Asıl mevkiye dokun.'
+                      : 'Asıl mevkiye dokun; değişiklik onaydan sonra geçer.'
+                : 'Oynayabildiği diğer yerlere dokun (asıl mevki dışında en çok 3).',
             style: const TextStyle(color: _mid, fontSize: 13),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           _PositionsPitch(
-            mainKeys: widget.mainKeys,
+            mainKeys: _mainKeys,
             other: _picked,
             accent: widget.accent,
-            onTap: _toggle,
+            onTap: _tap,
+          ),
+          const SizedBox(height: 10),
+          Text.rich(
+            TextSpan(
+              style: const TextStyle(color: Color(0xFFC9D6EA), fontSize: 13),
+              children: [
+                const TextSpan(
+                  text: 'Asıl: ',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                TextSpan(text: mainText),
+                const TextSpan(
+                  text: ' · Oynayabildiği: ',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                TextSpan(text: _picked.isEmpty ? '-' : _picked.join(', ')),
+              ],
+            ),
           ),
           const SizedBox(height: 14),
           FilledButton(
