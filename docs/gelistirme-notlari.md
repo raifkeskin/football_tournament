@@ -284,7 +284,7 @@ Uygulamada yapılan ve panele de dokunan değişiklikler buraya yazılır. Kulla
 ## 27. Maç fotoğraflarında "Bu benim" ve oyuncu galerisi — SONRAKİ SÜRÜM (2026-10-27)
 - **İstek:** Futbolcu maç albümünde kendisinin olduğu fotoğrafa "Bu benim" diyebilsin. İşaretlediği fotoğraflar oyuncu kartında ve profilinde "Galeri" bölümünde görünsün.
 - **Bağlam:** Ana profil fotoğrafı vesikalık olarak kalır. Galeriye ayrıca fotoğraf yüklenmez, yalnız maç albümündeki fotoğraflar işaretlenir.
-- **Açık sorular:**
+- **Açık sorular (kullanıcıyla sonra konuşulacak):**
   - İşaret onaya gitsin mi, yoksa doğrudan mı görünsün?
   - Bir fotoğrafta birden çok futbolcu kendini işaretleyebilsin mi?
   - Galeride en fazla kaç fotoğraf olsun?
