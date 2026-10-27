@@ -9,6 +9,7 @@ import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/photo_crop_screen.dart';
 import '../../../core/widgets/picked_image.dart';
 import '../../../core/widgets/web_safe_image.dart';
+import '../../auth/registration/registration_service.dart';
 import '../../auth/widgets/phone_input.dart';
 import '../../identity/change_phone_screen.dart';
 import '../../identity/identity_access.dart';
@@ -45,6 +46,12 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
   late String? _mainPosition = widget.player.mainPosition;
   late String? _subPosition = widget.player.subPosition;
   late final String? _birthDate = widget.player.birthDate;
+  late final _firstController = TextEditingController(
+    text: widget.player.firstName,
+  );
+  late final _lastController = TextEditingController(
+    text: widget.player.lastName,
+  );
   XFile? _photo;
   bool _busy = false;
   String? _error;
@@ -64,6 +71,8 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
     super.initState();
     _heightController.addListener(_onEdit);
     _weightController.addListener(_onEdit);
+    _firstController.addListener(_onEdit);
+    _lastController.addListener(_onEdit);
   }
 
   void _onEdit() => setState(() => _error = null);
@@ -72,13 +81,22 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
   void dispose() {
     _heightController.dispose();
     _weightController.dispose();
+    _firstController.dispose();
+    _lastController.dispose();
     super.dispose();
   }
 
   /// Formdaki değerlerden yalnızca değişenler (fotoğraf hariç).
   Map<String, dynamic> _changedFields() {
     final cur = widget.player.values;
+    String? name(TextEditingController c) {
+      final v = c.text.trim().replaceAll(RegExp(r'\s+'), ' ');
+      return v.isEmpty ? null : v;
+    }
+
     final next = <String, dynamic>{
+      ProfileField.firstName: name(_firstController),
+      ProfileField.lastName: name(_lastController),
       ProfileField.height: int.tryParse(_heightController.text.trim()),
       ProfileField.weight: int.tryParse(_weightController.text.trim()),
       ProfileField.mainPosition: _mainPosition,
@@ -169,6 +187,19 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
       setState(() => _error = 'Değişiklik yapmadınız.');
       return;
     }
+    // Ad soyadda yalnız Türkçe harfler düzeltilebilir (Bılge → Bilge).
+    for (final k in [ProfileField.firstName, ProfileField.lastName]) {
+      final v = changes[k];
+      if (v is String &&
+          trFoldName(v) != trFoldName(widget.player.values[k] ?? '')) {
+        setState(
+          () => _error =
+              'Ad soyadda yalnız Türkçe harfler (ı, ğ, ş, ü, ö, ç) '
+              'düzeltilebilir.',
+        );
+        return;
+      }
+    }
     if (changes.containsKey(ProfileField.mainPosition) &&
         (kSubPositionsByMain[_mainPosition] ?? const []).isNotEmpty &&
         (_subPosition ?? '').isEmpty) {
@@ -191,6 +222,13 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
         changes[ProfileField.photoUrl] = uploaded;
       }
       final pending = await widget.service.submit(changes);
+      // Yerine yenisi geçen eski fotoğraf (kendi klasöründeyse) silinir.
+      final old = (widget.player.photoUrl ?? '').trim();
+      if (uploaded != null && old.contains('/profile_requests/')) {
+        try {
+          await widget.service.deletePhoto(old);
+        } catch (_) {}
+      }
       if (!mounted) return;
       Navigator.of(context).pop(true);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -284,6 +322,25 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
       ],
     );
   }
+
+  Widget _nameRow({
+    required String label,
+    required TextEditingController controller,
+  }) => AdminFieldRow(
+    icon: Icons.badge_outlined,
+    label: label,
+    child: TextField(
+      controller: controller,
+      enabled: !_busy,
+      textCapitalization: TextCapitalization.words,
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 15,
+        fontWeight: FontWeight.w700,
+      ),
+      decoration: adminInlineInputDecoration(hint: '-'),
+    ),
+  );
 
   Widget _numberRow({
     required IconData icon,
@@ -427,6 +484,23 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
           const SizedBox(height: 22),
           _phoneSection(),
           AdminFormSection(
+            title: 'Ad Soyad',
+            child: AdminFieldGroup(
+              children: [
+                _nameRow(label: 'Ad', controller: _firstController),
+                _nameRow(label: 'Soyad', controller: _lastController),
+              ],
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(4, 0, 4, 14),
+            child: Text(
+              'Yalnız Türkçe harfler (ı, ğ, ş, ü, ö, ç) düzeltilebilir; '
+              'ad değiştirilemez.',
+              style: TextStyle(color: kAdminMuted, fontSize: 12),
+            ),
+          ),
+          AdminFormSection(
             title: 'Fiziksel',
             child: AdminFieldGroup(
               children: [
@@ -522,13 +596,12 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
                 Expanded(
                   child: Text(
                     _pendingValues.isEmpty
-                        ? 'Değişiklikler turnuva sorumlusu onayladıktan sonra '
-                              'profilinde görünür. Onaylanana kadar talebini '
-                              'geri çekebilirsin.'
-                        : 'Kilitli alanlar için gönderdiğin talep onay '
-                              'bekliyor; talep sonuçlanana ya da sen geri '
-                              'çekene kadar değiştirilemez. Diğer alanları '
-                              'ayrı bir talep olarak gönderebilirsin.',
+                        ? 'Kaydettiğin bilgiler profilinde hemen görünür. '
+                              'Fotoğraf, boy ve kilo isteğe bağlı; istemezsen '
+                              'boş bırakabilirsin.'
+                        : 'Kilitli alanlar için daha önce gönderdiğin talep '
+                              'onay bekliyor; talep sonuçlanana ya da sen geri '
+                              'çekene kadar değiştirilemez.',
                     style: const TextStyle(
                       color: Colors.white70,
                       fontSize: 13,
@@ -552,9 +625,7 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
           ],
           const SizedBox(height: 22),
           AdminPrimaryButton(
-            label: count == 0
-                ? 'ONAYA GÖNDER'
-                : 'ONAYA GÖNDER ($count DEĞİŞİKLİK)',
+            label: count == 0 ? 'KAYDET' : 'KAYDET ($count DEĞİŞİKLİK)',
             busy: _busy,
             onPressed: count == 0 ? null : _submit,
           ),

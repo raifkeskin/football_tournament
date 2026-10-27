@@ -55,18 +55,6 @@ class _RegisterPlayerScreenState extends State<RegisterPlayerScreen> {
       ? trTitleCase(_card!.lastName)
       : _lastCtrl.text.trim().replaceAll(RegExp(r'\s+'), ' ');
 
-  /// Türkçe harfleri katlar: "Kağan" ile çipteki "KAGAN" eşleşsin.
-  static String _fold(String s) {
-    const from = 'ŞĞÜÇÖİÂÎÛ', to = 'SGUCOIAIU';
-    final u = s.replaceAll('i', 'İ').replaceAll('ı', 'I').toUpperCase();
-    final b = StringBuffer();
-    for (final ch in u.split('')) {
-      final i = from.indexOf(ch);
-      b.write(i >= 0 ? to[i] : ch);
-    }
-    return b.toString().replaceAll(RegExp(r'[^A-Z]+'), ' ').trim();
-  }
-
   /// Kimlik okunur; bu kişinin hesabı olan bir profili zaten varsa uyarılır.
   Future<void> _readCard() async {
     final card = await IdentityVerifyScreen.readForRegistration(context);
@@ -187,8 +175,8 @@ class _RegisterPlayerScreenState extends State<RegisterPlayerScreen> {
       setState(() => _error = numErr);
       return;
     }
-    if (_fold(_first) != _fold(card.firstName) ||
-        _fold(_last) != _fold(card.lastName)) {
+    if (trFoldName(_first) != trFoldName(card.firstName) ||
+        trFoldName(_last) != trFoldName(card.lastName)) {
       setState(
         () => _error =
             'Ad soyad kimlikteki adla aynı olmalı; yalnız Türkçe harfler '
