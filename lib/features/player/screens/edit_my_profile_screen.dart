@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/services/app_session.dart';
+import '../../../core/services/app_settings.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
 import '../../../core/widgets/picked_image.dart';
@@ -376,6 +377,10 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final positionLocked = _positionLocked;
+    // Mevki sekmesi açıksa mevkiler oyuncu kartının Mevki sekmesinden düzenlenir.
+    final positionsInTab =
+        AppSettings.positionsTabEnabled.value ||
+        AppSession.of(context).value.isAdmin;
     final pendingPos = [
       _pendingValues[ProfileField.mainPosition],
       _pendingValues[ProfileField.subPosition],
@@ -414,31 +419,32 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
             title: 'Futbol ve Kişisel',
             child: AdminFieldGroup(
               children: [
-                positionLocked
-                    ? AdminFieldRow(
-                        icon: Icons.sports_soccer_rounded,
-                        label: 'Mevki',
-                        trailing: _lockedTrailing(
-                          ProfileField.mainPosition,
-                          label: pendingPos,
-                        ),
-                        child: Text(
-                          _mainPosition ?? '-',
-                          style: const TextStyle(
-                            color: Colors.white54,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      )
-                    : AdminSelectRow(
-                        icon: Icons.sports_soccer_rounded,
-                        label: 'Mevki',
-                        value: _mainPosition,
-                        placeholder: 'Seçin',
-                        onTap: _busy ? null : _pickMainPosition,
+                if (!positionsInTab && positionLocked)
+                  AdminFieldRow(
+                    icon: Icons.sports_soccer_rounded,
+                    label: 'Mevki',
+                    trailing: _lockedTrailing(
+                      ProfileField.mainPosition,
+                      label: pendingPos,
+                    ),
+                    child: Text(
+                      _mainPosition ?? '-',
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
                       ),
-                if (!positionLocked && subs.length > 1)
+                    ),
+                  )
+                else if (!positionsInTab)
+                  AdminSelectRow(
+                    icon: Icons.sports_soccer_rounded,
+                    label: 'Mevki',
+                    value: _mainPosition,
+                    placeholder: 'Seçin',
+                    onTap: _busy ? null : _pickMainPosition,
+                  ),
+                if (!positionsInTab && !positionLocked && subs.length > 1)
                   AdminSelectRow(
                     icon: Icons.tune_rounded,
                     label: 'Alt Mevki',
