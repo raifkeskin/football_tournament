@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../tournament/models/league.dart';
 import '../../tournament/models/league_extras.dart';
 import '../../../core/services/app_session.dart';
+import '../../../core/services/app_settings.dart';
 import '../../tournament/services/interfaces/i_league_service.dart';
 import '../../../core/services/image_upload_service.dart';
 import '../../../core/services/service_locator.dart';
@@ -15,6 +16,7 @@ import '../../../core/widgets/app_date_picker.dart';
 import '../../../core/widgets/custom_popup_selector.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import 'package:football_tournament/core/widgets/picked_image.dart';
+import 'weekly_pick_screen.dart';
 
 class AdminManageNewsScreen extends StatefulWidget {
   const AdminManageNewsScreen({super.key});
@@ -850,6 +852,18 @@ class _AdminManageNewsScreenState extends State<AdminManageNewsScreen> {
     return AdminPageScaffold(
       title: 'Haber Yönetimi',
       actions: [
+        // Haftanın Seçimi: açılana dek yalnız admin.
+        if (session.isAdmin || AppSettings.weeklyPicksEnabled.value)
+          AdminBarAction(
+            icon: Icons.emoji_events_rounded,
+            tooltip: 'Haftanın Seçimi',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                settings: const RouteSettings(name: 'WeeklyPickScreen'),
+                builder: (_) => WeeklyPickScreen(tournaments: _tournaments),
+              ),
+            ),
+          ),
         AdminBarAction(
           icon: Icons.post_add_rounded,
           tooltip: 'Haber Ekle',
