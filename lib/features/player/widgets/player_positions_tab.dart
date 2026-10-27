@@ -172,16 +172,12 @@ class _PlayerPositionsTabState extends State<PlayerPositionsTab> {
     });
   }
 
-  /// Asıl mevki alt mevkiyle yazılır ("Merkez"); kalecide ana mevki.
-  String get _mainLabel {
-    if (_sub.isNotEmpty) return _sub;
-    return _main.isEmpty ? '-' : _main;
-  }
-
-  Future<void> _edit() async {
+  /// [main] true: asıl mevki, false: oynayabildiği mevkiler seçimiyle açılır.
+  Future<void> _edit({required bool main}) async {
     final saved = await showAdminPopup<_SavedPositions>(
       context: context,
       builder: (_) => _PositionsEditor(
+        initialMainMode: main,
         playerId: widget.playerId,
         mainKeys: _mainSpotKeys(_main, _sub),
         initial: _other,
@@ -228,75 +224,60 @@ class _PlayerPositionsTabState extends State<PlayerPositionsTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _infoRow(
-            ring: _Ring.main(_mainColor, size: 14),
-            label: 'Asıl mevki',
-            value: _mainLabel,
+          // Başlıklar yan yana; mevki adları sahada yazar.
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 12,
+            runSpacing: 4,
+            children: [
+              _legend(
+                ring: _Ring.main(_mainColor, size: 14),
+                label: 'Asıl mevki',
+                onEdit: _canEdit ? () => _edit(main: true) : null,
+              ),
+              _legend(
+                ring: _Ring.other(widget.accent, size: 12),
+                label: 'Oynayabildiği',
+                onEdit: _canEdit ? () => _edit(main: false) : null,
+              ),
+            ],
           ),
           const SizedBox(height: 10),
-          _infoRow(
-            ring: _Ring.other(widget.accent, size: 12),
-            label: 'Oynayabildiği',
-            value: _other.isEmpty ? '-' : _other.join(' / '),
-          ),
-          const SizedBox(height: 14),
           _PositionsPitch(
             mainKeys: mainKeys,
             other: _other,
             accent: widget.accent,
           ),
-          if (_canEdit) ...[
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: _edit,
-              icon: Icon(Icons.edit_rounded, color: widget.accent, size: 18),
-              label: const Text('Mevkileri düzenle'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.white,
-                minimumSize: const Size.fromHeight(46),
-                side: BorderSide(color: widget.accent),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-          ],
         ],
       ),
     );
   }
 
-  Widget _infoRow({
+  Widget _legend({
     required Widget ring,
     required String label,
-    required String value,
+    VoidCallback? onEdit,
   }) {
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(width: 18, child: Center(child: ring)),
         const SizedBox(width: 8),
-        SizedBox(
-          width: 104,
-          child: Text(
-            label,
-            style: const TextStyle(
-              color: _mid,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
           ),
         ),
-        Expanded(
-          child: Text(
-            value,
-            textAlign: TextAlign.right,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 15,
-              fontWeight: FontWeight.w800,
-            ),
+        if (onEdit != null)
+          IconButton(
+            onPressed: onEdit,
+            tooltip: '$label düzenle',
+            icon: Icon(Icons.edit_rounded, color: widget.accent, size: 18),
           ),
-        ),
       ],
     );
   }
@@ -432,7 +413,7 @@ class _PositionsPitch extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 ring,
-                if (editing) ...[
+                if (editing || isMain || isOther) ...[
                   const SizedBox(height: 2),
                   Text(
                     key,
@@ -516,8 +497,10 @@ class _PositionsEditor extends StatefulWidget {
     required this.initial,
     required this.accent,
     required this.manages,
+    this.initialMainMode = false,
   });
 
+  final bool initialMainMode;
   final String playerId;
   final Set<String> mainKeys;
   final List<String> initial;
@@ -538,7 +521,7 @@ class _PositionsEditorState extends State<_PositionsEditor> {
     for (final p in widget.initial)
       if (!widget.mainKeys.contains(p) && _spots.containsKey(p)) p,
   ];
-  bool _mainMode = false;
+  late bool _mainMode = widget.initialMainMode;
   bool _saving = false;
 
   String? get _newMain {
