@@ -336,7 +336,7 @@ class _PhoneVerifyCardState extends State<PhoneVerifyCard> {
 
   List<Widget> _codeStep(String raw10) => [
     _hint(
-      '0 ${formatPhoneRaw10(raw10)} numarasına $_channel doğrulama kodu '
+      '${formatPhoneRaw10(raw10)} numarasına $_channel doğrulama kodu '
       'gönderdik.',
     ),
     const SizedBox(height: 10),
@@ -409,7 +409,7 @@ class _PhoneVerifyCardState extends State<PhoneVerifyCard> {
         const Icon(Icons.check_circle, color: kAdminAccent, size: 18),
         const SizedBox(width: 8),
         Text(
-          '0 ${formatPhoneRaw10(raw10)} doğrulandı',
+          '${formatPhoneRaw10(raw10)} doğrulandı',
           style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.w800,
@@ -458,7 +458,7 @@ class _PhoneVerifyCardState extends State<PhoneVerifyCard> {
             const Icon(Icons.check_circle, color: kAdminAccent, size: 18),
             const SizedBox(width: 8),
             Text(
-              '0 ${formatPhoneRaw10(raw10)} doğrulandı',
+              '${formatPhoneRaw10(raw10)} doğrulandı',
               style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w800,

@@ -429,7 +429,7 @@ class _SmsOtpFormState extends State<SmsOtpForm> {
     final p1 = _pass1Controller.text.trim();
     return [
       _intro(
-        '0 ${formatPhoneRaw10(_sentTo!)} numarasına gönderilen 6 haneli '
+        '${formatPhoneRaw10(_sentTo!)} numarasına gönderilen 6 haneli '
         'kodu girin ve ${widget.isReset ? 'yeni ' : ''}şifrenizi belirleyin.',
       ),
       AdminFormSection(

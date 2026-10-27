@@ -190,12 +190,16 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
         uploaded = await widget.service.uploadPendingPhoto(_photo!);
         changes[ProfileField.photoUrl] = uploaded;
       }
-      await widget.service.submit(changes);
+      final pending = await widget.service.submit(changes);
       if (!mounted) return;
       Navigator.of(context).pop(true);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Talebin turnuva sorumlusu onayına gönderildi.'),
+        SnackBar(
+          content: Text(
+            pending
+                ? 'Talebin turnuva sorumlusu onayına gönderildi.'
+                : 'Bilgilerin güncellendi.',
+          ),
         ),
       );
     } catch (e) {
@@ -245,7 +249,7 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
                   ),
                 ),
                 child: Text(
-                  phone.length == 10 ? '0 ${formatPhoneRaw10(phone)}' : '-',
+                  phone.length == 10 ? formatPhoneRaw10(phone) : '-',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 15,
