@@ -174,3 +174,11 @@ class _LogoOption extends StatelessWidget {
     );
   }
 }
+
+/// Bellekte kesilmiş (kadrajı ayarlanmış) JPEG fotoğraf; önizleme web'de de
+/// baytlardan okunur.
+XFile preparedPhotoFile(Uint8List jpg) {
+  final f = XFile.fromData(jpg, name: 'photo.jpg', mimeType: 'image/jpeg');
+  _memoryBytes[f] = jpg;
+  return f;
+}

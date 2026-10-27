@@ -6,6 +6,7 @@ import '../../../core/services/app_session.dart';
 import '../../../core/services/app_settings.dart';
 import '../../../core/widgets/admin_form.dart';
 import '../../../core/widgets/admin_page.dart';
+import '../../../core/widgets/photo_crop_screen.dart';
 import '../../../core/widgets/picked_image.dart';
 import '../../../core/widgets/web_safe_image.dart';
 import '../../auth/widgets/phone_input.dart';
@@ -102,7 +103,25 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
   }
 
   Future<void> _pickPhoto() async {
-    final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
+    final picked = await pickAndCropPortraitPhoto(context);
+    _setPhoto(picked);
+  }
+
+  /// Seçili ya da yüklü fotoğrafın kadrajını yeniden ayarlar.
+  Future<void> _reframePhoto() async {
+    final current = (widget.player.photoUrl ?? '').trim();
+    final XFile? picked;
+    if (_photo != null) {
+      final bytes = await _photo!.readAsBytes();
+      if (!mounted) return;
+      picked = await cropPortraitPhoto(context, bytes);
+    } else {
+      picked = await cropPortraitPhotoFromUrl(context, current);
+    }
+    _setPhoto(picked);
+  }
+
+  void _setPhoto(XFile? picked) {
     if (picked == null || !mounted) return;
     setState(() {
       _photo = picked;
@@ -352,6 +371,13 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
             ],
           ),
         ),
+        if (!locked && (_photo != null || current.isNotEmpty))
+          TextButton.icon(
+            onPressed: _busy ? null : _reframePhoto,
+            style: TextButton.styleFrom(foregroundColor: kAdminAccent),
+            icon: const Icon(Icons.crop_rounded, size: 18),
+            label: const Text('Kadrajı düzenle'),
+          ),
         if (locked || _photo != null) ...[
           const SizedBox(height: 10),
           Container(
