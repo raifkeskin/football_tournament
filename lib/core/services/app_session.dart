@@ -514,9 +514,10 @@ class AppSessionController extends ValueNotifier<AppSessionState> {
           (r['surname'] ?? '').toString().trim(),
         ].where((e) => e.isNotEmpty).join(' ');
         if ((name ?? '').isEmpty && full.isNotEmpty) name = full;
-        // Hesapta fotoğraf yoksa futbolcu kaydındaki (menüdeki profil kartı).
+        // Futbolcu kaydı olan hesapta tek fotoğraf: futbolcu fotoğrafı
+        // (Futbolcu ve Yönetim kartı aynı fotoğrafı gösterir).
         final pp = (r['photo_url'] ?? '').toString().trim();
-        if ((photoUrl ?? '').isEmpty && pp.isNotEmpty) photoUrl = pp;
+        if (pp.isNotEmpty) photoUrl = pp;
       }
     } catch (_) {}
 

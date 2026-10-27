@@ -469,6 +469,19 @@ class _StaffHeaderCardState extends State<_StaffHeaderCard> {
 
   Future<void> _changePhoto() async {
     final messenger = ScaffoldMessenger.of(context);
+    // Futbolcu kaydı varsa tek fotoğraf o kayıttadır; ayrı yönetici
+    // fotoğrafı yüklenmez.
+    if ((widget.session.playerId ?? '').isNotEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Fotoğrafını Futbolcu sekmesindeki Bilgilerim\'den '
+            'değiştirebilirsin; iki kartta da aynı fotoğraf görünür.',
+          ),
+        ),
+      );
+      return;
+    }
     final controller = AppSession.of(context);
     final uid = Supabase.instance.client.auth.currentUser?.id;
     if (uid == null) return;

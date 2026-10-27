@@ -4857,6 +4857,7 @@ class _DetailTabView extends StatelessWidget {
             match: match,
             eventsStream: eventsStream,
             clips: clips,
+            regionOwner: regionOwner,
           );
         }
         return _buildFlow(context, settings.periodMinutes);
@@ -5104,7 +5105,11 @@ class _MinutelessSummary extends StatelessWidget {
     required this.match,
     required this.eventsStream,
     this.clips = const {},
+    this.regionOwner = false,
   });
+
+  /// Maçın bölge sorumlusu da olayları düzenler/siler.
+  final bool regionOwner;
 
   final MatchModel match;
   final Stream<List<Map<String, dynamic>>> eventsStream;
@@ -5169,6 +5174,9 @@ class _MinutelessSummary extends StatelessWidget {
               () => _SummaryRow(name, playerId, ownGoal: ownGoal),
             );
             row?.count++;
+            row?.events.add(e);
+            final assist = _str(e['assist_player_name']);
+            if (assist.isNotEmpty) row?.assists.add(assist);
             if (e['is_penalty'] == true) row?.penalties++;
             final clip = clips[_str(e['id'])];
             if (clip != null) row?.clips.add(clip);
@@ -5177,6 +5185,7 @@ class _MinutelessSummary extends StatelessWidget {
               playerId.isEmpty ? name : playerId,
               () => _SummaryRow(name, playerId),
             );
+            row?.events.add(e);
             if (type == 'red_card') {
               row?.reds++;
             } else {
@@ -5188,6 +5197,11 @@ class _MinutelessSummary extends StatelessWidget {
           }
         }
 
+        final session = AppSession.of(context).value;
+        final canEdit =
+            session.canManageLeague(match.leagueId) ||
+            regionOwner ||
+            (match.observerId != null && match.observerId == session.user?.id);
         final hasCards = cards.values.any((m) => m.isNotEmpty);
         final hasGoals = goals.values.any((m) => m.isNotEmpty);
         return ListView(
@@ -5201,12 +5215,14 @@ class _MinutelessSummary extends StatelessWidget {
                 goals[match.homeTeamId]!.values.toList(),
                 goals[match.awayTeamId]!.values.toList(),
                 goal: true,
+                canEdit: canEdit,
               ),
             if (hasCards)
               _section(
                 context,
                 cards[match.homeTeamId]!.values.toList(),
                 cards[match.awayTeamId]!.values.toList(),
+                canEdit: canEdit,
               ),
             if (motm != null)
               _card(
@@ -5246,6 +5262,128 @@ class _MinutelessSummary extends StatelessWidget {
     );
   }
 
+  /// Satıra dokununca: oyuncunun golleri / kartları tek tek; her biri
+  /// olay formuyla düzenlenir (asist, penaltı…) ya da silinir.
+  Future<void> _openRowEvents(
+    BuildContext context,
+    _SummaryRow r,
+    bool goal,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final picked = await showModalBottomSheet<(String, Map<String, dynamic>)>(
+      context: context,
+      backgroundColor: const Color(0xFF111A2E),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                r.name.isEmpty ? (goal ? 'Gol' : 'Kart') : r.name,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 10),
+              for (var i = 0; i < r.events.length; i++)
+                Builder(
+                  builder: (_) {
+                    final e = r.events[i];
+                    final type = _str(e['event_type']);
+                    final assist = _str(e['assist_player_name']);
+                    final label = goal
+                        ? [
+                            r.events.length > 1 ? '${i + 1}. gol' : 'Gol',
+                            if (e['is_penalty'] == true) 'penaltı',
+                            if (e['is_own_goal'] != true)
+                              assist.isEmpty ? 'asist yok' : 'Asist: $assist',
+                          ].join(' · ')
+                        : type == 'red_card'
+                        ? 'Kırmızı kart'
+                        : 'Sarı kart';
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E293B),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              label,
+                              style: const TextStyle(fontSize: 13.5),
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: () => Navigator.pop(ctx, ('edit', e)),
+                            icon: const Icon(Icons.edit_rounded, size: 18),
+                            label: const Text(
+                              'DÜZENLE',
+                              style: TextStyle(fontWeight: FontWeight.w800),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Sil',
+                            onPressed: () => Navigator.pop(ctx, ('delete', e)),
+                            icon: const Icon(
+                              Icons.delete_outline_rounded,
+                              color: Color(0xFFF87171),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              if (r.playerId.isNotEmpty)
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, ('card', const {})),
+                  child: const Text('Oyuncu kartını aç'),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (picked == null || !context.mounted) return;
+    final (action, e) = picked;
+    try {
+      switch (action) {
+        case 'card':
+          showPlayerCard(context, playerKey: r.playerId);
+        case 'edit':
+          await showDialog<void>(
+            context: context,
+            builder: (_) => AdminMatchEventScreen(
+              match: match,
+              event: MatchEvent.fromMap(e, _str(e['id'])),
+            ),
+          );
+        case 'delete':
+          final ok = await showAdminConfirmDialog(
+            context: context,
+            title: 'Olayı sil',
+            message: '${r.name.isEmpty ? 'Olay' : r.name} kaydı silinsin mi?',
+          );
+          if (!ok) return;
+          await ServiceLocator.matchService.deleteMatchEvent(_str(e['id']));
+          messenger.showSnackBar(
+            const SnackBar(content: Text('Olay silindi.')),
+          );
+      }
+    } catch (err) {
+      messenger.showSnackBar(SnackBar(content: Text('Hata: $err')));
+    }
+  }
+
   Widget _card({required Widget child}) => Container(
     margin: const EdgeInsets.only(bottom: 12),
     padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
@@ -5264,6 +5402,7 @@ class _MinutelessSummary extends StatelessWidget {
     String emptyHome = '',
     String emptyAway = '',
     bool goal = false,
+    bool canEdit = false,
   }) {
     Widget column(List<_SummaryRow> rows, bool end, String empty) {
       if (rows.isEmpty) {
@@ -5280,7 +5419,11 @@ class _MinutelessSummary extends StatelessWidget {
         children: [
           for (final r in rows)
             InkWell(
-              onTap: r.playerId.isEmpty
+              // Yetkili: oyuncunun olayları tek tek düzenlenir (asist
+              // eklemek gibi); diğerleri oyuncu kartını açar.
+              onTap: canEdit && r.events.isNotEmpty
+                  ? () => _openRowEvents(context, r, goal)
+                  : r.playerId.isEmpty
                   ? null
                   : () => showPlayerCard(context, playerKey: r.playerId),
               child: Padding(
@@ -5352,12 +5495,30 @@ class _MinutelessSummary extends StatelessWidget {
         : r.ownGoal
         ? ' (K.K.)'
         : '';
-    final nameText = Text(
+    final title = Text(
       '${r.name.isEmpty ? '-' : r.name}$suffix',
       overflow: TextOverflow.ellipsis,
       textAlign: end ? TextAlign.right : TextAlign.left,
       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
     );
+    // Asist, golcünün altında küçük ve soluk.
+    final Widget nameText = goal && r.assists.isNotEmpty
+        ? Column(
+            crossAxisAlignment: end
+                ? CrossAxisAlignment.end
+                : CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              title,
+              Text(
+                'Asist: ${r.assists.join(', ')}',
+                overflow: TextOverflow.ellipsis,
+                textAlign: end ? TextAlign.right : TextAlign.left,
+                style: const TextStyle(color: _muted, fontSize: 11.5),
+              ),
+            ],
+          )
+        : title;
     final iconRow = Row(mainAxisSize: MainAxisSize.min, children: icons);
     final clipButtons = [
       for (final c in r.clips)
@@ -5403,6 +5564,10 @@ class _SummaryRow {
   final String playerId;
   final bool ownGoal;
   final clips = <MatchHighlight>[];
+
+  /// Satırdaki olaylar (girildiği sırayla) ve gollerin asistçileri.
+  final events = <Map<String, dynamic>>[];
+  final assists = <String>[];
   int count = 0;
   int penalties = 0;
   int yellows = 0;
