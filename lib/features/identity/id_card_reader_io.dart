@@ -94,12 +94,23 @@ class IdCardReader {
   }
 
   /// Çipi okur: önce PACE (destekliyorsa), olmazsa BAC. [onStatus] okuma
-  /// adımlarını bildirir (Android ekranı; iPhone'da sistem penceresi).
+  /// adımlarını, [onProgress] ilerlemeyi (0-1) bildirir (Android ekranı;
+  /// iPhone'da sistem penceresinde yüzde yazar).
   static Future<IdCardData> readChip(
     IdCardKey key, {
     void Function(String status)? onStatus,
+    void Function(double progress)? onProgress,
   }) async {
     final nfc = NfcProvider();
+    Future<void> step(double p) async {
+      onProgress?.call(p);
+      try {
+        await nfc.setIosAlertMessage(
+          'Okunuyor %${(p * 100).round()} · kartı oynatmayın',
+        );
+      } catch (_) {}
+    }
+
     Future<void> connect() => nfc.connect(
       timeout: const Duration(seconds: 45),
       iosAlertMessage: 'Kimlik kartını telefonun arkasına yaklaştırın',
@@ -112,13 +123,14 @@ class IdCardReader {
         throw const IdCardError('Kart algılanamadı. Tekrar deneyin.');
       }
       onStatus?.call('Okunuyor, kartı oynatmayın…');
-      await nfc.setIosAlertMessage('Okunuyor, kartı oynatmayın…');
+      await step(0.1);
 
       var passport = Passport(nfc);
       EfCardAccess? cardAccess;
       try {
         cardAccess = await passport.readEfCardAccess();
       } catch (_) {}
+      await step(0.25);
 
       var opened = false;
       if (cardAccess != null) {
@@ -160,12 +172,15 @@ class IdCardReader {
         }
       }
 
+      await step(0.6);
       final dg1 = await passport.readEfDG1();
+      await step(0.95);
       final mrz = dg1.mrz;
       final tc = tcFromText([mrz.optionalData, mrz.optionalData2 ?? '']);
       if (tc == null) {
         throw const IdCardError('Kartta kimlik numarası bulunamadı.');
       }
+      onProgress?.call(1);
       await nfc.disconnect(iosAlertMessage: 'Kimlik okundu');
       return IdCardData(
         firstName: mrz.firstName.trim(),

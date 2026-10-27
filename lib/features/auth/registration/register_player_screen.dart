@@ -30,6 +30,12 @@ class _RegisterPlayerScreenState extends State<RegisterPlayerScreen> {
   String? _foot;
   final _height = TextEditingController();
   final _weight = TextEditingController();
+
+  /// Çipte Türkçe harf yok ("BILGE KAGAN"): ad soyad yalnız Türkçe harfler
+  /// düzeltilerek değiştirilebilir.
+  final _firstCtrl = TextEditingController();
+  final _lastCtrl = TextEditingController();
+  bool _editName = false;
   bool _busy = false;
   String? _error;
 
@@ -37,11 +43,29 @@ class _RegisterPlayerScreenState extends State<RegisterPlayerScreen> {
   void dispose() {
     _height.dispose();
     _weight.dispose();
+    _firstCtrl.dispose();
+    _lastCtrl.dispose();
     super.dispose();
   }
 
-  String get _first => trTitleCase(_card!.firstName);
-  String get _last => trTitleCase(_card!.lastName);
+  String get _first => _firstCtrl.text.trim().isEmpty
+      ? trTitleCase(_card!.firstName)
+      : _firstCtrl.text.trim().replaceAll(RegExp(r'\s+'), ' ');
+  String get _last => _lastCtrl.text.trim().isEmpty
+      ? trTitleCase(_card!.lastName)
+      : _lastCtrl.text.trim().replaceAll(RegExp(r'\s+'), ' ');
+
+  /// Türkçe harfleri katlar: "Kağan" ile çipteki "KAGAN" eşleşsin.
+  static String _fold(String s) {
+    const from = 'ŞĞÜÇÖİÂÎÛ', to = 'SGUCOIAIU';
+    final u = s.replaceAll('i', 'İ').replaceAll('ı', 'I').toUpperCase();
+    final b = StringBuffer();
+    for (final ch in u.split('')) {
+      final i = from.indexOf(ch);
+      b.write(i >= 0 ? to[i] : ch);
+    }
+    return b.toString().replaceAll(RegExp(r'[^A-Z]+'), ' ').trim();
+  }
 
   /// Kimlik okunur; bu kişinin hesabı olan bir profili zaten varsa uyarılır.
   Future<void> _readCard() async {
@@ -60,7 +84,12 @@ class _RegisterPlayerScreenState extends State<RegisterPlayerScreen> {
       );
       if (!mounted) return;
       if (r == 'ok') {
-        setState(() => _card = card);
+        setState(() {
+          _card = card;
+          _firstCtrl.text = trTitleCase(card.firstName);
+          _lastCtrl.text = trTitleCase(card.lastName);
+          _editName = false;
+        });
       } else if (r == 'profile_has_account') {
         await _alreadyRegistered();
       } else {
@@ -156,6 +185,15 @@ class _RegisterPlayerScreenState extends State<RegisterPlayerScreen> {
     final numErr = _numbersError();
     if (numErr != null) {
       setState(() => _error = numErr);
+      return;
+    }
+    if (_fold(_first) != _fold(card.firstName) ||
+        _fold(_last) != _fold(card.lastName)) {
+      setState(
+        () => _error =
+            'Ad soyad kimlikteki adla aynı olmalı; yalnız Türkçe harfler '
+            '(ı, ğ, ş, ü, ö, ç) düzeltilebilir.',
+      );
       return;
     }
     FocusScope.of(context).unfocus();
@@ -313,6 +351,37 @@ class _RegisterPlayerScreenState extends State<RegisterPlayerScreen> {
     final subs = kSubPositionsByMain[_main] ?? const <String>[];
     return [
       _identityCard(card),
+      if (_editName)
+        Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: AdminFormSection(
+            title: 'Ad soyad',
+            child: AdminFieldGroup(
+              children: [
+                AdminFieldRow(
+                  icon: Icons.badge_outlined,
+                  label: 'Ad',
+                  child: _nameField(_firstCtrl),
+                ),
+                AdminFieldRow(
+                  icon: Icons.badge_outlined,
+                  label: 'Soyad',
+                  child: _nameField(_lastCtrl),
+                ),
+              ],
+            ),
+          ),
+        )
+      else
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: _busy ? null : () => setState(() => _editName = true),
+            style: TextButton.styleFrom(foregroundColor: kAdminAccent),
+            icon: const Icon(Icons.edit_outlined, size: 16),
+            label: const Text('Türkçe harfleri düzelt (ı, ğ, ş, ü, ö, ç)'),
+          ),
+        ),
       const SizedBox(height: 18),
       AdminFormSection(
         title: 'Mevki',
@@ -428,8 +497,7 @@ class _RegisterPlayerScreenState extends State<RegisterPlayerScreen> {
               ),
               const SizedBox(height: 3),
               Text(
-                'Doğum yılı ${card.birthDate.year} · kimlikten geldi, '
-                'değiştirilemez',
+                'Doğum yılı ${card.birthDate.year} · kimlikten geldi',
                 style: const TextStyle(color: kAdminMuted, fontSize: 12.5),
               ),
             ],
@@ -441,6 +509,19 @@ class _RegisterPlayerScreenState extends State<RegisterPlayerScreen> {
         ),
       ],
     ),
+  );
+
+  Widget _nameField(TextEditingController c) => TextField(
+    controller: c,
+    enabled: !_busy,
+    textCapitalization: TextCapitalization.words,
+    onChanged: (_) => setState(() => _error = null),
+    style: const TextStyle(
+      color: Colors.white,
+      fontSize: 15,
+      fontWeight: FontWeight.w700,
+    ),
+    decoration: adminInlineInputDecoration(hint: ''),
   );
 
   Widget _numberField(TextEditingController c, String hint) => TextField(
