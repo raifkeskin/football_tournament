@@ -22,6 +22,8 @@ import '../../identity/identity_access.dart';
 import '../../identity/identity_service.dart';
 import '../../identity/identity_verify_screen.dart';
 import '../../identity/verified_badge.dart';
+import '../../match/models/match.dart';
+import '../../match/screens/match_details_screen.dart';
 import 'player_positions_tab.dart';
 
 // Uygulamanın ortak renkleri
@@ -201,8 +203,11 @@ class _PlayerCardState extends State<PlayerCard> {
   /// Açık gol satırı (dar listede dokununca ayrıntısı açılır).
   String? _openGoal;
 
-  /// Alt bölüm sekmesi: 0 Özet, 1 Turnuvalar, 2 Goller, 3 Mevki.
+  /// Alt bölüm sekmesi: 0 Özet, 1 Maçlar, 2 Kariyer, 3 Goller, 4 Mevki.
   int _tab = 0;
+
+  /// Maçlar sekmesi turnuva süzgeci: -1 tümü, diğerleri bu sezonun sırası.
+  int _matchFilter = -1;
 
   /// Özet › Bu sezon sekmesi: -1 toplam, diğerleri turnuva sırası.
   int _seasonTab = -1;
@@ -240,7 +245,8 @@ class _PlayerCardState extends State<PlayerCard> {
     index: _tab,
     labels: [
       'Özet',
-      'Turnuvalar',
+      'Maçlar',
+      'Kariyer',
       goalCount > 0 ? 'Goller ($goalCount)' : 'Goller',
       if (_showPositionsTab) 'Mevki',
     ],
@@ -339,10 +345,12 @@ class _PlayerCardState extends State<PlayerCard> {
   Future<String?> _resolvePlayerId(String key) async =>
       _uuidLike.hasMatch(key) ? key : null;
 
-  Future<Map<String, _StatTotals>> _loadTotalsBySeason(String pid) async {
+  Future<_StatsLoad> _loadStats(String pid) async {
     final events = <Map<String, dynamic>>[];
     final rosterMatchIds = <String>{};
     final startedMatchIds = <String>{};
+    // Maçta oynadığı takım (esameden).
+    final teamByMatch = <String, String>{};
     try {
       final res = await _sb
           .from('match_events')
@@ -359,12 +367,14 @@ class _PlayerCardState extends State<PlayerCard> {
     try {
       final res = await _sb
           .from('match_rosters')
-          .select('match_id, is_starting')
+          .select('match_id, team_id, is_starting')
           .eq('player_id', pid);
       for (final r in res) {
         final id = (r['match_id'] ?? '').toString();
         if (id.isEmpty) continue;
         rosterMatchIds.add(id);
+        final tid = (r['team_id'] ?? '').toString();
+        if (tid.isNotEmpty) teamByMatch[id] = tid;
         if (r['is_starting'] == true) startedMatchIds.add(id);
       }
     } catch (_) {}
@@ -414,10 +424,12 @@ class _PlayerCardState extends State<PlayerCard> {
     }
 
     final out = <String, _StatTotals>{};
+    final byMatch = <String, _StatTotals>{};
     void add(String? matchId, _StatTotals t) {
       final sid = seasonByMatch[matchId ?? ''];
       if (sid == null) return;
       out[sid] = (out[sid] ?? const _StatTotals()) + t;
+      byMatch[matchId!] = (byMatch[matchId] ?? const _StatTotals()) + t;
     }
 
     // Oynanan maç: esamede olduğu ya da olayı olan bitmiş maçlar (tekil).
@@ -426,7 +438,7 @@ class _PlayerCardState extends State<PlayerCard> {
       for (final e in events)
         if ((e['player_id'] ?? '').toString() == pid)
           (e['match_id'] ?? '').toString(),
-    }.where(finished.contains);
+    }.where(finished.contains).toSet();
     for (final mid in played) {
       add(mid, const _StatTotals(matches: 1));
     }
@@ -499,6 +511,7 @@ class _PlayerCardState extends State<PlayerCard> {
     }
 
     // Olayı olmayan sezonlar için kayıtlı sezon istatistikleri (ör. mock veri).
+    final fallbackSeasons = <String>{};
     try {
       final res = await _sb
           .from('player_season_stats')
@@ -507,6 +520,7 @@ class _PlayerCardState extends State<PlayerCard> {
       for (final r in res) {
         final sid = (r['season_id'] ?? '').toString();
         if (sid.isEmpty || out.containsKey(sid)) continue;
+        fallbackSeasons.add(sid);
         out[sid] = _StatTotals(
           matches: _readInt(r['matches_played']),
           goals: _readInt(r['goals']),
@@ -517,7 +531,14 @@ class _PlayerCardState extends State<PlayerCard> {
       }
     } catch (_) {}
 
-    return out;
+    return _StatsLoad(
+      bySeason: out,
+      byMatch: byMatch,
+      played: played,
+      seasonByMatch: seasonByMatch,
+      teamByMatch: teamByMatch,
+      fallbackSeasons: fallbackSeasons,
+    );
   }
 
   /// Oyuncunun onaylı gol videoları, en yeni maç üstte. Kesit oyuncuya
@@ -627,7 +648,8 @@ class _PlayerCardState extends State<PlayerCard> {
 
     final pid = await _resolvePlayerId(playerKey);
     if (pid == null || pid.isEmpty) return _PlayerCardData.empty();
-    final totalsBySeason = await _loadTotalsBySeason(pid);
+    final stats = await _loadStats(pid);
+    final totalsBySeason = stats.bySeason;
 
     // Sezon başına oynadığı takım(lar); bu sezonun armaları için id ve logo.
     final teamsBySeason = <String, List<String>>{};
@@ -685,7 +707,10 @@ class _PlayerCardState extends State<PlayerCard> {
       try {
         final res = await _sb
             .from('seasons')
-            .select('id, name, league_id, start_date, is_active, deleted_at')
+            .select(
+              'id, name, league_id, start_date, is_active, deleted_at, '
+              'season_year',
+            )
             .inFilter('id', seasonIds);
         for (final row in res) {
           final id = (row['id'] ?? '').toString().trim();
@@ -766,6 +791,7 @@ class _PlayerCardState extends State<PlayerCard> {
       final tid = teamIdBySeason[sid] ?? '';
       current.add(
         _CurrentEntry(
+          seasonId: sid,
           leagueName: (league?['name'] ?? 'Turnuva').toString().trim(),
           leagueLogo: (league?['logo_url'] ?? '').toString().trim(),
           teamId: tid,
@@ -778,11 +804,112 @@ class _PlayerCardState extends State<PlayerCard> {
     }
     current.sort((a, b) => b.sortKey.compareTo(a.sortKey));
 
+    // Maçlar: oynadığı bitmiş maçlar, en yeni üstte.
+    final matchRows = <_MatchRow>[];
+    if (stats.played.isNotEmpty) {
+      try {
+        final res = await _sb
+            .from('matches')
+            .select(
+              'id, season_id, match_date, week, home_score, away_score, '
+              'home_team_id, away_team_id, '
+              'home:teams!matches_home_team_id_fkey(name), '
+              'away:teams!matches_away_team_id_fkey(name)',
+            )
+            .inFilter('id', stats.played.toList());
+        String nm(dynamic v) =>
+            v is Map ? (v['name'] ?? '').toString().trim() : '';
+        for (final m in res) {
+          final id = (m['id'] ?? '').toString();
+          final sid = (m['season_id'] ?? '').toString();
+          final home = (m['home_team_id'] ?? '').toString();
+          final away = (m['away_team_id'] ?? '').toString();
+          var mine = stats.teamByMatch[id] ?? teamIdBySeason[sid] ?? '';
+          if (mine != home && mine != away) mine = '';
+          matchRows.add(
+            _MatchRow(
+              id: id,
+              seasonId: sid,
+              date: DateTime.tryParse((m['match_date'] ?? '').toString()),
+              week: m['week'] == null ? null : _readInt(m['week']),
+              home: nm(m['home']),
+              away: nm(m['away']),
+              homeScore: m['home_score'] == null
+                  ? null
+                  : _readInt(m['home_score']),
+              awayScore: m['away_score'] == null
+                  ? null
+                  : _readInt(m['away_score']),
+              mineHome: mine.isEmpty ? null : mine == home,
+              totals: stats.byMatch[id] ?? const _StatTotals(),
+            ),
+          );
+        }
+      } catch (_) {}
+    }
+    matchRows.sort((a, b) {
+      final da = a.date, db = b.date;
+      if (da != null && db != null) return db.compareTo(da);
+      return da == null ? 1 : -1;
+    });
+
+    // Kariyer: sezon yılı + takım; turnuvadan bağımsız toplanır.
+    String yearOf(String sid) {
+      final row = seasonById[sid];
+      final y = (row?['season_year'] ?? '').toString().trim();
+      if (y.isNotEmpty) return y;
+      return RegExp(r'(\d{4})')
+              .firstMatch((row?['start_date'] ?? row?['name'] ?? '').toString())
+              ?.group(1) ??
+          '-';
+    }
+
+    final career = <String, _CareerRow>{};
+    void addCareer(String sid, String tid, _StatTotals t) {
+      final row = seasonById[sid];
+      if (row == null || row['deleted_at'] != null) return;
+      final year = yearOf(sid);
+      final key = '$year|$tid';
+      final prev = career[key];
+      career[key] = _CareerRow(
+        year: year,
+        teamName: teamName[tid] ?? '',
+        teamLogo: teamLogo[tid] ?? '',
+        totals: (prev?.totals ?? const _StatTotals()) + t,
+      );
+    }
+
+    final seasonsWithMatches = <String>{};
+    stats.byMatch.forEach((mid, t) {
+      final sid = stats.seasonByMatch[mid] ?? '';
+      if (sid.isEmpty) return;
+      seasonsWithMatches.add(sid);
+      addCareer(sid, stats.teamByMatch[mid] ?? teamIdBySeason[sid] ?? '', t);
+    });
+    for (final sid in {...stats.fallbackSeasons, ...teamIdBySeason.keys}) {
+      if (seasonsWithMatches.contains(sid)) continue;
+      // Kayıtlı ama maçı yok: yalnız aktif sezon ya da eski sezon istatistiği.
+      final active = seasonById[sid]?['is_active'] == true;
+      if (!active && !stats.fallbackSeasons.contains(sid)) continue;
+      addCareer(
+        sid,
+        teamIdBySeason[sid] ?? '',
+        totalsBySeason[sid] ?? const _StatTotals(),
+      );
+    }
+    final careerRows = career.values.toList()
+      ..sort((a, b) {
+        final c = b.year.compareTo(a.year);
+        return c != 0 ? c : a.teamName.compareTo(b.teamName);
+      });
+
     return _PlayerCardData(
       overall: overall,
       tournaments: tournaments,
       current: current,
       foot: foot,
+      matches: matchRows,
+      career: careerRows,
     );
   }
 
@@ -814,9 +941,9 @@ class _PlayerCardState extends State<PlayerCard> {
                       builder: (context, g) => _tabBar(g.data?.length ?? 0),
                     ),
                     const SizedBox(height: 10),
-                    if (_tab == 3 && _showPositionsTab)
+                    if (_tab == 4 && _showPositionsTab)
                       PlayerPositionsTab(playerId: _cardPlayerId, accent: _tone)
-                    else if (_tab == 2)
+                    else if (_tab == 3)
                       _goalsTab()
                     else if (loading)
                       const Padding(
@@ -825,18 +952,10 @@ class _PlayerCardState extends State<PlayerCard> {
                       )
                     else if (_tab == 0)
                       _summary(data)
-                    else if (data.tournaments.isEmpty)
-                      Container(
-                        padding: const EdgeInsets.all(18),
-                        decoration: _panel(),
-                        child: const Text(
-                          'Henüz turnuva verisi yok.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: _mid),
-                        ),
-                      )
+                    else if (_tab == 1)
+                      _matchesTab(data)
                     else
-                      _historyTable(data.tournaments),
+                      _careerTab(data),
                   ],
                 ),
               ),
@@ -1480,64 +1599,288 @@ class _PlayerCardState extends State<PlayerCard> {
     );
   }
 
-  /// Turnuva > sezon satırları; sütunlar: M G A S K.
-  Widget _historyTable(List<_TournamentNode> tournaments) {
-    const colW = 30.0;
-    Widget cell(String v, {Color color = Colors.white, bool bold = false}) =>
-        SizedBox(
-          width: colW,
-          child: Text(
-            v,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: color,
-              fontSize: 13,
-              fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
+  Widget _emptyPanel(String text) => Container(
+    padding: const EdgeInsets.all(18),
+    decoration: _panel(),
+    child: Text(
+      text,
+      textAlign: TextAlign.center,
+      style: const TextStyle(color: _mid),
+    ),
+  );
+
+  static const _assistIcon = 'assets/images/assist.png';
+
+  Widget _cardRect(Color c) => Container(
+    width: 10,
+    height: 14,
+    decoration: BoxDecoration(color: c, borderRadius: BorderRadius.circular(2)),
+  );
+
+  Widget _countIcon(Widget icon, int n, String label) => Semantics(
+    label: n > 1 ? '$n $label' : label,
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        icon,
+        if (n > 1)
+          Text(
+            '×$n',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w800,
             ),
           ),
-        );
+      ],
+    ),
+  );
 
-    Widget header() => Padding(
-      padding: const EdgeInsets.fromLTRB(14, 10, 10, 6),
-      child: Row(
-        children: [
-          const Expanded(
-            child: Text(
-              'Turnuva / Sezon',
-              style: TextStyle(
-                color: _mid,
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
+  Future<void> _openMatch(String id) async {
+    final nav = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final isAdmin = AppSession.of(context).value.isAdmin;
+    try {
+      final row = await _sb.from('matches').select().eq('id', id).single();
+      if (!mounted) return;
+      await nav.push(
+        MaterialPageRoute<void>(
+          settings: const RouteSettings(name: 'MatchDetailsScreen'),
+          builder: (_) => MatchDetailsScreen(
+            match: MatchModel.fromMap(row, id),
+            isAdmin: isAdmin,
+          ),
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Maç açılamadı: $e')));
+    }
+  }
+
+  /// Maçlar: oynadığı maçlar (bu sezon; sezonu yoksa tümü), üstte "Tümü" +
+  /// turnuva logoları süzgeci. Satır: tarih, skor, katkı ikonları, dakika,
+  /// sonuç; dokununca maç detayı.
+  Widget _matchesTab(_PlayerCardData data) {
+    final entries = data.current;
+    final seasons = {for (final e in entries) e.seasonId};
+    final sel = entries.length > 1 && _matchFilter < entries.length
+        ? _matchFilter
+        : -1;
+    final rows = [
+      for (final m in data.matches)
+        if (seasons.isEmpty ||
+            (sel >= 0
+                ? m.seasonId == entries[sel].seasonId
+                : seasons.contains(m.seasonId)))
+          m,
+    ];
+    var w = 0, d = 0, l = 0;
+    for (final m in rows) {
+      switch (m.result) {
+        case 'G':
+          w++;
+        case 'B':
+          d++;
+        case 'M':
+          l++;
+      }
+    }
+
+    Widget filterTab(int index, Widget child, String label) {
+      final on = sel == index;
+      return Semantics(
+        selected: on,
+        button: true,
+        label: label,
+        child: InkWell(
+          onTap: () => setState(() => _matchFilter = index),
+          child: Container(
+            height: 48,
+            constraints: const BoxConstraints(minWidth: 56),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: on ? _tone : Colors.transparent,
+                  width: 3,
+                ),
               ),
             ),
+            child: Opacity(opacity: on ? 1 : 0.55, child: child),
           ),
-          for (final h in const ['M', 'G', 'A', 'S', 'K'])
-            cell(h, color: _mid, bold: true),
-        ],
-      ),
+        ),
+      );
+    }
+
+    Widget logo(_CurrentEntry e) => SizedBox(
+      width: 28,
+      height: 28,
+      child: e.leagueLogo.isEmpty
+          ? const Icon(Icons.emoji_events_outlined, color: _yellow, size: 22)
+          : WebSafeImage(
+              url: _normalizeUrl(e.leagueLogo),
+              fit: BoxFit.contain,
+              isCircle: true,
+              fallbackIconSize: 18,
+            ),
     );
 
-    // Ağaç: turnuva başlık satırı, altında girintili sezonlar (takım adıyla).
-    final children = <Widget>[header()];
-    for (final t in tournaments) {
-      children.add(
-        Container(
-          width: double.infinity,
-          color: Colors.white.withValues(alpha: 0.04),
-          padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+    Widget teamLine(String name, int? score, bool mine) {
+      final style = TextStyle(
+        color: Colors.white,
+        fontSize: 14,
+        fontWeight: mine ? FontWeight.w800 : FontWeight.w500,
+      );
+      return Row(
+        children: [
+          Expanded(
+            child: Text(
+              name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: style,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(score == null ? '-' : '$score', style: style),
+        ],
+      );
+    }
+
+    Widget row(_MatchRow m) {
+      final t = m.totals;
+      final res = m.result;
+      final resColor = res == 'G'
+          ? const Color(0xFF1F9D63)
+          : res == 'M'
+          ? const Color(0xFFD9434B)
+          : const Color(0xFF6B7489);
+      return InkWell(
+        onTap: () => _openMatch(m.id),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 60),
+          padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
+            ),
+          ),
           child: Row(
             children: [
-              const Icon(Icons.emoji_events_outlined, size: 15, color: _accent),
-              const SizedBox(width: 6),
+              SizedBox(
+                width: 44,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      m.date == null
+                          ? '-'
+                          : DateFormat('dd.MM').format(m.date!),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    if (m.week != null && m.week! > 0)
+                      Text(
+                        '${m.week}. hf',
+                        style: const TextStyle(color: _mid, fontSize: 11),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
               Expanded(
+                child: Column(
+                  children: [
+                    teamLine(
+                      shortTeamName(m.home),
+                      m.homeScore,
+                      m.mineHome == true,
+                    ),
+                    const SizedBox(height: 4),
+                    teamLine(
+                      shortTeamName(m.away),
+                      m.awayScore,
+                      m.mineHome == false,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 62,
+                child: Wrap(
+                  alignment: WrapAlignment.end,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: [
+                    if (t.goals > 0)
+                      _countIcon(
+                        const Icon(
+                          Icons.sports_soccer_rounded,
+                          color: Colors.white,
+                          size: 15,
+                        ),
+                        t.goals,
+                        'gol',
+                      ),
+                    if (t.assists > 0)
+                      _countIcon(
+                        Image.asset(_assistIcon, width: 17, height: 17),
+                        t.assists,
+                        'asist',
+                      ),
+                    if (t.yellow > 0)
+                      Semantics(label: 'Sarı kart', child: _cardRect(_yellow)),
+                    if (t.red > 0)
+                      Semantics(label: 'Kırmızı kart', child: _cardRect(_red)),
+                    if (t.motm > 0)
+                      const Icon(
+                        Icons.star_rounded,
+                        color: _yellow,
+                        size: 17,
+                        semanticLabel: 'Maçın adamı',
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 6),
+              Container(
+                height: 24,
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.white24),
+                ),
                 child: Text(
-                  t.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  "${t.minutes}'",
                   style: const TextStyle(
-                    color: _accent,
-                    fontWeight: FontWeight.w800,
+                    color: Color(0xFFC9D1E2),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Container(
+                width: 26,
+                height: 26,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: resColor,
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: Text(
+                  res ?? '-',
+                  style: const TextStyle(
+                    color: Colors.white,
                     fontSize: 13,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
               ),
@@ -1545,104 +1888,6 @@ class _PlayerCardState extends State<PlayerCard> {
           ),
         ),
       );
-      for (var i = 0; i < t.seasons.length; i++) {
-        final sn = t.seasons[i];
-        final last = i == t.seasons.length - 1;
-        final x = sn.totals;
-        children.add(
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Ağaç çizgisi: son sezonda yarıda biter (└), diğerlerinde ├.
-                SizedBox(
-                  width: 34,
-                  child: Stack(
-                    children: [
-                      Positioned(
-                        left: 21,
-                        top: 0,
-                        bottom: last ? null : 0,
-                        height: last ? 22 : null,
-                        child: Container(
-                          width: 1.5,
-                          color: Colors.white.withValues(alpha: 0.18),
-                        ),
-                      ),
-                      Positioned(
-                        left: 21,
-                        top: 21,
-                        child: Container(
-                          width: 9,
-                          height: 1.5,
-                          color: Colors.white.withValues(alpha: 0.18),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(0, 10, 10, 10),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                sn.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              if (sn.teams.isNotEmpty) ...[
-                                const SizedBox(height: 2),
-                                Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.shield_outlined,
-                                      size: 11,
-                                      color: _mid,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Expanded(
-                                      child: Text(
-                                        sn.teams.join(', '),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          color: _mid,
-                                          fontSize: 11.5,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                        cell('${x.matches}'),
-                        cell('${x.goals}', color: _accent, bold: true),
-                        cell('${x.assists}', color: _purple, bold: true),
-                        cell('${x.yellow}', color: _yellow),
-                        cell('${x.red}', color: _red),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      }
     }
 
     return Container(
@@ -1651,12 +1896,281 @@ class _PlayerCardState extends State<PlayerCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          ...children,
-          const Padding(
-            padding: EdgeInsets.fromLTRB(14, 6, 14, 10),
+          if (entries.length > 1)
+            Container(
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                    color: Colors.white.withValues(alpha: 0.08),
+                  ),
+                ),
+              ),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Row(
+                  children: [
+                    filterTab(
+                      -1,
+                      const Text(
+                        'Tümü',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      'Tümü',
+                    ),
+                    for (var i = 0; i < entries.length; i++)
+                      filterTab(
+                        i,
+                        sel == i
+                            ? Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  logo(entries[i]),
+                                  const SizedBox(width: 8),
+                                  ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 190,
+                                    ),
+                                    child: Text(
+                                      entries[i].leagueName,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : logo(entries[i]),
+                        entries[i].leagueName,
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Oynadığı maçlar',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                if (rows.isNotEmpty)
+                  Text(
+                    '${w}G · ${d}B · ${l}M',
+                    style: const TextStyle(
+                      color: _mid,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          if (rows.isEmpty)
+            const Padding(
+              padding: EdgeInsets.fromLTRB(14, 4, 14, 18),
+              child: Text(
+                'Henüz oynadığı maç yok.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: _mid),
+              ),
+            )
+          else
+            for (final m in rows) row(m),
+        ],
+      ),
+    );
+  }
+
+  /// Kariyer: sezon yılı + takım satırları (turnuvadan bağımsız), altta
+  /// toplam. Sütunlar: maç, ilk 11, gol, asist, sarı, kırmızı.
+  Widget _careerTab(_PlayerCardData data) {
+    final rows = data.career;
+    if (rows.isEmpty) return _emptyPanel('Henüz kariyer verisi yok.');
+    const colW = 32.0;
+    Widget cell(Widget child) => SizedBox(
+      width: colW,
+      child: Center(child: child),
+    );
+    Widget num(int v, {bool bold = false}) => cell(
+      Text(
+        '$v',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 14,
+          fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ),
+      ),
+    );
+    List<Widget> nums(_StatTotals t, {bool bold = false}) => [
+      num(t.matches, bold: bold),
+      num(t.starts, bold: bold),
+      num(t.goals, bold: bold),
+      num(t.assists, bold: bold),
+      num(t.yellow, bold: bold),
+      num(t.red, bold: bold),
+    ];
+    Widget head(Widget icon, String tip) =>
+        cell(Tooltip(message: tip, child: icon));
+
+    final header = Container(
+      color: Colors.white.withValues(alpha: 0.05),
+      padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 50,
             child: Text(
-              'M: Maç  G: Gol  A: Asist  S: Sarı kart  K: Kırmızı kart',
-              style: TextStyle(color: _mid, fontSize: 10),
+              'Sezon',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const Expanded(
+            child: Text(
+              'Takım',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          head(
+            const Icon(
+              Icons.checkroom_rounded,
+              color: Colors.white70,
+              size: 18,
+            ),
+            'Maç',
+          ),
+          head(
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.white70, width: 1.4),
+                borderRadius: BorderRadius.circular(3),
+              ),
+              child: const Text(
+                '11',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            'İlk 11',
+          ),
+          head(
+            const Icon(
+              Icons.sports_soccer_rounded,
+              color: Colors.white70,
+              size: 17,
+            ),
+            'Gol',
+          ),
+          head(Image.asset(_assistIcon, width: 18, height: 18), 'Asist'),
+          head(_cardRect(_yellow), 'Sarı kart'),
+          head(_cardRect(_red), 'Kırmızı kart'),
+        ],
+      ),
+    );
+
+    Widget line(_CareerRow c) => Container(
+      padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
+        ),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 50,
+            child: Text(
+              c.year,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 26,
+            height: 26,
+            child: c.teamLogo.isEmpty
+                ? const Icon(Icons.shield_outlined, color: _mid, size: 20)
+                : WebSafeImage(
+                    url: _normalizeUrl(c.teamLogo),
+                    fit: BoxFit.contain,
+                    fallbackIconSize: 16,
+                  ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              c.teamName.isEmpty ? '-' : shortTeamName(c.teamName),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          ...nums(c.totals),
+        ],
+      ),
+    );
+
+    final total = rows.fold(const _StatTotals(), (a, c) => a + c.totals);
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: _panel(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          header,
+          for (final c in rows) line(c),
+          Container(
+            color: Colors.white.withValues(alpha: 0.05),
+            padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Toplam',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                ...nums(total, bold: true),
+              ],
             ),
           ),
         ],
@@ -1671,7 +2185,15 @@ class _PlayerCardData {
     required this.tournaments,
     this.current = const [],
     this.foot = '',
+    this.matches = const [],
+    this.career = const [],
   });
+
+  /// Oynadığı bitmiş maçlar, en yeni üstte.
+  final List<_MatchRow> matches;
+
+  /// Kariyer: sezon yılı + takım satırları, en yeni üstte.
+  final List<_CareerRow> career;
 
   final _StatTotals overall;
   final List<_TournamentNode> tournaments;
@@ -1691,6 +2213,7 @@ class _PlayerCardData {
 /// Bu sezonun bir turnuvası: Özet'te sekme, üstte takım arması.
 class _CurrentEntry {
   const _CurrentEntry({
+    required this.seasonId,
     required this.leagueName,
     required this.leagueLogo,
     required this.teamId,
@@ -1700,12 +2223,92 @@ class _CurrentEntry {
     required this.totals,
   });
 
+  final String seasonId;
   final String leagueName;
   final String leagueLogo;
   final String teamId;
   final String teamName;
   final String teamLogo;
   final String sortKey;
+  final _StatTotals totals;
+}
+
+/// [_PlayerCardState._loadStats] sonucu: sezon ve maç bazında sayılar.
+class _StatsLoad {
+  const _StatsLoad({
+    required this.bySeason,
+    required this.byMatch,
+    required this.played,
+    required this.seasonByMatch,
+    required this.teamByMatch,
+    required this.fallbackSeasons,
+  });
+
+  final Map<String, _StatTotals> bySeason;
+  final Map<String, _StatTotals> byMatch;
+
+  /// Oynadığı bitmiş maçlar.
+  final Set<String> played;
+  final Map<String, String> seasonByMatch;
+  final Map<String, String> teamByMatch;
+
+  /// Sayıları maç olaylarından değil player_season_stats'tan gelen sezonlar.
+  final Set<String> fallbackSeasons;
+}
+
+/// Oyuncu kartı › Maçlar satırı.
+class _MatchRow {
+  const _MatchRow({
+    required this.id,
+    required this.seasonId,
+    required this.date,
+    required this.week,
+    required this.home,
+    required this.away,
+    required this.homeScore,
+    required this.awayScore,
+    required this.mineHome,
+    required this.totals,
+  });
+
+  final String id;
+  final String seasonId;
+  final DateTime? date;
+  final int? week;
+  final String home;
+  final String away;
+  final int? homeScore;
+  final int? awayScore;
+
+  /// Oyuncunun takımı ev sahibi mi (bilinmiyorsa null).
+  final bool? mineHome;
+  final _StatTotals totals;
+
+  /// G / B / M; skor ya da takım bilinmiyorsa null.
+  String? get result {
+    final hs = homeScore, as = awayScore, h = mineHome;
+    if (hs == null || as == null || h == null) return null;
+    final mine = h ? hs : as, other = h ? as : hs;
+    return mine > other
+        ? 'G'
+        : mine < other
+        ? 'M'
+        : 'B';
+  }
+}
+
+/// Oyuncu kartı › Kariyer satırı (sezon yılı + takım).
+class _CareerRow {
+  const _CareerRow({
+    required this.year,
+    required this.teamName,
+    required this.teamLogo,
+    required this.totals,
+  });
+
+  final String year;
+  final String teamName;
+  final String teamLogo;
   final _StatTotals totals;
 }
 
