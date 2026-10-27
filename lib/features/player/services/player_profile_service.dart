@@ -194,6 +194,9 @@ class MySeasonStats {
     this.assists = 0,
     this.yellow = 0,
     this.red = 0,
+    this.wins = 0,
+    this.draws = 0,
+    this.losses = 0,
   });
 
   final int matches;
@@ -201,6 +204,9 @@ class MySeasonStats {
   final int assists;
   final int yellow;
   final int red;
+  final int wins;
+  final int draws;
+  final int losses;
 }
 
 enum ProfileChangeStatus { pending, approved, rejected, withdrawn }
@@ -407,7 +413,7 @@ class PlayerProfileService {
     final results = await Future.wait([
       _client
           .from('match_rosters')
-          .select('match_id')
+          .select('match_id, team_id')
           .eq('player_id', playerId)
           .eq('season_id', seasonId),
       _client
@@ -417,21 +423,37 @@ class PlayerProfileService {
           )
           .eq('season_id', seasonId)
           .or('player_id.eq.$playerId,assist_player_id.eq.$playerId'),
-      // Ertelenen / iptal maçlar oynanmadı: sayılara katılmaz.
-      _client.from('matches').select('id').eq('season_id', seasonId).inFilter(
-        'status',
-        ['cancelled', 'postponed'],
-      ),
+      // Yalnız biten maçlar sayılır (başlamamış, ertelenen, iptal değil).
+      _client
+          .from('matches')
+          .select('id, home_team_id, home_score, away_score')
+          .eq('season_id', seasonId)
+          .eq('status', 'finished'),
     ]);
-    final unplayed = results[2].map((r) => r['id'].toString()).toSet();
-    final matchIds = results[0]
-        .map((r) => r['match_id'].toString())
-        .where((id) => !unplayed.contains(id))
-        .toSet();
+    final finished = {for (final r in results[2]) r['id'].toString(): r};
+    final matchTeam = <String, String>{
+      for (final r in results[0])
+        if (finished.containsKey(r['match_id'].toString()))
+          r['match_id'].toString(): (r['team_id'] ?? '').toString(),
+    };
+    var wins = 0, draws = 0, losses = 0;
+    matchTeam.forEach((id, team) {
+      final m = finished[id]!;
+      final hs = (m['home_score'] as num?)?.toInt() ?? 0;
+      final as = (m['away_score'] as num?)?.toInt() ?? 0;
+      final mine = m['home_team_id']?.toString() == team ? hs - as : as - hs;
+      if (mine > 0) {
+        wins++;
+      } else if (mine == 0) {
+        draws++;
+      } else {
+        losses++;
+      }
+    });
     var goals = 0, assists = 0, yellow = 0, red = 0;
     final yellowMatches = <String>{};
     for (final e in results[1]) {
-      if (unplayed.contains(e['match_id']?.toString())) continue;
+      if (!finished.containsKey(e['match_id']?.toString())) continue;
       final type = (e['event_type'] ?? '').toString();
       final mine = e['player_id']?.toString() == playerId;
       if (type == 'goal') {
@@ -450,11 +472,14 @@ class PlayerProfileService {
       }
     }
     return MySeasonStats(
-      matches: matchIds.length,
+      matches: matchTeam.length,
       goals: goals,
       assists: assists,
       yellow: yellow,
       red: red,
+      wins: wins,
+      draws: draws,
+      losses: losses,
     );
   }
 

@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -20,7 +19,6 @@ import '../../../core/utils/team_name.dart';
 import '../../../core/widgets/admin_page.dart' show showAdminConfirmDialog;
 import '../../identity/identity_access.dart';
 import '../../identity/identity_service.dart';
-import '../../identity/identity_verify_screen.dart';
 import '../../identity/verified_badge.dart';
 import '../../match/models/match.dart';
 import '../../match/screens/match_details_screen.dart';
@@ -1836,11 +1834,12 @@ class _PlayerCardState extends State<PlayerCard> {
                 ),
               ),
               const SizedBox(width: 6),
-              // İkon alanı yalnız ikon kadar yer kaplar.
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 62),
+              // Sabit genişlik: skorlar ikon sayısından bağımsız aynı
+              // sütunda durur.
+              SizedBox(
+                width: 62,
                 child: Wrap(
-                  alignment: WrapAlignment.end,
+                  alignment: WrapAlignment.center,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   spacing: 4,
                   runSpacing: 4,
@@ -2521,44 +2520,24 @@ class _IdentityMenuState extends State<_IdentityMenu> {
       size: 28,
       leading: 0,
     );
-    if (!_ready || !IdentityAccess.visibleIn(context)) return badge;
-    // Başkasının kimliğini admin, kurucu başkan ve bölge sorumlusu okutur;
-    // diğerleri yalnız kendi profilinde.
-    final session = AppSession.of(context).value;
-    final canRead =
-        !_verified &&
-        !kIsWeb &&
-        (session.hasManagementPanel || session.playerId == widget.playerId);
-    if (!canRead && !_canUnverify) return badge;
+    // Onaysız profilde hiçbir simge yok; kimlik menüden okutulur.
+    if (!_ready || !_verified || !_canUnverify) return badge;
+    if (!IdentityAccess.visibleIn(context)) return badge;
     return PopupMenuButton<String>(
       tooltip: 'Kimlik',
       padding: EdgeInsets.zero,
       color: const Color(0xFF1E293B),
       onSelected: (v) {
-        if (v == 'read') {
-          IdentityVerifyScreen.open(
-            context,
-            expectedPlayerId: widget.playerId,
-            expectedName: widget.playerName,
-          );
-        } else if (v == 'unverify') {
-          _unverify();
-        }
+        if (v == 'unverify') _unverify();
       },
       itemBuilder: (_) => [
-        if (canRead)
-          const PopupMenuItem(
-            value: 'read',
-            child: Text('Kimliği okut', style: TextStyle(color: Colors.white)),
+        const PopupMenuItem(
+          value: 'unverify',
+          child: Text(
+            'Onayı kaldır',
+            style: TextStyle(color: Color(0xFFF87171)),
           ),
-        if (_canUnverify)
-          const PopupMenuItem(
-            value: 'unverify',
-            child: Text(
-              'Onayı kaldır',
-              style: TextStyle(color: Color(0xFFF87171)),
-            ),
-          ),
+        ),
       ],
       child: Container(
         width: 30,
@@ -2569,9 +2548,9 @@ class _IdentityMenuState extends State<_IdentityMenu> {
           border: Border.all(color: _bgDark, width: 1),
         ),
         alignment: Alignment.center,
-        child: Icon(
-          _verified ? Icons.verified_rounded : Icons.verified_outlined,
-          color: _verified ? kVerifiedBlue : Colors.white70,
+        child: const Icon(
+          Icons.verified_rounded,
+          color: kVerifiedBlue,
           size: 26,
         ),
       ),

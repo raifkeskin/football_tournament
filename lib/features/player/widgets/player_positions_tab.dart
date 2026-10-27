@@ -11,6 +11,8 @@ const _pitchLine = Color(0xFF8AA2C6);
 
 /// Asıl mevki her zaman turuncu; oynayabildiği mevkiler takım renginde.
 const _mainColor = Color(0xFFF97316);
+// Diğer mevkiler takım renginden bağımsız açık gri.
+const _otherColor = Color(0xFFCBD5E1);
 
 /// Oynayabildiği mevki seçenekleri; bek ve kanatlar sol / sağ ayrı (FIFA
 /// gibi). Veritabanı `players_other_positions_check` ile de sınırlar.
@@ -237,7 +239,7 @@ class _PlayerPositionsTabState extends State<PlayerPositionsTab> {
                 onEdit: _canEdit ? () => _edit(main: true) : null,
               ),
               _legend(
-                ring: _Ring.other(widget.accent, size: 12),
+                ring: _Ring.other(_otherColor, size: 12),
                 label: 'Oynayabildiği',
                 onEdit: _canEdit ? () => _edit(main: false) : null,
               ),
@@ -397,7 +399,7 @@ class _PositionsPitch extends StatelessWidget {
             final ring = isMain
                 ? _Ring.main(_mainColor)
                 : isOther
-                ? _Ring.other(accent)
+                ? _Ring.other(_otherColor)
                 : Container(
                     width: 22,
                     height: 22,
