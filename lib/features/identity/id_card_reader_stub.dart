@@ -21,5 +21,6 @@ class IdCardReader {
   static Future<IdCardData> readChip(
     IdCardKey key, {
     void Function(String status)? onStatus,
+    void Function(double progress)? onProgress,
   }) async => throw const IdCardError('Kimlik okuma yalnız uygulamada.');
 }
