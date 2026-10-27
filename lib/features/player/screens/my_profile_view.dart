@@ -745,26 +745,23 @@ class _MyProfileViewState extends State<MyProfileView> {
               builder: (context, snap) {
                 final s = snap.data;
                 if (s == null) return const SizedBox.shrink();
+                if (s.matches == 0) return const SizedBox.shrink();
+                // Takımın bu oyuncuyla sonuçları: galibiyet · beraberlik ·
+                // mağlubiyet.
+                const bold = TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                );
                 return Text.rich(
                   TextSpan(
                     style: const TextStyle(color: kAdminMuted, fontSize: 12),
                     children: [
-                      TextSpan(
-                        text: '${s.matches}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const TextSpan(text: ' M · '),
-                      TextSpan(
-                        text: '${s.goals}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const TextSpan(text: ' G'),
+                      TextSpan(text: '${s.wins}', style: bold),
+                      const TextSpan(text: 'G · '),
+                      TextSpan(text: '${s.draws}', style: bold),
+                      const TextSpan(text: 'B · '),
+                      TextSpan(text: '${s.losses}', style: bold),
+                      const TextSpan(text: 'M'),
                     ],
                   ),
                 );
