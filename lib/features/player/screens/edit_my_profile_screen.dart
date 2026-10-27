@@ -225,6 +225,7 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
       _busy = true;
       _error = null;
     });
+    final session = AppSession.of(context);
     String? uploaded;
     try {
       if (_photo != null) {
@@ -232,6 +233,8 @@ class _EditMyProfileScreenState extends State<EditMyProfileScreen> {
         changes[ProfileField.photoUrl] = uploaded;
       }
       final pending = await widget.service.submit(changes);
+      // Yönetim kartı da futbolcu fotoğrafını gösterir.
+      if (uploaded != null) session.setPhotoUrl(uploaded);
       // Yerine yenisi geçen eski fotoğraf (kendi klasöründeyse) silinir.
       final old = (widget.player.photoUrl ?? '').trim();
       if (uploaded != null && old.contains('/profile_requests/')) {
