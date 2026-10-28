@@ -338,34 +338,41 @@ class MatchResultNewsCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _Header(label: 'Maç sonucu', meta: meta),
-              // Takım fotoğrafları: kazananınki önce (sunucu sıralar).
+              // Takım fotoğrafları varsa (kazananınki önce, sunucu sıralar)
+              // skor ve golcüler fotoğrafın üstünde; kaydırınca diğer takım.
               if (item.imageUrls.isNotEmpty)
-                _PhotoPager(urls: item.imageUrls, onOpen: onOpenPhoto),
-              _Band(result: r),
-              if (r.homeScorers.isNotEmpty || r.awayScorers.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: _ScorerColumn(
-                          r.homeScorers,
-                          goals: r.hs,
-                          end: false,
+                _PhotoResult(
+                  result: r,
+                  urls: item.imageUrls,
+                  onOpen: onOpenPhoto,
+                )
+              else ...[
+                _Band(result: r),
+                if (r.homeScorers.isNotEmpty || r.awayScorers.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: _ScorerColumn(
+                            r.homeScorers,
+                            goals: r.hs,
+                            end: false,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: _ScorerColumn(
-                          r.awayScorers,
-                          goals: r.as,
-                          end: true,
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: _ScorerColumn(
+                            r.awayScorers,
+                            goals: r.as,
+                            end: true,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
+              ],
               const SizedBox(height: 6),
               _Actions(
                 loggedIn: loggedIn,
@@ -384,26 +391,42 @@ class MatchResultNewsCard extends StatelessWidget {
   }
 }
 
-/// Haber görselleri: parmakla kaydırılır, altta nokta göstergesi.
-class _PhotoPager extends StatefulWidget {
-  const _PhotoPager({required this.urls, this.onOpen});
+/// Takım fotoğrafı tam kart: fotoğraflar kaydırılır, alttaki koyu geçişin
+/// üstünde armalar + skor ve golcüler sabit durur; sağ üstte "1/2".
+class _PhotoResult extends StatefulWidget {
+  const _PhotoResult({required this.result, required this.urls, this.onOpen});
 
+  final _Result result;
   final List<String> urls;
   final ValueChanged<int>? onOpen;
 
   @override
-  State<_PhotoPager> createState() => _PhotoPagerState();
+  State<_PhotoResult> createState() => _PhotoResultState();
 }
 
-class _PhotoPagerState extends State<_PhotoPager> {
+class _PhotoResultState extends State<_PhotoResult> {
   int _page = 0;
 
   @override
   Widget build(BuildContext context) {
+    final r = widget.result;
     final urls = widget.urls;
+    Widget crest(_Team t) => Container(
+      width: 64,
+      height: 64,
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: t.logo.isEmpty
+          ? Icon(Icons.shield_rounded, size: 40, color: t.band)
+          : WebSafeImage(url: t.logo, fit: BoxFit.contain),
+    );
     return AspectRatio(
-      aspectRatio: 4 / 3,
+      aspectRatio: 4 / 5,
       child: Stack(
+        fit: StackFit.expand,
         children: [
           PageView.builder(
             itemCount: urls.length,
@@ -413,26 +436,110 @@ class _PhotoPagerState extends State<_PhotoPager> {
               child: WebSafeImage(url: urls[i], fit: BoxFit.cover),
             ),
           ),
+          IgnorePointer(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Container(
+                  padding: const EdgeInsets.fromLTRB(14, 70, 14, 14),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Color(0x000B1220),
+                        Color(0xCC0B1220),
+                        Color(0xF20B1220),
+                      ],
+                      stops: [0, 0.35, 1],
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          crest(r.home),
+                          Expanded(
+                            child: Container(
+                              height: 64,
+                              alignment: Alignment.center,
+                              decoration: const BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    Color(0xFF064E3B),
+                                    Color(0xFF0B1220),
+                                    Color(0xFF064E3B),
+                                  ],
+                                ),
+                              ),
+                              child: Text(
+                                '${r.hs} - ${r.as}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 40,
+                                  height: 1,
+                                  fontWeight: FontWeight.w900,
+                                  fontFeatures: [FontFeature.tabularFigures()],
+                                ),
+                              ),
+                            ),
+                          ),
+                          crest(r.away),
+                        ],
+                      ),
+                      if (r.homeScorers.isNotEmpty ||
+                          r.awayScorers.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: _ScorerColumn(
+                                r.homeScorers,
+                                goals: r.hs,
+                                end: false,
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: _ScorerColumn(
+                                r.awayScorers,
+                                goals: r.as,
+                                end: true,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
           if (urls.length > 1)
             Positioned(
-              left: 0,
-              right: 0,
-              bottom: 8,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  for (var i = 0; i < urls.length; i++)
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      margin: const EdgeInsets.symmetric(horizontal: 3),
-                      width: i == _page ? 16 : 6,
-                      height: 6,
-                      decoration: BoxDecoration(
-                        color: i == _page ? Colors.white : Colors.white54,
-                        borderRadius: BorderRadius.circular(3),
-                      ),
+              top: 10,
+              right: 10,
+              child: IgnorePointer(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.6),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    '${_page + 1}/${urls.length}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
                     ),
-                ],
+                  ),
+                ),
               ),
             ),
         ],
