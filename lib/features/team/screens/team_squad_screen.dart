@@ -2077,8 +2077,9 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                   }
                 },
                 itemBuilder: (_) => [
-                  // Kişisel bilgileri yalnız bölge sorumlusu ve üstü düzenler.
-                  if (!_needsApproval)
+                  // Futbolcu bilgilerini yalnız admin düzenler (oyuncular
+                  // kendi hesaplarıyla kayıt olur).
+                  if (AppSession.of(context).value.isAdmin)
                     const PopupMenuItem(
                       value: 'edit',
                       child: _MenuRow(
@@ -4088,8 +4089,8 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
                   ],
                 ),
               ),
-              // Boştaki oyuncuyu (başka turnuvadan) yalnız admin düzenler.
-              if (!free || AppSession.of(context).value.isAdmin) ...[
+              // Futbolcu bilgilerini yalnız admin düzenler.
+              if (AppSession.of(context).value.isAdmin) ...[
                 const SizedBox(width: 8),
                 _SmallActionButton(
                   icon: Icons.edit_outlined,

@@ -81,23 +81,26 @@ class AdminPanelWidget extends StatelessWidget {
           );
         },
       ),
-      _AdminMenuData(
-        baslik: 'Fikstür Planlama',
-        renkler: const [Color(0xFF60A5FA), Color(0xFF2563EB)],
-        ikon: Icons.calendar_month_rounded,
-        resimYolu: 'assets/images/admin_fixture.jpg',
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              settings: const RouteSettings(name: 'AdminFixtureEntryScreen'),
-              builder: (_) => const AdminFixtureEntryScreen(),
-            ),
-          );
-        },
-      ),
-      // Canlı kuralar: iptal / geri alma (admin ve kurucu başkan).
-      if (isAdmin || session.isLeagueOwner)
+      // Fikstür oluşturma ve kuralar yalnız admin; diğer yöneticiler
+      // maçların yalnız tarihini (Maçı Düzenle) ve hakemini düzenler.
+      if (isAdmin)
+        _AdminMenuData(
+          baslik: 'Fikstür Planlama',
+          renkler: const [Color(0xFF60A5FA), Color(0xFF2563EB)],
+          ikon: Icons.calendar_month_rounded,
+          resimYolu: 'assets/images/admin_fixture.jpg',
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                settings: const RouteSettings(name: 'AdminFixtureEntryScreen'),
+                builder: (_) => const AdminFixtureEntryScreen(),
+              ),
+            );
+          },
+        ),
+      // Canlı kuralar: iptal / geri alma (yalnız admin).
+      if (isAdmin)
         _AdminMenuData(
           baslik: 'Canlı Kuralar',
           renkler: const [Color(0xFF38BDF8), Color(0xFF0369A1)],
