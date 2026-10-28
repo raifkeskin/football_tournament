@@ -90,6 +90,9 @@ class _MyProfileViewState extends State<MyProfileView> {
   List<ProfileChangeRequest> _requests = const [];
   MyConsents? _consents;
 
+  /// İzin verilmediği için gizli bekleyen kendi fotoğrafı.
+  String? _heldPhoto;
+
   /// Profilde gösterilen sezon yılı (null: en yeni).
   int? _year;
   bool _showPlayed = false;
@@ -130,6 +133,7 @@ class _MyProfileViewState extends State<MyProfileView> {
             .loadMine(id)
             .then<MyConsents?>((c) => c)
             .catchError((_) => null),
+        _service.heldPhoto().catchError((_) => null),
       ]);
       if (!mounted) return;
       setState(() {
@@ -137,6 +141,7 @@ class _MyProfileViewState extends State<MyProfileView> {
         _teams = results[1] as List<MyTeam>;
         _requests = results[2] as List<ProfileChangeRequest>;
         _consents = results[3] as MyConsents?;
+        _heldPhoto = results[4] as String?;
         if (!_years.contains(_year)) _year = null;
         _matches.clear();
         _stats.clear();
@@ -217,7 +222,23 @@ class _MyProfileViewState extends State<MyProfileView> {
         ),
       ),
     );
-    if (saved == true) _reloadRequests();
+    if (saved != true || !mounted) return;
+    _reloadRequests();
+    await _refreshPhoto();
+    if (!mounted || _heldPhoto == null) return;
+    // Yeni fotoğraf izin olmadan kimseye görünmez: izne yönlendir.
+    final go = await showAdminConfirmDialog(
+      context: context,
+      title: 'Fotoğraf İzni',
+      message:
+          'Fotoğraf yayın iznin olmadığı için fotoğrafın kimseye '
+          'görünmeyecek, yalnız sen görürsün. İzinlerim\'den '
+          '"Fotoğraf ve İsim Yayın İzni"ni verirsen herkese görünür.',
+      confirmLabel: 'İZİN VER',
+      cancelLabel: 'Şimdi değil',
+      icon: Icons.photo_camera_front_outlined,
+    );
+    if (go && mounted) await _openConsents();
   }
 
   Future<void> _withdraw(ProfileChangeRequest r) async {
@@ -375,7 +396,8 @@ class _MyProfileViewState extends State<MyProfileView> {
       if (position.isNotEmpty) position,
       if (p.age != null) '${p.age} yaş',
     ].join(' · ');
-    final photo = (p.photoUrl ?? '').trim();
+    final ownPhoto = (p.photoUrl ?? '').trim();
+    final photo = ownPhoto.isEmpty ? (_heldPhoto ?? '') : ownPhoto;
     final year = _shownYear;
     final newest = year == null || year == _years.firstOrNull;
     final totalFuture = teams.isEmpty
@@ -569,6 +591,49 @@ class _MyProfileViewState extends State<MyProfileView> {
               ],
             ),
           ),
+          if (ownPhoto.isEmpty && _heldPhoto != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+              child: Material(
+                color: kAdminAmber.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: _openConsents,
+                  child: const Padding(
+                    padding: EdgeInsets.fromLTRB(12, 10, 10, 10),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.visibility_off_outlined,
+                          color: kAdminAmber,
+                          size: 18,
+                        ),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Fotoğrafını yalnız sen görüyorsun. Herkese '
+                            'görünmesi için fotoğraf yayın iznini ver.',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12.5,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          'İzin ver ›',
+                          style: TextStyle(
+                            color: kAdminAmber,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 12.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
           // İzinler (eksikse sarı) ve bildirim ayarları: aynı düğme dili.
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
@@ -1400,6 +1465,25 @@ class _MyProfileViewState extends State<MyProfileView> {
     try {
       final c = await _consentService.loadMine(id);
       if (mounted) setState(() => _consents = c);
+    } catch (_) {}
+    // İzin değişince fotoğraf görünürlüğü de değişebilir.
+    await _refreshPhoto();
+  }
+
+  /// Oyuncu kaydı ve bekleyen fotoğraf, ekranı boşaltmadan yenilenir.
+  Future<void> _refreshPhoto() async {
+    final id = widget.playerId;
+    if (id == null) return;
+    try {
+      final r = await Future.wait([
+        _service.loadPlayer(id),
+        _service.heldPhoto().catchError((_) => null),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _player = (r[0] as MyPlayer?) ?? _player;
+        _heldPhoto = r[1] as String?;
+      });
     } catch (_) {}
   }
 
