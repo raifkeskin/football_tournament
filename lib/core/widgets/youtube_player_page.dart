@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
 import 'app_name_band.dart';
+import 'mp4_clip_page.dart';
 
 const youtubePlayerOrigin = 'https://ligmasasi.com';
 
@@ -167,6 +168,22 @@ Future<void> openYoutubeClip(
   required int endSec,
   String title = 'Gol',
 }) {
+  // Yayıncının teslim ettiği kesit: video_id alanında kendi depomuzdaki MP4
+  // adresi (http…) durur; YouTube yerine yerel oynatıcı.
+  if (videoId.startsWith('http')) {
+    return Navigator.of(context, rootNavigator: true).push(
+      MaterialPageRoute<void>(
+        settings: const RouteSettings(name: 'Mp4ClipPage'),
+        fullscreenDialog: true,
+        builder: (_) => Mp4ClipPage(
+          url: videoId,
+          title: title,
+          startSec: startSec,
+          endSec: endSec,
+        ),
+      ),
+    );
+  }
   return Navigator.of(context, rootNavigator: true).push(
     MaterialPageRoute<void>(
       settings: const RouteSettings(name: 'YoutubeClipPage'),
