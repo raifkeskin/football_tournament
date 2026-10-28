@@ -18,6 +18,8 @@ import '../features/auth/screens/admin_otp_monitor_screen.dart';
 import '../features/ai/admin_ai_screen.dart';
 import '../features/identity/admin_identity_screen.dart';
 import '../features/tournament_request/admin_tournament_requests_screen.dart';
+import '../features/referees/admin_referees_screen.dart';
+import '../features/referees/referee_service.dart';
 
 /// Yönetim paneli. Admin tüm kartları görür; kurucu başkan ve bölge
 /// sorumlusu yalnızca yetkili oldukları kartları (veriler ekranlarda kendi
@@ -173,6 +175,24 @@ class AdminPanelWidget extends StatelessWidget {
               MaterialPageRoute(
                 settings: const RouteSettings(name: 'AdminMediaCreditsScreen'),
                 builder: (_) => const AdminMediaCreditsScreen(),
+              ),
+            );
+          },
+        ),
+      // Hakemler: admin ve kurucu başkan (özellik açılana dek yalnız admin).
+      if ((isAdmin || session.isLeagueOwner) &&
+          RefereeService.enabledFor(isAdmin: isAdmin))
+        _AdminMenuData(
+          baslik: 'Hakemler',
+          renkler: const [Color(0xFFFDE047), Color(0xFFCA8A04)],
+          ikon: Icons.sports_rounded,
+          resimYolu: 'assets/images/admin_tournament.jpg',
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                settings: const RouteSettings(name: 'AdminRefereesScreen'),
+                builder: (_) => const AdminRefereesScreen(),
               ),
             );
           },

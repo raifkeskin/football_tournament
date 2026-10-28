@@ -81,6 +81,9 @@ class NotificationRouter {
       case 'attend':
       case 'esame':
         if (ref != null) await _openMatch(context, ref, tab: 1);
+      // Hakem atanmadı: maç detayı, Hakem Ata penceresi açık.
+      case 'referee':
+        if (ref != null) await _openMatch(context, ref, openReferee: true);
       case 'news':
         if (ref != null) await _openNews(context, ref);
       // Kadro talebi, etiketsiz Instagram gönderisi (approval-ig…) ve
@@ -126,6 +129,7 @@ class NotificationRouter {
     BuildContext context,
     String id, {
     int tab = 0,
+    bool openReferee = false,
   }) async {
     final isAdmin = AppSession.of(context).value.isAdmin;
     final nav = Navigator.of(context);
@@ -154,6 +158,7 @@ class NotificationRouter {
             match: match,
             isAdmin: isAdmin,
             initialTabIndex: tab,
+            openRefereePicker: openReferee,
           ),
         ),
       );

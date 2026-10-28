@@ -25,6 +25,8 @@ import '../../tournament/screens/tournament_hub_screen.dart';
 import 'home_news_card.dart';
 import 'attendance_home_card.dart';
 import 'overdue_results_banner.dart';
+import 'referee_home_card.dart';
+import 'unassigned_referees_banner.dart';
 import '../../sponsors/sponsor_strip.dart';
 import '../../../core/utils/team_name.dart';
 import '../../../core/push/notification_prefs.dart';
@@ -407,6 +409,8 @@ class _HomeDashboardState extends State<HomeDashboard> {
 
   Future<void> _refresh() async {
     OverdueResultsBanner.refresh.value++;
+    UnassignedRefereesBanner.refresh.value++;
+    RefereeHomeCard.refresh.value++;
     AttendanceHomeCard.refresh.value++;
     final session = AppSession.of(context).value;
     await _revalidate(session, _cacheKey(session), fromDisk: false);
@@ -938,6 +942,8 @@ class _HomeDashboardState extends State<HomeDashboard> {
               children: [
                 _greeting(session, data),
                 OverdueResultsBanner(leagueId: widget.league.id),
+                UnassignedRefereesBanner(leagueId: widget.league.id),
+                const RefereeHomeCard(),
                 AttendanceHomeCard(leagueId: widget.league.id),
                 content,
               ],
