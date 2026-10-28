@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../../media_credits/media_credit.dart';
 import '../../media_credits/media_credit_card.dart';
+import '../../referees/referee_service.dart';
 import '../models/match.dart';
 import 'match_weather.dart';
 
@@ -98,7 +99,14 @@ class _MatchInfoTabState extends State<MatchInfoTab>
     final referee = (widget.match.refereeName ?? '').trim();
     final broadcast = _credit(MediaCreditKind.broadcast);
     final photo = _credit(MediaCreditKind.photo);
-    final hasCrew = referee.isNotEmpty || broadcast != null || photo != null;
+    final m = widget.match;
+    final hasReferees =
+        referee.isNotEmpty ||
+        m.refereeId != null ||
+        m.assistantReferee1Id != null ||
+        m.assistantReferee2Id != null;
+    final hasMedia = broadcast != null || photo != null;
+    final hasCrew = hasReferees || hasMedia;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 104),
@@ -167,49 +175,167 @@ class _MatchInfoTabState extends State<MatchInfoTab>
               ),
             ),
           ),
-          _Box(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-            child: Column(
-              children: [
-                if (referee.isNotEmpty)
-                  _CrewRow(
-                    name: referee,
-                    badge: const _CrewBadge(
-                      color: Color(0xFFFACC15),
-                      icon: Icons.sports_rounded,
-                      iconColor: Color(0xFF0F172A),
+          if (hasReferees) _RefereesBox(match: m),
+          if (hasReferees && hasMedia) const SizedBox(height: 10),
+          if (hasMedia)
+            _Box(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+              child: Column(
+                children: [
+                  if (broadcast != null)
+                    _CrewRow(
+                      name: broadcast.name,
+                      badge: _CrewBadge(
+                        color: const Color(0x2EEF4444),
+                        icon: Icons.videocam_rounded,
+                        iconColor: const Color(0xFFF87171),
+                        imageUrl: broadcast.avatarUrl,
+                      ),
+                      role: 'Yayıncı',
+                      onTap: () => showMediaCreditCard(context, broadcast),
                     ),
-                    role: 'Hakem',
-                  ),
-                if (broadcast != null)
-                  _CrewRow(
-                    name: broadcast.name,
-                    badge: _CrewBadge(
-                      color: const Color(0x2EEF4444),
-                      icon: Icons.videocam_rounded,
-                      iconColor: const Color(0xFFF87171),
-                      imageUrl: broadcast.avatarUrl,
+                  if (photo != null)
+                    _CrewRow(
+                      name: photo.name,
+                      badge: _CrewBadge(
+                        color: const Color(0x2E38BDF8),
+                        icon: Icons.photo_camera_rounded,
+                        iconColor: const Color(0xFF38BDF8),
+                        imageUrl: photo.avatarUrl,
+                      ),
+                      role: 'Fotoğrafçı',
+                      onTap: () => showMediaCreditCard(context, photo),
                     ),
-                    role: 'Yayıncı',
-                    onTap: () => showMediaCreditCard(context, broadcast),
-                  ),
-                if (photo != null)
-                  _CrewRow(
-                    name: photo.name,
-                    badge: _CrewBadge(
-                      color: const Color(0x2E38BDF8),
-                      icon: Icons.photo_camera_rounded,
-                      iconColor: const Color(0xFF38BDF8),
-                      imageUrl: photo.avatarUrl,
-                    ),
-                    role: 'Fotoğrafçı',
-                    onTap: () => showMediaCreditCard(context, photo),
-                  ),
-              ],
+                ],
+              ),
             ),
-          ),
         ],
       ],
+    );
+  }
+}
+
+/// Maçın hakemleri: düdükle orta hakem ortada, altında bayraklarla iki
+/// yardımcı hakem aynı satırda (seçilmeyen gösterilmez).
+class _RefereesBox extends StatefulWidget {
+  const _RefereesBox({required this.match});
+
+  final MatchModel match;
+
+  @override
+  State<_RefereesBox> createState() => _RefereesBoxState();
+}
+
+class _RefereesBoxState extends State<_RefereesBox> {
+  Map<String, Referee> _refs = const {};
+
+  List<String> get _ids => [
+    ?widget.match.refereeId,
+    ?widget.match.assistantReferee1Id,
+    ?widget.match.assistantReferee2Id,
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _refs = {
+      for (final id in _ids)
+        if (RefereeService.cached(id) != null) id: RefereeService.cached(id)!,
+    };
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant _RefereesBox old) {
+    super.didUpdateWidget(old);
+    if (old.match.refereeId != widget.match.refereeId ||
+        old.match.assistantReferee1Id != widget.match.assistantReferee1Id ||
+        old.match.assistantReferee2Id != widget.match.assistantReferee2Id) {
+      _load();
+    }
+  }
+
+  Future<void> _load() async {
+    final ids = _ids;
+    if (ids.isEmpty || ids.every(_refs.containsKey)) return;
+    try {
+      final r = await RefereeService.byIds(ids);
+      if (mounted) setState(() => _refs = r);
+    } catch (_) {
+      // Ad okunamazsa eski hakem adı (referee_name) gösterilir.
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final m = widget.match;
+    final center = _refs[m.refereeId]?.name ?? (m.refereeName ?? '').trim();
+    final a1 = _refs[m.assistantReferee1Id]?.name;
+    final a2 = _refs[m.assistantReferee2Id]?.name;
+    Widget assistant(String name) => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.flag_outlined, size: 17, color: Color(0xFF38BDF8)),
+        const SizedBox(width: 5),
+        Flexible(
+          child: Text(
+            name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
+    );
+    return _Box(
+      padding: const EdgeInsets.fromLTRB(14, 16, 14, 16),
+      child: Column(
+        children: [
+          if (center.isNotEmpty)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const CircleAvatar(
+                  radius: 16,
+                  backgroundColor: Color(0xFFFACC15),
+                  child: Icon(
+                    Icons.sports_rounded,
+                    size: 17,
+                    color: Color(0xFF0F172A),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          if (a1 != null || a2 != null) ...[
+            if (center.isNotEmpty) const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (a1 != null) Flexible(child: assistant(a1)),
+                if (a1 != null && a2 != null) const SizedBox(width: 22),
+                if (a2 != null) Flexible(child: assistant(a2)),
+              ],
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

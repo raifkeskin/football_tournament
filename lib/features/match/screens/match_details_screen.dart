@@ -52,6 +52,8 @@ import '../widgets/match_highlights_section.dart';
 import '../../media_credits/media_credit.dart';
 import '../../media_credits/media_credit_card.dart';
 import '../widgets/youtube_find_sheet.dart';
+import '../../referees/match_referee_picker.dart';
+import '../../referees/referee_service.dart';
 import '../widgets/match_info_card.dart';
 import '../widgets/match_weather.dart';
 import '../services/youtube_autolink_service.dart';
@@ -519,11 +521,15 @@ class MatchDetailsScreen extends StatefulWidget {
   final MatchModel match;
   final bool isAdmin;
   final int initialTabIndex;
+
+  /// "Hakem atanmadı" bildirimi / uyarısından: açılınca Hakem Ata penceresi.
+  final bool openRefereePicker;
   const MatchDetailsScreen({
     super.key,
     required this.match,
     this.isAdmin = false,
     this.initialTabIndex = 0,
+    this.openRefereePicker = false,
   });
 
   @override
@@ -586,7 +592,24 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     _teamsStream = _teamService.watchSeasonTeams(widget.match.seasonId);
     _pitchesStream = _leagueService.watchPitches();
     _prefetchLineups(widget.match);
+    if (widget.openRefereePicker) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _openRefereePicker(widget.match);
+      });
+    }
   }
+
+  Future<void> _openRefereePicker(MatchModel m) async {
+    final saved = await showMatchRefereePicker(context, m);
+    if (saved && mounted) _triggerRefresh();
+  }
+
+  /// Hakem Ata: özellik açıksa (kapalıyken admin), başlamamış maçta.
+  bool _canAssignReferees(MatchModel m) =>
+      RefereeService.enabledFor(
+        isAdmin: AppSession.of(context).value.isAdmin,
+      ) &&
+      (m.status == MatchStatus.notStarted || m.status == MatchStatus.postponed);
 
   bool _regionOwnerChecked = false;
 
@@ -1193,6 +1216,12 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
         return _SpeedDialFab(
           key: const ValueKey('fab_schedule'),
           actions: [
+            if (_canAssignReferees(match))
+              _SpeedDialAction(
+                label: 'Hakem Ata',
+                icon: Icons.sports_rounded,
+                onTap: () => _openRefereePicker(match),
+              ),
             _SpeedDialAction(
               label: 'Tarih Girişi',
               icon: Icons.edit_calendar_rounded,
@@ -1231,6 +1260,12 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                 context: context,
                 builder: (_) => AdminMatchEventScreen(match: match),
               ),
+            ),
+          if (_canAssignReferees(match))
+            _SpeedDialAction(
+              label: 'Hakem Ata',
+              icon: Icons.sports_rounded,
+              onTap: () => _openRefereePicker(match),
             ),
           _SpeedDialAction(
             label: 'Tarih Girişi',

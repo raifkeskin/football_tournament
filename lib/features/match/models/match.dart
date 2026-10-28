@@ -142,6 +142,11 @@ class MatchModel {
 
   /// Maç bilgisi: hakemin adı (Maçı Düzenle'den girilir).
   final String? refereeName;
+
+  /// Hakem listesinden seçilen orta hakem ve yardımcılar (`referees`).
+  final String? refereeId;
+  final String? assistantReferee1Id;
+  final String? assistantReferee2Id;
   final MatchStatus status;
   final int? minute;
 
@@ -189,6 +194,9 @@ class MatchModel {
     this.pitchId,
     this.pitchName,
     this.refereeName,
+    this.refereeId,
+    this.assistantReferee1Id,
+    this.assistantReferee2Id,
     this.minute,
     this.kickoffAt,
     this.secondHalfAt,
@@ -361,6 +369,11 @@ class MatchModel {
       return null;
     }
 
+    String? idOrNull(dynamic value) {
+      final t = (value ?? '').toString().trim();
+      return t.isEmpty || t == 'null' ? null : t;
+    }
+
     List<String>? readStringList(dynamic value) {
       if (value == null) return null;
       if (value is List) {
@@ -386,6 +399,13 @@ class MatchModel {
       pitchId: pitchIdRaw.isEmpty ? null : pitchIdRaw,
       pitchName: pitchNameRaw.isEmpty ? null : pitchNameRaw,
       refereeName: refereeRaw.isEmpty ? null : refereeRaw,
+      refereeId: idOrNull(v('refereeId', 'referee_id')),
+      assistantReferee1Id: idOrNull(
+        v('assistantReferee1Id', 'assistant_referee1_id'),
+      ),
+      assistantReferee2Id: idOrNull(
+        v('assistantReferee2Id', 'assistant_referee2_id'),
+      ),
       status: resolvedStatus,
       minute: readScore(v('minute', 'minute')),
       kickoffAt: readDate(v('kickoffAt', 'kickoff_at'))?.toUtc(),
@@ -446,6 +466,9 @@ class MatchModel {
         'pitchId': pitchId,
         'pitchName': pitchName,
         'refereeName': refereeName,
+        'refereeId': refereeId,
+        'assistantReferee1Id': assistantReferee1Id,
+        'assistantReferee2Id': assistantReferee2Id,
         'status': status.name,
         'minute': minute,
         'seasonId': seasonId,

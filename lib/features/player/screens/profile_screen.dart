@@ -1,3 +1,5 @@
+import '../../referees/referee_profile_view.dart';
+import '../../referees/referee_service.dart';
 import '../../../core/widgets/app_name_band.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -380,6 +382,52 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       );
     }
+    // Hakem hesabı: hakem profili; aynı zamanda futbolcuysa
+    // Futbolcu | Hakem sekmesi.
+    final refereeId = RefereeService.enabledFor(isAdmin: sessionValue.isAdmin)
+        ? sessionValue.refereeId
+        : null;
+    if (refereeId != null) {
+      final refView = RefereeProfileView(
+        refereeId: refereeId,
+        name: state.displayName,
+        onSignOut: sessionValue.playerId == null
+            ? () => _logout(session)
+            : null,
+      );
+      if (sessionValue.playerId == null) return refView;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: _RoleTabs(
+              index: _roleTab,
+              onChanged: (i) => setState(() => _roleTab = i),
+              secondLabel: 'Hakem',
+              secondIcon: Icons.sports_rounded,
+            ),
+          ),
+          Expanded(
+            child: _roleTab == 0
+                ? MyProfileView(
+                    playerId: sessionValue.playerId,
+                    displayName: state.displayName,
+                    phone: phone,
+                    onSignOut: () => _logout(session),
+                    roleLabels: [
+                      'Futbolcu',
+                      'Hakem',
+                      if (sessionValue.managedTeams.isNotEmpty)
+                        'Takım Sorumlusu',
+                    ],
+                  )
+                : refView,
+          ),
+        ],
+      );
+    }
+
     // Futbolcu (ya da oyuncu kaydı olan herkes): kart, maçlar, talepler.
     // Oyuncu kaydı olmayan takım sorumlusu: bilgi kartı.
     final isStaffOnly =
@@ -663,10 +711,17 @@ class _StaffHeaderCardState extends State<_StaffHeaderCard> {
 
 /// Profilde Futbolcu | Yönetim sekmesi (iki rolü olan kişi için).
 class _RoleTabs extends StatelessWidget {
-  const _RoleTabs({required this.index, required this.onChanged});
+  const _RoleTabs({
+    required this.index,
+    required this.onChanged,
+    this.secondLabel = 'Yönetim',
+    this.secondIcon = Icons.admin_panel_settings_rounded,
+  });
 
   final int index;
   final ValueChanged<int> onChanged;
+  final String secondLabel;
+  final IconData secondIcon;
 
   static const _accent = Color(0xFF10B981);
 
@@ -724,7 +779,7 @@ class _RoleTabs extends StatelessWidget {
         children: [
           tab(0, Icons.sports_soccer_rounded, 'Futbolcu'),
           const SizedBox(width: 4),
-          tab(1, Icons.admin_panel_settings_rounded, 'Yönetim'),
+          tab(1, secondIcon, secondLabel),
         ],
       ),
     );

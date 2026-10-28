@@ -11,6 +11,7 @@ import '../../match/models/match.dart';
 import '../../team/models/team.dart';
 import '../../../core/services/active_tournament.dart';
 import '../../../core/services/app_session.dart';
+import '../../referees/referee_service.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/utils/resilient_stream.dart';
 import '../../../core/utils/table_feed.dart';
@@ -184,6 +185,7 @@ class SeasonManagementScreen extends StatelessWidget {
     var isDefault = season?.isDefault ?? false;
     var isDoubleRound = season?.isDoubleRound ?? false;
     var trackGoalMinutes = season?.trackGoalMinutes ?? true;
+    var assistantReferees = season?.assistantReferees ?? true;
     var requireVerifiedId = season?.requireVerifiedId ?? false;
     var goalkeeperAddAnytime = season?.goalkeeperAddAnytime ?? false;
     // Lig Formatı kaydedilince satırda onay (popup açıkken alt mesaj
@@ -281,6 +283,7 @@ class SeasonManagementScreen extends StatelessWidget {
         isDefault: isDefault,
         isDoubleRound: isDoubleRound,
         trackGoalMinutes: trackGoalMinutes,
+        assistantReferees: assistantReferees,
         requireVerifiedId: requireVerifiedId,
         goalkeeperAddAnytime: goalkeeperAddAnytime,
         transferStartDate: transferStartDate,
@@ -545,6 +548,19 @@ class SeasonManagementScreen extends StatelessWidget {
                               trackGoalMinutes,
                               (v) => setSheetState(() => trackGoalMinutes = v),
                             ),
+                            if (RefereeService.enabledFor(
+                              isAdmin: AppSession.of(context).value.isAdmin,
+                            ))
+                              switchRow(
+                                Icons.flag_outlined,
+                                'Yan Hakem',
+                                assistantReferees
+                                    ? 'Orta hakem + 2 yardımcı hakem seçilir'
+                                    : 'Tek hakem: yalnız orta hakem seçilir',
+                                assistantReferees,
+                                (v) =>
+                                    setSheetState(() => assistantReferees = v),
+                              ),
                             if (showIdentity)
                               switchRow(
                                 Icons.verified_outlined,
