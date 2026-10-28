@@ -405,145 +405,199 @@ class _PhotoResult extends StatefulWidget {
 }
 
 class _PhotoResultState extends State<_PhotoResult> {
+  /// Fotoğrafların en/boy oranı (bellekte); takım fotoğrafı kırpılmadan
+  /// tam görünsün diye alan bu orana göre açılır.
+  static final Map<String, double> _aspects = {};
+
   int _page = 0;
+  final _streams = <ImageStream, ImageStreamListener>{};
+
+  @override
+  void initState() {
+    super.initState();
+    _resolve();
+  }
+
+  @override
+  void didUpdateWidget(covariant _PhotoResult old) {
+    super.didUpdateWidget(old);
+    if (old.urls.join() != widget.urls.join()) _resolve();
+  }
+
+  void _resolve() {
+    for (final url in widget.urls) {
+      if (_aspects.containsKey(url)) continue;
+      final stream = NetworkImage(url).resolve(const ImageConfiguration());
+      late final ImageStreamListener l;
+      l = ImageStreamListener(
+        (info, _) {
+          final w = info.image.width, h = info.image.height;
+          if (w > 0 && h > 0) _aspects[url] = w / h;
+          stream.removeListener(l);
+          _streams.remove(stream);
+          if (mounted) setState(() {});
+        },
+        onError: (_, _) {
+          stream.removeListener(l);
+          _streams.remove(stream);
+        },
+      );
+      _streams[stream] = l;
+      stream.addListener(l);
+    }
+  }
+
+  @override
+  void dispose() {
+    _streams.forEach((s, l) => s.removeListener(l));
+    super.dispose();
+  }
+
+  /// En dik fotoğrafın oranı (hepsi kırpılmadan sığar); yatay–dikey
+  /// arası sınırlı, bilinmeyen için takım fotoğraflarına uygun 4:3.
+  double get _aspect {
+    final known = [
+      for (final u in widget.urls)
+        if (_aspects[u] != null) _aspects[u]!,
+    ];
+    if (known.isEmpty) return 4 / 3;
+    final a = known.reduce((x, y) => x < y ? x : y);
+    return a.clamp(0.8, 1.9);
+  }
 
   @override
   Widget build(BuildContext context) {
     final r = widget.result;
     final urls = widget.urls;
     Widget crest(_Team t) => Container(
-      width: 64,
-      height: 64,
+      width: 56,
+      height: 56,
       padding: const EdgeInsets.all(6),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
       ),
       child: t.logo.isEmpty
-          ? Icon(Icons.shield_rounded, size: 40, color: t.band)
+          ? Icon(Icons.shield_rounded, size: 36, color: t.band)
           : WebSafeImage(url: t.logo, fit: BoxFit.contain),
     );
-    return AspectRatio(
-      aspectRatio: 4 / 5,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          PageView.builder(
-            itemCount: urls.length,
-            onPageChanged: (i) => setState(() => _page = i),
-            itemBuilder: (context, i) => GestureDetector(
-              onTap: widget.onOpen == null ? null : () => widget.onOpen!(i),
-              child: WebSafeImage(url: urls[i], fit: BoxFit.cover),
-            ),
-          ),
-          IgnorePointer(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Container(
-                  padding: const EdgeInsets.fromLTRB(14, 70, 14, 14),
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Color(0x000B1220),
-                        Color(0xCC0B1220),
-                        Color(0xF20B1220),
-                      ],
-                      stops: [0, 0.35, 1],
-                    ),
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          crest(r.home),
-                          Expanded(
-                            child: Container(
-                              height: 64,
-                              alignment: Alignment.center,
-                              decoration: const BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    Color(0xFF064E3B),
-                                    Color(0xFF0B1220),
-                                    Color(0xFF064E3B),
-                                  ],
-                                ),
-                              ),
-                              child: Text(
-                                '${r.hs} - ${r.as}',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 40,
-                                  height: 1,
-                                  fontWeight: FontWeight.w900,
-                                  fontFeatures: [FontFeature.tabularFigures()],
-                                ),
-                              ),
-                            ),
-                          ),
-                          crest(r.away),
-                        ],
-                      ),
-                      if (r.homeScorers.isNotEmpty ||
-                          r.awayScorers.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: _ScorerColumn(
-                                r.homeScorers,
-                                goals: r.hs,
-                                end: false,
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: _ScorerColumn(
-                                r.awayScorers,
-                                goals: r.as,
-                                end: true,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (urls.length > 1)
-            Positioned(
-              top: 10,
-              right: 10,
-              child: IgnorePointer(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 9,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.6),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    '${_page + 1}/${urls.length}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TweenAnimationBuilder<double>(
+          tween: Tween(end: _aspect),
+          duration: const Duration(milliseconds: 220),
+          builder: (context, a, child) =>
+              AspectRatio(aspectRatio: a, child: child),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              ColoredBox(
+                color: const Color(0xFF0B1220),
+                child: PageView.builder(
+                  itemCount: urls.length,
+                  onPageChanged: (i) => setState(() => _page = i),
+                  itemBuilder: (context, i) => GestureDetector(
+                    onTap: widget.onOpen == null
+                        ? null
+                        : () => widget.onOpen!(i),
+                    // Kırpılmaz: takımın tamamı görünür.
+                    child: WebSafeImage(url: urls[i], fit: BoxFit.contain),
                   ),
                 ),
               ),
-            ),
-        ],
-      ),
+              if (urls.length > 1)
+                Positioned(
+                  top: 10,
+                  right: 10,
+                  child: IgnorePointer(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.6),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        '${_page + 1}/${urls.length}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        // Skor ve golcüler fotoğrafın altında; yüzleri kapatmaz.
+        Container(
+          color: const Color(0xFF0B1220),
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  crest(r.home),
+                  Expanded(
+                    child: Container(
+                      height: 56,
+                      alignment: Alignment.center,
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            Color(0xFF064E3B),
+                            Color(0xFF0B1220),
+                            Color(0xFF064E3B),
+                          ],
+                        ),
+                      ),
+                      child: Text(
+                        '${r.hs} - ${r.as}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 36,
+                          height: 1,
+                          fontWeight: FontWeight.w900,
+                          fontFeatures: [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ),
+                  ),
+                  crest(r.away),
+                ],
+              ),
+              if (r.homeScorers.isNotEmpty || r.awayScorers.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: _ScorerColumn(
+                        r.homeScorers,
+                        goals: r.hs,
+                        end: false,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: _ScorerColumn(
+                        r.awayScorers,
+                        goals: r.as,
+                        end: true,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
