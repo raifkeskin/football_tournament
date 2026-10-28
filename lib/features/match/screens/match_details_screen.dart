@@ -5001,6 +5001,34 @@ class _DetailTabView extends StatelessWidget {
             .map((e) => _asMap(e))
             .toList();
 
+        // İlk yarı skoru (dakikası devre süresini geçmeyen goller; uzatma
+        // dakikası girilen gol de ilk yarıya sayılır). Maç sonucu gibi
+        // "İlk Yarı Bitti" satırının yanında yazılır.
+        var htHome = 0;
+        var htAway = 0;
+        for (final e in normalized) {
+          final type = _readString(e['event_type']).isNotEmpty
+              ? _readString(e['event_type'])
+              : _readString(e['type']);
+          if (type != 'goal' || e['minute'] == null) continue;
+          if (_readMinute(e['minute']) > period) continue;
+          final team = _readString(e['team_id']).isNotEmpty
+              ? _readString(e['team_id'])
+              : _readString(e['teamId']);
+          final own = e['is_own_goal'] == true || e['isOwnGoal'] == true;
+          final forHome = (team == match.homeTeamId) != own;
+          if (forHome) {
+            htHome++;
+          } else {
+            htAway++;
+          }
+        }
+        for (final st in systemStory) {
+          if (st['title'] == 'İlk Yarı Bitti') {
+            st['title'] = 'İlk Yarı Bitti  $htHome - $htAway';
+          }
+        }
+
         String pickType(Map<String, dynamic> e) {
           return _readString(e['type']).isNotEmpty
               ? _readString(e['type'])
