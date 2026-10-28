@@ -3722,14 +3722,13 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
     final ids = leagues.keys.toList()
       ..sort((a, b) => '${leagues[a]}'.compareTo('${leagues[b]}'));
     return [
-      if (isAdmin)
-        const ListFilterSection(
-          key: 'roster',
-          label: 'Kadro durumu',
-          options: [('in', 'Kadroda'), ('free', 'Boşta'), ('all', 'Tümü')],
-          defaultValue: 'in',
-          hint: 'Boşta: hiçbir etkin turnuva kadrosunda olmayan oyuncu.',
-        ),
+      const ListFilterSection(
+        key: 'roster',
+        label: 'Kadro durumu',
+        options: [('all', 'Tümü'), ('in', 'Kadroda'), ('free', 'Boşta')],
+        defaultValue: 'in',
+        hint: 'Boşta: hiçbir etkin turnuva kadrosunda olmayan oyuncu.',
+      ),
       if (ids.length > 1)
         ListFilterSection(
           key: 'league',
@@ -4089,13 +4088,16 @@ class _FootballerLicenseScreenState extends State<FootballerLicenseScreen> {
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
-              _SmallActionButton(
-                icon: Icons.edit_outlined,
-                tooltip: 'Düzenle',
-                color: Colors.white70,
-                onTap: () => _openPlayerForm(editing: p),
-              ),
+              // Boştaki oyuncuyu (başka turnuvadan) yalnız admin düzenler.
+              if (!free || AppSession.of(context).value.isAdmin) ...[
+                const SizedBox(width: 8),
+                _SmallActionButton(
+                  icon: Icons.edit_outlined,
+                  tooltip: 'Düzenle',
+                  color: Colors.white70,
+                  onTap: () => _openPlayerForm(editing: p),
+                ),
+              ],
             ],
           ),
         ),
