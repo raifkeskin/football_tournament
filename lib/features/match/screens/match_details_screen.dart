@@ -1172,6 +1172,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
     bool canQuickScore = false,
     bool canControl = true,
     bool scheduleOnly = false,
+    bool beforeWindow = false,
     String homeName = '',
     String awayName = '',
   }) {
@@ -1202,10 +1203,13 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
       }
       // Maçı başka sorumlu yönetirken giriş menüsü yok (şeritten devral).
       if (!canControl) return null;
+      // Skor ve olay girişi "Maçı yönet" şeridiyle birlikte (maçtan 1 saat
+      // önce) açılır; öncesinde yalnız tarih girişi.
       return _SpeedDialFab(
-        key: const ValueKey('fab_detail'),
+        key: ValueKey('fab_detail_$beforeWindow'),
         actions: [
-          if (canQuickScore &&
+          if (!beforeWindow &&
+              canQuickScore &&
               match.status != MatchStatus.postponed &&
               match.status != MatchStatus.cancelled)
             _SpeedDialAction(
@@ -1219,14 +1223,15 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                 onSaved: _triggerRefresh,
               ),
             ),
-          _SpeedDialAction(
-            label: 'Maç Detayı Gir',
-            icon: Icons.edit_note_rounded,
-            onTap: () => showDialog<void>(
-              context: context,
-              builder: (_) => AdminMatchEventScreen(match: match),
+          if (!beforeWindow)
+            _SpeedDialAction(
+              label: 'Maç Detayı Gir',
+              icon: Icons.edit_note_rounded,
+              onTap: () => showDialog<void>(
+                context: context,
+                builder: (_) => AdminMatchEventScreen(match: match),
+              ),
             ),
-          ),
           _SpeedDialAction(
             label: 'Tarih Girişi',
             icon: Icons.edit_calendar_rounded,
@@ -1447,6 +1452,7 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen>
                       match: m,
                       tabIndex: _tab,
                       scheduleOnly: !isSuperAdmin,
+                      beforeWindow: beforeWindow,
                       canUndo: canManageLeague,
                       canQuickScore: canManageLeague,
                       canControl: canControl,
