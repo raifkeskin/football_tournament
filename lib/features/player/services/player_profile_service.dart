@@ -320,6 +320,14 @@ class PlayerProfileService {
     return rows.isEmpty ? null : MyPlayer.fromMap(rows.first);
   }
 
+  /// Fotoğraf yayın izni yokken bekleyen kendi fotoğrafı (yalnız ona
+  /// görünür); yoksa null.
+  Future<String?> heldPhoto() async {
+    final r = await _client.rpc('my_held_photo');
+    final s = (r ?? '').toString().trim();
+    return s.isEmpty || s == 'null' ? null : s;
+  }
+
   /// Aktif kadro kayıtları, en yeni sezon önce.
   Future<List<MyTeam>> loadTeams(String playerId) async {
     final rows = await _client
