@@ -26,7 +26,7 @@
 // fiyatlar GEMINI_PRICE_INPUT (görüntü+metin, 0.5), GEMINI_PRICE_AUDIO (1.0),
 // GEMINI_PRICE_OUTPUT (3.0).
 
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 import { aiModel, refreshUsdTry, seasonAiEnabled } from "../_shared/ai_settings.ts";
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
@@ -127,6 +127,28 @@ const CORS = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
+
+/** Denemenin sonucu silinmeyen günlüğe (highlight_attempt_log); otomatik
+ *  taramanın neden tutmadığını sonradan görmek için. Hata işi bozmaz. */
+async function logAttempt(
+  matchId: string,
+  auto: boolean,
+  stage: string,
+  status: number | null,
+  error: string | null,
+) {
+  try {
+    await admin.from("highlight_attempt_log").insert({
+      match_id: matchId,
+      auto,
+      stage,
+      status,
+      error: error?.slice(0, 1000) ?? null,
+    });
+  } catch (_) {
+    // günlük yazılamazsa geç
+  }
+}
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -774,6 +796,7 @@ type RunOpts = {
   roster: RosterPlayer[];
   /** Sezon tercihi: kesitler doğrudan yayına girer. */
   autoPublish: boolean;
+  auto: boolean;
   /** Onaylı yeniden tarama: başarılı bitince maçın tüm eski kesitleri silinir. */
   replace: boolean;
 };
@@ -985,6 +1008,13 @@ async function run(opts: RunOpts) {
       cost_usd: Number(budget.spent.toFixed(5)),
       finished_at: new Date().toISOString(),
     }).eq("match_id", matchId);
+    await logAttempt(
+      matchId,
+      opts.auto,
+      "done",
+      200,
+      `${rows.length} kesit, ${missing.length} eksik`,
+    );
     if (needsReview) {
       await admin.rpc("highlights_review_notify", {
         p_match_id: matchId,
@@ -993,6 +1023,7 @@ async function run(opts: RunOpts) {
     }
   } catch (e) {
     console.error("video-highlights", matchId, (e as Error).message);
+    await logAttempt(matchId, opts.auto, "run", null, (e as Error).message);
     await admin.from("match_highlight_jobs").update({
       status: "error",
       error: (e as Error).message.slice(0, 500),
@@ -1064,7 +1095,27 @@ async function probeModels(videoId: string, models: unknown) {
   return { videoId, results: out };
 }
 
+// Otomatik çağrının her yanıtı (bekleme dahil), elle çağrının hataları
+// günlüğe yazılır.
 Deno.serve(async (req) => {
+  if (req.method !== "POST") return handle(req);
+  const copy = req.clone();
+  const res = await handle(req);
+  const auto = !!req.headers.get("x-sync-secret");
+  if (auto || res.status >= 400) {
+    const body = await copy.json().catch(() => ({}));
+    const matchId = String(body?.match_id ?? "").trim();
+    if (matchId && !body?.probe) {
+      const out = await res.clone().json().catch(() => ({}));
+      const msg = out?.error ?? (out?.waiting ? `yayın: ${out.waiting}` : null);
+      const stage = out?.ok ? "start" : out?.waiting ? "waiting" : "start-fail";
+      await logAttempt(matchId, auto, stage, res.status, msg);
+    }
+  }
+  return res;
+});
+
+async function handle(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "POST bekleniyor" }, 405);
   if (!GEMINI_API_KEY) return json({ error: "GEMINI_API_KEY ayarlı değil." }, 500);
@@ -1306,6 +1357,7 @@ Deno.serve(async (req) => {
     limit: limits.perMatch,
     roster,
     autoPublish,
+    auto,
     replace,
   });
   // deno-lint-ignore no-explicit-any
@@ -1314,4 +1366,4 @@ Deno.serve(async (req) => {
   else await task;
 
   return json({ ok: true, mode: timed ? "events" : "full", goals: goals.length }, 202);
-});
+}
