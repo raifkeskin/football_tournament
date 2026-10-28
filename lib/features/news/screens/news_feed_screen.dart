@@ -271,6 +271,7 @@ class _NewsViewState extends State<NewsView> {
                       likeCount: count,
                       onToggleLike: () => _toggleLike(n, liked),
                       onShare: () => _share(n),
+                      onOpenPhoto: (i) => _openGallery(n.imageUrls, i),
                     )
                   : WeekResultsNewsCard(
                       key: _keys.putIfAbsent(n.id, GlobalKey.new),

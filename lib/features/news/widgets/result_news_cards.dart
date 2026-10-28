@@ -307,7 +307,11 @@ class MatchResultNewsCard extends StatelessWidget {
     required this.likeCount,
     required this.onToggleLike,
     required this.onShare,
+    this.onOpenPhoto,
   });
+
+  /// Takım fotoğrafına dokununca tam ekran galeri.
+  final ValueChanged<int>? onOpenPhoto;
 
   final NewsItem item;
 
@@ -334,6 +338,9 @@ class MatchResultNewsCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _Header(label: 'Maç sonucu', meta: meta),
+              // Takım fotoğrafları: kazananınki önce (sunucu sıralar).
+              if (item.imageUrls.isNotEmpty)
+                _PhotoPager(urls: item.imageUrls, onOpen: onOpenPhoto),
               _Band(result: r),
               if (r.homeScorers.isNotEmpty || r.awayScorers.isNotEmpty)
                 Padding(
@@ -372,6 +379,63 @@ class MatchResultNewsCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Haber görselleri: parmakla kaydırılır, altta nokta göstergesi.
+class _PhotoPager extends StatefulWidget {
+  const _PhotoPager({required this.urls, this.onOpen});
+
+  final List<String> urls;
+  final ValueChanged<int>? onOpen;
+
+  @override
+  State<_PhotoPager> createState() => _PhotoPagerState();
+}
+
+class _PhotoPagerState extends State<_PhotoPager> {
+  int _page = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final urls = widget.urls;
+    return AspectRatio(
+      aspectRatio: 4 / 3,
+      child: Stack(
+        children: [
+          PageView.builder(
+            itemCount: urls.length,
+            onPageChanged: (i) => setState(() => _page = i),
+            itemBuilder: (context, i) => GestureDetector(
+              onTap: widget.onOpen == null ? null : () => widget.onOpen!(i),
+              child: WebSafeImage(url: urls[i], fit: BoxFit.cover),
+            ),
+          ),
+          if (urls.length > 1)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 8,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  for (var i = 0; i < urls.length; i++)
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
+                      width: i == _page ? 16 : 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: i == _page ? Colors.white : Colors.white54,
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }
