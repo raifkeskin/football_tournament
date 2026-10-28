@@ -315,21 +315,48 @@ Future<T?> showAdminPopup<T>({
     context: context,
     builder: (ctx) {
       final mq = MediaQuery.of(ctx);
+      // Klavye açıkken popup kalan alanın tamamını kullanır ve başlık
+      // gizlenir (AdminDialogHeader); alanlar daha az daralır.
+      final keyboard = mq.viewInsets.bottom > 0;
       return Dialog(
         backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        insetPadding: EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: keyboard ? 8 : 24,
+        ),
         child: Container(
           constraints: BoxConstraints(
-            maxHeight: (mq.size.height - mq.viewInsets.bottom) * 0.85,
+            maxHeight: keyboard
+                ? double.infinity
+                : (mq.size.height - mq.viewInsets.bottom) * 0.85,
           ),
-          padding: const EdgeInsets.only(top: 14),
+          padding: EdgeInsets.only(top: keyboard ? 8 : 14),
           clipBehavior: Clip.antiAlias,
           decoration: adminDialogDecoration(),
-          child: builder(ctx),
+          child: AdminPopupKeyboard(open: keyboard, child: builder(ctx)),
         ),
       );
     },
   );
+}
+
+/// [showAdminPopup] içinde klavyenin açık olup olmadığı (Dialog içinde
+/// MediaQuery klavye boşluğunu sıfırladığı için ayrıca taşınır).
+class AdminPopupKeyboard extends InheritedWidget {
+  const AdminPopupKeyboard({
+    super.key,
+    required this.open,
+    required super.child,
+  });
+
+  final bool open;
+
+  static bool isOpen(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<AdminPopupKeyboard>()?.open ??
+      false;
+
+  @override
+  bool updateShouldNotify(AdminPopupKeyboard old) => old.open != open;
 }
 
 /// Fikstür ekranındaki filtre kapsülü: seçili filtrelerin özeti. Birden fazla

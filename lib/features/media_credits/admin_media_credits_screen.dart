@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -9,6 +10,7 @@ import '../../core/widgets/admin_form.dart';
 import '../../core/widgets/admin_page.dart';
 import '../../core/widgets/picked_image.dart';
 import '../../core/widgets/web_safe_image.dart';
+import '../auth/widgets/phone_input.dart';
 import 'media_credit.dart';
 import 'media_credit_card.dart';
 
@@ -111,13 +113,64 @@ class _AdminMediaCreditsScreenState extends State<AdminMediaCreditsScreen> {
     setState(() => _busy = true);
     try {
       await _sb.from('media_credits').delete().eq('id', c.id);
-      if (c.avatarUrl != null) {
-        await SupabaseImageUploadService().deleteImageByUrl(c.avatarUrl!);
-      }
+      await deleteCreditAvatarIfUnused(c.avatarUrl);
       MediaCreditFeed.notifyChanged(c.leagueId);
       await _loadCredits();
     } catch (e) {
       _snack('Silinemedi: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Künyeyi yönetilen başka bir turnuvaya kopyalar (oradaki aynı türdeki
+  /// künyenin yerine geçer); her turnuvada yeniden girmek gerekmez.
+  Future<void> _copyTo(MediaCredit c) async {
+    final targets = [
+      for (final l in _leagues ?? const <LeagueChoice>[])
+        if (l.id != c.leagueId) l,
+    ];
+    if (targets.isEmpty) return;
+    final target = await showAdminOptionPicker<LeagueChoice>(
+      context: context,
+      title: 'Hangi turnuvaya aktarılsın?',
+      items: targets,
+      labelBuilder: (l) => l.name,
+    );
+    if (target == null || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      final existing = await _sb
+          .from('media_credits')
+          .select('id, name, avatar_url')
+          .eq('league_id', target.id)
+          .eq('kind', c.kind.name)
+          .maybeSingle();
+      if (existing != null && mounted) {
+        final ok = await showAdminConfirmDialog(
+          context: context,
+          title: 'Künye Değişsin mi?',
+          message:
+              '${target.name} turnuvasında ${c.kind.label.toLowerCase()} '
+              'olarak "${existing['name']}" kayıtlı. Yerine "${c.name}" '
+              'yazılacak.',
+        );
+        if (!ok) return;
+      }
+      final row = c.toMap()
+        ..remove('id')
+        ..remove('created_at')
+        ..remove('updated_at')
+        ..['league_id'] = target.id;
+      await _sb.from('media_credits').upsert(row, onConflict: 'league_id,kind');
+      final oldAvatar = existing?['avatar_url'] as String?;
+      if (oldAvatar != null && oldAvatar != c.avatarUrl) {
+        await deleteCreditAvatarIfUnused(oldAvatar);
+      }
+      MediaCreditFeed.notifyChanged(target.id);
+      _snack('"${c.name}" ${target.name} turnuvasına aktarıldı.');
+    } catch (e) {
+      _snack('Aktarılamadı: $e');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -203,6 +256,7 @@ class _AdminMediaCreditsScreenState extends State<AdminMediaCreditsScreen> {
                       onEdit: () => _edit(kind, c),
                       onPreview: () => showMediaCreditCard(context, c),
                       onDelete: () => _delete(c),
+                      onCopy: leagues.length > 1 ? () => _copyTo(c) : null,
                     ),
                   ],
                 ),
@@ -229,8 +283,9 @@ class _AdminMediaCreditsScreenState extends State<AdminMediaCreditsScreen> {
             const Padding(
               padding: EdgeInsets.fromLTRB(4, 6, 4, 18),
               child: Text(
-                'Maç detayındaki Medya sekmesinde "Fotoğraf: …" ve "Yayın: …" '
-                'etiketi görünür; dokununca kartvizit açılır.',
+                'Maç detayının Bilgi sekmesinde (kâğıt ikonu) ve Medya '
+                'sekmesinde görünür; dokununca kartvizit açılır. Başka '
+                'turnuvaya aktarmak için satırdaki aktar düğmesini kullanın.',
                 style: TextStyle(
                   color: kAdminMuted,
                   fontSize: 12,
@@ -255,6 +310,7 @@ class _CreditRow extends StatelessWidget {
     required this.onEdit,
     required this.onPreview,
     required this.onDelete,
+    this.onCopy,
   });
 
   final MediaCredit credit;
@@ -262,6 +318,9 @@ class _CreditRow extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onPreview;
   final VoidCallback onDelete;
+
+  /// Başka turnuvaya aktar (birden çok turnuva yönetiliyorsa).
+  final VoidCallback? onCopy;
 
   @override
   Widget build(BuildContext context) {
@@ -311,7 +370,8 @@ class _CreditRow extends StatelessWidget {
                       [
                         c.displayTitle,
                         if (!c.isActive) 'Gizli',
-                        if (c.contactConsent && c.phone != null) c.phone!,
+                        if (c.contactConsent && c.phone != null)
+                          formatPhoneRaw10(normalizePhoneToRaw10(c.phone!)),
                       ].join(' · '),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -326,6 +386,13 @@ class _CreditRow extends StatelessWidget {
                 color: Colors.white70,
                 onTap: busy ? null : onPreview,
               ),
+              if (onCopy != null)
+                AdminSmallAction(
+                  icon: Icons.drive_file_move_outline,
+                  tooltip: 'Başka turnuvaya aktar',
+                  color: kAdminAccent,
+                  onTap: busy ? null : onCopy,
+                ),
               AdminSmallAction(
                 icon: Icons.delete_outline_rounded,
                 tooltip: 'Sil',
@@ -361,7 +428,11 @@ class _MediaCreditFormState extends State<_MediaCreditForm> {
   late final _name = TextEditingController(text: widget.credit?.name ?? '');
   late final _title = TextEditingController(text: widget.credit?.title ?? '');
   late final _note = TextEditingController(text: widget.credit?.note ?? '');
-  late final _phone = TextEditingController(text: widget.credit?.phone ?? '');
+  late final _phone = TextEditingController(
+    text: (widget.credit?.phone ?? '').isEmpty
+        ? ''
+        : PhoneMaskFormatter.formatFromRaw(widget.credit!.phone!),
+  );
   late final _email = TextEditingController(text: widget.credit?.email ?? '');
   late final _instagram = TextEditingController(
     text: widget.credit?.instagram ?? '',
@@ -415,18 +486,14 @@ class _MediaCreditFormState extends State<_MediaCreditForm> {
 
     final name = _name.text.trim();
     if (name.isEmpty) return fail('Ad zorunludur.', 0);
-    final phone = _clean(_phone);
-    final email = _clean(_email);
-    if (phone != null &&
-        phone
-                .replaceAll(RegExp(r'\D'), '')
-                .replaceFirst(RegExp('^0'), '')
-                .length <
-            10) {
-      return fail('Telefon numarası eksik görünüyor.', 1);
+    // Telefon her yerde olduğu gibi 10 hane (5XX…) saklanır.
+    final rawPhone = normalizePhoneToRaw10(_phone.text);
+    final phone = rawPhone.isEmpty ? null : rawPhone;
+    final email = _clean(_email)?.toLowerCase();
+    if (phone != null && (phone.length != 10 || !phone.startsWith('5'))) {
+      return fail('Telefon numarası 5 ile başlayan 10 hane olmalı.', 1);
     }
-    if (email != null &&
-        !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
+    if (email != null && !isValidEmail(email)) {
       return fail('E-posta adresi geçersiz.', 1);
     }
     if ((phone != null || email != null) && !_consent) {
@@ -477,8 +544,8 @@ class _MediaCreditFormState extends State<_MediaCreditForm> {
         });
       } else {
         await sb.from('media_credits').update(payload).eq('id', old.id);
-        if ((avatarUrl != null || _removeAvatar) && old.avatarUrl != null) {
-          await upload.deleteImageByUrl(old.avatarUrl!);
+        if (avatarUrl != null || _removeAvatar) {
+          await deleteCreditAvatarIfUnused(old.avatarUrl);
         }
       }
       MediaCreditFeed.notifyChanged(widget.leagueId);
@@ -498,6 +565,8 @@ class _MediaCreditFormState extends State<_MediaCreditForm> {
     TextCapitalization caps = TextCapitalization.none,
     int maxLines = 1,
     int? maxLength,
+    List<TextInputFormatter>? formatters,
+    String? prefixText,
   }) {
     return AdminFieldRow(
       icon: icon,
@@ -510,15 +579,22 @@ class _MediaCreditFormState extends State<_MediaCreditForm> {
         maxLines: maxLines,
         minLines: 1,
         maxLength: maxLength,
+        inputFormatters: formatters,
         style: const TextStyle(
           color: Colors.white,
           fontSize: 15,
           fontWeight: FontWeight.w700,
         ),
         cursorColor: kAdminAccent,
-        decoration: adminInlineInputDecoration(
-          hint: hint,
-        ).copyWith(counterText: ''),
+        decoration: adminInlineInputDecoration(hint: hint).copyWith(
+          counterText: '',
+          prefixText: prefixText,
+          prefixStyle: const TextStyle(
+            color: Colors.white,
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
       ),
     );
   }
@@ -662,8 +738,10 @@ class _MediaCreditFormState extends State<_MediaCreditForm> {
             _phone,
             Icons.call_outlined,
             'Telefon',
-            hint: '05xx xxx xx xx',
+            hint: '(5XX) XXX XX XX',
             keyboard: TextInputType.phone,
+            formatters: [PhoneMaskFormatter()],
+            prefixText: '0 ',
           ),
           _field(
             _email,
@@ -758,5 +836,22 @@ class _MediaCreditFormState extends State<_MediaCreditForm> {
         ],
       ),
     );
+  }
+}
+
+/// Künye fotoğrafını depodan siler; başka turnuvaya aktarılmış bir künye
+/// aynı dosyayı kullanıyorsa dokunmaz.
+Future<void> deleteCreditAvatarIfUnused(String? url) async {
+  if (url == null || url.isEmpty) return;
+  try {
+    final users = await Supabase.instance.client
+        .from('media_credits')
+        .select('id')
+        .eq('avatar_url', url)
+        .limit(1);
+    if (users.isNotEmpty) return;
+    await SupabaseImageUploadService().deleteImageByUrl(url);
+  } catch (_) {
+    // Dosya kalırsa yalnız depoda yer kaplar.
   }
 }

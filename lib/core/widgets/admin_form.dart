@@ -100,6 +100,8 @@ class AdminDialogHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Klavye açıkken başlık yer kaplamasın; alanlara yer kalsın.
+    if (AdminPopupKeyboard.isOpen(context)) return const SizedBox(height: 28);
     return Column(
       children: [
         // Yanlardaki boşluk: sağ üstteki X düğmesiyle çakışmasın.

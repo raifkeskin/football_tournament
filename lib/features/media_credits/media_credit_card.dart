@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/widgets/admin_form.dart';
 import '../../core/widgets/admin_page.dart';
 import '../../core/widgets/web_safe_image.dart';
+import '../auth/widgets/phone_input.dart';
 import 'media_credit.dart';
 
 /// Medya sekmesindeki künye etiketi ("Fotoğraf: Ekrem Ayyüz"). Turnuvanın o
@@ -224,7 +225,8 @@ class _MediaCreditCard extends StatelessWidget {
     ];
 
     final details = <(String, String)>[
-      if (c.contactConsent && c.phone != null) ('Telefon', c.phone!),
+      if (c.contactConsent && c.phone != null)
+        ('Telefon', formatPhoneRaw10(normalizePhoneToRaw10(c.phone!))),
       if (email != null) ('E-posta', email),
       if (c.instagram != null) ('Instagram', _instagramHandle(c.instagram!)),
     ];
