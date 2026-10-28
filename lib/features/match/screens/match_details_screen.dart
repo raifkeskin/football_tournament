@@ -2022,7 +2022,10 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
   String _selectedType = 'Maç Yayın Linki';
   final _urlCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
-  bool _isHomeTeam = true;
+
+  /// Takım Fotosu'nun takımı; varsayılan yok, yanlış takıma gitmesin diye
+  /// her yüklemede seçilir.
+  bool? _isHomeTeam;
 
   /// Seçilen görseller (galeriden çoklu seçim).
   List<XFile> _pickedFiles = const [];
@@ -2377,7 +2380,9 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
                       AdminSelectRow(
                         icon: Icons.shield_outlined,
                         label: 'Takım',
-                        value: _isHomeTeam ? _homeName : _awayName,
+                        value: _isHomeTeam == null
+                            ? null
+                            : (_isHomeTeam! ? _homeName : _awayName),
                         placeholder: 'Seçin',
                         onTap: _isUploading
                             ? null
@@ -2482,8 +2487,14 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
   Future<void> _save() async {
     final m = widget.match;
     final desc = _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim();
+    if (_selectedType == 'Takım Fotosu' && _isHomeTeam == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Takımı seçin.')));
+      return;
+    }
     final teamId = _selectedType == 'Takım Fotosu'
-        ? (_isHomeTeam ? m.homeTeamId : m.awayTeamId)
+        ? (_isHomeTeam! ? m.homeTeamId : m.awayTeamId)
         : null;
     MatchMediaModel media(String url) => MatchMediaModel(
       id: '',
