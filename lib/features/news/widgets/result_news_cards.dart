@@ -470,16 +470,30 @@ class _PhotoResultState extends State<_PhotoResult> {
     final r = widget.result;
     final urls = widget.urls;
     Widget crest(_Team t) => Container(
-      width: 56,
-      height: 56,
-      padding: const EdgeInsets.all(6),
-      decoration: BoxDecoration(
+      width: 36,
+      height: 36,
+      padding: const EdgeInsets.all(3),
+      decoration: const BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        shape: BoxShape.circle,
       ),
-      child: t.logo.isEmpty
-          ? Icon(Icons.shield_rounded, size: 36, color: t.band)
-          : WebSafeImage(url: t.logo, fit: BoxFit.contain),
+      child: ClipOval(
+        child: t.logo.isEmpty
+            ? Icon(Icons.shield_rounded, size: 22, color: t.band)
+            : WebSafeImage(url: t.logo, fit: BoxFit.contain),
+      ),
+    );
+    Widget teamName(String name, {required bool end}) => Text(
+      name,
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+      textAlign: end ? TextAlign.right : TextAlign.left,
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 12.5,
+        height: 1.15,
+        fontWeight: FontWeight.w800,
+      ),
     );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -534,69 +548,78 @@ class _PhotoResultState extends State<_PhotoResult> {
             ],
           ),
         ),
-        // Skor ve golcüler fotoğrafın altında; yüzleri kapatmaz.
+        // Skor ve golcüler fotoğrafın altında, olabildiğince dar: maç
+        // detayı başlığındaki gibi ev sahibi rengi → koyu → deplasman rengi.
         Container(
-          color: const Color(0xFF0B1220),
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-          child: Column(
+          padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                r.home.band,
+                const Color(0xFF0B1220),
+                const Color(0xFF0B1220),
+                r.away.band,
+              ],
+              stops: const [0, 0.42, 0.58, 1],
+            ),
+          ),
+          child: Row(
             children: [
-              Row(
-                children: [
-                  crest(r.home),
-                  Expanded(
-                    child: Container(
-                      height: 56,
-                      alignment: Alignment.center,
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            Color(0xFF064E3B),
-                            Color(0xFF0B1220),
-                            Color(0xFF064E3B),
-                          ],
-                        ),
-                      ),
-                      child: Text(
-                        '${r.hs} - ${r.as}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 36,
-                          height: 1,
-                          fontWeight: FontWeight.w900,
-                          fontFeatures: [FontFeature.tabularFigures()],
-                        ),
-                      ),
-                    ),
-                  ),
-                  crest(r.away),
-                ],
-              ),
-              if (r.homeScorers.isNotEmpty || r.awayScorers.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              crest(r.home),
+              const SizedBox(width: 8),
+              Expanded(child: teamName(r.home.name, end: false)),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Expanded(
-                      child: _ScorerColumn(
-                        r.homeScorers,
-                        goals: r.hs,
-                        end: false,
+                    Text(
+                      '${r.hs} - ${r.as}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 28,
+                        height: 1,
+                        fontWeight: FontWeight.w900,
+                        fontFeatures: [FontFeature.tabularFigures()],
                       ),
                     ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: _ScorerColumn(
-                        r.awayScorers,
-                        goals: r.as,
-                        end: true,
+                    const SizedBox(height: 2),
+                    const Text(
+                      'MS',
+                      style: TextStyle(
+                        color: Color(0xFF10B981),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                   ],
                 ),
-              ],
+              ),
+              Expanded(child: teamName(r.away.name, end: true)),
+              const SizedBox(width: 8),
+              crest(r.away),
             ],
           ),
         ),
+        if (r.homeScorers.isNotEmpty || r.awayScorers.isNotEmpty)
+          Container(
+            color: const Color(0xFF0B1220),
+            padding: const EdgeInsets.fromLTRB(10, 7, 10, 8),
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: _CompactScorers(r.homeScorers, end: true)),
+                  Container(
+                    width: 1,
+                    margin: const EdgeInsets.symmetric(horizontal: 10),
+                    color: Colors.white.withValues(alpha: 0.14),
+                  ),
+                  Expanded(child: _CompactScorers(r.awayScorers, end: false)),
+                ],
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -671,6 +694,50 @@ class _Band extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Fotoğraflı sonuç kartında dar golcü listesi: ad + yeşil dakika,
+/// ortadaki çizgiye yaslı.
+class _CompactScorers extends StatelessWidget {
+  const _CompactScorers(this.scorers, {required this.end});
+
+  final List<_Scorer> scorers;
+  final bool end;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: end ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+    children: [
+      for (final s in scorers)
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 1.5),
+          child: Text.rich(
+            TextSpan(
+              text: s.label,
+              children: [
+                if (s.minuteText.isNotEmpty)
+                  TextSpan(
+                    text: ' ${s.minuteText}',
+                    style: const TextStyle(
+                      color: Color(0xFF10B981),
+                      fontWeight: FontWeight.w800,
+                      fontSize: 11.5,
+                    ),
+                  ),
+              ],
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: end ? TextAlign.right : TextAlign.left,
+            style: const TextStyle(
+              color: _soft,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+    ],
+  );
 }
 
 class _ScorerColumn extends StatelessWidget {
