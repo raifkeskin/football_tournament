@@ -13,7 +13,7 @@ class InstagramShare {
 
   /// Meta uygulamasının (LigMasasi Yayın) Facebook App ID'si; Instagram
   /// hikâye paylaşımında kaynağı belirtir. Boşsa gönderilmez.
-  static const _facebookAppId = '';
+  static const _facebookAppId = '2164236947498221';
 
   static Future<bool>? _available;
 
