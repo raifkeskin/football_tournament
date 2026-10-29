@@ -98,7 +98,9 @@ extension on TeamPageTabBar {
       child: Row(
         children: [
           for (var i = 0; i < labels.length; i++)
+            // Yazısız (yalnız simgeli) sekme dar kalır.
             Expanded(
+              flex: labels[i].isEmpty ? 2 : 3,
               child: Material(
                 color: i == index ? indicatorColor : Colors.transparent,
                 borderRadius: BorderRadius.circular(11),
@@ -116,17 +118,18 @@ extension on TeamPageTabBar {
                         children: [
                           if (i < icons.length && icons[i] != null) ...[
                             icons[i]!,
-                            const SizedBox(width: 5),
+                            if (labels[i].isNotEmpty) const SizedBox(width: 5),
                           ],
-                          Text(
-                            labels[i],
-                            maxLines: 1,
-                            style: TextStyle(
-                              color: i == index ? Colors.white : _muted,
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w800,
+                          if (labels[i].isNotEmpty)
+                            Text(
+                              labels[i],
+                              maxLines: 1,
+                              style: TextStyle(
+                                color: i == index ? Colors.white : _muted,
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
-                          ),
                         ],
                       ),
                     ),
