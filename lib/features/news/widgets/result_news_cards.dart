@@ -144,28 +144,19 @@ class _Crest extends StatelessWidget {
   final _Team team;
   final double size;
 
+  /// Arma beyaz daire olmadan, kendi şekliyle.
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return SizedBox(
       width: size,
       height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: Colors.white,
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.85),
-          width: 2,
-        ),
-      ),
-      clipBehavior: Clip.antiAlias,
       child: team.logo.isEmpty
-          ? Icon(Icons.shield_rounded, size: size * 0.6, color: team.band)
+          ? Icon(Icons.shield_rounded, size: size * 0.8, color: _soft)
           : WebSafeImage(
               url: team.logo,
               width: size,
               height: size,
               fit: BoxFit.contain,
-              isCircle: true,
             ),
     );
   }
@@ -552,6 +543,7 @@ class _PhotoResultState extends State<_PhotoResult> {
   /// tam görünsün diye alan bu orana göre açılır.
   static final Map<String, double> _aspects = {};
 
+  int _page = 0;
   final _streams = <ImageStream, ImageStreamListener>{};
 
   @override
@@ -611,20 +603,7 @@ class _PhotoResultState extends State<_PhotoResult> {
   Widget build(BuildContext context) {
     final r = widget.result;
     final urls = widget.urls;
-    Widget crest(_Team t) => Container(
-      width: 36,
-      height: 36,
-      padding: const EdgeInsets.all(3),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        shape: BoxShape.circle,
-      ),
-      child: ClipOval(
-        child: t.logo.isEmpty
-            ? Icon(Icons.shield_rounded, size: 22, color: t.band)
-            : WebSafeImage(url: t.logo, fit: BoxFit.contain),
-      ),
-    );
+    Widget crest(_Team t) => _Crest(t, size: 38);
     Widget teamName(String name, {required bool end}) => Text(
       name,
       maxLines: 2,
@@ -652,6 +631,7 @@ class _PhotoResultState extends State<_PhotoResult> {
                 color: const Color(0xFF0B1220),
                 child: PageView.builder(
                   itemCount: urls.length,
+                  onPageChanged: (i) => setState(() => _page = i),
                   itemBuilder: (context, i) => GestureDetector(
                     onTap: widget.onOpen == null
                         ? null
@@ -661,6 +641,31 @@ class _PhotoResultState extends State<_PhotoResult> {
                   ),
                 ),
               ),
+              if (urls.length > 1)
+                Positioned(
+                  top: 10,
+                  right: 10,
+                  child: IgnorePointer(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.6),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        '${_page + 1}/${urls.length}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
