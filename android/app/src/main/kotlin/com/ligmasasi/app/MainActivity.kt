@@ -50,7 +50,8 @@ class MainActivity : FlutterActivity() {
         listOf(
             Triple("lm_gol", "Goller", R.raw.lm_gol),
             Triple("lm_mac_basladi", "Maç başlangıcı", R.raw.lm_mac_basladi),
-            Triple("lm_mac_sonu", "Devre ve maç sonucu", R.raw.lm_mac_sonu),
+            Triple("lm_ilk_yari", "İlk yarı sonucu", R.raw.lm_ilk_yari),
+            Triple("lm_mac_sonu", "Maç sonucu", R.raw.lm_mac_sonu),
         ).forEach { (id, name, res) ->
             val ch = NotificationChannel(id, name, NotificationManager.IMPORTANCE_HIGH)
             ch.setSound(Uri.parse("android.resource://$packageName/$res"), attrs)
