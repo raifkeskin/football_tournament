@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:convert';
 import 'package:archive/archive.dart';
 import 'package:flutter/material.dart';
@@ -281,9 +282,7 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
     return s;
   }
 
-  /// Takımın kadro ekranı. Kadro sezona bağlıdır: takım tek sezondaysa
-  /// doğrudan açılır; birden fazla sezondaysa üstte sezon yılı, altta o yılın
-  /// turnuvaları seçilir (aynı yıl iki turnuvada oynayan takımlar için).
+  /// Takımın kadro ekranı (sezona bağlı); sezon sorulmadan açılır.
   Future<void> _openSquad(
     BuildContext ctx, {
     required String teamId,
@@ -354,10 +353,18 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
       );
       return;
     }
-    final season = seasons.length == 1
-        ? seasons.first
-        : await _pickSquadSeason(ctx, teamName: teamName, seasons: seasons);
-    if (season == null || !ctx.mounted) return;
+    // Seçim sorulmaz: içinde bulunulan yılın sezonu (yoksa en yeni yıl),
+    // o yılın turnuvalarından adı alfabetik ilk olan. Kadro ekranında sezon
+    // ve turnuva değiştirilebilir.
+    final years = {for (final s in seasons) s.year};
+    final now = DateTime.now().year;
+    final year = years.contains(now) ? now : years.reduce(max);
+    final inYear = seasons.where((s) => s.year == year).toList()
+      ..sort(
+        (a, b) => a.league.toLowerCase().compareTo(b.league.toLowerCase()),
+      );
+    final season = inYear.first;
+    if (!ctx.mounted) return;
     await Navigator.of(ctx).push(
       MaterialPageRoute<void>(
         settings: const RouteSettings(name: 'TeamSquadScreen'),
@@ -371,99 +378,6 @@ class _AdminManageTeamsScreenState extends State<AdminManageTeamsScreen> {
     );
   }
 
-  /// Kadro için sezon seçimi: üstte yıllar (tek seçim), altta seçili yılın
-  /// turnuvaları. Turnuvaya dokununca o sezon döner.
-  Future<_SquadSeason?> _pickSquadSeason(
-    BuildContext ctx, {
-    required String teamName,
-    required List<_SquadSeason> seasons,
-  }) {
-    final years = {for (final s in seasons) s.year}.toList()
-      ..sort((a, b) => b.compareTo(a));
-    var year = years.first;
-    return showDialog<_SquadSeason>(
-      context: ctx,
-      builder: (dctx) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-        child: AdminDialogCloseOverlay(
-          onClose: () => Navigator.pop(dctx),
-          child: StatefulBuilder(
-            builder: (dctx, setDState) {
-              final list = seasons.where((s) => s.year == year).toList()
-                ..sort((a, b) => _trCompare(a.league, b.league));
-              return Container(
-                constraints: BoxConstraints(
-                  maxHeight: MediaQuery.of(dctx).size.height * 0.8,
-                ),
-                padding: const EdgeInsets.fromLTRB(16, 22, 16, 16),
-                decoration: adminDialogDecoration(),
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      AdminDialogHeader(
-                        icon: Icons.groups_outlined,
-                        title: 'Kadro',
-                        subtitle: teamName,
-                      ),
-                      AdminFormSection(
-                        title: 'Sezonlar',
-                        child: Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            for (final y in years)
-                              _YearChip(
-                                label: y == 0 ? 'Diğer' : '$y',
-                                selected: y == year,
-                                onTap: () => setDState(() => year = y),
-                              ),
-                          ],
-                        ),
-                      ),
-                      AdminFormSection(
-                        title: 'Turnuvalar',
-                        child: AdminFieldGroup(
-                          children: [
-                            for (final s in list)
-                              AdminFieldRow(
-                                icon: Icons.emoji_events_outlined,
-                                label: s.name,
-                                onTap: () => Navigator.pop(dctx, s),
-                                trailing: const Icon(
-                                  Icons.chevron_right_rounded,
-                                  color: Colors.white54,
-                                ),
-                                child: Text(
-                                  s.league.isEmpty ? s.name : s.league,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Takım sorumlusu: önce telefon yazılır. Telefon bir futbolcuya ya da
-  /// hesaba kayıtlıysa ad soyad kendiliğinden gelir ve değiştirilemez;
-  /// kayıtlı değilse elle yazılır. İptalde null.
   Future<({String phone, String name})?> _editManager({
     required String phone,
     required String name,
@@ -1800,49 +1714,6 @@ class _SquadSeason {
   final String name;
   final int year;
   final String league;
-}
-
-/// Tek seçimli yıl kapsülü.
-class _YearChip extends StatelessWidget {
-  const _YearChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: selected
-          ? kAdminAccent.withValues(alpha: 0.18)
-          : const Color(0xFF1E293B).withValues(alpha: 0.94),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(999),
-        side: BorderSide(
-          color: selected ? kAdminAccent : Colors.white.withValues(alpha: 0.08),
-        ),
-      ),
-      child: InkWell(
-        customBorder: const StadiumBorder(),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-          child: Text(
-            label,
-            style: TextStyle(
-              color: selected ? kAdminAccent : Colors.white70,
-              fontSize: 14,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 class _Pill extends StatelessWidget {
