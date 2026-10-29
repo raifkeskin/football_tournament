@@ -1,6 +1,8 @@
 // \b Türkçe harfleri (ı, ş...) tanımadığı için Unicode harf kontrolü.
+// Geriye bakış (?<!) eski Safari'de sayfayı düşürdüğü için önceki karakter
+// grupla yakalanıp yerine geri yazılır.
 final _masterWord = RegExp(
-  r'(?<!\p{L})master(?:ları|leri|lar|ler)?(?!\p{L})',
+  r'(^|[^\p{L}])master(?:ları|leri|lar|ler)?(?!\p{L})',
   caseSensitive: false,
   unicode: true,
 );
@@ -14,7 +16,7 @@ final _masterWord = RegExp(
 String shortTeamName(String raw) {
   final original = raw.trim();
   final s = original
-      .replaceAll(_masterWord, ' ')
+      .replaceAllMapped(_masterWord, (m) => '${m[1]} ')
       .replaceAll(RegExp(r'Spor Kulübü', caseSensitive: false), 'SK')
       .replaceAll(RegExp(r'Futbol Kulübü', caseSensitive: false), 'FK')
       .replaceAll(RegExp(r'\s+'), ' ')
@@ -23,12 +25,12 @@ String shortTeamName(String raw) {
 }
 
 final _masterAbbr = RegExp(
-  r'(?<!\p{L})master(?:ları|leri|lar|ler)(?!\p{L})',
+  r'(^|[^\p{L}])master(?:ları|leri|lar|ler)(?!\p{L})',
   caseSensitive: false,
   unicode: true,
 );
 final _veteranAbbr = RegExp(
-  r'(?<!\p{L})veteran(?:ları|lar)(?!\p{L})',
+  r'(^|[^\p{L}])veteran(?:ları|lar)(?!\p{L})',
   caseSensitive: false,
   unicode: true,
 );
@@ -40,8 +42,8 @@ String compactTeamName(String raw, {int maxLength = 22}) {
   final s = raw.trim();
   if (s.length <= maxLength) return s;
   return s
-      .replaceAll(_masterAbbr, 'M.')
-      .replaceAll(_veteranAbbr, 'V.')
+      .replaceAllMapped(_masterAbbr, (m) => '${m[1]}M.')
+      .replaceAllMapped(_veteranAbbr, (m) => '${m[1]}V.')
       .replaceAll(RegExp(r'\s+'), ' ')
       .trim();
 }

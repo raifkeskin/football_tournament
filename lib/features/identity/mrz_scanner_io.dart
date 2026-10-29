@@ -43,6 +43,9 @@ class _MrzScannerScreenState extends State<MrzScannerScreen>
   /// Okunan satırlar var ama sağlama tutmadı: kullanıcıya "yaklaştırın".
   bool _seeing = false;
 
+  /// Kamera açılıyor: arka plandan dönüşte ikinci bir kamera açılmasın.
+  bool _starting = false;
+
   static const _blue = Color(0xFF38BDF8);
 
   @override
@@ -72,6 +75,8 @@ class _MrzScannerScreenState extends State<MrzScannerScreen>
   }
 
   Future<void> _start() async {
+    if (_starting) return;
+    _starting = true;
     try {
       final cams = await availableCameras();
       final back = cams.firstWhere(
@@ -90,7 +95,10 @@ class _MrzScannerScreenState extends State<MrzScannerScreen>
       try {
         await c.setFocusMode(FocusMode.auto);
       } catch (_) {}
-      if (!mounted) {
+      // Açılırken ekran kapandıysa ya da uygulama arka plana alındıysa
+      // önizleme hiç gösterilmez.
+      final state = WidgetsBinding.instance.lifecycleState;
+      if (!mounted || _done || state != AppLifecycleState.resumed) {
         await c.dispose();
         return;
       }
@@ -115,6 +123,8 @@ class _MrzScannerScreenState extends State<MrzScannerScreen>
               _error = 'Kamera açılamadı. Fotoğraf çekerek ya da elle deneyin.',
         );
       }
+    } finally {
+      _starting = false;
     }
   }
 
