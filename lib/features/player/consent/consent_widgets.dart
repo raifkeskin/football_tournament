@@ -90,16 +90,16 @@ class ConsentChip extends StatelessWidget {
     final s = status;
     if (s == null || s.complete) return const SizedBox.shrink();
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
       decoration: BoxDecoration(
         color: kAdminAmber.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(7),
       ),
       child: Text(
         s.hasAccount ? 'Onay yok' : 'Hesap yok',
         style: const TextStyle(
           color: kAdminAmber,
-          fontSize: 11,
+          fontSize: 10.5,
           fontWeight: FontWeight.w800,
         ),
       ),

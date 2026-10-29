@@ -2283,6 +2283,11 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                                         ],
                                         if (_tab == 1)
                                           TeamFixtureTab(
+                                            // Sezon değişince maçlar yeniden
+                                            // okunur.
+                                            key: ValueKey(
+                                              effectiveTournamentId,
+                                            ),
                                             seasonId: effectiveTournamentId,
                                             teamId: widget.teamId,
                                             teamName: titleTeam,
@@ -2526,8 +2531,8 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
     return InkWell(
       onTap: () => _openPlayerCard(p),
       child: Container(
-        constraints: const BoxConstraints(minHeight: 54),
-        padding: EdgeInsets.fromLTRB(10, 6, canAdd ? 0 : 10, 6),
+        constraints: const BoxConstraints(minHeight: 46),
+        padding: EdgeInsets.fromLTRB(8, 4, canAdd ? 0 : 8, 4),
         decoration: BoxDecoration(
           border: first
               ? null
@@ -2537,8 +2542,8 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
         ),
         child: Row(
           children: [
-            SquadPlayerAvatar(name: p.name, photoUrl: photo),
-            const SizedBox(width: 10),
+            SquadPlayerAvatar(name: p.name, photoUrl: photo, size: 34),
+            const SizedBox(width: 9),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -2561,7 +2566,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
                       _ageTag(p) ?? const SizedBox.shrink(),
                     ],
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 1),
                   Row(
                     children: [
                       Flexible(
@@ -2604,7 +2609,11 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
               child: InkWell(
                 customBorder: const CircleBorder(),
                 onTap: canAdd ? editJersey : null,
-                child: SquadJerseyCircle(number: number, palette: palette),
+                child: SquadJerseyCircle(
+                  number: number,
+                  palette: palette,
+                  size: 28,
+                ),
               ),
             ),
             // Düzenleme menüsü yalnız admin ve kadroyu yönetebilenlere
@@ -2612,6 +2621,7 @@ class _TeamSquadScreenState extends State<TeamSquadScreen> {
             if (canAdd)
               IconButton(
                 tooltip: 'Diğer işlemler',
+                visualDensity: VisualDensity.compact,
                 icon: const Icon(Icons.menu_rounded, color: _squadMuted),
                 onPressed: openActions,
               ),
@@ -4697,12 +4707,12 @@ class _SquadSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.only(top: 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+            padding: const EdgeInsets.fromLTRB(4, 0, 4, 6),
             child: Row(
               children: [
                 Expanded(
