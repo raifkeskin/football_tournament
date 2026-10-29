@@ -506,7 +506,10 @@ Future<String?> showSquadJerseyPicker({
                             : '$playerName · şu an $current',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: kAdminMuted, fontSize: 12),
+                        style: const TextStyle(
+                          color: kAdminMuted,
+                          fontSize: 12,
+                        ),
                       ),
                     ],
                   ),
@@ -683,7 +686,9 @@ class _NumberCell extends StatelessWidget {
             child: Text(
               '$value',
               style: TextStyle(
-                color: taken ? const Color(0xFF475569) : const Color(0xFFE2E8F0),
+                color: taken
+                    ? const Color(0xFF475569)
+                    : const Color(0xFFE2E8F0),
                 fontSize: 14,
                 fontWeight: FontWeight.w800,
               ),
