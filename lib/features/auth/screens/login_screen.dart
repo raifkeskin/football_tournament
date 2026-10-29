@@ -687,55 +687,74 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ),
                                 ),
                               )
-                            : ElevatedButton(
-                                onPressed: () => _login(session),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF16A34A),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
+                            : Row(
+                                children: [
+                                  Expanded(
+                                    flex: 7,
+                                    child: SizedBox.expand(
+                                      child: ElevatedButton(
+                                        onPressed: () => _login(session),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: const Color(
+                                            0xFF16A34A,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              14,
+                                            ),
+                                          ),
+                                          elevation: 0,
+                                        ),
+                                        child: Text(
+                                          _staff
+                                              ? 'KULÜBEYE GEÇ'
+                                              : 'SAHAYA ÇIK',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 16,
+                                            letterSpacing: 1.2,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
                                   ),
-                                  elevation: 0,
-                                ),
-                                child: Text(
-                                  _staff ? 'KULÜBEYE GEÇ' : 'SAHAYA ÇIK',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 16,
-                                    letterSpacing: 1.2,
-                                  ),
-                                ),
+                                  // Kayıtlı biyometrik giriş: aynı satırda,
+                                  // ekran yüksekliği değişmez.
+                                  if (_bioLabel != null) ...[
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      flex: 3,
+                                      child: SizedBox.expand(
+                                        child: OutlinedButton(
+                                          onPressed: () => _bioLogin(session),
+                                          style: OutlinedButton.styleFrom(
+                                            padding: EdgeInsets.zero,
+                                            side: const BorderSide(
+                                              color: _green,
+                                            ),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(14),
+                                            ),
+                                          ),
+                                          child: Tooltip(
+                                            message: '$_bioLabel ile giriş',
+                                            child: Icon(
+                                              _bioLabel == 'Parmak izi'
+                                                  ? Icons.fingerprint_rounded
+                                                  : Icons.face_rounded,
+                                              color: _green,
+                                              size: 30,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
                       ),
-                      if (_bioLabel != null && !_loading) ...[
-                        const SizedBox(height: 10),
-                        SizedBox(
-                          height: 50,
-                          child: OutlinedButton.icon(
-                            onPressed: () => _bioLogin(session),
-                            icon: Icon(
-                              _bioLabel == 'Parmak izi'
-                                  ? Icons.fingerprint_rounded
-                                  : Icons.face_rounded,
-                              color: _green,
-                            ),
-                            label: Text(
-                              '$_bioLabel ile giriş',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 15,
-                              ),
-                            ),
-                            style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: _green),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
                       _Collapse(
                         visible: !keyboard,
                         child: const TournamentRequestLoginCard(),
