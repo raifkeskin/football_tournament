@@ -8,6 +8,9 @@
 // drive_media_seen: alınan dosya bir daha alınmaz, uygulamada silinen geri
 // gelmez.
 //
+// Önce drive_folder_seasons'taki sezonların eksik klasörleri açılır:
+// <kök> / <Turnuva Yıl> / <N. Hafta> / <Ev - Dep | #LM…> (drive_folders).
+//
 // Gizli ayar: GOOGLE_DRIVE_SA_JSON (servis hesabı anahtarı).
 // JWT doğrulaması kapalı yayınlanır (`--no-verify-jwt`); çağrı
 // `x-sync-secret` = app_private_settings.drive_sync_secret ile yetkilenir.
@@ -56,7 +59,8 @@ async function accessToken(): Promise<string> {
   const header = b64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
   const claim = b64url(JSON.stringify({
     iss: sa.client_email,
-    scope: "https://www.googleapis.com/auth/drive.readonly",
+    // Klasör açmak için tam yetki; hesap yalnız paylaşılan klasörü görür.
+    scope: "https://www.googleapis.com/auth/drive",
     aud: "https://oauth2.googleapis.com/token",
     iat: now,
     exp: now + 3600,
@@ -104,6 +108,75 @@ async function children(token: string, parent: string): Promise<DriveFile[]> {
   return out;
 }
 
+async function createFolder(token: string, parent: string, name: string): Promise<string> {
+  const res = await fetch(`${DRIVE}?supportsAllDrives=true&fields=id`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ name, mimeType: FOLDER, parents: [parent] }),
+  });
+  const body = await res.json();
+  if (!res.ok || !body.id) throw new Error(`Klasör açılamadı (${name}): ${JSON.stringify(body)}`);
+  return body.id;
+}
+
+const clean = (s: string) => s.replace(/[\/]/g, "-").replace(/\s+/g, " ").trim();
+
+/// Sezonların eksik turnuva / hafta / maç klasörlerini açar; açılan sayısı.
+async function ensureFolders(token: string, root: string, seasonIds: string[]): Promise<number> {
+  if (!seasonIds.length) return 0;
+  const { data: known } = await admin.from("drive_folders").select("key, folder_id");
+  const folders = new Map((known ?? []).map((r) => [r.key as string, r.folder_id as string]));
+  let created = 0;
+  async function ensure(key: string, parent: string, name: string): Promise<string> {
+    const have = folders.get(key);
+    if (have) return have;
+    const id = await createFolder(token, parent, name);
+    await admin.from("drive_folders").insert({ key, folder_id: id });
+    folders.set(key, id);
+    created++;
+    return id;
+  }
+  for (const seasonId of seasonIds) {
+    const { data: season } = await admin
+      .from("seasons")
+      .select("id, season_year, leagues(name)")
+      .eq("id", seasonId)
+      .maybeSingle();
+    if (!season) continue;
+    // deno-lint-ignore no-explicit-any
+    const league = clean(String((season as any).leagues?.name ?? "Turnuva"));
+    const seasonDir = await ensure(
+      `season:${seasonId}`,
+      root,
+      [league, season.season_year].filter(Boolean).join(" "),
+    );
+    const { data: matches } = await admin
+      .from("matches")
+      .select("id, week, home_team_id, away_team_id")
+      .eq("season_id", seasonId)
+      .is("deleted_at", null)
+      .order("week")
+      .order("match_date");
+    const list = matches ?? [];
+    const missing = list.filter((m) => !folders.has(`match:${m.id}`));
+    if (!missing.length) continue;
+    const teamIds = [...new Set(missing.flatMap((m) => [m.home_team_id, m.away_team_id]))];
+    const { data: teams } = await admin.from("teams").select("id, name").in("id", teamIds);
+    const teamName = new Map((teams ?? []).map((t) => [t.id, clean(String(t.name ?? ""))]));
+    for (const m of missing) {
+      const parent = m.week == null
+        ? seasonDir
+        : await ensure(`week:${seasonId}:${m.week}`, seasonDir, `${m.week}. Hafta`);
+      const code = m.id.replace(/-/g, "").slice(0, 6).toUpperCase();
+      const name = `${teamName.get(m.home_team_id) ?? "Ev Sahibi"} - ${
+        teamName.get(m.away_team_id) ?? "Deplasman"
+      } | #LM${code}`;
+      await ensure(`match:${m.id}`, parent, name);
+    }
+  }
+  return created;
+}
+
 function codeOf(name: string): string | undefined {
   return name.match(/#LM([0-9a-f]{6})\b/i)?.[1]?.toLowerCase();
 }
@@ -142,15 +215,21 @@ Deno.serve(async (req) => {
   const { data: settings } = await admin
     .from("app_private_settings")
     .select("key, value")
-    .in("key", ["drive_sync_secret", "drive_root_folder_id"]);
+    .in("key", ["drive_sync_secret", "drive_root_folder_id", "drive_folder_seasons"]);
   const s = Object.fromEntries((settings ?? []).map((r) => [r.key, r.value]));
   const given = req.headers.get("x-sync-secret") ?? "";
   if (!s.drive_sync_secret || given !== s.drive_sync_secret) return json({ error: "Yetkisiz." }, 401);
   if (!s.drive_root_folder_id) return json({ error: "Kök klasör yok." }, 400);
 
-  const report = { folders: 0, added: 0, skipped: [] as string[], errors: [] as string[] };
+  const report = { created: 0, folders: 0, added: 0, skipped: [] as string[], errors: [] as string[] };
   try {
     const token = await accessToken();
+    try {
+      const seasons = JSON.parse(s.drive_folder_seasons ?? "[]");
+      report.created = await ensureFolders(token, s.drive_root_folder_id, Array.isArray(seasons) ? seasons : []);
+    } catch (e) {
+      report.errors.push(e instanceof Error ? e.message : String(e));
+    }
 
     // Kodlu maç klasörlerini bul.
     const matchFolders: { id: string; name: string; code: string }[] = [];
@@ -225,6 +304,6 @@ Deno.serve(async (req) => {
   } catch (e) {
     report.errors.push(e instanceof Error ? e.message : String(e));
   }
-  if (report.added || report.errors.length) console.log(JSON.stringify(report));
+  if (report.created || report.added || report.errors.length) console.log(JSON.stringify(report));
   return json(report);
 });
