@@ -45,6 +45,9 @@ class AppSettings {
   /// Veritabanı da aynı sınırı uygular (match_media tetikleyicisi).
   static final matchPhotoLimit = ValueNotifier<int>(20);
 
+  /// Maç başına fotoğraf sınırı yok mu (ayar 0).
+  static bool get matchPhotosUnlimited => matchPhotoLimit.value == 0;
+
   /// "Turnuvanı Kur" girişleri herkese açık mı (admin her zaman görür).
   static final tournamentRequestsEnabled = ValueNotifier<bool>(false);
 
@@ -140,7 +143,8 @@ class AppSettings {
           positionsTabEnabled.value = r['value'] == true;
         } else if (r['key'] == _kMatchPhotoLimit) {
           final v = r['value'];
-          if (v is num && v > 0) matchPhotoLimit.value = v.toInt();
+          // 0: sınırsız.
+          if (v is num && v >= 0) matchPhotoLimit.value = v.toInt();
         }
       }
     } catch (e) {

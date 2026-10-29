@@ -574,8 +574,8 @@ class _PhotoLimitSettingState extends State<_PhotoLimitSetting> {
     final v = await showAdminOptionPicker<int>(
       context: context,
       title: 'Maç Başına Fotoğraf',
-      items: const [10, 20, 30, 50],
-      labelBuilder: (n) => '$n fotoğraf',
+      items: const [10, 20, 30, 50, 100, 0],
+      labelBuilder: (n) => n == 0 ? 'Sınırsız' : '$n fotoğraf',
       selected: AppSettings.matchPhotoLimit.value,
     );
     if (v == null || !mounted) return;
@@ -612,7 +612,10 @@ class _PhotoLimitSettingState extends State<_PhotoLimitSetting> {
           ),
         ),
         subtitle: Text(
-          'En fazla $limit fotoğraf · yayın, video ve albüm linki sayılmaz',
+          limit == 0
+              ? 'Sınırsız · yayın, video ve albüm linki sayılmaz'
+              : 'En fazla $limit fotoğraf · yayın, video ve albüm linki '
+                    'sayılmaz',
           style: const TextStyle(color: Colors.white54, fontSize: 12),
         ),
         trailing: const Icon(

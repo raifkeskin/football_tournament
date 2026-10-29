@@ -2316,7 +2316,7 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
 
   /// "Fotoğraflar 7 / 20" göstergesi; sınır dolunca kırmızı.
   Widget _photoCounter(int count, int limit) {
-    final full = count >= limit;
+    final full = limit > 0 && count >= limit;
     final color = full ? const Color(0xFFF87171) : const Color(0xFF10B981);
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
@@ -2342,7 +2342,7 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
                 ),
               ),
               Text(
-                '$count / $limit',
+                limit == 0 ? '$count · sınırsız' : '$count / $limit',
                 style: TextStyle(
                   color: color,
                   fontSize: 15,
@@ -2352,16 +2352,18 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: limit == 0 ? 1 : (count / limit).clamp(0, 1).toDouble(),
-              minHeight: 5,
-              color: color,
-              backgroundColor: Colors.white.withValues(alpha: 0.08),
+          if (limit > 0) ...[
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: limit == 0 ? 1 : (count / limit).clamp(0, 1).toDouble(),
+                minHeight: 5,
+                color: color,
+                backgroundColor: Colors.white.withValues(alpha: 0.08),
+              ),
             ),
-          ),
+          ],
           if (full && !_isUrlType) ...[
             const SizedBox(height: 8),
             const Text(
@@ -2392,7 +2394,7 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
     final isAlbum = _selectedType == kMediaAlbumLink;
     final isVideo = _selectedType == kMediaVideoLink;
     final limit = AppSettings.matchPhotoLimit.value;
-    final full = !isLink && _photoCount >= limit;
+    final full = !isLink && limit > 0 && _photoCount >= limit;
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
@@ -2468,7 +2470,10 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
                         onTap: _isUploading
                             ? null
                             : () async {
-                                final room = limit - _photoCount;
+                                // Sınırsızda (0) üst sınır yok.
+                                final room = limit == 0
+                                    ? 1000
+                                    : limit - _photoCount;
                                 if (room <= 0) return;
                                 final messenger = ScaffoldMessenger.of(context);
                                 // Maçın Adamı tek fotoğraf.
@@ -2485,7 +2490,9 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
                                 final picked = await ImagePicker()
                                     .pickMultiImage(
                                       imageQuality: 85,
-                                      limit: room > 1 ? room : null,
+                                      limit: room > 1 && limit > 0
+                                          ? room
+                                          : null,
                                     );
                                 if (picked.isEmpty || !mounted) return;
                                 setState(
@@ -2692,7 +2699,7 @@ class _MediaAdderDialogState extends State<_MediaAdderDialog> {
     }
 
     final limit = AppSettings.matchPhotoLimit.value;
-    if (_photoCount >= limit) {
+    if (limit > 0 && _photoCount >= limit) {
       snack('Bu maç için fotoğraf sınırı ($limit) doldu.');
       return;
     }
@@ -3136,8 +3143,10 @@ class _HighlightsTabViewState extends State<_HighlightsTabView> {
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    'Fotoğraflar ${photos.length} / '
-                    '${AppSettings.matchPhotoLimit.value}',
+                    AppSettings.matchPhotosUnlimited
+                        ? 'Fotoğraflar ${photos.length}'
+                        : 'Fotoğraflar ${photos.length} / '
+                              '${AppSettings.matchPhotoLimit.value}',
                     style: const TextStyle(
                       color: Colors.white60,
                       fontSize: 12.5,
