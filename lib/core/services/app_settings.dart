@@ -23,6 +23,7 @@ class AppSettings {
   static const _kReferees = 'referees_enabled';
   static const _kPositionsTab = 'positions_tab_enabled';
   static const _kRosterAdd = 'roster_add_shortcut_enabled';
+  static const _kBiometricLogin = 'biometric_login_enabled';
   static const _kRosterAddUsers = 'roster_add_shortcut_users';
 
   /// Gizli turnuva özelliği. Kapalıyken "Turnuva Kodu Gir" ve "Gizli turnuva"
@@ -84,6 +85,9 @@ class AppSettings {
   /// Takım sorumlusu menüsünde "Kadroya Futbolcu Ekle" kısayolu herkese açık
   /// mı; kapalıyken yalnız admin ve [rosterAddShortcutUsers] görür.
   static final rosterAddShortcutEnabled = ValueNotifier<bool>(false);
+
+  /// Yüz tanıma / parmak izi ile giriş teklifi herkese açık mı (admin her zaman).
+  static final biometricLoginEnabled = ValueNotifier<bool>(false);
   static final rosterAddShortcutUsers = ValueNotifier<Set<String>>({});
 
   /// Oyuncu kartındaki "Mevki" sekmesi (asıl mevki + oynayabildiği en çok 3
@@ -131,6 +135,8 @@ class AppSettings {
           refereesEnabled.value = r['value'] == true;
         } else if (r['key'] == _kRosterAdd) {
           rosterAddShortcutEnabled.value = r['value'] == true;
+        } else if (r['key'] == _kBiometricLogin) {
+          biometricLoginEnabled.value = r['value'] == true;
         } else if (r['key'] == _kRosterAddUsers) {
           final v = r['value'];
           rosterAddShortcutUsers.value = {

@@ -13,8 +13,10 @@ import '../../home/screens/main_navigator.dart';
 import 'online_registration_screen.dart';
 import 'reset_password_screen.dart';
 import '../widgets/phone_input.dart';
+import '../biometric_login.dart';
 import '../password_input.dart';
 import '../../../core/widgets/admin_form.dart';
+import '../../../core/widgets/admin_page.dart';
 import '../../tournament_request/tournament_request.dart';
 import '../../../core/services/app_settings.dart';
 import '../registration/register_choice_screen.dart';
@@ -94,6 +96,78 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     _loadLastPhone();
+    _loadBiometric();
+  }
+
+  /// Kayıtlı biyometrik giriş varsa düğme metni ("Face ID" / "Parmak izi").
+  String? _bioLabel;
+
+  Future<void> _loadBiometric() async {
+    if (await BiometricLogin.savedPhone() == null) return;
+    if (!await BiometricLogin.available()) return;
+    final label = await BiometricLogin.label();
+    if (mounted) setState(() => _bioLabel = label);
+  }
+
+  Future<void> _bioLogin(AppSessionController session) async {
+    final label = _bioLabel ?? 'Parmak izi';
+    if (!await BiometricLogin.authenticate('$label ile Lig Masası\'na giriş')) {
+      return;
+    }
+    final creds = await BiometricLogin.read();
+    if (!mounted) return;
+    if (creds == null) {
+      setState(() => _bioLabel = null);
+      return;
+    }
+    _phoneController.text = PhoneMaskFormatter.formatFromRaw(creds.phone);
+    _passwordController.text = creds.password;
+    await _login(session, biometric: true);
+  }
+
+  /// Şifreyle girişten sonra bir kez: "Face ID / parmak izi ile giriş
+  /// kullanılsın mı?" Hayır denirse o numara için bir daha sorulmaz.
+  static Future<void> _offerBiometric(
+    BuildContext context,
+    AppSessionController session,
+    String phone,
+    String password,
+  ) async {
+    if (!BiometricLogin.offerAllowed(session.value)) return;
+    final raw = normalizePhoneToRaw10(phone);
+    if (raw.length != 10) return;
+    if (!await BiometricLogin.available()) return;
+    if (await BiometricLogin.savedPhone() == raw) return;
+    final declinedKey = 'bio_declined_$raw';
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool(declinedKey) == true) return;
+    } catch (_) {}
+    final label = await BiometricLogin.label();
+    if (!context.mounted) return;
+    final yes = await showAdminConfirmDialog(
+      context: context,
+      title: '$label ile Giriş',
+      message:
+          'Bir dahaki girişte şifre yazmadan $label ile girebilirsin. '
+          'Şifren yalnız bu telefonda, şifreli olarak saklanır.',
+      confirmLabel: 'KULLAN',
+      cancelLabel: 'ŞİMDİ DEĞİL',
+      destructive: false,
+      icon: label == 'Parmak izi'
+          ? Icons.fingerprint_rounded
+          : Icons.face_rounded,
+    );
+    if (yes && await BiometricLogin.authenticate('$label ile girişi aç')) {
+      await BiometricLogin.save(raw, password);
+      return;
+    }
+    if (!yes) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool(declinedKey, true);
+      } catch (_) {}
+    }
   }
 
   /// Son girişin telefonu (çıkış yapılsa da) alana yazılır.
@@ -226,7 +300,10 @@ class _LoginScreenState extends State<LoginScreen> {
         'deneyin.';
   }
 
-  Future<void> _login(AppSessionController session) async {
+  Future<void> _login(
+    AppSessionController session, {
+    bool biometric = false,
+  }) async {
     final phone = _phoneController.text.trim();
     final password = _passwordController.text;
     if (phone.isEmpty || password.isEmpty) {
@@ -268,6 +345,9 @@ class _LoginScreenState extends State<LoginScreen> {
       ]);
       // Girişten sonra ana sayfa (kişinin turnuvasıyla); Kulübe seçip
       // yönetim yetkisi olan doğrudan yönetim sayfasına (Profil) düşer.
+      if (!biometric && rootNav.mounted) {
+        await _offerBiometric(rootNav.context, session, phone, password);
+      }
       final toPanel = staff && session.value.hasManagementPanel;
       rootNav.pushAndRemoveUntil(
         MaterialPageRoute<void>(
@@ -279,11 +359,20 @@ class _LoginScreenState extends State<LoginScreen> {
         (Route<dynamic> route) => false,
       );
     } catch (e) {
+      if (biometric) {
+        // Şifre değişmiş olabilir: kayıt silinir, şifreyle girilir.
+        await BiometricLogin.clear();
+        _passwordController.clear();
+        if (mounted) setState(() => _bioLabel = null);
+      }
       if (!mounted) return;
       await showAdminInfoDialog(
         context: context,
         title: 'Giriş yapılamadı',
-        message: _loginErrorMessage(e),
+        message: biometric
+            ? 'Kayıtlı bilgilerle girilemedi; şifren değişmiş olabilir. '
+                  'Lütfen şifrenle giriş yap.'
+            : _loginErrorMessage(e),
       );
     } finally {
       LoginScreen.redirecting.value = false;
@@ -618,6 +707,35 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                               ),
                       ),
+                      if (_bioLabel != null && !_loading) ...[
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          height: 50,
+                          child: OutlinedButton.icon(
+                            onPressed: () => _bioLogin(session),
+                            icon: Icon(
+                              _bioLabel == 'Parmak izi'
+                                  ? Icons.fingerprint_rounded
+                                  : Icons.face_rounded,
+                              color: _green,
+                            ),
+                            label: Text(
+                              '$_bioLabel ile giriş',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 15,
+                              ),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: _green),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                       _Collapse(
                         visible: !keyboard,
                         child: const TournamentRequestLoginCard(),
