@@ -828,8 +828,8 @@ class _TournamentRequestFormScreenState
       ),
     ),
     const Text(
-      'Uygulamadaki her şey zaten dahil. Buradaki istekleri görüşmede '
-      'konuşuruz.',
+      'Bu form yalnızca talep toplamak içindir, herhangi bir ödeme alınmaz. '
+      'Sorunuz varsa İletişim adımındaki açıklama alanına yazabilirsiniz.',
       textAlign: TextAlign.center,
       style: TextStyle(color: Colors.white54, fontSize: 12.5),
     ),
